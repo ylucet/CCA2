@@ -7,19 +7,13 @@ piecewise-linear cubic functions.
 
 Here are the main files provided by the package. 
 
-======
-<PATH>
-======
-
 README.txt    The present file
-
 PLQVC.m       The main class implementing convexity detection algorithm, plotting, data structure...
 PLQVCTest.m   Unit tests
 
-============================
-Unit Tests: in PLQVCTest.m
-============================
+##Unit Tests: in PLQVCTest.m
 
+```MATLAB
 >> runtests('PLQVCTest')
 Running PLQVCTest
 .......... .......... .......... .......... ......
@@ -41,8 +35,8 @@ ans =
 Totals:
    46 Passed, 0 Failed, 0 Incomplete.
    2.9043 seconds testing time.
-          
-========
-Credits:
+```   
+
+##Credits:
 ========
 See copyright.txt for the list of contributors to this library.
