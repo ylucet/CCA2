@@ -1,0 +1,14 @@
+Computational Convex Analysis Library for bivariate functions
+
+The copyright model used is to ask all contributor to the code source for all rights to be assigned to the PI (Yves Lucet). Then selected parts of the code are released under the GPL. 
+
+- A MATLAB version was released in 2021 under GPL 3.0+
+
+The main papers forming the foundation of the algorithms are
+- S. Singh, Y. Lucet	Linear-time convexity test for low-order piecewise polynomials	SIAM Journal on Optimization, 31(1), 972–990, 2021, https://epubs.siam.org/doi/abs/10.1137/19M1290851
+- T. Haque, Y. Lucet	A Linear-Time Algorithm to Compute the Conjugate of Convex Piecewise Linear-Quadratic Functions	Computational Optimization and Applications, 70, 593–613, 2018, https://link.springer.com/article/10.1007%2Fs10589-018-0007-1
+
+Code contributors:
+- Yves Lucet (PI, 2020-2021)
+- Jeff Hatton (Honours, 2020-21)
+- Aaron Mahnic (Honours, 2020-21)
