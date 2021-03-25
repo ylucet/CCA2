@@ -11,7 +11,7 @@ README.txt    The present file
 PLQVC.m       The main class implementing convexity detection algorithm, plotting, data structure...
 PLQVCTest.m   Unit tests
 
-##Unit Tests: in PLQVCTest.m
+## Unit Tests: in PLQVCTest.m
 
 ```MATLAB
 >> runtests('PLQVCTest')
@@ -37,6 +37,6 @@ Totals:
    2.9043 seconds testing time.
 ```   
 
-##Credits:
-========
+## Credits:
+
 See copyright.txt for the list of contributors to this library.
