@@ -13,35 +13,35 @@ Here are the main files provided by the package.
 
 README.txt    The present file
 
-PLQVC.m
+PLQVC.m       The main class implementing convexity detection algorithm, plotting, data structure...
+PLQVCTest.m   Unit tests
 
 ============================
-Unit Tests: in <PATH>/tests/
+Unit Tests: in PLQVCTest.m
 ============================
 
-runtests('tests')  Matlab script that runs all unit tests and
-          displays the results
+>> runtests('PLQVCTest')
+Running PLQVCTest
+.......... .......... .......... .......... ......
+Done PLQVCTest
+__________
 
-*_test.m  Unit test files that validate the algorithms
-            and provide numerous examples of their
-            use. Test files included are:
-        plq_*_test.m: Unit tests and examples for
-            the PLQ functions provided in plq_test.m.
-        plt_test.m: Tests the Parametric Moreau
-            Envelope algorithm pl_me_plt, which uses
-            the Parametric Legendre Transform.
-        rock_test.m: Unit tests for the computation
-            of Rockafellar functions.
-                Each of the unit test files can be called 
-                independently by giving the command 
-                  exec "<PATH>/tests/name_of_test.m"; 
-                or
-                  exec (CCADIR+'/tests/name_of_test.m');
-                Then calling:
-                  runtest('name_of_test.m')
-                will return a true if the tests succeeded,
-                false otherwise.
-             
+
+ans = 
+
+  1×46 TestResult array with properties:
+
+    Name
+    Passed
+    Failed
+    Incomplete
+    Duration
+    Details
+
+Totals:
+   46 Passed, 0 Failed, 0 Incomplete.
+   2.9043 seconds testing time.
+          
 ========
 Credits:
 ========
