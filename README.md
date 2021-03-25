@@ -6,10 +6,11 @@ This toolbox implements functions for convex operations on bivariate
 piecewise-linear cubic functions.
 
 Here are the main files provided by the package. 
-
-README.txt    The present file
-PLQVC.m       The main class implementing convexity detection algorithm, plotting, data structure...
-PLQVCTest.m   Unit tests
+Filename | Description
+-- | --
+README.txt   | The present file
+PLQVC.m      | The main class implementing convexity detection algorithm, plotting, data structure...
+PLQVCTest.m  | Unit tests
 
 ## Unit Tests: in PLQVCTest.m
 
