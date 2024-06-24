@@ -503,7 +503,7 @@ classdef PLQVC
             if ~obj.isDomBounded, error("plotDomain only implemented for bounded domain for now");end       
             hold on;
             warning('off','MATLAB:polyshape:repairedBySimplify');%may produce warning when an edge is split in 2 along boundary; in that case, polyshape simplifies the polyhedral set; ignore warning
-            for iFace = obj.nf % loop on each face and plot the associated polygon
+            for iFace = 1:obj.nf % loop on each face and plot the associated polygon
                 % build a list of vertices clockwise that make up the face
                 face = obj.P{iFace};
                 iVs = zeros(size(face));
