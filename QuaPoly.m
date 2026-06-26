@@ -117,7 +117,7 @@ classdef QuaPoly
                 end
             end
 
-            for i = 1:size(P)
+            for i = 1:size(P,1)%P is nf x 1; use size(P,1) (1:size(P) warns: colon operand must be scalar)
                 %P{i} = obj.sortRow(P{i},obj.E);
                 if ~isempty(P{i})%only sort nonempty arrays
                     P{i} = obj.orderEdges(i);
