@@ -45,9 +45,64 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(r.eval([0.5 0.5]) - q.eval([0.5 0.5]), 1e-12);
         end
 
-        function indefiniteOverTriangleNotImplemented(testCase)
+        function bilinearZeroConvexEdgesIsAffine(testCase)
+            % xy over the triangle (0,0),(1,0),(0,1): no convex edges (slopes 0, -1, vertical),
+            % vertex values xy = 0,0,0 => convex envelope is the zero function.
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V,E,[0 1 0 0 0 0],F);    % xy (indefinite)
+            q = convEnvCPLQ(QuaPoly(V,E,[0 1 0 0 0 0],F));
+            testCase.verifyClass(q, 'RatPol');
+            testCase.verifyEqual(q.eval([0.25 0.25; 0.1 0.6; 0.5 0.2]), [0;0;0], 'AbsTol', 1e-12);
+        end
+
+        function bilinearOneConvexEdgeRational(testCase)
+            % [COAP] Appendix A.3.3 Example 2: conv(xy) over conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2).
+            V = [1 1; 0 0; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            r = convEnvCPLQ(QuaPoly(V,E,[0 1 0 0 0 0],F));
+            testCase.verifyClass(r, 'RatPol');
+            S = [1 0.3; 1.2 0.3; 1.5 0.2; 0.6 0.3];               % interior points
+            expected = 2*S(:,2).^2 ./ (S(:,2) - S(:,1) + 2);
+            testCase.verifyEqual(r.eval(S), expected, 'AbsTol', 1e-12);
+            % envelope touches f = xy along the convex edge (0,0)-(1,1)
+            testCase.verifyEqual(r.eval([0.5 0.5]), 0.25, 'AbsTol', 1e-12);
+        end
+
+        function bilinearOneConvexEdgePlusLinear(testCase)
+            % conv(xy + 2x - y) over the same triangle = 2y^2/(y-x+2) + 2x - y.
+            V = [1 1; 0 0; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            r = convEnvCPLQ(QuaPoly(V,E,[0 1 0 2 -1 0],F));
+            S = [1 0.3; 1.2 0.3; 0.6 0.3];
+            expected = 2*S(:,2).^2 ./ (S(:,2) - S(:,1) + 2) + 2*S(:,1) - S(:,2);
+            testCase.verifyEqual(r.eval(S), expected, 'AbsTol', 1e-12);
+        end
+
+        function bilinearTwoConvexEdgesQuadratic(testCase)
+            % [COAP] Appendix A.4.3 Example: conv(xy) over triangle (2,1),(0,0),(1,0) =
+            %   (x^2 + 2 sqrt(2) xy + 2 y^2 - x + 2 y) / (3 + 2 sqrt(2)).
+            V = [2 1; 0 0; 1 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            r = convEnvCPLQ(QuaPoly(V,E,[0 1 0 0 0 0],F));
+            S = [1 0.3; 0.5 0.2; 1.5 0.6];                         % interior points
+            x = S(:,1); y = S(:,2);
+            expected = (x.^2 + 2*sqrt(2)*x.*y + 2*y.^2 - x + 2*y) / (3 + 2*sqrt(2));
+            testCase.verifyEqual(r.eval(S), expected, 'AbsTol', 1e-12);
+        end
+
+        function generalIndefiniteNeedsRotation(testCase)
+            % indefinite WITH x^2/y^2 terms (1/2 x^2 - 1/2 y^2): rotation not implemented.
+            V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V,E,[1 0 -1 0 0 0],F);
+            testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
+        end
+
+        function negativeBilinearNotImplemented(testCase)
+            V = [1 1; 0 0; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V,E,[0 -1 0 0 0 0],F);   % -xy
+            testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
+        end
+
+        function threeConvexEdgesNotImplemented(testCase)
+            % triangle (0,0),(1,1),(3,2): all three edge slopes (1, 1/2, 2/3) are positive.
+            V = [0 0; 1 1; 3 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V,E,[0 1 0 0 0 0],F);    % xy
             testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
         end
 
