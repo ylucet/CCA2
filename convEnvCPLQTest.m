@@ -87,9 +87,10 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
         end
 
         function generalIndefiniteViaRotation(testCase)
-            % conv(x^2 - y^2) over the triangle (1,0),(0,0),(1,1) = (x-y)^2/(1-y).
+            % conv(x^2 - y^2) over the triangle {(0,0),(1,0),(1,1)} = (x-y)^2/(1-y).
             % (It rotates to conv(xy) over conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2).)
-            V = [1 0; 0 0; 1 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            % Vertices listed counter-clockwise so F=[1 0;...] (face on the left) is consistent.
+            V = [0 0; 1 0; 1 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             r = convEnvCPLQ(QuaPoly(V,E,[2 0 -2 0 0 0],F));   % x^2 - y^2
             testCase.verifyClass(r, 'RatPol');
             S = [0.7 0.3; 0.8 0.2; 0.9 0.5];                  % interior, away from y=1
@@ -98,8 +99,9 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
         end
 
         function negativeBilinearViaRotation(testCase)
-            % conv(-xy) over the triangle (1,-1),(0,0),(2,0) = 2y^2/(2-x-y).
-            V = [1 -1; 0 0; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            % conv(-xy) over the triangle {(0,0),(1,-1),(2,0)} = 2y^2/(2-x-y).
+            % Vertices listed counter-clockwise so F=[1 0;...] (face on the left) is consistent.
+            V = [0 0; 1 -1; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             r = convEnvCPLQ(QuaPoly(V,E,[0 -1 0 0 0 0],F));   % -xy
             S = [1 -0.3; 1.2 -0.3; 0.6 -0.3];                 % interior
             x = S(:,1); y = S(:,2);
