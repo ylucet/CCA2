@@ -86,24 +86,40 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(r.eval(S), expected, 'AbsTol', 1e-12);
         end
 
-        function generalIndefiniteNeedsRotation(testCase)
-            % indefinite WITH x^2/y^2 terms (1/2 x^2 - 1/2 y^2): rotation not implemented.
-            V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V,E,[1 0 -1 0 0 0],F);
-            testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
+        function generalIndefiniteViaRotation(testCase)
+            % conv(x^2 - y^2) over the triangle (1,0),(0,0),(1,1) = (x-y)^2/(1-y).
+            % (It rotates to conv(xy) over conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2).)
+            V = [1 0; 0 0; 1 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            r = convEnvCPLQ(QuaPoly(V,E,[2 0 -2 0 0 0],F));   % x^2 - y^2
+            testCase.verifyClass(r, 'RatPol');
+            S = [0.7 0.3; 0.8 0.2; 0.9 0.5];                  % interior, away from y=1
+            x = S(:,1); y = S(:,2);
+            testCase.verifyEqual(r.eval(S), (x-y).^2 ./ (1-y), 'AbsTol', 1e-12);
         end
 
-        function negativeBilinearNotImplemented(testCase)
-            V = [1 1; 0 0; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V,E,[0 -1 0 0 0 0],F);   % -xy
-            testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
+        function negativeBilinearViaRotation(testCase)
+            % conv(-xy) over the triangle (1,-1),(0,0),(2,0) = 2y^2/(2-x-y).
+            V = [1 -1; 0 0; 2 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            r = convEnvCPLQ(QuaPoly(V,E,[0 -1 0 0 0 0],F));   % -xy
+            S = [1 -0.3; 1.2 -0.3; 0.6 -0.3];                 % interior
+            x = S(:,1); y = S(:,2);
+            testCase.verifyEqual(r.eval(S), 2*y.^2 ./ (2 - x - y), 'AbsTol', 1e-12);
         end
 
-        function threeConvexEdgesNotImplemented(testCase)
-            % triangle (0,0),(1,1),(3,2): all three edge slopes (1, 1/2, 2/3) are positive.
+        function threeConvexEdgesSplit(testCase)
+            % triangle (0,0),(1,1),(3,2): all three edge slopes (1, 1/2, 2/3) positive => split
+            % into two sub-triangles (a 2-face RatPol). No closed form; check key properties.
             V = [0 0; 1 1; 3 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V,E,[0 1 0 0 0 0],F);    % xy
-            testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
+            r = convEnvCPLQ(QuaPoly(V,E,[0 1 0 0 0 0],F));    % xy
+            testCase.verifyClass(r, 'RatPol');
+            testCase.verifyEqual(r.nf, 2);
+            % envelope equals xy at the three original vertices
+            testCase.verifyEqual(r.eval([0 0; 1 1; 3 2]), [0; 1; 6], 'AbsTol', 1e-10);
+            % finite and underestimates xy at interior points
+            S = [1 0.8; 1.5 1.1; 2 1.4];
+            vals = r.eval(S);
+            testCase.verifyTrue(all(isfinite(vals)));
+            testCase.verifyLessThanOrEqual(vals - S(:,1).*S(:,2), 1e-9);
         end
 
         function concaveOverSquareNotImplemented(testCase)

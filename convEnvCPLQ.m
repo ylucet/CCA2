@@ -2,171 +2,237 @@ function r = convEnvCPLQ(obj)
 % convEnvCPLQ  Step 1 of the 'cplq' conjugate pipeline: convex envelope of ONE quadratic piece.
 %
 % objective: compute conv(q + I_P), the convex envelope of a single quadratic q over its
-%   (convex) polyhedral domain P, returned as a RatPol. This is Step 1 of the algorithm in
+%   (convex) polyhedral domain P, returned as a RatPol. Step 1 of the algorithm in
 %     [COAP] Karmarkar & Lucet, Comput. Optim. Appl. 94 (2026) 747-780 (Sect. 3, Appendix A);
 %     [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34.
 %
-% [input]  obj : QuaPoly with a SINGLE piece (nf==1: either the full domain nv==0, or one face).
-%                Must be operable (quadratic numerator; cubic is rejected).
+% [input]  obj : QuaPoly with a SINGLE piece (nf==1: full domain nv==0, or one face).
+%                Operable (quadratic numerator; cubic rejected).
 % [output] r   : RatPol = conv(q + I_P).
 %
 % Classification by the (constant) Hessian Q of q = 1/2 x'Q x + L'x + kappa:
-%   * Q positive semidefinite  -> q is convex on the convex set P, so conv = q itself
-%                                 (valid on the full domain or any single face).
-%   * Q negative semidefinite over a TRIANGLE -> conv is the affine function interpolating the
-%                                 three vertex values (the "no convex edges" case, Appendix A.2).
-%   * Q indefinite, BILINEAR part beta*x*y (beta>0, no x^2/y^2 terms) over a triangle:
-%                                 classify the 0/1/2 strictly convex edges (slope > 0) and apply
-%                                 [COAP] Appendix A.2 (0 -> affine), A.3 eq.16 (1 -> rational
-%                                 quadratic/linear), A.4 (2 -> quadratic, harmonic-mean form),
-%                                 then add the linear part. Verified against the Appendix A
-%                                 examples (e.g. conv(xy) over conv{(1,1),(0,0),(2,0)} =
-%                                 2 y^2 / (y - x + 2)).
-%   * Q indefinite, GENERAL (x^2/y^2 terms, beta<=0, or 3 convex edges) -> NOT IMPLEMENTED YET:
-%                                 needs the eigen-rotation to x*y (and back) and/or the
-%                                 3-convex-edge triangle split (Appendix A.5). See DESIGN.md
-%                                 II.5.1 and codeOld/cPLQ (plq_1p.convexEnvelope).
+%   * Q positive semidefinite  -> q is convex on the convex set P, so conv = q itself.
+%   * Q negative semidefinite over a TRIANGLE -> affine interpolation of the 3 vertex values.
+%   * Q indefinite over a TRIANGLE -> reduce to the bilinear form u1*u2 via u = M x (eigen-
+%       rotation; for an already-bilinear positive q the map is the identity), compute the
+%       envelope with [COAP] Appendix A (0/1/2 convex edges -> affine / rational eq.16 /
+%       quadratic harmonic-mean; a triangle with 3 convex edges is split by a horizontal line
+%       through the middle vertex into two 2-convex-edge sub-triangles), then substitute u = M x
+%       back. Yields linear / quadratic / rational (quadratic over linear) pieces on a polyhedral
+%       subdivision (1 or 2 faces). Verified vs Appendix A examples, e.g. conv(xy) over
+%       conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2), and conv(x^2-y^2) over (1,0),(0,0),(1,1) =
+%       (x-y)^2/(1-y).
 %
-% Multi-piece inputs (nf>1) are handled by the pipeline that loops over pieces (later); here a
-% single piece is required.
+% Not implemented yet: non-convex over a non-triangle, non-convex full domain, and multi-piece
+% inputs (assembled by the pipeline loop). See DESIGN.md II.5.1 and codeOld/cPLQ.
 
-    obj.assertOperable();                 % quadratic numerator (cubic rejected)
+    obj.assertOperable();
     if obj.nf ~= 1
         error('convEnvCPLQ:notImplemented', ...
             ['convEnvCPLQ handles a single quadratic piece (nf==1); got nf=%d. ' ...
              'Multi-piece convex envelopes are assembled by the pipeline (not implemented yet).'], obj.nf);
     end
 
-    [L,Q,C] = QuaPoly.matrixForm(obj.f(1,:)); %#ok<ASGLU>
-    ev   = eig(Q);
+    [L,Q,~] = QuaPoly.matrixForm(obj.f(1,:));
+    ev    = eig(Q);
     isPSD = all(ev >= -sqrt(eps));
     isNSD = all(ev <=  sqrt(eps));
-    f6 = obj.f(1,5:10);                   % quadratic numerator in 6-coeff [x^2 xy y^2 x y const]
+    f6    = obj.f(1,5:10);                 % quadratic numerator [x^2 xy y^2 x y const] (stored)
 
-    % ---- Convex case: envelope = q itself (on the full domain or any single convex face) ----
+    % ---- Convex: envelope = q itself (full domain or any single convex face) ----------------
     if isPSD
-        if obj.nv == 0
-            r = RatPol(f6);                       % full-domain quadratic
-        else
-            r = RatPol(obj.V, obj.E, f6, obj.F);  % same quadratic on the same face
+        if obj.nv == 0, r = RatPol(f6);
+        else,           r = RatPol(obj.V, obj.E, f6, obj.F);
         end
         return
     end
-
-    % ---- Non-convex on the full domain: convex envelope is -inf (not a finite RatPol) -------
     if obj.nv == 0
         error('convEnvCPLQ:notImplemented', ...
             'Convex envelope of a non-convex full-domain quadratic is not finite; not implemented.');
     end
-
-    % ---- Non-convex requires a bounded triangle for the closed-form cases below -------------
     isTriangle = (obj.nv == 3) && (obj.ne == 3) && obj.isDomBounded;
     if ~isTriangle
         error('convEnvCPLQ:notImplemented', ...
-            ['Convex envelope of a non-convex quadratic is currently implemented only over a ' ...
-             'bounded triangle (got nv=%d, ne=%d, bounded=%d).'], obj.nv, obj.ne, obj.isDomBounded);
+            ['Convex envelope of a non-convex quadratic is implemented only over a bounded ' ...
+             'triangle (got nv=%d, ne=%d, bounded=%d).'], obj.nv, obj.ne, obj.isDomBounded);
     end
 
-    % ---- Concave over a triangle: affine interpolation of the three vertex values -----------
+    % ---- Concave over a triangle: affine interpolation of the 3 vertex values ---------------
     if isNSD
-        z   = QuaPoly.evalPoly(obj.f(1,:), obj.V);   % 3x1 values q(v_i) at the triangle vertices
-        abc = [obj.V, ones(3,1)] \ z;                % [alpha; beta; gamma]: z = alpha x + beta y + gamma
-        flin = [0 0 0 abc(1) abc(2) abc(3)];         % linear function in 6-coeff format
-        r = RatPol(obj.V, obj.E, flin, obj.F);
+        z   = QuaPoly.evalPoly(obj.f(1,:), obj.V);
+        abc = [obj.V, ones(3,1)] \ z;
+        r = RatPol(obj.V, obj.E, [0 0 0 abc(1) abc(2) abc(3)], obj.F);
         return
     end
 
-    % ---- Indefinite over a triangle ---------------------------------------------------------
-    % General indefinite q has the form (quadratic part) = x^2/y^2/xy terms with one positive
-    % and one negative eigenvalue. Reducing a general indefinite quadratic to the bilinear form
-    % x*y requires an eigen-rotation (and tracking the change of variables back) -- not done yet.
-    % Here we handle the already-bilinear case: quadratic part = beta*x*y (no x^2, y^2 terms)
-    % with beta>0, plus an arbitrary linear part. This covers [COAP] Appendix A's worked
-    % examples and produces real rational/quadratic/linear envelope pieces.
-    if abs(f6(1)) > sqrt(eps) || abs(f6(3)) > sqrt(eps)
-        error('convEnvCPLQ:notImplemented', ...
-            ['Convex envelope of a general indefinite quadratic (with x^2 or y^2 terms) needs a ' ...
-             'rotation to the bilinear form x*y, which is not implemented yet. Only the pure ' ...
-             'bilinear case (quadratic part = beta*x*y) is supported. See DESIGN.md II.5.1.']);
+    % ---- Indefinite over a triangle: reduce to bilinear u1*u2 via u = M x --------------------
+    kappa = obj.f(1,end);
+    if abs(f6(1)) < sqrt(eps) && abs(f6(3)) < sqrt(eps) && f6(2) > sqrt(eps)
+        % already bilinear with positive coefficient: identity frame
+        M = eye(2); Minv = eye(2); Vbf = obj.V; beta = f6(2); lin = [f6(4) f6(5) f6(6)];
+    else
+        % general indefinite (incl. negative bilinear): rotate so 1/2 x'Q x = u1*u2
+        M = bilinearFrame(Q); Minv = inv(M); %#ok<MINV>
+        Vbf = (M * obj.V')';
+        Ltil = (M') \ L;                   % linear part in u-coords: M^{-T} L
+        beta = 1; lin = [Ltil(1) Ltil(2) kappa];
     end
-    beta = f6(2);                          % actual coefficient of x*y
-    if beta <= sqrt(eps)
-        error('convEnvCPLQ:notImplemented', ...
-            ['Only a positive bilinear coefficient (beta>0) is supported; beta<=0 needs the ' ...
-             'general reduction (reflection/rotation), not implemented yet. See DESIGN.md II.5.1.']);
+
+    ce  = classifyConvexEdges(Vbf);
+    nCE = size(ce,1);
+    if nCE <= 2
+        [numPlain, den3] = envelopeFromClassified(Vbf, beta, lin, ce);
+        numX = substituteQuadPlain(numPlain, M);
+        denX = substituteLin(den3, M);
+        r = RatPol(obj.V, obj.E, plainToStored(numX), obj.F, denX);
+        return
     end
-    [num6, den3] = bilinearTriangleEnvelope(obj.V, beta, f6(4:6));
-    r = RatPol(obj.V, obj.E, num6, obj.F, den3);
+
+    % nCE == 3: split the triangle (in the bilinear frame) into two 2-convex-edge sub-triangles
+    [triU, faces, edgeList] = splitThreeConvex(Vbf);
+    num6 = zeros(2,6); den3 = zeros(2,3);
+    for k = 1:2
+        sub = triU(faces{k}, :);
+        [npk, dk] = envelopeFromClassified(sub, beta, lin, classifyConvexEdges(sub));
+        num6(k,:) = plainToStored(substituteQuadPlain(npk, M));
+        den3(k,:) = substituteLin(dk, M);
+    end
+    Vx = (Minv * triU')';                  % sub-triangle vertices back in x-coords
+    r  = assembleTwoTriangles(Vx, faces, edgeList, num6, den3);
 end
 
 % ===================== local functions ======================================================
-function [num6, den3] = bilinearTriangleEnvelope(V, beta, lin)
-% conv(beta*x*y + d*x + e*y + f0) over the triangle with vertices V (3x2), beta>0.
-% Returns the envelope as numerator coefficients num6 (STORED weighted basis [x^2 xy y^2 x y 1])
-% and a linear denominator den3 = [g h k] (den3 = [0 0 1] when the envelope is a polynomial).
-% Implements [COAP] Appendix A.2 (0 convex edges -> linear), A.3 eq.16 (1 -> rational),
-% A.4 (2 -> quadratic). 3 convex edges (needs splitting) is not implemented.
-    tol = sqrt(eps);
-    d = lin(1); e = lin(2); f0 = lin(3);
-    % classify each of the 3 edges: convex (for beta>0) iff its slope m > 0
-    ed = [1 2; 2 3; 3 1];
-    cm = []; cq = []; copp = [];          % slope, intercept, opposite-vertex index of convex edges
+function M = bilinearFrame(Q)
+% Build M (u = M x) so that 1/2 x'Q x = u1*u2 for an indefinite symmetric Q.
+% With Q = lam1 r1 r1' + lam2 r2 r2' (lam1>0>lam2) and a = sqrt(lam1/2) r1 + sqrt(-lam2/2) r2,
+% b = sqrt(lam1/2) r1 - sqrt(-lam2/2) r2, one has a b' + b a' = Q, hence (a'x)(b'x) = 1/2 x'Q x.
+    [R, Lam] = eig(Q); lam = diag(Lam);
+    [lp, ip] = max(lam); [ln, in] = min(lam);
+    r1 = R(:,ip); r2 = R(:,in);
+    a = sqrt(lp/2)*r1 + sqrt(-ln/2)*r2;
+    b = sqrt(lp/2)*r1 - sqrt(-ln/2)*r2;
+    M = [a'; b'];
+end
+
+function ce = classifyConvexEdges(V)
+% Convex edges of a triangle for the bilinear form u1*u2: an edge is convex iff its slope > 0
+% (u1*u2 restricted to y=m x+q is m x^2+q x, convex iff m>0). Vertical edges are not convex.
+% Returns ce: (#convex) x 3 rows [slope, intercept, opposite-vertex-index].
+    tol = sqrt(eps); ed = [1 2; 2 3; 3 1]; ce = zeros(0,3);
     for t = 1:3
         i = ed(t,1); j = ed(t,2); opp = 6 - i - j;
         vi = V(i,:); vj = V(j,:); dx = vj(1)-vi(1); dy = vj(2)-vi(2);
-        if abs(dx) < tol, continue; end    % vertical edge: x*y is linear along it (not convex)
+        if abs(dx) < tol, continue; end
         m = dy/dx;
         if m > tol
-            cm(end+1) = m; cq(end+1) = vi(2) - m*vi(1); copp(end+1) = opp; %#ok<AGROW>
+            ce(end+1,:) = [m, vi(2)-m*vi(1), opp]; %#ok<AGROW>
         end
     end
-    nCE = numel(cm);
-    switch nCE
-        case 0   % Appendix A.2: affine interpolation of q at the 3 vertices
+end
+
+function [numPlain, den3] = envelopeFromClassified(V, beta, lin, ce)
+% conv(beta*u1*u2 + lin) over the triangle V, given the convex-edge list ce (0/1/2 rows).
+% Returns PLAIN numerator coefficients [a b c d e f] (a u1^2+b u1u2+c u2^2+d u1+e u2+f) and a
+% linear denominator den3 = [g h k] (den3 = [0 0 1] when the envelope is a polynomial).
+    d = lin(1); e = lin(2); f0 = lin(3);
+    switch size(ce,1)
+        case 0   % Appendix A.2: affine interpolation of the vertex values
             qv  = beta*(V(:,1).*V(:,2)) + d*V(:,1) + e*V(:,2) + f0;
-            abc = [V, ones(3,1)] \ qv;     % q ~ abc(1) x + abc(2) y + abc(3)
+            abc = [V, ones(3,1)] \ qv;
             numPlain = [0 0 0 abc(1) abc(2) abc(3)]; den3 = [0 0 1];
         case 1   % Appendix A.3 eq.16: rational (quadratic over linear)
-            m = cm(1); q = cq(1); x1 = V(copp(1),1); y1 = V(copp(1),2);
+            m = ce(1,1); q = ce(1,2); x1 = V(ce(1,3),1); y1 = V(ce(1,3),2);
             a = -m*y1; b = q; c = x1;
             dd = -q*y1 + m*x1*y1; ee = -q*x1 - x1*y1; ff = q*x1*y1;
             g = -m; h = 1; k = -y1 + m*x1;
-            numB = [a b c dd ee ff];       % conv(x*y) numerator (plain), over denB
-            denB = [g h k];
-            % conv(beta*xy + lin) = (beta*numB + lin*denB) / denB
+            numB = [a b c dd ee ff]; denB = [g h k];
             linDen = [d*g, d*h+e*g, e*h, d*k+f0*g, e*k+f0*h, f0*k];
             numPlain = beta*numB + linDen; den3 = denB;
         case 2   % Appendix A.4: quadratic (harmonic-mean form)
-            q2 = twoEdgeQuadPlain(cm(1), cq(1), cm(2), cq(2), V);  % conv(x*y), plain coeffs
+            q2 = twoEdgeQuadPlain(ce(1,1), ce(1,2), ce(2,1), ce(2,2), V);
             numPlain = beta*q2 + [0 0 0 d e f0]; den3 = [0 0 1];
-        otherwise % nCE == 3
-            error('convEnvCPLQ:notImplemented', ...
-                ['Bilinear triangle with 3 convex edges must be split into two triangles ' ...
-                 '(Appendix A.5); not implemented yet.']);
+        otherwise
+            error('convEnvCPLQ:internal','envelopeFromClassified expects 0,1,or 2 convex edges.');
     end
-    num6 = [2*numPlain(1), numPlain(2), 2*numPlain(3), numPlain(4), numPlain(5), numPlain(6)];
 end
 
 function q = twoEdgeQuadPlain(mh, qh, mw, qw, V)
-% conv(x*y) over a triangle with two convex edges y=mh x+qh and y=mw x+qw (Appendix A.4),
-% as plain coefficients [a b c d e f] of a x^2+b xy+c y^2+d x+e y+f. Of the two (+/-) solutions
-% we pick the one that touches f=x*y along a convex edge.
+% conv(u1*u2) over a triangle with two convex edges (Appendix A.4), plain coeffs [a b c d e f].
+% Of the two (+/-) solutions, pick the one that touches f=u1*u2 along a convex edge.
     for s = [1 -1]
         cand = buildTwoEdge(mh, qh, mw, qw, s);
-        xt = mean(V(:,1)); yt = mh*xt + qh;             % a point on convex edge h
+        xt = mean(V(:,1)); yt = mh*xt + qh;
         if abs(evalPlain(cand, xt, yt) - xt*yt) < 1e-7*(1+abs(xt*yt))
             q = cand; return;
         end
     end
-    q = buildTwoEdge(mh, qh, mw, qw, 1);                 % fallback (matches [COAP] example)
+    q = buildTwoEdge(mh, qh, mw, qw, 1);
 end
 
 function c = buildTwoEdge(mh, qh, mw, qw, s)
-    r = sqrt(mh*mw); denom = mh + mw + s*2*r;
-    c = [ mh*mw/denom, s*2*r/denom, 1/denom, ...
+    rr = sqrt(mh*mw); denom = mh + mw + s*2*rr;
+    c = [ mh*mw/denom, s*2*rr/denom, 1/denom, ...
           (mh*qw + mw*qh)/denom, -(qh+qw)/denom, qh*qw/denom ];
 end
 
 function v = evalPlain(c, x, y)
     v = c(1)*x.^2 + c(2)*x.*y + c(3)*y.^2 + c(4)*x + c(5)*y + c(6);
+end
+
+function s6 = plainToStored(p6)
+% plain [A B C D E F] (A x^2+...) -> stored weighted basis [2A B 2C D E F] used by evalPoly.
+    s6 = [2*p6(1), p6(2), 2*p6(3), p6(4), p6(5), p6(6)];
+end
+
+function p = substituteQuadPlain(N, M)
+% Substitute u = M x into a PLAIN quadratic N=[A B C D E F] (in u1,u2); return PLAIN coeffs in x,y.
+% u1 = M(1,1) x + M(1,2) y,  u2 = M(2,1) x + M(2,2) y.
+    A=N(1); B=N(2); C=N(3); D=N(4); E=N(5); F=N(6);
+    m11=M(1,1); m12=M(1,2); m21=M(2,1); m22=M(2,2);
+    p = [ A*m11^2 + B*m11*m21 + C*m21^2, ...
+          A*2*m11*m12 + B*(m11*m22+m12*m21) + C*2*m21*m22, ...
+          A*m12^2 + B*m12*m22 + C*m22^2, ...
+          D*m11 + E*m21, ...
+          D*m12 + E*m22, ...
+          F ];
+end
+
+function d3 = substituteLin(den, M)
+% Substitute u = M x into a linear denominator den=[g h k] (g u1+h u2+k); return [.. .. k] in x,y.
+    g=den(1); h=den(2); k=den(3);
+    d3 = [ g*M(1,1) + h*M(2,1), g*M(1,2) + h*M(2,2), k ];
+end
+
+function [tri, faces, edgeList] = splitThreeConvex(V)
+% Split a triangle (3x2, in the bilinear frame) by the horizontal line through the middle (by
+% 2nd-coordinate) vertex, hitting the opposite edge at Pnew. Returns 4 vertices
+% tri = [vlow; vmid; vhigh; Pnew], the two sub-triangles faces (vertex indices into tri), and a
+% directed edge list. Each sub-triangle then has exactly two convex edges.
+    [~, ord] = sort(V(:,2));
+    vlow = V(ord(1),:); vmid = V(ord(2),:); vhigh = V(ord(3),:);
+    t = (vmid(2) - vlow(2)) / (vhigh(2) - vlow(2));
+    Pnew = vlow + t*(vhigh - vlow);
+    tri = [vlow; vmid; vhigh; Pnew];          % indices 1=low, 2=mid, 3=high, 4=Pnew
+    faces = {[1 2 4], [2 3 4]};               % T1={low,mid,Pnew}, T2={mid,high,Pnew}
+    edgeList = [1 2; 2 3; 1 4; 4 3; 2 4];     % low-mid, mid-high, low-Pnew, Pnew-high, mid-Pnew(internal)
+end
+
+function r = assembleTwoTriangles(V, faces, edgeList, num6, den3)
+% Build a 2-face RatPol from two triangles sharing an edge. Edge orientation (which face is on
+% the left/right) is determined by a centroid side test, so F is consistent for the constructor.
+    ne = size(edgeList,1); nf = numel(faces);
+    E = [edgeList, ones(ne,1)];
+    cent = zeros(nf,2);
+    for k = 1:nf, cent(k,:) = mean(V(faces{k},:),1); end
+    F = zeros(ne,2);
+    for j = 1:ne
+        a = edgeList(j,1); b = edgeList(j,2); va = V(a,:); dir = V(b,:) - va;
+        for k = 1:nf
+            if all(ismember([a b], faces{k}))
+                cr = dir(1)*(cent(k,2)-va(2)) - dir(2)*(cent(k,1)-va(1)); % (b-a) x (cent-a)
+                if cr > 0, F(j,1) = k; else, F(j,2) = k; end
+            end
+        end
+    end
+    r = RatPol(V, E, num6, F, den3);
 end
