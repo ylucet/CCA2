@@ -7,7 +7,10 @@ function r = convEnvCPLQ(obj)
 %     [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34.
 %
 % [input]  obj : QuaPoly with a SINGLE piece (nf==1: full domain nv==0, or one face).
-%                Operable (quadratic numerator; cubic rejected).
+%                Operable (quadratic numerator; cubic rejected). A bounded-triangle face must be
+%                a valid QuaPoly: with F=[k 0] (face on the left of each directed edge) the
+%                vertices are listed counter-clockwise. The single-piece result reuses obj's
+%                domain, so an inconsistent winding would make eval miss the interior.
 % [output] r   : RatPol = conv(q + I_P).
 %
 % Classification by the (constant) Hessian Q of q = 1/2 x'Q x + L'x + kappa:
