@@ -26,14 +26,20 @@ function r = convEnvCPLQ(obj)
 %       conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2), and conv(x^2-y^2) over (1,0),(0,0),(1,1) =
 %       (x-y)^2/(1-y).
 %
-% Not implemented yet: non-convex over a non-triangle, non-convex full domain, and multi-piece
-% inputs (assembled by the pipeline loop). See DESIGN.md II.5.1 and codeOld/cPLQ.
+% Multi-piece input (nf>1): each bounded face is fan-triangulated (CCW), the single-triangle
+% envelope above is computed per triangle, and the triangle-pieces are merged into one connected
+% RatPol (convEnvMultiFace). This is Step 1 of the pipeline: for a single NON-convex quadratic
+% over a polygon it returns the per-triangle envelopes (a triangulated intermediate), not the
+% polygon's true convex envelope (the latter is recovered later by the conjugate/max steps); for
+% convex pieces the per-triangle envelope equals the piece itself, so the result is exact.
+%
+% Not implemented yet: non-convex over a single non-triangular face (nf==1; pass nf>1 or a
+% triangle), non-convex full domain, and unbounded faces. See DESIGN.md II.5.1 and codeOld/cPLQ.
 
     obj.assertOperable();
-    if obj.nf ~= 1
-        error('convEnvCPLQ:notImplemented', ...
-            ['convEnvCPLQ handles a single quadratic piece (nf==1); got nf=%d. ' ...
-             'Multi-piece convex envelopes are assembled by the pipeline (not implemented yet).'], obj.nf);
+    if obj.nf > 1
+        r = convEnvMultiFace(obj);   % triangulate each face, envelope per triangle, assemble
+        return
     end
 
     [L,Q,~] = QuaPoly.matrixForm(obj.f(1,:));
@@ -237,5 +243,99 @@ function r = assembleTwoTriangles(V, faces, edgeList, num6, den3)
             end
         end
     end
+    r = RatPol(V, E, num6, F, den3);
+end
+
+% ----- multi-face (Step 1 over a triangulated domain) ---------------------------------------
+function r = convEnvMultiFace(obj)
+% Fan-triangulate every bounded face of obj, compute the single-triangle convex envelope of the
+% face's quadratic on each triangle, and merge the resulting triangle-pieces into one RatPol.
+    pieces = struct('V', {}, 'num6', {}, 'den3', {});
+    for i = 1:obj.nf
+        tris = extractFaceTrianglesCCW(obj, i);
+        q6   = obj.f(i, 5:10);                 % the (quadratic) numerator on face i
+        for t = 1:numel(tris)
+            qT = QuaPoly(tris{t}, [1 2 1; 2 3 1; 3 1 1], q6, [1 0; 1 0; 1 0]);
+            rT = convEnvCPLQ(qT);              % single-triangle path (1 or 2 output faces)
+            for g = 1:rT.nf
+                Vg = ensureCCW(rT.V(faceVertexIndices(rT, g), :));
+                pieces(end+1) = struct('V', Vg, 'num6', rT.f(g,5:10), 'den3', rT.den(g,:)); %#ok<AGROW>
+            end
+        end
+    end
+    r = assembleTriangles(pieces);
+end
+
+function tris = extractFaceTrianglesCCW(obj, i)
+% Vertices of bounded face i in boundary order -> CCW polygon -> fan triangulation (convex face).
+    ej = find(any(obj.F == i, 2));             % edges incident to face i
+    if any(obj.E(ej,3) == 0)
+        error('convEnvCPLQ:notImplemented', ...
+            'Multi-piece convex envelope requires bounded faces (face %d is unbounded).', i);
+    end
+    W = obj.V(faceVertexIndices(obj, i), :);
+    if signedArea(W) < 0, W = flipud(W); end   % make the polygon CCW
+    n = size(W,1);
+    if n < 3, error('convEnvCPLQ:degenerateFace', 'Face %d has fewer than 3 vertices.', i); end
+    tris = cell(1, n-2);
+    for t = 1:n-2, tris{t} = [W(1,:); W(t+1,:); W(t+2,:)]; end   % fan from W(1)
+end
+
+function iVs = faceVertexIndices(obj, k)
+% Vertex indices around face k, in the order of its ordered edge list obj.P{k}.
+    face = obj.P{k}; iVs = zeros(1, numel(face));
+    for i = 1:numel(face)
+        j = face(i);
+        if j > 0, iVs(i) = obj.E(j,1); else, iVs(i) = obj.E(-j,2); end
+    end
+end
+
+function W = ensureCCW(W)
+    if signedArea(W) < 0, W = W([1 3 2], :); end   % 3 vertices: swap to CCW
+end
+
+function a = signedArea(W)
+    x = W(:,1); y = W(:,2); n = size(W,1); a = 0;
+    for i = 1:n, j = mod(i,n)+1; a = a + (x(i)*y(j) - x(j)*y(i)); end
+    a = a/2;
+end
+
+function r = assembleTriangles(pieces)
+% Merge CCW triangle pieces {V(3x2), num6, den3} into one connected RatPol. Vertices are
+% deduplicated by coordinate; an undirected edge shared by two CCW triangles is internal (the
+% face that traverses it as a->b is on its left, the other on its right); boundary edges keep 0.
+    tol = sqrt(eps); nf = numel(pieces);
+    allV = zeros(3*nf, 2);
+    for k = 1:nf, allV(3*k-2:3*k, :) = pieces(k).V; end
+    V = zeros(0,2); idx = zeros(3*nf,1);
+    for p = 1:3*nf
+        hit = 0;
+        for q = 1:size(V,1)
+            if norm(V(q,:) - allV(p,:)) < tol, idx(p) = q; hit = 1; break; end
+        end
+        if ~hit, V(end+1,:) = allV(p,:); idx(p) = size(V,1); end %#ok<AGROW>
+    end
+    faceV = reshape(idx, 3, nf)';              % nf x 3 CCW vertex indices
+    HE = zeros(3*nf, 3); c = 0;                % half-edges [face a b]
+    for k = 1:nf
+        vs = faceV(k,:);
+        for t = 1:3
+            c = c+1; HE(c,:) = [k, vs(t), vs(mod(t,3)+1)];
+        end
+    end
+    used = false(3*nf,1); E = zeros(0,3); F = zeros(0,2);
+    for c = 1:3*nf
+        if used(c), continue; end
+        used(c) = true; k = HE(c,1); a = HE(c,2); b = HE(c,3);
+        opp = find(~used & HE(:,2)==b & HE(:,3)==a, 1);
+        if isempty(opp)
+            E(end+1,:) = [a b 1]; F(end+1,:) = [k 0]; %#ok<AGROW>
+        else
+            used(opp) = true;
+            E(end+1,:) = [a b 1]; F(end+1,:) = [k HE(opp,1)]; %#ok<AGROW>
+        end
+    end
+    num6 = zeros(nf,6); den3 = zeros(nf,3);
+    for k = 1:nf, num6(k,:) = pieces(k).num6; den3(k,:) = pieces(k).den3; end
     r = RatPol(V, E, num6, F, den3);
 end
