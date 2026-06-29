@@ -124,14 +124,50 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(vals - S(:,1).*S(:,2), 1e-9);
         end
 
+        function multiFaceConvexSquare(testCase)
+            % Unit square split by the diagonal (0,0)-(1,1) into two triangles, convex
+            % 1/2(x^2+y^2) on both: per-triangle envelope = the function, assembled over the square.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];   % bottom, right, diagonal, top, left
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];             % face1 = lower-right, face2 = upper-left
+            f = [1 0 1 0 0 0; 1 0 1 0 0 0];
+            q = QuaPoly(V,E,f,F);
+            % validate the input itself
+            testCase.verifyEqual(q.eval([0.5 0.3; 0.3 0.5]), 0.5*[0.34; 0.34], 'AbsTol', 1e-12);
+            r = convEnvCPLQ(q);
+            testCase.verifyClass(r, 'RatPol');
+            S = [0.5 0.3; 0.3 0.5; 0.5 0.5];
+            testCase.verifyEqual(r.eval(S), 0.5*(S(:,1).^2 + S(:,2).^2), 'AbsTol', 1e-12);
+        end
+
+        function multiFaceBilinearSquare(testCase)
+            % Same 2-triangle square, f = xy on both faces. Per-triangle convex envelopes:
+            %   lower-right triangle (y<x): y^2/(y-x+1);  upper-left (y>x): x^2/(x-y+1).
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];
+            f = [0 1 0 0 0 0; 0 1 0 0 0 0];
+            q = QuaPoly(V,E,f,F);
+            testCase.verifyEqual(q.eval([0.5 0.3; 0.3 0.5]), [0.15; 0.15], 'AbsTol', 1e-12); % xy
+            r = convEnvCPLQ(q);
+            testCase.verifyEqual(r.nf, 2);
+            testCase.verifyEqual(r.eval([0.5 0.3]), 0.3^2/(0.3-0.5+1), 'AbsTol', 1e-12); % T1: 0.1125
+            testCase.verifyEqual(r.eval([0.3 0.5]), 0.3^2/(0.3-0.5+1), 'AbsTol', 1e-12); % T2: 0.1125
+            testCase.verifyEqual(r.eval([0.5 0.5]), 0.25, 'AbsTol', 1e-12);               % touches xy
+            % underestimates xy
+            S = [0.6 0.2; 0.2 0.6];
+            testCase.verifyLessThanOrEqual(r.eval(S) - S(:,1).*S(:,2), 1e-12);
+        end
+
         function concaveOverSquareNotImplemented(testCase)
-            % Non-convex over a non-triangle is not implemented yet.
+            % Non-convex over a single non-triangular face (nf==1) is not implemented yet.
             V = [0 0; 1 0; 1 1; 0 1]; E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0;1 0;1 0;1 0];
             q = QuaPoly(V,E,[-1 0 -1 0 0 0],F);
             testCase.verifyError(@() convEnvCPLQ(q), 'convEnvCPLQ:notImplemented');
         end
 
-        function multiPieceNotImplemented(testCase)
+        function unboundedMultiFaceRejected(testCase)
+            % oneNorm has 4 unbounded (ray) faces -> multi-face path requires bounded faces.
             testCase.verifyError(@() convEnvCPLQ(QuaPoly.oneNorm()), 'convEnvCPLQ:notImplemented');
         end
 
