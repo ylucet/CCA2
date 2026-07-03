@@ -61,6 +61,39 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             end
         end
 
+        function linearOverTriangleConjugate(testCase)
+            % ell(x) = -x over the triangle (0,0),(1,0),(0,1). Vertex values ell = 0,-1,0, so
+            % f*(s) = max_i(<s,v_i> - ell(v_i)) = max(0, s1+1, s2), a 3-cone piecewise-linear QuaPar.
+            V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            g = conjPieceCPLQ(QuaPoly(V, E, [0 0 0 -1 0 0], F));   % ell = -x
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 3);
+            S = [-2 -1; 3 -1; -1 2; 0.5 0.5; -1 0];
+            for i = 1:size(S,1)
+                expected = max([0; S(i,1)+1; S(i,2)]);        % max(L1,L2,L3)
+                testCase.verifyEqual(g.eval(S(i,:)), expected, 'AbsTol', 1e-10, sprintf('s=%d', i));
+            end
+        end
+
+        function concaveQuadraticConjugateEndToEnd(testCase)
+            % conj(concave quadratic over T) = conj(its affine envelope). For q = -(x^2+y^2) over
+            % the triangle (0,0),(2,0),(0,2): sup_{x in T} <s,x> - q(x) is attained at a vertex, so
+            % f*(s) = max_i(<s,v_i> - q(v_i)) with q-values 0,-4,-4.
+            V = [0 0; 2 0; 0 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [-2 0 -2 0 0 0], F);            % -(x^2+y^2)
+            r = convEnvCPLQ(q);                                % Step 1 -> affine envelope (RatPol)
+            g = conjPieceCPLQ(r);                              % Step 2 -> 3-cone conjugate
+            testCase.verifyEqual(g.nf, 3);
+            qf = @(x) -(x(1)^2 + x(2)^2);
+            v1=[0;0]; v2=[2;0]; v3=[0;2];
+            S = [1 1; 5 -1; -1 5; 3 3];
+            for i = 1:size(S,1)
+                s = S(i,:)';
+                expected = max([s'*v1-qf(v1); s'*v2-qf(v2); s'*v3-qf(v3)]);
+                testCase.verifyEqual(g.eval(S(i,:)), expected, 'AbsTol', 1e-10, sprintf('s=%d', i));
+            end
+        end
+
         function indefiniteRejected(testCase)
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy (not PD)

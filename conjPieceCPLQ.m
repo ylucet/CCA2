@@ -7,8 +7,9 @@ function g = conjPieceCPLQ(p)
 %     [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34.
 %
 % [input]  p : a single convex piece over a bounded triangle. Currently implemented:
-%              a CONVEX (positive-definite) QUADRATIC over a triangle (den = 1, no x^2/y^2
-%              "rational" denominator). p may be a QuaPoly, QuaPar, or RatPol.
+%              an AFFINE piece (-> f* = max_i(<s,v_i>-ell(v_i)), three cones) and a CONVEX
+%              (positive-definite) QUADRATIC (-> seven regions). den = 1 (no rational
+%              denominator). p may be a QuaPoly, QuaPar, or RatPol.
 % [output] g : QuaPar = the conjugate, a quadratic on a polyhedral subdivision with seven faces:
 %              the central gradient image triangle T' = {A v_i + b}, three edge strips, and
 %              three vertex cones; the conjugate is finite everywhere (domain = R^2).
@@ -39,13 +40,56 @@ function g = conjPieceCPLQ(p)
         error('conjPieceCPLQ:notImplemented','Quadratic numerator required (got a cubic).');
     end
     A = Q; b = L; c = p.f(1,end);
-    if ~all(eig(A) > sqrt(eps))
-        error('conjPieceCPLQ:notImplemented', ...
-            'A convex (positive-definite) quadratic is required; got a non-PD Hessian.');
-    end
     V3 = p.V;
     if triSignedArea(V3) < 0, V3 = V3([1 3 2],:); end     % ensure CCW
-    g = conjConvexQuadTriangle(V3, A, b, c);
+    if norm(A) < sqrt(eps)
+        g = conjLinearTriangle(V3, b, c);                 % affine piece (e.g. a concave envelope)
+    elseif all(eig(A) > sqrt(eps))
+        g = conjConvexQuadTriangle(V3, A, b, c);          % strictly convex quadratic
+    else
+        error('conjPieceCPLQ:notImplemented', ...
+            ['Only an affine or a positive-definite quadratic piece over a triangle is supported; ' ...
+             'got a non-PD, non-zero Hessian (indefinite or rank-deficient, or a rational piece).']);
+    end
+end
+
+% ============================================================================================
+function g = conjLinearTriangle(V, gvec, h)
+% Conjugate of an affine ell(x)=gvec'x+h over the CCW triangle V:
+%   f*(s) = max_i [ <s,v_i> - ell(v_i) ],
+% a piecewise-linear QuaPar with three unbounded cones meeting at the point s0 where the three
+% vertex-linears L_i(s) = <s,v_i> - ell(v_i) are equal ([COAP] Appendix B.1).
+    v1 = V(1,:)'; v2 = V(2,:)'; v3 = V(3,:)';
+    lv = @(v) gvec'*v + h;
+    s0 = [(v1-v2)'; (v1-v3)'] \ [lv(v1)-lv(v2); lv(v1)-lv(v3)];   % L1=L2=L3 here
+
+    d12 = boundaryDir(v1-v2, v1-v3);   % along boundary L1=L2, oriented so L1>=L3
+    d23 = boundaryDir(v2-v3, v2-v1);   % along boundary L2=L3, oriented so L2>=L1
+    d13 = boundaryDir(v1-v3, v1-v2);   % along boundary L1=L3, oriented so L1>=L2
+
+    Vd = [s0'; (s0+d12)'; (s0+d23)'; (s0+d13)'];
+    E  = [1 2 0; 1 3 0; 1 4 0];        % rays from s0: r12, r23, r13
+    Ec = zeros(3,6);
+    adj = [1 2; 2 3; 1 3];             % r12:{cone1,cone2}, r23:{cone2,cone3}, r13:{cone1,cone3}
+    d  = 0.5 * max([norm(d12), norm(d23), norm(d13)]);
+    rep = [ (s0 + d*udir(d12) + d*udir(d13))';   % cone1 (between r12,r13)
+            (s0 + d*udir(d12) + d*udir(d23))';   % cone2 (between r12,r23)
+            (s0 + d*udir(d23) + d*udir(d13))' ];  % cone3 (between r23,r13)
+    F = orientFaces(Vd, E, adj, rep);
+    f = [0 0 0 v1(1) v1(2) -lv(v1);
+         0 0 0 v2(1) v2(2) -lv(v2);
+         0 0 0 v3(1) v3(2) -lv(v3)];
+    g = QuaPar(Vd, E, Ec, f, F);
+end
+
+function d = boundaryDir(w, u)
+% Direction perpendicular to w (along the line w'*s = const), oriented so that <d,u> > 0.
+    d = [-w(2); w(1)];
+    if d'*u < 0, d = -d; end
+end
+
+function u = udir(d)
+    u = d / norm(d);
 end
 
 % ============================================================================================
