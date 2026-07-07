@@ -114,9 +114,36 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             end
         end
 
-        function indefiniteZeroConvexEdgeNotImplemented(testCase)
-            % xy over (0,0),(1,0),(0,1): no convex edge (slopes 0,-1,vertical) -> not yet handled.
+        function bilinearZeroConvexEdgeConjugate(testCase)
+            % f = xy over (0,0),(1,0),(0,1): no convex edge (slopes 0,-1,vertical) -> vertex values
+            % xy = 0,0,0, so f*(s) = max(0, s1, s2), a 3-cone piecewise-linear QuaPar. Cross-check
+            % against the numeric sup over the triangle too.
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            g = conjPieceCPLQ(QuaPoly(V, E, [0 1 0 0 0 0], F));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 3);
+            S = [-2 -1; 3 -1; -1 2; 0.5 0.5; -1 -1];
+            for i = 1:size(S,1)
+                testCase.verifyEqual(g.eval(S(i,:)), max([0, S(i,1), S(i,2)]), ...
+                    'AbsTol', 1e-10, sprintf('s=%d', i));
+            end
+            nt = 200; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            xyg = Xg.*Yg;
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - xyg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 1e-3, sprintf('numeric s=%d', i));
+            end
+        end
+
+        function bilinearTwoConvexEdgesNotImplemented(testCase)
+            % xy over (0,0),(1,0),(1,1): edges (0,0)-(1,0) m=0, (1,0)-(1,1) vertical (skipped by
+            % convexEdgesXY), (1,1)-(0,0) m=1 -> only one convex edge actually; use a triangle with
+            % two positive-slope edges instead: (0,0),(2,1),(1,2) has edges m=1/2, m=-1, m=2 -> two
+            % convex edges (m>0): (0,0)-(2,1) and (1,2)-(0,0) -> not yet handled.
+            V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);
             testCase.verifyError(@() conjPieceCPLQ(q), 'conjPieceCPLQ:notImplemented');
         end

@@ -9,11 +9,13 @@ function g = conjPieceCPLQ(p)
 % [input]  p : a single piece over a bounded triangle. Currently implemented:
 %              - AFFINE piece  -> f* = max_i(<s,v_i>-ell(v_i)), three cones;
 %              - CONVEX (positive-definite) QUADRATIC -> seven polyhedral regions;
+%              - pure BILINEAR f = x*y with ZERO convex edges -> three-cone piecewise-linear
+%                QuaPar (max of vertex linears, same construction as the affine case);
 %              - pure BILINEAR f = x*y with exactly ONE convex edge -> six-face PARABOLIC QuaPar
 %                (COAP B.2: edge region E, three L_W regions, two vertex cones; parabola arc).
 %              den = 1 (no rational denominator). p may be a QuaPoly, QuaPar, or RatPol.
 %              TODO: beta*x*y + linear (scale/shift), general indefinite (rotate via
-%              bilinearFrame), 0 / 2 / 3 convex edges, and rational pieces.
+%              bilinearFrame), 2 / 3 convex edges, and rational pieces.
 % [output] g : QuaPar = the conjugate, a quadratic on a polyhedral subdivision with seven faces:
 %              the central gradient image triangle T' = {A v_i + b}, three edge strips, and
 %              three vertex cones; the conjugate is finite everywhere (domain = R^2).
@@ -55,11 +57,13 @@ function g = conjPieceCPLQ(p)
         % pure bilinear f = x*y (already in bilinear frame; general indefinite reduces to this
         % via bilinearFrame + an affine substitution -- to be added). Requires one convex edge.
         ce = convexEdgesXY(V3);
-        if size(ce,1) == 1
+        if size(ce,1) == 0
+            g = conjBilinearXYzeroCE(V3);                 % -> 3-cone linear QuaPar
+        elseif size(ce,1) == 1
             g = conjBilinearXYoneCE(V3, ce);              % -> parabolic QuaPar (6 faces)
         else
             error('conjPieceCPLQ:notImplemented', ...
-                'Bilinear conjugate is implemented for exactly one convex edge (got %d).', size(ce,1));
+                'Bilinear conjugate is implemented for zero or one convex edge (got %d).', size(ce,1));
         end
     else
         error('conjPieceCPLQ:notImplemented', ...
@@ -76,7 +80,16 @@ function g = conjLinearTriangle(V, gvec, h)
 % vertex-linears L_i(s) = <s,v_i> - ell(v_i) are equal ([COAP] Appendix B.1).
     v1 = V(1,:)'; v2 = V(2,:)'; v3 = V(3,:)';
     lv = @(v) gvec'*v + h;
-    s0 = [(v1-v2)'; (v1-v3)'] \ [lv(v1)-lv(v2); lv(v1)-lv(v3)];   % L1=L2=L3 here
+    g = conjVertexMax(V, [lv(v1); lv(v2); lv(v3)]);
+end
+
+function g = conjVertexMax(V, ellv)
+% Conjugate f*(s) = max_i [ <s,v_i> - ellv(i) ] of arbitrary pointwise vertex values ellv (need
+% not come from an affine function) over the CCW triangle V: the same 3-cone piecewise-linear
+% QuaPar geometry as conjLinearTriangle, driven only by the three vertex values.
+    v1 = V(1,:)'; v2 = V(2,:)'; v3 = V(3,:)';
+    lv = @(i) ellv(i);
+    s0 = [(v1-v2)'; (v1-v3)'] \ [lv(1)-lv(2); lv(1)-lv(3)];   % L1=L2=L3 here
 
     d12 = boundaryDir(v1-v2, v1-v3);   % along boundary L1=L2, oriented so L1>=L3
     d23 = boundaryDir(v2-v3, v2-v1);   % along boundary L2=L3, oriented so L2>=L1
@@ -91,9 +104,9 @@ function g = conjLinearTriangle(V, gvec, h)
             (s0 + d*udir(d12) + d*udir(d23))';   % cone2 (between r12,r23)
             (s0 + d*udir(d23) + d*udir(d13))' ];  % cone3 (between r23,r13)
     F = orientFaces(Vd, E, adj, rep);
-    f = [0 0 0 v1(1) v1(2) -lv(v1);
-         0 0 0 v2(1) v2(2) -lv(v2);
-         0 0 0 v3(1) v3(2) -lv(v3)];
+    f = [0 0 0 v1(1) v1(2) -lv(1);
+         0 0 0 v2(1) v2(2) -lv(2);
+         0 0 0 v3(1) v3(2) -lv(3)];
     g = QuaPar(Vd, E, Ec, f, F);
 end
 
@@ -212,6 +225,16 @@ function ce = convexEdgesXY(V)
         m = (vj(2)-vi(2))/dx;
         if m > tol, ce(end+1,:) = [i, j, m, vi(2)-m*vi(1)]; end %#ok<AGROW>
     end
+end
+
+function g = conjBilinearXYzeroCE(V)
+% Conjugate of f = x*y over a triangle with NO convex edge: every edge is concave for x*y, so the
+% restriction of <s,x>-xy to each edge is concave and its max is at an endpoint; hence the overall
+% sup over the triangle is attained at a vertex and f*(s) = max_i(<s,v_i> - xy(v_i)), the same
+% 3-cone piecewise-linear QuaPar as conjLinearTriangle (COAP B.1 applied to the vertex values).
+    xy = @(v) v(1)*v(2);
+    ellv = [xy(V(1,:)); xy(V(2,:)); xy(V(3,:))];
+    g = conjVertexMax(V, ellv);
 end
 
 function g = conjBilinearXYoneCE(V, ce)
