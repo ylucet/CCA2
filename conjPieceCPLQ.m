@@ -6,10 +6,14 @@ function g = conjPieceCPLQ(p)
 %     [COAP] Karmarkar & Lucet, Comput. Optim. Appl. 94 (2026) 747-780 (Appendix B);
 %     [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34.
 %
-% [input]  p : a single convex piece over a bounded triangle. Currently implemented:
-%              an AFFINE piece (-> f* = max_i(<s,v_i>-ell(v_i)), three cones) and a CONVEX
-%              (positive-definite) QUADRATIC (-> seven regions). den = 1 (no rational
-%              denominator). p may be a QuaPoly, QuaPar, or RatPol.
+% [input]  p : a single piece over a bounded triangle. Currently implemented:
+%              - AFFINE piece  -> f* = max_i(<s,v_i>-ell(v_i)), three cones;
+%              - CONVEX (positive-definite) QUADRATIC -> seven polyhedral regions;
+%              - pure BILINEAR f = x*y with exactly ONE convex edge -> six-face PARABOLIC QuaPar
+%                (COAP B.2: edge region E, three L_W regions, two vertex cones; parabola arc).
+%              den = 1 (no rational denominator). p may be a QuaPoly, QuaPar, or RatPol.
+%              TODO: beta*x*y + linear (scale/shift), general indefinite (rotate via
+%              bilinearFrame), 0 / 2 / 3 convex edges, and rational pieces.
 % [output] g : QuaPar = the conjugate, a quadratic on a polyhedral subdivision with seven faces:
 %              the central gradient image triangle T' = {A v_i + b}, three edge strips, and
 %              three vertex cones; the conjugate is finite everywhere (domain = R^2).
@@ -46,10 +50,21 @@ function g = conjPieceCPLQ(p)
         g = conjLinearTriangle(V3, b, c);                 % affine piece (e.g. a concave envelope)
     elseif all(eig(A) > sqrt(eps))
         g = conjConvexQuadTriangle(V3, A, b, c);          % strictly convex quadratic
+    elseif abs(A(1,1)) < sqrt(eps) && abs(A(2,2)) < sqrt(eps) && abs(A(1,2)-1) < sqrt(eps) ...
+            && norm(b) < sqrt(eps) && abs(c) < sqrt(eps)
+        % pure bilinear f = x*y (already in bilinear frame; general indefinite reduces to this
+        % via bilinearFrame + an affine substitution -- to be added). Requires one convex edge.
+        ce = convexEdgesXY(V3);
+        if size(ce,1) == 1
+            g = conjBilinearXYoneCE(V3, ce);              % -> parabolic QuaPar (6 faces)
+        else
+            error('conjPieceCPLQ:notImplemented', ...
+                'Bilinear conjugate is implemented for exactly one convex edge (got %d).', size(ce,1));
+        end
     else
         error('conjPieceCPLQ:notImplemented', ...
-            ['Only an affine or a positive-definite quadratic piece over a triangle is supported; ' ...
-             'got a non-PD, non-zero Hessian (indefinite or rank-deficient, or a rational piece).']);
+            ['Only affine, positive-definite quadratic, or pure-bilinear (x*y) pieces over a ' ...
+             'triangle are supported so far; general indefinite (rotation) and rational are next.']);
     end
 end
 
@@ -185,4 +200,78 @@ end
 
 function a = triSignedArea(W)
     a = 0.5*((W(2,1)-W(1,1))*(W(3,2)-W(1,2)) - (W(3,1)-W(1,1))*(W(2,2)-W(1,2)));
+end
+
+% ----- bilinear (f=x*y) conjugate over a triangle with ONE convex edge (COAP B.2) -----------
+function ce = convexEdgesXY(V)
+% Convex edges of the triangle for f = x*y: positive-slope edges. Returns rows [i j m q].
+    tol = sqrt(eps); ed = [1 2; 2 3; 3 1]; ce = zeros(0,4);
+    for t = 1:3
+        i = ed(t,1); j = ed(t,2); vi = V(i,:); vj = V(j,:); dx = vj(1)-vi(1);
+        if abs(dx) < tol, continue; end
+        m = (vj(2)-vi(2))/dx;
+        if m > tol, ce(end+1,:) = [i, j, m, vi(2)-m*vi(1)]; end %#ok<AGROW>
+    end
+end
+
+function g = conjBilinearXYoneCE(V, ce)
+% Conjugate of f = x*y over a triangle with one convex edge (endpoints A,B; special vertex W).
+% Six convex faces: SE (parabolic quad E), CW_mid/CW_below/CW_above (linear L_W), C_A (L_A),
+% C_B (L_B); seven edges: the parabola arc P0-P1 plus six rays. Verified vs numeric sup.
+    m = ce(3); q = ce(4);
+    A = V(ce(1),:)'; B = V(ce(2),:)';
+    W = V(setdiff(1:3, [ce(1) ce(2)]), :)';
+    if A(1) > B(1), tmp = A; A = B; B = tmp; end   % canonical order x_A < x_B (m>0 => distinct)
+    xy = @(v) v(1)*v(2);
+    % parabola (crs) and the region functions (plain coefficients)
+    crs = [-1, -2*m, -m^2, 2*q+4*m*W(1), -(2*m*q-4*m*W(2)), -(q^2+4*m*W(1)*W(2))];
+    E  = [1/(4*m), 1/2, m/4, -q/(2*m), q/2, q^2/(4*m)];
+    LA = [0 0 0 A(1) A(2) -xy(A)]; LB = [0 0 0 B(1) B(2) -xy(B)]; LW = [0 0 0 W(1) W(2) -xy(W)];
+    % strip lines x* = x_A, x_B : s1 + m s2 - q - 2 m x = 0
+    P0 = lineParabolaInt([1 m (-q-2*m*A(1))], crs);
+    P1 = lineParabolaInt([1 m (-q-2*m*B(1))], crs);
+    gc = @(s) [2*crs(1)*s(1)+crs(2)*s(2)+crs(4); crs(2)*s(1)+2*crs(3)*s(2)+crs(5)];
+    gw = [1; m]; rp = @(w) [-w(2); w(1)]; un = @(d) d/norm(d);
+    dSEA = [m;-1]; if gc(P0)'*dSEA > 0, dSEA = -dSEA; end   % crs decreasing along strip line
+    dSEB = [m;-1]; if gc(P1)'*dSEB > 0, dSEB = -dSEB; end
+    dCAW = rp(A-W);  if gw'*dCAW > 0, dCAW = -dCAW; end     % x* decreasing (C_A side)
+    dCBW = rp(B-W);  if gw'*dCBW < 0, dCBW = -dCBW; end     % x* increasing (C_B side)
+    dAL = -dSEA; dBL = -dSEB;                               % lower strip rays
+    Vd = [P0'; P1'; (P0+un(dSEA))'; (P0+un(dAL))'; (P0+un(dCAW))'; ...
+          (P1+un(dSEB))'; (P1+un(dBL))'; (P1+un(dCBW))'];
+    E7 = [1 2 1; 1 3 0; 1 4 0; 1 5 0; 2 6 0; 2 7 0; 2 8 0];
+    Ec = zeros(7,6); Ec(1,:) = crs;
+    % faces: 1=SE, 2=CW_mid, 3=C_A, 4=CW_below, 5=C_B, 6=CW_above
+    adj = [1 2; 1 3; 2 4; 3 4; 1 5; 2 6; 5 6];
+    sc = 0.6*norm(P1-P0) + 1;
+    rep = [ ((P0+P1)/2 + sc*un(dSEA))';                 % SE
+            ((P0+P1)/2 + sc*un(-dSEA))';                % CW_mid (parabola interior)
+            (P0 + sc*(un(dSEA)+un(dCAW)))';             % C_A
+            (P0 + sc*(un(dAL)+un(dCAW)))';              % CW_below
+            (P1 + sc*(un(dSEB)+un(dCBW)))';             % C_B
+            (P1 + sc*(un(dBL)+un(dCBW)))' ];            % CW_above
+    F = orientFaces(Vd, E7, adj, rep);
+    if evalConicPt(Ec(1,:), rep(F(1,1),:)) < 0, Ec(1,:) = -Ec(1,:); end   % >0 on left face
+    toS = @(p) [2*p(1), p(2), 2*p(3), p(4), p(5), p(6)];
+    f = [toS(E); toS(LW); toS(LA); toS(LW); toS(LB); toS(LW)];
+    g = QuaPar(Vd, E7, Ec, f, F);
+end
+
+function P = lineParabolaInt(l, c)
+% Intersection of line l=[1 b c0] (s1 = -c0 - b s2) with conic c. For our strip lines (parallel
+% to the parabola axis) this is a single point; solve the induced polynomial in s2.
+    b = l(2); c0 = l(3); r = -b; p = -c0;               % s1 = p + r s2  (l(1)=1)
+    A2 = c(1)*r^2 + c(2)*r + c(3);
+    A1 = c(1)*2*p*r + c(2)*p + c(4)*r + c(5);
+    A0 = c(1)*p^2 + c(4)*p + c(6);
+    if abs(A2) < 1e-10
+        s2 = -A0/A1;
+    else
+        rr = roots([A2 A1 A0]); rr = rr(abs(imag(rr)) < 1e-9); s2 = real(rr(1));
+    end
+    P = [p + r*s2; s2];
+end
+
+function z = evalConicPt(c, s)
+    z = c(1)*s(1)^2 + c(2)*s(1)*s(2) + c(3)*s(2)^2 + c(4)*s(1) + c(5)*s(2) + c(6);
 end
