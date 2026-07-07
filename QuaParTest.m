@@ -68,6 +68,24 @@ classdef QuaParTest < matlab.unittest.TestCase
             testCase.verifyEqual(p.eval(S), expected, 'AbsTol', 1e-12);
         end
 
+        function parabolicFaceAutoBuildsP(testCase)
+            % A parabolic "triangle" built with the 5-arg constructor (no explicit P): edge 1 is
+            % the arc of y=x^2 from (-1,1) to (1,1); edges 2,3 are the straight edges to (0,2).
+            % The conic y-x^2 is oriented >0 above the arc = left of the directed edge (1->2), so
+            % createP/orderEdges build P automatically and eval locates points correctly.
+            V  = [-1 1; 1 1; 0 2];
+            E  = [1 2 1; 2 3 1; 3 1 1];
+            Ec = [-1 0 0 0 1 0; 0 0 0 0 0 0; 0 0 0 0 0 0];   % edge1: y - x^2 = 0
+            f  = [1 0 1 0 0 0];                               % 1/2(x^2+y^2)
+            p  = QuaPar(V, E, Ec, f, [1 0; 1 0; 1 0]);        % no P supplied
+            testCase.verifyEqual(p.nf, 1);
+            % interior points (above parabola y>=x^2, below both lines to (0,2))
+            Sin = [0 1.5; 0 1.2; 0 0.5; 0.3 0.8];
+            testCase.verifyEqual(p.eval(Sin), 0.5*(Sin(:,1).^2 + Sin(:,2).^2), 'AbsTol', 1e-12);
+            % exterior: below the parabola, above the apex, and outside a top edge
+            testCase.verifyEqual(p.eval([0 -1; 0 3; -0.5 1.7]), [Inf; Inf; Inf]);
+        end
+
         function fullDomainConjugateViaCplq(testCase)
             % conj of a full-domain strictly convex quadratic QuaPar works through conjCPLQ.
             p = QuaPar.energy();

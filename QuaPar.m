@@ -14,14 +14,19 @@ classdef QuaPar
    % (so a QuaPar with Ec all-zero behaves exactly like a QuaPoly -- a polyhedral subdivision is
    % a special case of a parabolic subdivision).
    %
-   % Orientation invariant (used by eval): Ec(j,:) is oriented like QuaPoly's lineEquation, i.e.
-   % evaluating the conic at a point and applying the sign from P{i} (face-left/right convention)
-   % gives <= 0 inside face i. The conjugate algorithm that produces a QuaPar sets this sign.
+   % Orientation invariant (REQUIRED for correct eval / auto-built P): each conic Ec(j,:) must be
+   % oriented so that evalConic(Ec(j,:), .) > 0 on the LEFT of the directed edge
+   % V(E(j,1)) -> V(E(j,2)) -- exactly the convention QuaPoly.lineEquation gives for straight
+   % edges. With this orientation, createP/orderEdges build P topologically (they only follow
+   % shared vertices; the arc geometry is irrelevant to the ordering), and eval's test
+   % evalConic(Ec).*sign(P{i}) <= 0 selects the correct side. The conjugate builder sets Ec's sign
+   % via the left-face interior point.
    %
-   % IMPLEMENTATION STATUS (first version, see DESIGN.md II.5.1):
-   %   * eval supports both linear and parabolic edges (point location via conic inequalities).
-   %   * Automatic adjacency (createP/createDom) and plotDomain are implemented for LINEAR edges
-   %     only; for curved edges, pass P explicitly to the constructor and use plot (grid via eval).
+   % IMPLEMENTATION STATUS (see DESIGN.md II.5.1):
+   %   * eval and createP/createDom support both linear and parabolic edges: the 5-arg constructor
+   %     QuaPar(V,E,Ec,f,F) auto-builds P for parabolic faces (given the Ec orientation above);
+   %     an explicit P (6-arg) is still accepted. isConvex/plotDomain remain LINEAR-only (the
+   %     angle/convexity test uses chords, not arc tangents; plot works via eval on a grid).
    %   * This class is currently standalone (clone of QuaPoly + conic edges); the QuaPoly<QuaPar
    %     hierarchy unification is a planned follow-up.
    %
