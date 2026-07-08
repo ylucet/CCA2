@@ -72,7 +72,7 @@ Full suite **105/105 PASS** on Frances (103 previous + 2 new).
 
 ## Where things stand
 - Branch: `cplq-engine` @ `8084a41` (this session's starting point). This session's changes are
-  committed as `<FILL IN AFTER COMMIT>` (author-approved) and pushed.
+  committed as `ec25e20` (author-approved) and pushed.
 - Files changed this session: `conjPieceCPLQ.m` (new `conjIndefiniteQuadTriangle`,
   `bilinearFrame`, `pushforwardQuaParDual`; replaced the old narrow pure-`x*y` dispatch branch and
   the old catch-all error with the general indefinite dispatch + an explicit concave-quadratic
