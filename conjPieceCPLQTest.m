@@ -188,10 +188,9 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % must dispatch to conjPSDRank1QuadTriangle, not error out. Checked against the
             % numeric sup of the ENVELOPE quadratic itself (not the original xy). Uses (1,1),
             % (4,3),(3,5) rather than the (0,0),(2,1),(1,2) triangle used elsewhere in this file:
-            % that one is a KNOWN DEGENERATE case for conjPSDRank1QuadTriangle (its harmonic-mean
-            % envelope's Hessian eigenvector happens to be exactly (1,1)/sqrt(2), which makes the
-            % two non-origin vertices tie in the rotated t-coordinate -- a divide-by-zero in the
-            % t2/t3 edge-slope formula; not yet handled, see conjPieceCPLQ header).
+            % that one hits the TIED-vertex sub-case (conjPSDRank1QuadTriangleTie, 5 faces instead
+            % of 6) -- see psdRank1QuadraticTieEndToEnd below -- so this test exercises the
+            % non-degenerate (6-face) path specifically.
             V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
             r = convEnvCPLQ(q);                            % Step 1 -> rank-1 PSD quadratic
@@ -201,6 +200,64 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             g = conjPieceCPLQ(r);                          % Step 2
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 6);
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = Q(1,1)*Xg.^2 + 2*Q(1,2)*Xg.*Yg + Q(2,2)*Yg.^2;
+            qg = 0.5*qg + L(1)*Xg + L(2)*Yg + r.f(1,end);
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
+        function psdRank1QuadraticTieConjugate(testCase)
+            % Same construction as psdRank1QuadraticConjugate but with va,vb manufactured to tie
+            % in the rotated-t coordinate (the triangle edge va-vb is exactly perpendicular to A's
+            % nonzero eigenvector u) -- dispatches to conjPSDRank1QuadTriangleTie, five faces (two
+            % parabolic edge strips + three linear vertex cones) instead of six.
+            u = [cos(0.7); sin(0.7)]; lam = 1.3; uperp = [-u(2); u(1)];
+            A = lam*(u*u'); b = [0.4; -0.6]; cc = 0.2;
+            v1 = [0;0]; t0 = 2;
+            v2 = t0*u + 1.0*uperp; v3 = t0*u - 1.5*uperp;   % v2,v3 tie at t=t0
+            V = [v1'; v2'; v3'];
+            if 0.5*((V(2,1)-V(1,1))*(V(3,2)-V(1,2)) - (V(3,1)-V(1,1))*(V(2,2)-V(1,2))) < 0
+                V = V([1 3 2],:);
+            end
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 5);
+            nt = 220; [uu2,vv2] = meshgrid(linspace(0,1,nt)); uu2 = uu2(:); vv2 = vv2(:);
+            kk = (uu2+vv2 <= 1); uu2 = uu2(kk); vv2 = vv2(kk);
+            Xg = V(1,1)+uu2*(V(2,1)-V(1,1))+vv2*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu2*(V(2,2)-V(1,2))+vv2*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2;
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
+        function psdRank1QuadraticTieEndToEnd(testCase)
+            % conj(Step 1 envelope of xy over (0,0),(2,1),(1,2)) end to end -- previously a
+            % documented UNHANDLED case (see psdRank1QuadraticEndToEnd): the harmonic-mean
+            % envelope's Hessian eigenvector is exactly (1,1)/sqrt(2), which ties the two
+            % non-origin vertices in the rotated t-coordinate. Now dispatches to
+            % conjPSDRank1QuadTriangleTie (5 faces).
+            V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
+            r = convEnvCPLQ(q);                            % Step 1 -> rank-1 PSD quadratic
+            [L, Q, C] = QuaPoly.matrixForm(r.f(1,:));
+            testCase.verifyEmpty(C);
+            testCase.verifyEqual(min(eig(Q)), 0, 'AbsTol', 1e-8);
+            g = conjPieceCPLQ(r);                          % Step 2 -> conjPSDRank1QuadTriangleTie
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 5);
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
             kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
             Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));

@@ -1,83 +1,80 @@
 # Session Handoff
 
-_Last updated: 2026-07-07 (local session end)_
+_Last updated: 2026-07-07 (later session)_
 
 ## What happened this session
-Started from the prior handoff's plan to extend the raw-bilinear `conjPieceCPLQ` construction to
-nCE==2 (two convex edges). That plan turned out to be based on a flawed premise -- see "Key
-finding" below -- so the session pivoted to implementing the case that's actually needed.
+Picked up from the prior handoff. First correction: the prior handoff said the
+`conjPSDRank1QuadTriangle` work was left uncommitted -- it was in fact committed and pushed since
+(commit `918b1f1`, author-approved, tip of `cplq-engine` at session start). Verified 101/101 PASS
+on Frances before starting new work.
 
-**Key finding (dead end, documented, not implemented):** the raw indefinite-bilinear "conjugate
-of `x*y` over a triangle with TWO convex edges" needs a boundary between the two edges' own COAP
-B.2 quadratic formulas, and that boundary is a genuine HYPERBOLA whenever the two slopes differ
-(discriminant = `(m1-m2)^2/(4*m1*m2) > 0`) -- verified both numerically (2M+ random dual points,
-zero mismatches vs. true 2D sup) and symbolically (sympy `factor`). `QuaPar` only supports
-parabolic/linear edges, so this cannot be represented. This case also **does not arise from the
-wired pipeline**: Step 1 (`convEnvCPLQ`) always convexifies a 2-convex-edge piece into a rank-1
-PSD quadratic (its harmonic-mean formula, `twoEdgeQuadPlain`, has discriminant identically zero
-for *any* slopes -- proved via sympy, `s^2-1=0` since `s=+-1`) before Step 2 ever sees it, so
-`conjPieceCPLQ` is never actually asked to conjugate the raw indefinite piece in that case. The
-old pinned test `bilinearTwoConvexEdgesNotImplemented` was renamed
-`bilinearTwoConvexEdgesDocumentedLimitation` with this explanation; it still pins the same
-`verifyError`/`notImplemented` behavior, just now as an intentional limitation, not a TODO.
+**This session's work: handled the "known remaining gap" from the prior handoff** -- the
+degenerate sub-case of `conjPSDRank1QuadTriangle` where two triangle vertices tie in the rotated
+t-coordinate (the edge between them is exactly perpendicular to `A`'s nonzero eigenvector `u`).
+Previously this raised `notImplemented` and was worked around in tests by picking a triangle that
+avoids it (e.g. `(1,1),(4,3),(3,5)` instead of the natural `(0,0),(2,1),(1,2)`).
 
-**What was actually needed and got implemented:** `conjPSDRank1QuadTriangle` (in
-`conjPieceCPLQ.m`) -- the conjugate of a rank-1 PSD quadratic `q(x)=1/2 x'Ax+b'x+c` (one zero
-eigenvalue) over a triangle, which *is* the real Step-2 case for a 2-convex-edge piece. Six-face
-QuaPar: three PARABOLIC edge strips (one per triangle edge -- every edge, not just "convex-for-xy"
-ones, since `q` is jointly convex) + three LINEAR vertex cones, meeting at three COLLINEAR dual
-points `s_i = A*v_i+b` (collinear because rank-1 `A*v` only varies along its eigenvector `u`).
-Derived by rotating to `t=u'x` (curved direction) / `r=uperp'x` (flat direction, where `q` is
-convex-but-affine), reducing to a 1D "conjugate of a concave... er, convex quadratic over a
-possibly-kinked piecewise-linear chain" problem per half-plane (sign of `gamma=s'*uperp-w`).
-Wired into `conjPieceCPLQ`'s dispatch as a new `elseif` between the strict-PD branch
-(`conjConvexQuadTriangle`) and the pure-bilinear-frame branch (order matters: PD check must run
-first). Representative-point selection for `QuaPar`'s `orientFaces` turned out to be fragile by
-hand (two bugs: wrong bisector sign for a vertex wedge, and a strip-interior offset large enough
-to overshoot past the strip's own valid t*-range) -- fixed with an oracle-based `pickRep` helper
-that evaluates the 6 gated candidate formulas directly and searches over sign x magnitude rather
-than trusting a hand-derived geometric argument. New tests: `psdRank1QuadraticConjugate` (hand-
-built rank-1 quadratic, numeric-sup-validated) and `psdRank1QuadraticEndToEnd` (through the real
-`convEnvCPLQ` -> `conjPieceCPLQ` pipeline). **Known remaining gap**: `conjPSDRank1QuadTriangle`
-errors with `notImplemented` on a degenerate input where two triangle vertices tie in the rotated
-t-coordinate (an edge exactly perpendicular to `A`'s eigenvector) -- hit by the very triangle used
-elsewhere in the test file, `(0,0),(2,1),(1,2)`, for that reason `psdRank1QuadraticEndToEnd` uses
-`(1,1),(4,3),(3,5)` instead. Not yet handled; would need a tie-breaking rule (e.g. tiny
-perturbation, or a direct 2-vertex/1-vertex special case) if it turns out to matter in practice.
+**Key fact used:** since `A = lam*u*u'` (rank 1), `A*v = lam*(u'v)*u` depends only on `t=u'v`, so
+the two tied vertices `va,vb` (same `t0`) have the SAME dual point `s_ab = A*va+b = A*vb+b`. The
+usual three collinear dual "vertices" `s1,s2,s3` collapse to two (`s_ab`, `s_c=A*vc+b`), and the
+"kink" that normally splits one boundary chain into two segments disappears (there's no third
+vertex at an intermediate t to create it) -- both boundary chains `va-vc` and `vb-vc` become single
+segments spanning the full `[t0,tc]` range. Result: **5 faces instead of 6** -- two parabolic edge
+strips `Ea` (through `va`), `Eb` (through `vb`), and three linear vertex cones `La,Lb,Lc`, meeting
+at `s_ab` (apex of `Ea,La,Lb,Eb`) and `s_c` (apex of `Ea,Lc,Eb`). Implemented as
+`conjPSDRank1QuadTriangleTie` (new function in `conjPieceCPLQ.m`), dispatched from
+`conjPSDRank1QuadTriangle` when `t2-t1` or `t3-t2` is below tolerance (replacing the old
+`notImplemented` error).
 
-Full suite **101/101 PASS** on Frances (this session ran directly on Frances, not round-tripped).
-Author was asked how to proceed after the hyperbola finding; answered with two new resources not
-previously known to me: the convex-envelope paper is also expected at `./doc/...` (not found in
-this repo or the `github.com/tanmaya11/convex` clone -- may be elsewhere or not yet added) and the
-original research code is at `github.com/tanmaya11/convex` (cloned to scratchpad, branches `b2`,
-`b3`, `biconjugate`, `biconjugate2` are relevant -- `biconjugate2/plq_1piece.m`'s general
-`conjugateFunction` treats domains as general polygons via a `psi0/psi1/zeta` parametrization
-(`convexExpr.m`, types 1=rational and 3=affine-or-bilinear-product; types 2/4 are marked
-"disable this" by the original author) rather than case-splitting by convex-edge count -- worth
-reading fully if/when tackling the rational-piece conjugate below, but was not needed for this
-session's rank-1-quadratic derivation, which was done from first principles instead.
+**Two sign bugs found and fixed via numeric ring-scans (same "search, don't derive by hand"
+lesson as the prior session), not caught by the first test case alone:**
+1. The ray direction `dray(m)` used for the `Ea`/`La` boundary always has gamma-rate `+1`
+   (`uperp'*dray(m) == 1` identically, same fact the non-degenerate code already documents via
+   `sgn13/sgn12`) -- but `Ea` (built from `ra`, the smaller of the two tied r-values) is *always*
+   the gamma<0 chain (proof: maximizing `gamma*r` prefers the smaller `r` iff `gamma<0`), so its
+   ray needs `-dray(ma)`, not `+dray(ma)`. `Eb`'s ray (`+dray(mb)`) was already correct since it's
+   the gamma>0 chain by construction.
+2. The `La`/`Lb` boundary lies on the line `perp(va-vb)` through `s_ab` -- but that whole line is
+   an exact algebraic tie (`La(s)==Lb(s))` for its ENTIRE length, not just at one point, so no
+   bisector-of-two-rays direction reliably lands inside one wedge, and there is no clean, general
+   sign rule the way there was for `dA`/`dB` (tested two hand-derived candidates that worked on one
+   example each but not both). Fixed with a new `pickRepSweep` helper: a full angular sweep (every
+   10 degrees, a few magnitudes) around the wedge apex instead of a single hand-derived bisector
+   direction -- more robust, in the same spirit as the existing `pickRep`'s magnitude search.
+
+**Validated:** the two known reference triangles (the `xy`-envelope's `(0,0),(2,1),(1,2)` case, and
+a hand-built generic rank-1 quadratic with a manufactured tie) both match numeric sup-sampling to
+~1e-5/1e-6 (grid-noise level), PLUS a 40-trial random stress test (random eigenvector angle, random
+tied r-values, random third vertex, random dual query points) -- 40/40 passed, worst error 1.4e-4
+(consistent with the coarse grid, not a real error). New tests: `psdRank1QuadraticTieConjugate`
+(hand-built, direct) and `psdRank1QuadraticTieEndToEnd` (through the real `convEnvCPLQ` ->
+`conjPieceCPLQ` pipeline, using the exact `(0,0),(2,1),(1,2)` triangle that used to be the
+documented degenerate case). Updated the header docstring and the stale comment in
+`psdRank1QuadraticEndToEnd` (which used to say the tie case was "not yet handled").
+
+Full suite **103/103 PASS** on Frances (101 previous + 2 new).
 
 ## Where things stand
-- Branch: `cplq-engine` @ `04988db` locally, working tree has the changes described above
-  UNCOMMITTED (author's standing instruction: ask before every commit/push, no exceptions).
-- Files changed this session: `conjPieceCPLQ.m` (new dispatch branch + `conjPSDRank1QuadTriangle`
-  + 3 helpers: `rank1EdgeQuad`, `pickRep`, `rank1Winner`; updated header docstring),
-  `conjPieceCPLQTest.m` (renamed + rewrote the old nCE==2 test's docstring, added
-  `psdRank1QuadraticConjugate` and `psdRank1QuadraticEndToEnd`), this handoff file.
-- Not pushed (working tree has real uncommitted changes now, unlike the previous handoff's
-  "no code changes" state).
+- Branch: `cplq-engine` @ `918b1f1` (this session's starting point), working tree has this
+  session's changes UNCOMMITTED (author's standing instruction: ask before every commit/push, no
+  exceptions -- always ask, never assume a prior "yes" carries forward).
+- Files changed this session: `conjPieceCPLQ.m` (new `conjPSDRank1QuadTriangleTie` +
+  `rank1TieWinner` + `pickRepSweep` helpers, dispatch branch inside `conjPSDRank1QuadTriangle`,
+  updated header docstring), `conjPieceCPLQTest.m` (new `psdRank1QuadraticTieConjugate`,
+  `psdRank1QuadraticTieEndToEnd`, updated stale comment in `psdRank1QuadraticEndToEnd`), this
+  handoff file.
+- Not pushed.
 
 ## Next steps
 - Ask the author whether to commit/push this session's work (standing rule: always ask).
-- The degenerate rank-1 case (two vertices tying in rotated-t) -- decide if it's worth handling or
-  documenting as a permanent limitation like the hyperbola case.
 - Conjugate of RATIONAL pieces (the 1-convex-edge `RatPol` output of Step 1) is still the
-  remaining big gap before the full `conjCPLQ` pipeline (Step1 `convEnvCPLQ` -> Step2
+  remaining BIG gap before the full `conjCPLQ` pipeline (Step1 `convEnvCPLQ` -> Step2
   `conjPieceCPLQ` per piece -> Step3 max) is wired end to end for nonconvex inputs. This needs
   genuinely curved (parabolic) edges in the OUTPUT too, not just the input -- `QuaPar`'s
   curved-edge `orderEdges` support (commit `ccbaba6`) is already there for this. Consider reading
   `biconjugate2/plq_1piece.m`'s type-1 branch (rational envelope conjugate, general polygon) in
-  the cloned reference repo before re-deriving from scratch.
+  the reference repo (`github.com/tanmaya11/convex`, cloned to scratchpad in a prior session, not
+  part of this repo) before re-deriving from scratch.
 - Then Step 3 (max of per-piece conjugates) to complete `conj(QuaPoly)` for nonconvex inputs.
 - Test command (run directly on Frances -- MATLAB now runs there; prefix every batch call with
   `restoredefaultpath; rehash toolboxcache;` because the Maple toolbox conflicts with Symbolic):
@@ -89,18 +86,17 @@ session's rank-1-quadratic derivation, which was done from first principles inst
   ```
 
 ## Relevant files
-- `conjPieceCPLQ.m` -- this session's main file; new `conjPSDRank1QuadTriangle` + helpers near the
-  end, dispatch branch near the top of `conjPieceCPLQ` itself.
-- `conjPieceCPLQTest.m` -- `bilinearTwoConvexEdgesDocumentedLimitation`, `psdRank1QuadraticConjugate`,
-  `psdRank1QuadraticEndToEnd`.
-- `convEnvCPLQ.m` (`twoEdgeQuadPlain`, `envelopeFromClassified` case 2) -- Step 1's source of the
-  rank-1 PSD quadratic that motivated this session's real work.
+- `conjPieceCPLQ.m` -- this session's main file; new `conjPSDRank1QuadTriangleTie` +
+  `rank1TieWinner` + `pickRepSweep` near the end (right after `rank1Winner`), dispatch branch
+  inside `conjPSDRank1QuadTriangle` (checks `t2-t1 < tol || t3-t2 < tol` before the old collinear-
+  dual-vertex construction).
+- `conjPieceCPLQTest.m` -- `psdRank1QuadraticTieConjugate`, `psdRank1QuadraticTieEndToEnd`.
 - `/home/ylucet/CCA2/DESIGN.md` -- design proposal (outside this repo).
-- `/home/ylucet/CCA2/s10589-026-00781-5.pdf` (COAP) -- Appendix A (convex envelope, incl. A.4
-  two-convex-edge harmonic mean) and Appendix B (conjugate, B.1/B.2 -- B.3's "two convex edges"
-  section describes the case this session's `conjPSDRank1QuadTriangle` actually implements, though
-  the derivation here was done independently rather than by transcribing B.3's prose).
-- Reference repo (cloned to scratchpad this session, not part of this repo):
-  `github.com/tanmaya11/convex`, branches `b2`/`b3`/`biconjugate`/`biconjugate2` -- the original
-  (more general, polygon-based) research code; worth reading before tackling the rational-piece
-  conjugate next.
+- `/home/ylucet/CCA2/s10589-026-00781-5.pdf` (COAP) -- Appendix A (convex envelope) and Appendix B
+  (conjugate); the tied-vertex case isn't explicitly in the paper (it's a measure-zero geometric
+  coincidence of the *triangle*, not a distinct case in the theory) -- this session's derivation
+  was from first principles, following the same rotate-to-(t,r) approach as the non-degenerate
+  `conjPSDRank1QuadTriangle`.
+- Reference repo (cloned to scratchpad in a prior session, not part of this repo):
+  `github.com/tanmaya11/convex`, branches `b2`/`b3`/`biconjugate`/`biconjugate2` -- worth reading
+  before tackling the rational-piece conjugate next.

@@ -10,7 +10,10 @@ function g = conjPieceCPLQ(p)
 %              - AFFINE piece  -> f* = max_i(<s,v_i>-ell(v_i)), three cones;
 %              - CONVEX (positive-definite) QUADRATIC -> seven polyhedral regions;
 %              - CONVEX, RANK-1 (PSD, one zero eigenvalue) QUADRATIC -> six-face QuaPar (three
-%                PARABOLIC edge strips + three linear vertex cones). This is the case actually
+%                PARABOLIC edge strips + three linear vertex cones), or FIVE faces (two edge
+%                strips + three vertex cones) in the degenerate sub-case where two triangle
+%                vertices tie in the rotated t-coordinate (an edge exactly perpendicular to A's
+%                nonzero eigenvector -- conjPSDRank1QuadTriangleTie). This is the case actually
 %                produced by convEnvCPLQ's Appendix A.4 two-convex-edge envelope: its harmonic-
 %                mean formula is PROVABLY always rank-1 PSD (b^2-4ac=0 identically, any slopes),
 %                never strictly indefinite -- see conjPieceCPLQTest for the discriminant proof
@@ -261,18 +264,27 @@ function g = conjPSDRank1QuadTriangle(V, A, b, c)
     [Ts, ord] = sort(T); Rs = R(ord); Vs = V(ord,:);
     t1=Ts(1); t2=Ts(2); t3=Ts(3); r1=Rs(1); r2=Rs(2); r3=Rs(3);
     v1=Vs(1,:)'; v2=Vs(2,:)'; v3=Vs(3,:)';
-    if min(t2-t1, t3-t2) < sqrt(eps)*(1+abs(t3-t1))
-        error('conjPieceCPLQ:notImplemented', ...
-            ['conjPSDRank1QuadTriangle: degenerate case (two vertices tie in the rotated t-' ...
-             'coordinate, i.e. a triangle edge is exactly perpendicular to the quadratic''s ' ...
-             'nonzero eigenvector) is not implemented.']);
+    p = b'*u; w = b'*uperp;
+    tol = sqrt(eps)*(1+abs(t3-t1));
+    if t2-t1 < tol || t3-t2 < tol
+        if t2-t1 < tol
+            t0 = (t1+t2)/2; ra0=r1; rb0=r2; va0=v1; vb0=v2; tc=t3; rc=r3; vc=v3;
+        else
+            t0 = (t2+t3)/2; ra0=r2; rb0=r3; va0=v2; vb0=v3; tc=t1; rc=r1; vc=v1;
+        end
+        if ra0 <= rb0
+            ra=ra0; va=va0; rb=rb0; vb=vb0;
+        else
+            ra=rb0; va=vb0; rb=ra0; vb=va0;
+        end
+        g = conjPSDRank1QuadTriangleTie(u, uperp, lam, p, w, A, b, c, t0, ra, rb, va, vb, tc, rc, vc);
+        return
     end
     s1 = A*v1+b; s2 = A*v2+b; s3 = A*v3+b;             % collinear dual "vertices"
     qv = @(v) 0.5*(v'*A*v) + b'*v + c;
     q1=qv(v1); q2=qv(v2); q3=qv(v3);
 
     m13 = (r3-r1)/(t3-t1); m12 = (r2-r1)/(t2-t1); m23 = (r3-r2)/(t3-t2);
-    p = b'*u; w = b'*uperp;
 
     % which (t,r) chain the middle vertex sits on ("kink" chain = 2 segments; the other chain is
     % the direct edge v1-v3, one segment). Ray direction along {alpha+gamma*m = const} always has
@@ -351,6 +363,20 @@ function p = pickRep(base, dir, wantIdx, winner, scale)
         'conjPSDRank1QuadTriangle: could not locate a representative point for face %d.', wantIdx);
 end
 
+function p = pickRepSweep(base, wantIdx, winner, scale)
+% Like pickRep but searches a full sweep of angles (rather than +/- one hand-derived direction)
+% at a few magnitudes: robust for a wedge whose two bounding rays don't have an easily-signed
+% bisector (see conjPSDRank1QuadTriangleTie).
+    for mag = scale * [1, 0.5, 0.2, 2, 0.05]
+        for degStep = 0:10:350
+            pt = base + mag*[cosd(degStep), sind(degStep)];
+            if winner(pt) == wantIdx, p = pt; return; end
+        end
+    end
+    error('conjPieceCPLQ:internal', ...
+        'pickRepSweep: could not locate a representative point for face %d.', wantIdx);
+end
+
 function idx = rank1Winner(s, u, uperp, lam, p, w, t1, t2, t3, r1, r2, m13, m12, m23, ...
         v1, v2, v3, q1, q2, q3, c)
 % Oracle: index (1=E13,2=E12,3=E23,4=L1,5=L2,6=L3) of the true argmax of the six rank-1-quadratic
@@ -374,6 +400,93 @@ function idx = rank1Winner(s, u, uperp, lam, p, w, t1, t2, t3, r1, r2, m13, m12,
     xs23 = (alpha+gamma*m23)/lam;
     if xs23 >= t2-tol && xs23 <= t3+tol
         vals(3) = evalStored(rank1EdgeQuad(t2,r2,m23,u,lam,p,w,c));
+    end
+    [~, idx] = max(vals);
+end
+
+% ----- degenerate sub-case of conjPSDRank1QuadTriangle: a tied rotated-t coordinate -----------
+function g = conjPSDRank1QuadTriangleTie(u, uperp, lam, p, w, A, b, c, t0, ra, rb, va, vb, tc, rc, vc)
+% Two triangle vertices va,vb tie in the rotated t-coordinate (t0), i.e. the edge va-vb is exactly
+% perpendicular to A's nonzero eigenvector u. Since A = lam*u*u' (rank 1), A*v = lam*(u'v)*u
+% depends only on t=u'v, so va and vb have the SAME dual point s_ab = A*va+b = A*vb+b: the usual
+% three collinear dual "vertices" collapse to two (s_ab, s_c = A*vc+b). The (t,r)-chain picture
+% loses its "kink" (there is no third vertex at an intermediate t to split a chain into two
+% segments): both boundary chains va-vc and vb-vc are single segments spanning the FULL range
+% [t0,tc], selected by the sign of gamma = s'*uperp-w exactly as before. Structure: five faces --
+% two parabolic edge strips Ea (through va), Eb (through vb), and three linear vertex cones
+% La, Lb, Lc -- meeting at the two dual points s_ab (apex of Ea,La,Lb,Eb) and s_c (apex of Ea,Lc,
+% Eb). The Ea/Eb shared boundary is the full segment s_ab-s_c (on the line gamma=0, where both
+% chain formulas agree since the r-term of the objective vanishes there); La/Lb meet directly at
+% s_ab along a ray (no strip in between, since the tied edge va-vb is affine, not curved, for q).
+% Validated by numeric sup-sampling (see conjPieceCPLQTest/psdRank1QuadraticTieConjugate); uses the
+% same oracle-based pickRep as the non-degenerate case for the same reason (hand-derived
+% bisector/ray signs are easy to get backwards).
+    qv = @(v) 0.5*(v'*A*v) + b'*v + c;
+    qa = qv(va); qb = qv(vb); qc = qv(vc);
+    sab = A*va+b; sc = A*vc+b;
+    ma = (rc-ra)/(tc-t0); mb = (rc-rb)/(tc-t0);
+    Ea = rank1EdgeQuad(t0,ra,ma,u,lam,p,w,c);
+    Eb = rank1EdgeQuad(t0,rb,mb,u,lam,p,w,c);
+
+    % dray(m) always has gamma-rate +1 (uperp'*dray(m) == 1 identically, since u is unit -- same
+    % fact the non-degenerate case documents/compensates for via sgn13/sgn12). Ea is built from ra
+    % (the smaller r, ALWAYS the gamma<0 chain per the sup-over-r argument: maximizing gamma*r
+    % prefers the smaller r iff gamma<0) so its ray must point toward DEcreasing gamma; Eb (from
+    % rb, the larger r) is already the gamma>0 chain, so its ray is used as-is.
+    dray = @(m) [-(m*u(1)+u(2)); u(1)-m*u(2)];
+    dA = -dray(ma); dB = dray(mb);
+    dAB = [-(va(2)-vb(2)); va(1)-vb(1)];    % perp to (va-vb): boundary of La(s)=Lb(s), sign moot
+                                             % (pickRep searches both signs)
+
+    winner = @(s) rank1TieWinner(s, u, uperp, lam, p, w, t0, tc, ra, rb, ma, mb, va, vb, vc, qa, qb, qc, c);
+    un = @(x) x/norm(x);
+    scale = 0.4*norm(sc-sab) + 1;
+
+    Vd = [sab'; sc'; (sab+dA)'; (sab+dAB)'; (sab+dB)'; (sc+dA)'; (sc+dB)'];
+    E = [1 2 1; 1 3 0; 1 4 0; 1 5 0; 2 6 0; 2 7 0];   % edge 1 (sab-sc) is a genuine segment
+    Ec = zeros(6,6);
+    % faces: 1=Ea, 2=Eb, 3=La, 4=Lb, 5=Lc
+    adj = [1 2; 1 3; 3 4; 4 2; 1 5; 2 5];
+
+    % La/Lb (faces 3,4) meet along the line dAB = perp(va-vb), which is EXACTLY the tie line
+    % La(s)==Lb(s) for its entire length (not just at one point) -- so, unlike the other faces,
+    % no single bisector-of-two-rays direction reliably lands inside one wedge (the two rays
+    % bounding each of these two wedges are dA/dAB or dAB/dB, but dAB's own sign relative to
+    % u is convention-dependent -- see conjPSDRank1QuadTriangleTie header). Use a full angular
+    % sweep instead of a hand-derived bisector for these two (same "search, don't derive" spirit
+    % as pickRep's own magnitude search).
+    rep = zeros(5,2);
+    rep(1,:) = pickRep((sab+sc)'/2, un(dA)', 1, winner, scale);
+    rep(2,:) = pickRep((sab+sc)'/2, un(dB)', 2, winner, scale);
+    rep(3,:) = pickRepSweep(sab', 3, winner, scale);
+    rep(4,:) = pickRepSweep(sab', 4, winner, scale);
+    rep(5,:) = pickRep(sc', un(un(dA)+un(dB))', 5, winner, scale);
+    F = orientFaces(Vd, E, adj, rep);
+
+    f = [Ea; Eb; ...
+         0 0 0 va(1) va(2) -qa; ...
+         0 0 0 vb(1) vb(2) -qb; ...
+         0 0 0 vc(1) vc(2) -qc];
+    g = QuaPar(Vd, E, Ec, f, F);
+end
+
+function idx = rank1TieWinner(s, u, uperp, lam, p, w, t0, tc, ra, rb, ma, mb, va, vb, vc, qa, qb, qc, c)
+% Oracle: index (1=Ea,2=Eb,3=La,4=Lb,5=Lc) of the true argmax of the five tied-case candidates.
+    s = s(:);
+    alpha = s'*u - p; gamma = s'*uperp - w;
+    tol = 1e-7*(1+abs(tc-t0));
+    lo = min(t0,tc)-tol; hi = max(t0,tc)+tol;
+    evalStored = @(row) 0.5*row(1)*s(1)^2 + row(2)*s(1)*s(2) + 0.5*row(3)*s(2)^2 ...
+        + row(4)*s(1) + row(5)*s(2) + row(6);
+    vals = -inf(5,1);
+    vals(3) = s'*va - qa; vals(4) = s'*vb - qb; vals(5) = s'*vc - qc;
+    xsA = (alpha+gamma*ma)/lam;
+    if xsA >= lo && xsA <= hi
+        vals(1) = evalStored(rank1EdgeQuad(t0,ra,ma,u,lam,p,w,c));
+    end
+    xsB = (alpha+gamma*mb)/lam;
+    if xsB >= lo && xsB <= hi
+        vals(2) = evalStored(rank1EdgeQuad(t0,rb,mb,u,lam,p,w,c));
     end
     [~, idx] = max(vals);
 end
