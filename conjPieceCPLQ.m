@@ -23,8 +23,27 @@ function g = conjPieceCPLQ(p)
 %                QuaPar (max of vertex linears, same construction as the affine case);
 %              - pure BILINEAR f = x*y with exactly ONE convex edge -> six-face PARABOLIC QuaPar
 %                (COAP B.2: edge region E, three L_W regions, two vertex cones; parabola arc).
+%              - GENUINELY INDEFINITE QUADRATIC (beta*x*y+linear, ANY frame/shift, one positive
+%                and one negative eigenvalue) with ZERO or ONE convex edge -> generalizes the pure
+%                bilinear case above via conjIndefiniteQuadTriangle: rotate to the bilinear frame
+%                (1/2 x'Ax = u1*u2 exactly, so beta=1 always with that construction), complete the
+%                square on the residual linear part (a pure translation), reuse the pure-bilinear
+%                conjugate on the shifted triangle, undo the shift (linear correction to the
+%                VALUE only) and the rotation (a linear change of the DUAL variable, pushed
+%                through vertices/conics/orientation by pushforwardQuaParDual). Two convex edges
+%                remains the same hyperbola dead end as the pure bilinear case (see NOTES).
 %              den = 1 (no rational denominator). p may be a QuaPoly, QuaPar, or RatPol.
-%              TODO: beta*x*y + linear (scale/shift), rational pieces (parabolic edges).
+%              TODO: rational pieces (RatPol input with a genuine nonzero denominator) -- NOT
+%              reducible to the cases above (there is no known "original quadratic" to fall back
+%              on when p IS the rational function itself, e.g. via a direct RatPol.conj call with
+%              no memory of a pre-envelope piece); it needs a genuinely new 2D critical-point/
+%              curved-region derivation (see DESIGN.md II.5.1 and cPLQ Appendix B / the reference
+%              plq_1piece.m "type 1" branch) and remains unimplemented (conjPieceCPLQTest/
+%              rationalRejected). For the WIRED conjCPLQ pipeline, this gap can be sidestepped:
+%              since f*=(conv f)*, Step 2 can conjugate the ORIGINAL per-triangle piece directly
+%              (now handled for indefinite quadratics too, above) instead of materializing and
+%              re-conjugating Step 1's rational envelope output, whenever the original piece is
+%              still available to the caller.
 %
 % NOTES (2026-07-07 investigation): the raw indefinite-bilinear "conjugate of x*y over a
 % triangle with TWO convex edges" (as opposed to the rank-1 PSD quadratic above) requires, in
@@ -73,23 +92,15 @@ function g = conjPieceCPLQ(p)
         g = conjConvexQuadTriangle(V3, A, b, c);          % strictly convex quadratic
     elseif min(eig(A)) > -sqrt(eps) && max(eig(A)) > sqrt(eps)
         g = conjPSDRank1QuadTriangle(V3, A, b, c);        % convex, rank 1 (COAP A.4 envelope)
-    elseif abs(A(1,1)) < sqrt(eps) && abs(A(2,2)) < sqrt(eps) && abs(A(1,2)-1) < sqrt(eps) ...
-            && norm(b) < sqrt(eps) && abs(c) < sqrt(eps)
-        % pure bilinear f = x*y (already in bilinear frame; general indefinite reduces to this
-        % via bilinearFrame + an affine substitution -- to be added). Requires one convex edge.
-        ce = convexEdgesXY(V3);
-        if size(ce,1) == 0
-            g = conjBilinearXYzeroCE(V3);                 % -> 3-cone linear QuaPar
-        elseif size(ce,1) == 1
-            g = conjBilinearXYoneCE(V3, ce);              % -> parabolic QuaPar (6 faces)
-        else
-            error('conjPieceCPLQ:notImplemented', ...
-                'Bilinear conjugate is implemented for zero or one convex edge (got %d).', size(ce,1));
-        end
+    elseif min(eig(A)) < -sqrt(eps) && max(eig(A)) > sqrt(eps)
+        % genuinely indefinite (one positive, one negative eigenvalue): general beta*x*y+linear in
+        % ANY frame, reduced to the pure-bilinear case -- see conjIndefiniteQuadTriangle.
+        g = conjIndefiniteQuadTriangle(V3, A, b, c);
     else
         error('conjPieceCPLQ:notImplemented', ...
-            ['Only affine, positive-definite quadratic, or pure-bilinear (x*y) pieces over a ' ...
-             'triangle are supported so far; general indefinite (rotation) and rational are next.']);
+            ['Concave (negative semidefinite) quadratic pieces are not supported directly; ' ...
+             'compute convEnvCPLQ first (affine envelope), then conjugate that. See ' ...
+             'conjPieceCPLQTest/concaveQuadraticConjugateEndToEnd.']);
     end
 end
 
@@ -489,6 +500,112 @@ function idx = rank1TieWinner(s, u, uperp, lam, p, w, t0, tc, ra, rb, ma, mb, va
         vals(2) = evalStored(rank1EdgeQuad(t0,rb,mb,u,lam,p,w,c));
     end
     [~, idx] = max(vals);
+end
+
+% ----- general INDEFINITE quadratic (beta*x*y+linear, any frame) via reduction to bilinear -----
+function g = conjIndefiniteQuadTriangle(V, A, b, c)
+% Conjugate of q(x)=1/2 x'Ax+b'x+c (A INDEFINITE: one positive, one negative eigenvalue) over the
+% CCW triangle V. Generalizes the old exact-pure-"x*y" bilinear case (conjBilinearXYzeroCE/OneCE)
+% to ANY indefinite A, b, c by:
+%   1. Rotating to the bilinear frame u=Mx via the SAME construction convEnvCPLQ uses (bilinear-
+%      Frame below): 1/2 x'Ax = u1*u2 EXACTLY, i.e. beta=1 always with this specific M -- no
+%      separate "scale" case is needed, only the residual linear part.
+%   2. Completing the square on the residual linear part: q(u) = u1*u2+Ltil(1)*u1+Ltil(2)*u2+c =
+%      (u1+Ltil(2))*(u2+Ltil(1)) + c-Ltil(1)*Ltil(2), i.e. a pure bilinear function of the
+%      SHIFTED variable u' = u + [Ltil(2) Ltil(1)] (translation only -- edge convexity depends
+%      only on slope, so it is unaffected by the shift; classify convex edges once on Vshift).
+%   3. Reusing conjBilinearXYzeroCE/OneCE (unmodified) on the SHIFTED triangle for the pure-
+%      bilinear conjugate h(s)=sup_{u'} s.u'-u1'u2', in s_u-space.
+%   4. Undoing the shift: q*(s_u) = sup_u s_u.u-q(u) = sup_u' [s_u.u'-u1'u2'] - s_u.shift -
+%      (c-Ltil(1)*Ltil(2)) = h(s_u) - shift(1)*s_u1-shift(2)*s_u2 - (c-Ltil(1)*Ltil(2)): a
+%      LINEAR-IN-s_u correction added to every face's VALUE only (the region partition -- Vd, E,
+%      Ec, F -- is unaffected, since the correction is a constant w.r.t. the argmax variable u').
+%   5. Undoing the rotation: f*(s) = q*(M^-T s), a linear change of the DUAL variable, pushed
+%      through the whole QuaPar (vertices, face quadratics, conics, and left/right orientation if
+%      det(M)<0) by pushforwardQuaParDual.
+% Only 0 or 1 convex edge is supported (2 convex edges is the same genuine-hyperbola dead end as
+% the pure bilinear case -- see the file-header NOTES and
+% conjPieceCPLQTest/bilinearTwoConvexEdgesDocumentedLimitation -- unaffected by translation/
+% rotation, since convexity of an edge depends only on its slope, and rotating back preserves the
+% conic degree). Setting A=[0 1;1 0], b=0, c=0 recovers the old pure-xy case exactly (Ltil=0, so
+% the shift is exactly zero and M reduces the rotation to whatever bilinearFrame([0 1;1 0]) gives).
+    M = bilinearFrame(A);
+    Vbf = (M*V')';
+    if triSignedArea(Vbf) < 0, Vbf = Vbf([1 3 2],:); end   % keep CCW for conjBilinearXY*CE's own conventions
+    Ltil = (M')\b;                                         % q(u) = u1*u2 + Ltil(1)*u1 + Ltil(2)*u2 + c
+    shift = [Ltil(2), Ltil(1)];
+    Vshift = Vbf + shift;
+    ce = convexEdgesXY(Vshift);
+    switch size(ce,1)
+        case 0, gU = conjBilinearXYzeroCE(Vshift);
+        case 1, gU = conjBilinearXYoneCE(Vshift, ce);
+        otherwise
+            error('conjPieceCPLQ:notImplemented', ...
+                'Indefinite-quadratic conjugate is implemented for zero or one convex edge (got %d).', size(ce,1));
+    end
+    constCorr = c - Ltil(1)*Ltil(2);
+    gU.f(:,8)  = gU.f(:,8)  - shift(1);    % L1 -= shift(1) (stored basis: col 8 = x-linear coeff)
+    gU.f(:,9)  = gU.f(:,9)  - shift(2);    % L2 -= shift(2) (col 9 = y-linear coeff)
+    gU.f(:,10) = gU.f(:,10) - constCorr;   % const -= (c - Ltil(1)*Ltil(2))
+    g = pushforwardQuaParDual(gU, M);
+end
+
+function M = bilinearFrame(A)
+% Build M (u = M x) so that 1/2 x'Ax = u1*u2 for an INDEFINITE symmetric A (same construction as
+% convEnvCPLQ's bilinearFrame, duplicated here since it is a file-local helper there): with
+% A = lam1 r1 r1' + lam2 r2 r2' (lam1>0>lam2) and a = sqrt(lam1/2) r1 + sqrt(-lam2/2) r2,
+% w = sqrt(lam1/2) r1 - sqrt(-lam2/2) r2, one has a w' + w a' = A, hence (a'x)(w'x) = 1/2 x'Ax.
+    [R, Lam] = eig(A); lam = diag(Lam);
+    [lp, ip] = max(lam); [ln, in] = min(lam);
+    r1 = R(:,ip); r2 = R(:,in);
+    a = sqrt(lp/2)*r1 + sqrt(-ln/2)*r2;
+    w = sqrt(lp/2)*r1 - sqrt(-ln/2)*r2;
+    M = [a'; w'];
+end
+
+function g = pushforwardQuaParDual(gU, M)
+% Push a QuaPar gU, a function of a dual variable s_u, forward through the linear change of dual
+% variable s_u = M^-T s (i.e. gU represents q*(s_u); this returns f*(s) = q*(M^-T s)). Since the
+% region partition is unaffected by the sign of a determinant-preserved argmax (only ORIENTED
+% quantities move), this transforms:
+%   - dual vertices:  s_u = M^-T s  <=>  s = M' s_u, so as row vectors Vd_new = Vd_old * M.
+%   - each face's quadratic h(s_u)=1/2 s_u'H s_u+g'*s_u+kappa: h(M^-T s) is quadratic in s with
+%     Hessian Minv*H*Minv', linear part Minv*g, and UNCHANGED constant kappa.
+%   - each edge's conic (same quadratic-form substitution, using the conic's own PLAIN [a b c d e
+%     f] convention -- NOT the doubled "stored" convention the face values use).
+%   - left/right face orientation (F) and the conics' sign convention (evalConic>0 on the left):
+%     a linear map with det(M)<0 reverses orientation, so F's columns swap and Ec's sign flips.
+    Minv = inv(M); detM = det(M);
+    Vd = gU.V * M;
+    nf = size(gU.f,1);
+    fNew = zeros(nf,6);
+    for k = 1:nf
+        [Lk,Hk,Ck] = QuaPoly.matrixForm(gU.f(k,:));
+        if ~isempty(Ck)
+            error('conjPieceCPLQ:internal','pushforwardQuaParDual: cubic face not supported.');
+        end
+        Hn = Minv*Hk*Minv'; Ln = Minv*Lk;
+        fNew(k,:) = [Hn(1,1), Hn(1,2), Hn(2,2), Ln(1), Ln(2), gU.f(k,end)];
+    end
+    ne = size(gU.E,1);
+    EcNew = zeros(ne,6);
+    for j = 1:ne
+        row = gU.Ec(j,:);
+        if all(row==0), continue; end                      % linear edge stays linear (all-zero)
+        Ac = [row(1), row(2)/2; row(2)/2, row(3)]; Lc = [row(4); row(5)];
+        An = Minv*Ac*Minv'; Ln = Minv*Lc;
+        newRow = [An(1,1), An(1,2)+An(2,1), An(2,2), Ln(1), Ln(2), row(6)];
+        EcNew(j,:) = newRow / max(abs(newRow));    % a conic is scale-invariant; normalize so the
+                                                    % fixed ABSOLUTE tolerance in
+                                                    % QuaPar.assertParabolicEdges (b^2-4ac<=sqrt(eps))
+                                                    % stays meaningful after M can amplify magnitudes
+    end
+    FNew = gU.F;
+    if detM < 0
+        FNew = FNew(:,[2 1]);
+        EcNew = -EcNew;
+    end
+    g = QuaPar(Vd, gU.E, EcNew, fNew, FNew);
 end
 
 % ----- bilinear (f=x*y) conjugate over a triangle with ONE convex edge (COAP B.2) -----------

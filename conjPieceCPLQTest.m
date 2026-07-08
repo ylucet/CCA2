@@ -271,6 +271,65 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             end
         end
 
+        function indefiniteQuadraticZeroConvexEdgeConjugate(testCase)
+            % q = 3*x*y + 2x + y + 0.5 (indefinite, beta=3 not 1, plus a linear shift) over
+            % (0,0),(1,0),(0,1): generalizes bilinearZeroConvexEdgeConjugate (which only covered
+            % the exact pure-xy, no-shift case) via conjIndefiniteQuadTriangle. In the reduced
+            % bilinear frame this triangle still has zero convex edges, so the conjugate is again
+            % the 3-cone piecewise-linear QuaPar of vertex values (COAP B.1), just with the actual
+            % vertex values of q (not xy). Cross-checked against the numeric sup over the triangle.
+            A = [0 3; 3 0]; b = [2; 1]; cc = 0.5;
+            V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 3);
+            qf = @(x) 0.5*x'*A*x + b'*x + cc;
+            v1=[0;0]; v2=[1;0]; v3=[0;1];
+            S = [-2 -1; 3 -1; -1 2; 0.5 0.5; -1 -1];
+            for i = 1:size(S,1)
+                s = S(i,:)';
+                expected = max([s'*v1-qf(v1); s'*v2-qf(v2); s'*v3-qf(v3)]);
+                testCase.verifyEqual(g.eval(S(i,:)), expected, 'AbsTol', 1e-9, sprintf('s=%d', i));
+            end
+            nt = 200; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2;
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('numeric s=%d', i));
+            end
+        end
+
+        function indefiniteQuadraticOneConvexEdgeConjugate(testCase)
+            % q = 1/2 x'Ax+b'x+c with A=[2 1;1 -2] indefinite (rotated, not axis- or diagonal-
+            % aligned) and a nonzero shift b, over a triangle -- generalizes
+            % bilinearOneConvexEdgeConjugate to a genuinely rotated/shifted indefinite quadratic
+            % via conjIndefiniteQuadTriangle (bilinearFrame reduction + shift correction +
+            % pushforwardQuaParDual). In the reduced frame this hits exactly one convex edge, so
+            % the conjugate is a six-face parabolic QuaPar, validated against the numeric sup.
+            A = [2 1; 1 -2]; b = [0.5; 0.5]; cc = 0.2;
+            V = [0 0; 2 0; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 6);
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2;
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
         function rationalRejected(testCase)
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             r = RatPol(V, E, [2 0 2 0 0 0], F, [1 1 3]);  % rational denominator
