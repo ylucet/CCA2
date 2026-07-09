@@ -1,129 +1,132 @@
 # Session Handoff
 
-_Last updated: 2026-07-08_
+_Last updated: 2026-07-09_
 
 ## What happened this session
-Picked up from the prior handoff. First correction: the prior handoff said the tied-vertex
-`conjPSDRank1QuadTriangleTie` work was left uncommitted -- it was in fact committed and pushed
-since (commit `8084a41`, author-approved, tip of `cplq-engine` at session start). Verified
-103/103 PASS on Frances before starting new work.
 
-**This session's work: generalized `conjPieceCPLQ`'s indefinite-quadratic branch** from the exact
-pure-`x*y` bilinear special case to ANY genuinely indefinite quadratic `q(x)=1/2 x'Ax+b'x+c`
-(`beta*x*y+linear`, arbitrary rotation and shift) -- one of the two TODOs the file header had
-flagged (`beta*x*y+linear (scale/shift)`).
+Two parts. Verified 112/112 PASS on Frances before starting.
 
-**Key realization that scoped the work:** the prior handoff framed the remaining big gap as
-"conjugate of RATIONAL pieces (the 1-convex-edge `RatPol` output of Step 1)". Investigation (incl.
-re-reading the reference repo's `plq_1piece.m` type-1 branch, and the COAP paper's actual Appendix
-B, which turns out to cover ONLY the conjugate of a bilinear function's own envelope, not a general
-rational quad/linear conjugate) showed that a literal "conjugate an arbitrary `RatPol` with nonzero
-denominator" is a genuinely harder, different problem: there is no known reduction to an
-already-solved case when the caller has no memory of an original pre-envelope piece (e.g. a direct
-`RatPol.conj()` call). That remains UNSOLVED and is explicitly still rejected
-(`conjPieceCPLQTest/rationalRejected`, unchanged).
+### Part 1: wired the `conjCPLQ` orchestrator (done, tested, uncommitted)
 
-However: since `f* = (conv f)*`, Step 2 does NOT need to consume Step 1's rational envelope output
-at all when the ORIGINAL per-triangle piece is still available to the caller -- it can conjugate
-that original piece directly. For the one-convex-edge bilinear case, the original piece is exactly
-`beta*x*y+linear` in some rotated/shifted frame -- so generalizing the indefinite-quadratic branch
-is what actually lets a future `conjCPLQ` orchestrator wire Step 1 -> Step 2 -> Step 3 for
-nonconvex inputs, without needing the harder standalone-`RatPol.conj` capability.
+Added `conjSingleTriangle` (local fn in `conjCPLQ.m`) so a single bounded-triangle piece is
+conjugated end-to-end: tries `conjPieceCPLQ` on the ORIGINAL piece first (works directly for
+affine / PD / rank-1-PSD / indefinite-with-0-or-1-convex-edge, since `f*=(conv f)*` means no
+envelope is needed at all in these cases), falling back to `convEnvCPLQ`'s envelope only when
+`conjPieceCPLQ` can't handle the raw piece (a concave piece, or an indefinite piece with exactly
+2 convex edges, which envelopes to a single rank-1-PSD face). 7 new tests added to
+`conjCPLQTest.m` (`affineTriangleViaOrchestrator`, `convexQuadraticTriangleViaOrchestrator`,
+`concaveTriangleViaOrchestratorSidestepsToEnvelope`,
+`indefiniteTriangleZeroOrOneConvexEdgeViaOrchestrator`,
+`indefiniteTriangleTwoConvexEdgesSidestepsToEnvelope`,
+`indefiniteTriangleThreeConvexEdgesNeedsStep3`, `multiFacePieceStillNotImplemented`). Full suite
+**112/112 PASS**. The one remaining case (indefinite triangle with 3 convex edges) raises an
+explicit `PLQ:conjCPLQ:notImplemented` naming Step 3 as the reason, instead of a generic error.
 
-**Implementation** (`conjIndefiniteQuadTriangle` + `pushforwardQuaParDual`, new functions in
-`conjPieceCPLQ.m`, mechanical linear algebra, no new curved-region derivation):
-1. Rotate to the bilinear frame `u=Mx` via `bilinearFrame(A)` (same construction as
-   `convEnvCPLQ`'s, duplicated locally): `1/2 x'Ax = u1*u2` exactly, so `beta=1` always with this
-   specific `M` -- no separate "scale" case needed.
-2. Complete the square on the residual linear part: `u1*u2+d*u1+e*u2+f0 = (u1+e)*(u2+d)+f0-ed`, a
-   PURE TRANSLATION `u'=u+[e,d]` (edge convexity depends only on slope, so classification is
-   unaffected by the shift -- classify once on the shifted triangle).
-3. Reuse `conjBilinearXYzeroCE`/`conjBilinearXYoneCE` UNMODIFIED on the shifted triangle for the
-   pure-bilinear conjugate in `s_u`-space.
-4. Undo the shift: subtract a LINEAR-IN-`s_u` correction from every face's VALUE only (the region
-   partition -- `Vd`,`E`,`Ec`,`F` -- is unaffected, since the correction is constant w.r.t. the
-   argmax variable).
-5. Undo the rotation: push the whole `QuaPar` through the linear dual-variable change
-   `s_u = M^-T s` (`pushforwardQuaParDual`) -- transforms dual vertices (`Vd*M`), each face's
-   quadratic (Hessian/linear part via `Minv*H*Minv'`, `Minv*L`), each edge's conic the same way
-   (using its own PLAIN, non-doubled coefficient convention), and swaps left/right (`F` columns,
-   `Ec` sign) if `det(M)<0` (a reflection).
+### Part 2: Step 3 primitive `maxQuaPar.m` — hit a real mathematical wall, not a bug
 
-**One real bug found and fixed via the stress test** (not a math error, a numerical-conditioning
-one): `pushforwardQuaParDual`'s conic transform can amplify coefficient magnitudes, and
-`QuaPar.assertParabolicEdges`'s `b^2-4ac<=sqrt(eps)` check uses a fixed ABSOLUTE tolerance, so a
-large-magnitude (but perfectly valid) conic row could spuriously fail it. Fixed by normalizing
-each transformed conic row by its own max-abs entry before constructing (a conic equation is
-scale-invariant, so this is free and doesn't touch the shared `QuaPar` validation code).
+Built `maxQuaPar.m` (new file, ~450 lines) implementing the pointwise max of two full-domain
+`QuaPar`s: face-pair overlay (all `g1.nf × g2.nf` combinations), Sutherland-Hodgman-style
+polygon/ray clipping (`clipByFace`/`clipPolyHalfPlane`, handles bounded and unbounded cells,
+0/1/2 crossings), closed-form winner decision (`decideWinner`, finite vertices + ray
+asymptotics via the Hessian/linear/constant leading term, no numeric far-point guessing),
+curve-splitting for undecided cells (`splitCell`, exact ray-quadratic algebra, asserts the
+degeneracy the whole approach depends on rather than assuming it), and reassembly into one
+`QuaPar` (`assemblePieces`, generalizes `convEnvCPLQ.m`'s `assembleTriangles` half-edge pairing
+to rays and one conic edge per piece). Algorithm shape was cross-checked against the older
+symbolic `cPLQ`/`functionNDomain.m`+`region.m`'s own max implementation
+(`maximumP`/`maximumPC`, `region.maxArray`/`splitmax3`) — ported the *algorithm*, not the code
+(cPLQ needs an `intmax` sentinel for points at infinity; `maxQuaPar.m` uses `QuaPar`'s own
+structural ray representation instead, no sentinel needed — a real simplification).
 
-**Validated:** 200-trial random stress test (random rotation angle, random eigenvalues of both
-signs, random shift, random triangle, random dual query points) against numeric sup-sampling over
-a fine triangle grid, run ad hoc on Frances (not committed) -- 0 mismatches across 498 checked
-dual points (100/200 trials skipped for landing in the documented two-convex-edge dead end), worst
-error 2.4e-5 (grid-noise level). Two new PERMANENT tests committed:
-`indefiniteQuadraticZeroConvexEdgeConjugate` (`A=[0 3;3 0]`, i.e. `beta=3` not 1, plus a linear
-shift, over the unit triangle -- exercises BOTH the scale-into-eigenvalues path and the shift
-correction) and `indefiniteQuadraticOneConvexEdgeConjugate` (`A=[2 1;1 -2]`, genuinely rotated, not
-axis- or diagonal-aligned, plus a shift -- exercises a nontrivial `det(M)` and the full
-pushforward). Both cross-checked against numeric sup over a fine grid, matching the existing style
-(e.g. `psdRank1QuadraticConjugate`).
+**Testing this on a concrete example surfaced a genuine mathematical obstruction in the
+published algorithm, not a bug in this session's code.** Full writeup with proofs and diagrams:
+**`/home/ylucet/CCA2/3-edge.tex`** (compiled `3-edge.pdf`) — **read this first**, it has the
+complete derivation; summary:
 
-Full suite **105/105 PASS** on Frances (103 previous + 2 new).
+- Example: `f(x,y)=xy` over the triangle `(0,0),(3,3),(1,2)` (three convex edges — the same
+  category `convEnvCPLQ` already splits, via `splitThreeConvex`, into
+  `T1=(0,0)-(1,2)-(2,2)` and `T2=(1,2)-(2,2)-(3,3)` sharing the horizontal edge `(1,2)-(2,2)`,
+  which is *not* a convex edge of either sub-triangle).
+- `g1=conj(T1's rank-1-PSD envelope)`, `g2=conj(T2's rank-1-PSD envelope)` (via
+  `conjPSDRank1QuadTriangle`, 6 faces each). Of the 36 combinatorial face×face pairs (18 nonempty
+  overlap cells), exactly **2** require comparing two genuinely quadratic pieces against each
+  other — both involving `g1`'s shared-edge-strip piece — and **both have discriminant provably
+  > 0** (exact: `√2/8+3/16 ≈ 0.364` and `√2/4+3/8 ≈ 0.729`): a genuine **hyperbola**, which
+  `QuaPar` cannot represent as an edge.
+- This directly contradicts [JOGO] Theorem 6's proof, which asserts "when we compare two
+  functions we always get one of them as linear" — false here, since **both** pieces are
+  quadratic (they descend from *different* rank-1 envelopes on adjacent sub-triangles, a
+  configuration the proof never actually examines). [COAP] Appendix A.5 states the
+  three-convex-edge split in one sentence and never revisits Step 3 for it.
+- Verified 3 independent ways: (1) **SCAT** (`github.com/ylucet/SCAT`, Python/SymPy port,
+  installed editable at `/home/ylucet/SCATpy` — `from scat import PWF, rsym`) independently
+  re-derived `g1` via its own general n-D pivot algorithm, exact match with the closed-form
+  construction; (2) direct constrained solver (MATLAB `fmincon`, multi-start) computing
+  `sup_{x in T} <s,x>-f(x)` directly vs `max(g1,g2)` — max error `4e-15` at 16 points including
+  inside both hyperbola cells; (3) ran the **actual reference `cPLQ` code**
+  (`/home/ylucet/FLTW/codeOld/cPLQ`) on this example: `plq_1p.convexEnvelope` has explicit
+  branches for `nCE==0,1,2` only — no `nCE==3` branch exists — so it **silently returns an empty
+  envelope/conjugate** rather than computing anything or erroring; a comment in the authors' own
+  `testcPLQ.m` (`testRect`: `% add to split 3 convex edge case`) confirms this was a known,
+  never-finished item, not a deliberate design choice.
+
+`maxQuaPar.m`'s clipping/winner/reassembly machinery is otherwise believed complete for the
+16/18 cells that *do* decide cleanly, but **has never returned a complete result end-to-end on
+any real example** — the one scenario tried hits the hyperbola wall partway through
+(`splitCell`'s degeneracy assertion fires as designed, loudly, not silently).
 
 ## Where things stand
-- Branch: `cplq-engine` @ `8084a41` (this session's starting point). This session's changes are
-  committed as `ec25e20` (author-approved) and pushed.
-- Files changed this session: `conjPieceCPLQ.m` (new `conjIndefiniteQuadTriangle`,
-  `bilinearFrame`, `pushforwardQuaParDual`; replaced the old narrow pure-`x*y` dispatch branch and
-  the old catch-all error with the general indefinite dispatch + an explicit concave-quadratic
-  error; updated header docstring), `conjPieceCPLQTest.m` (new
-  `indefiniteQuadraticZeroConvexEdgeConjugate`, `indefiniteQuadraticOneConvexEdgeConjugate`), this
-  handoff file.
+
+- Branch: `cplq-engine` @ `1d115d4` (this session's starting point, unchanged — nothing pushed
+  this session).
+- **Uncommitted** (ask before committing, per standing rule): `conjCPLQ.m` (modified),
+  `conjCPLQTest.m` (modified), `maxQuaPar.m` (new, untracked).
+- Full suite (excluding `maxQuaPar.m`, which has no test file yet): **112/112 PASS** on Frances.
+- New file outside the repo: `/home/ylucet/CCA2/3-edge.tex` + `3-edge.pdf` (the hyperbola
+  writeup) and its figures `fig_primal.pdf`, `fig_dual.pdf`, `fig_hyperbola_insets.pdf`.
 
 ## Next steps
-- Standalone `RatPol.conj` (conjugate of a genuine rational quad/linear piece with NO known
-  originating quadratic) is still the remaining BIG unsolved gap -- needs a genuinely new 2D
-  critical-point / curved-region derivation (unlike the indefinite-quadratic case, there is no
-  reduction to an already-solved case). Reading `biconjugate2/plq_1piece.m`'s type-1 branch
-  (`github.com/tanmaya11/convex`, NOT cloned into this repo -- re-clone to scratchpad if needed,
-  see this session's notes) is still the best starting point; expect it to need genuinely curved
-  edges in the OUTPUT domain (`QuaPar`'s curved-edge `orderEdges` support, commit `ccbaba6`, is
-  already there for this) and a nontrivial amount of new geometric case analysis (interior
-  critical point in a 2D rotated frame that does NOT decouple the way the rank-1-quadratic case
-  did, since the rational numerator's dependence on both rotated coordinates does not vanish).
-- Separately/in parallel: wire an actual `conjCPLQ` orchestrator (Step1 `convEnvCPLQ` -> Step2
-  `conjPieceCPLQ` per ORIGINAL triangle piece (not Step 1's RatPol output, using this session's
-  generalized indefinite-quadratic support) -> Step3 max of conjugates) for nonconvex inputs; this
-  is now realistic without waiting on the `RatPol.conj` gap above, since `conjPieceCPLQ` can
-  already conjugate every triangle-piece shape convEnvCPLQ's classification produces (affine, PD
-  quadratic, rank-1 PSD quadratic incl. the tie sub-case, and now general indefinite with 0 or 1
-  convex edge -- only the 2-convex-edge indefinite case is a genuine dead end, and Step 1 already
-  proves that never arises after its own rank-1-PSD convexification).
-- Test command (run directly on Frances -- MATLAB now runs there; prefix every batch call with
-  `restoredefaultpath; rehash toolboxcache;` because the Maple toolbox conflicts with Symbolic):
-  ```
-  matlab -batch "restoredefaultpath; rehash toolboxcache; cd('/home/ylucet/CCA2/CCA2'); \
-    res=runtests({'RatPolTest','convEnvCPLQTest','QuaParTest','conjCPLQTest','conjPieceCPLQTest','PLQVCTest'}); \
-    fprintf('\n==== SUMMARY ====\nTOTAL %d PASSED %d FAILED %d\n',numel(res),sum([res.Passed]),sum([res.Failed])); \
-    exit(sum([res.Failed])>0)"
-  ```
+
+1. **Read `/home/ylucet/CCA2/3-edge.tex` first.** Then decide between:
+   - (a) Construct or find a 3-convex-edge example where the two sub-triangles' shared-edge
+     pieces do *not* end up needing to be compared as two quadratics, to get a first full
+     `maxQuaPar` end-to-end validation (would confirm the clipping/reassembly machinery works
+     when the hyperbola issue doesn't arise).
+   - (b) Determine whether the hyperbola is **unavoidable in general** for a 3-convex-edge
+     split: the shared cut edge is, by construction (COAP A.5's horizontal-line-through-the-
+     middle-vertex), never a convex edge of either sub-triangle, so there is no a priori reason
+     for the two adjacent rank-1 Hessians to share an eigenvector (which is what would be needed
+     for their difference to stay degenerate). If unavoidable, this is a genuine gap in
+     [JOGO]/[COAP]'s coverage for *any* 3-convex-edge split, not just this one example — worth
+     deciding whether/how to report it, and whether some `QuaPar`-representable workaround
+     exists (e.g. does the pipeline actually need the exact max there, or could a different
+     splitting strategy in Step 1 avoid ever producing this configuration?).
+2. Separately, the standalone `RatPol.conj` gap (rational piece with no known originating
+   quadratic) is still open — unrelated to this session's finding, see prior handoffs.
+3. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
+   ```
+   matlab -batch "restoredefaultpath; rehash toolboxcache; cd('/home/ylucet/CCA2/CCA2'); \
+     res=runtests({'RatPolTest','convEnvCPLQTest','QuaParTest','conjCPLQTest','conjPieceCPLQTest','PLQVCTest'}); \
+     fprintf('\n==== SUMMARY ====\nTOTAL %d PASSED %d FAILED %d\n',numel(res),sum([res.Passed]),sum([res.Failed])); \
+     exit(sum([res.Failed])>0)"
+   ```
 
 ## Relevant files
-- `conjPieceCPLQ.m` -- this session's main file; new `conjIndefiniteQuadTriangle`,
-  `bilinearFrame`, `pushforwardQuaParDual` right after the bilinear-conjugate helpers; dispatch
-  changed inside the main `conjPieceCPLQ` function (the `elseif` chain after the rank-1 PSD case).
-- `conjPieceCPLQTest.m` -- `indefiniteQuadraticZeroConvexEdgeConjugate`,
-  `indefiniteQuadraticOneConvexEdgeConjugate`.
-- `/home/ylucet/CCA2/DESIGN.md` -- design proposal (outside this repo); II.5.1 describes the
-  3-step `cplq` engine.
-- `/home/ylucet/CCA2/s10589-026-00781-5.pdf` (COAP) -- Appendix B is SPECIFICALLY "Conjugate of
-  convex envelope of a bilinear function over a triangle" (B.1/B.2/B.3, matching
-  `conjBilinearXYzeroCE`/`OneCE`/the documented 2-CE dead end), NOT a general rational-piece
-  conjugate formula -- that gap is genuinely open, not just unread.
-- Reference repo `github.com/tanmaya11/convex` (branches `b2`/`b3`/`biconjugate`/`biconjugate2`,
-  NOT part of this repo, NOT currently cloned anywhere persistent -- re-clone to scratchpad):
-  `plq_1piece.m`'s `conjugateFunction`/type-1 branch (~line 2387) is the general symbolic
-  (Maple/MATLAB symbolic-toolbox) rational-conjugate machinery for arbitrary polygons; worth
-  reading again before attempting the standalone `RatPol.conj` case, though it computes normal
-  cones/subdifferentials symbolically for a much more general polygon setting than this project's
-  triangle-only, numeric approach, so expect to adapt rather than port directly.
+
+- `/home/ylucet/CCA2/3-edge.tex` (+ `.pdf`) — **the main deliverable of this session**: full
+  proof, diagrams, and 3-way verification of the hyperbola finding. Figures generated from
+  `/home/ylucet/.claude/jobs/237b4e30/tmp/make_diagrams.py` and
+  `make_hyperbola_insets.py` (job scratch dir, not persistent — regenerate from the `.tex`
+  source data if needed, or copy the `.py` scripts out first).
+- `conjCPLQ.m` — `conjSingleTriangle` (Part 1).
+- `conjCPLQTest.m` — 7 new tests (Part 1).
+- `maxQuaPar.m` — Part 2, the Step 3 primitive (untested end-to-end, see above).
+- `/home/ylucet/SCATpy` — Python SCAT (SymPy port of Maple SCAT), used to independently verify
+  `g1`'s conjugate. `pip`-editable-installed; `from scat import PWF, rsym`; `PWF.from_regions`,
+  `PWF.conj`.
+- `/home/ylucet/FLTW/codeOld/cPLQ` — reference implementation; `plq_1p.m`'s `convexEnvelope`
+  (~line 209) confirms the missing `nCE==3` branch; `testcPLQ.m`'s `testRect` has the
+  "unfinished" comment.
+- `/home/ylucet/CCA2/DESIGN.md` — design proposal; II.5.1 describes the 3-step `cplq` engine.
+- Memory: `cca2-toolbox-design` project memory updated with this session's findings (auto-loaded
+  next session).
