@@ -77,10 +77,8 @@ any real example** — the one scenario tried hits the hyperbola wall partway th
 
 ## Where things stand
 
-- Branch: `cplq-engine` @ `1d115d4` (this session's starting point, unchanged — nothing pushed
-  this session).
-- **Uncommitted** (ask before committing, per standing rule): `conjCPLQ.m` (modified),
-  `conjCPLQTest.m` (modified), `maxQuaPar.m` (new, untracked).
+- Branch: `cplq-engine` @ `60a9c45` — "Wire conjCPLQ orchestrator for single-triangle pieces;
+  add maxQuaPar (WIP)". Committed and pushed (author approved both this session).
 - Full suite (excluding `maxQuaPar.m`, which has no test file yet): **112/112 PASS** on Frances.
 - New file outside the repo: `/home/ylucet/CCA2/3-edge.tex` + `3-edge.pdf` (the hyperbola
   writeup) and its figures `fig_primal.pdf`, `fig_dual.pdf`, `fig_hyperbola_insets.pdf`.
