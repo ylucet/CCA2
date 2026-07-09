@@ -62,6 +62,102 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
         end
 
+        function affineTriangleViaOrchestrator(testCase)
+            % conjCPLQ dispatches a single bounded-triangle piece straight to conjPieceCPLQ (no
+            % Step 1 needed for an affine piece). ell = -x over (0,0),(1,0),(0,1).
+            V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            p = QuaPoly(V, E, [0 0 0 -1 0 0], F);
+            g = p.conj('cplq');
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 3);
+            S = [-2 -1; 3 -1; -1 2; 0.5 0.5];
+            for i = 1:size(S,1)
+                expected = max([0; S(i,1)+1; S(i,2)]);
+                testCase.verifyEqual(g.eval(S(i,:)), expected, 'AbsTol', 1e-10);
+            end
+        end
+
+        function convexQuadraticTriangleViaOrchestrator(testCase)
+            % PD quadratic over a triangle: conjCPLQ should match conjPieceCPLQ directly (no
+            % envelope needed, since a PD piece is already its own convex envelope).
+            A = [2 1; 1 3]; b = [1; -2]; cc = 0.5;
+            V = [0 0; 2 0; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            p = QuaPoly(V, E, f6, F);
+            g = p.conj('cplq');
+            testCase.verifyEqual(g.f, conjPieceCPLQ(p).f, 'AbsTol', 1e-12);
+            qf = @(x) 0.5*x'*A*x + b'*x + cc;
+            xin = [0.8; 0.5]; s = A*xin + b;
+            testCase.verifyEqual(g.eval(s'), s'*xin - qf(xin), 'AbsTol', 1e-8);
+        end
+
+        function concaveTriangleViaOrchestratorSidestepsToEnvelope(testCase)
+            % A concave piece cannot be conjugated directly (conjPieceCPLQ rejects it); conjCPLQ
+            % must fall back to Step 1's affine envelope automatically. q = -(x^2+y^2) over
+            % (0,0),(2,0),(0,2): f*(s) = max_i(<s,v_i> - q(v_i)).
+            V = [0 0; 2 0; 0 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [-2 0 -2 0 0 0], F);
+            g = q.conj('cplq');
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 3);
+            qf = @(x) -(x(1)^2 + x(2)^2);
+            v1=[0;0]; v2=[2;0]; v3=[0;2];
+            S = [1 1; 5 -1; -1 5; 3 3];
+            for i = 1:size(S,1)
+                s = S(i,:)';
+                expected = max([s'*v1-qf(v1); s'*v2-qf(v2); s'*v3-qf(v3)]);
+                testCase.verifyEqual(g.eval(S(i,:)), expected, 'AbsTol', 1e-10);
+            end
+        end
+
+        function indefiniteTriangleZeroOrOneConvexEdgeViaOrchestrator(testCase)
+            % Genuinely indefinite pieces with 0 or 1 convex edge are conjugated directly (no
+            % envelope needed) -- exercise both through the orchestrator.
+            V0 = [0 0; 1 0; 0 1]; E0 = [1 2 1; 2 3 1; 3 1 1]; F0 = [1 0; 1 0; 1 0];
+            g0 = QuaPoly(V0, E0, [0 1 0 0 0 0], F0).conj('cplq');
+            testCase.verifyEqual(g0.nf, 3);   % zero convex edges -> 3-cone piecewise-linear
+
+            V1 = [0 0; 2 0; 1 1]; E1 = [1 2 1; 2 3 1; 3 1 1]; F1 = [1 0; 1 0; 1 0];
+            g1 = QuaPoly(V1, E1, [0 1 0 0 0 0], F1).conj('cplq');
+            testCase.verifyEqual(g1.nf, 6);   % one convex edge -> 6-face parabolic QuaPar
+        end
+
+        function indefiniteTriangleTwoConvexEdgesSidestepsToEnvelope(testCase)
+            % Two convex edges: conjPieceCPLQ rejects the raw piece directly, so conjCPLQ must
+            % fall back to Step 1's rank-1-PSD envelope (COAP Appendix A.4) automatically, matching
+            % what conjPieceCPLQTest/psdRank1QuadraticEndToEnd does by hand.
+            V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            g = q.conj('cplq');
+            env = convEnvCPLQ(q);
+            testCase.verifyEqual(env.nf, 1);   % single-face envelope: no Step 3 needed here
+            testCase.verifyEqual(g.f, conjPieceCPLQ(env).f, 'AbsTol', 1e-12);
+        end
+
+        function indefiniteTriangleThreeConvexEdgesNeedsStep3(testCase)
+            % Three convex edges: Step 1 splits the triangle into two sub-triangle pieces, so the
+            % orchestrator needs Step 3 (max of conjugates) -- not implemented yet. A strictly
+            % increasing vertex chain (both x and y increasing) makes all 3 pairwise slopes
+            % positive, i.e. all 3 edges convex for f=xy.
+            V = [0 0; 3 3; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            testCase.verifyEqual(convEnvCPLQ(q).nf, 2);   % confirms the 3-convex-edge split
+            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
+        end
+
+        function multiFacePieceStillNotImplemented(testCase)
+            % A multi-face domain (nf>1) still needs Step 3 (not implemented), even though the
+            % single-triangle case is now handled. Reuses the known-good 4-face V/E/F geometry
+            % from plqvcAliasStillWorks below (a fan of 4 unbounded cones around the origin).
+            V = [0 0;-1 0; 0 1;1 0;0 -1];
+            E = [1 2 0;1 3 0;1 4 0;1 5 0];
+            f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
+            F = [1 2;2 3;3 4;4 1];
+            p = QuaPoly(V,E,f,F);
+            testCase.verifyEqual(p.nf, 4);
+            testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
+        end
+
         function cubicRejectedByOperators(testCase)
             % Cubic numerator is storable but rejected by operators (allowed for isConvex only).
             p = QuaPoly([1 0 0 0 0 0 0 0 0 0]);   % x^3/6 term present -> degree 3
