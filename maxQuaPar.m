@@ -14,14 +14,26 @@ function g = maxQuaPar(g1, g2)
 % [output] g      : QuaPar, h = max(g1,g2), finite everywhere.
 %
 % SCOPING CAVEAT (load-bearing, not a generic fact): this only works because, for THIS pipeline's
-%   adjacent sub-pieces, g1.f(k,:)-g2.f(l,:) is always a DEGENERATE conic (rank <= 1, i.e. a
-%   parabola or a line -- see DESIGN.md Part IV.2, "no ellipse/hyperbola arcs"). That is a theorem
-%   about pieces produced by convEnvCPLQ's own triangle-splitting, NOT a generic fact: two
-%   arbitrary PD quadratics CAN have a genuinely indefinite (hyperbola) difference (e.g. Hessians
-%   diag(1,4) and diag(4,1) give a difference-Hessian diag(-3,3)), which QuaPar cannot represent as
-%   an edge. This is checked at runtime (splitCell asserts near-zero discriminant) rather than
-%   assumed silently, so a violating input errors loudly instead of producing a wrong/unrepresentable
-%   result.
+%   adjacent sub-pieces, g1.f(k,:)-g2.f(l,:) is always a DEGENERATE conic (its full 3x3
+%   discriminant Delta vanishes), so it factors into a parabola, a single line, or -- the case
+%   this file's first version got wrong, see below -- a pair of two distinct straight lines, of
+%   which only one is ever active inside any one comparison cell. That is a theorem about pieces
+%   produced by convEnvCPLQ's own triangle-splitting, NOT a generic fact: two arbitrary PD
+%   quadratics CAN have a genuinely irreducible (ellipse/hyperbola) difference (e.g. Hessians
+%   diag(1,4) and diag(4,1) give a difference-Hessian diag(-3,3) with no affine correction that
+%   makes Delta vanish), which QuaPar cannot represent as an edge. This is checked at runtime
+%   (splitCell asserts Delta~=0) rather than assumed silently, so a violating input errors loudly
+%   instead of producing a wrong/unrepresentable result.
+%
+%   HISTORY: an earlier version of this check tested only the quadratic PART's discriminant
+%   delta=b^2-4ac (equivalently rank(Qd) for the 2x2 submatrix [a b/2;b/2 c]), which decides the
+%   conic's TYPE (hyperbolic/parabolic/elliptic) but not its IRREDUCIBILITY. On the f(x,y)=xy,
+%   three-convex-edge-triangle example (see /home/ylucet/CCA2/3-edge.tex), the two comparison
+%   boundaries have delta>0 (so the old check rejected them as "not degenerate") but the full
+%   discriminant Delta=0 exactly: both are pairs of straight lines, not hyperbolas. Fixed below to
+%   test Delta directly, and to detect -- per split, from the two actual boundary-crossing points,
+%   not from a symbolic factorization -- whether the connecting curve between them is straight
+%   (the generic case for this pipeline, per the above) or a genuine parabola.
 %
 % STATUS (incremental implementation -- see DESIGN.md II.5.1 and the session plan):
 %   * IMPLEMENTED: g1, g2 purely polyhedral (all-zero Ec, i.e. every edge a line/ray/segment) --
@@ -174,13 +186,26 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
 % open chain has two distinct ends, not a cycle. A crossing on pair (1,2) or (m-1,m) lies ON the
 % corresponding ray itself (solved by the ray's own parametrization); every other pair is an
 % ordinary segment-vs-line intersection.
+%
+% DEGENERATE CASE (ray parallel to the clip boundary, dir*nrm'~0): the "asymptotic trend" sign is
+% meaningless then -- the constraint value along that ray is CONSTANT (equal to its value at the
+% ray's own finite anchor vertex), not trending to +-inf, so sign2 correctly returning 0 for the
+% trend must NOT be fed into the crossing-detection logic as a genuine tie (that wrongly flags a
+% "crossing" between the ray and its neighbouring vertex whenever their true, constant signs
+% differ, and crossingPoint's ray formula then divides by this near-zero denom and returns a
+% huge/NaN "intersection" that is not actually on the boundary -- see maxQuaPar.m header
+% HISTORY). Fall back to the anchor vertex's own (non-asymptotic) sign in that case.
     nv = size(poly.V,1);
     tol = 1e-9*(1+abs(c)+norm(nrm));
     val = poly.V*nrm' - c;
     unbounded = ~isempty(poly.dirIn);
 
     if unbounded
-        st = [sign2(poly.dirIn*nrm', tol); sign2(val,tol); sign2(poly.dirOut*nrm', tol)];
+        inSign = sign2(poly.dirIn*nrm', tol);
+        if inSign == 0, inSign = sign2(val(1), tol); end
+        outSign = sign2(poly.dirOut*nrm', tol);
+        if outSign == 0, outSign = sign2(val(end), tol); end
+        st = [inSign; sign2(val,tol); outSign];
     else
         st = sign2(val,tol);
     end
@@ -343,18 +368,33 @@ end
 % ----- splitting a cell by the (degenerate) curve where f1row and f2row are equal ------------
 function [cellA, cellB] = splitCell(cell, f1row, f2row)
 % Split cell into cellA (f1row wins) and cellB (f2row wins) along {f1row=f2row}. See the file
-% header scoping caveat: this REQUIRES f1row-f2row to be a degenerate conic (rank<=1), asserted
-% here, and requires exactly 2 boundary crossings (asserted too) -- both are theorems about this
-% pipeline's own adjacent sub-pieces, not generic facts, so a violation errors loudly.
+% header scoping caveat: this REQUIRES f1row-f2row to be a degenerate conic (full 3x3 discriminant
+% Delta==0), asserted here, and requires exactly 2 boundary crossings (asserted too) -- both are
+% theorems about this pipeline's own adjacent sub-pieces, not generic facts, so a violation errors
+% loudly.
     diffRow = f1row - f2row;
-    Qd = [diffRow(5), diffRow(6); diffRow(6), diffRow(7)];
-    sc = norm(Qd, 'fro');
-    if sc > 1e-9 && abs(det(Qd)) > (1e-6*sc)^2
+    a = diffRow(5)/2; b = diffRow(6); c = diffRow(7)/2;
+    d = diffRow(8); e = diffRow(9); f = diffRow(10);
+    % Delta is the standard conic invariant that decides irreducibility (Delta~=0 <=> a genuine
+    % curve of type delta=b^2-4ac; Delta==0 <=> degenerates to a point, a line, or a pair of
+    % lines). Checking only delta (as an earlier version of this file did, via rank of the 2x2
+    % quadratic-part submatrix [a b/2;b/2 c]) cannot tell a genuine hyperbola/ellipse apart from
+    % this last, still-representable case -- see the file header HISTORY note.
+    M = [a, b/2, d/2; b/2, c, e/2; d/2, e/2, f];
+    sc = max(1e-9, norm(M, 'fro'));
+    % det(M) is a degree-3-homogeneous function of M's entries, so a relative tolerance on those
+    % entries bounds det(M) by tolRel*sc^3 (linear in tolRel), NOT (tolRel*sc)^3 (which is what an
+    % earlier version of this line wrote -- cubing the tolerance itself made the threshold many
+    % orders of magnitude tighter than floating-point noise, rejecting even exactly-degenerate
+    % inputs; e.g. on the 3-edge.tex example, det(M)~-1.7e-17 against a true zero, but the old
+    % threshold (1e-6*sc)^3~3e-18 was smaller still).
+    if abs(det(M)) > 1e-6*sc^3
         error('maxQuaPar:notDegenerate', ...
             ['maxQuaPar:splitCell: the difference of the two candidate quadratics is not (numerically) ' ...
-             'a degenerate conic (rank<=1) -- a genuine hyperbola boundary would be needed, which QuaPar ' ...
-             'cannot represent. This should never happen for two conjugates of adjacent sub-pieces of the ' ...
-             'same originally-nonconvex domain (see maxQuaPar.m header); the input pair violates that.']);
+             'a degenerate conic (its full 3x3 discriminant is nonzero) -- a genuine ellipse/hyperbola ' ...
+             'boundary would be needed, which QuaPar cannot represent. This should never happen for two ' ...
+             'conjugates of adjacent sub-pieces of the same originally-nonconvex domain (see maxQuaPar.m ' ...
+             'header); the input pair violates that.']);
     end
 
     edges = cellEdgeList(cell);
@@ -362,13 +402,42 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     for i = 1:numel(edges)
         [A,B,C] = quadAlongRay(diffRow, edges(i).apex, edges(i).dir);
         for r = solveQuad(A,B,C)
-            if r >= -1e-7 && r <= edges(i).tMax + 1e-7
+            if r >= -1e-6 && r <= edges(i).tMax + 1e-6
+                % Snap a root near EITHER endpoint exactly onto it (not just clamp values that
+                % overshoot past the endpoint): at the singular point of a degenerate two-line
+                % conic (where both lines cross), every direction through it is a double root of
+                % the local quadratic, but the two solveQuad roots straddle the true value by a
+                % little floating-point noise -- one lands just past tMax (already clamped below)
+                % and the other just short of it (previously left un-snapped), so their computed
+                % points differed by up to ~1e-7*edgeLength, just over dedupHits' tolerance, and
+                % were wrongly kept as two separate hits (see maxQuaPar.m header HISTORY; observed
+                % noise on the 3-edge.tex example ranged up to ~1.5e-7, hence the 1e-6 margin here
+                % rather than exactly matching that noise floor).
+                if abs(r) < 1e-6, r = 0; end
+                if abs(r - edges(i).tMax) < 1e-6, r = edges(i).tMax; end
                 t = min(max(r,0), edges(i).tMax);
                 hits(end+1) = struct('edge', i, 't', t, 'pt', edges(i).apex + t*edges(i).dir); %#ok<AGROW>
             end
         end
     end
     hits = dedupHits(hits);
+    if numel(hits) == 1
+        % The cell only TOUCHES {diffRow=0} at a single point -- a tangency at the degenerate
+        % conic's singular point, which happens to coincide with a cell vertex shared with other
+        % face-pairs elsewhere in the arrangement (see maxQuaPar.m header HISTORY). decideWinner
+        % flagged this cell "undecided" only because that one vertex evaluates to a tiny nonzero
+        % residual (floating-point noise around the true value 0); the cell does not actually
+        % split into two regions. Resolve the winner from the centroid (always strictly interior
+        % for a convex cell, hence never the touch point itself) and return the WHOLE cell intact.
+        cellA = cell; cellA.curveAfter = 0; cellA.curveEc = [];
+        if QuaPar.evalPoly(diffRow, mean(cell.V,1)) >= 0
+            cellA.f = f1row;
+        else
+            cellA.f = f2row;
+        end
+        cellB = [];
+        return
+    end
     if numel(hits) ~= 2
         error('maxQuaPar:internal', ...
             ['maxQuaPar:splitCell: expected exactly 2 boundary crossings of the splitting curve, found ' ...
@@ -376,8 +445,26 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     end
     e1 = hits(1).edge; e2 = hits(2).edge; X1 = hits(1).pt; X2 = hits(2).pt;
 
-    ecRow = [0.5*diffRow(5), diffRow(6), 0.5*diffRow(7), diffRow(8), diffRow(9), diffRow(10)];
-    ecRow = ecRow / max(abs(ecRow));   % a conic is scale-invariant; normalize (see pushforwardQuaParDual)
+    % Is the curve connecting X1 to X2 straight or genuinely curved? {diffRow=0} is a degenerate
+    % conic (checked above), so it is a parabola, a single line, or a pair of two distinct lines;
+    % in every case it can only touch a cell's interior along ONE connected branch (see
+    % maxQuaPar.m header HISTORY note -- verified visually for the 3-edge.tex example, where only
+    % one of the two lines cuts through each cell). Rather than reconstruct that branch by
+    % symbolic factorization, test it directly: diffRow restricted to the line through X1,X2 is
+    % A*t^2+B*t+C in the chord parameter t in [0,1]; X1,X2 are already roots (C=diffRow(X1)~=0,
+    % A+B+C=diffRow(X2)~0), so A~0 iff the WHOLE chord lies on {diffRow=0}, i.e. the connecting
+    % branch is exactly this straight segment. A~=0 means a genuinely curved (parabolic) branch,
+    % handled by the pre-existing general-conic construction below.
+    [Achord, ~, ~] = quadAlongRay(diffRow, X1, X2 - X1);
+    scChord = max(1e-9, norm(diffRow(5:10), Inf)*max(1, norm(X2-X1))^2);
+    isStraight = abs(Achord) <= 1e-8*scChord;
+
+    if isStraight
+        edgeEc = zeros(1,6);
+    else
+        edgeEc = [0.5*diffRow(5), diffRow(6), 0.5*diffRow(7), diffRow(8), diffRow(9), diffRow(10)];
+        edgeEc = edgeEc / max(abs(edgeEc));   % a conic is scale-invariant; normalize (see pushforwardQuaParDual)
+    end
 
     nv = size(cell.V,1);
     unbounded = ~isempty(cell.dirIn);
@@ -386,8 +473,8 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     if ~unbounded
         midIdx = mod((e1):(e2-1), nv) + 1;    % real V-indices strictly between the two crossings
         restIdx = mod((e2):(e1-1), nv) + 1;
-        cellMidB = boundedPiece(X1, cell.V(midIdx,:), X2, ecRow);
-        cellRestB = boundedPiece(X2, cell.V(restIdx,:), X1, ecRow);
+        cellMidB = boundedPiece(X1, cell.V(midIdx,:), X2, edgeEc);
+        cellRestB = boundedPiece(X2, cell.V(restIdx,:), X1, edgeEc);
         cellA = assignSide(cellMidB, diffRow, f1row, f2row);
         cellB = assignSide(cellRestB, diffRow, f1row, f2row);
         return
@@ -403,13 +490,13 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     % (not expected here -- see header caveat -- and will surface via the hit-count assertion above
     % or the isDomBounded-style checks in assemblePieces).
     vMidIdx = (e1):(e2-1);
-    cellMid = boundedPiece(X1, cell.V(vMidIdx,:), X2, ecRow);
+    cellMid = boundedPiece(X1, cell.V(vMidIdx,:), X2, edgeEc);
 
     keepBefore = cell.V(1:e1-1,:);
     keepAfter  = cell.V(e2:nv,:);
     cellRest.V = dedupConsecutive([keepBefore; X1; X2; keepAfter]);
     cellRest.dirIn = cell.dirIn; cellRest.dirOut = cell.dirOut;
-    cellRest.curveAfter = size(keepBefore,1) + 1; cellRest.curveEc = ecRow;
+    cellRest.curveAfter = size(keepBefore,1) + 1; cellRest.curveEc = edgeEc;
 
     % Determine which of cellMid/cellRest is "f1 wins" by evaluating f1row-f2row at one interior
     % sample of each (a point strictly on one side; the cell's own vertices adjacent to the curve,
@@ -492,7 +579,13 @@ function g = assemblePieces(pieces)
 % piece. Since every input to maxQuaPar is full-domain, every edge produced here MUST pair with
 % exactly one neighbour; an unpaired edge is treated as an internal-consistency error, not a valid
 % "boundary of the domain" (there is no domain boundary -- the result is finite everywhere).
-    tol = sqrt(eps);
+% Global vertex merge tolerance: an absolute 1e-6, not sqrt(eps)~1.5e-8 -- the SAME physical
+% vertex can arrive here computed via two different arithmetic paths (e.g. a cell corner from
+% clipByFace's intersection formula vs. the same point recomputed by splitCell's ray-quadratic
+% root, snapped to an edge endpoint) that agree only to ~1e-7, which sqrt(eps) is too tight to
+% treat as equal, silently leaving two "different" vertices whose edges then fail to pair up in
+% the half-edge matching below (see maxQuaPar.m header HISTORY).
+    tol = 1e-6;
     n = numel(pieces);
     allV = cell(1,n); allE = cell(1,n); allEc = cell(1,n);
     for p = 1:n
