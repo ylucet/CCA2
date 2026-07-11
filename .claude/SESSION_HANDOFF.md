@@ -66,8 +66,8 @@ below).
 
 ## Where things stand
 
-- Branch: `cplq-engine` @ `e27e23b` — "Fix four maxQuaPar face-clipping topology bugs; full
-  assembly now succeeds". Committed; not yet pushed (ask the user before pushing).
+- Branch: `cplq-engine` @ `55d0f25` — "Update session handoff: maxQuaPar topology fixes,
+  QuaPar.orderEdges bug open". Committed and pushed (author approved).
 - `QuaPar.m` is untouched (byte-identical to the committed version) despite the exploratory edit
   described above; that edit was reverted.
 
