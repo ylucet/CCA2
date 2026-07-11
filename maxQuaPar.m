@@ -35,6 +35,43 @@ function g = maxQuaPar(g1, g2)
 %   not from a symbolic factorization -- whether the connecting curve between them is straight
 %   (the generic case for this pipeline, per the above) or a genuine parabola.
 %
+%   HISTORY (later session): with the Delta fix above in place, full end-to-end assembly of
+%   maxQuaPar(g1,g2) on the same f(x,y)=xy example still failed with "no matching neighbour" on a
+%   plain, cleanly-decided cell (g1 face 1 vs g2 face 4) nowhere near the hyperbola cells -- a
+%   separate face-clipping topology gap, not a conic degeneracy issue. Four distinct bugs were
+%   found and fixed, each uncovered only after fixing the previous one let the computation get
+%   further:
+%     1. clipPolyHalfPlane's bounded-polygon "keep the far/wrapped arc" branch computed
+%        keepIdx = mod((p2):(p1-1), nv) + 1, which is ALWAYS empty in MATLAB (p1<p2 always here,
+%        so p1-1<p2, and the colon operator does not wrap) -- silently turning "keep the far arc"
+%        into "keep nothing" and collapsing the cell to empty. Fixed by adding +nv before modding:
+%        mod((p2):(p1-1+nv), nv) + 1. The identical bug, identically fixed, was in splitCell's
+%        analogous restIdx.
+%     2. Once #1 actually returned vertices, they were wired up wrong: that same far-arc branch
+%        built [X1; kept-vertices; X2], but X1 and X2 are always adjacent via the new cut edge
+%        regardless of which arc survives, so for the far-arc case the correct order is
+%        [X2; kept-vertices; X1] -- the old order produced a self-intersecting "bowtie" cell.
+%     3. assemblePieces encodes both rays of an unbounded piece apex-first in Ep (matching
+%        QuaPar's own E-matrix convention: "column 1 is always the finite apex" -- see facePoly's
+%        header comment), which, unlike segments, is NOT walk-order. So two adjacent pieces
+%        sharing one physical ray both encode it as the SAME (a,b) pair, not swapped -- but the
+%        half-edge matching loop was uniformly searching for a swapped pair (correct for segments,
+%        wrong for rays), so no ray ever found its neighbour. Fixed by branching the search: rays
+%        match on identical (a,b), segments on swapped (a,b).
+%     4. g2 face 1's own three real vertices happen to be exactly collinear, so its two
+%        consecutive boundary edges (to face 2, then to face 3) clip g1 face 2 by the SAME
+%        half-plane twice -- the second clip is a geometric no-op, so the shared vertex between
+%        those two collinear edges (where the true neighbouring face changes from face 2 to
+%        face 3) never becomes an explicit vertex of the clipped cell, leaving one straight cell
+%        edge that silently spans two different neighbours. Fixed by adding
+%        insertPassthroughVertices, called at the end of clipByFace, which re-inserts any
+%        polyK/polyL vertex lying in the open interior of one of the clipped cell's edges.
+%   After all four fixes, maxQuaPar(g1,g2) on this example fully assembles and matches ground
+%   truth at 6 of 7 sample points; the 7th (s=(-3,2)) is wrong due to a separate, deeper,
+%   currently-open bug in QuaPar.m's orderEdges (NOT in this file -- confirmed reproducible on g1
+%   alone) -- see .claude/SESSION_HANDOFF.md and maxQuaParTest.m's
+%   maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying for the precise diagnosis.
+%
 % STATUS (incremental implementation -- see DESIGN.md II.5.1 and the session plan):
 %   * IMPLEMENTED: g1, g2 purely polyhedral (all-zero Ec, i.e. every edge a line/ray/segment) --
 %     exactly what conjPSDRank1QuadTriangle/conjPSDRank1QuadTriangleTie/conjLinearTriangle produce.
@@ -143,9 +180,72 @@ function cell = clipByFace(polyK, polyL)
         cell = clipPolyHalfPlane(cell, cons(i,1:2), cons(i,3));
         if isempty(cell), return; end
     end
+    % Two consecutive real vertices of polyL (or polyK) can be exactly collinear with a third --
+    % e.g. this pipeline's own faces sometimes have 3 real vertices on one straight line -- in
+    % which case polyConstraints emits the SAME half-plane twice (once per collinear edge) and the
+    % second clip is a geometric no-op. The vertex BETWEEN those two collinear edges is where the
+    % true neighbouring face changes (e.g. from g2's face2 to face3), but it never becomes a vertex
+    % of `cell` since no half-plane clip actually cut there -- leaving a straight cell edge that
+    % silently spans TWO different neighbours, so assemblePieces can never find a match for either
+    % sub-portion (see maxQuaPar.m header HISTORY). Explicitly re-insert any polyK/polyL vertex
+    % that lies in the open interior of one of cell's own edges to restore that missing corner.
+    cell = insertPassthroughVertices(cell, [polyK.V; polyL.V]);
     if size(cell.V,1) < 1 || (isempty(cell.dirIn) && size(cell.V,1) < 3)
         cell = []; return
     end
+end
+
+function cell = insertPassthroughVertices(cell, pts)
+% Subdivide cell's straight boundary edges (segments, plus the two rays if unbounded) at any point
+% of `pts` that lies in the OPEN interior of an existing edge and isn't already a vertex. See
+% clipByFace's call site for why this is needed.
+    if isempty(pts), return; end
+    tol = 1e-7;
+    for pi = 1:size(pts,1)
+        p = pts(pi,:);
+        again = true;
+        while again
+            again = false;
+            nv = size(cell.V,1);
+            if nv == 0 || any(all(abs(cell.V - p) < tol, 2)), break; end
+            if isempty(cell.dirIn)
+                for i = 1:nv
+                    j = mod(i,nv)+1;
+                    if onOpenSegment(cell.V(i,:), cell.V(j,:), p, tol)
+                        cell.V = [cell.V(1:i,:); p; cell.V(i+1:end,:)];
+                        again = true; break
+                    end
+                end
+            else
+                for i = 1:nv-1
+                    if onOpenSegment(cell.V(i,:), cell.V(i+1,:), p, tol)
+                        cell.V = [cell.V(1:i,:); p; cell.V(i+1:end,:)];
+                        again = true; break
+                    end
+                end
+                if ~again && onOpenRay(cell.V(1,:), cell.dirIn, p, tol)
+                    cell.V = [p; cell.V]; again = true;
+                elseif ~again && onOpenRay(cell.V(end,:), cell.dirOut, p, tol)
+                    cell.V = [cell.V; p]; again = true;
+                end
+            end
+        end
+    end
+end
+
+function tf = onOpenSegment(a, b, p, tol)
+    d = b - a; L = norm(d);
+    if L < tol, tf = false; return; end
+    t = dot(p-a, d) / L^2;
+    if t <= tol/L || t >= 1 - tol/L, tf = false; return; end
+    tf = norm(a + t*d - p) < tol;
+end
+
+function tf = onOpenRay(apex, dir, p, tol)
+    dn = dir/norm(dir);
+    t = dot(p-apex, dn);
+    if t <= tol, tf = false; return; end
+    tf = norm(apex + t*dn - p) < tol;
 end
 
 function cons = polyConstraints(poly)
@@ -231,14 +331,26 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
         end
         p1 = cross(1); p2 = cross(2); X1 = xpt(p1); X2 = xpt(p2);
         % Closed polygon: keep whichever arc (p1+1..p2, or its wrapped complement) is inside; close
-        % with a chord between the two crossing points either way.
+        % with a chord between the two crossing points either way. p1<p2 always (cross is found in
+        % ascending pair-index order), so the wrapped complement p2..p1-1 must add nv before
+        % modding -- MATLAB's colon operator does not wrap on its own, and p2:(p1-1) (p2>p1-1) is
+        % simply empty rather than the intended wrapped range (see maxQuaPar.m header HISTORY: this
+        % silently turned "keep the far arc" into "keep nothing," producing a spurious empty cell).
         midIdx = mod((p1):(p2-1), nv) + 1;
         if isempty(midIdx) || all(st(midIdx) <= 0)
-            keepIdx = midIdx;
+            % Kept arc runs forward from X1 to X2 (through the mid vertices): X1, mid..., X2, then
+            % the new cut edge closes X2 back to X1.
+            Vnew = dedupConsecutive([X1; poly.V(midIdx,:); X2]);
         else
-            keepIdx = mod((p2):(p1-1), nv) + 1;
+            % Kept arc is the WRAPPED complement, running forward from X2 (through p2+1..p1) back
+            % to X1: X2, rest..., X1, then the new cut edge closes X1 back to X2. Swapped relative
+            % to the mid case above -- X1 and X2 are always adjacent via the cut edge regardless of
+            % which arc is kept, so whichever crossing begins the kept arc must come first (see
+            % maxQuaPar.m header HISTORY: putting X1 first here produced a self-intersecting
+            % "bowtie" cell, since X1 would then be wrongly wired to the FAR end of the kept arc).
+            keepIdx = mod((p2):(p1-1+nv), nv) + 1;
+            Vnew = dedupConsecutive([X2; poly.V(keepIdx,:); X1]);
         end
-        Vnew = dedupConsecutive([X1; poly.V(keepIdx,:); X2]);
         if size(Vnew,1) < 3, poly2 = []; return; end
         poly2.V = Vnew; poly2.dirIn = []; poly2.dirOut = [];
         return
@@ -472,7 +584,11 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
 
     if ~unbounded
         midIdx = mod((e1):(e2-1), nv) + 1;    % real V-indices strictly between the two crossings
-        restIdx = mod((e2):(e1-1), nv) + 1;
+        % e1<e2 always (hits are collected walking edges in increasing order), so, exactly as in
+        % clipPolyHalfPlane's analogous bounded-arc split (see that function's HISTORY comment),
+        % the wrapped complement e2..e1-1 needs +nv before modding or MATLAB's colon operator
+        % yields an empty range instead of wrapping.
+        restIdx = mod((e2):(e1-1+nv), nv) + 1;
         cellMidB = boundedPiece(X1, cell.V(midIdx,:), X2, edgeEc);
         cellRestB = boundedPiece(X2, cell.V(restIdx,:), X1, edgeEc);
         cellA = assignSide(cellMidB, diffRow, f1row, f2row);
@@ -601,6 +717,13 @@ function g = assemblePieces(pieces)
             Vp = [piece.V; piece.V(1,:)+piece.dirIn; piece.V(end,:)+piece.dirOut];
             ne = nv+1;
             Ep = zeros(ne,3); Ecp = zeros(ne,6);
+            % Both ray rows are apex-first (matching QuaPar's own E-matrix convention, see
+            % facePoly's header comment: "column 1 is always the finite apex"), NOT walk-order --
+            % unlike segment rows, a ray's encoding here is not "start of walk, end of walk", so its
+            % opposite half-edge (built by an adjacent piece sharing the same physical ray) also
+            % comes out apex-first, i.e. as the SAME (a,b) pair rather than swapped. The half-edge
+            % matching loop below accounts for this (rays match on identical (a,b), segments on
+            % swapped) -- see maxQuaPar.m header HISTORY.
             Ep(1,:) = [1, nv+1, 0];
             for i = 1:nv-1
                 Ep(i+1,:) = [i, i+1, 1];
@@ -641,7 +764,18 @@ function g = assemblePieces(pieces)
     for h = 1:numel(HE)
         if used(h), continue; end
         used(h) = true;
-        opp = find(~used & hbVec==HE(h).a & haVec==HE(h).b & hsVec==HE(h).isSeg, 1);
+        if HE(h).isSeg
+            % Segment: each piece walks it in its OWN CCW order, which is necessarily reversed
+            % between two pieces sharing it (interior on the left for both, on opposite sides of
+            % the boundary) -- so the opposite half-edge has (a,b) swapped relative to this one.
+            opp = find(~used & hbVec==HE(h).a & haVec==HE(h).b & hsVec==HE(h).isSeg, 1);
+        else
+            % Ray: both pieces sharing this physical ray encode it apex-first (QuaPar's own E
+            % convention overrides walk order here, see the comment where Ep(1,:)/Ep(ne,:) are
+            % built above), so the opposite half-edge has the SAME (a,b), not swapped (see
+            % maxQuaPar.m header HISTORY: searching for a swapped pair here always failed).
+            opp = find(~used & haVec==HE(h).a & hbVec==HE(h).b & ~hsVec, 1);
+        end
         if isempty(opp)
             error('maxQuaPar:internal', ...
                 ['assemblePieces: boundary edge (%d,%d) has no matching neighbour -- inputs should ' ...
