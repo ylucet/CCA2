@@ -307,17 +307,17 @@ classdef QuaPar
                P(jj)=j;
            end
 
-           for jj=2:nedges 
-               %consider edge j find i the vertex index of its endpoint
-               if obj.E(j,3)==0 %ray so take base point
-                   i = obj.E(j,1);%vertex index
-               else
-                   if obj.F(j,1)==k %face on the left, take previous edge to move clockwise so take base point of edge
-                        i = obj.E(j,1);
-                   else %face on the right, take next edge to move clockwise so take end point of edge
-                        i = obj.E(j,2);
-                   end
-               end               
+           %consider edge j find i the vertex index of its endpoint
+           if obj.E(j,3)==0 %ray so take base point
+               i = obj.E(j,1);%vertex index
+           else
+               if obj.F(j,1)==k %face on the left, take previous edge to move clockwise so take base point of edge
+                    i = obj.E(j,1);
+               else %face on the right, take next edge to move clockwise so take end point of edge
+                    i = obj.E(j,2);
+               end
+           end
+           for jj=2:nedges
                %looking at edge j between vertex index i and vertex index iEndpoint
                iEndpoint=sum(obj.E(j,1:2),2) - i;
                if jj==2, iFirst=iEndpoint;iEndpointFirst=i;end %needed for testing last angle in bounded polyhedral set below
@@ -348,8 +348,12 @@ classdef QuaPar
                     P(jj)=-jNext;
                else%face on right of edge j so store +j
                    P(jj)=jNext;
-               end               
+               end
                j=jNext;
+               i=iNext;%pivot for the next iteration is the vertex the walk just arrived at; recomputing it
+                       %from scratch via the left/right rule above (as the code used to do every iteration)
+                       %is wrong once a ray edge is followed by a segment edge, since that rule only looks
+                       %at edge j's own orientation and can pick the vertex we just came from instead
            end
            %for bounded polyhedral set, need to compute the angle between the first edge and the last edge
            if iNext==iFirst

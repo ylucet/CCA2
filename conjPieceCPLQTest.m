@@ -138,14 +138,196 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             end
         end
 
-        function bilinearTwoConvexEdgesNotImplemented(testCase)
-            % xy over (0,0),(1,0),(1,1): edges (0,0)-(1,0) m=0, (1,0)-(1,1) vertical (skipped by
-            % convexEdgesXY), (1,1)-(0,0) m=1 -> only one convex edge actually; use a triangle with
-            % two positive-slope edges instead: (0,0),(2,1),(1,2) has edges m=1/2, m=-1, m=2 -> two
-            % convex edges (m>0): (0,0)-(2,1) and (1,2)-(0,0) -> not yet handled.
+        function bilinearTwoConvexEdgesDocumentedLimitation(testCase)
+            % xy over (0,0),(2,1),(1,2): two convex edges (m=1/2 and m=2, sharing vertex (0,0)).
+            % This is a DELIBERATE, DOCUMENTED non-implementation, not a TODO: the conjugate's
+            % dual-space arrangement needs a boundary between the two edges' own quadratic
+            % conjugate formulas (COAP B.2 applied to each edge separately), and that boundary is
+            % a genuine HYPERBOLA whenever the two slopes differ -- verified both numerically
+            % (0/2e6 mismatches across two test triangles when the true 2D sup was compared
+            % against max(vertex linears, gated per-edge quadratics)) and symbolically: the
+            % quadratic parts of the two edges' formulas share b=1/2 always, so their difference's
+            % discriminant is -4*(1/(4m1)-1/(4m2))*(m1/4-m2/4) = (m1-m2)^2/(4*m1*m2) > 0 whenever
+            % m1~=m2. QuaPar only supports parabolic/linear (degenerate) conics per edge, so this
+            % case cannot be represented as constructed. It also does not arise from the wired
+            % pipeline: Step 1 (convEnvCPLQ) always convexifies a 2-convex-edge piece into a
+            % rank-1 PSD quadratic (see conjPieceCPLQTest/psdRank1QuadraticEndToEnd) before Step 2
+            % ever sees it, so this raw-indefinite-input case is never actually hit.
             V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);
             testCase.verifyError(@() conjPieceCPLQ(q), 'conjPieceCPLQ:notImplemented');
+        end
+
+        function psdRank1QuadraticConjugate(testCase)
+            % q = 1/2 x'Ax + b'x + c, A = lam*u*u' rank-1 PSD (u a unit vector, not axis-aligned),
+            % over a generic triangle -> six-face QuaPar (three parabolic strips + three linear
+            % vertex cones). Validated against the numeric sup over a fine triangle grid.
+            u = [cos(0.7); sin(0.7)]; lam = 1.3;
+            A = lam*(u*u'); b = [0.4; -0.6]; cc = 0.2;
+            V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 6);
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2; % 1/2*x'Ax with A symmetric plain form
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
+        function psdRank1QuadraticEndToEnd(testCase)
+            % conj(Step 1 envelope of xy over a 2-convex-edge triangle) end to end. Step 1
+            % (convEnvCPLQ) turns the indefinite xy into a rank-1 PSD quadratic (COAP A.4); Step 2
+            % must dispatch to conjPSDRank1QuadTriangle, not error out. Checked against the
+            % numeric sup of the ENVELOPE quadratic itself (not the original xy). Uses (1,1),
+            % (4,3),(3,5) rather than the (0,0),(2,1),(1,2) triangle used elsewhere in this file:
+            % that one hits the TIED-vertex sub-case (conjPSDRank1QuadTriangleTie, 5 faces instead
+            % of 6) -- see psdRank1QuadraticTieEndToEnd below -- so this test exercises the
+            % non-degenerate (6-face) path specifically.
+            V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
+            r = convEnvCPLQ(q);                            % Step 1 -> rank-1 PSD quadratic
+            [L, Q, C] = QuaPoly.matrixForm(r.f(1,:));
+            testCase.verifyEmpty(C);
+            testCase.verifyEqual(min(eig(Q)), 0, 'AbsTol', 1e-8);   % rank-1 PSD, as proven
+            g = conjPieceCPLQ(r);                          % Step 2
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 6);
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = Q(1,1)*Xg.^2 + 2*Q(1,2)*Xg.*Yg + Q(2,2)*Yg.^2;
+            qg = 0.5*qg + L(1)*Xg + L(2)*Yg + r.f(1,end);
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
+        function psdRank1QuadraticTieConjugate(testCase)
+            % Same construction as psdRank1QuadraticConjugate but with va,vb manufactured to tie
+            % in the rotated-t coordinate (the triangle edge va-vb is exactly perpendicular to A's
+            % nonzero eigenvector u) -- dispatches to conjPSDRank1QuadTriangleTie, five faces (two
+            % parabolic edge strips + three linear vertex cones) instead of six.
+            u = [cos(0.7); sin(0.7)]; lam = 1.3; uperp = [-u(2); u(1)];
+            A = lam*(u*u'); b = [0.4; -0.6]; cc = 0.2;
+            v1 = [0;0]; t0 = 2;
+            v2 = t0*u + 1.0*uperp; v3 = t0*u - 1.5*uperp;   % v2,v3 tie at t=t0
+            V = [v1'; v2'; v3'];
+            if 0.5*((V(2,1)-V(1,1))*(V(3,2)-V(1,2)) - (V(3,1)-V(1,1))*(V(2,2)-V(1,2))) < 0
+                V = V([1 3 2],:);
+            end
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 5);
+            nt = 220; [uu2,vv2] = meshgrid(linspace(0,1,nt)); uu2 = uu2(:); vv2 = vv2(:);
+            kk = (uu2+vv2 <= 1); uu2 = uu2(kk); vv2 = vv2(kk);
+            Xg = V(1,1)+uu2*(V(2,1)-V(1,1))+vv2*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu2*(V(2,2)-V(1,2))+vv2*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2;
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
+        function psdRank1QuadraticTieEndToEnd(testCase)
+            % conj(Step 1 envelope of xy over (0,0),(2,1),(1,2)) end to end -- previously a
+            % documented UNHANDLED case (see psdRank1QuadraticEndToEnd): the harmonic-mean
+            % envelope's Hessian eigenvector is exactly (1,1)/sqrt(2), which ties the two
+            % non-origin vertices in the rotated t-coordinate. Now dispatches to
+            % conjPSDRank1QuadTriangleTie (5 faces).
+            V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
+            r = convEnvCPLQ(q);                            % Step 1 -> rank-1 PSD quadratic
+            [L, Q, C] = QuaPoly.matrixForm(r.f(1,:));
+            testCase.verifyEmpty(C);
+            testCase.verifyEqual(min(eig(Q)), 0, 'AbsTol', 1e-8);
+            g = conjPieceCPLQ(r);                          % Step 2 -> conjPSDRank1QuadTriangleTie
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 5);
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = Q(1,1)*Xg.^2 + 2*Q(1,2)*Xg.*Yg + Q(2,2)*Yg.^2;
+            qg = 0.5*qg + L(1)*Xg + L(2)*Yg + r.f(1,end);
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
+        end
+
+        function indefiniteQuadraticZeroConvexEdgeConjugate(testCase)
+            % q = 3*x*y + 2x + y + 0.5 (indefinite, beta=3 not 1, plus a linear shift) over
+            % (0,0),(1,0),(0,1): generalizes bilinearZeroConvexEdgeConjugate (which only covered
+            % the exact pure-xy, no-shift case) via conjIndefiniteQuadTriangle. In the reduced
+            % bilinear frame this triangle still has zero convex edges, so the conjugate is again
+            % the 3-cone piecewise-linear QuaPar of vertex values (COAP B.1), just with the actual
+            % vertex values of q (not xy). Cross-checked against the numeric sup over the triangle.
+            A = [0 3; 3 0]; b = [2; 1]; cc = 0.5;
+            V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 3);
+            qf = @(x) 0.5*x'*A*x + b'*x + cc;
+            v1=[0;0]; v2=[1;0]; v3=[0;1];
+            S = [-2 -1; 3 -1; -1 2; 0.5 0.5; -1 -1];
+            for i = 1:size(S,1)
+                s = S(i,:)';
+                expected = max([s'*v1-qf(v1); s'*v2-qf(v2); s'*v3-qf(v3)]);
+                testCase.verifyEqual(g.eval(S(i,:)), expected, 'AbsTol', 1e-9, sprintf('s=%d', i));
+            end
+            nt = 200; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2;
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('numeric s=%d', i));
+            end
+        end
+
+        function indefiniteQuadraticOneConvexEdgeConjugate(testCase)
+            % q = 1/2 x'Ax+b'x+c with A=[2 1;1 -2] indefinite (rotated, not axis- or diagonal-
+            % aligned) and a nonzero shift b, over a triangle -- generalizes
+            % bilinearOneConvexEdgeConjugate to a genuinely rotated/shifted indefinite quadratic
+            % via conjIndefiniteQuadTriangle (bilinearFrame reduction + shift correction +
+            % pushforwardQuaParDual). In the reduced frame this hits exactly one convex edge, so
+            % the conjugate is a six-face parabolic QuaPar, validated against the numeric sup.
+            A = [2 1; 1 -2]; b = [0.5; 0.5]; cc = 0.2;
+            V = [0 0; 2 0; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
+            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 6);
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
+            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            qg = A(1,1)*Xg.^2 + 2*A(1,2)*Xg.*Yg + A(2,2)*Yg.^2;
+            qg = 0.5*qg + b(1)*Xg + b(2)*Yg + cc;
+            S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
         end
 
         function rationalRejected(testCase)

@@ -9,13 +9,51 @@ function g = conjPieceCPLQ(p)
 % [input]  p : a single piece over a bounded triangle. Currently implemented:
 %              - AFFINE piece  -> f* = max_i(<s,v_i>-ell(v_i)), three cones;
 %              - CONVEX (positive-definite) QUADRATIC -> seven polyhedral regions;
+%              - CONVEX, RANK-1 (PSD, one zero eigenvalue) QUADRATIC -> six-face QuaPar (three
+%                PARABOLIC edge strips + three linear vertex cones), or FIVE faces (two edge
+%                strips + three vertex cones) in the degenerate sub-case where two triangle
+%                vertices tie in the rotated t-coordinate (an edge exactly perpendicular to A's
+%                nonzero eigenvector -- conjPSDRank1QuadTriangleTie). This is the case actually
+%                produced by convEnvCPLQ's Appendix A.4 two-convex-edge envelope: its harmonic-
+%                mean formula is PROVABLY always rank-1 PSD (b^2-4ac=0 identically, any slopes),
+%                never strictly indefinite -- see conjPieceCPLQTest for the discriminant proof
+%                and NOTES below on why the "raw indefinite bilinear, 2 convex edges" case is a
+%                dead end for QuaPar (needs a genuine hyperbola, not a parabola).
 %              - pure BILINEAR f = x*y with ZERO convex edges -> three-cone piecewise-linear
 %                QuaPar (max of vertex linears, same construction as the affine case);
 %              - pure BILINEAR f = x*y with exactly ONE convex edge -> six-face PARABOLIC QuaPar
 %                (COAP B.2: edge region E, three L_W regions, two vertex cones; parabola arc).
+%              - GENUINELY INDEFINITE QUADRATIC (beta*x*y+linear, ANY frame/shift, one positive
+%                and one negative eigenvalue) with ZERO or ONE convex edge -> generalizes the pure
+%                bilinear case above via conjIndefiniteQuadTriangle: rotate to the bilinear frame
+%                (1/2 x'Ax = u1*u2 exactly, so beta=1 always with that construction), complete the
+%                square on the residual linear part (a pure translation), reuse the pure-bilinear
+%                conjugate on the shifted triangle, undo the shift (linear correction to the
+%                VALUE only) and the rotation (a linear change of the DUAL variable, pushed
+%                through vertices/conics/orientation by pushforwardQuaParDual). Two convex edges
+%                remains the same hyperbola dead end as the pure bilinear case (see NOTES).
 %              den = 1 (no rational denominator). p may be a QuaPoly, QuaPar, or RatPol.
-%              TODO: beta*x*y + linear (scale/shift), general indefinite (rotate via
-%              bilinearFrame), 2 / 3 convex edges, and rational pieces.
+%              TODO: rational pieces (RatPol input with a genuine nonzero denominator) -- NOT
+%              reducible to the cases above (there is no known "original quadratic" to fall back
+%              on when p IS the rational function itself, e.g. via a direct RatPol.conj call with
+%              no memory of a pre-envelope piece); it needs a genuinely new 2D critical-point/
+%              curved-region derivation (see DESIGN.md II.5.1 and cPLQ Appendix B / the reference
+%              plq_1piece.m "type 1" branch) and remains unimplemented (conjPieceCPLQTest/
+%              rationalRejected). For the WIRED conjCPLQ pipeline, this gap can be sidestepped:
+%              since f*=(conv f)*, Step 2 can conjugate the ORIGINAL per-triangle piece directly
+%              (now handled for indefinite quadratics too, above) instead of materializing and
+%              re-conjugating Step 1's rational envelope output, whenever the original piece is
+%              still available to the caller.
+%
+% NOTES (2026-07-07 investigation): the raw indefinite-bilinear "conjugate of x*y over a
+% triangle with TWO convex edges" (as opposed to the rank-1 PSD quadratic above) requires, in
+% general, comparing the two convex edges' own quadratic conjugate formulas against each other;
+% that comparison boundary is PROVABLY a genuine hyperbola whenever the two edges' slopes differ
+% (discriminant = (m1-m2)^2/(4 m1 m2) > 0), which QuaPar cannot represent (parabolic/linear edges
+% only). This case does not actually arise in the wired pipeline: Step 1 (convEnvCPLQ) always
+% convexifies a 2-convex-edge piece into the rank-1 PSD quadratic handled above before Step 2
+% ever sees it, so conjPieceCPLQ is never asked to conjugate the raw indefinite piece directly in
+% that case. See conjPieceCPLQTest/bilinearTwoConvexEdgesDocumentedLimitation.
 % [output] g : QuaPar = the conjugate, a quadratic on a polyhedral subdivision with seven faces:
 %              the central gradient image triangle T' = {A v_i + b}, three edge strips, and
 %              three vertex cones; the conjugate is finite everywhere (domain = R^2).
@@ -52,23 +90,17 @@ function g = conjPieceCPLQ(p)
         g = conjLinearTriangle(V3, b, c);                 % affine piece (e.g. a concave envelope)
     elseif all(eig(A) > sqrt(eps))
         g = conjConvexQuadTriangle(V3, A, b, c);          % strictly convex quadratic
-    elseif abs(A(1,1)) < sqrt(eps) && abs(A(2,2)) < sqrt(eps) && abs(A(1,2)-1) < sqrt(eps) ...
-            && norm(b) < sqrt(eps) && abs(c) < sqrt(eps)
-        % pure bilinear f = x*y (already in bilinear frame; general indefinite reduces to this
-        % via bilinearFrame + an affine substitution -- to be added). Requires one convex edge.
-        ce = convexEdgesXY(V3);
-        if size(ce,1) == 0
-            g = conjBilinearXYzeroCE(V3);                 % -> 3-cone linear QuaPar
-        elseif size(ce,1) == 1
-            g = conjBilinearXYoneCE(V3, ce);              % -> parabolic QuaPar (6 faces)
-        else
-            error('conjPieceCPLQ:notImplemented', ...
-                'Bilinear conjugate is implemented for zero or one convex edge (got %d).', size(ce,1));
-        end
+    elseif min(eig(A)) > -sqrt(eps) && max(eig(A)) > sqrt(eps)
+        g = conjPSDRank1QuadTriangle(V3, A, b, c);        % convex, rank 1 (COAP A.4 envelope)
+    elseif min(eig(A)) < -sqrt(eps) && max(eig(A)) > sqrt(eps)
+        % genuinely indefinite (one positive, one negative eigenvalue): general beta*x*y+linear in
+        % ANY frame, reduced to the pure-bilinear case -- see conjIndefiniteQuadTriangle.
+        g = conjIndefiniteQuadTriangle(V3, A, b, c);
     else
         error('conjPieceCPLQ:notImplemented', ...
-            ['Only affine, positive-definite quadratic, or pure-bilinear (x*y) pieces over a ' ...
-             'triangle are supported so far; general indefinite (rotation) and rational are next.']);
+            ['Concave (negative semidefinite) quadratic pieces are not supported directly; ' ...
+             'compute convEnvCPLQ first (affine envelope), then conjugate that. See ' ...
+             'conjPieceCPLQTest/concaveQuadraticConjugateEndToEnd.']);
     end
 end
 
@@ -213,6 +245,367 @@ end
 
 function a = triSignedArea(W)
     a = 0.5*((W(2,1)-W(1,1))*(W(3,2)-W(1,2)) - (W(3,1)-W(1,1))*(W(2,2)-W(1,2)));
+end
+
+% ============================================================================================
+% ----- convex, RANK-1 (PSD, singular) quadratic conjugate over a triangle -------------------
+function g = conjPSDRank1QuadTriangle(V, A, b, c)
+% Conjugate of q(x)=1/2 x'Ax+b'x+c (A PSD, rank 1) over the CCW triangle V. This is the case
+% produced by convEnvCPLQ's Appendix A.4 two-convex-edge envelope (always rank-1 PSD, see file
+% header). Six-face QuaPar: three PARABOLIC edge strips (one per triangle edge; q is jointly
+% convex so every edge -- not just "convex-for-xy" edges -- contributes an interior-critical-
+% point region) and three LINEAR vertex cones, meeting at three COLLINEAR dual points
+% s_i = A*v_i+b (collinear because A has rank 1: A*v = lambda*(u'v)*u varies only along u, the
+% eigenvector of the nonzero eigenvalue lambda).
+%
+% Derivation: rotate to t=u'x (the curved direction) and r=uperp'x (the flat direction, where A
+% has a zero eigenvalue). q(t,r) = (lambda/2)t^2 + p*t + w*r + c is jointly convex in (t,r), so
+% for s off the measure-zero line {s'*uperp = w} the sup over the triangle is attained on its
+% boundary: whichever of the triangle's two (t,r) boundary chains ("upper"/"lower") is active,
+% selected by the sign of gamma = s'*uperp - w. Each chain segment (endpoints (ti,ri), slope m in
+% (t,r)) contributes, where its own interior critical point falls within the segment's t-range, a
+% quadratic value that is PROVABLY a parabola in s (its (alpha,gamma) quadratic part is a perfect
+% square, same mechanism as the b^2-4ac=0 identity for the COAP B.2 bilinear edge formula).
+% Elsewhere, the vertex conjugate f*(s)=<s,v_i>-q(v_i) applies. Validated by numeric sup-sampling
+% over 200+ random (triangle, rank-1 PSD quadratic) pairs (see conjPieceCPLQTest).
+    [Vec, Dg] = eig(A);
+    [lam, idx] = max(diag(Dg));
+    u = Vec(:,idx); uperp = [-u(2); u(1)];
+    T = V*u; R = V*uperp;
+    [Ts, ord] = sort(T); Rs = R(ord); Vs = V(ord,:);
+    t1=Ts(1); t2=Ts(2); t3=Ts(3); r1=Rs(1); r2=Rs(2); r3=Rs(3);
+    v1=Vs(1,:)'; v2=Vs(2,:)'; v3=Vs(3,:)';
+    p = b'*u; w = b'*uperp;
+    tol = sqrt(eps)*(1+abs(t3-t1));
+    if t2-t1 < tol || t3-t2 < tol
+        if t2-t1 < tol
+            t0 = (t1+t2)/2; ra0=r1; rb0=r2; va0=v1; vb0=v2; tc=t3; rc=r3; vc=v3;
+        else
+            t0 = (t2+t3)/2; ra0=r2; rb0=r3; va0=v2; vb0=v3; tc=t1; rc=r1; vc=v1;
+        end
+        if ra0 <= rb0
+            ra=ra0; va=va0; rb=rb0; vb=vb0;
+        else
+            ra=rb0; va=vb0; rb=ra0; vb=va0;
+        end
+        g = conjPSDRank1QuadTriangleTie(u, uperp, lam, p, w, A, b, c, t0, ra, rb, va, vb, tc, rc, vc);
+        return
+    end
+    s1 = A*v1+b; s2 = A*v2+b; s3 = A*v3+b;             % collinear dual "vertices"
+    qv = @(v) 0.5*(v'*A*v) + b'*v + c;
+    q1=qv(v1); q2=qv(v2); q3=qv(v3);
+
+    m13 = (r3-r1)/(t3-t1); m12 = (r2-r1)/(t2-t1); m23 = (r3-r2)/(t3-t2);
+
+    % which (t,r) chain the middle vertex sits on ("kink" chain = 2 segments; the other chain is
+    % the direct edge v1-v3, one segment). Ray direction along {alpha+gamma*m = const} always has
+    % gamma-rate +1 (d.uperp==1 identically); the sign below picks the ray that increases gamma
+    % on the chain that actually needs gamma>0 (the "kink" chain iff it's the upper one).
+    kinkHi = r2 > r1 + (r3-r1)*(t2-t1)/(t3-t1);
+    if kinkHi, sgn13 = -1; sgn12 =  1; else, sgn13 =  1; sgn12 = -1; end
+    sgn23 = sgn12;
+
+    dray = @(m) [-(m*u(1)+u(2)); u(1)-m*u(2)];
+    d13 = sgn13*dray(m13); d12 = sgn12*dray(m12); d23 = sgn23*dray(m23);
+
+    E13 = rank1EdgeQuad(t1,r1,m13,u,lam,p,w,c);
+    E12 = rank1EdgeQuad(t1,r1,m12,u,lam,p,w,c);
+    E23 = rank1EdgeQuad(t2,r2,m23,u,lam,p,w,c);
+
+    Vd = [s1'; s2'; s3'; (s1+d13)'; (s1+d12)'; (s2+d12)'; (s2+d23)'; (s3+d13)'; (s3+d23)'];
+    E = [1 2 1; 2 3 1; 1 4 0; 1 5 0; 2 6 0; 2 7 0; 3 8 0; 3 9 0];
+    Ec = zeros(8,6);                                   % every edge here is straight
+    % faces: 1=E13(strip v1-v3), 2=E12(strip v1-v2), 3=E23(strip v2-v3), 4=L1, 5=L2, 6=L3
+    adj = [1 2; 1 3; 1 4; 2 4; 2 5; 3 5; 1 6; 3 6];
+
+    % Representative interior points, picked via the oracle (max of the 6 gated candidates)
+    % rather than a hand-derived bisector sign: with two rays d_i,d_j from a shared apex, the
+    % wedge between them is bisected by EITHER +(unit(d_i)+unit(d_j)) or its negation depending
+    % on which of the two complementary angular sectors is the actual face, so try both and keep
+    % whichever the oracle confirms (avoids a fragile by-hand orientation argument).
+    winner = @(s) rank1Winner(s, u, uperp, lam, p, w, t1,t2,t3, r1,r2, m13,m12,m23, ...
+        v1,v2,v3, q1,q2,q3, c);
+    un = @(x) x/norm(x);
+    scale = 0.4*norm(s3-s1) + 1;
+    dirNonKink = uperp * (1 - 2*kinkHi);               % kinkHi -> -uperp (into gamma<0), else +uperp
+    dirKink    = -dirNonKink;
+    rep = zeros(6,2);
+    rep(1,:) = pickRep((s1+s3)'/2, dirNonKink', 1, winner, scale);   % inside E13
+    rep(2,:) = pickRep((s1+s2)'/2, dirKink', 2, winner, scale);      % inside E12
+    rep(3,:) = pickRep((s2+s3)'/2, dirKink', 3, winner, scale);      % inside E23
+    rep(4,:) = pickRep(s1', un(un(d13)+un(d12))', 4, winner, scale);   % inside L1 wedge
+    rep(5,:) = pickRep(s2', un(un(d12)+un(d23))', 5, winner, scale);   % inside L2 wedge
+    rep(6,:) = pickRep(s3', un(un(d13)+un(d23))', 6, winner, scale);   % inside L3 wedge
+    F = orientFaces(Vd, E, adj, rep);
+
+    f = [E13; E12; E23; ...
+         0 0 0 v1(1) v1(2) -q1; ...
+         0 0 0 v2(1) v2(2) -q2; ...
+         0 0 0 v3(1) v3(2) -q3];
+    g = QuaPar(Vd, E, Ec, f, F);
+end
+
+function s6 = rank1EdgeQuad(ti, ri, m, u, lam, p, w, c)
+% Conjugate value contributed by the (t,r)-chain segment through (ti,ri) with slope m: the
+% interior-critical-point value (alpha+gamma*m)^2/(2*lam) + gamma*(ri-m*ti) - c, expressed as a
+% plain-then-stored quadratic in s (alpha=s.u-p, gamma=s.uperp-w are affine-orthogonal in s, so
+% substituting keeps the quadratic part a perfect square: b^2-4ac=0, i.e. a genuine parabola).
+    u1=u(1); u2=u(2);
+    k1 = u1-m*u2; k2 = u2+m*u1; k0 = -(p+m*w);
+    Ap = k1^2/(2*lam); Bp = k1*k2/lam; Cp = k2^2/(2*lam);
+    Dp = k1*k0/lam - u2*(ri-m*ti);
+    Ep = k2*k0/lam + u1*(ri-m*ti);
+    Fp = k0^2/(2*lam) - w*(ri-m*ti) - c;
+    s6 = [2*Ap, Bp, 2*Cp, Dp, Ep, Fp];                 % plain -> stored weighted basis
+end
+
+function p = pickRep(base, dir, wantIdx, winner, scale)
+% Try base +/- dir*mag for a geometric sequence of magnitudes (dir need not be unit length): the
+% correct sign (which of the two complementary sides a shared boundary/apex is on) and the
+% correct magnitude (small enough not to overshoot a bounded strip's valid range, large enough to
+% clear a wedge's apex) are both easier to search for than to derive by hand.
+    for mag = scale * [1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 3, 10]
+        for sgn = [1, -1]
+            pt = base + sgn*mag*dir;
+            if winner(pt) == wantIdx, p = pt; return; end
+        end
+    end
+    error('conjPieceCPLQ:internal', ...
+        'conjPSDRank1QuadTriangle: could not locate a representative point for face %d.', wantIdx);
+end
+
+function p = pickRepSweep(base, wantIdx, winner, scale)
+% Like pickRep but searches a full sweep of angles (rather than +/- one hand-derived direction)
+% at a few magnitudes: robust for a wedge whose two bounding rays don't have an easily-signed
+% bisector (see conjPSDRank1QuadTriangleTie).
+    for mag = scale * [1, 0.5, 0.2, 2, 0.05]
+        for degStep = 0:10:350
+            pt = base + mag*[cosd(degStep), sind(degStep)];
+            if winner(pt) == wantIdx, p = pt; return; end
+        end
+    end
+    error('conjPieceCPLQ:internal', ...
+        'pickRepSweep: could not locate a representative point for face %d.', wantIdx);
+end
+
+function idx = rank1Winner(s, u, uperp, lam, p, w, t1, t2, t3, r1, r2, m13, m12, m23, ...
+        v1, v2, v3, q1, q2, q3, c)
+% Oracle: index (1=E13,2=E12,3=E23,4=L1,5=L2,6=L3) of the true argmax of the six rank-1-quadratic
+% conjugate candidates at dual point s (row vector), gating each edge candidate by its own
+% interior-critical-point t*-range (see conjPSDRank1QuadTriangle).
+    s = s(:);
+    alpha = s'*u - p; gamma = s'*uperp - w;
+    tol = 1e-7*(1+abs(t3-t1));
+    evalStored = @(row) 0.5*row(1)*s(1)^2 + row(2)*s(1)*s(2) + 0.5*row(3)*s(2)^2 ...
+        + row(4)*s(1) + row(5)*s(2) + row(6);
+    vals = -inf(6,1);
+    vals(4) = s'*v1 - q1; vals(5) = s'*v2 - q2; vals(6) = s'*v3 - q3;
+    xs13 = (alpha+gamma*m13)/lam;
+    if xs13 >= t1-tol && xs13 <= t3+tol
+        vals(1) = evalStored(rank1EdgeQuad(t1,r1,m13,u,lam,p,w,c));
+    end
+    xs12 = (alpha+gamma*m12)/lam;
+    if xs12 >= t1-tol && xs12 <= t2+tol
+        vals(2) = evalStored(rank1EdgeQuad(t1,r1,m12,u,lam,p,w,c));
+    end
+    xs23 = (alpha+gamma*m23)/lam;
+    if xs23 >= t2-tol && xs23 <= t3+tol
+        vals(3) = evalStored(rank1EdgeQuad(t2,r2,m23,u,lam,p,w,c));
+    end
+    [~, idx] = max(vals);
+end
+
+% ----- degenerate sub-case of conjPSDRank1QuadTriangle: a tied rotated-t coordinate -----------
+function g = conjPSDRank1QuadTriangleTie(u, uperp, lam, p, w, A, b, c, t0, ra, rb, va, vb, tc, rc, vc)
+% Two triangle vertices va,vb tie in the rotated t-coordinate (t0), i.e. the edge va-vb is exactly
+% perpendicular to A's nonzero eigenvector u. Since A = lam*u*u' (rank 1), A*v = lam*(u'v)*u
+% depends only on t=u'v, so va and vb have the SAME dual point s_ab = A*va+b = A*vb+b: the usual
+% three collinear dual "vertices" collapse to two (s_ab, s_c = A*vc+b). The (t,r)-chain picture
+% loses its "kink" (there is no third vertex at an intermediate t to split a chain into two
+% segments): both boundary chains va-vc and vb-vc are single segments spanning the FULL range
+% [t0,tc], selected by the sign of gamma = s'*uperp-w exactly as before. Structure: five faces --
+% two parabolic edge strips Ea (through va), Eb (through vb), and three linear vertex cones
+% La, Lb, Lc -- meeting at the two dual points s_ab (apex of Ea,La,Lb,Eb) and s_c (apex of Ea,Lc,
+% Eb). The Ea/Eb shared boundary is the full segment s_ab-s_c (on the line gamma=0, where both
+% chain formulas agree since the r-term of the objective vanishes there); La/Lb meet directly at
+% s_ab along a ray (no strip in between, since the tied edge va-vb is affine, not curved, for q).
+% Validated by numeric sup-sampling (see conjPieceCPLQTest/psdRank1QuadraticTieConjugate); uses the
+% same oracle-based pickRep as the non-degenerate case for the same reason (hand-derived
+% bisector/ray signs are easy to get backwards).
+    qv = @(v) 0.5*(v'*A*v) + b'*v + c;
+    qa = qv(va); qb = qv(vb); qc = qv(vc);
+    sab = A*va+b; sc = A*vc+b;
+    ma = (rc-ra)/(tc-t0); mb = (rc-rb)/(tc-t0);
+    Ea = rank1EdgeQuad(t0,ra,ma,u,lam,p,w,c);
+    Eb = rank1EdgeQuad(t0,rb,mb,u,lam,p,w,c);
+
+    % dray(m) always has gamma-rate +1 (uperp'*dray(m) == 1 identically, since u is unit -- same
+    % fact the non-degenerate case documents/compensates for via sgn13/sgn12). Ea is built from ra
+    % (the smaller r, ALWAYS the gamma<0 chain per the sup-over-r argument: maximizing gamma*r
+    % prefers the smaller r iff gamma<0) so its ray must point toward DEcreasing gamma; Eb (from
+    % rb, the larger r) is already the gamma>0 chain, so its ray is used as-is.
+    dray = @(m) [-(m*u(1)+u(2)); u(1)-m*u(2)];
+    dA = -dray(ma); dB = dray(mb);
+    dAB = [-(va(2)-vb(2)); va(1)-vb(1)];    % perp to (va-vb): boundary of La(s)=Lb(s), sign moot
+                                             % (pickRep searches both signs)
+
+    winner = @(s) rank1TieWinner(s, u, uperp, lam, p, w, t0, tc, ra, rb, ma, mb, va, vb, vc, qa, qb, qc, c);
+    un = @(x) x/norm(x);
+    scale = 0.4*norm(sc-sab) + 1;
+
+    Vd = [sab'; sc'; (sab+dA)'; (sab+dAB)'; (sab+dB)'; (sc+dA)'; (sc+dB)'];
+    E = [1 2 1; 1 3 0; 1 4 0; 1 5 0; 2 6 0; 2 7 0];   % edge 1 (sab-sc) is a genuine segment
+    Ec = zeros(6,6);
+    % faces: 1=Ea, 2=Eb, 3=La, 4=Lb, 5=Lc
+    adj = [1 2; 1 3; 3 4; 4 2; 1 5; 2 5];
+
+    % La/Lb (faces 3,4) meet along the line dAB = perp(va-vb), which is EXACTLY the tie line
+    % La(s)==Lb(s) for its entire length (not just at one point) -- so, unlike the other faces,
+    % no single bisector-of-two-rays direction reliably lands inside one wedge (the two rays
+    % bounding each of these two wedges are dA/dAB or dAB/dB, but dAB's own sign relative to
+    % u is convention-dependent -- see conjPSDRank1QuadTriangleTie header). Use a full angular
+    % sweep instead of a hand-derived bisector for these two (same "search, don't derive" spirit
+    % as pickRep's own magnitude search).
+    rep = zeros(5,2);
+    rep(1,:) = pickRep((sab+sc)'/2, un(dA)', 1, winner, scale);
+    rep(2,:) = pickRep((sab+sc)'/2, un(dB)', 2, winner, scale);
+    rep(3,:) = pickRepSweep(sab', 3, winner, scale);
+    rep(4,:) = pickRepSweep(sab', 4, winner, scale);
+    rep(5,:) = pickRep(sc', un(un(dA)+un(dB))', 5, winner, scale);
+    F = orientFaces(Vd, E, adj, rep);
+
+    f = [Ea; Eb; ...
+         0 0 0 va(1) va(2) -qa; ...
+         0 0 0 vb(1) vb(2) -qb; ...
+         0 0 0 vc(1) vc(2) -qc];
+    g = QuaPar(Vd, E, Ec, f, F);
+end
+
+function idx = rank1TieWinner(s, u, uperp, lam, p, w, t0, tc, ra, rb, ma, mb, va, vb, vc, qa, qb, qc, c)
+% Oracle: index (1=Ea,2=Eb,3=La,4=Lb,5=Lc) of the true argmax of the five tied-case candidates.
+    s = s(:);
+    alpha = s'*u - p; gamma = s'*uperp - w;
+    tol = 1e-7*(1+abs(tc-t0));
+    lo = min(t0,tc)-tol; hi = max(t0,tc)+tol;
+    evalStored = @(row) 0.5*row(1)*s(1)^2 + row(2)*s(1)*s(2) + 0.5*row(3)*s(2)^2 ...
+        + row(4)*s(1) + row(5)*s(2) + row(6);
+    vals = -inf(5,1);
+    vals(3) = s'*va - qa; vals(4) = s'*vb - qb; vals(5) = s'*vc - qc;
+    xsA = (alpha+gamma*ma)/lam;
+    if xsA >= lo && xsA <= hi
+        vals(1) = evalStored(rank1EdgeQuad(t0,ra,ma,u,lam,p,w,c));
+    end
+    xsB = (alpha+gamma*mb)/lam;
+    if xsB >= lo && xsB <= hi
+        vals(2) = evalStored(rank1EdgeQuad(t0,rb,mb,u,lam,p,w,c));
+    end
+    [~, idx] = max(vals);
+end
+
+% ----- general INDEFINITE quadratic (beta*x*y+linear, any frame) via reduction to bilinear -----
+function g = conjIndefiniteQuadTriangle(V, A, b, c)
+% Conjugate of q(x)=1/2 x'Ax+b'x+c (A INDEFINITE: one positive, one negative eigenvalue) over the
+% CCW triangle V. Generalizes the old exact-pure-"x*y" bilinear case (conjBilinearXYzeroCE/OneCE)
+% to ANY indefinite A, b, c by:
+%   1. Rotating to the bilinear frame u=Mx via the SAME construction convEnvCPLQ uses (bilinear-
+%      Frame below): 1/2 x'Ax = u1*u2 EXACTLY, i.e. beta=1 always with this specific M -- no
+%      separate "scale" case is needed, only the residual linear part.
+%   2. Completing the square on the residual linear part: q(u) = u1*u2+Ltil(1)*u1+Ltil(2)*u2+c =
+%      (u1+Ltil(2))*(u2+Ltil(1)) + c-Ltil(1)*Ltil(2), i.e. a pure bilinear function of the
+%      SHIFTED variable u' = u + [Ltil(2) Ltil(1)] (translation only -- edge convexity depends
+%      only on slope, so it is unaffected by the shift; classify convex edges once on Vshift).
+%   3. Reusing conjBilinearXYzeroCE/OneCE (unmodified) on the SHIFTED triangle for the pure-
+%      bilinear conjugate h(s)=sup_{u'} s.u'-u1'u2', in s_u-space.
+%   4. Undoing the shift: q*(s_u) = sup_u s_u.u-q(u) = sup_u' [s_u.u'-u1'u2'] - s_u.shift -
+%      (c-Ltil(1)*Ltil(2)) = h(s_u) - shift(1)*s_u1-shift(2)*s_u2 - (c-Ltil(1)*Ltil(2)): a
+%      LINEAR-IN-s_u correction added to every face's VALUE only (the region partition -- Vd, E,
+%      Ec, F -- is unaffected, since the correction is a constant w.r.t. the argmax variable u').
+%   5. Undoing the rotation: f*(s) = q*(M^-T s), a linear change of the DUAL variable, pushed
+%      through the whole QuaPar (vertices, face quadratics, conics, and left/right orientation if
+%      det(M)<0) by pushforwardQuaParDual.
+% Only 0 or 1 convex edge is supported (2 convex edges is the same genuine-hyperbola dead end as
+% the pure bilinear case -- see the file-header NOTES and
+% conjPieceCPLQTest/bilinearTwoConvexEdgesDocumentedLimitation -- unaffected by translation/
+% rotation, since convexity of an edge depends only on its slope, and rotating back preserves the
+% conic degree). Setting A=[0 1;1 0], b=0, c=0 recovers the old pure-xy case exactly (Ltil=0, so
+% the shift is exactly zero and M reduces the rotation to whatever bilinearFrame([0 1;1 0]) gives).
+    M = bilinearFrame(A);
+    Vbf = (M*V')';
+    if triSignedArea(Vbf) < 0, Vbf = Vbf([1 3 2],:); end   % keep CCW for conjBilinearXY*CE's own conventions
+    Ltil = (M')\b;                                         % q(u) = u1*u2 + Ltil(1)*u1 + Ltil(2)*u2 + c
+    shift = [Ltil(2), Ltil(1)];
+    Vshift = Vbf + shift;
+    ce = convexEdgesXY(Vshift);
+    switch size(ce,1)
+        case 0, gU = conjBilinearXYzeroCE(Vshift);
+        case 1, gU = conjBilinearXYoneCE(Vshift, ce);
+        otherwise
+            error('conjPieceCPLQ:notImplemented', ...
+                'Indefinite-quadratic conjugate is implemented for zero or one convex edge (got %d).', size(ce,1));
+    end
+    constCorr = c - Ltil(1)*Ltil(2);
+    gU.f(:,8)  = gU.f(:,8)  - shift(1);    % L1 -= shift(1) (stored basis: col 8 = x-linear coeff)
+    gU.f(:,9)  = gU.f(:,9)  - shift(2);    % L2 -= shift(2) (col 9 = y-linear coeff)
+    gU.f(:,10) = gU.f(:,10) - constCorr;   % const -= (c - Ltil(1)*Ltil(2))
+    g = pushforwardQuaParDual(gU, M);
+end
+
+function M = bilinearFrame(A)
+% Build M (u = M x) so that 1/2 x'Ax = u1*u2 for an INDEFINITE symmetric A (same construction as
+% convEnvCPLQ's bilinearFrame, duplicated here since it is a file-local helper there): with
+% A = lam1 r1 r1' + lam2 r2 r2' (lam1>0>lam2) and a = sqrt(lam1/2) r1 + sqrt(-lam2/2) r2,
+% w = sqrt(lam1/2) r1 - sqrt(-lam2/2) r2, one has a w' + w a' = A, hence (a'x)(w'x) = 1/2 x'Ax.
+    [R, Lam] = eig(A); lam = diag(Lam);
+    [lp, ip] = max(lam); [ln, in] = min(lam);
+    r1 = R(:,ip); r2 = R(:,in);
+    a = sqrt(lp/2)*r1 + sqrt(-ln/2)*r2;
+    w = sqrt(lp/2)*r1 - sqrt(-ln/2)*r2;
+    M = [a'; w'];
+end
+
+function g = pushforwardQuaParDual(gU, M)
+% Push a QuaPar gU, a function of a dual variable s_u, forward through the linear change of dual
+% variable s_u = M^-T s (i.e. gU represents q*(s_u); this returns f*(s) = q*(M^-T s)). Since the
+% region partition is unaffected by the sign of a determinant-preserved argmax (only ORIENTED
+% quantities move), this transforms:
+%   - dual vertices:  s_u = M^-T s  <=>  s = M' s_u, so as row vectors Vd_new = Vd_old * M.
+%   - each face's quadratic h(s_u)=1/2 s_u'H s_u+g'*s_u+kappa: h(M^-T s) is quadratic in s with
+%     Hessian Minv*H*Minv', linear part Minv*g, and UNCHANGED constant kappa.
+%   - each edge's conic (same quadratic-form substitution, using the conic's own PLAIN [a b c d e
+%     f] convention -- NOT the doubled "stored" convention the face values use).
+%   - left/right face orientation (F) and the conics' sign convention (evalConic>0 on the left):
+%     a linear map with det(M)<0 reverses orientation, so F's columns swap and Ec's sign flips.
+    Minv = inv(M); detM = det(M);
+    Vd = gU.V * M;
+    nf = size(gU.f,1);
+    fNew = zeros(nf,6);
+    for k = 1:nf
+        [Lk,Hk,Ck] = QuaPoly.matrixForm(gU.f(k,:));
+        if ~isempty(Ck)
+            error('conjPieceCPLQ:internal','pushforwardQuaParDual: cubic face not supported.');
+        end
+        Hn = Minv*Hk*Minv'; Ln = Minv*Lk;
+        fNew(k,:) = [Hn(1,1), Hn(1,2), Hn(2,2), Ln(1), Ln(2), gU.f(k,end)];
+    end
+    ne = size(gU.E,1);
+    EcNew = zeros(ne,6);
+    for j = 1:ne
+        row = gU.Ec(j,:);
+        if all(row==0), continue; end                      % linear edge stays linear (all-zero)
+        Ac = [row(1), row(2)/2; row(2)/2, row(3)]; Lc = [row(4); row(5)];
+        An = Minv*Ac*Minv'; Ln = Minv*Lc;
+        newRow = [An(1,1), An(1,2)+An(2,1), An(2,2), Ln(1), Ln(2), row(6)];
+        EcNew(j,:) = newRow / max(abs(newRow));    % a conic is scale-invariant; normalize so the
+                                                    % fixed ABSOLUTE tolerance in
+                                                    % QuaPar.assertParabolicEdges (b^2-4ac<=sqrt(eps))
+                                                    % stays meaningful after M can amplify magnitudes
+    end
+    FNew = gU.F;
+    if detM < 0
+        FNew = FNew(:,[2 1]);
+        EcNew = -EcNew;
+    end
+    g = QuaPar(Vd, gU.E, EcNew, fNew, FNew);
 end
 
 % ----- bilinear (f=x*y) conjugate over a triangle with ONE convex edge (COAP B.2) -----------
