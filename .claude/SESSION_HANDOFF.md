@@ -51,31 +51,50 @@ be the signal that a fix landed).
 
 Full suite: **115/115 PASS**.
 
+**Audit: did either bug silently affect any other already-passing test's objects?** Checked
+directly rather than left open. Set up a `git worktree` of the pre-fix commit (`2459f50`) alongside
+the fixed repo, temporarily instrumented `QuaPar.m`'s constructor in both to log every face's `P`
+for every `QuaPar` object built during a full 115-test run, then diffed the two logs line-for-line.
+Result: **every `QuaPar` object produced anywhere else in the suite** (via `conjPieceCPLQ`,
+`conjCPLQ`, the `QuaParTest` fixtures, `RatPolTest`, `convEnvCPLQTest`, `PLQVCTest`) **was
+byte-identical before and after both fixes** — no silent corruption elsewhere. Makes sense in
+hindsight: `maxQuaPar` (and so the `assemblePieces` ray bug) is only ever invoked from
+`maxQuaParTest`, and no other fixture happens to produce the specific "ray immediately followed by
+a segment" vertex configuration that triggered the `orderEdges` bug.
+
+The one object the bugs DID touch -- the `maxQuaPar(g1,g2)` composite in `maxQuaParTest` -- turned
+out to have a wider footprint than originally diagnosed: the original diagnosis only caught faces
+16 and 20 (the ones that happened to corrupt the one previously-tested point, s=(-3,2)); the full
+diff showed faces 3, 11, 12, 14, and 19 also had the identical duplicated-edge corruption
+pre-fix, silently, since none of the other 6 ground-truth sample points happened to land in the
+regions those faces got wrong. Faces 15, 17, 21 also changed, but only by a sign flip on a ray
+edge -- an expected, correct side effect of the `assemblePieces` fix, not a separate bug. All of
+this is already covered by the two fixes below: the new object has zero duplicate edges in any
+face and matches ground truth exactly at all 7 sample points (already confirmed above), so no
+further code change was needed -- this closes out the "silent effect elsewhere" question with a
+clean result. Instrumentation was reverted and the worktree removed; `git status`/`git diff`
+confirmed clean before finishing.
+
 ## Where things stand
 
-- Branch: `cplq-engine`. Two commits this session, both pushed:
+- Branch: `cplq-engine`. Three commits this session, all pushed:
   - `ca46421` — "Fix orderEdges pivot-vertex bug causing duplicated/missing boundary edges"
     (`QuaPar.m` only).
   - `dfb1305` — "Fix ray left/right assignment bug in assemblePieces; verify all 7 ground-truth
     points now pass" (`maxQuaPar.m` + `maxQuaParTest.m`).
-- No other files touched this session.
+  - `dffa2c1` — session handoff update.
+- The silent-effect audit above (worktree diff) was exploratory/verification only and left no
+  trace in the repo (instrumentation reverted, worktree removed, confirmed clean).
 
 ## Next steps
 
-1. **Audit whether the two bugs fixed this session affected any OTHER already-passing test's
-   objects silently** (i.e. whether some other test's `QuaPar`/`maxQuaPar` result has/had a
-   malformed `P` or a wrongly-sided ray edge that just didn't happen to get evaluated at a point
-   that exposed it). All 115 tests passed both before and after these fixes, so nothing is
-   currently *failing* because of this, but a silent wrong-but-unexercised region elsewhere hasn't
-   been positively ruled out. This was flagged as open in the previous handoff too and is still
-   open.
-2. Whether the `delta>0, Delta=0` degeneracy (an earlier session's fix, unrelated to this session)
+1. Whether the `delta>0, Delta=0` degeneracy (an earlier session's fix, unrelated to this session)
    is a coincidence of this specific instance or forced whenever the two adjacent envelopes share
    the same eigenvalue `lambda` is still open — see the "Open question" paragraph in
    `/home/ylucet/CCA2/3-edge.tex`'s Conclusion (outside this repo).
-3. The standalone `RatPol.conj` gap (rational piece with no known originating quadratic) is still
+2. The standalone `RatPol.conj` gap (rational piece with no known originating quadratic) is still
    open and untouched — unrelated to this session, see prior handoffs.
-4. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
+3. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
    ```
    matlab -batch "restoredefaultpath; rehash toolboxcache; cd('/home/ylucet/CCA2/CCA2'); \
      res=runtests({'RatPolTest','convEnvCPLQTest','QuaParTest','conjCPLQTest','conjPieceCPLQTest','PLQVCTest','maxQuaParTest'}); \
