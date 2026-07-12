@@ -4,13 +4,49 @@
 Optimization). 2D primary, 1D as a thin degenerate case. General PLQ (occasionally PLC),
 **no grid/LLT algorithms**.
 
-**Authoritative references** (in `/home/ylucet/CCA2`):
+**Authoritative references** (PDFs in `reference/`):
 - **[COAP]** Karmarkar & Lucet, *Computing the convex envelope of bivariate PLQ functions
-  in linear time*, Comput. Optim. Appl. 94 (2026) 747–780. (`s10589-026-00781-5.pdf`)
+  in linear time*, Comput. Optim. Appl. 94 (2026) 747–780. (`KARMARKAR-26-convex-envelope.pdf`)
 - **[JOGO]** Karmarkar & Lucet, *A linear-time algorithm to compute the conjugate of
-  nonconvex bivariate PLQ functions*, J. Glob. Optim. 94 (2026) 3–34. (`s10898-025-01503-7.pdf`)
+  nonconvex bivariate PLQ functions*, J. Glob. Optim. 94 (2026) 3–34. (`KARMARKAR-26-conjugate.pdf`)
 
-These two papers define the data types and the algorithms this design implements.
+These two papers define the data types and the algorithms this design implements. **Both handle
+nonconvex PLQ** (the `'cplq'` engine, II.5.1); they build on a lineage of predecessor work that
+handles the **convex** case only:
+- **[KUMAR-20]** Kumar & Lucet, *Towards the Biconjugate of Bivariate Piecewise Quadratic
+  Functions*, in *Optimization of Complex Systems*, Adv. Intell. Syst. Comput., Springer (2020)
+  257–266. **Deepak Kumar**'s numeric convex-envelope-of-a-quadratic-over-a-polytope method
+  (`codeOld/deepak`, I.4) is the direct predecessor that [COAP]/[JOGO] extend — it is **not** a
+  parametric-QP method (a previous version of this document conflated the two; see I.4/I.5 for
+  the correct attribution below).
+- **[JAKEE-13]** Khan Md. Kamall Jakee, *Computational Convex Analysis using Parametric
+  Quadratic Programming*, M.Sc. thesis, University of British Columbia (Okanagan), 2013.
+  (`JAKEE-09-pQP-MSc.pdf`) — **Jakee Khan**'s work; the actual source of the **parametric-QP**
+  (`'pqp'`) conjugate engine (II.5.2). Convex PLQ only.
+- **[GARDINER-09]** Gardiner & Lucet, *Numerical Computation of Fitzpatrick Functions*,
+  J. Convex Anal. 16 (2009) 779–790. (`GARDINER-09-Fitzpatrick.pdf`) — source of the
+  Fitzpatrick-function routine kept as an example generator (I.6).
+- **[GARDINER-11]** Gardiner & Lucet, *Graph-Matrix Calculus for Computational Convex
+  Analysis*, in *Fixed-Point Algorithms for Inverse Problems in Science and Engineering*,
+  Springer Optim. Appl. (2011) 243–259. (`GARDINER-11-graph-matrix.pdf`)
+- **[GARDINER-13]** Gardiner & Lucet, *Computing the Conjugate of Convex Piecewise
+  Linear-Quadratic Bivariate Functions*, Math. Program. 139 (2013) 161–184.
+  (`GARDINER-13-conjugate-PLQ.pdf`) — convex-only bivariate conjugate (`lft2.sci`, I.5).
+- **[GARDINER-14]** Gardiner, Khan & Lucet, *Computing the Partial Conjugate of Convex
+  Piecewise Linear-Quadratic Bivariate Functions*, Comput. Optim. Appl. 58 (2014) 249–272.
+  (`GARDINER-14-partial-conjugate.pdf`) — source of `partialConj` for `'pqp'` (II.4/II.5.2).
+- **[HAQUE-17]** Haque, Tasnuva, *Computation of Convex Conjugates in Linear Time using
+  Graph-Matrix Calculus*, M.Sc. thesis, University of British Columbia (Okanagan), 2017.
+  (`HAQUE-17-conjugate-convex-PLQ-MSc.pdf`)
+- **[HAQUE-18]** Haque & Lucet, *A Linear-time Algorithm to Compute the Conjugate of Convex
+  Piecewise Linear-Quadratic Bivariate Functions*, Comput. Optim. Appl. 70 (2018) 593–613.
+  (`HAQUE-18-conjugate-convex-PLQ.pdf`) — **Tasnuva Haque**'s work; the algorithm the
+  point-cloud + neighbour-graph (`'graph'`) engine implements (II.5.3). Convex PLQ only.
+- **[HIRIART-URRUTY-07]** Hiriart-Urruty & Lucet, *Parametric Computation of the
+  Legendre–Fenchel Conjugate with Application to the Computation of the Moreau Envelope*,
+  J. Convex Anal. 14 (2007) 657–666. Source of the "expand-the-square" identity that computes
+  the Moreau envelope as a **single conjugate**, not an inf-convolution (II.6) — valid for
+  **any** function, convex or not.
 
 ---
 
@@ -28,19 +64,31 @@ These two papers define the data types and the algorithms this design implements
    function; the three *operated* families (**`RatPol`**, **`QuaPar`**, **`QuaPoly`**) are its
    specializations, ending at the released quadratic-on-polyhedral class.
 3. **Three conjugate engines** behind one `conj(f, engine)`:
-   - **`'pqp'`** — exact parametric-QP conjugate (Scilab `pQP` port).
-   - **`'graph'`** — point-cloud + neighbour-graph conjugate (`PLQVG` primal↔dual swap).
+   - **`'pqp'`** — exact parametric-QP conjugate (Scilab `pQP` port; Jakee Khan's M.Sc. thesis
+     [JAKEE-13]). **Convex `f` only.**
+   - **`'graph'`** — point-cloud + neighbour-graph conjugate (`PLQVG` primal↔dual swap;
+     Tasnuva Haque [HAQUE-17]/[HAQUE-18]). **Convex `f` only.**
    - **`'cplq'`** — symbolic per-piece conjugate (`cPLQ` Lagrange-multiplier method) — this is
-     the engine that follows the [JOGO] 3-step algorithm exactly.
-4. **Convex envelope = biconjugate**, built *on top of any conjugate engine*
-   (`convEnv = biconj = conj∘conj`). This is how cPLQ does it natively, and it works equally
-   over the `'pqp'` and `'graph'` engines. A **direct** envelope path (`deepak`, [COAP]) is
-   kept as a faster alternative and an independent cross-check.
-5. **Everything else** (`add`, `infConv`, `moreau`, `proxAverage`, `lasryLions`, `partialConj`)
-   is a short composition over `conj` + `add` + scalar ops.
+     the engine that follows the [JOGO] 3-step algorithm exactly, and the only one of the three
+     that handles **nonconvex** `f`.
+4. **Convex envelope = biconjugate**, built *on top of the `'cplq'` conjugate engine*
+   (`convEnv = biconj = conj∘conj`, `engine='cplq'`). This is how `cPLQ` does it natively; it does
+   **not** work over `'pqp'`/`'graph'` for a genuinely nonconvex `f` (they only accept convex
+   input, so the first conjugation is undefined — II.5/II.6). A **direct** envelope path (Deepak
+   Kumar's per-piece method [KUMAR-20], `codeOld/deepak`, extended by Karmarkar's [COAP] Step 4
+   assembly — **not** parametric-QP) is kept as a faster alternative and an independent
+   cross-check.
+5. **Everything else** (`add`, `proxAverage`, `lasryLions`, `partialConj`) is a short composition
+   over `conj` + `add` + scalar ops. `infConv(f,g)=conj(conj(f)+conj(g))` is this same kind of
+   composition but is only valid (returns the true inf-convolution) for `f,g` convex (II.6).
+   `moreau` looks similar but is **not** built on `infConv`: it is one direct conjugate call via
+   the "expand the square" identity of Hiriart-Urruty & Lucet [HIRIART-URRUTY-07], which needs no
+   convexity assumption at all.
 
-> **The pillars:** conjugate = {`pQP`, `PLQVG`, `cPLQ`} · convex envelope = `biconj` over any
-> engine (+ `deepak` direct). All other operators compose on these.
+> **The pillars:** conjugate = {`pQP` (Jakee Khan, convex), `PLQVG` (Tasnuva Haque, convex),
+> `cPLQ` (Karmarkar, convex + nonconvex)} · convex envelope = `biconj` with `engine='cplq'`
+> (+ Kumar/Karmarkar `direct`). All other operators compose on these — except `infConv`
+> (convex-only) and `moreau` (a direct conjugate, not `infConv`; convexity-free) — see II.6.
 
 ---
 
@@ -64,7 +112,7 @@ quadratic vs cubic. The release ships the data structure + convexity tests; **no
 |--------------|-----------|--------------|--------------------------|
 | **`PLCVC`** | vertex (V/E/F/P) | coefficient (cubic) | `eval`, `isConvex`, `isFaceConvex`, `isEdgeConvex`, `isDD`, `toPLCHC`, `toPLQVG`. **Direct ancestor of `PLQVC`.** |
 | **`PLCHC`** | half-space per piece | coefficient | `lineEquation`, `toPLCVC`, **`add`** (polyshape intersection + coeff sum — working pointwise addition), `isFaceBounded`. |
-| **`PLQVG`** | vertex via `Entity` | **graph/pointwise** (values `y` + subgrads `s`) | **`conjugate`** (primal↔dual entity swap: Face↔Vertex, Ray↔Ray, Segment↔Segment), `toPLCVC`, `toPLCVCDual`. **= the point-cloud + neighbour-graph conjugate engine.** |
+| **`PLQVG`** | vertex via `Entity` | **graph/pointwise** (values `y` + subgrads `s`) | **`conjugate`** (primal↔dual entity swap: Face↔Vertex, Ray↔Ray, Segment↔Segment), `toPLCVC`, `toPLCVCDual`. **= the point-cloud + neighbour-graph conjugate engine**, implementing **Tasnuva Haque**'s entity-graph algorithm [HAQUE-17]/[HAQUE-18] (this specific code is an unpublished refinement by Hatton/Kagdiwala/Patodia, not Haque's own implementation). **Convex PLQ only** (per [HAQUE-17]/[HAQUE-18]'s own scope). |
 | **`PLQList`** | inequality list | quadratic coeffs | **`computeDual`** (symbolic conjugate), **`computeMoreauEnvelope`**, `scalarMultiply`, `additionOfPLQAndQuadraticFunction`. |
 | `Entity`/`Entitytype` | — | — | Primal/dual graph cell (type ∈ {Vertex,Face,Ray,Segment,Line}); enables the primal-dual conjugate. |
 | `lcon2vert`,`vert2lcon`,`qlcon2vert` | — | — | **Reusable:** half-space ↔ vertex conversion. |
@@ -87,12 +135,18 @@ Implements **conjugate, convex envelope, biconjugate, subdifferential, max** sym
 This is the engine that mirrors [JOGO]'s 3-step pipeline and handles parabolic regions and
 rational pieces directly.
 
-### I.4 `codeOld/deepak` — parametric-QP convex envelope / conjugate ([COAP]/[JOGO] reference impl)
+### I.4 `codeOld/deepak` — Deepak Kumar's convex-envelope front-end ([KUMAR-20]; predecessor to [COAP]/[JOGO])
+
+**Not a parametric-QP method** — a previous version of this document mislabeled it as one,
+confusing it with the unrelated `'pqp'` engine (I.5/[JAKEE-13]). Deepak Kumar's code
+([KUMAR-20]) is a **numeric, eigenvalue/classification-based** method for the convex envelope of
+*one* quadratic over *one* polytope; **Tanmaya Karmarkar**'s [COAP]/[JOGO] algorithms extend it
+into the full symbolic, multi-piece pipeline (`codeOld/cPLQ`, I.3) that this design is built on.
 
 | Entry point | Description |
 |-------------|-------------|
-| `cvxEnv2d` | **Convex envelope of a quadratic over a polytope** ([COAP] Step 1+4): indefinite→bilinear `xy`, classify convex edges vs saddle vertices, build `η(a,b)` supporting families, subdivide dual space, parametric-QP per subregion, map back. Output = rational(quad÷linear)/polyhedral. |
-| `cvxHull2d_solver`, `OP_Solver`, `compute_OP*`, `solve_OP_*` | Parametric 1D/QP solver core (QQ/QL/LL). |
+| `cvxEnv2d` | **Convex envelope of a quadratic over a polytope** ([COAP] Step 1+4): indefinite→bilinear `xy`, classify convex edges vs saddle vertices, build `η(a,b)` supporting families, subdivide dual space, closed-form `η(a,b)`-family solve per subregion, map back. Output = rational(quad÷linear)/polyhedral. |
+| `cvxHull2d_solver`, `OP_Solver`, `compute_OP*`, `solve_OP_*` | Parametric 1D optimization solver core (closed-form QQ/QL/LL cases) — a per-edge 1D parametrization, unrelated to the multivariate KKT `'pqp'` engine of I.5. |
 | `Conjugate/compute_conjugate*` | Conjugate of quadratic/rational pieces; domain division into parabolic subdivision. |
 | `transform_quadxp_to_xy` | Bilinear handling via Hessian eigendecomposition. |
 
@@ -104,14 +158,19 @@ The Scilab toolbox where **one conjugate generates the whole operator algebra**:
 `plq2_lft` (full conjugate), `plq2_lft_partial` (partial), `plq2_me`/`plq2_me2`/`plq2_me_partial`
 (Moreau, two formulas), `plq2_pa`/`plq2_pa_partial` (proximal average), `plq2_add`/`plq2_subtract`/
 `plq2_scalar`, `plq2_s` (self-smoothing). PLQ2 = arrangement (DCEL) + `6×n` coeff matrix.
-The `plq2_lft_pQP/parametric_ME.sci` + `…/partial_conjugate.sci` are the **parametric-QP**
-engine (KKT solve, symbolic in the dual parameter) → Engine `'pqp'`. The example scripts
+`macros/lft2.sci` (the main conjugate) and the partial-conjugate algorithm are **Bryan
+Gardiner**'s work ([GARDINER-13], [GARDINER-14] — the latter co-authored with **Jakee Khan**).
+Nested inside this same tree, `plq2_lft_pQP/parametric_ME.sci` + `…/partial_conjugate.sci` are a
+**different, separate** method — **Jakee Khan**'s **parametric-QP** engine (KKT solve, symbolic
+in the dual parameter, [JAKEE-13]) → Engine `'pqp'`. Both are **convex-only** ([GARDINER-13]/
+[GARDINER-14]/[JAKEE-13] all state "convex" in their titles/scope). The example scripts
 (`l1-norm-lft+me`, `l1-linf-norm-pa`, `house-lft`, `diamond-lft`, `four-faces-lft+me`) define
 the intended public API.
 
 ### I.6 `codeOld/JCA_fitz`, `JCA_plt-scripts`, `NA_FMEI-scipts` — Scilab
 
-`JCA_fitz/gph.sci`: **Fitzpatrick function** `F_{m,A}` as a PLQ; `plq_pds` (primal-dual symmetric
+`JCA_fitz/gph.sci`: **Fitzpatrick function** `F_{m,A}` as a PLQ, per **Bryan Gardiner**'s
+[GARDINER-09]; `plq_pds` (primal-dual symmetric
 antiderivative) via `plq_lft`+`plq_pa`; `subdiff_plq`, `diff_plq`. `JCA_plt-scripts` & `NA_FMEI`:
 1D grid/LLT Moreau-envelope demos/timing (`me_llt/pe/nep/plt/direct`) on `abs`,`sqr`,indicators,
 nonconvex `|‖x‖−1|`,`(x²−1)²`. **The 1D grid scripts are out of scope** (no grid algorithms);
@@ -245,16 +304,16 @@ the object *is* a released `PLQVC` and every existing method works unchanged.
 
 | Method | Signature | Operation | Built on |
 |--------|-----------|-----------|----------|
-| `conj` | `g = conj(f, engine)` | Fenchel conjugate `f*` | engine ∈ {`'pqp'`,`'graph'`,`'cplq'`} (default `'cplq'`) |
+| `conj` | `g = conj(f, engine)` | Fenchel conjugate `f*` | engine ∈ {`'pqp'`,`'graph'`,`'cplq'`} (default `'cplq'`); **`'pqp'`/`'graph'` require `f` convex, `'cplq'` handles both** (II.5) |
 | `partialConj` | `g = partialConj(f, idx, engine)` | conjugate w.r.t. variable `idx` | engine ∈ {`'pqp'`,`'cplq'`} only |
-| `biconj` | `g = biconj(f, engine)` | `f** = conj(conj(f))` | `conj∘conj` |
-| `convEnv` | `h = convEnv(f, method)` | convex envelope; `method`=`'biconj'`(any engine) \| `'direct'`(deepak) | `biconj` / `convEnvDirect` |
+| `biconj` | `g = biconj(f, engine)` | `f** = conj(conj(f))` | `conj∘conj` — nonconvex `f` needs `engine='cplq'` for the first `conj` (II.5/II.6) |
+| `convEnv` | `h = convEnv(f, method)` | convex envelope; `method`=`'biconj'`(default `'cplq'`) \| `'direct'`(Kumar+Karmarkar, [KUMAR-20]/[COAP]) | `biconj` / `convEnvDirect` — see II.6 note on engine choice |
 | `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add |
 | `sub` | `h = sub(f, g)` | `f − g` | `add(f, negate(g))` |
 | `scalarMul`,`negate` | `c·f`, `−f` | coeff scaling | — |
 | `addQuadratic` | `addQuadratic(f, A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | per-face coeff update |
-| `infConv` | `infConv(f,g,engine)` | `(f□g)(x)=inf_z f(z)+g(x−z)` | `conj((conj f)+(conj g))` |
-| `moreau` | `moreau(f,mu,engine)` | Moreau envelope `e_μ f` | `infConv(f, ½μ‖·‖²)` (II.6) |
+| `infConv` | `infConv(f,g,engine)` | `(f□g)(x)=inf_z f(z)+g(x−z)` | `conj((conj f)+(conj g))` — **valid (returns the true inf-conv) only for `f,g` convex**; see II.6 |
+| `moreau` | `moreau(f,mu,engine)` | Moreau envelope `e_μ f` | **single conjugate** (`conj`, once) via the expand-the-square identity [HIRIART-URRUTY-07] — **NOT** `infConv(f,½μ‖·‖²)`; see II.6 |
 | `proxAverage` | `proxAverage(f,g,lambda,mu,engine)` | proximal average | compose `moreau`,`add`,`negate` |
 | `lasryLions` | `lasryLions(f,lambda,mu,engine)` | double envelope | `−moreau(−moreau(f,λ),μ)` |
 | `eval`,`isConvex`,`plot`,… | (unchanged) | evaluation / tests / display | existing `PLQVC` code |
@@ -302,10 +361,18 @@ consumes all three families — so `biconj`, `moreau`, etc. compose through it w
 
 #### II.5.2 Engine `'pqp'` — parametric quadratic programming (exact)
 
-*Source:* Scilab `parametric_ME.sci`, COAP `partial_conjugate.sci`; closed forms from `lft2.sci`.
+*Source:* **Jakee Khan**'s M.Sc. thesis [JAKEE-13] (Scilab `parametric_ME.sci`); partial variant
+co-authored with Bryan Gardiner [GARDINER-14] (`partial_conjugate.sci`); closed forms adapted
+from Gardiner's `lft2.sci` [GARDINER-13].
+
+**Convex PLQ only** — [JAKEE-13] computes the KKT stationarity conditions of
+`v(s)=sup_x sᵀx − r(x) s.t. Ax≤β` per primal entity; this characterizes the true supremum only
+when the maximization is concave, i.e. `r` convex, so `conj(f,'pqp')` requires `f` convex
+(`assertOperable` should reject/flag a nonconvex `f` here rather than silently returning a
+KKT critical point that isn't the actual conjugate).
 
 For each primal entity collect `(Q,q,κ)` and active constraints `Ax≤β`, then solve, symbolically
-in the dual parameter `s`, `v(s)=sup_x sᵀx − r(x) s.t. Ax≤β` via KKT
+in the dual parameter `s`, via KKT
 `[Q Aᵀ; A 0][x;λ]=[s−q; β]`. Optimizer `x*(s)` is affine in `s`; back-substitution gives the
 piece value; the active-set critical region is the dual cell. Assemble cells into the dual mesh.
 `partialConj` = the same solve with `s` on selected coordinates only
@@ -314,7 +381,15 @@ piece value; the active-set critical region is the dual cell. Assemble cells int
 
 #### II.5.3 Engine `'graph'` — point cloud + neighbour graph
 
-*Source:* `PLQVG` + `Entity`/`Entitytype`.
+*Source:* `PLQVG` + `Entity`/`Entitytype`, implementing **Tasnuva Haque**'s entity-graph
+algorithm [HAQUE-17]/[HAQUE-18] (this codebase's specific `PLQVG` implementation is an
+unpublished refinement by other students, not Haque's own code — see I.2).
+
+**Convex PLQ only** — [HAQUE-17]/[HAQUE-18] are both titled "...of **convex** piecewise
+linear-quadratic bivariate functions": the primal↔dual entity swap and the well-poised
+subgradient sampling below both presume a genuine (single-valued-per-point, convex) subgradient
+at each entity, which is not well defined for a nonconvex `f`. So `conj(f,'graph')` requires `f`
+convex, same restriction as `'pqp'`.
 
 Represent the graph of `f` as a **point cloud with a neighbour graph**: each entity carries a
 point `x`, value `y=f(x)`, and subgradient(s) `s∈∂f(x)`; adjacency = the mesh neighbour graph.
@@ -336,22 +411,60 @@ independent cross-check of the exact engines. **`partialConj` is not implemented
 function h = convEnv(f, method)             % convex envelope = closed convex hull = f**
     if nargin<2, method='biconj'; end
     switch lower(method)
-        case 'biconj', h = biconj(f);           % conj∘conj over ANY engine (default)
-        case 'direct', h = convEnvDirect(f);    % deepak cvxEnv2d pipeline ([COAP], faster)
+        case 'biconj', h = biconj(f);           % conj∘conj — see NOTE below on engine choice
+        case 'direct', h = convEnvDirect(f);    % Kumar's per-piece envelope [KUMAR-20], assembled
+                                                 % across pieces per [COAP] Step 4
     end
 end
 % Output is RatPol (quad÷linear on polyhedral), per [COAP] Step 4 / [JOGO] Prop 1.
+```
 
+**Which engine actually computes the envelope of a nonconvex `f`?** Only `'cplq'` (II.5.1) — the
+`'pqp'` and `'graph'` engines (II.5.2/II.5.3) are convex-only by construction of the algorithms
+they implement ([JAKEE-13], [HAQUE-17]/[HAQUE-18]), so `conj(f,engine)` for a nonconvex `f` is
+not a meaningful operation for those two. Consequently:
+- `convEnv(f,'biconj')` (default `engine='cplq'`) is the general nonconvex→envelope path: `f*`
+  (via `conjCPLQ`'s own internal per-piece envelope + conjugate + max, II.5.1 steps 1–3) is
+  already convex, so the second conjugation is an ordinary (convex-input) conjugate in any engine.
+- `convEnv(f,'biconj', 'pqp')` / `('graph')` only make sense when `f` is **already convex**
+  (where `biconj(f)=f` is a round-trip identity check, not an actual envelope computation) —
+  using them on a genuinely nonconvex `f` is invalid, since the *first* conjugation is undefined.
+- `convEnv(f,'direct')` never conjugates at all: it is Deepak Kumar's numeric per-piece method
+  ([KUMAR-20], `codeOld/deepak`, I.4), with cross-piece assembly per [COAP] Step 4 — a genuinely
+  different, faster route, valid for nonconvex `f` by construction (that is the whole point of
+  [COAP]). Kept as an independent cross-check against `'biconj'`+`'cplq'`.
+
+```matlab
 function h = infConv(f,g,engine)            % (f □ g)
     h = conj( add( conj(f,engine), conj(g,engine) ), engine );
 end
+```
 
+**Only valid (returns the true `f□g`) when `f` and `g` are both convex.** The identity
+`(f□g)* = f*+g*` holds for *any* `f,g` (a pure sup-interchange, no convexity needed), so this
+code actually computes `conj(f*+g*) = (f□g)**`, the **biconjugate** of the inf-convolution. By
+Fenchel–Moreau, `h**=h` iff `h` is convex, proper and lsc — guaranteed when `f,g` are both convex
+(inf-convolution of two convex functions is convex). For nonconvex `f` or `g`, `infConv` as coded
+instead returns `conv(f□g)`, the convex envelope of the true inf-convolution, **not** `f□g` itself.
+
+```matlab
 function h = moreau(f,mu,engine)            % Moreau envelope e_μ f   (cf. plq2_me)
-    %   e_μ f = (1/(2μ))‖·‖² − (1/μ)·conj( μ·f + ½‖·‖² )
+    %   e_μ f = (1/(2μ))‖·‖² − (1/μ)·conj( μ·f + ½‖·‖² )       [HIRIART-URRUTY-07]
     g = addQuadratic( scalarMul(f,mu), eye(2), [0;0], 0 );
     h = addScaledEnergy( scalarMul( conj(g,engine), -1/mu ), 1/(2*mu) );
 end
+```
 
+**Deliberately NOT `infConv(f, ½μ‖·‖²)`**, even though `e_μf = f □ (1/(2μ))‖·‖²` by definition —
+composing through `infConv` would (per the note above) silently require `f` convex. Instead this
+expands the square in the Moreau-envelope definition and regroups to make a **single** conjugate
+appear: `e_μf(x) = inf_z[f(z)+(1/(2μ))‖x−z‖²] = (1/(2μ))‖x‖² − sup_z[x·z−(μf(z)+½‖z‖²)]/μ =
+(1/(2μ))‖x‖² − (1/μ)·(μf+½‖·‖²)*(x)`, exactly the formula coded above. This is pure algebraic
+regrouping of the definition of conjugate — no biconjugation, no Fenchel–Moreau argument, hence
+**no convexity requirement on `f`** ([HIRIART-URRUTY-07] gives this identity in full). This is
+also why `moreau` only ever calls `conj` **once**, unlike `infConv`'s two calls.
+
+```matlab
 function h = proxAverage(f,g,lambda,mu,engine)   % −M_μ(−λ₁M_μf − λ₂M_μg), λ₁+λ₂=1
     Mf=moreau(f,mu,engine); Mg=moreau(g,mu,engine);
     h = negate( moreau( add(scalarMul(Mf,-lambda),scalarMul(Mg,-(1-lambda))), mu, engine ) );
@@ -377,9 +490,9 @@ CCA2/
   QuaPoly.m           % quadratic on polyhedral       (= released PLQVC; input type)
   PLQVC.m             % thin alias of QuaPoly (backward compatibility)
   conjCPLQ.m          % Engine 'cplq': symbolic per-piece conjugate (default; [JOGO] 3 steps)
-  conjPQP.m           % Engine 'pqp' : parametric-QP / KKT conjugate (+ partial variant)
-  conjGraph.m         % Engine 'graph': point-cloud + neighbour-graph conjugate (PLQVG)
-  convEnvDirect.m     % direct convex-envelope path (deepak cvxEnv2d)
+  conjPQP.m           % Engine 'pqp' : parametric-QP / KKT conjugate (+ partial variant); convex only [JAKEE-13]
+  conjGraph.m         % Engine 'graph': point-cloud + neighbour-graph conjugate (PLQVG); convex only [HAQUE-17]/[HAQUE-18]
+  convEnvDirect.m     % direct convex-envelope path (Kumar cvxEnv2d [KUMAR-20] + Karmarkar assembly [COAP])
   +internal/
     Entity.m  Entitytype.m            % graph engine
     kktConjFace.m                     % QQ/QL/LL closed-form face conjugates (lft2.sci)
@@ -392,15 +505,18 @@ CCA2/
 
 ### II.8 Validation strategy
 
-- **Engine agreement:** `conjCPLQ` vs `conjPQP` vs `conjGraph` match on every convex example.
+- **Engine agreement:** `conjCPLQ` vs `conjPQP` vs `conjGraph` match on every convex example
+  (`conjPQP`/`conjGraph` have no nonconvex examples to agree on — they reject those inputs, II.5).
 - **Type cycle:** `conj`/`convEnv` outputs land in the correct family (`QuaPar` /
-  `RatPol`); `biconj(convex f)=f`; `biconj` of nonconvex `=convEnv`.
+  `RatPol`); `biconj(convex f)=f` (any engine); `biconj` of nonconvex `f` `=convEnv(f)`, computed
+  with `engine='cplq'` (II.6).
 - **Analytic pairs:** `energy*=energy`; `oneNorm*=ι_{‖·‖∞≤1}`; `l1Norm*=ι_{‖·‖∞≤1}`,
-  `linfNorm*=ι_{‖·‖1≤1}`; `moreau(energy,μ)` closed form; `proxAverage(l1,linf;λ)` from
-  `l1-linf-norm-pa`.
+  `linfNorm*=ι_{‖·‖1≤1}`; `moreau(energy,μ)` closed form (nonconvex test functions welcome here
+  too, since `moreau` needs no convexity, II.6); `proxAverage(l1,linf;λ)` from `l1-linf-norm-pa`.
 - **Paper replication:** reproduce [JOGO] Fig. 2 / Table 1 and [COAP] Fig. 2 / Table 1 exactly
   (rational arithmetic) — the strongest correctness test, since those are the published outputs.
-- **Direct vs biconj envelope:** `convEnv(f,'direct')` (deepak) ≡ `convEnv(f,'biconj')`.
+- **Direct vs biconj envelope:** `convEnv(f,'direct')` (Kumar/Karmarkar) ≡ `convEnv(f,'biconj')`
+  with `engine='cplq'` (the only engine valid for nonconvex `f` on the `'biconj'` side, II.6).
 
 ---
 
@@ -411,16 +527,17 @@ CCA2/
 | Data structure `V/E/f/F/P/dom` | released `PLQVC` | becomes leaf class `QuaPoly`; superset adds `Ec`,`den` |
 | Class hierarchy (rational/parabolic types) | [COAP]/[JOGO] defs; `cPLQ.region` (parabolic ineqs) | `RatPar`→`RatPol`/`QuaPar`→`QuaPoly` |
 | Convexity tests | released `PLQVC` | unchanged |
-| **conjugate Engine `'cplq'`** (default) | **`cPLQ`** (`conjugateExpr`,`convexEnvelope`,`maximumP`) | the symbolic [JOGO] 3-step pipeline; bilinear `x*y` via `quadQuad` |
-| **conjugate Engine `'pqp'`** | Scilab `parametric_ME.sci` + `lft2.sci` | KKT parametric-QP + QQ/QL/LL closed forms |
-| `partialConj` | Scilab `plq2_lft_partial`, COAP `partial_conjugate.sci` | partial branch of `'pqp'` |
-| **conjugate Engine `'graph'`** | `PLQVG` + `Entity`/`Entitytype` | primal-dual swap (point cloud + neighbour graph) |
-| `convEnv` `'direct'` | `deepak/cvxEnv2d` | faster envelope + numeric cross-check |
-| `convEnv` `'biconj'` | `conj∘conj` (any engine) | default; how `cPLQ` does it natively |
+| **conjugate Engine `'cplq'`** (default) | **`cPLQ`** (`conjugateExpr`,`convexEnvelope`,`maximumP`), Tanmaya Karmarkar | the symbolic [JOGO] 3-step pipeline; bilinear `x*y` via `quadQuad`; convex **and** nonconvex |
+| **conjugate Engine `'pqp'`** | Scilab `parametric_ME.sci` (Jakee Khan, [JAKEE-13]) + `lft2.sci` closed forms (Bryan Gardiner, [GARDINER-13]) | KKT parametric-QP + QQ/QL/LL closed forms; **convex only** |
+| `partialConj` | Scilab `plq2_lft_partial`, COAP `partial_conjugate.sci` (Gardiner, Khan & Lucet, [GARDINER-14]) | partial branch of `'pqp'` |
+| **conjugate Engine `'graph'`** | `PLQVG` + `Entity`/`Entitytype`, implementing Tasnuva Haque's algorithm ([HAQUE-17]/[HAQUE-18]) | primal-dual swap (point cloud + neighbour graph); **convex only** |
+| `convEnv` `'direct'` | `deepak/cvxEnv2d` (Deepak Kumar, [KUMAR-20]) + [COAP] Step 4 assembly (Karmarkar) | faster envelope + numeric cross-check; nonconvex-capable |
+| `convEnv` `'biconj'` | `conj∘conj`, `engine='cplq'` for nonconvex `f` | default; how `cPLQ` does it natively; `'pqp'`/`'graph'` only valid when `f` already convex |
 | `add`/`sub`/`scalarMul` | `PLCHC.add`, Scilab `plq2_add`/`plq2_scalar` | overlay + coeff/rational arithmetic |
-| `moreau`/`infConv`/`proxAverage`/`lasryLions` | Scilab `plq2_me`/`plq2_pa`; `PLQList` | compose on `conj`+`add` |
+| `infConv`/`proxAverage`/`lasryLions` | Scilab `plq2_pa`; `PLQList` | compose on `conj`+`add`; `infConv` valid only for convex `f,g` (II.6) |
+| `moreau` | Scilab `plq2_me` per the Hiriart-Urruty–Lucet identity [HIRIART-URRUTY-07] | **single** conjugate (expand-the-square), not `infConv`; valid for nonconvex `f` too (II.6) |
 | polytope/parabolic utilities | `lcon2vert`/`vert2lcon`/`unionHull`/`intersectionHull`; `cPLQ.region` | reuse; extend intersection to conic arcs |
-| Fitzpatrick; 1D grid-ME; SOS prover | `JCA_fitz`; `*_FMEI`; `polyPak` | Fitzpatrick + nonconvex fns kept as examples; rest **out of scope** |
+| Fitzpatrick (Gardiner, [GARDINER-09]); 1D grid-ME; SOS prover | `JCA_fitz`; `*_FMEI`; `polyPak` | Fitzpatrick + nonconvex fns kept as examples; rest **out of scope** |
 
 ---
 
@@ -439,11 +556,24 @@ CCA2/
    `isConvex` only** (released convexity machinery). Cubic otherwise storable, not operated on.
 5. **Default arithmetic** → **symbolic + rational** everywhere in the operators (exact; avoids
    the degenerate-subdivision floating-point issues [COAP]/[JOGO] warn about).
-6. **Conjugate engines** → three: `'cplq'` (default, symbolic), `'pqp'`, `'graph'`.
-7. **Convex envelope** → `biconj` over any engine (default), `deepak` `'direct'` as alternative.
+6. **Conjugate engines** → three: `'cplq'` (default, symbolic, handles convex **and** nonconvex
+   `f`, [JOGO]/[COAP]/`cPLQ`, Tanmaya Karmarkar); `'pqp'` (parametric-QP/KKT, **convex `f`
+   only**, Jakee Khan's M.Sc. thesis [JAKEE-13], with closed forms reused from Bryan Gardiner's
+   `lft2.sci` [GARDINER-13]); `'graph'` (point-cloud + neighbour-graph, **convex `f` only**,
+   Tasnuva Haque [HAQUE-17]/[HAQUE-18]).
+7. **Convex envelope** → `biconj` (default `engine='cplq'`, the only engine valid for a
+   genuinely nonconvex `f` — `'pqp'`/`'graph'` are convex-only, II.5/II.6), or Deepak Kumar's
+   per-piece method [KUMAR-20] (`codeOld/deepak`) as extended by Karmarkar's [COAP] Step 4
+   assembly, `'direct'`, as a faster alternative/cross-check. **Not** parametric-QP (a previous
+   version of this document mislabeled Kumar's method as such; see I.4).
 8. **Backward compatibility** → keep **`PLQVC` as a thin alias of `QuaPoly`** (so existing code
    and tests calling `PLQVC(...)` keep working).
 9. **`partialConj`** → exposed for the **`'pqp'` and `'cplq'`** engines only (the `'graph'`
    partial conjugate is left unimplemented for now).
+10. **`infConv` vs `moreau`** → `infConv(f,g)=conj(conj(f)+conj(g))` computes `(f□g)**`
+    (Fenchel–Moreau biconjugate), which equals the true inf-convolution `f□g` only when `f,g`
+    are both convex; it is **not** used to implement `moreau`. `moreau` is instead computed as a
+    **single** conjugate via the "expand the square" identity of Hiriart-Urruty & Lucet
+    [HIRIART-URRUTY-07], which needs no convexity assumption on `f` at all (II.6).
 
 *(No open questions remain — the design is fully specified.)*
