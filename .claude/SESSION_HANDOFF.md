@@ -1,103 +1,81 @@
 # Session Handoff
 
-_Last updated: 2026-07-10_
+_Last updated: 2026-07-11_
 
 ## What happened this session
 
-Picked up the previously-open "face-clipping topology gap" in `maxQuaPar.m` (`g1` face 1 vs `g2`
-face 4, a plain decided cell whose boundary edge had no matching neighbour anywhere in the
-arrangement). Debugged it incrementally by running the actual `f(x,y)=xy` three-convex-edge-
-triangle example (`maxQuaParTest.buildG1G2()`) through a scratch-instrumented copy of
-`maxQuaPar.m` (its helpers are file-local, so a real MATLAB run, not just reading, was needed each
-time) and found **four distinct, real bugs**, fixed one at a time, each verified against the
-previous error disappearing and a new (or no) one appearing:
+Picked up the previously-open `QuaPar.m` `orderEdges` bug (the last known issue blocking
+`maxQuaPar(g1,g2)` from matching ground truth at all 7 sample points of the
+`maxQuaParTest.buildG1G2()` / `f(x,y)=xy` three-convex-edge-triangle example). Found and fixed
+**two distinct, real bugs**, one in each of the two files, verified incrementally in a real MATLAB
+session (both files' helpers are either file-local or need a live run to observe the actual
+boundary-walk/assembly behaviour):
 
-1. **`clipPolyHalfPlane`'s bounded-polygon wraparound index bug.** When keeping the "far"
-   (wrapped) arc after clipping, `keepIdx = mod((p2):(p1-1), nv) + 1` is *always* empty in MATLAB
-   because `p1 < p2` always (so `p1-1 < p2`) and the colon operator doesn't wrap — silently turning
-   "keep the far arc" into "keep nothing" and collapsing the result to an empty cell. Fixed by
-   adding `+nv` before modding: `mod((p2):(p1-1+nv), nv) + 1`. Same bug, same fix, in `splitCell`'s
-   analogous `restIdx`.
-2. **`clipPolyHalfPlane`'s far-arc vertex-ORDER bug** (found immediately after fixing #1, since the
-   wrap now actually returned vertices, revealing they were wired up wrong): the far-arc branch
-   built `[X1; kept-vertices; X2]`, but for that branch the correct topological order is `[X2;
-   kept-vertices; X1]` — X1 and X2 are always adjacent via the new cut edge regardless of which arc
-   survives, so the wrong order produced a self-intersecting "bowtie" cell instead of a simple
-   polygon.
-3. **`assemblePieces`' ray half-edge orientation bug.** Both the incoming and outgoing ray of an
-   unbounded piece are encoded apex-first in `Ep` (matching `QuaPar`'s own E-matrix convention:
-   "column 1 is always the finite apex"), which — unlike segments — is *not* walk-order, so two
-   adjacent pieces sharing a physical ray both encode it as the *same* `(a,b)` pair, not swapped.
-   The half-edge matching loop was uniformly searching for a swapped pair (correct for segments,
-   wrong for rays), so no ray ever found its neighbour. Fixed by branching the search: rays match
-   on identical `(a,b)`, segments on swapped `(a,b)`.
-4. **`clipByFace`'s missing collinear-vertex split.** `g2` face 1's own three real vertices happen
-   to be exactly collinear, so its two consecutive boundary edges (to face 2 and to face 3) clip
-   `g1` face 2 by the *same* half-plane twice — the second clip is a geometric no-op, so the shared
-   vertex between those two collinear edges (where the true neighbouring face changes from face 2
-   to face 3) never becomes an explicit vertex of the clipped cell, leaving one straight cell edge
-   that silently spans two different neighbours. Fixed by adding `insertPassthroughVertices`,
-   called at the end of `clipByFace`, which re-inserts any `polyK`/`polyL` vertex lying in the open
-   interior of one of the clipped cell's edges.
+1. **`QuaPar.m`'s `orderEdges` pivot-vertex bug** (the bug this session was asked to fix). The
+   clockwise boundary walk recomputed its pivot vertex `i` from scratch every loop iteration via a
+   left/right rule based only on the current edge's own orientation (ray: base point; segment:
+   `F(j,1)==k` decides base vs end point). That rule has no memory of which vertex the walk just
+   arrived at, and for a segment edge entered from a ray, it could pick the vertex the walk came
+   FROM instead of the one it arrived AT — for face 16 (and, identically, face 20) of the assembled
+   `g = maxQuaPar(g1,g2)`, this made the walk double back onto edge 32, producing `P{16} =
+   [-32, 18, -32]` (edge 32 repeated, edge 33 never visited) instead of `[-32, 18, -33]`. Fixed by
+   computing the pivot `i` once before the loop (for the starting edge) and, from then on, setting
+   `i = iNext` at the end of each iteration instead of recomputing it — i.e. tracking the vertex the
+   walk just arrived at rather than re-deriving it from the left/right rule mid-walk.
+2. **`maxQuaPar.m`'s `assemblePieces` ray left/right assignment bug** (found while verifying fix
+   #1: `g.P{16}` became correct, but `g.eval([-3 2])` still returned `0` instead of `0.125`, because
+   *three* faces — 16, 20, AND 21 — all still claimed that point as interior, and `git stash`
+   confirmed face 21's malformed claim was already present in the pre-fix code too, i.e. a second,
+   independent defect). `assemblePieces` built each new global edge's `F(:,1)`/`F(:,2)` (left/right
+   face) as `[HE(h).piece, HE(opp).piece]` — whichever of the two half-edges sharing that physical
+   edge happened to be enumerated first. For segments this is fine: each piece walks a shared
+   segment in its own CCW order, which is necessarily reversed between the two neighbours, so the
+   direction itself (not enumeration order) encodes which piece is on the left. But rays are
+   encoded identically (apex-first) by BOTH neighbouring pieces (see the file's existing HISTORY
+   note on this), so for rays, enumeration order carries NO left/right information at all — it's
+   effectively random which piece ends up on which side. This let one piece's cell silently claim
+   territory that geometrically belonged to its neighbour across a ray boundary (confirmed via
+   instrumented tracing: piece 12 = g1-face-3 ∩ g2-face-4, the true owner of s=(-3,2) per `g1.eval`
+   alone, was wrongly excluded by its own ray edge 27, while piece 20 = g1-face-6 ∩ g2-face-4 wrongly
+   included it). Fixed by deriving left/right from which end of its OWN CCW boundary each piece uses
+   for that ray, instead of enumeration order: the piece for which the ray is OUTGOING (walked
+   apex->direction, matching the stored `a->b` order) is on the left, same as segments; the piece
+   for which it is INCOMING (walked direction->apex, i.e. `b->a`) is on the right.
 
-After all four fixes, `maxQuaPar(g1, g2)` **fully assembles** (21 pieces, no error) and matches
-in-house ground truth (`sup_{(x,y) in T} [s.x - xy]`) at 6 of 7 sample points to 1e-8.
+After both fixes, `maxQuaPar(g1,g2)` matches ground truth at **all 7** sample points, including
+`s=(-3,2)` (`g.eval([-3 2])` now gives `0.125`, matching
+`maxQuaParTest.supBilinearOverPoly([-3 2], [0 0;3 3;1 2])` exactly). Updated
+`maxQuaParTest.m`'s `verifyAgainstGroundTruth` to fold `(-3,2)` into the normal 7-point `AbsTol`
+loop, removing the separate pinned-known-bad assertion (as the previous handoff anticipated would
+be the signal that a fix landed).
 
-**The 7th point, s=(-3,2), is wrong** (`g.eval` gives 0, true value is 0.125) — but this is a
-**separate, deeper, currently-open bug in `QuaPar.m`'s `orderEdges`**, not in `maxQuaPar.m`.
-Diagnosed precisely: face 16 of the assembled result (an unbounded piece with one segment + two
-rays) gets `P{16} = [-32, 18, -32]` — edge 32 (a ray) is visited twice and edge 33 (its own other
-ray) is never visited, so the face's region silently overlaps its neighbour's (confirmed via
-`eval`'s `region==0` "shared boundary" return, meaning >1 face claims the same point). Traced the
-bug into `orderEdges`'s vertex-pivot selection for segment edges (`QuaPar.m` lines ~312-320): when
-transitioning FROM a ray edge INTO a segment edge at a shared vertex, and then needing to pivot
-again to exit that SAME segment edge, the algorithm recomputes the pivot vertex from scratch via
-the `F(j,1)==k` left/right rule rather than remembering which vertex it entered from — for this
-specific ray+segment vertex configuration, that recomputation picks the vertex we just came FROM
-(cycling straight back to the ray) instead of the one we're walking TO. **Important:** a same-
-session attempt to fix this by swapping the branch's base/end-point assignment appeared to fix
-face 16 but broke a different, previously-correct face of `g1` itself (`P{1}` degenerated from 4
-distinct edges to a repeated pair) — proving the bug is not a simple polarity flip and needs
-careful, separate investigation (was reverted; `QuaPar.m` is untouched this session, confirmed
-`git diff QuaPar.m` empty).
-
-Full suite: **115/115 PASS** (including `maxQuaParTest`'s 3 tests, updated this session — see
-below).
+Full suite: **115/115 PASS**.
 
 ## Where things stand
 
-- Branch: `cplq-engine` @ `55d0f25` — "Update session handoff: maxQuaPar topology fixes,
-  QuaPar.orderEdges bug open". Committed and pushed (author approved).
-- `QuaPar.m` is untouched (byte-identical to the committed version) despite the exploratory edit
-  described above; that edit was reverted.
+- Branch: `cplq-engine`. Two commits this session, both pushed:
+  - `ca46421` — "Fix orderEdges pivot-vertex bug causing duplicated/missing boundary edges"
+    (`QuaPar.m` only).
+  - `dfb1305` — "Fix ray left/right assignment bug in assemblePieces; verify all 7 ground-truth
+    points now pass" (`maxQuaPar.m` + `maxQuaParTest.m`).
+- No other files touched this session.
 
 ## Next steps
 
-1. **Fix the `QuaPar.m` `orderEdges` bug**, carefully, in its own session. Repro: `[g1,g2] =
-   maxQuaParTest.buildG1G2(); g = maxQuaPar(g1,g2); g.eval([-3 2])` gives `0`, should give `0.125`
-   (`maxQuaParTest.supBilinearOverPoly([-3 2], [0 0;3 3;1 2])`). More directly: `g.P{16}` is
-   `[-32, 18, -32]` (should be 3 *distinct* edges, e.g. `[-32, 18, 33]` or similar) — inspect
-   `orderEdges(g, 16)` step by step (it's a method, callable directly, unlike `maxQuaPar.m`'s
-   file-local helpers). The bug reproduces on `g1` ALONE too (no `maxQuaPar` needed) if you swap
-   the base/end-point branch in lines ~312-320 the naive way — that specific swap is confirmed
-   WRONG, so don't just re-apply it; the real fix likely needs to track which vertex a segment
-   edge was *entered* from (e.g. threading `iNext`/the previous iteration's exit vertex into the
-   next iteration) rather than recomputing the pivot purely from the `F(j,1)==k` left/right rule.
-   Once fixed, `maxQuaParTest.verifyAgainstGroundTruth`'s pinned-bad assertion for `s=(-3,2)` (see
-   below) will start failing — that's the expected signal to replace it with a normal `AbsTol`
-   check like the other 6 points.
-2. Whether this `orderEdges` bug affects any OTHER already-passing test's objects silently (i.e.
-   whether some other test's `QuaPar` has a malformed `P` that just doesn't happen to get evaluated
-   at a point that exposes it) is unknown and worth a quick audit once fixed.
-3. Decide whether to commit the `maxQuaPar.m`/`maxQuaParTest.m` changes from this session — not
-   done yet, pending user confirmation.
-4. Separately, whether the `delta>0, Delta=0` degeneracy (prior session's fix) is a coincidence of
-   this specific instance or forced whenever the two adjacent envelopes share the same eigenvalue
-   `lambda` is still open — see the "Open question" paragraph in `/home/ylucet/CCA2/3-edge.tex`'s
-   Conclusion (outside this repo).
-5. The standalone `RatPol.conj` gap (rational piece with no known originating quadratic) is still
+1. **Audit whether the two bugs fixed this session affected any OTHER already-passing test's
+   objects silently** (i.e. whether some other test's `QuaPar`/`maxQuaPar` result has/had a
+   malformed `P` or a wrongly-sided ray edge that just didn't happen to get evaluated at a point
+   that exposed it). All 115 tests passed both before and after these fixes, so nothing is
+   currently *failing* because of this, but a silent wrong-but-unexercised region elsewhere hasn't
+   been positively ruled out. This was flagged as open in the previous handoff too and is still
+   open.
+2. Whether the `delta>0, Delta=0` degeneracy (an earlier session's fix, unrelated to this session)
+   is a coincidence of this specific instance or forced whenever the two adjacent envelopes share
+   the same eigenvalue `lambda` is still open — see the "Open question" paragraph in
+   `/home/ylucet/CCA2/3-edge.tex`'s Conclusion (outside this repo).
+3. The standalone `RatPol.conj` gap (rational piece with no known originating quadratic) is still
    open and untouched — unrelated to this session, see prior handoffs.
-6. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
+4. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
    ```
    matlab -batch "restoredefaultpath; rehash toolboxcache; cd('/home/ylucet/CCA2/CCA2'); \
      res=runtests({'RatPolTest','convEnvCPLQTest','QuaParTest','conjCPLQTest','conjPieceCPLQTest','PLQVCTest','maxQuaParTest'}); \
@@ -107,15 +85,13 @@ below).
 
 ## Relevant files
 
-- `maxQuaPar.m` — this session's four fixes (see above), all in `clipByFace`/`clipPolyHalfPlane`/
-  `assemblePieces`/`splitCell`. The file header's HISTORY section has the full narrative for each.
-- `maxQuaParTest.m` — updated: `maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying` no longer
-  needs a `try/catch` (assembly now succeeds); `verifyAgainstGroundTruth` checks 6 points normally
-  and pins the 7th (`s=(-3,2)`) as a known-bad value with a comment pointing at the `QuaPar.m` bug,
-  so a future fix shows up as a test failure here (the intended signal to update the assertion),
-  not a silent pass.
-- `QuaPar.m` — NOT modified this session (an exploratory fix was tried and reverted); `orderEdges`
-  (~line 272-366) is where the next session's fix belongs. See "Next steps" #1 for the precise
-  repro and a lead on the likely correct approach.
+- `QuaPar.m` — `orderEdges` (~line 272-370): this session's pivot-vertex fix (bug #1 above). The
+  method's own inline comments now explain the tracked-`iNext` approach.
+- `maxQuaPar.m` — `assemblePieces` (~line 691-830): this session's ray left/right fix (bug #2
+  above). The file header's HISTORY section (items 5 and 6) has the full narrative for both of
+  this session's fixes, continuing from items 1-4 (prior session's face-clipping topology fixes).
+- `maxQuaParTest.m` — `verifyAgainstGroundTruth` now checks all 7 points uniformly (no more pinned
+  known-bad value); `maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying`'s comment updated to
+  match.
 - `/home/ylucet/CCA2/3-edge.tex` (+ `.pdf`, outside this repo) — unchanged this session.
 - `conjCPLQ.m` / `conjCPLQTest.m` — unchanged this session.
