@@ -58,19 +58,11 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             % maxQuaPar.m's header HISTORY for the four distinct bugs that were involved: a
             % wraparound-index bug and an endpoint-ordering bug in clipPolyHalfPlane, a ray
             % half-edge orientation bug and a missing collinear-vertex split in assemblePieces/
-            % clipByFace).
-            %
-            % Ground truth matches at 6 of 7 sample points (see verifyAgainstGroundTruth). The 7th,
-            % s=(-3,2), is wrong -- but the root cause is now a DIFFERENT, deeper bug, in
-            % QuaPar.m's orderEdges (not in this file): one assembled face's P{} entry visits one
-            % of its own boundary edges twice and skips another, so that face's region silently
-            % overlaps a neighbour's. Confirmed NOT caused by maxQuaPar.m: forcing g1/g2's own
-            % conjPieceCPLQ output through orderEdges shows the identical duplicate-edge pattern on
-            % an unrelated face of g1 alone (P{1} degenerates from 4 distinct edges to a repeated
-            % pair) whenever a ray edge and a segment edge meet at a shared vertex in a certain
-            % configuration -- reproducible without maxQuaPar at all. A same-session attempt to fix
-            % orderEdges by swapping its base/end-point branch selection fixed THIS face but broke
-            % that other one, so the real fix needs its own careful session (see SESSION_HANDOFF.md).
+            % clipByFace) AND matches ground truth at all 7 sample points (see
+            % verifyAgainstGroundTruth), including s=(-3,2), which used to be wrong due to two
+            % further, separate bugs (also now fixed, see maxQuaPar.m's header HISTORY): a
+            % pivot-vertex bug in QuaPar.m's orderEdges, and a ray left/right assignment bug in
+            % this file's assemblePieces.
             [g1, g2] = maxQuaParTest.buildG1G2();
             g = maxQuaPar(g1, g2);
             testCase.verifyClass(g, 'QuaPar');
@@ -123,24 +115,15 @@ classdef maxQuaParTest < matlab.unittest.TestCase
 
         function verifyAgainstGroundTruth(testCase, g)
             % h(s) should equal sup_{(x,y) in T} [s1 x + s2 y - x y], T=conv{(0,0),(3,3),(1,2)},
-            % everywhere, including at points inside both former "hyperbola" cells. All points here
-            % pass except (-3,2) -- pinned separately below as a KNOWN-WRONG value, not silently
-            % skipped, because it traces to a real, currently-open bug in QuaPar.m's orderEdges
-            % (see maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying), not to anything in
-            % this pipeline stage. If that bug gets fixed, this assertion will start failing --
-            % that's the intended signal to replace it with a normal AbsTol check like the others.
+            % everywhere, including at points inside both former "hyperbola" cells and at (-3,2),
+            % which used to be wrong (see maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying).
             T = [0 0; 3 3; 1 2];
-            testPts = [1.90 2.50; 1.70 2.00; 2.3431 1.9; 2.05 1.95; 0 0; 5 5];
+            testPts = [1.90 2.50; 1.70 2.00; 2.3431 1.9; 2.05 1.95; 0 0; 5 5; -3 2];
             for i = 1:size(testPts,1)
                 s = testPts(i,:);
                 testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
                     'AbsTol', 1e-8, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
             end
-            sBad = [-3 2];
-            testCase.verifyEqual(g.eval(sBad), 0, 'AbsTol', 1e-8, ...
-                ['s=(-3,2) is currently WRONG (true value is 0.125, see QuaPar.orderEdges bug in ' ...
-                 'maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying) -- this pins the known-bad ' ...
-                 'value so a fix is noticed as a test failure here, not silently.']);
         end
 
         function h = supBilinearOverPoly(s, T)

@@ -67,10 +67,28 @@ function g = maxQuaPar(g1, g2)
 %        insertPassthroughVertices, called at the end of clipByFace, which re-inserts any
 %        polyK/polyL vertex lying in the open interior of one of the clipped cell's edges.
 %   After all four fixes, maxQuaPar(g1,g2) on this example fully assembles and matches ground
-%   truth at 6 of 7 sample points; the 7th (s=(-3,2)) is wrong due to a separate, deeper,
-%   currently-open bug in QuaPar.m's orderEdges (NOT in this file -- confirmed reproducible on g1
-%   alone) -- see .claude/SESSION_HANDOFF.md and maxQuaParTest.m's
-%   maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying for the precise diagnosis.
+%   truth at 6 of 7 sample points; the 7th (s=(-3,2)) was wrong due to two further, separate bugs,
+%   both now fixed (later session):
+%     5. QuaPar.m's orderEdges (NOT in this file) recomputed its boundary-walk pivot vertex from
+%        scratch every iteration via a left/right rule based only on the current edge's own
+%        orientation; that rule doesn't know which vertex the walk just arrived at, and for a
+%        segment edge entered from a ray, could pick the vertex the walk came FROM instead of the
+%        one it arrived AT, duplicating one boundary edge and dropping its true neighbour. Fixed
+%        by tracking the pivot vertex as the previous iteration's iNext instead of recomputing it.
+%     6. This file's assemblePieces assigned ray edges' F(:,1)/F(:,2) (left/right face) by
+%        processing order ([HE(h).piece, HE(opp).piece], whichever half-edge was enumerated
+%        first) -- fine for segments, where the CCW walk direction is naturally reversed between
+%        the two adjacent pieces and so encodes which is on the left, but WRONG for rays, which
+%        both adjacent pieces encode identically (apex-first), carrying no left/right information
+%        via processing order. This let one piece's cell silently claim territory that geometrically
+%        belonged to its neighbour across a ray boundary. Fixed by deriving left/right from which
+%        end of its own CCW boundary each piece uses for that ray: the piece for which the ray is
+%        OUTGOING (walked apex->direction, matching the stored a->b order) is on the left, same as
+%        segments; the piece for which it is INCOMING (walked direction->apex, i.e. b->a) is on the
+%        right.
+%   After fixes 5 and 6, maxQuaPar(g1,g2) on this example matches ground truth at all 7 sample
+%   points, including s=(-3,2) -- see maxQuaParTest.m's
+%   maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying.
 %
 % STATUS (incremental implementation -- see DESIGN.md II.5.1 and the session plan):
 %   * IMPLEMENTED: g1, g2 purely polyhedral (all-zero Ec, i.e. every edge a line/ray/segment) --
@@ -750,12 +768,13 @@ function g = assemblePieces(pieces)
         globalIdx{p} = gi;
     end
 
-    HE = struct('piece', {}, 'a', {}, 'b', {}, 'isSeg', {}, 'ec', {});
+    HE = struct('piece', {}, 'a', {}, 'b', {}, 'isSeg', {}, 'ec', {}, 'rayOut', {});
     for p = 1:n
         Ep = allE{p}; Ecp = allEc{p}; gi = globalIdx{p};
         for e = 1:size(Ep,1)
+            rayOut = ~Ep(e,3) && e == size(Ep,1);   % Ep's last row is always the OUTGOING ray
             HE(end+1) = struct('piece', p, 'a', gi(Ep(e,1)), 'b', gi(Ep(e,2)), ...
-                'isSeg', Ep(e,3), 'ec', Ecp(e,:)); %#ok<AGROW>
+                'isSeg', Ep(e,3), 'ec', Ecp(e,:), 'rayOut', rayOut); %#ok<AGROW>
         end
     end
     haVec = [HE.a]; hbVec = [HE.b]; hsVec = [HE.isSeg];
@@ -786,7 +805,24 @@ function g = assemblePieces(pieces)
         E(end+1,:) = [HE(h).a, HE(h).b, HE(h).isSeg]; %#ok<AGROW>
         ecRow = HE(h).ec; if all(ecRow==0), ecRow = HE(opp).ec; end
         Ec(end+1,:) = ecRow; %#ok<AGROW>
-        F(end+1,:) = [HE(h).piece, HE(opp).piece]; %#ok<AGROW>
+        if HE(h).isSeg
+            F(end+1,:) = [HE(h).piece, HE(opp).piece]; %#ok<AGROW>
+        else
+            % Ray: unlike segments, the SAME (a,b) apex-first encoding is used regardless of
+            % whether this ray is incoming or outgoing for a given piece, so processing order
+            % carries no left/right information (the bug: the old code just used [HE(h).piece,
+            % HE(opp).piece], i.e. whichever piece happened to be enumerated first). Derive it
+            % instead from which end each piece uses: walking a piece's OWN CCW boundary, its
+            % OUTGOING ray is traversed apex->direction (matching the stored a->b order), so that
+            % piece's interior is on the LEFT of (a,b), same as segments; its INCOMING ray is
+            % traversed direction->apex (b->a, the reverse of stored a->b), so that piece's
+            % interior is on the RIGHT of (a,b).
+            if HE(h).rayOut
+                F(end+1,:) = [HE(h).piece, HE(opp).piece]; %#ok<AGROW>
+            else
+                F(end+1,:) = [HE(opp).piece, HE(h).piece]; %#ok<AGROW>
+            end
+        end
     end
 
     f = zeros(n,10);
