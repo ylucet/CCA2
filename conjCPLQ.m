@@ -18,15 +18,20 @@ function g = conjCPLQ(obj, idx)
 % STATUS (incremental implementation -- see DESIGN.md II.5.1):
 %   * IMPLEMENTED (exact): full-domain strictly convex quadratic -> full-domain quadratic.
 %   * IMPLEMENTED: a single bounded-triangle piece (any classification -- affine, convex
-%     (PD or rank-1 PSD), concave, or genuinely indefinite with 0 or 1 convex edge) -> QuaPar.
-%     Step 2 (conjPieceCPLQ) conjugates the ORIGINAL piece directly whenever it can (since
-%     f*=(conv f)*, this needs no Step 1 envelope at all); when it can't (a concave piece, or
-%     an indefinite piece with 2 convex edges), Step 1 (convEnvCPLQ) is computed first and its
-%     (single-face) envelope is conjugated instead -- see conjSingleTriangle below.
-%   * TODO: Step 3 (maximum of several conjugates), needed whenever a domain is genuinely
-%     covered by MORE THAN ONE piece: a multi-face input (nf>1), a single non-triangular face,
-%     or a single triangle whose indefinite quadratic has 3 convex edges (Step 1 splits it into
-%     2 sub-triangles, each convexified -- see convEnvCPLQ -- with no single-piece shortcut).
+%     (PD or rank-1 PSD), concave, genuinely indefinite with 0 or 1 convex edge, or genuinely
+%     indefinite with 3 convex edges) -> QuaPar. Step 2 (conjPieceCPLQ) conjugates the ORIGINAL
+%     piece directly whenever it can (since f*=(conv f)*, this needs no Step 1 envelope at all);
+%     when it can't (a concave piece, or an indefinite piece with 2 or 3 convex edges), Step 1
+%     (convEnvCPLQ) is computed first. A 2-convex-edge envelope is a single rank-1-PSD face,
+%     conjugated directly; a 3-convex-edge envelope splits into TWO 2-convex-edge sub-triangles
+%     (COAP Appendix A.5), each conjugated separately and combined via Step 3 (maxQuaPar,
+%     pointwise maximum) -- see conjSingleTriangle/conjMaxOfSubTriangles below.
+%   * TODO: Step 3 for a domain genuinely covered by more than one ORIGINAL piece (a multi-face
+%     input, nf>1) or a single non-triangular face -- convEnvCPLQ's own multi-face triangulation
+%     can produce a triangle piece with exactly ONE convex edge (a genuinely rational envelope),
+%     which conjPieceCPLQ cannot conjugate yet (see its own header TODO); the 3-convex-edge
+%     single-triangle case above never hits that gap, since both of its sub-triangles are
+%     provably 2-convex-edge (COAP Appendix A.5), so it is handled separately and exactly.
 %
 % NOTE on arithmetic: the design target is exact symbolic + rational arithmetic
 %   ([COAP]/[JOGO]); this first version uses double precision for the closed-form quadratic
@@ -78,7 +83,7 @@ end
 
 % ================================================================================================
 function g = conjSingleTriangle(obj)
-% Step 2 (+ Step 1 when needed) for a single bounded-triangle piece, following the "sidestep"
+% Step 2 (+ Step 1/3 when needed) for a single bounded-triangle piece, following the "sidestep"
 % noted in conjPieceCPLQ's header: since f*=(conv f)*, try to conjugate the ORIGINAL piece
 % directly first (conjPieceCPLQ handles affine, PD/rank-1-PSD convex, and indefinite with 0 or 1
 % convex edge this way). That fails only for a concave piece or an indefinite piece with >=2
@@ -87,8 +92,9 @@ function g = conjSingleTriangle(obj)
 % compute Step 1's convex envelope (convEnvCPLQ) and conjugate that instead: a concave piece's
 % envelope is a single affine piece, and an indefinite piece with exactly 2 convex edges envelopes
 % to a single rank-1 PSD quadratic (COAP Appendix A.4) -- both directly conjugable. An indefinite
-% piece with 3 convex edges envelopes to TWO sub-triangle pieces (convEnvCPLQ splits it): that
-% case genuinely needs Step 3 (max of the two sub-conjugates), not yet implemented.
+% piece with 3 convex edges envelopes to TWO sub-triangle pieces (COAP Appendix A.5, convEnvCPLQ's
+% splitThreeConvex): Step 2 conjugates each sub-triangle separately, and Step 3 (maxQuaPar)
+% combines them into the true conjugate of the original piece -- see conjMaxOfSubTriangles.
     try
         g = conjPieceCPLQ(obj);
         return
@@ -102,8 +108,49 @@ function g = conjSingleTriangle(obj)
         g = conjPieceCPLQ(env);
         return
     end
-    error('PLQ:conjCPLQ:notImplemented', ...
-        ['Indefinite triangle with 3 convex edges: Step 1''s envelope splits into %d sub-triangle ' ...
-         'pieces, whose conjugates must be combined by Step 3 (max of conjugates), which is not ' ...
-         'implemented yet. See DESIGN.md II.5.1.'], env.nf);
+    g = conjMaxOfSubTriangles(env);
+end
+
+% ================================================================================================
+function g = conjMaxOfSubTriangles(env)
+% Step 3: conjugate every triangle face of a multi-face convex-envelope RatPol (Step 1's output)
+% independently (Step 2, conjPieceCPLQ), then combine them via repeated pairwise maxQuaPar. Only
+% reached from conjSingleTriangle's 3-convex-edge case, where env is always the 2-sub-triangle
+% split of COAP Appendix A.5 -- each sub-triangle is provably 2-convex-edge (a rank-1 PSD
+% quadratic, no curved domain edges), so both conjPieceCPLQ (Step 2) and maxQuaPar's polyhedral-
+% domain requirement (Step 3) are satisfied exactly; see maxQuaParTest.m for the same construction
+% validated against ground truth.
+    g = toQuaPar(conjPieceCPLQ(extractTriangleFace(env, 1)));
+    for k = 2:env.nf
+        gk = toQuaPar(conjPieceCPLQ(extractTriangleFace(env, k)));
+        g = maxQuaPar(g, gk);
+    end
+end
+
+function p = extractTriangleFace(r, k)
+% Extract face k of a multi-face RatPol as a standalone single-triangle RatPol -- the shape
+% conjPieceCPLQ requires (nf=1, nv=3, ne=3, bounded). conjPieceCPLQ reads only p.V/p.f/p.den (it
+% fixes V's CCW order itself via its own triSignedArea check), so the vertex order returned by
+% orderEdges' walk (documented as clockwise) needs no correction here.
+    iVs = faceVertexIndices(r, k);
+    if numel(iVs) ~= 3
+        error('PLQ:conjCPLQ:notImplemented', ...
+            ['conjCPLQ: Step 3 currently supports only triangular envelope pieces (face %d has ' ...
+             '%d vertices).'], k, numel(iVs));
+    end
+    V3 = r.V(iVs, :);
+    E3 = [1 2 1; 2 3 1; 3 1 1];
+    F3 = [1 0; 1 0; 1 0];
+    p = RatPol(V3, E3, r.f(k,:), F3, r.den(k,:));
+end
+
+function iVs = faceVertexIndices(obj, k)
+% Vertex indices around face k, in the order of its ordered edge list obj.P{k} (same convention
+% as convEnvCPLQ.m's own file-local helper of the same name, duplicated here since it is
+% file-local there).
+    face = obj.P{k}; iVs = zeros(1, numel(face));
+    for i = 1:numel(face)
+        j = face(i);
+        if j > 0, iVs(i) = obj.E(j,1); else, iVs(i) = obj.E(-j,2); end
+    end
 end

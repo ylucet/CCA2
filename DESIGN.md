@@ -63,7 +63,18 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   incremental; each file's own header STATUS block lists exactly which piece-classification
   cases are covered so far.
 - `maxQuaPar.m` — pointwise max of two full-domain `QuaPar` objects (needed when Step 1 splits a
-  nonconvex piece into more than one sub-piece).
+  nonconvex piece into more than one sub-piece). Now wired into `conjCPLQ`'s own Step 3
+  (`conjMaxOfSubTriangles`, in `conjCPLQ.m`): a single bounded triangle whose indefinite quadratic
+  has 3 convex edges — the one case Step 1 (`convEnvCPLQ`) splits into more than one sub-piece —
+  conjugates each of the two sub-triangles (Step 2, always exactly 2-convex-edge/rank-1-PSD by
+  COAP Appendix A.5, so always polyhedral-domain-safe for `maxQuaPar`) and combines them via
+  `maxQuaPar`. Exercised end to end (not just the pre-existing manual `conjPieceCPLQ`+`maxQuaPar`
+  wiring in `maxQuaParTest.m`) by `conjCPLQTest.m`'s
+  `indefiniteTriangleThreeConvexEdgesUsesStep3`. The fully general case — a multi-face original
+  domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
+  multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
+  rational envelope), which `conjPieceCPLQ` cannot conjugate yet (its own header TODO); the
+  3-convex-edge single-triangle case above never hits that gap, which is why it alone is solved.
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
@@ -154,19 +165,25 @@ exists yet for):
 - `partialConj` — not implemented for any engine.
 - `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
   method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
-- `conjCPLQ`'s own Step 3 (pointwise maximum of several per-piece conjugates, needed whenever a
-  domain is genuinely covered by more than one piece) — this is what currently confines
-  `infConv`/`moreau`/`lasryLions`/`proxAverage` to full-domain-quadratic `f,g` for an *exact*
-  end-to-end round trip (a bounded-triangle `f,g` pair errors clearly at the final `conj` call
-  rather than silently giving a wrong answer).
+- `conjCPLQ`'s own Step 3 for a genuinely multi-face original domain (`nf>1`) or a single
+  non-triangular face — the single-bounded-triangle/3-convex-edge case IS now implemented (see
+  `maxQuaPar.m`'s bullet above), but the fully general case needs `conjPieceCPLQ` to also handle a
+  1-convex-edge (genuinely rational) envelope piece, which `convEnvCPLQ`'s multi-face
+  triangulation can produce and which `conjPieceCPLQ` cannot conjugate yet — this is what still
+  confines `infConv`/`moreau`/`lasryLions`/`proxAverage` to full-domain-quadratic `f,g` for an
+  *exact* end-to-end round trip on a genuinely multi-face `f,g` (a bounded-triangle pair with 3
+  convex edges now works end to end; a multi-face pair still errors clearly at the final `conj`
+  call rather than silently giving a wrong answer).
 
 **Next planned**: the **nonconvex-PLQ operator pipeline** (`conj`→`infConv`/`moreau`→
 `lasryLions`/`proxAverage`) that has been this project's stated focus is now code-complete (see
 above) — remaining work is either widening its *scope* or growing the toolbox in directions the
 pipeline itself doesn't need:
-1. **`conjCPLQ`'s Step 3** (max of conjugates over a multi-face domain) is the highest-value next
-   step: it is the single gap keeping `infConv`/`moreau`/`lasryLions`/`proxAverage` from working
-   end to end on genuinely piecewise (not just full-domain-quadratic) `f,g`.
+1. **`conjPieceCPLQ`'s own rational-piece TODO** (conjugate of a 1-convex-edge, genuinely
+   rational envelope piece) is the highest-value next step: it is the single remaining gap in
+   `conjCPLQ`'s Step 3, needed for `infConv`/`moreau`/`lasryLions`/`proxAverage` to work end to end
+   on a genuinely multi-face (not just single-triangle) `f,g`. The single-triangle/3-convex-edge
+   case is already done (`maxQuaPar.m`'s bullet above), since it never needs a rational piece.
 2. **`partialConj`** for the `'cplq'`/`'pqp'` engines (II.4) — not started.
 3. **`add` for `RatPol`** (common-denominator sum) and the **`RatPar`** parent class (II.3) —
    deprioritized, nothing in the operator pipeline calls for either.
