@@ -104,6 +104,19 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   quadratics so far — a bounded-triangle `f,g` pair currently can't complete the final `conj`
   step, since that would land the summed `QuaPar` in `conjCPLQ`'s still-unimplemented Step 3
   (max of conjugates over a multi-face domain). See `infConvTest.m`.
+- `addQuadratic`/`addScaledEnergy` — instance methods on both `QuaPoly` and `QuaPar`. Simpler
+  than `add`: the added term is a FULL-DOMAIN quadratic, so it never restricts the domain and
+  needs no overlay/clipping — just bump columns 5:10 (`[x^2 xy y^2 x y const]`) of `f` by
+  `[A(1,1) A(1,2) A(2,2) b(1) b(2) c]` identically on every face/edge row. `addScaledEnergy(f,
+  alpha)` adds `alpha*(x1^2+x2^2)` (note: no leading 1/2 — it's `addQuadratic(f, 2*alpha*eye(2),
+  0, 0)`), matching exactly how `moreau`'s own formula uses it (see below).
+- `moreau.m` — `e_mu*f` via the "expand the square" single-conjugate identity
+  [HIRIART-URRUTY-07] (II.6): `g = addQuadratic(scalarMul(f,mu), eye(2), 0, 0)` (= `mu*f +
+  1/2||.||^2`), `h = addScaledEnergy(scalarMul(conj(g,engine), -1/mu), 1/(2*mu))`. Pure algebraic
+  regrouping, no biconjugation, so — unlike `infConv` — **no convexity assumption on `f` at
+  all**; tested on a genuinely nonconvex full-domain quadratic (indefinite Hessian) as well as
+  convex ones, cross-checked against an independently-solved stationarity condition for a
+  shifted (linear+constant terms) case. See `moreauTest.m`.
 
 **NOT implemented** (II.5.2/II.5.3 and parts of II.4/II.6 describe the intended design; no code
 exists yet for):
@@ -114,27 +127,22 @@ exists yet for):
   [HAQUE-17]/[HAQUE-18]) — same: `conj(f,'graph')` errors explicitly, not ported.
 - `RatPar` (the abstract storage-umbrella parent class, II.3).
 - `add` for `RatPol` (`QuaPoly`/`QuaPar` are both done — see above).
-- `addQuadratic`/`addScaledEnergy` (per-face quadratic-coefficient update — needed by `moreau`
-  and `proxAverage`, II.6) — not implemented on any class yet.
-- `moreau`, `lasryLions`, `proxAverage`, `partialConj` — none of these exist in code for any
-  engine yet (not just "for anything but `'cplq'`" — they haven't been started at all). `infConv`
-  is now done (see above).
+- `lasryLions`, `proxAverage`, `partialConj` — none of these exist in code for any engine yet
+  (not just "for anything but `'cplq'`" — they haven't been started at all). `infConv` and
+  `moreau` (and their `addQuadratic`/`addScaledEnergy` prerequisite) are now done (see above).
 - `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
   method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
 
 **Next planned, in priority order**: the project's focus is the **nonconvex-PLQ operator
 pipeline** (`conj`→`infConv`/`moreau`→`lasryLions`/`proxAverage`), **not** growing
 `RatPol`/`RatPar` into a general-purpose toolbox for its own sake. Concretely, in order:
-1. **`moreau`**, by expanding the square (single `conj` call, [HIRIART-URRUTY-07]) — **not** via
-   `infConv`. Needs `addQuadratic`/`addScaledEnergy` (a per-face coefficient update, simpler than
-   `add`: only one function's coefficients change, no domain overlay) implemented on `QuaPoly`
-   (input) and `QuaPar` (to add back the energy term after conjugating).
-2. **`lasryLions`**, by reducing to `moreau` (`−e_μ(−e_λ f)`, already just composition once
-   `moreau`/`negate` exist — no new geometry needed).
-3. **`proxAverage`**, by reducing directly to `conj` (a "sandwich" of two conjugations around a
+1. **`lasryLions`**, by reducing to `moreau` (`−e_μ(−e_λ f)`, already just composition now that
+   `moreau`/`negate` both exist — no new geometry needed).
+2. **`proxAverage`**, by reducing directly to `conj` (a "sandwich" of two conjugations around a
    weighted `add`, **not** by composing three calls to the `moreau` function as previously
-   drafted) — see the rewritten formula and derivation in II.6/II.4. `add` on `QuaPar` (its first
-   prerequisite) is now done; only `addQuadratic`/`addScaledEnergy` (step 1 above) remains.
+   drafted) — see the rewritten formula and derivation in II.6/II.4. Its prerequisites (`add` on
+   `QuaPar`, `addQuadratic`/`addScaledEnergy`) are both done now (see above); this step is just
+   wiring `proxAverage.m` itself.
 
 ---
 
@@ -613,12 +621,14 @@ CCA2/
   addQuaPar.m         % IMPLEMENTED: add extended to QuaPar (curved/Ec-edge clipping via an
                       % axis-rotation parabola parametrization) -- prerequisite for infConv and
                       % proxAverage; see Implementation status for its STATUS/scope notes
-  addQuadratic.m      % NEXT: per-face quadratic-coefficient update (QuaPoly + QuaPar) --
-                      % prerequisite for moreau and proxAverage, not yet started
+  % addQuadratic/addScaledEnergy: IMPLEMENTED as instance methods directly on QuaPoly/QuaPar
+  % (no separate file -- trivial per-face coefficient bump, no domain overlay/clipping needed,
+  % unlike add's addQuaPoly.m/addQuaPar.m); prerequisite for moreau and proxAverage
   infConv.m           % IMPLEMENTED: conj(add(conj f,conj g)); convex f,g only (II.6); see
                       % Implementation status for scope (full-domain quadratics round-trip end to
                       % end; a bounded-triangle pair hits conjCPLQ's Step 3 TODO on the final conj)
-  moreau.m            % NEXT: single conjugate via expand-the-square [HIRIART-URRUTY-07]
+  moreau.m            % IMPLEMENTED: single conjugate via expand-the-square [HIRIART-URRUTY-07];
+                      % no convexity assumption on f -- see moreauTest.m's nonconvex case
   lasryLions.m        % NEXT: composition of moreau (II.6)
   proxAverage.m       % NEXT: reduces to conj directly, NOT to moreau (II.6 derivation)
   +internal/
