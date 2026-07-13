@@ -65,5 +65,15 @@ classdef RatPolTest < matlab.unittest.TestCase
             testCase.verifyError(@() p.conj(),   'RatPol:conj:notImplemented');
             testCase.verifyError(@() p.biconj(), 'RatPol:biconj:notImplemented');
         end
+
+        function scalarMulAndNegateScaleNumeratorOnly(testCase)
+            p = RatPol.energy();   % 0.5*(x^2+y^2), full domain, denominator 1
+            S = [1 2; -3 0.5];
+            q = p.scalarMul(3);
+            testCase.verifyEqual(q.den, p.den);   % denominator untouched
+            testCase.verifyEqual(q.eval(S), 3*p.eval(S), 'AbsTol', 1e-12);
+            r = p.negate();
+            testCase.verifyEqual(r.eval(S), -p.eval(S), 'AbsTol', 1e-12);
+        end
     end
 end

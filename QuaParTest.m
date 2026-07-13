@@ -93,5 +93,15 @@ classdef QuaParTest < matlab.unittest.TestCase
             S = [0 0; 1 -1; 2 3];
             testCase.verifyEqual(q.eval(S), 0.5*(S(:,1).^2+S(:,2).^2), 'AbsTol', 1e-12);
         end
+
+        function scalarMulAndNegateScaleCoefficientsOnly(testCase)
+            p = QuaPar.energy();   % 0.5*(x^2+y^2), full domain
+            S = [1 2; -3 0.5];
+            q = p.scalarMul(3);
+            testCase.verifyEqual(q.nv, p.nv);   % domain untouched
+            testCase.verifyEqual(q.eval(S), 3*p.eval(S), 'AbsTol', 1e-12);
+            r = p.negate();
+            testCase.verifyEqual(r.eval(S), -p.eval(S), 'AbsTol', 1e-12);
+        end
     end
 end

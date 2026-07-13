@@ -50,6 +50,47 @@ handles the **convex** case only:
 
 ---
 
+## Implementation status (as of 2026-07-12)
+
+This document is a **design proposal**; large parts of it describe intended, not yet built,
+code. Cross-check the actual repo file list before assuming an operator or engine exists.
+
+**Implemented** (MATLAB, in the repo root):
+- Classes `QuaPoly` (leaf/input type, formerly `PLQVC`), `QuaPar` (conjugate `f*`), `RatPol`
+  (convex envelope `f**`) — each its own `classdef`, **not yet organized under a common `RatPar`
+  parent** (II.3's class hierarchy is proposed, not built).
+- Conjugate engine **`'cplq'` only** (`conjCPLQ.m`, `conjPieceCPLQ.m`, `convEnvCPLQ.m`) —
+  incremental; each file's own header STATUS block lists exactly which piece-classification
+  cases are covered so far.
+- `maxQuaPar.m` — pointwise max of two full-domain `QuaPar` objects (needed when Step 1 splits a
+  nonconvex piece into more than one sub-piece).
+- `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
+  scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
+  shared implementation; each class has its own copy.
+- `add` — `QuaPoly` only so far (`QuaPoly.add`, implemented in `addQuaPoly.m`): overlays the two
+  domain subdivisions by pairwise convex-polygon clipping (adapted from `maxQuaPar.m`'s
+  facePoly/clipByFace machinery, generalized to allow an unmatched edge to become a genuine
+  domain-boundary edge rather than an error, since unlike `maxQuaPar`'s inputs, `add`'s inputs
+  need not be full-domain) and sums the two quadratics on each overlap cell (always exactly one
+  quadratic per cell — no case-split needed, unlike `maxQuaPar`'s pointwise max). Handles bounded
+  and unbounded domains; see `addQuaPolyTest.m`. **Not yet extended to `QuaPar`** (would need
+  curved/`Ec` edge clipping) or **`RatPol`** (would need a common-denominator sum).
+
+**NOT implemented** (II.5.2/II.5.3 and parts of II.4/II.6 describe the intended design; no code
+exists yet for):
+- Conjugate engine **`'pqp'`** (parametric-QP, Jakee Khan [JAKEE-13]) — `conj(f,'pqp')` already
+  errors explicitly in code (`QuaPoly.conj`, `PLQ:conj:engine`, "not implemented yet; use
+  'cplq'"), it does not silently fall back or give a wrong answer.
+- Conjugate engine **`'graph'`** (point-cloud + neighbour-graph, Tasnuva Haque
+  [HAQUE-17]/[HAQUE-18]) — same: `conj(f,'graph')` errors explicitly, not ported.
+- `RatPar` (the abstract storage-umbrella parent class, II.3).
+- `add` for `QuaPar`/`RatPol` (only `QuaPoly` is done — see above).
+- `infConv`, `moreau`, `proxAverage`, `lasryLions`, `partialConj` for anything but `'cplq'`.
+- `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
+  method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
+
+---
+
 ## 0. TL;DR — what to build
 
 1. **Anchor data structure:** keep the released `PLQVC` mesh (`V/E/f/F` + adjacency `P`
@@ -308,9 +349,9 @@ the object *is* a released `PLQVC` and every existing method works unchanged.
 | `partialConj` | `g = partialConj(f, idx, engine)` | conjugate w.r.t. variable `idx` | engine ∈ {`'pqp'`,`'cplq'`} only |
 | `biconj` | `g = biconj(f, engine)` | `f** = conj(conj(f))` | `conj∘conj` — nonconvex `f` needs `engine='cplq'` for the first `conj` (II.5/II.6) |
 | `convEnv` | `h = convEnv(f, method)` | convex envelope; `method`=`'biconj'`(default `'cplq'`) \| `'direct'`(Kumar+Karmarkar, [KUMAR-20]/[COAP]) | `biconj` / `convEnvDirect` — see II.6 note on engine choice |
-| `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add |
+| `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add — **implemented for `QuaPoly` only** (`addQuaPoly.m`), see Implementation status above |
 | `sub` | `h = sub(f, g)` | `f − g` | `add(f, negate(g))` |
-| `scalarMul`,`negate` | `c·f`, `−f` | coeff scaling | — |
+| `scalarMul`,`negate` | `c·f`, `−f` | coeff scaling | — implemented on all three classes |
 | `addQuadratic` | `addQuadratic(f, A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | per-face coeff update |
 | `infConv` | `infConv(f,g,engine)` | `(f□g)(x)=inf_z f(z)+g(x−z)` | `conj((conj f)+(conj g))` — **valid (returns the true inf-conv) only for `f,g` convex**; see II.6 |
 | `moreau` | `moreau(f,mu,engine)` | Moreau envelope `e_μ f` | **single conjugate** (`conj`, once) via the expand-the-square identity [HIRIART-URRUTY-07] — **NOT** `infConv(f,½μ‖·‖²)`; see II.6 |
@@ -493,11 +534,14 @@ CCA2/
   conjPQP.m           % Engine 'pqp' : parametric-QP / KKT conjugate (+ partial variant); convex only [JAKEE-13]
   conjGraph.m         % Engine 'graph': point-cloud + neighbour-graph conjugate (PLQVG); convex only [HAQUE-17]/[HAQUE-18]
   convEnvDirect.m     % direct convex-envelope path (Kumar cvxEnv2d [KUMAR-20] + Karmarkar assembly [COAP])
+  addQuaPoly.m        % IMPLEMENTED: QuaPoly.add's domain-overlay sum (polygon clipping adapted
+                      % from maxQuaPar.m); QuaPar/RatPol add not yet extended -- see II.4
   +internal/
     Entity.m  Entitytype.m            % graph engine
     kktConjFace.m                     % QQ/QL/LL closed-form face conjugates (lft2.sci)
     quadQuadEnv.m                     % cPLQ symbolic bilinear x*y / quad-quad envelope
-    overlayAdd.m                      % domain-overlay addition (PLCHC.add + unionHull)
+    overlayAdd.m                      % domain-overlay addition (PLCHC.add + unionHull) -- for
+                                      % QuaPoly this role is filled by the real addQuaPoly.m above
     parabolicGeom.m                   % conic-arc edge intersection / parabolic-region ops
     lcon2vert.m vert2lcon.m unionHull.m intersectionHull.m
   PLQTest.m  PLQConjugateTest.m  PLQOperatorTest.m  PLQTypeCycleTest.m
