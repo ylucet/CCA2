@@ -18,27 +18,12 @@ function h = infConv(f, g, engine)
 % METHOD: conj(f,engine) and conj(g,engine) may each come back as either QuaPoly (conjCPLQ's
 %   full-domain-quadratic shortcut) or QuaPar (its general single-piece case) -- see conjCPLQ.m's
 %   own header. QuaPoly.add and QuaPar.add only accept same-class operands, so both conjugates
-%   are first promoted to QuaPar (toQuaPar below): QuaPoly and QuaPar share the same V/E/f/F
-%   layout (QuaPar is a strict superset, all-zero Ec -- DESIGN.md II.2), so this promotion is a
-%   lossless relabeling, not a geometric operation. addQuaPar then combines them and the result is
+%   are first promoted to QuaPar (toQuaPar.m): QuaPoly and QuaPar share the same V/E/f/F layout
+%   (QuaPar is a strict superset, all-zero Ec -- DESIGN.md II.2), so this promotion is a lossless
+%   relabeling, not a geometric operation. addQuaPar then combines them and the result is
 %   conjugated back through the same engine.
     if nargin < 3, engine = 'cplq'; end
     cf = toQuaPar(conj(f, engine));
     cg = toQuaPar(conj(g, engine));
     h = conj(cf.add(cg), engine);
-end
-
-% ================================================================================================
-function q = toQuaPar(obj)
-% Promote a QuaPoly to the equivalent QuaPar (all-zero Ec); a QuaPar is returned unchanged.
-    if isa(obj, 'QuaPar'), q = obj; return; end
-    if ~isa(obj, 'QuaPoly')
-        error('infConv:unsupportedType', ...
-            'infConv: conj(f,engine) returned a %s; expected QuaPoly or QuaPar.', class(obj));
-    end
-    if obj.nv == 0
-        q = QuaPar(obj.f);
-    else
-        q = QuaPar(obj.V, obj.E, zeros(obj.ne, 6), obj.f, obj.F);
-    end
 end
