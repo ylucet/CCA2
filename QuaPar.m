@@ -707,6 +707,24 @@ classdef QuaPar
             obj.assertOperable(); obj2.assertOperable();
             h = addQuaPar(obj, obj2);
        end
+       function h = addQuadratic(obj, A, b, c)
+       % objective: h(x) = f(x) + (1/2 x'Ax + b'x + c), adding a FULL-DOMAIN quadratic to f
+       % [input]  obj: QuaPar, operable (degree<=2); A: 2x2 (symmetric); b: 2x1 or 1x2; c: scalar
+       % [output] h  : QuaPar, same domain/mesh (V/E/Ec/F/P/dom unchanged) as obj -- a full-domain
+       %               quadratic is finite everywhere, so it never restricts obj's domain -- only
+       %               its per-face coefficients, columns 5:10 = [x^2 xy y^2 x y const], change,
+       %               identically on every face
+            obj.assertOperable();
+            b = b(:);
+            h = obj;
+            h.f(:,5:10) = h.f(:,5:10) + [A(1,1), A(1,2), A(2,2), b(1), b(2), c];
+       end
+       function h = addScaledEnergy(obj, alpha)
+       % objective: h(x) = f(x) + alpha*(x1^2+x2^2), a convenience wrapper over addQuadratic
+       % [input]  obj: QuaPar, operable (degree<=2); alpha: real scalar
+       % [output] h  : QuaPar, same domain/mesh as obj
+            h = addQuadratic(obj, 2*alpha*eye(2), [0;0], 0);
+       end
 
     end % methods
    
