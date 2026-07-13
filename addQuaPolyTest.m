@@ -36,6 +36,20 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
             testCase.verifyTrue(h.dom.isConvex);
         end
 
+        function missingClosingEdgeConstraintIsEnforced(testCase)
+            % Regression test for a bug found while implementing addQuaPar.m: polyConstraints
+            % used to loop only 1:nv-1 for a bounded poly, silently dropping its closing edge
+            % (nv,1) -- e.g. clipping f=[0,2]x[0,2] by g=[1,3]x[1,3] never enforced one of g's
+            % four sides, so a point outside g along exactly that side (but inside f) was wrongly
+            % treated as inside the overlap. twoOverlappingSquaresSumOnTheirIntersection's own
+            % sample points didn't happen to probe that missing side; this one does.
+            f = addQuaPolyTest.squareLinear([0 0], [0 1 0]);   % [0,2]x[0,2]
+            g = addQuaPolyTest.squareLinear([1 1], [0 1 0]);   % [1,3]x[1,3]
+            h = f.add(g);
+            testCase.verifyEqual(h.eval([1.5 0.5]), Inf);   % inside f, outside g (y<1): must be Inf
+            testCase.verifyEqual(h.eval([0.5 1.5]), Inf);   % inside f, outside g (x<1): must be Inf
+        end
+
         function noOverlapErrors(testCase)
             f = addQuaPolyTest.squareLinear([0 0], [0 1 0]);
             g = addQuaPolyTest.squareLinear([10 10], [0 0 1]);

@@ -50,7 +50,7 @@ handles the **convex** case only:
 
 ---
 
-## Implementation status (as of 2026-07-12)
+## Implementation status (as of 2026-07-13)
 
 This document is a **design proposal**; large parts of it describe intended, not yet built,
 code. Cross-check the actual repo file list before assuming an operator or engine exists.
@@ -67,14 +67,33 @@ code. Cross-check the actual repo file list before assuming an operator or engin
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
-- `add` — `QuaPoly` only so far (`QuaPoly.add`, implemented in `addQuaPoly.m`): overlays the two
-  domain subdivisions by pairwise convex-polygon clipping (adapted from `maxQuaPar.m`'s
-  facePoly/clipByFace machinery, generalized to allow an unmatched edge to become a genuine
-  domain-boundary edge rather than an error, since unlike `maxQuaPar`'s inputs, `add`'s inputs
-  need not be full-domain) and sums the two quadratics on each overlap cell (always exactly one
-  quadratic per cell — no case-split needed, unlike `maxQuaPar`'s pointwise max). Handles bounded
-  and unbounded domains; see `addQuaPolyTest.m`. **Not yet extended to `QuaPar`** (would need
-  curved/`Ec` edge clipping) or **`RatPol`** (would need a common-denominator sum).
+- `add` — `QuaPoly` and `QuaPar` (`QuaPoly.add`/`QuaPar.add`, in `addQuaPoly.m`/`addQuaPar.m`):
+  overlays the two domain subdivisions by pairwise convex-polygon clipping and sums the two
+  quadratics on each overlap cell (always exactly one quadratic per cell — no case-split needed,
+  unlike `maxQuaPar`'s pointwise max). `QuaPoly.add` (straight edges only) is the base case,
+  adapted from `maxQuaPar.m`'s facePoly/clipByFace machinery, generalized to allow an unmatched
+  edge to become a genuine domain-boundary edge rather than an error, since unlike `maxQuaPar`'s
+  inputs, `add`'s inputs need not be full-domain. `QuaPar.add` generalizes this further to allow
+  one curved (parabolic-arc) edge per face: every boundary edge and every clipping constraint —
+  straight or curved — is represented uniformly as a 6-coefficient conic row (`a=b=c=0` for the
+  linear case); a straight edge is parametrized affinely in a scalar `t`, the one curved edge via
+  an axis-rotation of its parabola (`x(u),y(u)`, each quadratic in `u`); either substituted into
+  any constraint gives a plain polynomial (degree ≤2 for a straight edge, degree ≤4 for the curved
+  edge) whose real roots are exactly the crossing points — found directly via full root-solving,
+  not an endpoint-sign-disagreement shortcut, since a conic constraint (unlike a linear one) can
+  cross even a straight edge twice while agreeing in sign at both endpoints. Handles bounded and
+  unbounded domains (including replacing an entirely-discarded ray with a new one along a linear
+  cutting constraint, mirroring `clipPolyHalfPlane`); a result needing two curved edges, a curved
+  ray, a non-single-branch (double-line-degenerate) parabola, a new *unbounded curved* ray, or
+  more than one disjoint surviving piece (other than the two-rays-survive-with-a-middle-gap
+  shape, also not implemented) all error clearly rather than being silently mishandled — see
+  `addQuaPar.m`'s header STATUS block. See `addQuaPolyTest.m`/`addQuaParTest.m`. **Not yet
+  extended to `RatPol`** (would need a common-denominator sum).
+  - Found and fixed while building this: `polyConstraints` (shared by `addQuaPoly.m` and
+    `maxQuaPar.m`) looped `1:nv-1` for a BOUNDED poly, silently dropping its closing edge
+    `(nv,1)` — under-constraining `clipByFace` by exactly one of `polyL`'s half-planes. Fixed in
+    both files (loop now wraps for bounded polys, unaffected for unbounded ones); regression test
+    added to `addQuaPolyTest.m`.
 
 **NOT implemented** (II.5.2/II.5.3 and parts of II.4/II.6 describe the intended design; no code
 exists yet for):
@@ -84,7 +103,7 @@ exists yet for):
 - Conjugate engine **`'graph'`** (point-cloud + neighbour-graph, Tasnuva Haque
   [HAQUE-17]/[HAQUE-18]) — same: `conj(f,'graph')` errors explicitly, not ported.
 - `RatPar` (the abstract storage-umbrella parent class, II.3).
-- `add` for `QuaPar`/`RatPol` (only `QuaPoly` is done — see above).
+- `add` for `RatPol` (`QuaPoly`/`QuaPar` are both done — see above).
 - `addQuadratic`/`addScaledEnergy` (per-face quadratic-coefficient update — needed by `moreau`
   and `proxAverage`, II.6) — not implemented on any class yet.
 - `infConv`, `moreau`, `lasryLions`, `proxAverage`, `partialConj` — none of these exist in code
@@ -92,17 +111,11 @@ exists yet for):
 - `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
   method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
 
-**Next planned, in priority order** (per direction given 2026-07-13 — see II.6 for the
-`proxAverage` formula change): the project's focus is the **nonconvex-PLQ operator pipeline**
-(`conj`→`infConv`/`moreau`→`lasryLions`/`proxAverage`), **not** growing `RatPol`/`RatPar` into a
-general-purpose toolbox for its own sake. Concretely, in order:
-1. **`infConv`**, via `conj(add(conj(f,engine),conj(g,engine)),engine)` (II.6) — this is the
-   first prerequisite exercise of `add` on the engine's *output* type, not just its input type:
-   for `f,g : QuaPoly`, `conj(f)`/`conj(g)` are `QuaPar` (II.2's type cycle), so **`add` must be
-   extended to `QuaPar` first** (curved/`Ec`-edge clipping in `clipByFace`/`clipPolyHalfPlane`,
-   generalizing `addQuaPoly.m`) — this is a real, load-bearing prerequisite, unlike the `RatPol`
-   extension of `add`, which nothing in this operator pipeline currently calls for and stays
-   deprioritized.
+**Next planned, in priority order**: the project's focus is the **nonconvex-PLQ operator
+pipeline** (`conj`→`infConv`/`moreau`→`lasryLions`/`proxAverage`), **not** growing
+`RatPol`/`RatPar` into a general-purpose toolbox for its own sake. Concretely, in order:
+1. **`infConv`**, via `conj(add(conj(f,engine),conj(g,engine)),engine)` (II.6) — its prerequisite,
+   `add` on `QuaPar`, is now done (see above); this step is just wiring `infConv.m` itself.
 2. **`moreau`**, by expanding the square (single `conj` call, [HIRIART-URRUTY-07]) — **not** via
    `infConv`. Needs `addQuadratic`/`addScaledEnergy` (a per-face coefficient update, simpler than
    `add`: only one function's coefficients change, no domain overlay) implemented on `QuaPoly`
@@ -111,9 +124,8 @@ general-purpose toolbox for its own sake. Concretely, in order:
    `moreau`/`negate` exist — no new geometry needed).
 4. **`proxAverage`**, by reducing directly to `conj` (a "sandwich" of two conjugations around a
    weighted `add`, **not** by composing three calls to the `moreau` function as previously
-   drafted) — see the rewritten formula and derivation in II.6/II.4. Needs `add` on `QuaPar`
-   (step 1) and `addQuadratic`/`addScaledEnergy` (step 2) as its only prerequisites; no new
-   geometry beyond those.
+   drafted) — see the rewritten formula and derivation in II.6/II.4. `add` on `QuaPar` (its first
+   prerequisite) is now done; only `addQuadratic`/`addScaledEnergy` (step 2 above) remains.
 
 ---
 
@@ -378,7 +390,7 @@ the object *is* a released `PLQVC` and every existing method works unchanged.
 | `partialConj` | `g = partialConj(f, idx, engine)` | conjugate w.r.t. variable `idx` | engine ∈ {`'pqp'`,`'cplq'`} only |
 | `biconj` | `g = biconj(f, engine)` | `f** = conj(conj(f))` | `conj∘conj` — nonconvex `f` needs `engine='cplq'` for the first `conj` (II.5/II.6) |
 | `convEnv` | `h = convEnv(f, method)` | convex envelope; `method`=`'biconj'`(default `'cplq'`) \| `'direct'`(Kumar+Karmarkar, [KUMAR-20]/[COAP]) | `biconj` / `convEnvDirect` — see II.6 note on engine choice |
-| `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add — **implemented for `QuaPoly` only** (`addQuaPoly.m`), see Implementation status above |
+| `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add — **implemented for `QuaPoly` and `QuaPar`** (`addQuaPoly.m`/`addQuaPar.m`); `RatPol` still open, see Implementation status above |
 | `sub` | `h = sub(f, g)` | `f − g` | `add(f, negate(g))` |
 | `scalarMul`,`negate` | `c·f`, `−f` | coeff scaling | — implemented on all three classes |
 | `addQuadratic` | `addQuadratic(f, A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | per-face coeff update |
@@ -564,14 +576,15 @@ biconjugation step), this derivation's last step **is** a biconjugation, so — 
 **`proxAverage` is only valid (returns the actual proximal average) for `f,g` both convex**; for
 nonconvex input the formula instead computes the biconjugate of the intended object, same
 caveat as `infConv` (II.6 above). This also means `proxAverage`'s only two new-code
-dependencies are `add` (on `QuaPar`, the type `conj(gf)`/`conj(gg)` land in — see the
-Implementation-status "Next planned" note) and `addQuadratic`/`addScaledEnergy`; it needs no
-call to the `moreau` function at all, despite computing something moreau-envelope-flavored.
+dependencies are `add` (on `QuaPar`, the type `conj(gf)`/`conj(gg)` land in — now implemented,
+see Implementation status) and `addQuadratic`/`addScaledEnergy`; it needs no call to the
+`moreau` function at all, despite computing something moreau-envelope-flavored.
 
-`add` is the only other primitive needing real geometry: **overlay the two domain subdivisions
-and add functions per overlapping piece** (sum quadratics, or add rationals over a common
-denominator). Reuse `PLCHC.add` (polyshape intersection + coeff add) and the
-`unionHull`/`intersectionHull` utilities; for curved boundaries, intersect parabolic regions.
+`add` is the other primitive needing real geometry: **overlay the two domain subdivisions and
+add functions per overlapping piece** (sum quadratics, or add rationals over a common
+denominator) — implemented for `QuaPoly`/`QuaPar` (`addQuaPoly.m`/`addQuaPar.m`, curved
+boundaries handled by intersecting parabolic arcs via an axis-rotation parametrization, see
+Implementation status); `RatPol` (common-denominator sum) remains open.
 
 ### II.7 File / module layout (pure MATLAB)
 
@@ -587,9 +600,10 @@ CCA2/
   conjGraph.m         % Engine 'graph': point-cloud + neighbour-graph conjugate (PLQVG); convex only [HAQUE-17]/[HAQUE-18]
   convEnvDirect.m     % direct convex-envelope path (Kumar cvxEnv2d [KUMAR-20] + Karmarkar assembly [COAP])
   addQuaPoly.m        % IMPLEMENTED: QuaPoly.add's domain-overlay sum (polygon clipping adapted
-                      % from maxQuaPar.m); QuaPar/RatPol add not yet extended -- see II.4
-  addQuaPar.m         % NEXT: add extended to QuaPar (curved/Ec-edge clipping) -- prerequisite
-                      % for infConv and proxAverage, not yet started (Implementation status)
+                      % from maxQuaPar.m); RatPol add not yet extended -- see II.4
+  addQuaPar.m         % IMPLEMENTED: add extended to QuaPar (curved/Ec-edge clipping via an
+                      % axis-rotation parabola parametrization) -- prerequisite for infConv and
+                      % proxAverage; see Implementation status for its STATUS/scope notes
   addQuadratic.m      % NEXT: per-face quadratic-coefficient update (QuaPoly + QuaPar) --
                       % prerequisite for moreau and proxAverage, not yet started
   infConv.m           % NEXT: conj(add(conj f,conj g)); convex f,g only (II.6)
@@ -638,7 +652,7 @@ CCA2/
 | `convEnv` `'direct'` | `deepak/cvxEnv2d` (Deepak Kumar, [KUMAR-20]) + [COAP] Step 4 assembly (Karmarkar) | faster envelope + numeric cross-check; nonconvex-capable |
 | `convEnv` `'biconj'` | `conj∘conj`, `engine='cplq'` for nonconvex `f` | default; how `cPLQ` does it natively; `'pqp'`/`'graph'` only valid when `f` already convex |
 | `add`/`sub`/`scalarMul` | `PLCHC.add`, Scilab `plq2_add`/`plq2_scalar` | overlay + coeff/rational arithmetic |
-| `infConv` | Scilab `plq2_pa`-adjacent; `PLQList` | `conj(add(conj f,conj g))`; valid only for convex `f,g` (II.6); needs `add` extended to `QuaPar` first |
+| `infConv` | Scilab `plq2_pa`-adjacent; `PLQList` | `conj(add(conj f,conj g))`; valid only for convex `f,g` (II.6); `add` on `QuaPar` (its prerequisite) is now done |
 | `moreau` | Scilab `plq2_me` per the Hiriart-Urruty–Lucet identity [HIRIART-URRUTY-07] | **single** conjugate (expand-the-square), not `infConv`; valid for nonconvex `f` too (II.6) |
 | `lasryLions` | Scilab `plq2_pa`-adjacent | `−moreau(−moreau(f,λ),μ)`; pure composition, no new geometry (II.6) |
 | `proxAverage` | Scilab `plq2_pa`; `PLQList` (concept only — this design's formula is a fresh derivation, II.6) | **reduces directly to `conj`**: two conjugations sandwiching a weighted `add`, **not** three `moreau` calls; valid only for convex `f,g` (II.6) |
@@ -687,9 +701,9 @@ CCA2/
     (1-λ)(T_μg)^*)` where `T_μh:=μh+½‖·‖²`, so `P` needs three `conj` calls (two in, one out)
     around a weighted `add`, and **no call to `moreau` itself** (II.6 derivation above). Like
     `infConv`, valid only for `f,g` both convex. Build-order consequence: `proxAverage` and
-    `infConv` both require `add` to work on `QuaPar` (not just `QuaPoly`), so that extension is
-    now the load-bearing prerequisite for this session's roadmap — **not** the `RatPol`
-    extension of `add`, which nothing in the `conj`/`infConv`/`moreau`/`lasryLions`/
-    `proxAverage` pipeline currently calls for (see Implementation status's "Next planned").
+    `infConv` both require `add` to work on `QuaPar` (not just `QuaPoly`) — that extension is now
+    implemented (`addQuaPar.m`, see Implementation status) — **not** the `RatPol` extension of
+    `add`, which nothing in the `conj`/`infConv`/`moreau`/`lasryLions`/`proxAverage` pipeline
+    currently calls for (see Implementation status's "Next planned").
 
 *(No open questions remain — the design is fully specified.)*

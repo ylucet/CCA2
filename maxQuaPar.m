@@ -270,10 +270,21 @@ function cons = polyConstraints(poly)
 % Outward half-plane constraints [n1 n2 c] (inside iff n*x'<=c) for every boundary edge of poly,
 % in CCW order: interior is on the LEFT of each edge's direction of travel, so the outward normal
 % is rot90cw(direction) = (dy,-dx) (same convention as conjPieceCPLQ.m's unitNormal).
+%
+% BUGFIX (found while implementing addQuaPar.m): a BOUNDED poly (dirIn empty) is a closed cycle
+% of nv edges (1,2),...,(nv-1,nv),(nv,1) -- the old "for i=1:nv-1" loop always dropped the
+% closing edge (nv,1), so clipByFace never enforced that one constraint of polyL (silent
+% under-constraining of the clipped cell -- not caught by the existing test suite, which never
+% happened to need that specific constraint). An UNBOUNDED poly's nv-1 real-vertex edges
+% (1,2),...,(nv-1,nv) do NOT wrap (the two ends connect to rays, not each other), so that case is
+% unaffected: `last` below is nv-1 for it, exactly as before.
     nv = size(poly.V,1);
     cons = zeros(0,3);
-    for i = 1:nv-1
-        d = poly.V(i+1,:) - poly.V(i,:);
+    last = nv - 1;
+    if isempty(poly.dirIn), last = nv; end   % bounded: also include the closing edge (nv,1)
+    for i = 1:last
+        jn = mod(i,nv) + 1;
+        d = poly.V(jn,:) - poly.V(i,:);
         n = [d(2), -d(1)];
         cons(end+1,:) = [n, n*poly.V(i,:)']; %#ok<AGROW>
     end
