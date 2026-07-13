@@ -350,10 +350,19 @@ classdef QuaPar
                    P(jj)=jNext;
                end
                j=jNext;
-               i=iNext;%pivot for the next iteration is the vertex the walk just arrived at; recomputing it
-                       %from scratch via the left/right rule above (as the code used to do every iteration)
-                       %is wrong once a ray edge is followed by a segment edge, since that rule only looks
-                       %at edge j's own orientation and can pick the vertex we just came from instead
+               if jj<nedges
+                   i=iNext;%pivot for the NEXT iteration is the vertex the walk just arrived at; recomputing
+                           %it from scratch via the left/right rule above (as the code used to do every
+                           %iteration) is wrong once a ray edge is followed by a segment edge, since that
+                           %rule only looks at edge j's own orientation and can pick the vertex we just
+                           %came from instead. Deliberately NOT done on the LAST iteration: the
+                           %closing-angle code just below needs `i` to still hold ITS value from the last
+                           %iteration's own processing (the far vertex of the last edge relative to the
+                           %closing vertex `iFirst`) -- overwriting it to iNext (the closing vertex itself)
+                           %would collapse that angle's v1 to a zero vector (found while implementing
+                           %QuaPoly's add(): the identical bug this fix was copied to also broke
+                           %QuaPoly.orderEdges's closing-angle isConvex check for bounded, non-ray faces).
+               end
            end
            %for bounded polyhedral set, need to compute the angle between the first edge and the last edge
            if iNext==iFirst
