@@ -28,20 +28,40 @@ own pre-existing `testNonconvex1-4`. Full suite: 123/123 PASS. All work committe
 
 ## Next steps
 
-1. **`add` is QuaPoly-only.** Extending it to `QuaPar` (needs curved/`Ec`-edge clipping in
-   `clipByFace`/`clipPolyHalfPlane`) or `RatPol` (needs a common-denominator sum, not just adding
-   numerators) is open — see `DESIGN.md`'s Implementation status section.
-2. **`'pqp'`/`'graph'` conjugate engines are unimplemented** (`conj(f,'pqp'|'graph')` errors
+**Redirected 2026-07-13: the project's focus is the nonconvex-PLQ operator pipeline, not growing
+`RatPol`/`RatPar` into a general-purpose toolbox.** `DESIGN.md` (Implementation status, II.4,
+II.6, Part III, Part IV item 11) was updated accordingly. Priority order now:
+
+1. **Extend `add` to `QuaPar`** (curved/`Ec`-edge clipping in `clipByFace`/`clipPolyHalfPlane`,
+   generalizing `addQuaPoly.m`) — this is now a **load-bearing prerequisite** (not a nice-to-have):
+   both `infConv` and the revised `proxAverage` (below) call `add` on the `QuaPar` objects that
+   `conj` produces from `QuaPoly` input. Extending `add` to `RatPol` is still open but deprioritized
+   — nothing in this pipeline needs it.
+2. **`infConv(f,g,engine) = conj(add(conj(f,engine),conj(g,engine)),engine)`** — convex `f,g`
+   only (returns the biconjugate of the true inf-convolution otherwise; DESIGN.md II.6).
+3. **`moreau`**, by expanding the square (single `conj` call, [HIRIART-URRUTY-07]) — needs
+   `addQuadratic`/`addScaledEnergy` (a per-face coefficient update, not yet implemented on any
+   class) implemented on `QuaPoly` and `QuaPar`. **Not** built on `infConv`; valid for nonconvex
+   `f` too.
+4. **`lasryLions`**, by reducing to `moreau` (`−e_μ(−e_λ f)`) — pure composition once `moreau`
+   and `negate` exist.
+5. **`proxAverage` — formula changed this session.** No longer
+   `−moreau(−λ₁M_μf−λ₂M_μg)` (the old draft); it now reduces **directly to `conj`**: a sandwich
+   of two conjugations around a weighted `add` (`T_μP = conj(λ(T_μf)*+(1-λ)(T_μg)*)` where
+   `T_μh:=μh+½‖·‖²`), with no call to the `moreau` function at all. Convex `f,g` only, like
+   `infConv` — see DESIGN.md II.6 for the full derivation. Needs only steps 1 (`add` on `QuaPar`)
+   and 3 (`addQuadratic`/`addScaledEnergy`) above; no new geometry beyond those.
+6. **`'pqp'`/`'graph'` conjugate engines are unimplemented** (`conj(f,'pqp'|'graph')` errors
    explicitly, doesn't silently give a wrong answer) — porting Jakee Khan's parametric-QP code or
-   Tasnuva Haque's entity-graph algorithm is future work, not started.
-3. Still-open items from before this session (untouched): the standalone `RatPol.conj` gap; the
+   Tasnuva Haque's entity-graph algorithm is future work, not started, and not this session's focus.
+7. Still-open items from before this session (untouched): the standalone `RatPol.conj` gap; the
    `delta>0, Delta=0` degeneracy open question (see `/home/ylucet/CCA2/3-edge.tex`'s Conclusion,
    outside this repo).
-4. Worth a quick audit: are there other unfused copies of buggy shared code across
+8. Worth a quick audit: are there other unfused copies of buggy shared code across
    `QuaPoly.m`/`QuaPar.m`/`RatPol.m` beyond `orderEdges`? All three files are largely
    parallel/copy-pasted, so a bug found in one is worth checking in the other two (as happened
    twice this session already).
-5. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
+9. Test command (Frances, prefix every batch call — Maple toolbox conflicts with Symbolic):
    ```
    matlab -batch "restoredefaultpath; rehash toolboxcache; cd('/home/ylucet/CCA2/CCA2'); \
      res=runtests({'RatPolTest','convEnvCPLQTest','QuaParTest','conjCPLQTest','conjPieceCPLQTest','PLQVCTest','maxQuaParTest','addQuaPolyTest'}); \
