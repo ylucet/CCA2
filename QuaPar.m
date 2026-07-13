@@ -699,6 +699,14 @@ classdef QuaPar
        % objective: (-f)(x) = -f(x)
             h = scalarMul(obj, -1);
        end
+       function h = add(obj, obj2)
+       % objective: (f+g)(x) = f(x)+g(x), the pointwise sum of two QuaPar functions
+       % [input]  obj, obj2: QuaPar, both operable (degree<=2)
+       % [output] h: QuaPar, domain = overlay of obj's and obj2's domains (only where BOTH are
+       %             finite -- see addQuaPar.m header for the full algorithm)
+            obj.assertOperable(); obj2.assertOperable();
+            h = addQuaPar(obj, obj2);
+       end
 
     end % methods
    

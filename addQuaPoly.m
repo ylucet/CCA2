@@ -160,10 +160,20 @@ function tf = onOpenRay(apex, dir, p, tol)
 end
 
 function cons = polyConstraints(poly)
+% BUGFIX (found while implementing addQuaPar.m): a BOUNDED poly (dirIn empty) is a closed
+% cycle of nv edges (1,2),...,(nv-1,nv),(nv,1) -- the old "for i=1:nv-1" loop always dropped
+% the closing edge (nv,1), so clipByFace never enforced that one constraint of polyL. Silent
+% under-constraining, not caught by the existing test suite (see addQuaPolyTest.m's new
+% missingClosingEdgeConstraintIsEnforced regression test). An UNBOUNDED poly's nv-1 real-vertex
+% edges (1,2),...,(nv-1,nv) do NOT wrap (the two ends connect to rays, not to each other), so
+% that case is unaffected: `last` below is nv-1 for it, exactly as before.
     nv = size(poly.V,1);
     cons = zeros(0,3);
-    for i = 1:nv-1
-        d = poly.V(i+1,:) - poly.V(i,:);
+    last = nv - 1;
+    if isempty(poly.dirIn), last = nv; end   % bounded: also include the closing edge (nv,1)
+    for i = 1:last
+        jn = mod(i,nv) + 1;
+        d = poly.V(jn,:) - poly.V(i,:);
         n = [d(2), -d(1)];
         cons(end+1,:) = [n, n*poly.V(i,:)']; %#ok<AGROW>
     end
