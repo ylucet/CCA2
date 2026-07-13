@@ -85,9 +85,35 @@ exists yet for):
   [HAQUE-17]/[HAQUE-18]) — same: `conj(f,'graph')` errors explicitly, not ported.
 - `RatPar` (the abstract storage-umbrella parent class, II.3).
 - `add` for `QuaPar`/`RatPol` (only `QuaPoly` is done — see above).
-- `infConv`, `moreau`, `proxAverage`, `lasryLions`, `partialConj` for anything but `'cplq'`.
+- `addQuadratic`/`addScaledEnergy` (per-face quadratic-coefficient update — needed by `moreau`
+  and `proxAverage`, II.6) — not implemented on any class yet.
+- `infConv`, `moreau`, `lasryLions`, `proxAverage`, `partialConj` — none of these exist in code
+  for any engine yet (not just "for anything but `'cplq'`" — they haven't been started at all).
 - `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
   method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
+
+**Next planned, in priority order** (per direction given 2026-07-13 — see II.6 for the
+`proxAverage` formula change): the project's focus is the **nonconvex-PLQ operator pipeline**
+(`conj`→`infConv`/`moreau`→`lasryLions`/`proxAverage`), **not** growing `RatPol`/`RatPar` into a
+general-purpose toolbox for its own sake. Concretely, in order:
+1. **`infConv`**, via `conj(add(conj(f,engine),conj(g,engine)),engine)` (II.6) — this is the
+   first prerequisite exercise of `add` on the engine's *output* type, not just its input type:
+   for `f,g : QuaPoly`, `conj(f)`/`conj(g)` are `QuaPar` (II.2's type cycle), so **`add` must be
+   extended to `QuaPar` first** (curved/`Ec`-edge clipping in `clipByFace`/`clipPolyHalfPlane`,
+   generalizing `addQuaPoly.m`) — this is a real, load-bearing prerequisite, unlike the `RatPol`
+   extension of `add`, which nothing in this operator pipeline currently calls for and stays
+   deprioritized.
+2. **`moreau`**, by expanding the square (single `conj` call, [HIRIART-URRUTY-07]) — **not** via
+   `infConv`. Needs `addQuadratic`/`addScaledEnergy` (a per-face coefficient update, simpler than
+   `add`: only one function's coefficients change, no domain overlay) implemented on `QuaPoly`
+   (input) and `QuaPar` (to add back the energy term after conjugating).
+3. **`lasryLions`**, by reducing to `moreau` (`−e_μ(−e_λ f)`, already just composition once
+   `moreau`/`negate` exist — no new geometry needed).
+4. **`proxAverage`**, by reducing directly to `conj` (a "sandwich" of two conjugations around a
+   weighted `add`, **not** by composing three calls to the `moreau` function as previously
+   drafted) — see the rewritten formula and derivation in II.6/II.4. Needs `add` on `QuaPar`
+   (step 1) and `addQuadratic`/`addScaledEnergy` (step 2) as its only prerequisites; no new
+   geometry beyond those.
 
 ---
 
@@ -119,17 +145,20 @@ exists yet for):
    Kumar's per-piece method [KUMAR-20], `codeOld/deepak`, extended by Karmarkar's [COAP] Step 4
    assembly — **not** parametric-QP) is kept as a faster alternative and an independent
    cross-check.
-5. **Everything else** (`add`, `proxAverage`, `lasryLions`, `partialConj`) is a short composition
-   over `conj` + `add` + scalar ops. `infConv(f,g)=conj(conj(f)+conj(g))` is this same kind of
-   composition but is only valid (returns the true inf-convolution) for `f,g` convex (II.6).
-   `moreau` looks similar but is **not** built on `infConv`: it is one direct conjugate call via
-   the "expand the square" identity of Hiriart-Urruty & Lucet [HIRIART-URRUTY-07], which needs no
-   convexity assumption at all.
+5. **Everything else** (`add`, `lasryLions`, `partialConj`) is a short composition over `conj` +
+   `add` + scalar ops. `infConv(f,g)=conj(conj(f)+conj(g))` is this same kind of composition but
+   is only valid (returns the true inf-convolution) for `f,g` convex (II.6). `moreau` looks
+   similar but is **not** built on `infConv`: it is one direct conjugate call via the "expand the
+   square" identity of Hiriart-Urruty & Lucet [HIRIART-URRUTY-07], which needs no convexity
+   assumption at all. `proxAverage` is **not** a composition of `moreau` calls either: it reduces
+   directly to `conj` — a sandwich of two conjugations around a weighted `add` — and, like
+   `infConv`, is only valid for `f,g` convex (II.6).
 
 > **The pillars:** conjugate = {`pQP` (Jakee Khan, convex), `PLQVG` (Tasnuva Haque, convex),
 > `cPLQ` (Karmarkar, convex + nonconvex)} · convex envelope = `biconj` with `engine='cplq'`
-> (+ Kumar/Karmarkar `direct`). All other operators compose on these — except `infConv`
-> (convex-only) and `moreau` (a direct conjugate, not `infConv`; convexity-free) — see II.6.
+> (+ Kumar/Karmarkar `direct`). All other operators compose on these — except `infConv` and
+> `proxAverage` (both convex-only, both reduce to `conj`+`add`) and `moreau` (a single direct
+> conjugate, not `infConv`; convexity-free) — see II.6.
 
 ---
 
@@ -355,8 +384,8 @@ the object *is* a released `PLQVC` and every existing method works unchanged.
 | `addQuadratic` | `addQuadratic(f, A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | per-face coeff update |
 | `infConv` | `infConv(f,g,engine)` | `(f□g)(x)=inf_z f(z)+g(x−z)` | `conj((conj f)+(conj g))` — **valid (returns the true inf-conv) only for `f,g` convex**; see II.6 |
 | `moreau` | `moreau(f,mu,engine)` | Moreau envelope `e_μ f` | **single conjugate** (`conj`, once) via the expand-the-square identity [HIRIART-URRUTY-07] — **NOT** `infConv(f,½μ‖·‖²)`; see II.6 |
-| `proxAverage` | `proxAverage(f,g,lambda,mu,engine)` | proximal average | compose `moreau`,`add`,`negate` |
 | `lasryLions` | `lasryLions(f,lambda,mu,engine)` | double envelope | `−moreau(−moreau(f,λ),μ)` |
+| `proxAverage` | `proxAverage(f,g,lambda,mu,engine)` | proximal average | **reduces directly to `conj`** (two conjugations sandwiching a weighted `add`, II.6) — **not** a composition of `moreau` calls; convex `f,g` only, like `infConv` |
 | `eval`,`isConvex`,`plot`,… | (unchanged) | evaluation / tests / display | existing `PLQVC` code |
 
 Static factories: keep `QuaPoly.examples*`,`oneNorm`,`energy`; add `QuaPoly.l1Norm`,`linfNorm`,
@@ -506,15 +535,38 @@ regrouping of the definition of conjugate — no biconjugation, no Fenchel–Mor
 also why `moreau` only ever calls `conj` **once**, unlike `infConv`'s two calls.
 
 ```matlab
-function h = proxAverage(f,g,lambda,mu,engine)   % −M_μ(−λ₁M_μf − λ₂M_μg), λ₁+λ₂=1
-    Mf=moreau(f,mu,engine); Mg=moreau(g,mu,engine);
-    h = negate( moreau( add(scalarMul(Mf,-lambda),scalarMul(Mg,-(1-lambda))), mu, engine ) );
-end
-
 function h = lasryLions(f,lambda,mu,engine)      % −e_μ( −e_λ f )
     h = negate( moreau( negate( moreau(f,lambda,engine) ), mu, engine ) );
 end
+
+function h = proxAverage(f,g,lambda,mu,engine)   % P_μ(f,g;λ,1−λ), λ∈[0,1]
+    gf = addQuadratic( scalarMul(f,mu), eye(2), [0;0], 0 );  % T_μf := μf + ½‖·‖²
+    gg = addQuadratic( scalarMul(g,mu), eye(2), [0;0], 0 );  % T_μg := μg + ½‖·‖²
+    s  = add( scalarMul(conj(gf,engine),lambda), scalarMul(conj(gg,engine),1-lambda) );
+    h  = addScaledEnergy( scalarMul(conj(s,engine),1/mu), -1/(2*mu) );
+end
 ```
+
+**Derivation of the `proxAverage` formula (reduces to `conj`, not to `moreau`).** Write
+`T_μf := μf+½‖·‖²`, so `moreau`'s inner term is `T_μf` and `e_μf = (1/(2μ))‖·‖² − (1/μ)(T_μf)^*`
+(II.6 above). The proximal average `P=P_μ(f,g;λ)` is *characterized* by its Moreau envelope being
+the convex combination of the two envelopes: `e_μP = λe_μf+(1-λ)e_μg`. Substituting the identity
+above into both sides and cancelling the `(1/(2μ))‖·‖²` term (since `λ+(1-λ)=1`) gives
+`(T_μP)^* = λ(T_μf)^*+(1-λ)(T_μg)^*`. The right-hand side is **always** convex, proper and lsc
+(a nonnegative combination of conjugates, and every conjugate is convex/lsc by construction) —
+so, **provided `T_μP=μP+½‖·‖²` is itself convex** (guaranteed when `f,g` are convex and `μ>0`,
+the paper's standing assumption), Fenchel–Moreau lets us take the conjugate of both sides and
+recover `T_μP` exactly: `T_μP = conj(λ(T_μf)^*+(1-λ)(T_μg)^*)`. Solving for `P` gives the code
+above: two conjugations (`conj(gf)`,`conj(gg)`) feed a weighted `add`, then a third conjugation
+recovers `T_μP`, and `P` falls out after subtracting back `½‖·‖²` and rescaling by `1/μ`. Unlike
+`moreau` (one conjugate call, no convexity needed — the identity is pure algebra with no
+biconjugation step), this derivation's last step **is** a biconjugation, so — like `infConv` —
+**`proxAverage` is only valid (returns the actual proximal average) for `f,g` both convex**; for
+nonconvex input the formula instead computes the biconjugate of the intended object, same
+caveat as `infConv` (II.6 above). This also means `proxAverage`'s only two new-code
+dependencies are `add` (on `QuaPar`, the type `conj(gf)`/`conj(gg)` land in — see the
+Implementation-status "Next planned" note) and `addQuadratic`/`addScaledEnergy`; it needs no
+call to the `moreau` function at all, despite computing something moreau-envelope-flavored.
 
 `add` is the only other primitive needing real geometry: **overlay the two domain subdivisions
 and add functions per overlapping piece** (sum quadratics, or add rationals over a common
@@ -536,6 +588,14 @@ CCA2/
   convEnvDirect.m     % direct convex-envelope path (Kumar cvxEnv2d [KUMAR-20] + Karmarkar assembly [COAP])
   addQuaPoly.m        % IMPLEMENTED: QuaPoly.add's domain-overlay sum (polygon clipping adapted
                       % from maxQuaPar.m); QuaPar/RatPol add not yet extended -- see II.4
+  addQuaPar.m         % NEXT: add extended to QuaPar (curved/Ec-edge clipping) -- prerequisite
+                      % for infConv and proxAverage, not yet started (Implementation status)
+  addQuadratic.m      % NEXT: per-face quadratic-coefficient update (QuaPoly + QuaPar) --
+                      % prerequisite for moreau and proxAverage, not yet started
+  infConv.m           % NEXT: conj(add(conj f,conj g)); convex f,g only (II.6)
+  moreau.m            % NEXT: single conjugate via expand-the-square [HIRIART-URRUTY-07]
+  lasryLions.m        % NEXT: composition of moreau (II.6)
+  proxAverage.m       % NEXT: reduces to conj directly, NOT to moreau (II.6 derivation)
   +internal/
     Entity.m  Entitytype.m            % graph engine
     kktConjFace.m                     % QQ/QL/LL closed-form face conjugates (lft2.sci)
@@ -578,8 +638,10 @@ CCA2/
 | `convEnv` `'direct'` | `deepak/cvxEnv2d` (Deepak Kumar, [KUMAR-20]) + [COAP] Step 4 assembly (Karmarkar) | faster envelope + numeric cross-check; nonconvex-capable |
 | `convEnv` `'biconj'` | `conj∘conj`, `engine='cplq'` for nonconvex `f` | default; how `cPLQ` does it natively; `'pqp'`/`'graph'` only valid when `f` already convex |
 | `add`/`sub`/`scalarMul` | `PLCHC.add`, Scilab `plq2_add`/`plq2_scalar` | overlay + coeff/rational arithmetic |
-| `infConv`/`proxAverage`/`lasryLions` | Scilab `plq2_pa`; `PLQList` | compose on `conj`+`add`; `infConv` valid only for convex `f,g` (II.6) |
+| `infConv` | Scilab `plq2_pa`-adjacent; `PLQList` | `conj(add(conj f,conj g))`; valid only for convex `f,g` (II.6); needs `add` extended to `QuaPar` first |
 | `moreau` | Scilab `plq2_me` per the Hiriart-Urruty–Lucet identity [HIRIART-URRUTY-07] | **single** conjugate (expand-the-square), not `infConv`; valid for nonconvex `f` too (II.6) |
+| `lasryLions` | Scilab `plq2_pa`-adjacent | `−moreau(−moreau(f,λ),μ)`; pure composition, no new geometry (II.6) |
+| `proxAverage` | Scilab `plq2_pa`; `PLQList` (concept only — this design's formula is a fresh derivation, II.6) | **reduces directly to `conj`**: two conjugations sandwiching a weighted `add`, **not** three `moreau` calls; valid only for convex `f,g` (II.6) |
 | polytope/parabolic utilities | `lcon2vert`/`vert2lcon`/`unionHull`/`intersectionHull`; `cPLQ.region` | reuse; extend intersection to conic arcs |
 | Fitzpatrick (Gardiner, [GARDINER-09]); 1D grid-ME; SOS prover | `JCA_fitz`; `*_FMEI`; `polyPak` | Fitzpatrick + nonconvex fns kept as examples; rest **out of scope** |
 
@@ -619,5 +681,15 @@ CCA2/
     are both convex; it is **not** used to implement `moreau`. `moreau` is instead computed as a
     **single** conjugate via the "expand the square" identity of Hiriart-Urruty & Lucet
     [HIRIART-URRUTY-07], which needs no convexity assumption on `f` at all (II.6).
+11. **`proxAverage` (revised 2026-07-13)** → **not** implemented as `−moreau(−λ₁M_μf−λ₂M_μg)`
+    (a previous draft of this document). Instead it reduces directly to `conj`, mirroring
+    `moreau`'s "expand the square" style but with a biconjugation: `T_μP = conj(λ(T_μf)^*+
+    (1-λ)(T_μg)^*)` where `T_μh:=μh+½‖·‖²`, so `P` needs three `conj` calls (two in, one out)
+    around a weighted `add`, and **no call to `moreau` itself** (II.6 derivation above). Like
+    `infConv`, valid only for `f,g` both convex. Build-order consequence: `proxAverage` and
+    `infConv` both require `add` to work on `QuaPar` (not just `QuaPoly`), so that extension is
+    now the load-bearing prerequisite for this session's roadmap — **not** the `RatPol`
+    extension of `add`, which nothing in the `conj`/`infConv`/`moreau`/`lasryLions`/
+    `proxAverage` pipeline currently calls for (see Implementation status's "Next planned").
 
 *(No open questions remain — the design is fully specified.)*
