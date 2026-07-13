@@ -134,15 +134,26 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.f, conjPieceCPLQ(env).f, 'AbsTol', 1e-12);
         end
 
-        function indefiniteTriangleThreeConvexEdgesNeedsStep3(testCase)
+        function indefiniteTriangleThreeConvexEdgesUsesStep3(testCase)
             % Three convex edges: Step 1 splits the triangle into two sub-triangle pieces, so the
-            % orchestrator needs Step 3 (max of conjugates) -- not implemented yet. A strictly
-            % increasing vertex chain (both x and y increasing) makes all 3 pairwise slopes
-            % positive, i.e. all 3 edges convex for f=xy.
+            % orchestrator needs Step 3 (max of conjugates, maxQuaPar) to combine their Step-2
+            % conjugates. A strictly increasing vertex chain (both x and y increasing) makes all 3
+            % pairwise slopes positive, i.e. all 3 edges convex for f=xy -- the same T=conv{(0,0),
+            % (3,3),(1,2)} example maxQuaParTest.m validates by hand; here conjCPLQ is called
+            % directly (end to end) and checked against the same closed-form ground truth (the sup
+            % of s.x-xy over T is attained on the boundary since the Hessian is indefinite).
             V = [0 0; 3 3; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);
             testCase.verifyEqual(convEnvCPLQ(q).nf, 2);   % confirms the 3-convex-edge split
-            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
+            g = q.conj('cplq');
+            testCase.verifyClass(g, 'QuaPar');
+            T = V;
+            testPts = [1.90 2.50; 1.70 2.00; 2.3431 1.9; 2.05 1.95; 0 0; 5 5; -3 2];
+            for i = 1:size(testPts,1)
+                s = testPts(i,:);
+                testCase.verifyEqual(g.eval(s), conjCPLQTest.supBilinearOverPoly(s, T), ...
+                    'AbsTol', 1e-8, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
         end
 
         function multiFacePieceStillNotImplemented(testCase)
@@ -187,6 +198,35 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             p2 = PLQVC(V,E,f,F);                % construct via the alias
             testCase.verifyTrue(isa(p2, 'PLQVC'));
             testCase.verifyEqual(p2.nf, 4);
+        end
+    end
+
+    methods (Static)
+        function h = supBilinearOverPoly(s, T)
+            % Exact sup_{(x,y) in T} [s1 x + s2 y - x y] over a triangle T: the Hessian of the
+            % objective is indefinite (eigenvalues +-1), so no interior point can be a local max,
+            % and the sup is attained on T's boundary -- checked in closed form (quadratic-in-t
+            % along each edge). Same construction as maxQuaParTest.m's own ground-truth helper.
+            s1 = s(1); s2 = s(2);
+            best = -inf;
+            n = size(T,1);
+            for i = 1:n
+                va = T(i,:); vb = T(mod(i,n)+1,:);
+                dx = vb(1)-va(1); dy = vb(2)-va(2);
+                A = -dx*dy;
+                B = s1*dx + s2*dy - va(1)*dy - va(2)*dx;
+                C = s1*va(1) + s2*va(2) - va(1)*va(2);
+                cand = [0 1];
+                if abs(A) > 1e-14
+                    tstar = -B/(2*A);
+                    if tstar > 0 && tstar < 1, cand(end+1) = tstar; end %#ok<AGROW>
+                end
+                for t = cand
+                    val = A*t^2 + B*t + C;
+                    if val > best, best = val; end
+                end
+            end
+            h = best;
         end
     end
 end
