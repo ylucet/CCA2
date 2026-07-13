@@ -687,6 +687,18 @@ classdef QuaPar
             if nargin < 2, engine = 'cplq'; end
             h = conj(conj(obj, engine), engine);
        end
+       function h = scalarMul(obj, c)
+       % objective: (c*f)(x) = c*f(x), scaling the function by a real constant c
+       % [input]  obj: QuaPar, operable (degree<=2); c: nonzero real scalar
+       % [output] h  : QuaPar, same domain (V/E/Ec/F/P/dom unchanged), coefficients scaled by c
+            obj.assertOperable();
+            h = obj;
+            h.f = c * obj.f;
+       end
+       function h = negate(obj)
+       % objective: (-f)(x) = -f(x)
+            h = scalarMul(obj, -1);
+       end
 
     end % methods
    

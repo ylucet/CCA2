@@ -723,7 +723,16 @@ classdef PLQVCTest < matlab.unittest.TestCase
            X=[0,0;0.5,0;1,0;1,1;-1,-1];
            fexp=[0;0.5^2;1;nan;inf];
            testCase.verifyEqual(p.eval(X),fexp);
-           
+
+        end
+        function testScalarMulAndNegate(testCase)
+           p = PLQVC.energy();   % 0.5*(x^2+y^2), full domain
+           S = [1 2; -3 0.5];
+           q = p.scalarMul(3);
+           testCase.verifyEqual(q.nv, p.nv);
+           testCase.verifyEqual(q.eval(S), 3*p.eval(S), 'AbsTol', 1e-12);
+           r = p.negate();
+           testCase.verifyEqual(r.eval(S), -p.eval(S), 'AbsTol', 1e-12);
         end
 %       examples of plotting; not automated testing so commented out        
 %         function mytestPlotDomainGRaph(testCase)

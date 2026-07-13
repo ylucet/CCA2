@@ -636,6 +636,26 @@ classdef QuaPoly
             if nargin < 2, engine = 'cplq'; end
             h = conj(conj(obj, engine), engine);
        end
+       function h = scalarMul(obj, c)
+       % objective: (c*f)(x) = c*f(x), scaling the function by a real constant c
+       % [input]  obj: QuaPoly, operable (degree<=2); c: nonzero real scalar
+       % [output] h  : QuaPoly, same domain (V/E/F/P/dom unchanged), coefficients scaled by c
+            obj.assertOperable();
+            h = obj;
+            h.f = c * obj.f;
+       end
+       function h = negate(obj)
+       % objective: (-f)(x) = -f(x)
+            h = scalarMul(obj, -1);
+       end
+       function h = add(obj, obj2)
+       % objective: (f+g)(x) = f(x)+g(x), the pointwise sum of two QuaPoly functions
+       % [input]  obj, obj2: QuaPoly, both operable (degree<=2)
+       % [output] h: QuaPoly, domain = overlay of obj's and obj2's domains (only where BOTH are
+       %             finite -- see addQuaPoly.m header for the full algorithm)
+            obj.assertOperable(); obj2.assertOperable();
+            h = addQuaPoly(obj, obj2);
+       end
 
     end % methods
    

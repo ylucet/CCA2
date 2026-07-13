@@ -648,6 +648,18 @@ classdef RatPol
             error('RatPol:biconj:notImplemented', ...
                 'Biconjugate of a RatPol is not implemented yet. See DESIGN.md II.5.1.');
        end
+       function h = scalarMul(obj, c)
+       % objective: (c*r)(x) = c*r(x) = (c*num)/den, scaling the function by a real constant c
+       % [input]  obj: RatPol, operable (degree<=2); c: nonzero real scalar
+       % [output] h  : RatPol, same domain and denominator, numerator scaled by c
+            obj.assertOperable();
+            h = obj;
+            h.f = c * obj.f;
+       end
+       function h = negate(obj)
+       % objective: (-r)(x) = -r(x)
+            h = scalarMul(obj, -1);
+       end
 
     end % methods
    
