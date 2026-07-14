@@ -213,6 +213,44 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             end
         end
 
+        function pickRepFindsThinEdgeStripFace(testCase)
+            % Regression test for a bug found via a randomized f(x,y)=xy triangle stress test:
+            % conjPSDRank1QuadTriangle's pickRep helper searches base+/-dir*mag over a fixed list
+            % of magnitudes (scale*[1,0.3,...,0.001,3,10]) to find a point inside each candidate
+            % face; for T=(0,0),(4.46,1.83),(5.81,2.38), Step 1's triangle split (via the
+            % middle-vertex construction) produces a sub-triangle so thin ((0,0),(4.4674,1.83),
+            % (4.46,1.83) -- the last two vertices only 0.0074 apart in x) that its E23 edge-strip
+            % face needed mag=scale*1e-4 to land inside its valid range -- one order of magnitude
+            % below the smallest value the old list tried (scale*0.001) -- so conjPieceCPLQ threw
+            % conjPieceCPLQ:internal ("could not locate a representative point for face 3").
+            % Fixed by extending pickRep's magnitude range in both directions.
+            T = [0 0; 4.46 1.83; 5.81 2.38];
+            E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(T, E, [0 1 0 0 0 0], F);           % f(x,y) = x*y over T
+            r = convEnvCPLQ(q);                             % Step 1: 2 sub-triangles
+            testCase.verifyEqual(r.nf, 2);
+            V1 = r.V(unique(r.E(r.F(:,1)==1 | r.F(:,2)==1, 1:2)), :);
+            f1 = r.f(1,:);
+            testCase.verifyLessThan(min(abs(diff(sort(V1(:,1))))), 0.01, ...
+                'expected the thin sliver sub-triangle this bug depends on');
+
+            p1 = QuaPoly(V1, E, f1(5:10), F);
+            g = conjPieceCPLQ(p1);   % used to throw conjPieceCPLQ:internal here
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyEqual(g.nf, 6);
+
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
+            kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
+            Xg = V1(1,1)+uu*(V1(2,1)-V1(1,1))+vv*(V1(3,1)-V1(1,1));
+            Yg = V1(1,2)+uu*(V1(2,2)-V1(1,2))+vv*(V1(3,2)-V1(1,2));
+            qg = QuaPoly.evalPoly(f1, [Xg Yg]);
+            S = [1 1; 0.5 0.2; 2 1; -1 1];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
+                testCase.verifyEqual(g.eval(S(i,:)), sup, 'AbsTol', 1e-4, sprintf('s=%d', i));
+            end
+        end
+
         function psdRank1QuadraticTieConjugate(testCase)
             % Same construction as psdRank1QuadraticConjugate but with va,vb manufactured to tie
             % in the rotated-t coordinate (the triangle edge va-vb is exactly perpendicular to A's

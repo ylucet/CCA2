@@ -364,7 +364,14 @@ function p = pickRep(base, dir, wantIdx, winner, scale)
 % correct sign (which of the two complementary sides a shared boundary/apex is on) and the
 % correct magnitude (small enough not to overshoot a bounded strip's valid range, large enough to
 % clear a wedge's apex) are both easier to search for than to derive by hand.
-    for mag = scale * [1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 3, 10]
+%
+% HISTORY: found via a randomized triangle stress test, an edge-strip face (E23) for a skewed
+% triangle (T=(0,0),(4.46,1.83),(5.81,2.38)) needed mag=scale*1e-4 to land inside its valid
+% range -- one order of magnitude below the smallest value this list used to try (scale*0.001) --
+% because that strip is extremely thin in dual space for this triangle's shape. Extended the
+% magnitude range (both smaller and, symmetrically, larger) rather than just adding one value, so
+% an even thinner/wider strip on some other triangle doesn't hit the same wall.
+    for mag = scale * [1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001, 0.00003, 0.00001, 3, 10, 30, 100]
         for sgn = [1, -1]
             pt = base + sgn*mag*dir;
             if winner(pt) == wantIdx, p = pt; return; end
