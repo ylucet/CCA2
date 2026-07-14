@@ -367,11 +367,19 @@ function p = pickRep(base, dir, wantIdx, winner, scale)
 %
 % HISTORY: found via a randomized triangle stress test, an edge-strip face (E23) for a skewed
 % triangle (T=(0,0),(4.46,1.83),(5.81,2.38)) needed mag=scale*1e-4 to land inside its valid
-% range -- one order of magnitude below the smallest value this list used to try (scale*0.001) --
-% because that strip is extremely thin in dual space for this triangle's shape. Extended the
-% magnitude range (both smaller and, symmetrically, larger) rather than just adding one value, so
-% an even thinner/wider strip on some other triangle doesn't hit the same wall.
-    for mag = scale * [1, 0.3, 0.1, 0.03, 0.01, 0.003, 0.001, 0.0003, 0.0001, 0.00003, 0.00001, 3, 10, 30, 100]
+% range -- one order of magnitude below a since-replaced fixed magnitude list's smallest value
+% (scale*0.001). That fixed list was extended once (down to scale*1e-5), but the same triangle
+% (whose Step-1 sub-triangle sliver got even thinner after fixing splitThreeConvex's split-point
+% formula -- see convEnvCPLQ.m's HISTORY) then needed a magnitude below THAT too: any finite fixed
+% list is inherently fragile to progressively thinner slivers. Replaced with a dense geometric
+% sweep, shrinking from scale*1 down to scale*1e-12 (finding the LARGEST valid magnitude in that
+% shrinking pass first, since a bigger offset from `base` is less likely to sit on some OTHER
+% accidental near-degenerate boundary), falling back to growing from scale*1 up to scale*1e6 only
+% if no shrinking magnitude works. A naive smallest-to-largest sweep (tried first) picked up a
+% spuriously-accepted point at an extreme magnitude for a different, previously-passing test
+% (psdRank1QuadraticConjugate) -- winner() near a vertex where multiple face regions meet is not
+% reliable at that scale -- hence preferring the largest working magnitude within each pass.
+    for mag = scale * [10.^(0:-1/6:-12), 10.^(1/6:1/6:6)]
         for sgn = [1, -1]
             pt = base + sgn*mag*dir;
             if winner(pt) == wantIdx, p = pt; return; end

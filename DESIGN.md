@@ -70,7 +70,23 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   COAP Appendix A.5, so always polyhedral-domain-safe for `maxQuaPar`) and combines them via
   `maxQuaPar`. Exercised end to end (not just the pre-existing manual `conjPieceCPLQ`+`maxQuaPar`
   wiring in `maxQuaParTest.m`) by `conjCPLQTest.m`'s
-  `indefiniteTriangleThreeConvexEdgesUsesStep3`. The fully general case — a multi-face original
+  `indefiniteTriangleThreeConvexEdgesUsesStep3`.
+  **Correctness fix (2026-07-14)**: `convEnvCPLQ.m`'s `splitThreeConvex` used to split the
+  3-convex-edge triangle by a HORIZONTAL line through the middle vertex — wrong in general (only
+  correct when the two sub-envelopes happen to be mirror-symmetric). The two sub-envelopes q1,q2
+  both touch `u1*u2` exactly along the entire third (shared) edge, forcing `q1-q2` to factor as
+  (that edge's line) × (a second line through the middle vertex); THAT second line, not a
+  horizontal one, is the actual smooth-fit split direction (closed form in `splitThreeConvex`'s
+  header). The old horizontal split left `q1`,`q2` agreeing only at the two seam endpoints, not
+  along the interior of the seam — a small, silent discrepancy for the one hand-worked example
+  used everywhere in tests, but large enough for other triangles to make the glued 2-piece
+  "envelope" genuinely non-convex (a real jump discontinuity across the interior seam) and its
+  `maxQuaPar` conjugate numerically too high. Fixed; re-verified against ground truth to machine
+  precision on the previously-wrong triangle and on a 600-triangle randomized stress test (0 wrong
+  answers, only pre-existing/separate `maxQuaPar:internal` assembly-topology crashes on ~4% of
+  valid samples — a different, still-open gap, not a correctness issue). See `splitThreeConvex`'s
+  HISTORY comment and the session handoff for the derivation and stress-test details.
+  The fully general case — a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
   rational envelope), which `conjPieceCPLQ` cannot conjugate yet (its own header TODO); the

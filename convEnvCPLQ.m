@@ -19,8 +19,9 @@ function r = convEnvCPLQ(obj)
 %   * Q indefinite over a TRIANGLE -> reduce to the bilinear form u1*u2 via u = M x (eigen-
 %       rotation; for an already-bilinear positive q the map is the identity), compute the
 %       envelope with [COAP] Appendix A (0/1/2 convex edges -> affine / rational eq.16 /
-%       quadratic harmonic-mean; a triangle with 3 convex edges is split by a horizontal line
-%       through the middle vertex into two 2-convex-edge sub-triangles), then substitute u = M x
+%       quadratic harmonic-mean; a triangle with 3 convex edges is split by the smooth-fit line
+%       through the middle vertex -- see splitThreeConvex's HISTORY -- into two 2-convex-edge
+%       sub-triangles), then substitute u = M x
 %       back. Yields linear / quadratic / rational (quadratic over linear) pieces on a polyhedral
 %       subdivision (1 or 2 faces). Verified vs Appendix A examples, e.g. conv(xy) over
 %       conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2), and conv(x^2-y^2) over (1,0),(0,0),(1,1) =
@@ -213,14 +214,51 @@ function d3 = substituteLin(den, M)
 end
 
 function [tri, faces, edgeList] = splitThreeConvex(V)
-% Split a triangle (3x2, in the bilinear frame) by the horizontal line through the middle (by
-% 2nd-coordinate) vertex, hitting the opposite edge at Pnew. Returns 4 vertices
+% Split a triangle (3x2, in the bilinear frame) by the SMOOTH-FIT line through the middle (by
+% 2nd-coordinate) vertex, hitting the opposite (low-high) edge at Pnew. Returns 4 vertices
 % tri = [vlow; vmid; vhigh; Pnew], the two sub-triangles faces (vertex indices into tri), and a
 % directed edge list. Each sub-triangle then has exactly two convex edges.
+%
+% The split line is NOT simply horizontal through vmid (an earlier version of this function used
+% that, which is wrong in general -- see HISTORY below). Both sub-envelopes q1=conv(u1u2+I_lowMidPnew)
+% and q2=conv(u1u2+I_midHighPnew) touch u1*u2 exactly along the ENTIRE low-high edge (the "w" edge
+% of Appendix A.4's two-edge formula is shared by both sub-triangles), so q1-q2 is a quadratic that
+% vanishes identically on that whole line, hence factors as (low-high line) * (a second line). That
+% second line necessarily passes through vmid too (q1(vmid)=q2(vmid)=u1u2(vmid), both touching
+% there via their OTHER convex edge), and is the unique choice of split direction through vmid that
+% makes q1 and q2 agree identically along the shared internal seam (smooth C^1 pasting, required
+% for the glued 2-piece function to be the TRUE convex envelope, not just two locally-correct but
+% badly-glued pieces). Only for the special case sqrt(mh1)==sqrt(mh2) (mirror-symmetric split) does
+% this second line reduce to horizontal.
+%
+% HISTORY: the original "horizontal line through vmid" (matching [COAP] Appendix A.5's likely
+% intent for a specific/symmetric configuration, but not the general condition) produced q1,q2 that
+% only agreed with each other at the two seam endpoints (vmid, Pnew), not along the interior of the
+% seam -- a real but small (~0.02-0.04) mismatch for the well-tested T=(0,0),(3,3),(1,2) example
+% (small enough that it never affected that example's tested conjugate values), but a LARGE
+% (~1-13) mismatch for other triangles (e.g. T=(0,0),(7.02,0.67),(8.43,7.63)), making the glued
+% 2-piece "envelope" genuinely non-convex (a real jump discontinuity across the interior seam) and
+% its conjugate (via maxQuaPar) numerically too high. Found by comparing the two sub-envelopes'
+% closed forms along their shared seam for a stress-test triangle where the final conjugate was
+% wrong, discovering they only match at the seam's 2 endpoints, then deriving the correct split
+% line as the second factor of q1-q2 above (verified to give exact, to machine precision, agreement
+% along the WHOLE seam for both the known-good example and every previously-failing triangle).
     [~, ord] = sort(V(:,2));
     vlow = V(ord(1),:); vmid = V(ord(2),:); vhigh = V(ord(3),:);
-    t = (vmid(2) - vlow(2)) / (vhigh(2) - vlow(2));
-    Pnew = vlow + t*(vhigh - vlow);
+
+    mh1 = (vmid(2)-vlow(2))/(vmid(1)-vlow(1));  qh1 = vlow(2) - mh1*vlow(1);
+    mw  = (vhigh(2)-vlow(2))/(vhigh(1)-vlow(1)); qw = vlow(2) - mw*vlow(1);
+    mh2 = (vhigh(2)-vmid(2))/(vhigh(1)-vmid(1)); qh2 = vmid(2) - mh2*vmid(1);
+
+    c1 = buildTwoEdge(mh1, qh1, mw, qw, 1);
+    c2 = buildTwoEdge(mh2, qh2, mw, qw, 1);
+    d = c1 - c2;                                % plain [A B C D E F], vanishes on the low-high line
+    q = -d(3); p = mw*q - d(2); r = (d(4) - qw*p)/mw;   % second factor p*x+q*y+r=0, through vmid
+
+    xPnew = -(q*qw + r) / (p + q*mw);           % intersect p x+q y+r=0 with y = mw x + qw
+    yPnew = mw*xPnew + qw;
+    Pnew  = [xPnew, yPnew];
+
     tri = [vlow; vmid; vhigh; Pnew];          % indices 1=low, 2=mid, 3=high, 4=Pnew
     faces = {[1 2 4], [2 3 4]};               % T1={low,mid,Pnew}, T2={mid,high,Pnew}
     edgeList = [1 2; 2 3; 1 4; 4 3; 2 4];     % low-mid, mid-high, low-Pnew, Pnew-high, mid-Pnew(internal)
