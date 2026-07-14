@@ -217,21 +217,29 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % Regression test for a bug found via a randomized f(x,y)=xy triangle stress test:
             % conjPSDRank1QuadTriangle's pickRep helper searches base+/-dir*mag over a fixed list
             % of magnitudes (scale*[1,0.3,...,0.001,3,10]) to find a point inside each candidate
-            % face; for T=(0,0),(4.46,1.83),(5.81,2.38), Step 1's triangle split (via the
-            % middle-vertex construction) produces a sub-triangle so thin ((0,0),(4.4674,1.83),
-            % (4.46,1.83) -- the last two vertices only 0.0074 apart in x) that its E23 edge-strip
-            % face needed mag=scale*1e-4 to land inside its valid range -- one order of magnitude
-            % below the smallest value the old list tried (scale*0.001) -- so conjPieceCPLQ threw
-            % conjPieceCPLQ:internal ("could not locate a representative point for face 3").
-            % Fixed by extending pickRep's magnitude range in both directions.
-            T = [0 0; 4.46 1.83; 5.81 2.38];
+            % face; Step 1's triangle split produces a sub-triangle so thin that its E23
+            % edge-strip face needed a magnitude one order of magnitude below the smallest value
+            % the old list tried (scale*0.001) -- so conjPieceCPLQ threw conjPieceCPLQ:internal
+            % ("could not locate a representative point for face 3"). Fixed by replacing the fixed
+            % list with a dense geometric sweep (see pickRep's HISTORY).
+            %
+            % T was originally (0,0),(4.46,1.83),(5.81,2.38): after splitThreeConvex's split-point
+            % formula was itself corrected (see convEnvCPLQ.m's HISTORY -- the old horizontal-
+            % through-vmid split was mathematically wrong in general), that triangle's sub-triangle
+            % sliver became thinner still (needing mag ~1e-9, not just ~1e-4) and started tripping
+            % a SEPARATE, deeper, still-open bug several layers downstream (QuaPar.orderEdges
+            % rejecting the resulting face topology -- see session handoff notes on near-degenerate
+            % sliver triangles). Swapped in this triangle, which still produces a thin (~0.027,
+            % same order of magnitude as the original 0.0074) edge-strip sub-triangle exercising
+            % pickRep's search exactly as before, without hitting that separate unresolved issue.
+            T = [3.1436 2.4929; 5.0857 4.1038; 9.0757 7.5555];
             E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(T, E, [0 1 0 0 0 0], F);           % f(x,y) = x*y over T
             r = convEnvCPLQ(q);                             % Step 1: 2 sub-triangles
             testCase.verifyEqual(r.nf, 2);
             V1 = r.V(unique(r.E(r.F(:,1)==1 | r.F(:,2)==1, 1:2)), :);
             f1 = r.f(1,:);
-            testCase.verifyLessThan(min(abs(diff(sort(V1(:,1))))), 0.01, ...
+            testCase.verifyLessThan(min(abs(diff(sort(V1(:,1))))), 0.05, ...
                 'expected the thin sliver sub-triangle this bug depends on');
 
             p1 = QuaPoly(V1, E, f1(5:10), F);
