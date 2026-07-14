@@ -51,6 +51,77 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyEqual(DeltaB, 0, 'AbsTol', 1e-9);
         end
 
+        function splitCellAcceptsGenuineNonDegenerateParabola(testCase)
+            % Regression test for a bug found via a randomized stress test across many f(x,y)=xy
+            % triangles (not just the one hard-coded 3-edge.tex example used elsewhere in this
+            % file): splitCell's degeneracy guard used to reject ANY g1-face/g2-face boundary
+            % whose full 3x3 discriminant Delta was nonzero, mislabelling it "a genuine
+            % ellipse/hyperbola" -- but delta=b^2-4ac==0 (parabolic TYPE) with Delta~=0 is a
+            % genuine, representable PARABOLA, which QuaPar's curved Ec edges exist to handle.
+            %
+            % T=(0,0),(9.31,7.63),(3.80,7.40) is a plain triangle with all 3 edges convex for
+            % u1*u2 (so f(x,y)=xy is genuinely nonconvex on it -- the only case that matters, per
+            % the reduction argument: remove the affine part, rotate any indefinite quadratic to
+            % xy, triangulate). One of its g1-face/g2-face boundaries has delta~0 (parabolic type)
+            % but Delta significantly nonzero (genuinely non-degenerate) -- maxQuaPar(g1,g2) used
+            % to crash on this legitimate input with maxQuaPar:notDegenerate. (A different random
+            % triangle, T=(0,0),(7.02,0.67),(8.43,7.63), hits the same guard bug but ALSO exposes a
+            % separate, deeper Step-1 correctness issue unrelated to this guard -- see session notes
+            % -- so it is deliberately not used here to keep this test isolated to the one bug it
+            % documents.)
+            T = [0 0; 9.31 7.63; 3.80 7.40];
+            [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(T);
+
+            foundGenuineParabola = false;
+            for k = 1:g1.nf
+                for l = 1:g2.nf
+                    [delta, Delta] = maxQuaParTest.conicInvariants(g1.f(k,:) - g2.f(l,:));
+                    if abs(delta) < 1e-6 && abs(Delta) > 1e-3
+                        foundGenuineParabola = true;
+                    end
+                end
+            end
+            testCase.verifyTrue(foundGenuineParabola, ...
+                'expected at least one genuinely non-degenerate (parabolic-type) boundary pair');
+
+            g = maxQuaPar(g1, g2);   % used to throw maxQuaPar:notDegenerate here
+            testCase.verifyClass(g, 'QuaPar');
+
+            testPts = [1 1; 3 2; 5 3; 2 6; -1 3];
+            for i = 1:size(testPts,1)
+                s = testPts(i,:);
+                testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
+                    'AbsTol', 1e-6, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
+        function dedupHitsMergesCrossingsAtACellCorner(testCase)
+            % Regression test for a bug found via the same randomized triangle stress test:
+            % splitCell's dedupHits used tol=sqrt(eps) (~1.5e-8) to merge boundary crossings that
+            % are the SAME physical point computed via two different cell edges' independent
+            % quadratic-root arithmetic. That arithmetic can disagree by ~1e-7 for a genuinely
+            % coincident hit (the curve crossing exactly at a cell corner) -- the same
+            % cross-arithmetic noise floor already documented (with a 1e-6 absolute tolerance) in
+            % assemblePieces' global vertex merge -- so two hits ~7e-8 apart at a corner were
+            % wrongly kept distinct, inflating a genuine 2-crossing split into 3 and tripping
+            % splitCell's "expected exactly 2 boundary crossings" assertion on legitimate input.
+            %
+            % T=(0,0),(2.11,1.43),(8.84,4.50) is a plain triangle with all 3 edges convex for
+            % u1*u2; maxQuaPar(g1,g2) used to crash on it with maxQuaPar:internal.
+            T = [0 0; 2.11 1.43; 8.84 4.50];
+            [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(T);
+
+            g = maxQuaPar(g1, g2);   % used to throw maxQuaPar:internal here
+            testCase.verifyClass(g, 'QuaPar');
+
+            testPts = [1 1; 3 2; 0.5 0.3; 5 3; -2 1];
+            for i = 1:size(testPts,1)
+                s = testPts(i,:);
+                testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
+                    'AbsTol', 1e-6, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)
             % Calling the public entry point end-to-end. maxQuaPar(g1,g2) now fully ASSEMBLES (the
             % face-clipping topology gap this test used to pin -- a plain decided cell, g1 face 1
@@ -85,6 +156,38 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             V2 = [1 2; 2 2; 3 3]; E2 = [1 2 1; 2 3 1; 3 1 1]; F2 = [1 0; 1 0; 1 0];
             p2 = QuaPoly(V2, E2, [A2(1,1) A2(1,2) A2(2,2) b2(1) b2(2) 0], F2);
             g2 = conjPieceCPLQ(p2);
+        end
+
+        function [g1, g2] = buildG1G2ForTriangle(T)
+            % Generalization of buildG1G2 to an ARBITRARY triangle T (CCW), derived from the real
+            % Step-1/Step-2 pipeline (convEnvCPLQ then conjPieceCPLQ) instead of hard-coded
+            % closed-form coefficients, so it works for any T with all 3 edges convex for u1*u2
+            % (f(x,y)=xy genuinely nonconvex on it), not just the one 3-edge.tex example.
+            E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(T, E, [0 1 0 0 0 0], F);   % f(x,y) = x*y over T (c=[A11 A12 A22 d e f])
+            r = convEnvCPLQ(q);
+            if r.nf ~= 2
+                error('buildG1G2ForTriangle:unexpectedSplit', ...
+                    'expected 2 sub-triangles from convEnvCPLQ, got %d -- T does not have all 3 edges convex', r.nf);
+            end
+            [V1, f1] = maxQuaParTest.extractTriFace(r, 1);
+            [V2, f2] = maxQuaParTest.extractTriFace(r, 2);
+            p1 = QuaPoly(V1, E, f1(5:10), F);
+            p2 = QuaPoly(V2, E, f2(5:10), F);
+            g1 = conjPieceCPLQ(p1);
+            g2 = conjPieceCPLQ(p2);
+        end
+
+        function [Vt, frow] = extractTriFace(r, k)
+            % r: a 2-face RatPol (as produced by convEnvCPLQ's 3-convex-edge split). Returns face
+            % k's 3 vertices in CCW order and its (quadratic, since 2-convex-edge sub-triangles are
+            % never rational) coefficient row.
+            edgeIdx = find(r.F(:,1)==k | r.F(:,2)==k);
+            vids = unique(r.E(edgeIdx,1:2));
+            Vt = r.V(vids,:);
+            area2 = (Vt(2,1)-Vt(1,1))*(Vt(3,2)-Vt(1,2)) - (Vt(2,2)-Vt(1,2))*(Vt(3,1)-Vt(1,1));
+            if area2 < 0, Vt = Vt([1 3 2],:); end
+            frow = r.f(k,:);
         end
 
         function idx = findRow(fmat, expected6, testCase)

@@ -90,6 +90,18 @@ function g = maxQuaPar(g1, g2)
 %   points, including s=(-3,2) -- see maxQuaParTest.m's
 %   maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying.
 %
+%   HISTORY (later session): splitCell's degeneracy guard rejected ANY pair whose full 3x3
+%   discriminant Delta was nonzero, mislabelling the rejection "a genuine ellipse/hyperbola" --
+%   but Delta~=0 with delta=b^2-4ac==0 (parabolic TYPE) is a genuine, representable PARABOLA, not
+%   a hyperbola/ellipse; the guard only needs to reject delta~=0 (hyperbolic/elliptic type) cases
+%   whose Delta is also nonzero. Found via a randomized stress test across many f(x,y)=xy
+%   triangles (not just the one hard-coded 3-edge.tex example), e.g.
+%   T=(0,0),(7.02,0.67),(8.43,7.63): a legitimate g1-face/g2-face boundary there has delta~0 but
+%   Delta~0.063, and maxQuaPar(g1,g2) crashed on it even though the rest of splitCell (the
+%   isStraight/edgeEc construction) already builds curved parabolic edges correctly once let
+%   through. Fixed by conditioning the guard on delta as well as Delta. See
+%   maxQuaParTest.splitCellAcceptsGenuineNonDegenerateParabola.
+%
 % STATUS (incremental implementation -- see DESIGN.md II.5.1 and the session plan):
 %   * IMPLEMENTED: g1, g2 purely polyhedral (all-zero Ec, i.e. every edge a line/ray/segment) --
 %     exactly what conjPSDRank1QuadTriangle/conjPSDRank1QuadTriangleTie/conjLinearTriangle produce.
@@ -505,11 +517,31 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     diffRow = f1row - f2row;
     a = diffRow(5)/2; b = diffRow(6); c = diffRow(7)/2;
     d = diffRow(8); e = diffRow(9); f = diffRow(10);
-    % Delta is the standard conic invariant that decides irreducibility (Delta~=0 <=> a genuine
-    % curve of type delta=b^2-4ac; Delta==0 <=> degenerates to a point, a line, or a pair of
-    % lines). Checking only delta (as an earlier version of this file did, via rank of the 2x2
-    % quadratic-part submatrix [a b/2;b/2 c]) cannot tell a genuine hyperbola/ellipse apart from
-    % this last, still-representable case -- see the file header HISTORY note.
+    % delta=b^2-4ac decides the quadratic part's TYPE (>0 hyperbolic, ==0 parabolic, <0 elliptic).
+    % Delta (the full 3x3 discriminant) decides IRREDUCIBILITY (~=0 <=> a genuine curve of that
+    % type; ==0 <=> degenerates to a point, a line, or a pair of lines).
+    %
+    % Representability by QuaPar depends on BOTH: delta==0 (parabolic type, including its `a line`
+    % degeneracy -- see QuaPar.isParabola) is ALWAYS representable regardless of Delta, since a
+    % genuine non-degenerate parabola is exactly the curved edge QuaPar's Ec was built for (see
+    % the isStraight/edgeEc construction below, which already handles it once this guard lets it
+    % through). Only delta~=0 (hyperbolic/elliptic type) NEEDS Delta==0 (degenerating to one or two
+    % real straight lines, handled via the isStraight branch below) to be representable; if
+    % Delta~=0 there it is a genuine irreducible ellipse/hyperbola, which QuaPar cannot represent.
+    %
+    % HISTORY: an earlier version of this guard rejected whenever Delta~=0, with no delta check at
+    % all -- correct for the file's original bug (see file header HISTORY, which only needed to
+    % rule out hyperbolic-type false positives) but wrong in the OTHER direction: it also rejected
+    % the delta==0/Delta~=0 case, i.e. a genuine, representable parabola, mislabelling it "a
+    % genuine ellipse/hyperbola" and erroring on legitimate input. Found via a randomized stress
+    % test across many f(x,y)=xy triangles (not just the one hard-coded 3-edge.tex example): e.g.
+    % T=(0,0),(7.02,0.67),(8.43,7.63) produces a g1-face/g2-face boundary with delta~6.8e-49 (~0,
+    % parabolic type) but Delta~0.063 (genuinely non-degenerate) -- a real parabola arc that the
+    % rest of this function already has the machinery to build. See
+    % maxQuaParTest.splitCellAcceptsGenuineNonDegenerateParabola.
+    delta = b^2 - 4*a*c;
+    tolDelta = 1e-6 * (abs(a) + abs(b) + abs(c))^2;
+    isParabolicType = abs(delta) <= max(tolDelta, 1e-12);
     M = [a, b/2, d/2; b/2, c, e/2; d/2, e/2, f];
     sc = max(1e-9, norm(M, 'fro'));
     % det(M) is a degree-3-homogeneous function of M's entries, so a relative tolerance on those
@@ -518,13 +550,13 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     % orders of magnitude tighter than floating-point noise, rejecting even exactly-degenerate
     % inputs; e.g. on the 3-edge.tex example, det(M)~-1.7e-17 against a true zero, but the old
     % threshold (1e-6*sc)^3~3e-18 was smaller still).
-    if abs(det(M)) > 1e-6*sc^3
+    if ~isParabolicType && abs(det(M)) > 1e-6*sc^3
         error('maxQuaPar:notDegenerate', ...
-            ['maxQuaPar:splitCell: the difference of the two candidate quadratics is not (numerically) ' ...
-             'a degenerate conic (its full 3x3 discriminant is nonzero) -- a genuine ellipse/hyperbola ' ...
-             'boundary would be needed, which QuaPar cannot represent. This should never happen for two ' ...
-             'conjugates of adjacent sub-pieces of the same originally-nonconvex domain (see maxQuaPar.m ' ...
-             'header); the input pair violates that.']);
+            ['maxQuaPar:splitCell: the difference of the two candidate quadratics is a genuine ' ...
+             'irreducible ellipse/hyperbola (delta=%g ~= 0 and the full 3x3 discriminant is nonzero), ' ...
+             'which QuaPar cannot represent. This should never happen for two conjugates of adjacent ' ...
+             'sub-pieces of the same originally-nonconvex domain (see maxQuaPar.m header); the input ' ...
+             'pair violates that.'], delta);
     end
 
     edges = cellEdgeList(cell);
@@ -692,8 +724,17 @@ function r = solveQuad(A,B,C)
 end
 
 function hits = dedupHits(hits)
+% Merge boundary crossings that are the SAME physical point computed via two different cell
+% edges' independent quadratic-root arithmetic. sqrt(eps)~1.5e-8 is too tight for this: two
+% genuinely-coincident hits (e.g. the curve crossing exactly at a cell corner shared by two
+% adjacent boundary edges) can disagree by ~1e-7 between the two arithmetic paths -- the same
+% cross-arithmetic noise floor already documented (and handled with a 1e-6 absolute tolerance) in
+% assemblePieces' global vertex merge, see its HISTORY comment. Without this, e.g. a hit pair
+% ~7e-8 apart at a triangle corner was wrongly kept as 2 separate hits, inflating a genuine 2-hit
+% split into 3 and tripping the "expected exactly 2 boundary crossings" assertion below on
+% legitimate input (found via a randomized triangle stress test, T=(0,0),(2.11,1.43),(8.84,4.50)).
     if numel(hits) < 2, return; end
-    tol = sqrt(eps);
+    tol = 1e-6;
     keep = true(1,numel(hits));
     for i = 1:numel(hits)
         if ~keep(i), continue; end
@@ -804,6 +845,24 @@ function g = assemblePieces(pieces)
         used(opp) = true;
         E(end+1,:) = [HE(h).a, HE(h).b, HE(h).isSeg]; %#ok<AGROW>
         ecRow = HE(h).ec; if all(ecRow==0), ecRow = HE(opp).ec; end
+        if any(ecRow ~= 0)
+            % QuaPar's orientation invariant requires evalConic(Ec(j,:),.) > 0 on the LEFT of the
+            % stored directed edge V(E(j,1))->V(E(j,2)) = HE(h).a -> HE(h).b. Unlike a straight
+            % edge (Ec all-zero, whose side is instead read off vertex geometry, so orientation is
+            % automatic), a curved edge's Ec row is built once in splitCell from f1row-f2row and
+            % reused unchanged for both neighbouring pieces (see splitCell's boundedPiece calls) --
+            % its sign is therefore tied to "f1 wins" globally, not to whichever piece ends up on
+            % the geometric left of (a,b) here (an accident of HE processing order). HE(h).piece's
+            % own interior is ALWAYS on the left of (a,b) by construction (every piece's vertices
+            % are stored in its own CCW order), so flip the row's sign if it doesn't evaluate
+            % positive there -- exactly the same "which side wins" check assignSide already uses to
+            % pick a safe interior sample point.
+            Vp = pieces(HE(h).piece).V;
+            if size(Vp,1) > 2, samplePt = Vp(2,:); else, samplePt = mean(Vp,1); end
+            if QuaPar.evalConic(ecRow, samplePt) < 0
+                ecRow = -ecRow;
+            end
+        end
         Ec(end+1,:) = ecRow; %#ok<AGROW>
         if HE(h).isSeg
             F(end+1,:) = [HE(h).piece, HE(opp).piece]; %#ok<AGROW>
