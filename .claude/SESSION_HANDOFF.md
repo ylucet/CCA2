@@ -1,16 +1,16 @@
 # Session Handoff
 
-_Last updated: 2026-07-13 (after merging `cplq-engine` into `main`)_
+_Last updated: 2026-07-13_
 
 ## Where things stand
 
-- Branch: `main`, just merged `cplq-engine` in (three-way merge; conflict only in this handoff
-  file, resolved by combining both sessions' notes below; `maxQuaPar.m` merged automatically with
-  no conflict since the two sessions touched different parts of the file -- verified both sets of
-  changes survived the merge).
-- Pushed: pending (see end of this session's summary to the user for the actual outcome).
-- Full test suite re-run after the merge to confirm both sessions' work coexists correctly (see
-  below for the result).
+- Branch: `main` @ `27f3eba` -- "Merge branch 'cplq-engine'" (three-way merge; conflict only in
+  this handoff file, resolved by combining both sessions' notes below; `maxQuaPar.m` merged
+  automatically with no conflict since the two sessions touched different parts of the file --
+  verified both sets of changes survived the merge).
+- Pushed: yes (`origin/main` is at `27f3eba`).
+- Full test suite re-run after the merge to confirm both sessions' work coexists correctly: 142/142
+  PASS (see below).
 
 ## What happened (two sessions' work, now merged)
 
