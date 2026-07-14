@@ -4,13 +4,14 @@ _Last updated: 2026-07-14_
 
 ## Where things stand
 
-- Branch: `main` (uncommitted changes on top of `27f3eba` -- see "What happened" below; not yet
-  committed/pushed this session).
+- Branch: `main` @ `d5e9318` -- "Fix wrong split line in convEnvCPLQ's 3-convex-edge triangle
+  envelope" (this session's Step 1 fix, below). Pushed: yes (`origin/main` is at `d5e9318`).
 - Full test suite: **142/142 PASS**.
 - A 600-triangle randomized stress test of the full Step1->Step2->Step3 pipeline
   (`convEnvCPLQ`->`conjPieceCPLQ`->`maxQuaPar`) found **zero wrong answers** (max error 1.85e-13,
   machine precision) across 103 valid 3-convex-edge samples; only a pre-existing, separate
-  `maxQuaPar:internal` assembly-topology crash on ~4% of samples (item 1 in Next steps).
+  `maxQuaPar:internal`/`orderEdges` assembly-topology crash on some samples -- still open, see
+  "Investigated but NOT fixed" below and item 1 in Next steps.
 
 ## What happened this session: fixed the Step 1 envelope-correctness gap (2026-07-13's #1 priority)
 
@@ -61,15 +62,59 @@ how thin some sub-triangles are, in `conjPieceCPLQ.m`'s `pickRep`):
   search exactly as intended, without hitting that separate issue. See
   `conjPieceCPLQTest.pickRepFindsThinEdgeStripFace`'s updated comment.
 
+## Investigated but NOT fixed: the `maxQuaPar:internal` assembly-topology crash
+
+After committing/pushing the Step 1 fix above, investigated the now-top-priority open item: the
+"assemblePieces: boundary edge (r,c) has no matching neighbour" crash, reproduced with
+`T=(6.0365,4.9504),(9.8960,6.3015),(1.4908,3.3753)` (`maxQuaParTest.buildG1G2ForTriangle(T)` then
+`maxQuaPar(g1,g2)`).
+
+**Diagnostic findings** (via temporary instrumentation of `maxQuaPar.m`'s main loop and
+`assemblePieces`, since reverted -- see below): for this triangle, EVERY `(k,l)` face-pair cell is
+"decided" (no `splitCell` calls at all -- the bug is unrelated to the conic/parabola-splitting
+machinery). Several of the resulting per-cell vertex lists contain near-duplicate CONSECUTIVE
+vertices with gaps in the ~1e-8 to ~3e-5 range (e.g. `(4.95225745938978,6.03113941772176)` vs
+`(4.9522622221441,6.03115313053376)` vs `(4.95226699711111,6.03116680826839)` -- three distinct
+floating-point values for what is evidently ONE conceptual apex, recurring identically across
+several different `(k,l)` cells), while the smallest gap between two GENUINELY distinct nearby
+vertices in the same run was ~5e-3 (two orders of magnitude bigger) -- so in principle there is
+room for a tolerance between the two.
+
+**Tried and REJECTED**: widening `dedupConsecutive`'s tolerance (`sqrt(eps)` -> `1e-4`) and
+`assemblePieces`' global vertex-merge tolerance (`1e-6` -> `1e-4`), plus adding a
+`dedupConsecutive` pass at the end of `clipByFace` (after `insertPassthroughVertices`, which had
+its own tight `1e-7` "already there" check). This DID fix the specific `T=(6.0365,...)` case's
+"no matching neighbour" error, but a broader 600-triangle stress test with the wider tolerance in
+place showed it trades one crash for WORSE outcomes overall: crash count rose from 4/600 to 11/600
+(3 still `maxQuaPar:internal`, 8 a NEW failure mode: `QuaPar.orderEdges` rejecting a face's ray
+count, e.g. face 4 ending up with a self-referential ray edge `F=[4,4]` -- two of that face's own
+half-edges got matched to EACH OTHER instead of to a genuinely different neighbouring piece,
+apparently because several distinct pieces sharing one apex have ray directions close enough that
+the widened tolerance over-merges their "apex+direction" endpoint markers). No wrong ANSWERS were
+introduced either way (0/600 in both configurations) -- only crash frequency and failure mode
+changed -- but net reliability got worse, so this change was **reverted**
+(`git checkout -- maxQuaPar.m`); `maxQuaPar.m` is back to its pre-investigation, committed state.
+
+**Conclusion for whoever picks this up next**: a blanket distance-tolerance widen is the wrong
+tool here -- the real fix likely needs to track vertex PROVENANCE (which physical apex/ray a point
+is supposed to represent, e.g. by tagging vertices with which original triangle vertex or which
+`g1`/`g2` face-boundary they came from) rather than reconciling near-duplicates purely by
+coordinate distance, since genuinely-close-but-distinct rays (common when many `(k,l)` cells fan
+out from a shared apex) can be closer together than the cross-arithmetic noise on a truly-duplicate
+point. No code changes from this investigation remain in the tree.
+
 ## Next steps
 
 1. **Highest priority now**: the `maxQuaPar:internal` ("assemblePieces: boundary edge (r,c) has no
-   matching neighbour") crash -- seen on ~4% of random valid 3-convex-edge triangles in this
-   session's stress test, and previously seen (before this session) on the near-degenerate sliver
+   matching neighbour") crash -- seen on ~1-4% of random valid 3-convex-edge triangles across two
+   stress-test runs, and previously seen (before this session) on the near-degenerate sliver
    triangle from the old `pickRep` fix. This is a Step-3 assembly-topology bug, NOT a correctness
-   bug (no wrong answers have been observed, only outright crashes on certain edge configurations)
-   -- distinct from the gap just fixed. Not yet investigated. Reproduce with e.g.
-   `T=(6.0365,4.9504),(9.8960,6.3015),(1.4908,3.3753)` (found in this session's stress test) via
+   bug (no wrong answers have been observed in ~1200 stress-test trials this session, only
+   outright crashes on certain configurations) -- distinct from the gap just fixed. Investigated
+   this session but NOT fixed -- see "Investigated but NOT fixed" above for the diagnostic
+   findings (near-duplicate apex vertices at ~1e-8 to ~3e-5 vs genuinely-distinct vertices at
+   ~5e-3) and why a naive tolerance widen makes things worse, not better. Reproduce with e.g.
+   `T=(6.0365,4.9504),(9.8960,6.3015),(1.4908,3.3753)` via
    `maxQuaParTest.buildG1G2ForTriangle(T)` then `maxQuaPar(g1,g2)`.
 2. Separately, `QuaPar.orderEdges`/`createP` rejects the face topology produced by
    `conjPieceCPLQ`/`conjPSDRank1QuadTriangle` for SOME sufficiently near-degenerate/thin triangles
