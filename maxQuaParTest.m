@@ -122,6 +122,34 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
         end
 
+        function assemblePiecesResolvesNearDuplicateApexCluster(testCase)
+            % Regression test for the "assemblePieces: boundary edge (r,c) has no matching
+            % neighbour" crash reported in the session handoff (see maxQuaPar.m's assemblePieces
+            % HISTORY for the full fix). Root cause: a fan of many pieces meeting near one apex
+            % produced several near-duplicate vertex computations, some agreeing only to ~1e-5
+            % (cross-arithmetic noise across two different formulas for the "same" point) while
+            % OTHER, genuinely distinct vertices in the same tiling were only ~5e-3 apart -- no
+            % single coordinate-clustering tolerance can separate these two cases. Fixed by
+            % matching half-edges directly by geometry (never by pre-clustering vertices into a
+            % shared index) and deriving vertex identity afterwards, via union-find, purely from
+            % those confirmed matches.
+            %
+            % T=(6.0365,4.9504),(9.8960,6.3015),(1.4908,3.3753): the exact reproduction case from
+            % the session handoff; used to throw maxQuaPar:internal here.
+            T = [6.0365 4.9504; 9.8960 6.3015; 1.4908 3.3753];
+            [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(T);
+
+            g = maxQuaPar(g1, g2);   % used to throw maxQuaPar:internal here
+            testCase.verifyClass(g, 'QuaPar');
+
+            testPts = [T(1,:); T(2,:); T(3,:); mean(T,1); mean(T,1)+[1 -2]];
+            for i = 1:size(testPts,1)
+                s = testPts(i,:);
+                testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
+                    'AbsTol', 1e-6, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)
             % Calling the public entry point end-to-end. maxQuaPar(g1,g2) now fully ASSEMBLES (the
             % face-clipping topology gap this test used to pin -- a plain decided cell, g1 face 1

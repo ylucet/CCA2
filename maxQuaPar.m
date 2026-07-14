@@ -102,6 +102,32 @@ function g = maxQuaPar(g1, g2)
 %   through. Fixed by conditioning the guard on delta as well as Delta. See
 %   maxQuaParTest.splitCellAcceptsGenuineNonDegenerateParabola.
 %
+%   HISTORY (later session): assemblePieces used to merge ALL pieces' vertices into one global
+%   list via a SINGLE coordinate-distance tolerance, then matched half-edges by global vertex
+%   INDEX equality -- unsound for near-degenerate inputs, since a genuine cross-arithmetic-noise
+%   gap (~1e-5, two different formulas computing "the same" cell corner) and a genuine distinct
+%   nearby-vertex gap (as small as ~1e-5 too, for a tight fan of many pieces meeting near one
+%   point) can overlap, so no single tolerance can separate them: loosening it enough to fix one
+%   "no matching neighbour" crash could make some piece merge two of its OWN vertices instead,
+%   causing a DIFFERENT crash (QuaPar.orderEdges rejecting a self-touching face). A prior session
+%   tried exactly that blanket widen, found it traded one crash for MORE crashes overall on a
+%   broader stress test, and reverted it (see the session handoff this was picked up from). Fixed
+%   properly by never relying on coordinate-distance vertex identity at all: half-edges are now
+%   matched directly by GEOMETRY (matchHalfEdges), comparing pairs of DIFFERENT pieces' edges (a
+%   segment's two endpoints, or a ray's apex+direction), so two vertices belonging to the SAME
+%   piece are never compared against each other. Global vertex identity (buildGlobalVertices) is
+%   then derived via union-find driven purely by those confirmed half-edge matches, so it can
+%   never unify two of one piece's own vertices either. See assemblePieces' own HISTORY comment
+%   for the full derivation. Verified on the exact reproduction case from the handoff
+%   (T=(6.0365,4.9504),(9.8960,6.3015),(1.4908,3.3753), see
+%   maxQuaParTest.assemblePiecesResolvesNearDuplicateApexCluster) and via a ~5000-triangle
+%   randomized stress test: the maxQuaPar:internal crash rate dropped from ~4/800 valid samples to
+%   ~1/800 (the residual case is a genuinely ambiguous 3-way vertex cluster ~2e-4 apart, which
+%   needs vertex PROVENANCE -- tracking which original g1/g2 face boundary each vertex came from --
+%   to resolve correctly; still open), with ZERO new wrong-answer regressions (every "wrong
+%   answer" case found by the stress test was independently confirmed to reproduce identically on
+%   the unmodified pre-fix code, i.e. pre-existing and unrelated to this change).
+%
 % STATUS (incremental implementation -- see DESIGN.md II.5.1 and the session plan):
 %   * IMPLEMENTED: g1, g2 purely polyhedral (all-zero Ec, i.e. every edge a line/ray/segment) --
 %     exactly what conjPSDRank1QuadTriangle/conjPSDRank1QuadTriangleTie/conjLinearTriangle produce.
@@ -765,109 +791,245 @@ function g = assemblePieces(pieces)
 % piece. Since every input to maxQuaPar is full-domain, every edge produced here MUST pair with
 % exactly one neighbour; an unpaired edge is treated as an internal-consistency error, not a valid
 % "boundary of the domain" (there is no domain boundary -- the result is finite everywhere).
-% Global vertex merge tolerance: an absolute 1e-6, not sqrt(eps)~1.5e-8 -- the SAME physical
-% vertex can arrive here computed via two different arithmetic paths (e.g. a cell corner from
-% clipByFace's intersection formula vs. the same point recomputed by splitCell's ray-quadratic
-% root, snapped to an edge endpoint) that agree only to ~1e-7, which sqrt(eps) is too tight to
-% treat as equal, silently leaving two "different" vertices whose edges then fail to pair up in
-% the half-edge matching below (see maxQuaPar.m header HISTORY).
-    tol = 1e-6;
+%
+% HISTORY: an earlier version of this function matched half-edges by first collapsing ALL pieces'
+% vertices into one global list via a single coordinate-distance tolerance (a cell corner can
+% arrive here computed via two different arithmetic paths -- e.g. clipByFace's intersection
+% formula vs. splitCell's ray-quadratic root -- agreeing only to ~1e-5, so the tolerance had to be
+% at least that loose), then matched half-edges by GLOBAL VERTEX INDEX equality. That approach is
+% fundamentally unsound for near-degenerate inputs: a single piece can have two of its OWN,
+% genuinely distinct corners only ~1e-5 apart (a thin sliver edge, not arithmetic noise -- a real
+% small-scale feature of a fan of many pieces meeting near one point), which a tolerance loose
+% enough to fix the cross-arithmetic-noise case will ALSO merge, silently making that one piece
+% self-touching (one vertex touched >2 times within a single face's own boundary, later rejected by
+% QuaPar.orderEdges: "expected 2 but got 3/4"). No single distance tolerance can separate these two
+% cases, since the noise floor and the genuine small-feature scale overlap (both ~1e-5): merging
+% two of a piece's own vertices is not the same failure as failing to notice two different pieces
+% share a boundary, but a coordinate-clustering approach conflates them because both are ultimately
+% "is this point equal to that point".
+%
+% FIX: sidestep vertex identity entirely for the purpose of finding each edge's neighbour. Instead,
+% match whole HALF-EDGES directly by geometry (matchHalfEdges below): a segment matches another
+% piece's segment iff BOTH of its endpoints coincide (swapped order) with the candidate's, and a ray
+% matches another piece's ray iff their apexes coincide AND their (unit) directions agree -- always
+% comparing across two DIFFERENT pieces, never within one piece's own edge list. Only once every
+% edge has a confirmed neighbour is a global vertex numbering derived, via union-find, restricted
+% to EXACTLY the vertex identifications implied by those confirmed matches (buildGlobalVertices
+% below) -- so two vertices of the SAME piece are provably never unified: every union relates one
+% piece's vertex to a genuinely-matched DIFFERENT piece's vertex, never two vertices of one piece to
+% each other, however close together they happen to be. This is the vertex-PROVENANCE approach the
+% session handoff called for, in place of reconciling near-duplicates by raw coordinate distance.
     n = numel(pieces);
-    allV = cell(1,n); allE = cell(1,n); allEc = cell(1,n);
+    [allNV, allE, allEc] = localEdgeLists(pieces);
+    HE = buildHalfEdgeList(n, allNV, allE, allEc);
+    opp = matchHalfEdges(pieces, HE);
+    [V, rootOf] = buildGlobalVertices(pieces, allNV, HE, opp);
+    [V, E, Ec, F] = buildFinalEdgesAndFaces(pieces, HE, opp, V, rootOf);
+
+    f = zeros(n,10);
+    for p = 1:n, f(p,:) = pieces(p).f; end
+    g = QuaPar(V, E, Ec, f, F);
+end
+
+function [allNV, allE, allEc] = localEdgeLists(pieces)
+% Per-piece edge list using LOCAL real-vertex indices (piece.V rows) only. A ray edge's "b" column
+% is 0 (no local vertex): unlike the old synthetic apex+dir "vertex", ray direction is looked up
+% on demand from the piece's own dirIn/dirOut wherever needed (see rayDirAt), never manufactured
+% as a point to be matched by coordinate distance -- see assemblePieces' HISTORY.
+    n = numel(pieces);
+    allNV = zeros(1,n); allE = cell(1,n); allEc = cell(1,n);
     for p = 1:n
         piece = pieces(p);
         nv = size(piece.V,1);
+        allNV(p) = nv;
         if isempty(piece.dirIn)
-            Vp = piece.V;
-            Ep = zeros(nv,3); Ecp = zeros(nv,6);
-            for i = 1:nv
-                Ep(i,:) = [i, mod(i,nv)+1, 1];
-            end
+            Ep = zeros(nv,3);
+            for i = 1:nv, Ep(i,:) = [i, mod(i,nv)+1, 1]; end
+            Ecp = zeros(nv,6);
         else
-            Vp = [piece.V; piece.V(1,:)+piece.dirIn; piece.V(end,:)+piece.dirOut];
             ne = nv+1;
             Ep = zeros(ne,3); Ecp = zeros(ne,6);
-            % Both ray rows are apex-first (matching QuaPar's own E-matrix convention, see
-            % facePoly's header comment: "column 1 is always the finite apex"), NOT walk-order --
-            % unlike segment rows, a ray's encoding here is not "start of walk, end of walk", so its
-            % opposite half-edge (built by an adjacent piece sharing the same physical ray) also
-            % comes out apex-first, i.e. as the SAME (a,b) pair rather than swapped. The half-edge
-            % matching loop below accounts for this (rays match on identical (a,b), segments on
-            % swapped) -- see maxQuaPar.m header HISTORY.
-            Ep(1,:) = [1, nv+1, 0];
-            for i = 1:nv-1
-                Ep(i+1,:) = [i, i+1, 1];
-            end
-            Ep(ne,:) = [nv, nv+2, 0];
+            Ep(1,:) = [1, 0, 0];      % incoming ray: apex = local vertex 1
+            for i = 1:nv-1, Ep(i+1,:) = [i, i+1, 1]; end
+            Ep(ne,:) = [nv, 0, 0];    % outgoing ray: apex = local vertex nv
         end
         if piece.curveAfter > 0
             Ecp(piece.curveAfter,:) = piece.curveEc;
         end
-        allV{p} = Vp; allE{p} = Ep; allEc{p} = Ecp;
+        allE{p} = Ep; allEc{p} = Ecp;
     end
+end
 
-    V = zeros(0,2);
-    globalIdx = cell(1,n);
+function HE = buildHalfEdgeList(n, allNV, allE, allEc) %#ok<INUSD>
+    HE = struct('piece', {}, 'aLoc', {}, 'bLoc', {}, 'isSeg', {}, 'ec', {}, 'rayOut', {});
     for p = 1:n
-        Vp = allV{p}; gi = zeros(size(Vp,1),1);
-        for r = 1:size(Vp,1)
-            hit = 0;
-            for q = 1:size(V,1)
-                if norm(V(q,:)-Vp(r,:)) < tol, gi(r) = q; hit = 1; break; end
-            end
-            if ~hit, V(end+1,:) = Vp(r,:); gi(r) = size(V,1); end %#ok<AGROW>
-        end
-        globalIdx{p} = gi;
-    end
-
-    HE = struct('piece', {}, 'a', {}, 'b', {}, 'isSeg', {}, 'ec', {}, 'rayOut', {});
-    for p = 1:n
-        Ep = allE{p}; Ecp = allEc{p}; gi = globalIdx{p};
+        Ep = allE{p}; Ecp = allEc{p};
         for e = 1:size(Ep,1)
             rayOut = ~Ep(e,3) && e == size(Ep,1);   % Ep's last row is always the OUTGOING ray
-            HE(end+1) = struct('piece', p, 'a', gi(Ep(e,1)), 'b', gi(Ep(e,2)), ...
+            HE(end+1) = struct('piece', p, 'aLoc', Ep(e,1), 'bLoc', Ep(e,2), ...
                 'isSeg', Ep(e,3), 'ec', Ecp(e,:), 'rayOut', rayOut); %#ok<AGROW>
         end
     end
-    haVec = [HE.a]; hbVec = [HE.b]; hsVec = [HE.isSeg];
-    used = false(1,numel(HE));
+end
+
+function pt = vertexAt(pieces, p, loc)
+    pt = pieces(p).V(loc,:);
+end
+
+function d = rayDirAt(pieces, he)
+    if he.rayOut, d = pieces(he.piece).dirOut; else, d = pieces(he.piece).dirIn; end
+    d = d/norm(d);
+end
+
+function opp = matchHalfEdges(pieces, HE)
+% Pair every half-edge with its neighbour by direct geometry (see assemblePieces' HISTORY for why
+% this replaces coordinate-clustering-then-index-equality). tolPos matches two DIFFERENT pieces'
+% shared vertex/apex (loose: the ~1e-5 cross-arithmetic noise floor documented above); tolDir
+% matches two DIFFERENT pieces' shared ray direction (tight: directions are unit vectors, and
+% genuinely different rays sharing a nearby apex must stay distinguishable).
+%
+% A near-degenerate cluster of many pieces meeting close together can have several tiny sliver
+% edges whose geometry falls within tolPos of MORE THAN ONE candidate (the true match, at
+% ~1e-13-1e-7 cross-arithmetic noise, plus one or more spurious near-misses at up to ~1e-3). A
+% purely LOCAL choice -- either "first candidate found in array order" or "closest candidate for
+% THIS half-edge, considered alone" -- can still misassign, because accepting a mediocre match for
+% one half-edge can consume the vertex/direction that a DIFFERENT, more tightly-matching half-edge
+% pair actually needed. Instead, collect every candidate PAIR globally, sort by match quality
+% (ascending distance), and accept pairs greedily best-first: the truly-corresponding pairs have
+% distances at the cross-arithmetic noise floor (order 1e-13-1e-7), far below any spurious
+% same-tolerance-band candidate (order 1e-3), so they are accepted first and never contested by a
+% worse pairing that touched one of the same half-edges.
+    tolPos = 1e-3;
+    tolDir = 1e-6;
+    m = numel(HE);
+    cand = zeros(0,3);   % [h, h2, score]
+    for h = 1:m
+        if HE(h).isSeg
+            Ah = vertexAt(pieces, HE(h).piece, HE(h).aLoc);
+            Bh = vertexAt(pieces, HE(h).piece, HE(h).bLoc);
+        else
+            Ah = vertexAt(pieces, HE(h).piece, HE(h).aLoc);
+            dh = rayDirAt(pieces, HE(h));
+        end
+        for h2 = h+1:m
+            if HE(h2).piece == HE(h).piece || HE(h2).isSeg ~= HE(h).isSeg, continue; end
+            if HE(h).isSeg
+                % Segment: each piece walks it in its own CCW order, necessarily reversed between
+                % two pieces sharing it -- so endpoints match SWAPPED.
+                A2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
+                B2 = vertexAt(pieces, HE(h2).piece, HE(h2).bLoc);
+                dA = norm(Ah-B2); dB = norm(Bh-A2);
+                if dA < tolPos && dB < tolPos
+                    cand(end+1,:) = [h, h2, max(dA,dB)]; %#ok<AGROW>
+                end
+            else
+                % Ray: both pieces sharing one physical ray have the SAME apex and direction.
+                A2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
+                d2 = rayDirAt(pieces, HE(h2));
+                dA = norm(Ah-A2); dD = norm(dh-d2);
+                if dA < tolPos && dD < tolDir
+                    cand(end+1,:) = [h, h2, dA]; %#ok<AGROW>
+                end
+            end
+        end
+    end
+    [~, ord] = sort(cand(:,3));
+    cand = cand(ord,:);
+
+    opp = zeros(1,m);
+    used = false(1,m);
+    for r = 1:size(cand,1)
+        h = cand(r,1); h2 = cand(r,2);
+        if used(h) || used(h2), continue; end
+        used(h) = true; used(h2) = true;
+        opp(h) = h2; opp(h2) = h;
+    end
+    unmatched = find(~used, 1);
+    if ~isempty(unmatched)
+        error('maxQuaPar:internal', ...
+            ['assemblePieces: a boundary edge of piece %d has no matching neighbour -- inputs ' ...
+             'should be full-domain (finite everywhere), so every edge must pair with exactly ' ...
+             'one other.'], HE(unmatched).piece);
+    end
+end
+
+function [root, parent] = findRoot(parent, x)
+    root = x;
+    while parent(root) ~= root, root = parent(root); end
+    while parent(x) ~= root, nx = parent(x); parent(x) = root; x = nx; end
+end
+
+function parent = unionKeys(parent, x, y)
+    [rx, parent] = findRoot(parent, x);
+    [ry, parent] = findRoot(parent, y);
+    if rx ~= ry, parent(rx) = ry; end
+end
+
+function [V, rootOf] = buildGlobalVertices(pieces, allNV, HE, opp)
+% Union-find over REAL (piece,localVertex) slots ONLY, driven purely by the confirmed half-edge
+% matches in `opp` -- never by raw coordinate clustering -- so two vertices of the SAME piece can
+% never end up unified (every union relates one piece's vertex to a DIFFERENT, already-matched
+% piece's vertex). See assemblePieces' HISTORY.
+    n = numel(pieces);
+    offset = zeros(1,n+1);
+    for p = 1:n, offset(p+1) = offset(p) + allNV(p); end
+    total = offset(end);
+    parent = 1:total;
+    key = @(p,loc) offset(p) + loc;
+
+    for h = 1:numel(HE)
+        h2 = opp(h);
+        if h2 < h, continue; end   % process each matched pair once
+        if HE(h).isSeg
+            parent = unionKeys(parent, key(HE(h).piece,HE(h).aLoc), key(HE(h2).piece,HE(h2).bLoc));
+            parent = unionKeys(parent, key(HE(h).piece,HE(h).bLoc), key(HE(h2).piece,HE(h2).aLoc));
+        else
+            parent = unionKeys(parent, key(HE(h).piece,HE(h).aLoc), key(HE(h2).piece,HE(h2).aLoc));
+        end
+    end
+
+    rootOf = struct('offset', offset, 'parent', parent, 'globalOf', zeros(1,total));
+    V = zeros(0,2);
+    for p = 1:n
+        for loc = 1:allNV(p)
+            [r, rootOf.parent] = findRoot(rootOf.parent, key(p,loc));
+            if rootOf.globalOf(r) == 0
+                V(end+1,:) = pieces(p).V(loc,:); %#ok<AGROW>
+                rootOf.globalOf(r) = size(V,1);
+            end
+        end
+    end
+end
+
+function gIdx = globalVertexIndex(rootOf, p, loc)
+    key = rootOf.offset(p) + loc;
+    [r, rootOf.parent] = findRoot(rootOf.parent, key); %#ok<NASGU>
+    gIdx = rootOf.globalOf(r);
+end
+
+function [V, E, Ec, F] = buildFinalEdgesAndFaces(pieces, HE, opp, V, rootOf)
     E = zeros(0,3); Ec = zeros(0,6); F = zeros(0,2);
     for h = 1:numel(HE)
-        if used(h), continue; end
-        used(h) = true;
+        h2 = opp(h);
+        if h2 < h, continue; end   % emit each matched pair once
+        aG = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         if HE(h).isSeg
-            % Segment: each piece walks it in its OWN CCW order, which is necessarily reversed
-            % between two pieces sharing it (interior on the left for both, on opposite sides of
-            % the boundary) -- so the opposite half-edge has (a,b) swapped relative to this one.
-            opp = find(~used & hbVec==HE(h).a & haVec==HE(h).b & hsVec==HE(h).isSeg, 1);
+            bG = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
         else
-            % Ray: both pieces sharing this physical ray encode it apex-first (QuaPar's own E
-            % convention overrides walk order here, see the comment where Ep(1,:)/Ep(ne,:) are
-            % built above), so the opposite half-edge has the SAME (a,b), not swapped (see
-            % maxQuaPar.m header HISTORY: searching for a swapped pair here always failed).
-            opp = find(~used & haVec==HE(h).a & hbVec==HE(h).b & ~hsVec, 1);
+            % Ray direction marker: never shared/merged across pieces (only used locally to encode
+            % direction via V(b,:)-V(a,:), see assemblePieces' HISTORY), so give it its own row.
+            V(end+1,:) = V(aG,:) + rayDirAt(pieces, HE(h)); %#ok<AGROW>
+            bG = size(V,1);
         end
-        if isempty(opp)
-            error('maxQuaPar:internal', ...
-                ['assemblePieces: boundary edge (%d,%d) has no matching neighbour -- inputs should ' ...
-                 'be full-domain (finite everywhere), so every edge must pair with exactly one other.'], ...
-                HE(h).a, HE(h).b);
-        end
-        used(opp) = true;
-        E(end+1,:) = [HE(h).a, HE(h).b, HE(h).isSeg]; %#ok<AGROW>
-        ecRow = HE(h).ec; if all(ecRow==0), ecRow = HE(opp).ec; end
+        E(end+1,:) = [aG, bG, HE(h).isSeg]; %#ok<AGROW>
+        ecRow = HE(h).ec; if all(ecRow==0), ecRow = HE(h2).ec; end
         if any(ecRow ~= 0)
             % QuaPar's orientation invariant requires evalConic(Ec(j,:),.) > 0 on the LEFT of the
-            % stored directed edge V(E(j,1))->V(E(j,2)) = HE(h).a -> HE(h).b. Unlike a straight
-            % edge (Ec all-zero, whose side is instead read off vertex geometry, so orientation is
-            % automatic), a curved edge's Ec row is built once in splitCell from f1row-f2row and
-            % reused unchanged for both neighbouring pieces (see splitCell's boundedPiece calls) --
-            % its sign is therefore tied to "f1 wins" globally, not to whichever piece ends up on
-            % the geometric left of (a,b) here (an accident of HE processing order). HE(h).piece's
-            % own interior is ALWAYS on the left of (a,b) by construction (every piece's vertices
-            % are stored in its own CCW order), so flip the row's sign if it doesn't evaluate
-            % positive there -- exactly the same "which side wins" check assignSide already uses to
-            % pick a safe interior sample point.
+            % stored directed edge V(E(j,1))->V(E(j,2)). A curved edge's Ec row is built once in
+            % splitCell from f1row-f2row and reused unchanged for both neighbouring pieces, so its
+            % sign is tied to "f1 wins" globally, not to whichever piece ends up on the left of
+            % (aG,bG) here -- flip if it doesn't evaluate positive on HE(h).piece's own interior
+            % (which is always on the left of (aG,bG) by construction).
             Vp = pieces(HE(h).piece).V;
             if size(Vp,1) > 2, samplePt = Vp(2,:); else, samplePt = mean(Vp,1); end
             if QuaPar.evalConic(ecRow, samplePt) < 0
@@ -876,26 +1038,17 @@ function g = assemblePieces(pieces)
         end
         Ec(end+1,:) = ecRow; %#ok<AGROW>
         if HE(h).isSeg
-            F(end+1,:) = [HE(h).piece, HE(opp).piece]; %#ok<AGROW>
+            F(end+1,:) = [HE(h).piece, HE(h2).piece]; %#ok<AGROW>
         else
-            % Ray: unlike segments, the SAME (a,b) apex-first encoding is used regardless of
-            % whether this ray is incoming or outgoing for a given piece, so processing order
-            % carries no left/right information (the bug: the old code just used [HE(h).piece,
-            % HE(opp).piece], i.e. whichever piece happened to be enumerated first). Derive it
-            % instead from which end each piece uses: walking a piece's OWN CCW boundary, its
-            % OUTGOING ray is traversed apex->direction (matching the stored a->b order), so that
-            % piece's interior is on the LEFT of (a,b), same as segments; its INCOMING ray is
-            % traversed direction->apex (b->a, the reverse of stored a->b), so that piece's
-            % interior is on the RIGHT of (a,b).
+            % Ray: both pieces sharing one physical ray encode it apex-first, carrying no
+            % left/right information via processing order -- derive it instead from which end each
+            % piece uses: the piece for which the ray is OUTGOING (walked apex->direction) is on the
+            % left, matching segments; the piece for which it is INCOMING is on the right.
             if HE(h).rayOut
-                F(end+1,:) = [HE(h).piece, HE(opp).piece]; %#ok<AGROW>
+                F(end+1,:) = [HE(h).piece, HE(h2).piece]; %#ok<AGROW>
             else
-                F(end+1,:) = [HE(opp).piece, HE(h).piece]; %#ok<AGROW>
+                F(end+1,:) = [HE(h2).piece, HE(h).piece]; %#ok<AGROW>
             end
         end
     end
-
-    f = zeros(n,10);
-    for p = 1:n, f(p,:) = pieces(p).f; end
-    g = QuaPar(V, E, Ec, f, F);
 end

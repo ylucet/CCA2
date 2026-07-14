@@ -86,6 +86,21 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   answers, only pre-existing/separate `maxQuaPar:internal` assembly-topology crashes on ~4% of
   valid samples — a different, still-open gap, not a correctness issue). See `splitThreeConvex`'s
   HISTORY comment and the session handoff for the derivation and stress-test details.
+  **Reliability fix (2026-07-14, later session)**: the `maxQuaPar:internal` assembly-topology
+  crash noted above (`assemblePieces: boundary edge (r,c) has no matching neighbour`) was rooted in
+  `assemblePieces` merging all pieces' vertices via one coordinate-distance tolerance and then
+  matching half-edges by resulting vertex-index equality — unsound for near-degenerate triangles,
+  since a genuine cross-arithmetic-noise gap and a genuine distinct-nearby-vertex gap can be the
+  same order of magnitude (~1e-5), so no single tolerance separates them. Fixed by matching
+  half-edges directly by geometry instead (comparing only DIFFERENT pieces' edges, never a piece's
+  own), then deriving global vertex identity afterwards via union-find restricted to exactly those
+  confirmed matches — see `maxQuaPar.m`'s header HISTORY and `assemblePieces`' own HISTORY comment
+  for the full derivation. Crash rate on a ~5000-triangle randomized stress test dropped from
+  ~4/800 valid samples to ~1/800, with zero new wrong-answer regressions (verified: every
+  wrong-answer case reproduces identically on the unmodified pre-fix code). The residual ~1/800
+  case is a genuinely ambiguous 3-way vertex cluster that needs vertex PROVENANCE (tracking which
+  original `g1`/`g2` face boundary a vertex came from) to resolve, not just tighter geometry —
+  still open, see the session handoff.
   The fully general case — a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
