@@ -101,7 +101,39 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   case is a genuinely ambiguous 3-way vertex cluster that needs vertex PROVENANCE (tracking which
   original `g1`/`g2` face boundary a vertex came from) to resolve, not just tighter geometry —
   still open, see the session handoff.
-  The fully general case — a multi-face original
+  **Reliability fix (2026-07-14, later session)**: diagnosed the residual ~1/800 case above and
+  found full vertex provenance turned out to be unnecessary. Root cause: a 3-way (or more) vertex
+  cluster where several pieces meeting near one point each compute a slightly different position
+  (order ~1e-4 -- too coarse for `matchHalfEdges`' cross-arithmetic-noise tolerance, too fine to be
+  a distinct feature) for what is mathematically ONE vertex; the best-first greedy matcher can
+  pair up only 2 of the 3-plus mutually-close half-edges, always orphaning one. Diagnosis showed
+  the orphaned edge's own two endpoints ALWAYS resolve to the very same global vertex via the
+  OTHER, already-confirmed matches on its own piece's boundary -- i.e. it is provably zero-length
+  once the rest of the topology is resolved, so it is safe to just drop (emit nothing for it)
+  rather than error. Fixed via the new `checkOrphanHalfEdges` (called after global vertex identity
+  is built): drops an orphaned edge only when its two endpoints already coincide globally,
+  otherwise still raises the original error (a genuinely unresolved gap, or an orphaned ray -- no
+  evidence yet that rays can be legitimately degenerate this way). Verified on 5 of 6
+  randomly-found repro triangles end-to-end against ground truth (machine precision); crash rate
+  on the "no matching neighbour" error specifically dropped to 0/455 valid samples on a 3000-
+  triangle randomized stress test (down from ~4-6/800 before this session). See
+  `checkOrphanHalfEdges`'s own header in `maxQuaPar.m` and
+  `maxQuaParTest.checkOrphanHalfEdgesDropsProvablyDegenerateOrphanEdges`.
+  **New issue found while verifying the fix above (still open, higher priority than it looks)**:
+  one of the 6 repro triangles (a 5-piece cluster, more complex than the simple 3-way case) no
+  longer crashes but instead SILENTLY returns the wrong answer (`Inf`, i.e. a domain-coverage gap)
+  over a substantial region -- confirmed via `polyConstraints` that the original, pre-assembly
+  piece geometrically DOES cover that region, so the bug is in final assembly/`QuaPar.eval`, not
+  in piece generation. This is NOT caused by this session's fix (the crash previously masked it
+  for this exact triangle), and is NOT the same bug as the vertex-cluster crash above -- likely a
+  sign/orientation issue in `QuaPar.eval`'s per-edge conic membership test (`edgeConics`/
+  `evalConic`) specific to an unbounded face whose two rays point in nearly the SAME direction (a
+  degenerate "parallel-strip" shape), not yet isolated further. A broader stress test (2000
+  triangles) found this silent-wrong-answer pattern in ~2/300 valid samples -- roughly the same
+  order of magnitude as the crash rate this fix addressed, and worse in kind (silent, not loud).
+  **This should be the top priority for the next session** -- see the session handoff for the
+  repro triangle and diagnostic trail.
+  The fully general case -- a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
   rational envelope), which `conjPieceCPLQ` cannot conjugate yet (its own header TODO); the
