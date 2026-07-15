@@ -48,7 +48,7 @@ the top priority for the next session** — see "Repro for the still-open issue"
 
 - Branch: `main` @ `bcc2851` — "Fix residual maxQuaPar:internal crash by dropping
   provably-degenerate orphan edges".
-- Pushed: no upstream configured.
+- Pushed: pending.
 - Full test suite: 144/144 PASS (143 pre-existing + 1 new regression test,
   `checkOrphanHalfEdgesDropsProvablyDegenerateOrphanEdges`). Working tree clean (this session's
   work is committed).
