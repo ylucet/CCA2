@@ -150,6 +150,42 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
         end
 
+        function checkOrphanHalfEdgesDropsProvablyDegenerateOrphanEdges(testCase)
+            % Regression test for the residual "assemblePieces: ... has no matching neighbour"
+            % crash left open by assemblePiecesResolvesNearDuplicateApexCluster's fix (see this
+            % session's entry in maxQuaPar.m's assemblePieces HISTORY, and checkOrphanHalfEdges'
+            % own header). Root cause: a genuinely AMBIGUOUS 3-way vertex cluster -- three
+            % different pieces' edges all mutually within matchHalfEdges' tolPos, at a scale
+            % (~1e-4) too coarse to be cross-arithmetic noise but too fine to be a distinct
+            % feature -- so the best-first greedy matcher can pair up only 2 of the 3, always
+            % orphaning the third. Diagnosis showed the orphaned edge's own two endpoints ALWAYS
+            % resolve to the very same global vertex via the OTHER, confirmed matches on its own
+            % piece's boundary, i.e. it is provably zero-length once the rest of the topology is
+            % resolved -- safe to drop rather than error. Fixed by checkOrphanHalfEdges.
+            %
+            % 5 randomly-found near-degenerate (nearly-collinear) triangles that all used to throw
+            % maxQuaPar:internal here; verified end-to-end against ground truth at several points.
+            Ts = { [8.5697 2.6142; 5.0151 1.8051; 1.3296 0.9185]
+                   [7.4090 3.9129; 4.3476 2.4669; 1.6019 1.1161]
+                   [8.1673 7.7777; 5.0209 4.8767; 0.6393 0.7022]
+                   [6.6140 9.9669; 6.0687 8.8885; 4.8459 6.3676]
+                   [2.1767 3.3847; 0.5909 2.7773; 7.0977 5.1590] };
+            for ti = 1:numel(Ts)
+                T = Ts{ti};
+                [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(T);
+                g = maxQuaPar(g1, g2);   % used to throw maxQuaPar:internal here
+                testCase.verifyClass(g, 'QuaPar');
+
+                c = mean(T,1);
+                testPts = [T(1,:); T(2,:); T(3,:); c; c+[1 -2]; c+[-1 3]];
+                for i = 1:size(testPts,1)
+                    s = testPts(i,:);
+                    testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
+                        'AbsTol', 1e-6, sprintf('T#%d s=(%.4f,%.4f)', ti, s(1), s(2)));
+                end
+            end
+        end
+
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)
             % Calling the public entry point end-to-end. maxQuaPar(g1,g2) now fully ASSEMBLES (the
             % face-clipping topology gap this test used to pin -- a plain decided cell, g1 face 1

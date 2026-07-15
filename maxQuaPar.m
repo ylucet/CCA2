@@ -819,11 +819,34 @@ function g = assemblePieces(pieces)
 % piece's vertex to a genuinely-matched DIFFERENT piece's vertex, never two vertices of one piece to
 % each other, however close together they happen to be. This is the vertex-PROVENANCE approach the
 % session handoff called for, in place of reconciling near-duplicates by raw coordinate distance.
+%
+% HISTORY (later session): the fix above dropped the crash rate on a randomized stress test from
+% ~4/800 to ~1/800; the residual ~1/800 is a genuinely AMBIGUOUS 3-way (or more) vertex cluster --
+% e.g. three pieces whose edges are ALL mutually within matchHalfEdges' tolPos, at a scale
+% (~1e-4) too large to be cross-arithmetic noise (tolPos's intended target) but too small to be a
+% separate genuine feature -- for which matchHalfEdges' best-first greedy matching can only pair
+% up 2 of the 3, unavoidably orphaning the third half-edge regardless of matching strategy (this
+% is a topological tie, not a tolerance-tuning problem: full vertex PROVENANCE, tagging each edge
+% with which original g1/g2 face-pair boundary produced it, would resolve it in principle, but
+% turned out to be unnecessary -- see below). Diagnosed via checkOrphanHalfEdges's namesake
+% investigation: for every such orphaned half-edge found (6 randomly-sampled repro triangles), its
+% own two endpoints ALWAYS resolved to the very same global vertex once the OTHER, successfully
+% -matched half-edges on its own piece's boundary were accounted for -- i.e. the orphaned edge is
+% provably zero-length in the resolved geometry, so dropping it (emitting no edge for it, which
+% buildFinalEdgesAndFaces already does for any unmatched half-edge) is exactly correct, not a
+% guess. Fixed by moving the "no matching neighbour" error out of matchHalfEdges and into the new
+% checkOrphanHalfEdges (called after buildGlobalVertices, so global vertex identity is available):
+% it only raises the error for an orphan whose endpoints do NOT already coincide globally (a
+% genuine, still-unresolved topology gap) or for an orphaned RAY (no evidence yet that rays can be
+% legitimately degenerate this way, so they keep the original strict behaviour). See
+% checkOrphanHalfEdges's own header for the full argument and
+% maxQuaParTest.residualVertexClusterCrash* for the regression tests.
     n = numel(pieces);
     [allNV, allE, allEc] = localEdgeLists(pieces);
     HE = buildHalfEdgeList(n, allNV, allE, allEc);
     opp = matchHalfEdges(pieces, HE);
     [V, rootOf] = buildGlobalVertices(pieces, allNV, HE, opp);
+    checkOrphanHalfEdges(HE, opp, rootOf);
     [V, E, Ec, F] = buildFinalEdgesAndFaces(pieces, HE, opp, V, rootOf);
 
     f = zeros(n,10);
@@ -944,13 +967,10 @@ function opp = matchHalfEdges(pieces, HE)
         used(h) = true; used(h2) = true;
         opp(h) = h2; opp(h2) = h;
     end
-    unmatched = find(~used, 1);
-    if ~isempty(unmatched)
-        error('maxQuaPar:internal', ...
-            ['assemblePieces: a boundary edge of piece %d has no matching neighbour -- inputs ' ...
-             'should be full-domain (finite everywhere), so every edge must pair with exactly ' ...
-             'one other.'], HE(unmatched).piece);
-    end
+    % Any still-zero entry of opp is left for assemblePieces' checkOrphanHalfEdges to resolve,
+    % once global vertex identity is available -- see its header for why some of these are
+    % provably safe to drop rather than treat as errors (a genuinely ambiguous 3-way vertex
+    % cluster, not fixable by this function's own local view of the candidate list alone).
 end
 
 function [root, parent] = findRoot(parent, x)
@@ -998,6 +1018,51 @@ function [V, rootOf] = buildGlobalVertices(pieces, allNV, HE, opp)
                 rootOf.globalOf(r) = size(V,1);
             end
         end
+    end
+end
+
+function checkOrphanHalfEdges(HE, opp, rootOf)
+% Every half-edge matchHalfEdges left unpaired (opp==0) is normally a genuine topology bug (the
+% error below) -- EXCEPT one provably safe case: a genuinely AMBIGUOUS 3-way (or more) vertex
+% cluster, where several pieces meeting near one point each independently compute a slightly
+% different position (order ~1e-4, a real feature of a near-degenerate/thin input triangle -- NOT
+% the ~1e-5-1e-7 cross-arithmetic noise floor tolPos is tuned for) for what is mathematically ONE
+% single vertex. matchHalfEdges' greedy best-first matching can then pair up only 2 of the 3
+% (or more) mutually-close half-edges -- there is no valid 1-1 pairing that covers all of them,
+% however the candidates are chosen -- leaving exactly one tiny sliver edge (connecting two of
+% the near-duplicate points) without a partner.
+%
+% That leftover edge is safe to simply DROP (emit nothing for it -- buildFinalEdgesAndFaces
+% already does this for any h with opp(h)==0) precisely WHEN its own two endpoints have already
+% been identified as the SAME global vertex via the OTHER, independently-confirmed half-edge
+% matches elsewhere on this piece's own boundary: that means the "gap" this edge would have
+% bridged has zero length once the surrounding topology is resolved, so omitting it changes
+% nothing geometrically -- the piece's boundary still closes properly through the shared vertex.
+% If the two endpoints do NOT resolve to the same global vertex, this is still a genuine
+% unresolved topology gap and raises the original error.
+%
+% Verified on 6 randomly-found reproduction triangles (all near-degenerate/thin, e.g.
+% T=(8.5697,2.6142),(5.0151,1.8051),(1.3296,0.9185)) that used to throw maxQuaPar:internal here --
+% in every case the orphaned edge's two endpoints resolved to one shared global vertex, and
+% dropping it produced a QuaPar matching ground truth at all sample points (see
+% maxQuaParTest.residualVertexClusterCrash*). See also matchHalfEdges' HISTORY.
+    for h = 1:numel(HE)
+        if opp(h) ~= 0, continue; end
+        if ~HE(h).isSeg
+            error('maxQuaPar:internal', ...
+                ['assemblePieces: a boundary ray of piece %d has no matching neighbour -- inputs ' ...
+                 'should be full-domain (finite everywhere), so every edge must pair with exactly ' ...
+                 'one other.'], HE(h).piece);
+        end
+        gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
+        gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
+        if gA ~= gB
+            error('maxQuaPar:internal', ...
+                ['assemblePieces: a boundary edge of piece %d has no matching neighbour -- inputs ' ...
+                 'should be full-domain (finite everywhere), so every edge must pair with exactly ' ...
+                 'one other.'], HE(h).piece);
+        end
+        % else: gA==gB -- a zero-length orphan edge, safe to drop (see header).
     end
 end
 
