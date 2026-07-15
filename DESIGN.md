@@ -158,7 +158,43 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   randomized correctness stress test found 0/491 silent-wrong-answer (`Inf`) cases after this fix
   (down from ~2/300 before it); a handful of small-magnitude (not `Inf`) wrong-answer cases also
   turned up in that same stress test and were confirmed to reproduce identically on the unmodified
-  pre-fix code -- a separate, still-open issue, not addressed here (see the session handoff).
+  pre-fix code -- a separate, still-open issue, diagnosed (not fixed) in the next paragraph.
+  **Open research question found while diagnosing the small-magnitude wrong-answer cases
+  (2026-07-14, later session; higher priority than it looks -- affects the published paper's own
+  worked example)**: traced ALL of the small-magnitude wrong-answer cases to `convEnvCPLQ.m`'s
+  2-convex-edge quadratic (`envelopeFromClassified` case 2 / `twoEdgeQuadPlain` / `buildTwoEdge`,
+  implementing [COAP] Appendix A.4) NOT always being the true tightest convex envelope, even though
+  it is a valid minorant that correctly touches `f=u1u2` along both classified convex edges.
+  Reproduced and confirmed via three independent methods on **the paper's own Appendix A.4.3
+  example**, `V=(2,1),(0,0),(1,0)`  (the same triangle used verbatim in
+  `convEnvCPLQTest.bilinearTwoConvexEdgesQuadratic`): (1) hand-derived exact closed-form boundary
+  analysis gives `sup_{x in V}[s.x-f(x)] = 0` at `s=(-0.008727,-0.999962)`, achieved at vertex
+  `(0,0)`; (2) the REAL pipeline (`convEnvCPLQ` then `conjPieceCPLQ`, i.e. `gTest.eval(s)`) gives
+  `0.03864091` instead; (3) an independent biconjugate reconstruction (
+  `conv(f)(x0) = sup_s[s.x0 - supBilinearOverPoly(s,V)]`, solved numerically) confirms the TRUE
+  envelope value at the discrepancy's own argmax point `x0=(0.474343,0)` is `~0` (matching `f`
+  exactly there), while the formula's `q1(x0) = -0.042780` -- a genuine, reproducible ~0.043 gap,
+  not a numerical artifact (also reproduced on the session's original stress-test triangle
+  `T=(3.8398,5.0413),(8.8152,7.2338),(8.7969,5.6447)`, gap ~0.11 at its own analogous point).
+  Root cause: `x0` lies on the triangle's THIRD, non-convex ("weak") edge, where `twoEdgeQuadPlain`
+  is only constrained to match `f` at the 2 shared endpoints (not the whole edge) -- being a single
+  convex quadratic forced through those 2 endpoint values, it is mathematically forced to dip
+  strictly below `f` in the open interior of that edge, more than the TRUE 2D envelope needs to.
+  Established (via the same biconjugate check, at several points) that the TRUE envelope along the
+  weak edge equals the AFFINE CHORD between its 2 endpoint values (matches to 6 decimals at every
+  point checked) -- but naively using `max(q1, affine-interpolation-of-the-3-vertex-values)` as a
+  replacement is NOT globally valid: the affine piece exceeds `f` (and `q1`) in a region nearer the
+  common vertex (by up to 1.46 in the stress-test triangle), and a systematic re-check over many
+  random dual points found `s` values where that combination's conjugate is wrong in the OPPOSITE
+  direction too. A correct general fix likely needs a genuine sub-partition of the 2-convex-edge
+  triangle (an actual second piece with its own derivation, analogous to how the 3-convex-edge case
+  above splits into two sub-triangles) rather than a simple pointwise max of two candidates -- this
+  is a real extension of the published Appendix A.4 derivation, not a simple code fix. Consistent
+  with the paper's own text for its worked example -- *"by checking the bounds we get the domain as
+  the entire triangle"* -- which reads as a check that can fail for other triangles, not a
+  universal guarantee; the code never implements that check, so it silently assumes the single
+  quadratic is always valid. **Not fixed this session** -- see the session handoff for the full
+  repro/verification trail and suggested next steps.
   The fully general case -- a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
