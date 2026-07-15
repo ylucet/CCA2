@@ -186,6 +186,39 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
         end
 
+        function insertPassthroughVerticesDropsNearDuplicateCrossingPoint(testCase)
+            % Regression test for the still-open silent-wrong-answer issue from the prior session's
+            % handoff: g.eval used to return Inf over a real, comfortably-covered region of the
+            % plane instead of the correct finite value. Root cause: insertPassthroughVertices'
+            % "already a vertex" check shared its tolerance (1e-7) with onOpenSegment/onOpenRay's
+            % own edge-matching tolerance, but a genuine cross-arithmetic-noise gap between the
+            % ORIGINAL face vertex used as a passthrough candidate and the ALREADY-PRESENT cell
+            % vertex it geometrically coincides with can be ~3e-5 -- too coarse for that shared
+            % 1e-7. This face (an unbounded piece whose two rays point in the SAME direction, a
+            % degenerate "parallel-strip" shape rather than a normal wedge) ended up with an extra,
+            % near-zero-length sliver edge whose line equation was dominated by floating-point noise
+            % in the tiny direction vector, wrongly excluding a real chunk of the plane from
+            % QuaPar.eval's exact (no-tolerance) membership test. Fixed by decoupling the
+            % "already a vertex" pre-check into its own, wider tolerance (tolSnap=1e-4) -- see
+            % insertPassthroughVertices' own header for why the shared-tolerance fix was tried first
+            % and reverted (it broke two OTHER regression tests in this file with a different wrong
+            % topology, each at a different noise scale).
+            %
+            % T=(7.8665,4.6784),(2.6908,1.9477),(0.3892,0.7130): a randomly-found repro triangle;
+            % s=(3.380265,-0.644943) used to give g.eval==Inf here (true value ~2.6946).
+            T = [7.8665 4.6784; 2.6908 1.9477; 0.3892 0.7130];
+            [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(T);
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+
+            testPts = [3.380265 -0.644943; T(1,:); T(2,:); T(3,:); mean(T,1)];
+            for i = 1:size(testPts,1)
+                s = testPts(i,:);
+                testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
+                    'AbsTol', 1e-6, sprintf('s=(%.6f,%.6f)', s(1), s(2)));
+            end
+        end
+
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)
             % Calling the public entry point end-to-end. maxQuaPar(g1,g2) now fully ASSEMBLES (the
             % face-clipping topology gap this test used to pin -- a plain decided cell, g1 face 1

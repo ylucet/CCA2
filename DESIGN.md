@@ -133,6 +133,32 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   order of magnitude as the crash rate this fix addressed, and worse in kind (silent, not loud).
   **This should be the top priority for the next session** -- see the session handoff for the
   repro triangle and diagnostic trail.
+  **Correctness fix (2026-07-14, later session)**: diagnosed and fixed the silent-wrong-answer
+  issue above. Root cause: `insertPassthroughVertices` (which re-inserts an original `g1`/`g2` face
+  vertex into a clipped cell when it lies in the open interior of one of the cell's own edges, so
+  the true neighbouring face never silently changes mid-edge -- see `clipByFace`'s HISTORY) checked
+  "is this point ALREADY a vertex of the cell" using the SAME tight tolerance (1e-7) as
+  `onOpenSegment`/`onOpenRay`'s own edge-matching test. A genuine cross-arithmetic-noise gap between
+  the original face vertex and the already-present cell vertex it geometrically coincides with can
+  be ~3e-5 (two different formulas computing "the same" point, the same noise floor documented
+  elsewhere in this file) -- too coarse for that shared 1e-7 -- so the point narrowly failed the
+  "already present" check and was instead inserted as a brand-new, near-duplicate vertex, creating a
+  near-zero-length sliver edge whose line equation was dominated by floating-point noise in the tiny
+  direction vector. `QuaPar.eval`'s exact (no-tolerance) membership test then wrongly excluded a
+  real region of the plane behind that noise-direction line. Fixed by giving the "already a vertex"
+  pre-check its OWN, wider tolerance (`tolSnap=1e-4`), decoupled from `onOpenSegment`/`onOpenRay`'s
+  matching tolerance (left at 1e-7): widening the shared tolerance instead (tried first) broke two
+  OTHER regression tests, each at a different noise scale (a genuinely distinct ~7.9e-4-away vertex
+  wrongly absorbed into the wrong edge in one; a genuine ~1e-4 feature of a near-degenerate triangle
+  wrongly merged in the other) -- no single shared value separated all three cases, but `tolSnap`
+  only ever recognizes p as coincident with a vertex the cell construction already produced, never
+  changing whether a genuinely new point gets inserted, so it can't manufacture that kind of wrong
+  topology. See `insertPassthroughVertices`'s own header in `maxQuaPar.m` and
+  `maxQuaParTest.insertPassthroughVerticesDropsNearDuplicateCrossingPoint`. A 3000-triangle
+  randomized correctness stress test found 0/491 silent-wrong-answer (`Inf`) cases after this fix
+  (down from ~2/300 before it); a handful of small-magnitude (not `Inf`) wrong-answer cases also
+  turned up in that same stress test and were confirmed to reproduce identically on the unmodified
+  pre-fix code -- a separate, still-open issue, not addressed here (see the session handoff).
   The fully general case -- a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely

@@ -255,15 +255,48 @@ function cell = insertPassthroughVertices(cell, pts)
 % Subdivide cell's straight boundary edges (segments, plus the two rays if unbounded) at any point
 % of `pts` that lies in the OPEN interior of an existing edge and isn't already a vertex. See
 % clipByFace's call site for why this is needed.
+%
+% BUGFIX (found via the still-open silent-wrong-answer issue from the prior session's handoff):
+% `pts` is g1's/g2's ORIGINAL face vertex coordinates, while `cell.V` was built by a DIFFERENT
+% arithmetic path (clipPolyHalfPlane's crossingPoint formula, chained across possibly several
+% clips) -- the same cross-arithmetic-noise situation documented in assemblePieces'/
+% matchHalfEdges' HISTORY, just one step earlier in the pipeline. The "already a vertex" check
+% below used to share `tol`=1e-7 with onOpenSegment/onOpenRay's own matching tolerance, which was
+% tighter than that noise floor (observed ~3.1e-5 on a real repro, T=(7.8665,4.6784),
+% (2.6908,1.9477),(0.3892,0.7130)): a `pts` entry that geometrically IS an already-present cell
+% vertex narrowly failed this check and fell through to onOpenSegment, which (correctly, by ITS
+% OWN tight tolerance) still recognized p as within a hair of the edge's endpoint... except the
+% version of this code before this fix inserted p as a brand-new vertex regardless, creating a
+% near-zero-length sliver edge whose line equation is dominated by floating-point noise in the tiny
+% direction vector, wrongly excluding a real region of the plane from its face in QuaPar.eval's
+% exact (no-tolerance) membership test -- see
+% maxQuaParTest.insertPassthroughVerticesDropsNearDuplicateCrossingPoint.
+%
+% FIX: widen ONLY this "already a vertex" pre-check (tolSnap), leaving onOpenSegment/onOpenRay's own
+% matching tolerance (tol, still 1e-7) completely untouched. This was deliberately chosen over
+% widening `tol` itself (tried first): `tol` also controls onOpenSegment/onOpenRay's "is p actually
+% on this edge, and not too close to either of ITS OWN endpoints" tests, which are answering a
+% DIFFERENT question (whether a genuinely-distinct point elsewhere on this cell's boundary should
+% split it) than tolSnap (whether p merely coincides with a vertex the cell ALREADY has). Widening
+% `tol` broadly perturbs the former and was observed to wrongly absorb a genuinely DISTINCT nearby
+% vertex (~7.9e-4 away, a real corner, not noise) into the wrong edge on
+% maxQuaParTest.dedupHitsMergesCrossingsAtACellCorner's T=(0,0),(2.11,1.43),(8.84,4.50), while
+% narrower values still broke maxQuaParTest.checkOrphanHalfEdgesDropsProvablyDegenerateOrphanEdges's
+% near-degenerate triangles (whose genuine small-scale features sit right around 1e-4, per that
+% test's own header) -- no single value of the SHARED tolerance separated all three cases.
+% Decoupling them resolves this: tolSnap only ever causes p to be treated as coincident with a
+% vertex the cell construction already produced (never changes whether a genuinely new point gets
+% inserted), so it cannot manufacture the kind of wrong topology `tol` did.
     if isempty(pts), return; end
     tol = 1e-7;
+    tolSnap = 1e-4;
     for pi = 1:size(pts,1)
         p = pts(pi,:);
         again = true;
         while again
             again = false;
             nv = size(cell.V,1);
-            if nv == 0 || any(all(abs(cell.V - p) < tol, 2)), break; end
+            if nv == 0 || any(all(abs(cell.V - p) < tolSnap, 2)), break; end
             if isempty(cell.dirIn)
                 for i = 1:nv
                     j = mod(i,nv)+1;
