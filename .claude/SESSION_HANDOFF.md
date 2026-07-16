@@ -77,7 +77,7 @@ half-edge). Spent this session's remaining time digging into WHY:
 
 - Branch: `main` @ `719943d` -- "Fix convEnvCPLQ envelope-tightness bug; partial fix for maxQuaPar
   assembly gap".
-- Pushed: pending.
+- Pushed: yes.
 - Files changed: `convEnvCPLQ.m` (Part 1 fix), `convEnvCPLQTest.m` (+1 regression test + 2 static
   helpers), `conjPieceCPLQTest.m` (1 test updated for the new 2-face Step-1 output), `maxQuaPar.m`
   (`dedupPieces`, new -- Part 2 partial fix), `DESIGN.md` (documented both parts). No other files
