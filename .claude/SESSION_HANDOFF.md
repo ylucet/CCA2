@@ -1,70 +1,116 @@
 # Session Handoff
 
-_Last updated: 2026-07-14T23:59:00Z_
+_Last updated: 2026-07-15T01:00:00Z_
 
 ## What happened this session
 
-Diagnosed (did not fix) the prior session's #1-priority "finite but wrong `g.eval`" bug. Traced it
-to `convEnvCPLQ.m`'s 2-convex-edge quadratic (`envelopeFromClassified` case 2 / `twoEdgeQuadPlain` /
-`buildTwoEdge`, implementing [COAP] Appendix A.4) not always being the true tightest convex
-envelope, even though it is a valid minorant that correctly touches `f=u1u2` along both classified
-convex edges. This is a much deeper finding than expected: it reproduces on **the paper's own
-Appendix A.4.3 worked example** (`V=(2,1),(0,0),(1,0)`), confirmed via three independent methods
-(hand-derived exact boundary analysis, the real `convEnvCPLQ`+`conjPieceCPLQ` pipeline, and an
-independent biconjugate reconstruction `conv(f)(x0)=sup_s[s.x0 - supBilinearOverPoly(s,V)]`). Root
-cause and the true envelope's boundary conditions along the triangle's third ("weak") edge are now
-characterized, but a correct general fix needs an actual extension of the published derivation
-(likely a genuine sub-partition of the triangle, not a simple pointwise combination) — this is
-research-level work, not a code bug fix, and was intentionally left open this session per the
-user's direction. Full derivation trail is in `DESIGN.md`.
+**Part 1 (complete, verified): fixed the prior session's #1-priority envelope-tightness gap** in
+`convEnvCPLQ.m` (COAP Appendix A.4, 2-convex-edge triangle case), diagnosed but not fixed last
+time. Derived and implemented the genuine sub-partition that diagnosis anticipated: the triangle
+is split by a cevian from one weak-edge endpoint into the opposite convex edge, giving two
+sub-triangles -- the one containing the two convex edges' shared vertex keeps the original
+`twoEdgeQuadPlain` quadratic unchanged (still exactly tight there); the other uses a new quadratic
+(`buildEdgeAffinePiece`) that touches `f=u1u2` along its remaining convex edge and the AFFINE
+CHORD (not `f` itself) along the now-fully-contained weak edge. The cevian's direction is forced
+(found via the same "factor the difference of two same-touching quadratics" trick as
+`splitThreeConvex`), and exactly one of its two candidate directions is geometrically valid,
+verified across ~6500 random triangles. A separate, measure-zero case (e.g. the mirror-symmetric
+triangle `(0,0),(2,1),(1,2)`) needs no split at all and is detected directly and cheaply.
+
+Verified via: the paper's own Appendix A.4.3 example (previously wrong at the flagged bad dual
+point and at the "dip" point `x0=(0.474343,0)`, both now correct); a new regression test
+(`convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight`); and a ~60-triangle MATLAB-side randomized
+stress test comparing each split's two sub-triangle conjugates (`conjPieceCPLQ`) against exact
+closed-form ground truth (`supBilinearOverPoly`) -- max error `5e-14` (machine precision) across
+every triangle that produced a genuine split. **This part stands on its own and is not in
+question**, regardless of Part 2 below.
+
+While implementing, found and fixed a bug in my own first MATLAB port of the derivation (an
+algebra transcription error in the analytic null-space formula inside `buildEdgeAffinePiece`,
+caught by a randomized stress test producing wrong `convEnvCPLQ:internal` errors and one
+PSD-classification crash before the fix).
+
+**Part 2 (investigated at length, PARTIALLY fixed, not resolved): the downstream `maxQuaPar` gap**
+Fixing Step 1 means `conjCPLQ`'s existing Step-3 fallback (`conjMaxOfSubTriangles`, already used
+for the 3-convex-edge case) now also gets exercised for the 2-convex-edge case, and `maxQuaPar`
+(Step 3) frequently -- ~52% of random split cases in a 138-triangle stress test -- errors
+combining the two sub-triangles' conjugates (`maxQuaPar:internal`, an unmatched boundary
+half-edge). Spent this session's remaining time digging into WHY:
+
+- **First, confirmed this is not a correctness question at all.** `max(g1,g2)` is *always*
+  exactly `f*` for any domain partition (`sup` over a union is the max of the `sup`s over the
+  pieces -- a trivial identity, true whether the seam is smooth or kinked). Verified directly:
+  bypassing `maxQuaPar` entirely and taking a plain `max` of the two sub-triangles' own
+  `conjPieceCPLQ` conjugates matches ground truth to `5e-14` in every case, including the ~52%
+  where `maxQuaPar`'s ASSEMBLY throws. So the bug is entirely in `maxQuaPar` building a
+  self-consistent `QuaPar` object, never in any value it manages to produce (0 mismatches among
+  the cases that *did* succeed).
+- **Root cause, as far as diagnosed**: `splitThreeConvex`'s (3-convex-edge case) sub-triangles are
+  built so their conjugates paste together SMOOTHLY (C1) along the shared seam -- confirmed
+  `maxQuaPar` has only ever been exercised against that case. `splitTwoConvexEdges`'s new cevian
+  (this session's Part 1 fix) only guarantees the two PRIMAL pieces agree in VALUE along the seam,
+  not gradient -- confirmed by direct computation (gradients of the two pieces match at one seam
+  endpoint, diverge increasingly toward the other -- a real, continuously-varying kink). A primal
+  kink gives the two pieces' conjugates `g1,g2` a genuine POSITIVE-AREA tie region in dual space
+  (`g1=g2` over a whole 2D set, not just a curve) near the dual image of the shared seam vertex --
+  expected because both `g1` and `g2` independently produce their own vertex-cone face for that
+  shared point, and unlike the always-smooth case, these can overlap or sit adjacent to several of
+  the other side's faces (a "fan"). `maxQuaPar`'s per-`(k,l)`-pair loop isn't built to expect this.
+- **Implemented `dedupPieces`** (new function in `maxQuaPar.m`, called right before
+  `assemblePieces`): detects groups of pieces with IDENTICAL geometry produced by different
+  `(k,l)` pairs (one concrete symptom of the tie phenomenon) and collapses each group to one,
+  reconciling disagreeing winners by evaluating every candidate row at an interior point and
+  keeping the largest (sound, since both `g1`'s and `g2`'s rows are independently exact
+  everywhere). Verified correct on the paper's own example (where two `(k,l)` pairs produce an
+  identical cell with a wrong vs. right winner) and causes zero regressions (146/146 still pass).
+  **However, it empirically never independently fixes a single failing triangle** (checked with
+  and without it across 138 random split triangles: identical pass/fail outcome, `dedupPieces`
+  literally never changes which triangles succeed) -- every triangle hitting the exact-duplicate
+  pattern ALSO hits a second, more complex pattern (several small cone/strip faces near the kink
+  vertex whose RAYS fail to pair with any counterpart, not exact duplicates) that isn't understood
+  well enough yet to fix. Kept anyway: it's correct, safe, and necessary infrastructure even if not
+  sufficient on its own.
+- Fails LOUDLY and cleanly throughout (never a silent wrong answer) -- this is a real, fairly
+  common gap, but not a blocker for Part 1's correctness fix, which stands independently verified.
 
 ## Where things stand
 
-- Branch: `main` @ `b69dfec` — "docs: diagnose deep Appendix A.4 envelope-tightness gap in
-  convEnvCPLQ".
-- Pushed: pending (awaiting user confirmation).
-- No code changed this session — only `DESIGN.md` (documentation of the finding). Full test suite
-  therefore still 145/145 PASS (unchanged from end of prior session).
+- Branch: `main` @ `719943d` -- "Fix convEnvCPLQ envelope-tightness bug; partial fix for maxQuaPar
+  assembly gap".
+- Pushed: pending.
+- Files changed: `convEnvCPLQ.m` (Part 1 fix), `convEnvCPLQTest.m` (+1 regression test + 2 static
+  helpers), `conjPieceCPLQTest.m` (1 test updated for the new 2-face Step-1 output), `maxQuaPar.m`
+  (`dedupPieces`, new -- Part 2 partial fix), `DESIGN.md` (documented both parts). No other files
+  touched.
+- Full test suite: **146/146 PASS**.
 
 ## Next steps
 
-- **Top priority, and now known to be genuinely hard**: derive the correct general convex envelope
-  for a triangle with exactly 2 convex edges (COAP Appendix A.4), covering the case where the
-  paper's own "checking the bounds we get the domain as the entire triangle" check (stated but not
-  proven general, and never implemented as an actual runtime check) fails. Established boundary
-  conditions to build from:
-  - Along the 2 classified convex edges: the envelope must equal `f` exactly (already correct in
-    the current `twoEdgeQuadPlain` formula).
-  - Along the 3rd ("weak", non-convex) edge: the true envelope equals the AFFINE CHORD between its
-    2 endpoint `f`-values (verified to 6 decimals via biconjugate reconstruction, at multiple
-    points, on 2 different triangles).
-  - A naive `max(q1, affine-interpolation-of-all-3-vertex-values)` is NOT a valid general fix: the
-    affine piece exceeds `f` (and `q1`) in a region nearer the common vertex (by up to 1.46 on the
-    stress-test triangle), and a systematic re-check over random dual points `s` found the
-    combination's conjugate wrong in the OPPOSITE direction too (undershooting truth by >1). A
-    correct fix likely needs a genuine second piece/sub-partition (analogous to how the
-    3-convex-edge case already splits into two sub-triangles), not a simple max.
-  - Repro triangles or points for verification once a candidate fix exists (compare against
-    `maxQuaParTest.supBilinearOverPoly`, the exact/trustworthy ground truth):
-    - Paper's own example: `V=(2,1),(0,0),(1,0)`, bad `s=(-0.008727,-0.999962)` (exact truth `0`, current
-      code gives `0.03864091`); the "weak-edge dip" point is `x0=(0.474343,0)`, `q1(x0)=-0.042780`
-      vs true `conv(f)(x0)≈0`.
-    - Stress-test triangle: `T=(3.8398,5.0413),(8.8152,7.2338),(8.7969,5.6447)`, bad
-      `s=(6.457616,8.384129)` (exact truth `54.477034`, current code gives `54.532567`); dip point
-      `x0=(8.360846,5.984837)` (on the weak/seam edge, `t≈0.3367` of the way from V2 to V3),
-      `q1(x0)=49.636211` vs true `conv(f)(x0)=49.746078` (matches the affine chord there to 6
-      decimals).
-  - This session's scratch MATLAB probes (not committed — see
-    `C:\Users\ylucet\AppData\Local\Temp\claude\...\scratchpad\`, session-specific temp dir, likely
-    gone by next session) contain the biconjugate-reconstruction technique
-    (`conv(f)(x0)=sup_s[s.x0-supBilinearOverPoly(s,V)]`, solved via a coarse-then-refined 2D grid
-    search since `fminsearch`/`fminunc` were numerically unreliable here) — reuse this technique to
-    probe candidate fixes against ground truth at arbitrary points before trusting any closed form.
-  - Once a fix is found: add a regression test in `convEnvCPLQTest.m` (or a new dedicated test)
-    using the paper's own example at the bad `s` above, since the existing
-    `bilinearTwoConvexEdgesQuadratic` test only checks the primal formula's VALUE at a few interior
-    points against the published closed form — it does NOT check conjugate/tightness, which is
-    exactly why this bug went undetected until now.
+- **Top priority now**: finish diagnosing and fix the residual `maxQuaPar` gap (Part 2 above).
+  `dedupPieces` handles the exact-duplicate flavor of the "positive-area tie region" phenomenon;
+  the remaining ~52% failure rate is a second, adjacent-but-not-identical flavor of the same root
+  phenomenon (small cone/strip faces near the kink vertex's dual image, unmatched rays) that needs
+  its own diagnosis. Recommended direction: give the shared seam-vertex's dual-side "fan" of faces
+  first-class handling BEFORE the general `(k,l)` double loop (detect, for any vertex `g1`/`g2`
+  inherit from a shared primal point, whether their own faces there overlap/complement, and
+  resolve before the generic clip loop runs) -- likely needs vertex-PROVENANCE tracking (tying
+  each dual face back to the specific primal vertex/edge it came from), a tool this file's own
+  HISTORY comments already anticipated for a different, now-resolved ambiguity.
+  - Repro triangles (regenerate via `rand(3,2)*10-5`, keep ones where `classifyConvexEdges` gives
+    exactly 2 rows, and `convEnvCPLQ(...).nf==2`): the paper's own `V=[2 1;0 0;1 0]`, and
+    `V=[1.508518 2.818371; 2.687354 4.499057; -1.870671 3.524095]`. Both throw
+    `maxQuaPar:internal` ("piece 1" always has the specific unmatched edge in these traces),
+    *even with `dedupPieces` active*.
+  - Ground-truth check to validate any fix: compare `q.conj('cplq').eval(s)` against
+    `convEnvCPLQTest.supBilinearOverPoly(s, V)` (exact closed form, already in the codebase) at
+    several random `s` -- the same pattern `bilinearTwoConvexEdgesSplitIsTight` already uses at the
+    per-piece (not end-to-end) level.
+  - Once fixed: strengthen `bilinearTwoConvexEdgesSplitIsTight` (or add a new test) to call
+    `q.conj('cplq')` end-to-end instead of manually taking `max` of the two per-piece conjugates,
+    and add a dedicated `maxQuaParTest`/`conjCPLQTest` regression using one of the repro triangles.
+  - This session's diagnostic scratch files (`stress2edge.m`, `widersearch.m`, `checkg2.m`,
+    `maxQuaPar_backup.m`) are in the session scratchpad, NOT committed -- likely gone next session;
+    easy to regenerate from the descriptions above.
 - Related, still unconfirmed whether same root cause: `QuaPar.orderEdges`/`createP` rejects the
   face topology for some near-degenerate/thin triangles with a DIFFERENT error ("Face k has ..." /
   "expected 2 but got N").
@@ -74,18 +120,26 @@ user's direction. Full derivation trail is in `DESIGN.md`.
 
 ## Relevant files
 
-- `DESIGN.md` — `maxQuaPar.m`'s Implementation-status bullet has the full new-finding paragraph
-  ("Open research question found while diagnosing the small-magnitude wrong-answer cases"),
-  including the exact repro, the 3-method verification, and why the naive `max(q1,affine)` fix
-  doesn't work.
-- `convEnvCPLQ.m` — `envelopeFromClassified` case 2 / `twoEdgeQuadPlain` / `buildTwoEdge`: the
-  functions implementing [COAP] Appendix A.4, now known to need an additional piece/case-split.
-  NOT modified this session (diagnosis only).
-- `convEnvCPLQTest.m` — `bilinearTwoConvexEdgesQuadratic` (line ~78): the existing test using the
-  paper's own example, which only checks the primal formula's value (not tightness/conjugate) — the
-  gap this reveals is exactly why the bug was invisible until this session.
-- `maxQuaParTest.m` — `supBilinearOverPoly` is the exact, trustworthy ground-truth function used
-  throughout this diagnosis; `buildG1G2ForTriangle` is the real end-to-end pipeline entry point used
-  to reproduce the bug via `maxQuaPar`.
-- `QuaPar.m` — NOT modified this session; still a candidate location for a DIFFERENT, unconfirmed
-  issue (the `orderEdges`/`createP` face-topology rejection above).
+- `convEnvCPLQ.m` -- `splitTwoConvexEdges` (new), `buildEdgeAffinePiece` (new), `seamPoint` (new):
+  Part 1's fix. `envelopeFromClassified`/`twoEdgeQuadPlain`/`buildTwoEdge` themselves are UNCHANGED
+  (still used as-is for the 0/1-convex-edge cases and, deliberately unmodified, inside
+  `splitThreeConvex`'s 3-convex-edge sub-triangle loop -- that path was already empirically
+  correct per its own extensive `maxQuaParTest` coverage, so it was left alone to avoid regressing
+  it).
+- `maxQuaPar.m` -- `dedupPieces` (new), called from the main `maxQuaPar` function right before
+  `assemblePieces`. Part 2's partial fix; see its own header and this file's HISTORY-style
+  commentary for the full rationale. The residual gap (adjacent-but-not-identical tie cells) is
+  still inside this file, not yet isolated to a specific function.
+- `DESIGN.md` -- the `maxQuaPar.m` Implementation-status bullet now has the full writeup for both
+  Part 1 (the fix + verification) and Part 2 (root-cause diagnosis, the partial fix, and what's
+  still open), appended after last session's diagnosis.
+- `convEnvCPLQTest.m` -- new test `bilinearTwoConvexEdgesSplitIsTight` (the paper's own example,
+  checked for tightness via each sub-triangle's own conjugate, not just primal value -- NOT via
+  `q.conj('cplq')` end-to-end, since that still throws for this triangle per Part 2) plus two new
+  static helpers (`extractTriFace`, `supBilinearOverPoly`) reused from `maxQuaParTest.m`'s pattern.
+- `conjPieceCPLQTest.m` -- `psdRank1QuadraticEndToEnd` updated to extract one face from Step 1's
+  now-2-face output before feeding it to Step 2 (documented at the call site).
+- `conjCPLQ.m` -- NOT modified this session; its existing `conjMaxOfSubTriangles`/Step-3 fallback
+  already generically handles a multi-face Step-1 envelope (originally written for the 3-edge
+  case) and needed no changes to correctly dispatch the 2-edge case too -- the remaining gap is
+  entirely inside `maxQuaPar.m`.
