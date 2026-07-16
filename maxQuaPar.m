@@ -164,7 +164,96 @@ function g = maxQuaPar(g1, g2)
             if ~isempty(cellB), pieces(end+1) = cellB; end %#ok<AGROW>
         end
     end
+    pieces = dedupPieces(pieces);
     g = assemblePieces(pieces);
+end
+
+% ============================================================================================
+% ----- collapsing duplicate cells produced by two different (k,l) pairs ----------------------
+function pieces = dedupPieces(pieces)
+% Two DIFFERENT (g1-face k, g2-face l) pairs can produce GEOMETRICALLY IDENTICAL cells: this is not
+% a rare fluke but a structurally expected occurrence when g1 and g2 are conjugates of two
+% sub-pieces glued along a shared PRIMAL seam (see splitTwoConvexEdges/convEnvCPLQ.m) -- a point
+% common to both primal pieces (e.g. a seam endpoint) puts a genuinely shared feature into BOTH
+% g1's and g2's own face structure there, and several of g2's OWN faces can meet at the dual image
+% of that point (a "fan"), any one of which a touching g1 face can appear to align with exactly.
+% This differs from convEnvCPLQ's splitThreeConvex case (always a C1-smooth seam), where no such
+% dual-side fan alignment was ever observed -- it is a genuinely new configuration this session's
+% fix to convEnvCPLQ (COAP Appendix A.4) exposes, common enough (about half of random cases, per
+% this session's stress test) to need handling here rather than at the primal level.
+%
+% Left unhandled, assemblePieces sees each duplicate's boundary edges compete for the SAME single
+% neighbour, orphaning one copy's edges (maxQuaPar:internal, "no matching neighbour").
+%
+% Fix: collapse each group of identical-geometry pieces (same vertex count, same real vertices as
+% a SET, same dirIn/dirOut, no curved edge) into ONE. If every member of a group agrees on `f`,
+% simply drop the duplicates. If they DISAGREE (each drawn from a different, only PARTIALLY
+% applicable candidate g2/g1 face -- see header), reconcile by evaluating every candidate row at a
+% point verifiably interior to the shared cell and keeping the largest: both g1's and g2's own rows
+% are independently exact everywhere (conjPieceCPLQ's per-piece output, verified against ground
+% truth to machine precision), so whichever row is larger AT an interior point of this cell is
+% provably the correct one for the WHOLE cell (decideWinner's own premise -- a single row wins
+% across an entire convex cell -- already relies on exactly this).
+    n = numel(pieces);
+    if n == 0, return; end
+    groupOf = zeros(1,n);
+    nextGroup = 0;
+    for i = 1:n
+        if groupOf(i) ~= 0, continue; end
+        nextGroup = nextGroup + 1;
+        groupOf(i) = nextGroup;
+        for j = i+1:n
+            if groupOf(j) == 0 && samePieceGeometry(pieces(i), pieces(j))
+                groupOf(j) = nextGroup;
+            end
+        end
+    end
+    keep = false(1,n);
+    for gi = 1:nextGroup
+        idx = find(groupOf == gi);
+        keep(idx(1)) = true;
+        if numel(idx) == 1, continue; end
+        pt = interiorSample(pieces(idx(1)));
+        best = -inf; bestF = pieces(idx(1)).f;
+        for jj = idx
+            val = QuaPar.evalPoly(pieces(jj).f, pt);
+            if val > best, best = val; bestF = pieces(jj).f; end
+        end
+        pieces(idx(1)).f = bestF;
+    end
+    pieces = pieces(keep);
+end
+
+function tf = samePieceGeometry(a, b)
+    tol = 1e-6;
+    tf = false;
+    if a.curveAfter ~= 0 || b.curveAfter ~= 0, return; end
+    if isempty(a.dirIn) ~= isempty(b.dirIn), return; end
+    if size(a.V,1) ~= size(b.V,1), return; end
+    if ~isempty(a.dirIn)
+        if norm(a.dirIn/norm(a.dirIn) - b.dirIn/norm(b.dirIn)) > tol, return; end
+        if norm(a.dirOut/norm(a.dirOut) - b.dirOut/norm(b.dirOut)) > tol, return; end
+    end
+    Va = sortrows(a.V); Vb = sortrows(b.V);
+    tf = all(abs(Va(:) - Vb(:)) < tol);
+end
+
+function pt = interiorSample(piece)
+% A point verifiably interior to `piece` (not on its own boundary), used to compare candidate
+% winner rows -- see dedupPieces. For an unbounded piece with >=2 real vertices, stepping along the
+% (shared, since only this configuration is ever deduplicated as unbounded -- see samePieceGeometry
+% requiring matching dirIn/dirOut) ray direction from the midpoint of the real vertices stays
+% equidistant from both bounding rays, hence interior regardless of which side is "left"; for
+% exactly 1 real vertex (a cone), nudge by the sum of the two ray directions (the angle bisector's
+% direction, up to scale); for a bounded piece (>=3 vertices), the centroid is always interior.
+    nv = size(piece.V,1);
+    if isempty(piece.dirIn)
+        pt = mean(piece.V,1);
+    elseif nv >= 2
+        pt = mean(piece.V,1) + piece.dirIn;
+    else
+        pt = piece.V(1,:) + piece.dirIn + piece.dirOut;
+    end
 end
 
 function assertFullDomain(g, name)

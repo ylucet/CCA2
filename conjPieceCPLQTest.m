@@ -184,26 +184,36 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
 
         function psdRank1QuadraticEndToEnd(testCase)
             % conj(Step 1 envelope of xy over a 2-convex-edge triangle) end to end. Step 1
-            % (convEnvCPLQ) turns the indefinite xy into a rank-1 PSD quadratic (COAP A.4); Step 2
-            % must dispatch to conjPSDRank1QuadTriangle, not error out. Checked against the
-            % numeric sup of the ENVELOPE quadratic itself (not the original xy). Uses (1,1),
-            % (4,3),(3,5) rather than the (0,0),(2,1),(1,2) triangle used elsewhere in this file:
-            % that one hits the TIED-vertex sub-case (conjPSDRank1QuadTriangleTie, 5 faces instead
-            % of 6) -- see psdRank1QuadraticTieEndToEnd below -- so this test exercises the
+            % (convEnvCPLQ) turns the indefinite xy into TWO rank-1 PSD quadratic sub-triangle
+            % pieces (COAP A.4, corrected -- the single-quadratic formula alone is not always the
+            % tightest envelope over the whole triangle; see convEnvCPLQ.m's splitTwoConvexEdges
+            % HISTORY / DESIGN.md). Extracts face 1 (the sub-triangle containing the two convex
+            % edges' shared vertex, where the ORIGINAL single-quadratic formula is unchanged) as a
+            % standalone triangle and feeds it to Step 2, which must dispatch to
+            % conjPSDRank1QuadTriangle, not error out. Checked against the numeric sup of that
+            % sub-triangle's quadratic itself (not the original xy). Uses (1,1),(4,3),(3,5) rather
+            % than the (0,0),(2,1),(1,2) triangle used elsewhere in this file: that one is the
+            % special mirror-symmetric case where NO split is needed and Step 1 stays single-face,
+            % hitting the TIED-vertex sub-case (conjPSDRank1QuadTriangleTie, 5 faces instead of 6)
+            % -- see psdRank1QuadraticTieEndToEnd below -- so this test exercises the
             % non-degenerate (6-face) path specifically.
             V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
-            r = convEnvCPLQ(q);                            % Step 1 -> rank-1 PSD quadratic
+            r = convEnvCPLQ(q);                            % Step 1 -> 2 rank-1 PSD sub-triangles
+            testCase.verifyEqual(r.nf, 2);
+            iVs = unique(r.E(r.F(:,1)==1 | r.F(:,2)==1, 1:2));
+            V1 = r.V(iVs, :);
             [L, Q, C] = QuaPoly.matrixForm(r.f(1,:));
             testCase.verifyEmpty(C);
             testCase.verifyEqual(min(eig(Q)), 0, 'AbsTol', 1e-8);   % rank-1 PSD, as proven
-            g = conjPieceCPLQ(r);                          % Step 2
+            p1 = QuaPoly(V1, E, r.f(1,5:10), F);
+            g = conjPieceCPLQ(p1);                          % Step 2
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 6);
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
             kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
-            Xg = V(1,1)+uu*(V(2,1)-V(1,1))+vv*(V(3,1)-V(1,1));
-            Yg = V(1,2)+uu*(V(2,2)-V(1,2))+vv*(V(3,2)-V(1,2));
+            Xg = V1(1,1)+uu*(V1(2,1)-V1(1,1))+vv*(V1(3,1)-V1(1,1));
+            Yg = V1(1,2)+uu*(V1(2,2)-V1(1,2))+vv*(V1(3,2)-V1(1,2));
             qg = Q(1,1)*Xg.^2 + 2*Q(1,2)*Xg.*Yg + Q(2,2)*Yg.^2;
             qg = 0.5*qg + L(1)*Xg + L(2)*Yg + r.f(1,end);
             S = [0.5 0.5; 3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3];

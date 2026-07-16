@@ -86,6 +86,51 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(r.eval(S), expected, 'AbsTol', 1e-12);
         end
 
+        function bilinearTwoConvexEdgesSplitIsTight(testCase)
+            % Regression test for the tightness bug diagnosed in DESIGN.md / the session handoff:
+            % the single-quadratic Appendix A.4 formula checked by bilinearTwoConvexEdgesQuadratic
+            % above is a valid minorant but NOT always the tightest envelope over the WHOLE
+            % triangle -- it is only tight on the sub-triangle containing the two convex edges'
+            % shared vertex. Reproduced on the paper's OWN Appendix A.4.3 example, V=(2,1),(0,0),
+            % (1,0): the weak (non-convex) edge is (0,0)-(1,0) (f=xy is identically 0 there), and
+            % the old single-quadratic formula dipped to q1(0.474343,0)=-0.042780 instead of the
+            % true envelope value ~0 (matching f exactly, since f=0 along the whole weak edge here
+            % and the true envelope must equal the affine chord -- here 0 -- along it).
+            %
+            % Tightness is checked via each sub-triangle's OWN conjugate (Step 2, conjPieceCPLQ)
+            % rather than the full q.conj('cplq') pipeline: this split's internal seam is a genuine
+            % kink (unlike splitThreeConvex's C1-smooth seam for the 3-convex-edge case), which
+            % Step 3 (maxQuaPar) does not yet support combining -- see DESIGN.md / session handoff
+            % for that separate, newly-found gap. max(g1,g2) at a dual point s is exactly f*(s)
+            % whenever the underlying 2-piece split is the TRUE envelope, regardless of Step 3.
+            V = [2 1; 0 0; 1 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            r = convEnvCPLQ(q);
+            testCase.verifyClass(r, 'RatPol');
+            testCase.verifyEqual(r.nf, 2);           % genuine split (unlike the mirror-symmetric,
+                                                      % no-split-needed case exercised elsewhere)
+
+            x0 = [0.474343 0];                        % the weak-edge "dip" point from the diagnosis
+            testCase.verifyEqual(r.eval(x0), 0, 'AbsTol', 1e-6);
+
+            % underestimates f on interior sample points
+            S = [1 0.3; 0.5 0.2; 1.5 0.6; 0.9 0.05; 1.9 0.95];
+            testCase.verifyLessThanOrEqual(r.eval(S) - S(:,1).*S(:,2), 1e-9);
+
+            g1 = conjPieceCPLQ(convEnvCPLQTest.extractTriFace(r, 1));
+            g2 = conjPieceCPLQ(convEnvCPLQTest.extractTriFace(r, 2));
+            sBad = [-0.008727 -0.999962];             % the paper's own flagged bad dual point:
+            expected = convEnvCPLQTest.supBilinearOverPoly(sBad, V);   % old code gave 0.03864091
+            testCase.verifyEqual(max(g1.eval(sBad), g2.eval(sBad)), expected, 'AbsTol', 1e-6);
+            S2 = [1.90 2.50; -1 -1; 0.5 0.5; 3 -2; -3 2];
+            for i = 1:size(S2,1)
+                s = S2(i,:);
+                expected = convEnvCPLQTest.supBilinearOverPoly(s, V);
+                testCase.verifyEqual(max(g1.eval(s), g2.eval(s)), expected, ...
+                    'AbsTol', 1e-8, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
         function generalIndefiniteViaRotation(testCase)
             % conv(x^2 - y^2) over the triangle {(0,0),(1,0),(1,1)} = (x-y)^2/(1-y).
             % (It rotates to conv(xy) over conv{(1,1),(0,0),(2,0)} = 2y^2/(y-x+2).)
@@ -174,6 +219,50 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
         function cubicRejected(testCase)
             q = QuaPoly([1 0 0 0 0 0 0 0 0 0]);  % cubic
             testCase.verifyError(@() convEnvCPLQ(q), 'PLQ:op:unsupportedType');
+        end
+    end
+
+    methods (Static)
+        function p = extractTriFace(r, k)
+            % r: a 2-face RatPol (as produced by splitTwoConvexEdges). Returns face k's 3 vertices
+            % (CCW) and quadratic coefficients as a standalone QuaPoly, the shape conjPieceCPLQ
+            % requires. Same construction as maxQuaParTest.extractTriFace, duplicated here since
+            % it is file-local there.
+            edgeIdx = find(r.F(:,1)==k | r.F(:,2)==k);
+            vids = unique(r.E(edgeIdx,1:2));
+            Vt = r.V(vids,:);
+            area2 = (Vt(2,1)-Vt(1,1))*(Vt(3,2)-Vt(1,2)) - (Vt(2,2)-Vt(1,2))*(Vt(3,1)-Vt(1,1));
+            if area2 < 0, Vt = Vt([1 3 2],:); end
+            E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            p = QuaPoly(Vt, E, r.f(k,5:10), F);
+        end
+
+        function h = supBilinearOverPoly(s, T)
+            % Exact sup_{(x,y) in T} [s1 x + s2 y - x y]: the Hessian of the objective is
+            % indefinite (eigenvalues +-1), so no interior point can be a local max, and the sup
+            % is attained on T's boundary -- checked in closed form (quadratic-in-t along each
+            % edge). Same construction as maxQuaParTest.supBilinearOverPoly, duplicated here since
+            % it is file-local there.
+            s1 = s(1); s2 = s(2);
+            best = -inf;
+            n = size(T,1);
+            for i = 1:n
+                va = T(i,:); vb = T(mod(i,n)+1,:);
+                dx = vb(1)-va(1); dy = vb(2)-va(2);
+                A = -dx*dy;
+                B = s1*dx + s2*dy - va(1)*dy - va(2)*dx;
+                C = s1*va(1) + s2*va(2) - va(1)*va(2);
+                cand = [0 1];
+                if abs(A) > 1e-14
+                    tstar = -B/(2*A);
+                    if tstar > 0 && tstar < 1, cand(end+1) = tstar; end %#ok<AGROW>
+                end
+                for t = cand
+                    val = A*t^2 + B*t + C;
+                    if val > best, best = val; end
+                end
+            end
+            h = best;
         end
     end
 end
