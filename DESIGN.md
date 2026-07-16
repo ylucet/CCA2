@@ -193,8 +193,122 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   with the paper's own text for its worked example -- *"by checking the bounds we get the domain as
   the entire triangle"* -- which reads as a check that can fail for other triangles, not a
   universal guarantee; the code never implements that check, so it silently assumes the single
-  quadratic is always valid. **Not fixed this session** -- see the session handoff for the full
-  repro/verification trail and suggested next steps.
+  quadratic is always valid.
+  **Fixed (2026-07-15, later session)**: derived and implemented the genuine sub-partition
+  anticipated above (`convEnvCPLQ.m`'s `splitTwoConvexEdges`/`buildEdgeAffinePiece`/`seamPoint`).
+  Let `P` be the two convex edges' shared vertex and `A,B` the weak edge's endpoints (edges `P-A`,
+  `P-B` convex). The triangle is split by a cevian from ONE of `A,B` into the OPPOSITE convex edge,
+  giving two sub-triangles: the one containing `P` keeps `q1=twoEdgeQuadPlain(...)` UNCHANGED (it
+  is still exactly tight there, touching `f` along both of ITS two convex-edge sub-segments); the
+  other uses a NEW quadratic (`buildEdgeAffinePiece`) touching `f` along its remaining convex-edge
+  segment and the affine chord along the (now fully-contained) weak edge. Derivation: matching a
+  quadratic to `f` along one full line and to a DIFFERENT affine target along another full line is
+  a linear system in the quadratic's 6 coefficients that is rank-deficient by exactly 1 (a pencil,
+  like `twoEdgeQuadPlain`'s own derivation) -- but unlike `twoEdgeQuadPlain`'s two distinct rank-1
+  (Hessian-singular) solutions needing a +/- branch choice, this pencil's rank-1 condition is a
+  DOUBLE root (tangent), always picking a UNIQUE convex quadratic (proved symbolically with
+  `sympy` and confirmed numerically). The cevian's direction (which of `A,B` to cevian from, and
+  where it lands on the opposite convex edge) is forced, not free -- exactly analogous to
+  `splitThreeConvex`: `q1` and the new piece both touch `f` along the SAME original convex edge
+  being split, so their difference vanishes identically along that edge's line, hence factors as
+  (that line) * (the seam's line); intersecting the seam's line with the target edge gives the
+  split point. Of the two candidate cevians (from `A` into `P-B`, or from `B` into `P-A`), exactly
+  one lands strictly inside its target edge -- verified never both, never neither, across ~6500
+  random 2-convex-edge triangles this session, and used as the runtime selection rule (mirroring
+  how `twoEdgeQuadPlain` already picks its own branch by validity). A special (measure-zero) case
+  needs no split at all: if `q1`'s curvature along the weak edge is already zero (e.g. the mirror-
+  symmetric triangle `(0,0),(2,1),(1,2)`, where `mh*mw=1`), `q1` already equals the chord along the
+  WHOLE weak edge, so it is already the tight envelope everywhere (both candidate cevians degenerate
+  to parallel/at-infinity in exactly this case, giving a direct, cheap detection). Verified via: (1)
+  the paper's own Appendix A.4.3 example (`V=(2,1),(0,0),(1,0)`) -- the weak-edge dip point
+  `x0=(0.474343,0)` now gives `~0` (was `-0.042780`), and the flagged bad dual point
+  `s=(-0.008727,-0.999962)` now gives the correct `sup=0` via each sub-triangle's own conjugate
+  (`conjPieceCPLQ`), matching `maxQuaParTest`-style ground truth (`supBilinearOverPoly`) to machine
+  precision; (2) a ~60-triangle MATLAB-side randomized stress test comparing `max` of the two
+  sub-triangles' own `conjPieceCPLQ` conjugates against the same exact ground truth, at 5 random
+  dual points each: max error `5e-14` (machine precision, not the `~1e-6`-`1e-8` optimizer noise of
+  this session's earlier from Python-side numerical verification) across every case that produced a
+  genuine split. Regression test: `convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight`. Full suite:
+  146/146 pass (145 prior + 1 new; two prior tests -- `conjCPLQTest.
+  indefiniteTriangleTwoConvexEdgesSidestepsToEnvelope` (uses the no-split-needed symmetric
+  triangle, so unaffected) and `conjPieceCPLQTest.psdRank1QuadraticEndToEnd` (updated to extract
+  one sub-triangle face from Step 1's now-2-face output, since it specifically tests Step 2 on a
+  single rank-1 PSD triangle) -- needed no or minor updates, both documented at the call site).
+  **New downstream gap found as a direct consequence (partially diagnosed and partially fixed a
+  later same session, NOT fully resolved -- see below)**: `conjCPLQ`'s existing Step-3 fallback
+  (`conjMaxOfSubTriangles`, which already combines a multi-face Step-1 envelope via per-face
+  `conjPieceCPLQ` + `maxQuaPar`, exactly as needed here) now gets exercised for the 2-convex-edge
+  case too, and `maxQuaPar` frequently (about half of random split cases, ~52% in a 138-triangle
+  stress test) errors combining the two sub-triangles' conjugates, with `maxQuaPar:internal` (an
+  unmatched boundary half-edge in `assemblePieces`) or occasionally `:notDegenerate`/
+  `:notImplemented`. Likely root cause: `splitThreeConvex`'s sub-triangles are explicitly
+  constructed so their conjugates paste together SMOOTHLY (C1) along the shared seam (see that
+  function's own HISTORY) -- an assumption `maxQuaPar`'s `splitCell`/`assemblePieces` machinery
+  leans on (per its own comments, e.g. "this should never happen for two conjugates of adjacent
+  sub-pieces of the same originally-nonconvex domain"). `splitTwoConvexEdges`'s cevian, by
+  contrast, only guarantees the two PRIMAL pieces agree in VALUE along the seam (proved tight
+  against exact ground truth above), with no claim of matching gradients -- confirmed directly (by
+  evaluating both pieces' gradients at several points along the seam on the paper's own example):
+  gradients match at one seam endpoint (where the two original convex edges happen to already be
+  tangent) but diverge increasingly toward the other, a genuine, continuously-varying kink, unlike
+  the always-smooth 3-edge case.
+  **Important: this is NOT a correctness gap in the underlying math.** `h(s) = max(g1(s),g2(s))` is
+  *always* exactly `f*(s)` for `f` split into two pieces on a domain partition, by the elementary
+  identity `sup_{x in A union B} phi(x) = max(sup_{x in A} phi(x), sup_{x in B} phi(x))` -- true for
+  ANY partition, kinked or smooth. Verified directly: extracting each sub-triangle's own
+  `conjPieceCPLQ` conjugate and taking a plain `max` of the two (bypassing `maxQuaPar`'s assembly
+  entirely) matches `supBilinearOverPoly` ground truth to `5e-14` (machine precision) across every
+  split case in a 60-triangle stress test, with zero exceptions. The gap is *entirely* in
+  `maxQuaPar`'s ASSEMBLY: building one well-formed `QuaPar` (a clean partition of the dual plane,
+  every boundary edge with exactly one neighbour) when combining `g1`,`g2` whose seam is kinked, not
+  in any value `maxQuaPar` DOES manage to produce -- confirmed by re-running the same stress test
+  end-to-end through `conjCPLQ`: 0 mismatches among the ~48% of cases that succeeded.
+  Diagnosed root cause (this session): a kink along a shared primal seam gives `g1` and `g2` a
+  genuine **positive-area TIE region** in dual space (`g1(s)=g2(s)` over a whole 2D set, not just a
+  curve) -- expected whenever a seam's two adjacent pieces share a VERTEX (e.g. the seam's own
+  endpoints), since both `g1`'s and `g2`'s OWN face structure independently produce a valid
+  vertex-cone face there, and (unlike the smooth 3-edge case, where `maxQuaPar` had only ever been
+  tested against) these two vertex-cones can legitimately overlap or sit adjacent to several of the
+  OTHER side's faces at once (a "fan" of faces meeting at the dual image of the shared vertex).
+  `maxQuaPar`'s per-`(k,l)`-pair double loop clips each `g1` face against each `g2` face
+  independently and expects the results to tile the plane cleanly; when two DIFFERENT `(k,l)` pairs
+  produce the exact same geometric cell (one instance of the tie phenomenon above), `assemblePieces`
+  sees two competing claims on the same boundary, orphaning one copy's edges.
+  **Partial fix implemented**: `dedupPieces` (new, in `maxQuaPar.m`, called right before
+  `assemblePieces`) detects groups of pieces with IDENTICAL geometry (same vertex count, same real
+  vertices as a set, same ray directions, no curved edge, tolerance `1e-6`) produced by different
+  `(k,l)` pairs, and collapses each group to one: if every member agrees on which row (`f1`/`f2`)
+  wins, keeps one copy; if they disagree (each drawn from a DIFFERENT, only partially-applicable
+  candidate face), reconciles by evaluating every candidate row at a point verifiably interior to
+  the shared cell and keeping the largest -- sound because both `g1`'s and `g2`'s own rows are
+  independently exact everywhere (per the machine-precision check above), so whichever is larger at
+  an interior point is provably correct for the whole cell (the same premise `decideWinner` already
+  relies on). Verified this correctly detects and reconciles the EXACT-duplicate case (e.g. the
+  paper's own example, `V=(2,1),(0,0),(1,0)`, where two `(k,l)` pairs produce an identical cell with
+  DIFFERING winners, one right and one wrong by construction) and causes zero regressions (146/146
+  suite still passes). **However, empirically (138-triangle stress test, with and without
+  `dedupPieces`) it never independently flips a single failing triangle to success** -- every
+  triangle exhibiting the exact-duplicate pattern ALSO exhibits a second, more complex pattern:
+  several small single- or two-vertex cone/strip faces near the dual image of the kink's vertex
+  whose RAYS fail to pair with any counterpart (`matchHalfEdges` finds no candidate within
+  tolerance), rather than pairing with an EXACT duplicate. This looks like the same underlying
+  "positive-area tie / fan of faces" phenomenon but manifesting as adjacent-but-not-identical
+  cells (not caught by `dedupPieces`'s exact-match criterion) rather than as literal duplicates --
+  not yet understood well enough to fix. Concrete repros for continued work (both from the
+  `rng(12345)` stress test in this session's scratch `stress2edge.m`, NOT committed -- regenerate
+  by sampling random triangles and keeping ones where `classifyConvexEdges` gives exactly 2 rows):
+  `V=[2 1;0 0;1 0]` (the paper's own example) and `V=[1.508518 2.818371; 2.687354 4.499057;
+  -1.870671 3.524095]`; both fail with `maxQuaPar:internal`, "piece 1" always the specific piece
+  with an unmatched edge in these traces. Recommended direction for a full fix: give the shared
+  seam-endpoint vertex's dual-side "fan" first-class handling BEFORE the general `(k,l)` double
+  loop (e.g. explicitly detect, for each vertex `g1`/`g2` inherit from a shared primal point,
+  whether their own vertex-cone/edge-strip faces there overlap or complement, and merge/resolve
+  before the generic clip loop runs) -- likely needs the vertex-PROVENANCE tracking this file's own
+  HISTORY comments already anticipate as a tool of last resort for a different (now-resolved)
+  ambiguity, tying each dual face back to the specific primal vertex/edge that produced it. This is
+  a real, fairly common gap for `conjCPLQ`/`maxQuaPar` (~52% of random 2-convex-edge splits), but it
+  fails LOUDLY and cleanly (never a silent wrong answer, confirmed above) -- a substantial follow-up
+  in its own right, not a blocker for Step 1's correctness fix, which stands independently verified.
   The fully general case -- a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
