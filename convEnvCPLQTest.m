@@ -76,11 +76,19 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
         end
 
         function bilinearTwoConvexEdgesQuadratic(testCase)
-            % [COAP] Appendix A.4.3 Example: conv(xy) over triangle (2,1),(0,0),(1,0) =
-            %   (x^2 + 2 sqrt(2) xy + 2 y^2 - x + 2 y) / (3 + 2 sqrt(2)).
+            % [COAP] Appendix A.4.3's single-quadratic formula, conv(xy) over triangle (2,1),(0,0),
+            % (1,0) = (x^2 + 2 sqrt(2) xy + 2 y^2 - x + 2 y) / (3 + 2 sqrt(2)) -- the paper states
+            % "the domain is the entire triangle", but this is FALSE in general (confirmed against
+            % ground truth; see bilinearTwoConvexEdgesSplitIsTight and DESIGN.md's Part 2 diagnosis
+            % / fix): the formula is only tight in the sub-region containing the shared vertex
+            % (2,1), bounded by the line where the formula's own implied dual point reaches the far
+            % endpoint of a classified convex edge. (0.5,0.2) used to be asserted here too, but it
+            % lies on the OTHER side of that boundary, where convEnvCPLQ now correctly returns a
+            % different (rational) piece instead -- see bilinearTwoConvexEdgesSplitIsTight, which
+            % checks tightness comprehensively via ground truth rather than this one closed form.
             V = [2 1; 0 0; 1 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             r = convEnvCPLQ(QuaPoly(V,E,[0 1 0 0 0 0],F));
-            S = [1 0.3; 0.5 0.2; 1.5 0.6];                         % interior points
+            S = [1 0.3; 1.5 0.6; 1.8 0.85];                        % interior points, P-side only
             x = S(:,1); y = S(:,2);
             expected = (x.^2 + 2*sqrt(2)*x.*y + 2*y.^2 - x + 2*y) / (3 + 2*sqrt(2));
             testCase.verifyEqual(r.eval(S), expected, 'AbsTol', 1e-12);
