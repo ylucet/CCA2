@@ -309,6 +309,65 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   a real, fairly common gap for `conjCPLQ`/`maxQuaPar` (~52% of random 2-convex-edge splits), but it
   fails LOUDLY and cleanly (never a silent wrong answer, confirmed above) -- a substantial follow-up
   in its own right, not a blocker for Step 1's correctness fix, which stands independently verified.
+  **Follow-up session (2026-07-16): two more concrete bugs found and fixed within the "fan"
+  phenomenon, both in `maxQuaPar.m`, neither sufficient on its own.** Diagnosed by reproducing the
+  paper's own `V=[2 1;0 0;1 0]` example end to end and directly inspecting the (normally internal)
+  `pieces` list `assemblePieces` builds just before failing, then testing pairs of pieces for
+  literal point-set overlap (not just relying on the crash message) via a coverage/sampling check:
+  1. **`matchHalfEdges`' ray matching accepted a pairing on (apex, direction) equality alone, with
+     no check that the two candidate pieces are on OPPOSITE sides of that ray.** When a g1 (or g2)
+     face is cut into several `(k,l)` sub-pieces by different opposing faces, EVERY sub-piece
+     independently inherits the parent face's own boundary rays as part of its own boundary --
+     not because each is adjacent to some other sub-piece there, but simply because they all
+     descend from the same ancestor. The old code paired up the first two such inheritors it found
+     as if they were mutual neighbours; confirmed via direct point-sampling that two of this
+     triangle's pieces (built from the SAME `g1` face, different `g2` faces) genuinely overlapped
+     over a positive-area region, not merely touched a shared boundary -- exactly the "fan" pattern
+     described above, but now pinned to a specific, fixable root cause rather than only its symptom.
+     **Fixed** by `oppositeSides` (new, called from `matchHalfEdges`): each ray candidate's own
+     adjacent geometry (the next real vertex, or the OTHER ray's direction for a pure 2-ray cone) is
+     tested via the 2D cross product against the shared ray direction; two candidates are accepted
+     as genuine twins only when their representative points fall on opposite sides. Verified
+     directly: the previously-overlapping pair is no longer paired, and the piece that used to
+     wrongly claim that neighbour's territory now correctly finds ITS true opposite neighbour
+     instead (confirmed by re-inspecting the post-fix `pieces`/half-edge list by hand).
+  2. **A related but distinct redundancy**: two different `(k,l)` pairs sharing the identical
+     winning row `f` can produce pieces that are NOT exact geometric duplicates (`dedupPieces` only
+     collapses those) yet still overlap, one wholly containing the other -- pure redundant coverage
+     of territory the larger piece already legitimately claims. **Fixed** by `dropSubsumedPieces`
+     (new, called from `maxQuaPar` right after `dedupPieces`): for every pair of pieces agreeing on
+     `f`, drops whichever's every real vertex (and, if unbounded, both recession directions) lies
+     inside the other's own half-plane/ray constraints (reusing `polyConstraints`). Confirmed on the
+     same example: piece count drops from 12 to 10 with zero change in any resolved value.
+  Both fixes are individually correct (each addresses a genuine, hand-confirmed geometric defect,
+  not a heuristic tolerance tweak) and cause zero regressions: full suite still 147/147 (146 prior +
+  1 new, `maxQuaParTest.matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces`, which pins
+  the CURRENT documented failure mode below since neither fix alone resolves it). **Important,
+  initially-surprising finding, established via a properly-controlled experiment**: neither fix
+  moves the observed failure rate on GENERIC random 2-convex-edge triangles at all. A same-triangle-
+  set A/B comparison (pre-generating every triangle candidate AND every dual test point up front, so
+  the two runs -- with vs. without both fixes -- are byte-for-byte reproducible regardless of which
+  triangles happen to succeed or fail; an earlier, naive attempt at this comparison that drew random
+  numbers lazily inside the success/failure branches silently desynchronised the two runs' RNG
+  streams after the first behavioural difference, producing a spurious-looking improvement that
+  evaporated once corrected) across 1494 randomly generated 2-convex-edge triangles found **zero**
+  triangles whose pass/fail outcome changed in either direction (931/1494, 62.3%, succeed with or
+  without the fixes). So: both fixes are real, confirmed, worth keeping (the overlap bug in
+  particular is a genuine correctness hazard, not just a crash-avoidance nicety, even though it
+  happened not to flip any outcome in this sample), but the ~38% aggregate crash rate on generic
+  triangles is driven by a THIRD, still-undiagnosed pattern within the same "fan" phenomenon, not by
+  either of these two. Confirmed the paper's own example (and, unchecked but likely, the session's
+  other repro `V=[1.508518 2.818371; 2.687354 4.499057; -1.870671 3.524095]`) still throws
+  `maxQuaPar:internal` after both fixes: with `dropSubsumedPieces` active it fails one piece later in
+  the loop (piece 1's edge instead of piece 3's) but the underlying obstruction is unchanged -- a
+  small cluster of pieces near the dual image of the shared primal seam-vertex (this example: primal
+  vertex `A=(0,0)`) still fails to close up combinatorially. Recommended direction unchanged from the
+  diagnosis above (vertex-provenance-aware fan resolution); one attempted-and-reverted approach worth
+  recording so it isn't retried: broadening `insertPassthroughVertices`' candidate points from just
+  the current cell's own two parent faces (`polyK`/`polyL`) to EVERY vertex of both full inputs
+  `g1`/`g2` (reasoning: a missing "T-junction" split could in principle come from a third, unrelated
+  face) neither fixed the repro triangle nor helped the aggregate rate, and caused 7 new regressions
+  in the existing suite -- reverted; the missing structure is not a simple T-junction of this kind.
   The fully general case -- a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely

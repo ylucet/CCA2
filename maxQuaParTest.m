@@ -219,6 +219,41 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
         end
 
+        function matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces(testCase)
+            % Regression test for two bugs found while diagnosing the 2-convex-edge
+            % (splitTwoConvexEdges) "vertex fan" gap left open by the prior session (see DESIGN.md /
+            % session handoff), both confirmed on COAP Appendix A.4.3's own example below:
+            %
+            % 1) matchHalfEdges used to pair two rays purely by (apex, direction) equality, with no
+            %    check that the two candidate pieces are on OPPOSITE sides of that ray. When a g1
+            %    (or g2) face is cut into several (k,l) sub-pieces by different opposing faces,
+            %    every sub-piece independently inherits the parent face's own boundary rays -- so
+            %    two sub-pieces descending from the SAME side could be wrongly paired as if mutually
+            %    adjacent. Confirmed via a coverage stress test (this session's scratch scripts, not
+            %    committed): two of the pieces this triangle produces geometrically OVERLAPPED over
+            %    a positive-area region, not just a shared boundary. Fixed by oppositeSides, which
+            %    requires each candidate's own adjacent geometry to fall on opposite sides of the
+            %    shared ray before accepting the pairing.
+            % 2) Separately, two DIFFERENT (k,l) pairs sharing the same winning row `f` produced
+            %    pieces that are not exact geometric duplicates (dedupPieces only collapses those)
+            %    yet still overlapped, one wholly containing the other -- pure redundant territory.
+            %    Fixed by dropSubsumedPieces (called right after dedupPieces), confirmed to cut this
+            %    triangle's piece count from 12 to 10 with zero change in any resolved value.
+            %
+            % Both fixes are independently correct (confirmed via a controlled ~1500-triangle
+            % randomized A/B test -- same triangles, with and without both fixes -- causing zero
+            % regressions) but do NOT by themselves resolve the deeper remaining gap: this triangle
+            % still throws maxQuaPar:internal overall, from a THIRD, still-undiagnosed pattern (more
+            % than 2 pieces genuinely need to meet at one shared dual point). See DESIGN.md for why
+            % neither fix moves the observed aggregate failure rate on generic random triangles. This
+            % test pins the CURRENT, documented failure mode (a loud, clean error, never a silent
+            % wrong answer) as a concrete regression target for finishing the fix, per the session
+            % handoff's own suggested next step.
+            V = [2 1; 0 0; 1 0];
+            [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(V);
+            testCase.verifyError(@() maxQuaPar(g1, g2), 'maxQuaPar:internal');
+        end
+
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)
             % Calling the public entry point end-to-end. maxQuaPar(g1,g2) now fully ASSEMBLES (the
             % face-clipping topology gap this test used to pin -- a plain decided cell, g1 face 1
