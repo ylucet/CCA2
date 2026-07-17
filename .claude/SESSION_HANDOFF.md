@@ -1,135 +1,143 @@
 # Session Handoff
 
-_Last updated: 2026-07-17T00:00:00Z_
+_Last updated: 2026-07-17T19:48:35Z_
 
 ## What happened this session
 
-Diagnosed and fixed the #1-priority item carried over from the last two sessions: the "third,
-still-undiagnosed pattern" behind `maxQuaPar:internal` on generic random 2-convex-edge triangles
-(the same-side-ray and subsumed-piece bugs fixed two sessions ago were both real but never touched
-this pattern). Root cause: `facePoly`/`polyConstraints` computed a boundary ray's inside/outside
-half-plane from a FIXED role-based formula (`rot90cw(-dirIn)` for the "incoming" ray,
-`rot90cw(dirOut)` for the "outgoing" one) that implicitly assumes that ray's own sign in its
-`P{k}` entry is always `+1`/`-1` respectively. That assumption holds for a typical unbounded face
-(real vertices between the two rays constrain `orderEdges`' walk enough to guarantee it), but NOT
-for a face whose ENTIRE boundary is just two rays sharing one apex (no real vertices at all) --
-there `orderEdges`' own ray-selection rule can legitimately give BOTH rays the SAME sign. Confirmed
-concretely on the paper's own `V=[2 1;0 0;1 0]` example: g2's face 3 (exactly this single-apex
-"cone" case, `P{3}=[3 2]`, both positive) had its true ~170-degree wedge computed as the wrong
-~12-degree sliver -- verified by cross-checking against `QuaPar.eval`'s own independent
-face-membership logic (ground truth) at many sample angles, not by reasoning about the geometry by
-hand. This starved g1's face 3 of its true neighbour and crashed `assemblePieces` with "no matching
-neighbour," never a silent wrong answer.
+Diagnosed the top-priority item from last session: the 15/741 (2.0%) silent wrong-answer cases
+found in the prior session's `maxQuaPar` stress test. Reproduced the exact `rng(2026)`
+1500-triangle dataset (724 ok / 2 crash / 15 wrong -- byte-for-byte matching last session's counts,
+including the same crash triangles). Traced the root cause rigorously, via three independent
+methods: (1) cross-checked `maxQuaPar`'s output against `conj(r)` computed by brute-force grid
+sampling of `r`'s own raw quadratic pieces (bypassing `conjPieceCPLQ`/`maxQuaPar` entirely) --
+matched to grid precision, proving Steps 2/3 are computing the conjugate of `r` correctly; (2)
+verified `r` is a genuine globally convex minorant of `f=xy` (correct kink direction at the internal
+seam, checked via gradient-jump sign); (3) verified tightness directly via the biconjugate identity
+`env(f)(x0) = sup_s[s.x0 - f*(s)]`, using only the independently-correct closed-form
+`supBilinearOverPoly` -- found a genuine, large gap (~2.14, not a numerical artifact) between `r`
+and the true envelope at a concrete point. Conclusion: **all 15 wrong-answer cases are a Step 1
+(`convEnvCPLQ`) envelope-tightness bug, not a `maxQuaPar`/`conjPieceCPLQ` bug** -- `maxQuaPar`
+faithfully computes `conj(r)`, but `r` itself (`convEnvCPLQ`'s 2-convex-edge `splitTwoConvexEdges`,
+12/15 cases, and the 3-convex-edge `splitThreeConvex` path, 3/15 cases -- though per the user,
+the 3-convex-edge case is not actually distinct, since triangulating it reduces to the 2-convex-edge
+case) is not always the tightest envelope, despite `DESIGN.md`'s own record of a prior session
+believing this was already fixed (verified there via a 60-triangle stress test that happened not to
+catch this).
 
-Diagnostic method: reproduced the paper's example, dumped `facePoly`'s computed polygon for the
-offending face (via temporary `assignin('base',...)` instrumentation, removed before committing),
-found the ~12-degree vs ~170-degree discrepancy by sweeping `QuaPar.eval` around a full circle at
-fixed radius, then derived the correct general formula (`outward normal = sign(Pk(t)) *
-rot90ccw(direction)`) by direct algebraic comparison against `QuaPar.eval`'s own
-`evalConic(...)*sign(Pe(t))<=0` convention -- proved it is a STRICT GENERALIZATION of the old
-formula (reduces to it exactly when `dirInSign==+1`/`dirOutSign==-1`, the previously-assumed
-pattern), so no previously-passing case could be affected by construction, not just by testing.
+Also verified: the assembled dual arrangement (`g1`, `g2`, and `h=maxQuaPar(g1,g2)`) for the
+counterexample triangle **is** a genuine polyhedral complex (every pairwise face intersection is
+empty, a shared vertex, or a full shared edge -- checked computationally via `shapely`, using the
+actual sign-aware `polyConstraints`/`facePoly` logic from `maxQuaPar.m`, box-clipped for unbounded
+faces) -- so the wrong-answer bug is cleanly separated from the historical "fan"/assembly-crash bug
+class; assembly is working correctly here, Step 1's input to it is just wrong.
 
-**Fix**: `facePoly` now captures each ray's true `sign(Pk(t))` (`dirInSign`/`dirOutSign`, swapped
-alongside `dirIn`/`dirOut` through the existing CW->CCW reversal); this is threaded through
-`clipPolyHalfPlane` (pass-through unchanged when a ray survives a clip untouched; default sign
-`+1`/`-1` when a ray is replaced by a new clip-boundary-aligned ray, matching how that replacement
-was already constructed) and through `splitCell`'s unbounded-cell branch, so every final `piece` --
-not just the original g1/g2 faces -- carries a correct sign (needed because `dropSubsumedPieces`'
-`isSubsumed` also calls `polyConstraints` on final pieces). `polyConstraints` itself now computes
-each ray's outward normal as `sign * rot90ccw(direction)` instead of the old fixed-role formula.
+Cross-checked against the actual original reference implementation: the user pointed to
+`github.com/tanmaya11/cPLQ`, cloned locally into `cPLQ/` (untracked, has its own `.git` -- not
+committed into this repo). Confirmed its 2-convex-edge envelope formula
+(`plq_1p.convexEnvelope1`, case `nCE==2`) is algebraically identical to this codebase's
+`buildTwoEdge`/`twoEdgeQuadPlain` (no split logic exists there at all -- it's literally the paper's
+Appendix A.4 single-quadratic formula, applied over the whole triangle). Ran its full pipeline
+(`.triangulate` / `.maximum`) on one of the 15 wrong triangles and got a THIRD distinct value,
+different from both truth and this codebase's result, with a large (~2.03), clean (non-degenerate)
+discrepancy at a test dual point -- confirming the tightness gap is a genuine, pre-existing bug in
+the published algorithm/original reference code itself, not something this codebase's later
+`splitTwoConvexEdges` "fix" introduced or regressed.
 
-**Verification** (see this session's own scratch scripts under the OS temp scratchpad dir, not
-committed -- easy to regenerate from this description):
-- Paper's example (`V=[2 1;0 0;1 0]`) now assembles and matches `supBilinearOverPoly` (exact ground
-  truth) to ~1.8e-15 at 200 random sample points.
-- Full test suite: **147/147 PASS**. The one test that used to only pin the crash via
-  `verifyError` (`matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces`) is now upgraded
-  to a real end-to-end value check against `supBilinearOverPoly` at 7 sample points, and its header
-  comment documents all three bugs (the two from two sessions ago plus this session's).
-- **Controlled 1500-triangle A/B**, methodology matching the prior session's own (identical
-  triangles AND identical sample points pre-generated up front via a single `rng` seed, run through
-  both the pre-fix and post-fix code so outcomes are byte-for-byte comparable regardless of which
-  run succeeds where -- this avoids the "lazy RNG draws inside branches" pitfall the prior session
-  documented hitting once): crash rate dropped from **34.8% -> 0.3%** (258/741 -> 2/741 valid
-  triangles). Per-triangle transition matrix confirms **zero regressions**: every triangle that was
-  already correct under the old code (473/741) is STILL correct under the new code; every triangle
-  that was already wrong under the old code (10/741, pre-existing and unrelated) is still wrong,
-  unchanged; of the 258 old crashes, 251 become correct, 5 become "wrong answer" (a DIFFERENT,
-  previously-masked bug now surfacing instead of crashing -- not a regression, since these were
-  already broken, just differently), and only 2 remain crashing.
+Built two documentation figures (both new, committed) and one interactive artifact (published,
+not part of the repo) illustrating the concrete counterexample
+`T=(-9.95506,3.70366),(-9.345,-5.34552),(1.29049,5.31738)`:
+- `doc/bug.svg` -- 2-panel: primal split diagram + a 1D cross-section showing `r` dipping 2.14
+  below the true envelope at the gap point `x0=(-7.2947,-0.3917)`.
+- `doc/bug_pipeline.svg` -- full 7-row pipeline (matching `doc/full_pipeline.svg`'s style/structure):
+  primal domain -> split into `T1`/`T2` -> convex envelope of each (`q1`/`q_other`, with formulas)
+  -> conjugates `g1`/`g2` (their own dual-space face subdivisions) -> `h=max(g1,g2)` (assembled
+  14-cell arrangement) -> biconjugate of each piece (slice, confirms Step 2 correctness: `biconj(g1)
+  = q1` on `T1`, `biconj(g2) = q_other` on `T2`, machine precision) -> overall biconjugate (slice,
+  since no closed form is known -- this is the panel that actually shows the bug, comparing
+  `biconj(f)` [the true envelope, independent of `r`] against `r`, NOT `conj(h)` [which would just
+  trivially recover `r` itself via Fenchel-Moreau, since `r` is already convex -- would show nothing]).
+- Interactive 3D artifact (published at
+  `https://claude.ai/code/artifact/960a5c56-958d-411c-ba17-5ebd6d933ed4`, not in this repo): a
+  custom canvas-based rotatable 3D plot (drag=orbit, scroll=zoom, matching MATLAB's `rotate3d`; no
+  external libraries, per Artifact CSP) of `f=xy`, `r`, and `env(f)` over the triangle, camera
+  pivoted on the gap point (the 2.14 gap is small next to the surface's ~87-unit height range, so a
+  whole-triangle default view would hide it). Source file, generator script, and screenshots are in
+  the OS-temp scratchpad (see below), not committed.
+
+Finally, per the user's request, verified the gap via a SECOND, completely independent, more
+elementary method (no conjugate/duality machinery at all): sampled ~14000 points of the graph
+`(x,y,xy)` over `T` (dense barycentric grid + local refinement near `x0`), computed the 3D convex
+hull (`scipy.spatial.ConvexHull` -- the lower-hull facets are exactly the graph of the convex
+envelope, a standard fact), and evaluated the lower-hull facet at `x0`: **-1.811980**, matching the
+biconjugate-based value (-1.811990) to 5 decimals, both confirming the same 2.143 gap against
+`r=-3.955080`. The hull facet at `x0` has vertices at `B` and (essentially) `R` -- a concrete hint
+that the true envelope's supporting plane there runs along the seam `R-B` extended, not along
+`q_other`'s actual formula.
 
 ## Where things stand
 
-- Branch: `main` @ `6feced2` -- "Fix maxQuaPar ray-normal sign bug for single-apex cone faces".
+- Branch: `main` @ `1695311` -- "Add figures documenting the convEnvCPLQ 2-convex-edge tightness
+  bug". Previous commit `2cdc876` (last session's handoff) unchanged otherwise.
 - Pushed: pending (awaiting user confirmation in this session).
-- Files changed: `maxQuaPar.m` (`facePoly` now captures/swaps `dirInSign`/`dirOutSign`;
-  `polyConstraints` uses them for the ray-normal formula; `clipPolyHalfPlane` and `splitCell`'s
-  unbounded branch thread the sign fields through; `boundedPiece` sets them to `[]` for
-  consistency; the `pieces` struct-array declaration gained the two new fields), `maxQuaParTest.m`
-  (rewrote `matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces` from a `verifyError` pin
-  into a real end-to-end value check, with an updated header documenting all three historical bugs).
-  No other files touched. `DESIGN.md` was NOT updated this session (unlike prior sessions) --
-  worth doing next time if continuing this thread, per that file's established per-session
-  Implementation-status-bullet convention for `maxQuaPar.m`.
-- Full test suite: **147/147 PASS**.
-- Residual, NOT investigated this session (small enough now to be genuinely lower priority than
-  before, but still open):
-  - **2/741 (0.3%) still throw `maxQuaPar:internal`** ("no matching neighbour") on random
-    triangles even after this fix -- e.g. `T=[-7.71708 -0.856785;-8.22504 0.349933;-7.27519
-    1.40742]` and `T=[3.9615 8.03275;2.94803 -9.30541;-7.05705 6.43129]` (both from this session's
-    1500-triangle dataset, reproducible via the exact `rng(2026)` + per-trial `(rand(3,2)-0.5)*20`
-    draw sequence described above). Not yet diagnosed whether this is the same root-cause family
-    (e.g. a THREE-ray degenerate cluster, where the sign-aware fix still isn't enough) or a
-    genuinely distinct, fourth pattern.
-  - **15/741 (2.0%) assemble without crashing but give a WRONG answer** vs `supBilinearOverPoly`
-    at at least one of 5 random sample points: 10 of these are PRE-EXISTING (present, identically,
-    under the OLD pre-fix code too -- confirmed via the same controlled A/B, so definitely
-    unrelated to this session's change) and 5 are cases that used to crash and now silently
-    resolve to a wrong value instead (a previously-masked, separate bug now visible). Neither set
-    has been diagnosed yet. Wrong-answer bugs are a different (and arguably higher-severity, since
-    silent) class of problem than the crash this session fixed, and are recommended as the next
-    thing to diagnose using the same ground-truth-comparison methodology.
+- Files changed/added this session: `doc/bug.svg`, `doc/bug_pipeline.svg` (both committed). No
+  source `.m` files were modified this session -- this was pure diagnosis, no fix attempted (the
+  user explicitly steered toward "diagnose and visualize," not "fix," given `DESIGN.md`'s own
+  assessment that a real fix needs a genuine mathematical extension of Appendix A.4, not a quick
+  patch).
+- Untracked, not part of this repo: `cPLQ/` (clone of `github.com/tanmaya11/cPLQ`, has its own
+  `.git`, left untracked deliberately -- see "What happened" above). Also not committed: the
+  published interactive 3D artifact's HTML source and all of this session's scratch MATLAB/Python
+  diagnostic scripts (`convEnvCPLQDebug.m`, `exportpipeline2.m`, `gen_3d_data.py`,
+  `make_bug_pipeline.py`, `verify_hull.py`, etc.) -- all under the OS-temp scratchpad dir
+  (session-specific, not persisted); easily regenerable from this file's description if needed
+  again, but not guaranteed to survive to a future session.
+- Full test suite: not re-run this session (no source changed).
 
 ## Next steps
 
-- **New top priority**: diagnose the 15/741 (2.0%) silent WRONG-ANSWER cases against
-  `supBilinearOverPoly` -- a higher-severity class of bug than a loud crash, and now that the
-  crash-rate is down to 0.3%, likely the dominant remaining correctness gap in this pipeline.
-  Suggested approach: reproduce with the two known repro triangles from this session's stress test
-  (see the git history / this file's own description above for how to regenerate the exact
-  1500-triangle dataset via `rng(2026)`), narrow down to the SPECIFIC sample point(s) where
-  `g.eval(s)` disagrees with `supBilinearOverPoly(s,T)`, then use `g.eval`'s `region` output
-  (second return value) plus a point-sampling coverage check (as used successfully both this
-  session and two sessions ago) to see whether it's an overlap, a gap, or a genuinely wrong `f`
-  row winning in some cell.
-- **Lower priority**: the 2/741 (0.3%) residual crashes -- small enough now that it may not be
-  worth dedicated time versus the wrong-answer bugs above, but worth a quick check whether it's the
-  same family as the sign bug this session fixed (e.g. a three-or-more-ray degenerate cluster where
-  even a correctly-signed pairwise `oppositeSides` test still can't find a valid 1-1 matching) or
-  something new.
-- Update `DESIGN.md`'s `maxQuaPar.m` Implementation-status bullet with this session's write-up
-  (root cause, fix, and the controlled A/B result), matching the established per-session convention
-  -- not done this session, should be done before or alongside the next fix.
-- Still untouched, unchanged in priority from before: `QuaPar.orderEdges`/`createP`'s DIFFERENT
-  error ("Face k has ..." / "expected 2 but got N") on some near-degenerate/thin triangles --
-  still unconfirmed whether this shares a root cause with anything above.
-- Lower priority / untouched: `partialConj` for `'cplq'`/`'pqp'`; `add` for `RatPol` and the
-  `RatPar` parent class; conjugate engines `'pqp'`/`'graph'` (unimplemented, error explicitly); the
-  standalone `RatPol.conj` gap.
+- **Top priority, unchanged in kind from last session but now precisely scoped**: derive a
+  genuinely tight convex-envelope construction for the 2-convex-edge case in `convEnvCPLQ.m`
+  (`splitTwoConvexEdges`/`buildEdgeAffinePiece`/`seamPoint`). This is confirmed to be a real,
+  open mathematical gap -- not a transcription bug relative to the published paper (the original
+  reference code has the identical issue) and not something the existing split "fix" resolves in
+  general (it was only verified against a 60-triangle sample that missed this counterexample). The
+  hull-facet hint above (true envelope's support at `x0` passes through `B` and `R`, not through
+  `q_other`) is a concrete lead for the next attempt, but no fix was attempted this session.
+- Regenerate reproducible artifacts as needed: the counterexample triangle and its dual-space
+  objects (`T1`, `T2`, `q1`, `q_other`, `g1`, `g2`, `h`) are fully described in this file and in the
+  git history's own commit message / `bug_pipeline.svg`'s captions; the exact `rng(2026)` stress
+  test (1500 triangles, same seed) reproduces the same 15 wrong-answer / 2 crash triangles if a
+  broader sweep is wanted again.
+- Still open, unchanged from before: the 2/741 (0.3%) residual `maxQuaPar:internal` crashes
+  (`T=[-7.71708 -0.856785;-8.22504 0.349933;-7.27519 1.40742]` and `T=[3.9615 8.03275;2.94803
+  -9.30541;-7.05705 6.43129]`) -- lower priority than the tightness bug above, not investigated
+  this session.
+- Update `DESIGN.md`'s `convEnvCPLQ.m`/`maxQuaPar.m` Implementation-status write-ups with this
+  session's diagnosis (the "Important: this is NOT a correctness gap in the underlying math"
+  passage there is now known to be wrong in general -- it IS a correctness gap, just isolated to
+  Step 1, not Step 2/3 as that passage's surrounding context might suggest to a future reader) --
+  not done this session.
+- Lower priority / untouched, unchanged from before: `QuaPar.orderEdges`/`createP`'s separate
+  "Face k has ... expected 2 but got N" error on near-degenerate/thin triangles; `partialConj` for
+  `'cplq'`/`'pqp'`; `add` for `RatPol`/`RatPar`; conjugate engines `'pqp'`/`'graph'`; the standalone
+  `RatPol.conj` gap.
 
 ## Relevant files
 
-- `maxQuaPar.m` -- `facePoly` (now captures `dirInSign`/`dirOutSign`), `polyConstraints` (now
-  sign-aware ray-normal formula, with full derivation in its own HISTORY comment),
-  `clipPolyHalfPlane` and `splitCell`'s unbounded branch (thread the new sign fields through),
-  `boundedPiece` (sets them to `[]`): this session's fix, fully commented in place. The residual
-  2/741 crash and 15/741 wrong-answer cases are NOT yet isolated to a specific function within this
-  file.
-- `maxQuaParTest.m` -- `matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces`, rewritten
-  this session from a crash-pinning `verifyError` test into a real value check; its header
-  documents all three historical bugs (same-side ray pairing, subsumed pieces, and this session's
-  ray-sign fix) for anyone tracing the history.
-- `DESIGN.md` -- NOT updated this session; still only has the write-up through two sessions ago.
-  Worth appending this session's fix before/alongside the next one.
-- `convEnvCPLQ.m`, `conjCPLQ.m` -- NOT modified this session, unaffected.
+- `convEnvCPLQ.m` -- `splitTwoConvexEdges`/`buildEdgeAffinePiece`/`seamPoint`: confirmed this
+  session to still admit non-tight envelopes on some 2-convex-edge triangles (counterexample
+  T=(-9.95506,3.70366),(-9.345,-5.34552),(1.29049,5.31738), gap ~2.14 at x0=(-7.2947,-0.3917));
+  not modified this session.
+- `maxQuaPar.m` -- confirmed (not modified) to correctly compute `conj(r)` and to assemble a
+  genuine polyhedral complex for this counterexample; the wrong answer is entirely attributable to
+  its input `r`, not to this file's own logic.
+- `doc/bug.svg`, `doc/bug_pipeline.svg` -- new this session, both illustrate the counterexample
+  above; see their own captions for the full pipeline breakdown.
+- `doc/full_pipeline.svg`, `doc/cplq_split.svg`, `doc/cplq_unsplit.svg` -- pre-existing sibling
+  figures `bug_pipeline.svg` was styled to match.
+- `cPLQ/` -- untracked clone of the original `github.com/tanmaya11/cPLQ` reference implementation;
+  useful for cross-checking whether a future fix attempt's target behavior matches (or improves on)
+  the original algorithm, not just this codebase's own history.
+- `DESIGN.md` -- has the fullest prior history of the 2-convex-edge tightness saga (search for
+  "2-convex-edge" and "Open research question"); NOT updated this session with this session's
+  findings (see "Next steps").
