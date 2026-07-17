@@ -220,9 +220,9 @@ classdef maxQuaParTest < matlab.unittest.TestCase
         end
 
         function matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces(testCase)
-            % Regression test for two bugs found while diagnosing the 2-convex-edge
+            % Regression test for three bugs found while diagnosing the 2-convex-edge
             % (splitTwoConvexEdges) "vertex fan" gap left open by the prior session (see DESIGN.md /
-            % session handoff), both confirmed on COAP Appendix A.4.3's own example below:
+            % session handoff), all confirmed on COAP Appendix A.4.3's own example below:
             %
             % 1) matchHalfEdges used to pair two rays purely by (apex, direction) equality, with no
             %    check that the two candidate pieces are on OPPOSITE sides of that ray. When a g1
@@ -239,19 +239,46 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             %    yet still overlapped, one wholly containing the other -- pure redundant territory.
             %    Fixed by dropSubsumedPieces (called right after dedupPieces), confirmed to cut this
             %    triangle's piece count from 12 to 10 with zero change in any resolved value.
+            % 3) THE remaining "third, undiagnosed pattern" this test used to only pin via
+            %    verifyError: facePoly/polyConstraints computed a ray edge's outward half-plane
+            %    normal from a FIXED role-based formula (rot90cw(-dirIn) for the "incoming" ray,
+            %    rot90cw(dirOut) for the "outgoing" one), implicitly assuming that ray's own sign
+            %    in its original P{k} entry is always +1 for "incoming" and always -1 for
+            %    "outgoing". That assumption holds for a typical unbounded face (real vertices
+            %    between the two rays constrain orderEdges' walk enough to guarantee it), but NOT
+            %    for a face whose ENTIRE boundary is just two rays sharing one apex (no real
+            %    vertices at all) -- there, orderEdges' own ray-selection rule can legitimately give
+            %    BOTH rays the SAME sign. g2's face 3 here is exactly this case (P{3}=[3 2], both
+            %    positive): the old formula computed a ~12-degree sliver as "inside" when the true
+            %    region (confirmed against g2.eval, i.e. QuaPar's own ground-truth face-membership
+            %    test) is the ~170-degree complementary wedge -- so g1 face 3 (the piece that
+            %    should tile exactly that wedge from the other side) was left with a genuinely
+            %    unmatched boundary edge, not a T-junction sliver like checkOrphanHalfEdges' other
+            %    known-safe case, hence the loud crash. Fixed by having facePoly capture each ray's
+            %    true sign(Pk(t)) (dirInSign/dirOutSign, swapped alongside dirIn/dirOut through the
+            %    CW->CCW reversal, then threaded through clipPolyHalfPlane/splitCell so every piece
+            %    -- not just the original g1/g2 faces -- carries a correct sign) and having
+            %    polyConstraints use it: outward normal = sign*rot90ccw(direction), which reduces
+            %    to EXACTLY the old formula whenever dirInSign==+1/dirOutSign==-1 (the previously
+            %    assumed, still-correctly-handled case), so no previously-passing case is affected.
             %
-            % Both fixes are independently correct (confirmed via a controlled ~1500-triangle
-            % randomized A/B test -- same triangles, with and without both fixes -- causing zero
-            % regressions) but do NOT by themselves resolve the deeper remaining gap: this triangle
-            % still throws maxQuaPar:internal overall, from a THIRD, still-undiagnosed pattern (more
-            % than 2 pieces genuinely need to meet at one shared dual point). See DESIGN.md for why
-            % neither fix moves the observed aggregate failure rate on generic random triangles. This
-            % test pins the CURRENT, documented failure mode (a loud, clean error, never a silent
-            % wrong answer) as a concrete regression target for finishing the fix, per the session
-            % handoff's own suggested next step.
+            % All three fixes are independently correct AND, together, close the previously-open
+            % gap: this triangle now fully ASSEMBLES and matches ground truth (supBilinearOverPoly)
+            % at both the sample points spot-checked here and, in a separate randomized sweep, at
+            % 200 random points to machine precision (see this session's own verification, not a
+            % committed test file, referenced in the session handoff).
             V = [2 1; 0 0; 1 0];
             [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(V);
-            testCase.verifyError(@() maxQuaPar(g1, g2), 'maxQuaPar:internal');
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+            samples = [1 2; 0.5 1.5; -1 3; 2 -1; 0 0; -2 -2; 3 3];
+            for i = 1:size(samples,1)
+                s = samples(i,:);
+                truth = maxQuaParTest.supBilinearOverPoly(s, V);
+                got = g.eval(s);
+                testCase.verifyEqual(got, truth, 'AbsTol', 1e-9, ...
+                    sprintf('mismatch at s=[%g %g]', s(1), s(2)));
+            end
         end
 
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)

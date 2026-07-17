@@ -145,7 +145,8 @@ function g = maxQuaPar(g1, g2)
     assertFullDomain(g1, 'g1');
     assertFullDomain(g2, 'g2');
 
-    pieces = struct('V', {}, 'dirIn', {}, 'dirOut', {}, 'curveAfter', {}, 'curveEc', {}, 'f', {});
+    pieces = struct('V', {}, 'dirIn', {}, 'dirOut', {}, 'dirInSign', {}, 'dirOutSign', {}, ...
+        'curveAfter', {}, 'curveEc', {}, 'f', {});
     for k = 1:g1.nf
         polyK = facePoly(g1, k);
         for l = 1:g2.nf
@@ -349,20 +350,21 @@ function poly = facePoly(obj, k)
 % function wrongly re-appended the apex when n>2, producing a duplicate vertex).
     if obj.nv == 0   % bare full-domain quadratic: the "face" IS all of R^2, no boundary at all
         poly.V = zeros(0,2); poly.dirIn = []; poly.dirOut = [];
+        poly.dirInSign = []; poly.dirOutSign = [];
         return
     end
     Pk = obj.P{k};
     n = numel(Pk);
-    V = zeros(0,2); dirIn = []; dirOut = [];
+    V = zeros(0,2); dirIn = []; dirOut = []; dirInSign = []; dirOutSign = [];
     for t = 1:n
         j = abs(Pk(t)); s = sign(Pk(t));
         a = obj.E(j,1); b = obj.E(j,2);
         if obj.E(j,3) == 0   % ray: column 1 is always the finite apex
             apex = obj.V(a,:); d = obj.V(b,:) - apex; d = d/norm(d);
             if t == 1
-                V(end+1,:) = apex; dirIn = d; %#ok<AGROW>
+                V(end+1,:) = apex; dirIn = d; dirInSign = s; %#ok<AGROW>
             else   % t == n, the only other ray: apex already appended, never re-add it
-                dirOut = d;
+                dirOut = d; dirOutSign = s;
             end
         else
             if s > 0, V(end+1,:) = obj.V(b,:); else, V(end+1,:) = obj.V(a,:); end %#ok<AGROW>
@@ -370,10 +372,15 @@ function poly = facePoly(obj, k)
     end
     % obj.P{k} is CLOCKWISE; reverse to CCW, which swaps the roles of "first ray" (incoming when
     % reversed becomes outgoing) and "last ray" -- the ray direction VECTORS themselves (apex to
-    % infinity) don't change, only which end of the (now-reversed) vertex list they attach to.
+    % infinity) don't change, only which end of the (now-reversed) vertex list they attach to. The
+    % ray's own sign(Pk(t)) (dirInSign/dirOutSign) is an intrinsic property of THAT specific P{k}
+    % entry (not of its role), so it is carried along with the direction it was computed from,
+    % swapped identically -- see polyConstraints' HISTORY for why this is needed.
     poly.V = flipud(V);
     poly.dirIn = dirOut;    % swapped, see comment above
     poly.dirOut = dirIn;
+    poly.dirInSign = dirOutSign;
+    poly.dirOutSign = dirInSign;
 end
 
 % ============================================================================================
@@ -512,12 +519,32 @@ function cons = polyConstraints(poly)
         cons(end+1,:) = [n, n*poly.V(i,:)']; %#ok<AGROW>
     end
     if ~isempty(poly.dirIn)
-        % travel direction into V(1,:) is -dirIn (arriving from infinity); outward normal =
-        % rot90cw(-dirIn) = (-dirIn(2), dirIn(1)).
-        n = [-poly.dirIn(2), poly.dirIn(1)];
+        % BUGFIX: a ray edge's outward normal is NOT always rot90cw(-dirIn)/rot90cw(dirOut) --
+        % that fixed-role formula silently assumes dirIn's own P{k} sign is always +1 and dirOut's
+        % is always -1, which is exactly what obj.P{k}'s "-j=left/+j=right" convention (see
+        % orderEdges) produces for a TYPICAL unbounded face (real vertices in between the two
+        % rays constrain the walk enough that this pattern always holds), but is NOT guaranteed
+        % for a face whose ENTIRE boundary is just the two rays sharing one apex (poly.V has a
+        % single row, dirIn and dirOut anchored at the identical point) -- there, orderEdges' own
+        % ray-selection logic (picking the start ray via a DIFFERENT rule, see its own comments)
+        % can legitimately give BOTH rays the SAME sign. Found via a coverage/sampling stress test
+        % on the paper's own V=[2 1;0 0;1 0] example (maxQuaPar:internal on g1 face 3 vs g2's
+        % faces): g2 face 3's P{3}=[3 2] (both entries positive) is exactly this single-apex case,
+        % and the fixed-role formula silently computed a ~12-degree sliver as "inside" when the
+        % true (QuaPar.eval-confirmed ground truth) face is the ~170-degree complementary wedge.
+        %
+        % FIX: use the TRUE sign each ray carries in its own original P{k} entry (captured by
+        % facePoly as dirInSign/dirOutSign, swapped alongside dirIn/dirOut through the CW->CCW
+        % reversal) instead of assuming a fixed role-based sign. This is a strict generalization:
+        % outward normal = sign * rot90ccw(direction), which reduces to EXACTLY the old formula
+        % when dirInSign==+1 and dirOutSign==-1 (rot90cw(-dirIn)=+1*rot90ccw(dirIn) and
+        % rot90cw(dirOut)=-1*rot90ccw(dirOut)) -- i.e. every previously-passing case (where that
+        % sign pattern held) is completely unaffected; only the previously-mishandled
+        % same-sign/single-apex case now differs, correctly. See
+        % maxQuaParTest.matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces.
+        n = poly.dirInSign * [-poly.dirIn(2), poly.dirIn(1)];
         cons(end+1,:) = [n, n*poly.V(1,:)']; %#ok<AGROW>
-        % travel direction out of V(end,:) is +dirOut; outward normal = rot90cw(dirOut).
-        n = [poly.dirOut(2), -poly.dirOut(1)];
+        n = poly.dirOutSign * [-poly.dirOut(2), poly.dirOut(1)];
         cons(end+1,:) = [n, n*poly.V(end,:)']; %#ok<AGROW>
     end
 end
@@ -605,6 +632,7 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
         end
         if size(Vnew,1) < 3, poly2 = []; return; end
         poly2.V = Vnew; poly2.dirIn = []; poly2.dirOut = [];
+        poly2.dirInSign = []; poly2.dirOutSign = [];
         return
     end
 
@@ -620,10 +648,12 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
             keepAfter  = poly.V(p2:nv,:);
             poly2.V = dedupConsecutive([keepBefore; X1; X2; keepAfter]);
             poly2.dirIn = poly.dirIn; poly2.dirOut = poly.dirOut;
+            poly2.dirInSign = poly.dirInSign; poly2.dirOutSign = poly.dirOutSign;
         else            % both ray ends outside: keep only the middle; result becomes bounded
             Vnew = dedupConsecutive([X1; poly.V(vIdxMid,:); X2]);
             if size(Vnew,1) < 3, poly2 = []; return; end
             poly2.V = Vnew; poly2.dirIn = []; poly2.dirOut = [];
+            poly2.dirInSign = []; poly2.dirOutSign = [];
         end
         return
     end
@@ -636,17 +666,23 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
     % itself (direction chosen so the retained CCW region has this new edge's interior on its left,
     % i.e. its outward normal is exactly nrm -- see header derivation: rot90ccw(nrm)=(-nrm2,nrm1)
     % for a trailing/outgoing replacement, rot90cw(nrm)=(nrm2,-nrm1) for a leading/incoming one).
+    % The REPLACED ray's sign is fixed at its "default" value (dirInSign=+1, dirOutSign=-1) -- the
+    % one value for which polyConstraints' sign-aware normal (see its own HISTORY) reconstructs
+    % exactly nrm itself for this brand-new edge, by construction; the KEPT ray's sign passes
+    % through unchanged from `poly` (see polyConstraints' HISTORY -- this is what lets a piece
+    % that never has either of its original rays clipped away keep its true, possibly
+    % non-default, sign all the way through to dropSubsumedPieces' isSubsumed).
     p = cross(1); X = xpt(p);
     if st(1) <= 0   % dirIn side inside, dirOut side outside: keep 1..p, replace dirOut
         keepV = poly.V(1:min(p-1,nv),:);
         poly2.V = dedupConsecutive([keepV; X]);
-        poly2.dirIn = poly.dirIn;
-        poly2.dirOut = [-nrm(2), nrm(1)];
+        poly2.dirIn = poly.dirIn; poly2.dirInSign = poly.dirInSign;
+        poly2.dirOut = [-nrm(2), nrm(1)]; poly2.dirOutSign = -1;
     else            % dirOut side inside, dirIn side outside: keep p+1..m, replace dirIn
         keepV = poly.V(max(p,1):nv,:);
         poly2.V = dedupConsecutive([X; keepV]);
-        poly2.dirIn = [nrm(2), -nrm(1)];
-        poly2.dirOut = poly.dirOut;
+        poly2.dirIn = [nrm(2), -nrm(1)]; poly2.dirInSign = 1;
+        poly2.dirOut = poly.dirOut; poly2.dirOutSign = poly.dirOutSign;
     end
     if isempty(poly2.V), poly2 = []; end
 end
@@ -884,6 +920,7 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     keepAfter  = cell.V(e2:nv,:);
     cellRest.V = dedupConsecutive([keepBefore; X1; X2; keepAfter]);
     cellRest.dirIn = cell.dirIn; cellRest.dirOut = cell.dirOut;
+    cellRest.dirInSign = cell.dirInSign; cellRest.dirOutSign = cell.dirOutSign;
     cellRest.curveAfter = size(keepBefore,1) + 1; cellRest.curveEc = edgeEc;
 
     % Determine which of cellMid/cellRest is "f1 wins" by evaluating f1row-f2row at one interior
@@ -897,6 +934,7 @@ end
 function piece = boundedPiece(Xstart, Vmid, Xend, ecRow)
     piece.V = dedupConsecutive([Xstart; Vmid; Xend]);
     piece.dirIn = []; piece.dirOut = [];
+    piece.dirInSign = []; piece.dirOutSign = [];
     piece.curveAfter = size(piece.V,1);   % curve is the CLOSING edge (V(end) back to V(1))
     piece.curveEc = ecRow;
 end
