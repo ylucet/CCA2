@@ -165,6 +165,7 @@ function g = maxQuaPar(g1, g2)
         end
     end
     pieces = dedupPieces(pieces);
+    pieces = dropSubsumedPieces(pieces);
     g = assemblePieces(pieces);
 end
 
@@ -254,6 +255,68 @@ function pt = interiorSample(piece)
     else
         pt = piece.V(1,:) + piece.dirIn + piece.dirOut;
     end
+end
+
+% ============================================================================================
+% ----- dropping pieces geometrically SUBSUMED by another piece with the SAME winner -----------
+function pieces = dropSubsumedPieces(pieces)
+% Two DIFFERENT (k,l) pairs can produce two pieces that agree on the winning row `f` (same
+% quadratic/affine formula) yet are NOT geometrically identical (so dedupPieces, which only
+% collapses exact-geometry groups, leaves both) yet still OVERLAP -- specifically, one can be a
+% strict subset of the other. This happens when a g1 (or g2) face k is cut into several (k,l)
+% sub-pieces by different opposing faces l, l': every such sub-piece independently inherits face
+% k's own boundary edges/rays as part of ITS OWN boundary, so two sub-pieces that both end up
+% deciding "f1row (face k) wins" can each be a geometrically valid but differently-sized portion
+% of face k's own territory -- and if one is wholly contained in the other, the smaller one is
+% pure redundant duplication of already-covered territory (both, individually, are provably
+% correct: every point in either does have `f` as its true winning row), not a distinct region of
+% the final partition. Left in, the SMALLER one's boundary competes for neighbours that the
+% LARGER one's containing edges already legitimately claim, starving genuine neighbours elsewhere
+% of a match (maxQuaPar:internal in assemblePieces) -- see matchHalfEdges' oppositeSides for the
+% sibling bug this complements (that one rejects a spurious PAIRING between two such pieces; this
+% one removes the redundant piece outright when one wholly contains the other, which oppositeSides
+% alone cannot fix since rejecting the pairing merely leaves both orphaned).
+%
+% Fix: for every pair of pieces sharing the same winning row (within tolerance), drop whichever is
+% a subset of the other (by testing every real vertex, plus -- for an unbounded piece -- both
+% recession directions, against the other's own half-plane/ray constraints via polyConstraints).
+% Curved (parabolic) pieces are left untouched (curveAfter~=0 skipped): the source of this specific
+% redundancy is confined to plain polyhedral sub-pieces of one polyhedral parent face.
+    n = numel(pieces);
+    if n <= 1, return; end
+    tolF = 1e-6;
+    drop = false(1,n);
+    for i = 1:n
+        if drop(i) || pieces(i).curveAfter ~= 0, continue; end
+        for j = 1:n
+            if i == j || drop(j) || pieces(j).curveAfter ~= 0, continue; end
+            if norm(pieces(i).f - pieces(j).f) > tolF*(1+norm(pieces(j).f)), continue; end
+            if isSubsumed(pieces(i), pieces(j))
+                drop(i) = true;
+                break
+            end
+        end
+    end
+    pieces = pieces(~drop);
+end
+
+function tf = isSubsumed(a, b)
+% True iff a's whole region is contained in b's (same convention/shape as facePoly's poly struct:
+% .V real CCW vertices, .dirIn/.dirOut ray directions or [] if bounded).
+    tf = false;
+    if ~isempty(a.dirIn) && isempty(b.dirIn), return; end   % unbounded a can't fit in bounded b
+    cons = polyConstraints(b);
+    scale = 1 + max(abs(b.V(:)));
+    tol = 1e-6 * scale;
+    val = a.V * cons(:,1:2)' - cons(:,3)';
+    if any(val(:) > tol), return; end
+    if ~isempty(a.dirIn)
+        % Homogeneous (direction-only) check: no positional scale, just a small absolute tolerance.
+        if any(cons(:,1:2)*a.dirIn' > 1e-6) || any(cons(:,1:2)*a.dirOut' > 1e-6)
+            return
+        end
+    end
+    tf = true;
 end
 
 function assertFullDomain(g, name)
@@ -1026,6 +1089,51 @@ function d = rayDirAt(pieces, he)
     d = d/norm(d);
 end
 
+function v = raySideVector(pieces, he)
+% A representative vector, from the ray's apex, pointing toward the REST of he's own piece --
+% used by oppositeSides to tell a genuine twin ray (shared by two ADJACENT pieces, one on each
+% side) from two DIFFERENT pieces that merely inherit the SAME physical ray from a shared
+% ancestor face (see oppositeSides' header) without actually bordering each other across it.
+    piece = pieces(he.piece);
+    nv = size(piece.V,1);
+    if nv >= 2
+        if he.aLoc == 1, other = piece.V(2,:); else, other = piece.V(nv-1,:); end
+        v = other - piece.V(he.aLoc,:);
+    else   % a pure 2-ray cone (nv==1): use the OTHER ray's direction as the representative side
+        if he.rayOut, v = piece.dirIn; else, v = piece.dirOut; end
+    end
+end
+
+function tf = oppositeSides(pieces, he, he2, d)
+% True iff he and he2 -- two DIFFERENT pieces' rays with the SAME apex and direction (already
+% confirmed by the caller) -- are genuinely on OPPOSITE sides of that shared ray, i.e. are the
+% two true neighbours meeting along it.
+%
+% BUGFIX: matching purely on (apex,direction) is NOT sufficient. When a g1 (or g2) face k is cut
+% into several (k,l) sub-pieces by different g2 (or g1) faces l, EVERY one of those sub-pieces
+% independently inherits face k's own boundary rays as part of ITS OWN boundary -- not because
+% each is adjacent to some other sub-piece THERE, but simply because they all descend from the
+% same parent face. The old code paired up the first two such inheritors it found as if they were
+% mutual neighbours, when in fact both sit on the SAME side of the ray (their true neighbour, if
+% any, is a DIFFERENT piece descending from whichever face lies on the ray's other side) --
+% producing a piece pair that geometrically OVERLAPS rather than tiles, which then starves the
+% genuine neighbour of a match and crashes checkOrphanHalfEdges elsewhere (see maxQuaPar.m header
+% HISTORY -- diagnosed via a coverage stress test on the paper's own V=[2 1;0 0;1 0] example,
+% confirming pieces matched this way overlap over a positive area, not just share a boundary).
+%
+% Fix: each piece's interior lies, by the CCW convention, on a definite side of its own directed
+% ray; take a point representative of "the rest of the piece" from the apex (raySideVector) and
+% test its side via the 2D cross product with the shared ray direction d. Two pieces are genuine
+% opposite neighbours iff their representative points fall on OPPOSITE sides (cross products of
+% opposite sign) -- same-sign means both inherited the ray from the same side of the original
+% parent face and must NOT be paired.
+    v1 = raySideVector(pieces, he);
+    v2 = raySideVector(pieces, he2);
+    c1 = d(1)*v1(2) - d(2)*v1(1);
+    c2 = d(1)*v2(2) - d(2)*v2(1);
+    tf = (c1 * c2) < 0;
+end
+
 function opp = matchHalfEdges(pieces, HE)
 % Pair every half-edge with its neighbour by direct geometry (see assemblePieces' HISTORY for why
 % this replaces coordinate-clustering-then-index-equality). tolPos matches two DIFFERENT pieces'
@@ -1072,7 +1180,7 @@ function opp = matchHalfEdges(pieces, HE)
                 A2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
                 d2 = rayDirAt(pieces, HE(h2));
                 dA = norm(Ah-A2); dD = norm(dh-d2);
-                if dA < tolPos && dD < tolDir
+                if dA < tolPos && dD < tolDir && oppositeSides(pieces, HE(h), HE(h2), dh)
                     cand(end+1,:) = [h, h2, dA]; %#ok<AGROW>
                 end
             end
