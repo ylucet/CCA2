@@ -39,30 +39,49 @@ stress test (regenerated fresh this session, not the prior session's uncommitted
 aggregate gap rate drop from ~45% to **23.1%** (108/468 genuine 2-convex-edge splits still show a
 detectable gap) -- a real, substantial, independently-verified improvement, but not a full fix.
 
-**Part 2b (found this session, NOT fixed, deeper than 2a)**: investigating why Part 2a doesn't
-close the gap to 0% found a second, distinct phenomenon. Concrete repro:
-`V=(-5.2645,3.4904),(3.1062,0.5450),(5.0430,7.7766)`,
+**Part 2b (found this session, NOT fixed, deeper than 2a, but substantially narrowed)**:
+investigating why Part 2a doesn't close the gap to 0% found a second, distinct phenomenon. Concrete
+repro: `V=(-5.2645,3.4904),(3.1062,0.5450),(5.0430,7.7766)`,
 `f6=[0.3963 0.8289 0.0284 -2.4834 2.1149 -5.5999]` (QuaPoly's stored `[H11 H12 H22 L1 L2 kappa]`
 convention, i.e. `q=0.5*x'Hx+L'x+kappa`). With Part 2a's corrected cevian, `q1`'s own sub-triangle
-`T1={P,A,Ra}` (bilinear frame) is now genuinely smaller and IS confirmed exact along ALL THREE of
-`T1`'s own edges in their entirety (both original full rays from `P`, and the new `A-Ra` seam --
-the seam agreement is additionally a proven general algebraic identity, not a coincidence of this
-example). Yet `q1` still undershoots truth by up to ~0.38 in `T1`'s STRICT INTERIOR -- a "bubble":
-tight on the whole boundary of `T1`, not tight inside it. This pattern was NOT visible on the
-paper's own (near-symmetric, `mh=1,mw=0.5`) example -- a fresh check there (25-40 random interior
-points of the corrected `T1`) found no bubble -- so it likely depends on how different `mh` and
-`mw` are (this repro: `mh=0.275,mw=1.579`, a much bigger ratio); not confirmed, just the leading
-hypothesis. Ruled out as explanations (see DESIGN.md for detail): the `twoEdgeQuadPlain` +/- branch
-choice (both branches checked, the other is a strictly looser minorant, not a fix); a naive
-recursive re-application of `edgeClipCevian` to `T1` itself (one candidate is degenerate, the other
-lands just outside its target segment, `t~1.10`); the two vertex-anchored-at-`P` rational
-candidates `R_Ph`/`R_Pw` (wildly invalid in the bubble, ~-16 vs a true value in the single digits).
-**Not yet found**: the correct further split of `T1`. Leading guess for next session: the failing
-region is an INTERIOR bubble touching all three of `T1`'s own edges, not a corner wedge, so a
-further single cevian from a boundary vertex is probably NOT the right structure -- likely needs a
-split anchored at an INTERIOR point of `T1` (a fan of 3+ pieces), or a genuinely different
-combinatorial pairing not yet tried. Per Locatelli, whatever it is, it must reduce to straight
-edges.
+`T1={P,A,Ra}` (bilinear frame) is confirmed exact along ALL THREE of `T1`'s own edges in their
+entirety, yet undershoots truth by up to ~0.38 in `T1`'s interior.
+**Key finding**: `max(q1, R_Aw)` (`R_Aw` = `T2`'s OWN Appendix-A.3 formula, extended past its home
+triangle `T2` into `T1`) matches ground truth EXACTLY everywhere checked in `T1` (~70 random
+points) -- so the missing piece is not a new, undiscovered formula, it is `R_Aw` itself, valid over
+a LARGER region than the current single cevian gives it. However `R_Aw` is unconditionally `>= q1`
+throughout `T1` (including near `P`, where it wrongly overshoots by as much as ~2.8), so this is
+NOT simply "take the pointwise max" -- the correct split is a genuine geometric boundary, not a
+value comparison.
+**Precise shape, mapped via a full barycentric grid scan of `T1`** (66 points): the gap is exactly
+zero for more than ~30% of the way from `A-Ra` back toward `P`, and zero along the whole `P-A` and
+`P-Ra` edges -- i.e. NOT a broad interior "bubble" as first thought from coarser sampling, but a
+SMALL, THIN notch hugging the MIDDLE of the `A-Ra` edge, vanishing at both the `A` and `Ra` ends and
+fading out within ~20-30% of the depth back to `P`. Each row of the scan (fixed distance from `A-Ra`)
+has TWO transitions, not one, meaning the correction is not a single half-plane cut -- more like a
+small triangular notch with its own apex, closer to `A-Ra` than to `P`. Bisected several transition
+points precisely; checked whether the "lower" transition set lies on the extended `P-Ra` line
+itself -- close but with a real, growing residual (not solver noise), so it is a nearby but
+DIFFERENT line, not yet identified in closed form.
+Ruled out as explanations (see DESIGN.md for full detail): the `twoEdgeQuadPlain` +/- branch choice
+(the other branch is a strictly looser minorant everywhere, not relevant); a naive recursive
+re-application of `edgeClipCevian` to `T1` itself (one candidate is degenerate, reproducing the
+same `Ra`; the other lands just outside its target segment, `t~1.10`); the two
+vertex-anchored-at-`P` rational candidates `R_Ph`/`R_Pw` (wildly invalid in the notch, ~-16 vs a
+true value in the single digits); comparing `q1` directly against `R_Aw` as an equation (`q1=R_Aw`)
+-- a genuine conic (symbolically confirmed), not the right boundary condition, consistent with
+`R_Aw` never actually crossing back below `q1` inside `T1`.
+**Leading hypothesis, not yet derived**: `R_Aw` has its own Section A.1 dual-tangency validity
+limit, exactly analogous to `q1`'s (`edgeClipCevian`'s own derivation) -- most likely tied to edge
+`h` (`mh,qh`) becoming "visible" again once extended past `A` into `T1`, since `R_Aw`'s own
+derivation (Appendix A.3's "V-E" case, `V=A`, edge `w`) implicitly assumed edge `P-A` is NON-convex,
+which is false once inside `T1`. The concrete next step is to redo `edgeClipCevian`'s exact
+derivation but for `R_Aw`'s own gradient (a rational function -- needs the quotient rule, more work
+than `q1`'s polynomial gradient) instead of numerically chasing more transition points. This gap
+was NOT visible on the paper's own (near-symmetric, `mh=1,mw=0.5`) example -- confirmed via a fresh
+check there (no notch found) -- so it should degenerate to "outside the triangle" as `mh/mw -> 1`
+and grow as the ratio moves away from 1, a useful property to check any proposed closed form
+against.
 
 ## Where things stand
 
