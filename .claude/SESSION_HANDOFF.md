@@ -1,145 +1,149 @@
 # Session Handoff
 
-_Last updated: 2026-07-15T01:00:00Z_
+_Last updated: 2026-07-16T00:00:00Z_
 
 ## What happened this session
 
-**Part 1 (complete, verified): fixed the prior session's #1-priority envelope-tightness gap** in
-`convEnvCPLQ.m` (COAP Appendix A.4, 2-convex-edge triangle case), diagnosed but not fixed last
-time. Derived and implemented the genuine sub-partition that diagnosis anticipated: the triangle
-is split by a cevian from one weak-edge endpoint into the opposite convex edge, giving two
-sub-triangles -- the one containing the two convex edges' shared vertex keeps the original
-`twoEdgeQuadPlain` quadratic unchanged (still exactly tight there); the other uses a new quadratic
-(`buildEdgeAffinePiece`) that touches `f=u1u2` along its remaining convex edge and the AFFINE
-CHORD (not `f` itself) along the now-fully-contained weak edge. The cevian's direction is forced
-(found via the same "factor the difference of two same-touching quadratics" trick as
-`splitThreeConvex`), and exactly one of its two candidate directions is geometrically valid,
-verified across ~6500 random triangles. A separate, measure-zero case (e.g. the mirror-symmetric
-triangle `(0,0),(2,1),(1,2)`) needs no split at all and is detected directly and cheaply.
+Continued the prior session's #1-priority item: the `maxQuaPar` assembly gap that makes
+`conjCPLQ`/`maxQuaPar` throw `maxQuaPar:internal` on roughly half of random 2-convex-edge triangle
+splits (the case fixed structurally, but not yet fully wired end-to-end, last session). **Found and
+fixed two more concrete bugs within the "vertex fan" phenomenon diagnosed last session; both are
+real, verified, zero-regression fixes, but neither moves the observed aggregate crash rate** --
+established via a properly-controlled experiment, described below. The underlying gap remains open.
 
-Verified via: the paper's own Appendix A.4.3 example (previously wrong at the flagged bad dual
-point and at the "dip" point `x0=(0.474343,0)`, both now correct); a new regression test
-(`convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight`); and a ~60-triangle MATLAB-side randomized
-stress test comparing each split's two sub-triangle conjugates (`conjPieceCPLQ`) against exact
-closed-form ground truth (`supBilinearOverPoly`) -- max error `5e-14` (machine precision) across
-every triangle that produced a genuine split. **This part stands on its own and is not in
-question**, regardless of Part 2 below.
+Diagnostic method: reproduced the paper's own `V=[2 1;0 0;1 0]` example end to end, then
+temporarily instrumented `assemblePieces` (via `assignin('base',...)`, removed before every
+committed state) to dump the internal `pieces`/half-edge list right before the crash, and directly
+tested pairs of pieces for literal point-set overlap via a coverage/sampling check (not just
+trusting the crash message) -- this is what surfaced both bugs below as genuine geometric defects,
+not just symptoms.
 
-While implementing, found and fixed a bug in my own first MATLAB port of the derivation (an
-algebra transcription error in the analytic null-space formula inside `buildEdgeAffinePiece`,
-caught by a randomized stress test producing wrong `convEnvCPLQ:internal` errors and one
-PSD-classification crash before the fix).
+1. **`matchHalfEdges`' ray matching accepted a pairing on `(apex, direction)` equality alone, with
+   no check that the two candidate pieces are on OPPOSITE sides of that ray.** When a `g1` (or `g2`)
+   face is cut into several `(k,l)` sub-pieces by different opposing faces, every sub-piece
+   independently inherits the parent face's own boundary rays -- not because each is adjacent to
+   some other sub-piece there, but simply because they all descend from the same ancestor. The old
+   code paired up the first two such inheritors it found as if mutual neighbours; confirmed via
+   direct point-sampling that two of this triangle's pieces genuinely overlapped over a
+   positive-area region, not merely touched a shared boundary. **Fixed** by `oppositeSides` (new, in
+   `maxQuaPar.m`): tests each ray candidate's own adjacent geometry via a 2D cross product against
+   the shared ray direction, accepting a pairing only when the two candidates fall on opposite
+   sides.
+2. **A related but distinct redundancy**: two different `(k,l)` pairs sharing the identical winning
+   row `f` can produce pieces that are not exact geometric duplicates (`dedupPieces` only collapses
+   those) yet still overlap, one wholly containing the other. **Fixed** by `dropSubsumedPieces` (new
+   in `maxQuaPar.m`, called right after `dedupPieces`): drops whichever piece's entire geometry
+   (vertices, and recession directions if unbounded) is contained in another piece agreeing on `f`.
+   Confirmed: piece count for the same triangle drops from 12 to 10 with zero change in any resolved
+   value.
 
-**Part 2 (investigated at length, PARTIALLY fixed, not resolved): the downstream `maxQuaPar` gap**
-Fixing Step 1 means `conjCPLQ`'s existing Step-3 fallback (`conjMaxOfSubTriangles`, already used
-for the 3-convex-edge case) now also gets exercised for the 2-convex-edge case, and `maxQuaPar`
-(Step 3) frequently -- ~52% of random split cases in a 138-triangle stress test -- errors
-combining the two sub-triangles' conjugates (`maxQuaPar:internal`, an unmatched boundary
-half-edge). Spent this session's remaining time digging into WHY:
+**Both fixes are individually correct** (each addresses a genuine, hand-confirmed geometric defect)
+**and cause zero regressions** (full suite 147/147: 146 prior + 1 new regression test). **Important,
+initially counter-intuitive finding, established carefully after an early false positive**: neither
+fix changes the pass/fail outcome for ANY triangle in a large random sample. A same-triangle-set A/B
+comparison -- pre-generating every triangle candidate AND every dual sample point up front so the
+"with fixes" and "without fixes" runs are byte-for-byte reproducible regardless of which specific
+triangles happen to succeed -- across 1494 randomly generated 2-convex-edge triangles found **zero**
+outcome flips in either direction (931/1494, 62.3%, succeed with or without the fixes). (An earlier,
+naive attempt at this same comparison drew random numbers lazily inside the success/failure
+branches, which silently desynchronised the two runs' RNG streams the moment they first behaved
+differently -- producing a spurious-looking "52% -> 36%" improvement that evaporated once the
+methodology was corrected. Recorded here so it isn't mistaken for a real result if seen in old
+scratch output.) So: both fixes are real and worth keeping (the overlap bug especially -- it is a
+genuine correctness hazard, not just a crash-avoidance nicety, even though it happened not to flip
+any outcome in this sample), but the ~38% aggregate crash rate on generic random triangles is driven
+by a THIRD, still-undiagnosed pattern within the same "fan" phenomenon.
 
-- **First, confirmed this is not a correctness question at all.** `max(g1,g2)` is *always*
-  exactly `f*` for any domain partition (`sup` over a union is the max of the `sup`s over the
-  pieces -- a trivial identity, true whether the seam is smooth or kinked). Verified directly:
-  bypassing `maxQuaPar` entirely and taking a plain `max` of the two sub-triangles' own
-  `conjPieceCPLQ` conjugates matches ground truth to `5e-14` in every case, including the ~52%
-  where `maxQuaPar`'s ASSEMBLY throws. So the bug is entirely in `maxQuaPar` building a
-  self-consistent `QuaPar` object, never in any value it manages to produce (0 mismatches among
-  the cases that *did* succeed).
-- **Root cause, as far as diagnosed**: `splitThreeConvex`'s (3-convex-edge case) sub-triangles are
-  built so their conjugates paste together SMOOTHLY (C1) along the shared seam -- confirmed
-  `maxQuaPar` has only ever been exercised against that case. `splitTwoConvexEdges`'s new cevian
-  (this session's Part 1 fix) only guarantees the two PRIMAL pieces agree in VALUE along the seam,
-  not gradient -- confirmed by direct computation (gradients of the two pieces match at one seam
-  endpoint, diverge increasingly toward the other -- a real, continuously-varying kink). A primal
-  kink gives the two pieces' conjugates `g1,g2` a genuine POSITIVE-AREA tie region in dual space
-  (`g1=g2` over a whole 2D set, not just a curve) near the dual image of the shared seam vertex --
-  expected because both `g1` and `g2` independently produce their own vertex-cone face for that
-  shared point, and unlike the always-smooth case, these can overlap or sit adjacent to several of
-  the other side's faces (a "fan"). `maxQuaPar`'s per-`(k,l)`-pair loop isn't built to expect this.
-- **Implemented `dedupPieces`** (new function in `maxQuaPar.m`, called right before
-  `assemblePieces`): detects groups of pieces with IDENTICAL geometry produced by different
-  `(k,l)` pairs (one concrete symptom of the tie phenomenon) and collapses each group to one,
-  reconciling disagreeing winners by evaluating every candidate row at an interior point and
-  keeping the largest (sound, since both `g1`'s and `g2`'s rows are independently exact
-  everywhere). Verified correct on the paper's own example (where two `(k,l)` pairs produce an
-  identical cell with a wrong vs. right winner) and causes zero regressions (146/146 still pass).
-  **However, it empirically never independently fixes a single failing triangle** (checked with
-  and without it across 138 random split triangles: identical pass/fail outcome, `dedupPieces`
-  literally never changes which triangles succeed) -- every triangle hitting the exact-duplicate
-  pattern ALSO hits a second, more complex pattern (several small cone/strip faces near the kink
-  vertex whose RAYS fail to pair with any counterpart, not exact duplicates) that isn't understood
-  well enough yet to fix. Kept anyway: it's correct, safe, and necessary infrastructure even if not
-  sufficient on its own.
-- Fails LOUDLY and cleanly throughout (never a silent wrong answer) -- this is a real, fairly
-  common gap, but not a blocker for Part 1's correctness fix, which stands independently verified.
+**One dead end recorded so it isn't retried**: broadening `insertPassthroughVertices`' candidate
+points from just the current cell's own two parent faces to EVERY vertex of both full inputs
+`g1`/`g2` (reasoning: a missing "T-junction" split could in principle come from a third, unrelated
+face) neither fixed the repro triangle nor helped the aggregate rate, and caused 7 new regressions
+in the existing suite -- reverted immediately, not present in the final diff.
 
 ## Where things stand
 
-- Branch: `main` @ `719943d` -- "Fix convEnvCPLQ envelope-tightness bug; partial fix for maxQuaPar
-  assembly gap".
-- Pushed: yes.
-- Files changed: `convEnvCPLQ.m` (Part 1 fix), `convEnvCPLQTest.m` (+1 regression test + 2 static
-  helpers), `conjPieceCPLQTest.m` (1 test updated for the new 2-face Step-1 output), `maxQuaPar.m`
-  (`dedupPieces`, new -- Part 2 partial fix), `DESIGN.md` (documented both parts). No other files
-  touched.
-- Full test suite: **146/146 PASS**.
+- Branch: `main` @ `8828375` -- "Fix two maxQuaPar assembly bugs (ray same-side pairing, subsumed
+  pieces)".
+- Pushed: pending (see end-of-session summary for the actual outcome).
+- Files changed: `maxQuaPar.m` (`oppositeSides` + `raySideVector`, called from `matchHalfEdges`;
+  `dropSubsumedPieces` + `isSubsumed`, called from the main `maxQuaPar` function right after
+  `dedupPieces`), `maxQuaParTest.m` (+1 regression test,
+  `matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces`, pinning the CURRENT documented
+  failure mode -- `maxQuaPar:internal` on the paper's own example -- as a concrete target for
+  finishing the fix), `DESIGN.md` (full write-up appended after last session's diagnosis). No other
+  files touched.
+- Full test suite: **147/147 PASS** (146 prior + 1 new).
+- The `maxQuaPar:internal` crash rate on generic random 2-convex-edge triangles is **unchanged by
+  this session's fixes**: still ~38% (measured on this session's own 1494-triangle sample; the
+  ~52% figure from the immediately-prior session's differently-generated 138-triangle sample is not
+  directly comparable methodology, so don't read a trend into the two numbers differing).
 
 ## Next steps
 
-- **Top priority now**: finish diagnosing and fix the residual `maxQuaPar` gap (Part 2 above).
-  `dedupPieces` handles the exact-duplicate flavor of the "positive-area tie region" phenomenon;
-  the remaining ~52% failure rate is a second, adjacent-but-not-identical flavor of the same root
-  phenomenon (small cone/strip faces near the kink vertex's dual image, unmatched rays) that needs
-  its own diagnosis. Recommended direction: give the shared seam-vertex's dual-side "fan" of faces
-  first-class handling BEFORE the general `(k,l)` double loop (detect, for any vertex `g1`/`g2`
-  inherit from a shared primal point, whether their own faces there overlap/complement, and
-  resolve before the generic clip loop runs) -- likely needs vertex-PROVENANCE tracking (tying
-  each dual face back to the specific primal vertex/edge it came from), a tool this file's own
-  HISTORY comments already anticipated for a different, now-resolved ambiguity.
-  - Repro triangles (regenerate via `rand(3,2)*10-5`, keep ones where `classifyConvexEdges` gives
-    exactly 2 rows, and `convEnvCPLQ(...).nf==2`): the paper's own `V=[2 1;0 0;1 0]`, and
-    `V=[1.508518 2.818371; 2.687354 4.499057; -1.870671 3.524095]`. Both throw
-    `maxQuaPar:internal` ("piece 1" always has the specific unmatched edge in these traces),
-    *even with `dedupPieces` active*.
-  - Ground-truth check to validate any fix: compare `q.conj('cplq').eval(s)` against
-    `convEnvCPLQTest.supBilinearOverPoly(s, V)` (exact closed form, already in the codebase) at
-    several random `s` -- the same pattern `bilinearTwoConvexEdgesSplitIsTight` already uses at the
-    per-piece (not end-to-end) level.
-  - Once fixed: strengthen `bilinearTwoConvexEdgesSplitIsTight` (or add a new test) to call
-    `q.conj('cplq')` end-to-end instead of manually taking `max` of the two per-piece conjugates,
-    and add a dedicated `maxQuaParTest`/`conjCPLQTest` regression using one of the repro triangles.
-  - This session's diagnostic scratch files (`stress2edge.m`, `widersearch.m`, `checkg2.m`,
-    `maxQuaPar_backup.m`) are in the session scratchpad, NOT committed -- likely gone next session;
-    easy to regenerate from the descriptions above.
-- Related, still unconfirmed whether same root cause: `QuaPar.orderEdges`/`createP` rejects the
-  face topology for some near-degenerate/thin triangles with a DIFFERENT error ("Face k has ..." /
+- **Top priority, unchanged in substance from last session, now with two known-NOT-it patterns ruled
+  out**: the dominant remaining cause of `maxQuaPar:internal` on 2-convex-edge splits is still a
+  third, undiagnosed pattern -- confirmed NOT the same-side ray mismatch or the subsumed-piece
+  redundancy this session fixed (both present and fixed on the repro triangle, which still fails).
+  Diagnostic groundwork now in place for whoever continues:
+  - Reproduce via `maxQuaParTest.buildG1G2ForTriangle(V)` (already in the test file) + `maxQuaPar`,
+    e.g. `V=[2 1;0 0;1 0]` (the paper's own example; verified it still throws after both this
+    session's fixes) or `V=[1.508518 2.818371; 2.687354 4.499057; -1.870671 3.524095]` (from the
+    prior session, not re-checked this session but likely still failing too -- same underlying
+    pattern).
+  - To inspect the internal `pieces`/half-edge state right before the crash (this session's own
+    diagnostic method, not committed): temporarily add
+    `assignin('base','DBG_pieces',pieces); assignin('base','DBG_HE',HE); assignin('base','DBG_opp',opp); assignin('base','DBG_rootOf',rootOf);`
+    right after the `[V, rootOf] = buildGlobalVertices(...)` line in `assemblePieces` (inside
+    `maxQuaPar.m`), call `maxQuaPar` from a **script** (not a function -- so `assignin('base',...)`
+    lands in the same workspace you inspect from) wrapped in try/catch, then dump `DBG_pieces`'
+    vertices/dirIn/dirOut/f and `DBG_HE`'s `opp` column to see exactly which half-edges are
+    unmatched and why. Remove the `assignin` line before committing anything.
+  - A useful independent check for any candidate fix: a direct point-sampling coverage test (sample
+    a grid or random points across the region near the unmatched pieces, check via half-plane
+    membership tests how many of the CURRENT `pieces` claim each point -- 0 means a genuine gap,
+    ≥2 means a genuine overlap) is more reliable than reasoning about the geometry by hand; this is
+    what surfaced both of this session's bugs and is worth writing fresh each time rather than
+    trusting intuition about which pieces "should" be adjacent.
+  - For the specific repro triangle, the remaining unmatched pieces (after this session's fixes)
+    are a small cluster near the dual image of primal vertex `A=(0,0)` (5-6 tiny pieces that don't
+    close up combinatorially) PLUS one larger, seemingly unrelated orphaned edge on the big
+    quadrilateral piece -- worth checking whether these are really the same root cause or two
+    separate remaining bugs.
+  - Recommended direction, still unchanged from last session: vertex-provenance tracking (tying
+    each dual face/edge back to the specific primal vertex/edge that produced it), to give the
+    shared seam-vertex's dual-side "fan" first-class handling before the generic `(k,l)` clip loop
+    runs, rather than trying to patch the generic pairwise-matching machinery further -- this
+    session's two fixes were exactly that kind of generic patch, and while both were genuine,
+    correct bugs, neither touched the dominant failure pattern, suggesting further generic patches
+    are unlikely to be a good use of time versus the structural fix.
+  - Ground-truth check for any fix: `maxQuaParTest.supBilinearOverPoly(s, V)` (exact closed form,
+    already in the test file) vs. `maxQuaPar(g1,g2).eval(s)` at several random `s`.
+  - Once genuinely fixed: strengthen or replace this session's
+    `matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces` test (which currently only
+    documents the known failure via `verifyError`) with a real end-to-end value check against
+    `supBilinearOverPoly`, and consider re-running this session's 1494-triangle A/B methodology
+    (script not committed, easy to regenerate from the description above) to get a real
+    before/after aggregate number for whatever the actual fix turns out to be.
+- Related, still unconfirmed whether same root cause: `QuaPar.orderEdges`/`createP` rejects the face
+  topology for some near-degenerate/thin triangles with a DIFFERENT error ("Face k has ..." /
   "expected 2 but got N").
-- Lower priority / untouched: `partialConj` for `'cplq'`/`'pqp'`; `add` for `RatPol` and the
-  `RatPar` parent class; conjugate engines `'pqp'`/`'graph'` (unimplemented, error explicitly); the
+- Lower priority / untouched: `partialConj` for `'cplq'`/`'pqp'`; `add` for `RatPol` and the `RatPar`
+  parent class; conjugate engines `'pqp'`/`'graph'` (unimplemented, error explicitly); the
   standalone `RatPol.conj` gap.
 
 ## Relevant files
 
-- `convEnvCPLQ.m` -- `splitTwoConvexEdges` (new), `buildEdgeAffinePiece` (new), `seamPoint` (new):
-  Part 1's fix. `envelopeFromClassified`/`twoEdgeQuadPlain`/`buildTwoEdge` themselves are UNCHANGED
-  (still used as-is for the 0/1-convex-edge cases and, deliberately unmodified, inside
-  `splitThreeConvex`'s 3-convex-edge sub-triangle loop -- that path was already empirically
-  correct per its own extensive `maxQuaParTest` coverage, so it was left alone to avoid regressing
-  it).
-- `maxQuaPar.m` -- `dedupPieces` (new), called from the main `maxQuaPar` function right before
-  `assemblePieces`. Part 2's partial fix; see its own header and this file's HISTORY-style
-  commentary for the full rationale. The residual gap (adjacent-but-not-identical tie cells) is
-  still inside this file, not yet isolated to a specific function.
-- `DESIGN.md` -- the `maxQuaPar.m` Implementation-status bullet now has the full writeup for both
-  Part 1 (the fix + verification) and Part 2 (root-cause diagnosis, the partial fix, and what's
-  still open), appended after last session's diagnosis.
-- `convEnvCPLQTest.m` -- new test `bilinearTwoConvexEdgesSplitIsTight` (the paper's own example,
-  checked for tightness via each sub-triangle's own conjugate, not just primal value -- NOT via
-  `q.conj('cplq')` end-to-end, since that still throws for this triangle per Part 2) plus two new
-  static helpers (`extractTriFace`, `supBilinearOverPoly`) reused from `maxQuaParTest.m`'s pattern.
-- `conjPieceCPLQTest.m` -- `psdRank1QuadraticEndToEnd` updated to extract one face from Step 1's
-  now-2-face output before feeding it to Step 2 (documented at the call site).
-- `conjCPLQ.m` -- NOT modified this session; its existing `conjMaxOfSubTriangles`/Step-3 fallback
-  already generically handles a multi-face Step-1 envelope (originally written for the 3-edge
-  case) and needed no changes to correctly dispatch the 2-edge case too -- the remaining gap is
-  entirely inside `maxQuaPar.m`.
+- `maxQuaPar.m` -- `oppositeSides`/`raySideVector` (new, called from `matchHalfEdges`) and
+  `dropSubsumedPieces`/`isSubsumed` (new, called from the main `maxQuaPar` function right after
+  `dedupPieces`): this session's two fixes. Both have full header comments with the diagnosis. The
+  residual gap is still somewhere in this file's `(k,l)`-pair generation or matching machinery, not
+  yet isolated to a specific function.
+- `maxQuaParTest.m` -- new test
+  `matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces`, documenting both fixes and
+  pinning the current (still-failing) status of the paper's own repro triangle.
+- `DESIGN.md` -- the `maxQuaPar.m` Implementation-status bullet now has this session's full write-up
+  (root causes, fixes, and the controlled A/B methodology/result) appended after the prior two
+  sessions' diagnosis.
+- `convEnvCPLQ.m` -- NOT modified this session; last session's Part 1 fix (envelope tightness) is
+  unaffected and still independently verified.
+- `conjCPLQ.m` -- NOT modified this session.
