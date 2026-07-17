@@ -47,6 +47,15 @@ handles the **convex** case only:
   J. Convex Anal. 14 (2007) 657–666. Source of the "expand-the-square" identity that computes
   the Moreau envelope as a **single conjugate**, not an inf-convolution (II.6) — valid for
   **any** function, convex or not.
+- **[LOCATELLI]** Locatelli, M. — proved that the convex envelope of a quadratic function over a
+  polyhedron always admits a POLYHEDRAL subdivision (straight-edge domain partition). Full
+  citation not yet filled in here (recorded 2026-07-17 per the user, not independently looked up
+  this session) — fill in before citing in the paper. Directly relevant to `convEnvCPLQ.m`'s
+  2-convex-edge case (see its Implementation-status entry below): a session's numerical
+  exploration of the `q1`/Appendix-A.3 pairing suggested a curved transition boundary, which per
+  this theorem must be an artifact of an incomplete search (the wrong split/pairing), not a
+  genuine counterexample — the correct fix is a DIFFERENT polyhedral split, not a curved-domain
+  extension of `RatPol`.
 
 ---
 
@@ -373,6 +382,108 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
   rational envelope), which `conjPieceCPLQ` cannot conjugate yet (its own header TODO); the
   3-convex-edge single-triangle case above never hits that gap, which is why it alone is solved.
+  **Diagnosis (2026-07-17, later session): the 2026-07-15 "fix" above is itself NOT tight in
+  general -- confirmed via ground truth independent of the whole conjugate/duality pipeline.**
+  Found via a concrete counterexample, `T=(-9.95506,3.70366),(-9.345,-5.34552),(1.29049,5.31738)`
+  (from a stress test's silent-wrong-answer case; the SAME triangle as `doc/bug.svg`/
+  `doc/bug_pipeline.svg`, which document the ORIGINAL diagnosis this continues), cross-checked
+  against TWO independent ground-truth methods: (1) `sup_s[s.x0-supBilinearOverPoly(s,V)]`
+  (numerically maximized, matching the session handoff's earlier machine-precision value at its
+  own reference point to 5+ decimals); (2) the 3D convex hull of a dense (300-refinement
+  barycentric grid, ~45k points) sample of the graph `(x,y,xy)` over `T` (the lower-hull facets
+  are exactly the graph of `conv(f)`, a standard fact -- same method as the interactive artifact
+  from the prior session, but now driving a systematic sweep instead of one point).
+  - **Part 1, FIXED**: the "other" sub-triangle's own formula (`buildEdgeAffinePiece`, touching
+    `u1*u2` along its remaining convex-edge segment and the AFFINE CHORD along the weak edge) is
+    a valid boundary condition on that sub-triangle's OWN BOUNDARY but not sufficient to pin down
+    the tight envelope in its INTERIOR: fitting a general quadratic to ground truth over that
+    sub-triangle left a real (~0.36 max, ~0.11 rms) residual, proving the true envelope there is
+    not even a single quadratic, let alone `buildEdgeAffinePiece`'s specific one. Diagnosed the
+    correct replacement by RECLASSIFYING the sub-triangle's own 3 edges from scratch: the
+    "remaining convex-edge segment" is still convex (same line, hence same slope, as the
+    original triangle's edge it's part of) and the weak edge is unchanged, but the NEW internal
+    seam (the cevian itself) is ALSO consistently classified non-convex across ~17 random
+    2-convex-edge triangles checked -- i.e. the sub-triangle is a genuine, ordinary
+    ONE-convex-edge triangle, not a special case needing a bespoke construction at all. Replaced
+    `buildEdgeAffinePiece`'s result with a direct call to the EXISTING, already-validated Appendix
+    A.3 rational envelope (`envelopeFromClassified` case 1) on that sub-triangle's own
+    reclassified edges -- exactly the same "reclassify each sub-triangle and call
+    `envelopeFromClassified` again" pattern the 3-convex-edge case (`splitThreeConvex`) already
+    uses, now unified across both split cases (see `convEnvCPLQ.m`'s `nCE==2` branch and
+    `splitTwoConvexEdges`'s updated header). Verified against ground truth to grid resolution
+    (~1e-4, i.e. the sampling/hull discretization noise floor, not a real residual) on the
+    counterexample AND on 16/17 fresh random 2-convex-edge triangles that needed a genuine split
+    (the 17th was within 0.15% relative error, plausibly just coarser-grid noise for that
+    particular triangle's scale -- not independently re-verified with a finer grid this session).
+    `buildEdgeAffinePiece` itself is KEPT (renamed in purpose, not deleted) as a placeholder used
+    only to locate the cevian via `seamPoint`'s existing line-factoring argument, which still
+    applies unchanged since the placeholder and the real replacement formula both touch `u1*u2`
+    identically along the same shared full line and therefore agree at the shared opposite
+    vertex, the only two facts `seamPoint`'s derivation actually needs. **Consequence for Step 2**:
+    this makes the "other" sub-triangle's own piece genuinely rational, something
+    `conjPieceCPLQ` cannot conjugate yet (the SAME pre-existing gap already flagged above for the
+    multi-face/non-triangular case) -- `maxQuaParTest.buildG1G2ForTriangle`/`extractTriFace` now
+    detect this and error clearly (`extractTriFace:rationalFaceNotSupported`) instead of silently
+    dropping the denominator and building the wrong `QuaPoly`, which is what `
+    matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces` (the one test that exercises
+    this exact triangle) was unwittingly doing before; that test now pins the new loud failure
+    instead of the old silent one (its own three `maxQuaPar` assembly-bug fixes remain covered by
+    this file's OTHER repro triangles, all still passing). Full suite: 79/79 (unchanged count;
+    one test's assertions replaced, none newly broken).
+  - **Part 2, STILL OPEN, more fundamental than Part 1**: fixing the "other" sub-triangle alone
+    does NOT make the SAME-triangle counterexample's overall wrong-answer disappear, because
+    `q1` -- the UNCHANGED formula kept for the sub-triangle containing `P` -- turns out to be
+    **not tight throughout that sub-triangle either**, a gap that predates this session's fix and
+    was previously masked by the (much larger) Part 1 gap dominating whichever point a spot-check
+    happened to land on. Confirmed directly: sampling points along the shared internal seam
+    between the two sub-triangles shows `q1` matching ground truth only AT the seam's two
+    endpoints (as expected -- both are original triangle vertices, or lie on an original convex
+    edge) but undershooting truth by up to ~2.55 at interior points of the seam, and by up to
+    ~10.2 at other interior points of its own sub-triangle -- i.e. `q1`'s zone of exact tightness
+    is a genuine, smaller-than-the-sub-triangle 2D neighbourhood of `P`, not the whole sub-triangle
+    the current cevian split hands it.
+    **Established fact (per Locatelli): the convex envelope of a quadratic over a polyhedron
+    always admits a polyhedral subdivision.** This session's numerical exploration of where `q1`
+    stops matching ground truth (rays from `P`, bisection; a general conic fit to the empirically-
+    traced transition points) fit a CURVE far better than any single straight line -- but per
+    Locatelli's theorem, a polyhedral (straight-edge) subdivision is GUARANTEED to exist; that
+    numerical finding therefore reflects an INCOMPLETE SEARCH (the specific combinatorial splits
+    and formula pairings tried this session -- `q1` vs. a single Appendix-A.3 rational piece,
+    variously placed -- were simply the wrong pairing/split, not evidence of genuine
+    non-polyhedrality), not a counterexample to the theorem. Recorded here so the next session
+    does not re-derive this and does not pursue a curved-`RatPol`-domain extension, which is now
+    known to be unnecessary. Ruled out this session (all checked computationally against ground
+    truth, all fail -- kept as negative results to avoid retrying): (a) `max(q1, caseA1)` or
+    `max(q1,caseA1,caseB1)` over the WHOLE original triangle (the rational candidates are only
+    valid minorants -- i.e. `<=` truth -- within a bounded sub-region; extended past that they
+    exceed truth, so a naive pointwise max wrongly picks the now-invalid candidate); (b) splitting
+    via a cevian from `P` into the weak edge at a THIRD point `S` and using two case-1 formulas
+    with opposite vertex `S` (the two formulas agree exactly along the WHOLE cevian `P-S` for
+    ANY `S`, an exact identity, but neither is tight throughout its own region for essentially any
+    choice of `S` tried); (c) fitting an unconstrained general rational family (matching ground
+    truth exactly at 5 points while still touching `u1*u2` along both original convex edges) --
+    solvable but the fit does not generalize away from the 5 points (blows up near an
+    uncontrolled pole). The correct polyhedral split (a DIFFERENT combinatorial structure than any
+    tried this session -- e.g. more than 2 pieces, a different choice of which vertex/edge anchors
+    each piece, or a genuinely different split direction) has NOT yet been found.
+    **Practical impact, quantified**: a 1500-triangle `rng(2026)` resample (matching the earlier
+    session's seed) found 508 genuine-2-convex-edge-split triangles, 277 with no detectable gap
+    at 5 random interior points each (`AbsTol` 1e-3 against a numerically-maximized biconjugate)
+    and 231 (~45%) with a real, positive gap (`r` too loose, `truth-r` up to ~4.2) at at least one
+    of those points -- both BEFORE and AFTER this session's Part 1 fix, identically (same 231
+    triangles), confirming Part 1 is a genuine, isolated improvement to the "other" sub-triangle
+    specifically, not a fix to the aggregate wrong-answer rate, which is still dominated by Part
+    2. Separately confirmed `r` remains a VALID minorant throughout (no case of `r` exceeding
+    truth survived a more carefully multi-started numerical check -- an earlier quick pass using a
+    single coarse-grid-seeded `fminsearch` per point produced ~90 apparent "invalid" points that
+    were a ground-truth-oracle artifact, not a real defect in `r`, confirmed by re-solving those
+    same points with a much finer multi-start search). **This should be the top priority for the
+    next session**: Part 2 is the actual remaining source of wrong answers; Part 1's fix, while
+    correct and worth keeping, does not move that needle. Given Locatelli's theorem, the next
+    session's search should stay within straight-edge (polyhedral) splits -- likely more than 2
+    pieces, or a different combinatorial pairing than `q1` + a single Appendix A.3 piece -- not a
+    curved-boundary extension. See the session handoff for the concrete counterexample, the
+    ground-truth methodology (reusable), and the ruled-out approaches above.
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
