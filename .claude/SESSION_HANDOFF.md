@@ -78,7 +78,7 @@ that the true envelope's supporting plane there runs along the seam `R-B` extend
 
 - Branch: `main` @ `1695311` -- "Add figures documenting the convEnvCPLQ 2-convex-edge tightness
   bug". Previous commit `2cdc876` (last session's handoff) unchanged otherwise.
-- Pushed: pending (awaiting user confirmation in this session).
+- Pushed: yes -- `2cdc876..eb18e94 main -> main`.
 - Files changed/added this session: `doc/bug.svg`, `doc/bug_pipeline.svg` (both committed). No
   source `.m` files were modified this session -- this was pure diagnosis, no fix attempted (the
   user explicitly steered toward "diagnose and visualize," not "fix," given `DESIGN.md`'s own
