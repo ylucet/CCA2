@@ -190,13 +190,17 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % HISTORY / DESIGN.md). Extracts face 1 (the sub-triangle containing the two convex
             % edges' shared vertex, where the ORIGINAL single-quadratic formula is unchanged) as a
             % standalone triangle and feeds it to Step 2, which must dispatch to
-            % conjPSDRank1QuadTriangle, not error out. Checked against the numeric sup of that
-            % sub-triangle's quadratic itself (not the original xy). Uses (1,1),(4,3),(3,5) rather
-            % than the (0,0),(2,1),(1,2) triangle used elsewhere in this file: that one is the
-            % special mirror-symmetric case where NO split is needed and Step 1 stays single-face,
-            % hitting the TIED-vertex sub-case (conjPSDRank1QuadTriangleTie, 5 faces instead of 6)
-            % -- see psdRank1QuadraticTieEndToEnd below -- so this test exercises the
-            % non-degenerate (6-face) path specifically.
+            % conjPSDRank1QuadTriangle (generic) or its tied-vertex sub-case
+            % (conjPSDRank1QuadTriangleTie), not error out. Checked against the numeric sup of that
+            % sub-triangle's quadratic itself (not the original xy).
+            % Uses (1,1),(4,3),(3,5), also used (whole, unsplit) by psdRank1QuadraticConjugate to
+            % exercise the generic 6-face path directly. With the corrected split-cevian location
+            % (this session's Part 2 fix -- the OLD, buggy cevian placed the seam at roughly half
+            % the correct distance from the shared vertex, see DESIGN.md), face 1's sub-triangle
+            % shape changed enough that it now hits the TIED-vertex sub-case here (5 faces, not 6)
+            % -- confirmed still numerically exact against ground truth below; the 5-face path
+            % itself is exercised independently (from a different, mirror-symmetric starting
+            % triangle) by psdRank1QuadraticTieEndToEnd.
             V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
             r = convEnvCPLQ(q);                            % Step 1 -> 2 rank-1 PSD sub-triangles
@@ -209,7 +213,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             p1 = QuaPoly(V1, E, r.f(1,5:10), F);
             g = conjPieceCPLQ(p1);                          % Step 2
             testCase.verifyClass(g, 'QuaPar');
-            testCase.verifyEqual(g.nf, 6);
+            testCase.verifyEqual(g.nf, 5);
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
             kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
             Xg = V1(1,1)+uu*(V1(2,1)-V1(1,1))+vv*(V1(3,1)-V1(1,1));

@@ -484,6 +484,85 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     pieces, or a different combinatorial pairing than `q1` + a single Appendix A.3 piece -- not a
     curved-boundary extension. See the session handoff for the concrete counterexample, the
     ground-truth methodology (reusable), and the ruled-out approaches above.
+  - **Part 2a, FIXED this session (2026-07-17, later session): the cevian LOCATION itself was
+    wrong, independent of Part 1.** Root cause found by deriving, from [COAP] Section A.1's own
+    dual formalism (eq. 11-14) applied directly to `q1` (rather than assumed away, as the paper's
+    own Appendix A.4 does when it asserts "the domain is the entire triangle" -- confirmed FALSE in
+    general, even on the paper's own worked example, `V=(2,1),(0,0),(1,0)`: q1(0.474343,0) =
+    -0.042780 there instead of the true value 0, since f=xy is identically 0 -- hence `>=` any
+    valid minorant, in particular `>=0` -- along the WHOLE weak edge there): the constructive
+    envelope theorem says the implied dual point at `(x,y)` is `(a,b) = grad q1(x,y)`, and `q1` is
+    valid exactly while each classified edge's own tangency point `s_j(a,b) = (a+b*m_j-q_j)/(2 m_j)`
+    stays inside that edge's OWN segment. Since `q1` is quadratic, its gradient is affine, so
+    `s_j(x,y)` is affine in `(x,y)` -- meaning "`s_j(x,y)` = far endpoint's x-coordinate" is a
+    genuine STRAIGHT LINE (consistent with Locatelli), always passing exactly through that far
+    endpoint by construction. The OLD `seamPoint`/`buildEdgeAffinePiece` pair (a "factor `q1` minus
+    a placeholder that merely matches the weak edge's AFFINE CHORD" argument) computed a
+    DIFFERENT, wrong line: on the paper's own example it placed the cevian at x=0.2929 along the
+    target edge instead of the correct x=2-sqrt(2)=0.5858 (confirmed via a closed form,
+    `xR = xP + sqrt(mh/mw)*(xA-xP)` for the beta=1,lin=0 case, verified symbolically) -- almost
+    exactly HALF the correct distance from `P`. Concretely, the OLD seam made `T1` (the `q1` piece)
+    too BIG, wrongly annexing a wedge near the weak edge where `q1` undershoots (confirmed: e.g. at
+    the wedge centroid (0.626,0.146) in the paper's own example, `q1`=0.0616 vs true 0.0640).
+    New `edgeClipCevian` (replacing `seamPoint`+`buildEdgeAffinePiece` in `convEnvCPLQ.m`) builds
+    the line directly from `q1`'s own plain coefficients (`p=2A+m*B, q=B+2m*C,
+    r=D+m*E-q_edge-2m*xFar`) and intersects it with the OTHER convex edge -- same final
+    "intersect a line with `y=m*x+q`" step the old code used, just fed the correct line, so the
+    surrounding candidate-selection structure (try cevian-from-A first, fall back to cevian-from-B
+    if it does not land inside its target edge) is unchanged. Verified: matches ground truth
+    exactly (to solver precision) on the paper's own example, including at the wedge point the old
+    seam misclassified; full suite 79/79 (two pre-existing tests' hardcoded expectations were
+    themselves artifacts of the two bugs above -- `convEnvCPLQTest.bilinearTwoConvexEdgesQuadratic`
+    asserted the paper's own (disproven) "whole triangle" claim at a point now correctly assigned to
+    the other piece, and `conjPieceCPLQTest.psdRank1QuadraticEndToEnd` hardcoded a `nf` count for
+    `T1`'s shape that changed now that `T1` is correctly smaller; both updated with comments
+    explaining why, not just silently changed).
+    **Practical impact, quantified**: the SAME 1500-triangle `rng(2026)`-style resample (468
+    genuine 2-convex-edge splits found this run -- close to, not identical to, the prior session's
+    508, since `rng` state is consumed differently by this session's own regenerated stress script,
+    not the original uncommitted one) drops from ~45% of triangles showing a detectable gap to
+    **23.1%** (108/468), and the single worst gap seen dropped somewhat (2.07 vs ~4.2) but did NOT
+    disappear -- so this is a real, substantial, independently-verified improvement, not a full fix.
+  - **Part 2b, STILL OPEN: a deeper, seemingly RECURSIVE structure, found while investigating why
+    Part 2a's fix does not close the gap to 0%.** Concrete repro (from the same stress script,
+    `rng(2026)`, its first failing triangle): `V=(-5.2645,3.4904),(3.1062,0.5450),(5.0430,7.7766)`,
+    `f6=[0.3963 0.8289 0.0284 -2.4834 2.1149 -5.5999]` (i.e. `q=0.5*x'Hx+L'x+kappa` with
+    `H=[[0.3963,0.8289],[0.8289,0.0284]]`, `L=[-2.4834,2.1149]`, `kappa=-5.5999` -- QuaPoly's stored
+    convention, NOT plain `[A B C D E F]`). With Part 2a's corrected cevian, `T1` (the `q1`
+    sub-triangle, vertices `P,A,Ra` in the bilinear frame) is now correctly SMALLER than before, and
+    `q1` is confirmed exact along ALL THREE of `T1`'s own edges in their ENTIRETY (the two original
+    full rays from `P`, AND the new `A-Ra` seam, checked pointwise along each, not just at
+    endpoints -- the seam agreement is additionally a proven algebraic IDENTITY, `q1 == ` the
+    corresponding Appendix-A.3 piece anchored at `A`, along the whole line `s_h(x,y)=x_A`, verified
+    symbolically for general `mh,qh,mw,qw`, so this is not a coincidence of this example). Yet `q1`
+    still UNDERSHOOTS truth by up to ~0.38 at points in `T1`'s STRICT INTERIOR (a "bubble": tight on
+    the entire boundary of `T1`, not tight inside it) -- confirmed by tracing the failing region
+    with rays from `P` and bisecting; the traced critical-transition curve is close to, but not
+    exactly, a straight line (residuals ~0.03-0.07 against a least-squares line fit, larger than
+    plausible solver noise), suggesting -- per Locatelli -- that this is again the WRONG pairing,
+    not a real curve, and a further, still-uncombinatorially-identified split of `T1` itself is
+    needed. Ruled out as the explanation this session: (a) `twoEdgeQuadPlain`'s +/- branch choice --
+    both branches are legitimate rank-1-PSD, edge-touching solutions for this triangle, but the
+    other branch (`s=-1`) is a much LOOSER minorant everywhere checked, not a better fit in the
+    bubble, so the existing branch-selection is not the bug; (b) a naive RECURSIVE re-application of
+    `edgeClipCevian` to `T1` itself (treating it as its own fresh 2-convex-edge triangle with weak
+    edge `A-Ra`): the "cevian from `A`" candidate is degenerate (reproduces the SAME point, since
+    edge `h`'s far endpoint is still `A`, unchanged), and the "cevian from `Ra`" candidate (using
+    edge `w`'s far endpoint now `Ra` instead of `B`) lands just OUTSIDE its target segment
+    (`t~1.10`, not `(0,1)`) on this repro -- so the fix is not simply "apply the same two-candidate
+    logic one more time"; (c) the two vertex-anchored-at-`P` rational candidates (`R_Ph`, `R_Pw`,
+    i.e. Appendix A.3 with anchor `P` instead of the far vertex) are wildly invalid in the bubble
+    (~-16 vs a true value in the single digits), so they are not the missing third piece either.
+    **Not yet found**: what the correct third (or `n`-th) piece is, nor the right combinatorial
+    description of `T1`'s own further subdivision. Likely a genuinely different split geometry than
+    a single further cevian from a `T1`-boundary vertex -- e.g. a split anchored at an INTERIOR
+    point of `T1` (a fan of 3+ pieces meeting away from any of `P,A,Ra`), given the failing region
+    is an interior "bubble" touching all three of `T1`'s own edges rather than a corner wedge. This
+    was NOT visible in the paper's own (near-symmetric, `mh=1,mw=0.5`) worked example -- a fresh
+    stress-test/ground-truth check there (25-40 random interior samples of the corrected `T1`, all
+    matching `q1` exactly) shows no bubble for THAT triangle, so the bubble's size/existence likely
+    depends on how different `mh` and `mw` are (this repro has `mh=0.275,mw=1.579`, a much bigger
+    ratio) -- not confirmed, just the most likely lead for the next session.
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
