@@ -523,46 +523,106 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     not the original uncommitted one) drops from ~45% of triangles showing a detectable gap to
     **23.1%** (108/468), and the single worst gap seen dropped somewhat (2.07 vs ~4.2) but did NOT
     disappear -- so this is a real, substantial, independently-verified improvement, not a full fix.
-  - **Part 2b, STILL OPEN: a deeper, seemingly RECURSIVE structure, found while investigating why
-    Part 2a's fix does not close the gap to 0%.** Concrete repro (from the same stress script,
-    `rng(2026)`, its first failing triangle): `V=(-5.2645,3.4904),(3.1062,0.5450),(5.0430,7.7766)`,
+  - **Part 2b, STILL OPEN: `T1` itself needs a further split for sufficiently asymmetric edge
+    slopes, found while investigating why Part 2a's fix does not close the gap to 0%; narrowed
+    considerably this session but not yet resolved.** Concrete repro (from a fresh `rng(2026)`
+    stress script, its first failing triangle): `V=(-5.2645,3.4904),(3.1062,0.5450),(5.0430,7.7766)`,
     `f6=[0.3963 0.8289 0.0284 -2.4834 2.1149 -5.5999]` (i.e. `q=0.5*x'Hx+L'x+kappa` with
     `H=[[0.3963,0.8289],[0.8289,0.0284]]`, `L=[-2.4834,2.1149]`, `kappa=-5.5999` -- QuaPoly's stored
-    convention, NOT plain `[A B C D E F]`). With Part 2a's corrected cevian, `T1` (the `q1`
-    sub-triangle, vertices `P,A,Ra` in the bilinear frame) is now correctly SMALLER than before, and
-    `q1` is confirmed exact along ALL THREE of `T1`'s own edges in their ENTIRETY (the two original
-    full rays from `P`, AND the new `A-Ra` seam, checked pointwise along each, not just at
-    endpoints -- the seam agreement is additionally a proven algebraic IDENTITY, `q1 == ` the
-    corresponding Appendix-A.3 piece anchored at `A`, along the whole line `s_h(x,y)=x_A`, verified
-    symbolically for general `mh,qh,mw,qw`, so this is not a coincidence of this example). Yet `q1`
-    still UNDERSHOOTS truth by up to ~0.38 at points in `T1`'s STRICT INTERIOR (a "bubble": tight on
-    the entire boundary of `T1`, not tight inside it) -- confirmed by tracing the failing region
-    with rays from `P` and bisecting; the traced critical-transition curve is close to, but not
-    exactly, a straight line (residuals ~0.03-0.07 against a least-squares line fit, larger than
-    plausible solver noise), suggesting -- per Locatelli -- that this is again the WRONG pairing,
-    not a real curve, and a further, still-uncombinatorially-identified split of `T1` itself is
-    needed. Ruled out as the explanation this session: (a) `twoEdgeQuadPlain`'s +/- branch choice --
-    both branches are legitimate rank-1-PSD, edge-touching solutions for this triangle, but the
-    other branch (`s=-1`) is a much LOOSER minorant everywhere checked, not a better fit in the
-    bubble, so the existing branch-selection is not the bug; (b) a naive RECURSIVE re-application of
+    convention, NOT plain `[A B C D E F]`; `mh=0.275376,qh=-2.551975,mw=1.578980,qw=7.945196` in the
+    bilinear frame, a much bigger `mh`/`mw` ratio than the paper's own `1`/`0.5` example, where no
+    such further split is needed at all -- see below). With Part 2a's corrected cevian, `T1` (the
+    `q1` sub-triangle, vertices `P,A,Ra` in the bilinear frame) is confirmed exact along ALL THREE of
+    its own edges in their ENTIRETY (the two original full rays from `P`, AND the new `A-Ra` seam,
+    checked pointwise along each, not just at endpoints -- the seam agreement is additionally a
+    proven algebraic IDENTITY, `q1 == ` the corresponding Appendix-A.3 piece anchored at `A` (called
+    `R_Aw` below -- exactly `T2`'s own formula from Part 1), along the whole line `s_h(x,y)=x_A`,
+    verified symbolically for general `mh,qh,mw,qw`). Yet `q1` still UNDERSHOOTS truth by up to
+    ~0.38 at points in `T1`'s STRICT INTERIOR (tight on the entire boundary of `T1`, not tight
+    inside it).
+    **Key finding this session**: at every one of ~70 random interior points checked in `T1`,
+    `max(q1, R_Aw)` matches ground truth EXACTLY (to solver precision) -- i.e. **`T2`'s own formula,
+    `R_Aw`, extended past its home triangle `T2` into `T1`, is exactly the missing piece** (not a
+    new, undiscovered third formula). However, this is NOT simply "take the pointwise max
+    everywhere" (already ruled out earlier this session in the ORIGINAL, non-recursive frame, for a
+    related reason): `R_Aw` is `>= q1` EVERYWHERE checked in `T1`, including close to `P`, where
+    `q1` is the correct (smaller) answer and `R_Aw` OVERSHOOTS truth by as much as ~2.8 -- so the
+    correct split is a genuine geometric boundary within `T1` (some points use `q1`, others `R_Aw`,
+    determined by POSITION, not by which value is larger, since `R_Aw` is unconditionally the larger
+    of the two throughout `T1`). This resolves the earlier confusion about what the "bubble" even
+    is: it isn't that `q1` is wrong in some mysterious interior region for no visible reason -- it's
+    that `T2`'s own rightful territory (where `R_Aw` is the tight envelope) extends further into
+    what Part 2a's single cevian currently calls `T1` than that cevian accounts for. The real
+    question still open is where the true `R_Aw`-vs-`q1` boundary is and why it isn't simply the
+    `A-Ra` cevian already found.
+    Ruled out this session: (a) `twoEdgeQuadPlain`'s +/- branch choice -- both branches are
+    legitimate rank-1-PSD, edge-touching solutions, but the other branch (`s=-1`) is a much LOOSER
+    minorant everywhere checked, not relevant here; (b) a naive RECURSIVE re-application of
     `edgeClipCevian` to `T1` itself (treating it as its own fresh 2-convex-edge triangle with weak
-    edge `A-Ra`): the "cevian from `A`" candidate is degenerate (reproduces the SAME point, since
-    edge `h`'s far endpoint is still `A`, unchanged), and the "cevian from `Ra`" candidate (using
-    edge `w`'s far endpoint now `Ra` instead of `B`) lands just OUTSIDE its target segment
-    (`t~1.10`, not `(0,1)`) on this repro -- so the fix is not simply "apply the same two-candidate
-    logic one more time"; (c) the two vertex-anchored-at-`P` rational candidates (`R_Ph`, `R_Pw`,
-    i.e. Appendix A.3 with anchor `P` instead of the far vertex) are wildly invalid in the bubble
-    (~-16 vs a true value in the single digits), so they are not the missing third piece either.
-    **Not yet found**: what the correct third (or `n`-th) piece is, nor the right combinatorial
-    description of `T1`'s own further subdivision. Likely a genuinely different split geometry than
-    a single further cevian from a `T1`-boundary vertex -- e.g. a split anchored at an INTERIOR
-    point of `T1` (a fan of 3+ pieces meeting away from any of `P,A,Ra`), given the failing region
-    is an interior "bubble" touching all three of `T1`'s own edges rather than a corner wedge. This
-    was NOT visible in the paper's own (near-symmetric, `mh=1,mw=0.5`) worked example -- a fresh
-    stress-test/ground-truth check there (25-40 random interior samples of the corrected `T1`, all
-    matching `q1` exactly) shows no bubble for THAT triangle, so the bubble's size/existence likely
-    depends on how different `mh` and `mw` are (this repro has `mh=0.275,mw=1.579`, a much bigger
-    ratio) -- not confirmed, just the most likely lead for the next session.
+    edge `A-Ra`): the "cevian from `A`" candidate is degenerate (reproduces the SAME `Ra`, since
+    edge `h`'s far endpoint is still `A`, unchanged -- a general fact, not specific to this repro),
+    and the "cevian from `Ra`" candidate (using edge `w`'s far endpoint now `Ra` instead of `B`)
+    lands just OUTSIDE its target segment (`t~1.10`, not `(0,1)`) on this repro -- confirms plain
+    recursion of the SAME two-candidate logic is not the mechanism; (c) the two
+    vertex-anchored-at-`P` rational candidates (`R_Ph`, `R_Pw`, i.e. Appendix A.3 with anchor `P`
+    instead of the far vertex) are wildly invalid in the bubble (~-16 vs a true value in the single
+    digits), not relevant; (d) comparing `q1` directly against `R_Aw` as an equation (`q1=R_Aw`) to
+    find a crossing curve was tried in the ORIGINAL (non-recursive) frame earlier this session and
+    is a genuine CONIC, not a line (symbolically confirmed) -- consistent with `R_Aw` never actually
+    crossing back below `q1` inside `T1` (it stays `>= q1` throughout), so that equation is not the
+    right boundary condition to chase either.
+    **Leading hypothesis for next session, not yet derived**: `R_Aw` (built for Appendix A.3's
+    "V-E" case with `V=A`, edge `w`) has its OWN Section A.1 dual-tangency validity limit, exactly
+    analogous to `q1`'s (`edgeClipCevian`'s derivation) -- i.e. `R_Aw` is valid only while its own
+    implied dual point `(a,b) = grad R_Aw(x,y)` keeps edge `w`'s (or possibly edge `h`'s, since `A`
+    is adjacent to edge `h` too) own tangency point inside a segment appropriate to `R_Aw`'s actual
+    home triangle `T2 = {A,Ra,B}`. That home triangle's OWN third vertex is `B` (not `Ra` or `P`),
+    so the relevant boundary is likely tied to `B` specifically, or to edge `h` becoming "visible"
+    again once we cross into `T1` (where, unlike in `T2`, edge `P-A` is genuinely convex, a fact
+    `R_Aw`'s derivation implicitly assumed false). This has NOT been derived or checked this session
+    -- it is a concrete, well-scoped next step: redo `edgeClipCevian`'s exact derivation but for the
+    Appendix A.3 rational formula's own gradient instead of `q1`'s, most likely against edge `h`
+    (using `mh,qh`) since that is the edge whose "convexity" `R_Aw` implicitly ignores once extended
+    past `A`. This was NOT visible in the paper's own (near-symmetric, `mh=1,mw=0.5`) worked example
+    -- a fresh check there (25-40 random interior samples of the corrected `T1`, all matching `q1`
+    exactly, no bubble) -- so whatever this boundary is, it must degenerate to "outside the
+    triangle" (irrelevant) for `mh`/`mw` close to `1`, and move inside `T1` as the ratio grows -- a
+    useful property to check any proposed closed form against.
+    **Precise shape of the gap region, mapped this session via a full barycentric grid scan of
+    `T1`** (66 points, `n=10` subdivisions, `(i,j,k)` = barycentric weights toward `(P,A,Ra)`): gap
+    is EXACTLY zero for `i>=3` (i.e. everywhere more than ~30% of the way from the `A-Ra` edge
+    toward `P`) and also exactly zero at `j=0` (the whole `P-Ra` edge) and `k=0` (the whole `P-A`
+    edge), confirming those are genuinely fully tight, as found earlier. The gap is strictly
+    positive only for `i=1` (`j=1..6` out of `k=9-j`, peaking at `j=3`, gap~0.11) and `i=2`
+    (`j=1,2` only, gap~0.005-0.01) -- i.e. the failing region is a SMALL, THIN notch hugging the
+    MIDDLE of the `A-Ra` edge, vanishing at both the `A` and `Ra` ends (consistent with the proven
+    identity there) and fading out within about 20-30% of the distance back to `P`, NOT a broad
+    bubble filling much of `T1`'s interior as first thought from the coarser earlier sampling. Each
+    row (fixed `i`) has TWO transitions (gap turns on somewhere after `j=0`, then off again before
+    reaching `k=0`), not one -- meaning whatever the true correction is, it is not a single
+    half-plane cutting `T1` from one side (that would give only one transition per row); it is
+    something closer to a small triangular "notch" carved out of `T1` near the middle of `A-Ra`,
+    which by Locatelli must itself have straight edges, likely meeting at (or near) an interior
+    apex point closer to `A-Ra` than to `P`. This is a materially sharper target for the next
+    session than "an interior bubble" -- concretely, look for a THIRD formula (probably `R_Aw`
+    again, given it already provably matches truth throughout the region checked) valid only in
+    that small notch, bounded by two new short edges rather than by extending `T2`'s existing
+    single cevian.
+    **Precise transition points located this session (bisection, `i`=`P`-weight fixed, `j`=`A`-weight
+    varied)**: at `i=0.10,0.15,0.20` the LOWER transition (near the `P-Ra` edge side, `j` near 0)
+    sits at `j=0.0011,0.0021,0.0054` respectively (essentially hugging the `P-Ra` edge, but a real,
+    growing offset from it, not exactly on it), while the UPPER transition (`j` further from 0)
+    sits at `j=0.634,0.451,0.264` -- shrinking fast, extrapolating to 0 (i.e. the notch closing up)
+    around `i~0.3`. In `(x,y)`: lower transition points `(-1.1275,5.2034), (-0.7795,5.3418),
+    (-0.4201,5.4699)`; upper transition points `(1.9876,2.4345), (1.4325,3.3757), (0.8532,4.3382)`.
+    Checked whether the lower set simply lies on the extended `P-Ra` LINE itself: close but not
+    exact, with a growing residual (`~0.008,0.014,0.035`) inconsistent with solver noise alone --
+    so the lower boundary is a DIFFERENT, nearby line (or a genuine curve, in which case the
+    combinatorial split found so far is still not the Locatelli-guaranteed correct one). Neither
+    the lower nor upper transition set was confirmed exactly colinear with the numerical precision
+    available this session -- worth re-deriving symbolically (analogous to `q1`'s own
+    `edgeClipCevian` derivation, i.e. from a genuine closed-form gradient/dual-tangency condition)
+    rather than continuing to fit noisy numerical transition points, which is the likely next step.
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
