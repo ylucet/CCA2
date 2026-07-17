@@ -64,7 +64,7 @@ in the existing suite -- reverted immediately, not present in the final diff.
 
 - Branch: `main` @ `8828375` -- "Fix two maxQuaPar assembly bugs (ray same-side pairing, subsumed
   pieces)".
-- Pushed: pending (see end-of-session summary for the actual outcome).
+- Pushed: yes (`cf76d25..431629c` to `origin/main`).
 - Files changed: `maxQuaPar.m` (`oppositeSides` + `raySideVector`, called from `matchHalfEdges`;
   `dropSubsumedPieces` + `isSubsumed`, called from the main `maxQuaPar` function right after
   `dedupPieces`), `maxQuaParTest.m` (+1 regression test,
