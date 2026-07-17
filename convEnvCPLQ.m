@@ -101,10 +101,16 @@ function r = convEnvCPLQ(obj)
             r = RatPol(obj.V, obj.E, plainToStored(numX), obj.F, denX);
             return
         end
+        % Each sub-triangle is re-classified and solved via envelopeFromClassified (same pattern
+        % as the nCE==3 case below): the sub-triangle keeping P is still exactly 2-convex-edge
+        % (reproducing q1 unchanged), and the other sub-triangle is exactly 1-convex-edge (a
+        % genuine Appendix A.3 rational piece) -- see splitTwoConvexEdges's header for why.
         numX = zeros(2,6); denX = zeros(2,3);
         for k = 1:2
-            numX(k,:) = plainToStored(substituteQuadPlain(numPlain(k,:), M));
-            denX(k,:) = substituteLin(den3(k,:), M);
+            sub = triU(faces{k}, :);
+            [npk, dk] = envelopeFromClassified(sub, beta, lin, classifyConvexEdges(sub));
+            numX(k,:) = plainToStored(substituteQuadPlain(npk, M));
+            denX(k,:) = substituteLin(dk, M);
         end
         Vx = (Minv * triU')';
         r  = assembleTwoTriangles(Vx, faces, edgeList, numX, denX);
@@ -187,32 +193,49 @@ function [numPlain, den3] = envelopeFromClassified(V, beta, lin, ce)
 end
 
 function [needsSplit, num6, den3, tri, faces, edgeList] = splitTwoConvexEdges(V, beta, lin, ce)
-% [COAP] Appendix A.4 FIX (2026 session): the single quadratic q1 = twoEdgeQuadPlain(...), which
-% touches u1*u2 along BOTH classified convex edges, is a valid convex minorant but NOT always the
-% tightest one over the WHOLE triangle. Along the triangle's third ("weak", non-convex) edge,
-% u1*u2 is CONCAVE (slope <= 0), so the true envelope there is the AFFINE CHORD between its two
-% endpoint u1*u2 values -- strictly ABOVE q1 in the open interior of that edge, since q1 is a
-% single convex quadratic forced through only the 2 shared endpoints, not the whole edge.
-% Reproduced and confirmed (hand-derived boundary analysis, the real conjugate pipeline, and an
-% independent biconjugate reconstruction) on the paper's own Appendix A.4.3 example -- see
-% DESIGN.md / session handoff for the diagnosis this fix resolves.
+% [COAP] Appendix A.4 FIX (2026 session, corrected in a later session -- see below): the single
+% quadratic q1 = twoEdgeQuadPlain(...), which touches u1*u2 along BOTH classified convex edges, is
+% a valid convex minorant but NOT always the tightest one over the WHOLE triangle. Along the
+% triangle's third ("weak", non-convex) edge, u1*u2 is CONCAVE (slope <= 0), so the true envelope
+% there is the AFFINE CHORD between its two endpoint u1*u2 values -- strictly ABOVE q1 in the open
+% interior of that edge, since q1 is a single convex quadratic forced through only the 2 shared
+% endpoints, not the whole edge. Reproduced and confirmed on the paper's own Appendix A.4.3
+% example -- see DESIGN.md / session handoff for the diagnosis this fix resolves.
 %
 % Fix: split the triangle by a cevian from ONE weak-edge endpoint into the OPPOSITE convex edge.
 % The sub-triangle containing the two convex edges' common vertex P keeps q1 UNCHANGED (it still
-% touches u1*u2 exactly along both of ITS two convex-edge sub-segments). The other sub-triangle
-% uses a second convex quadratic (buildEdgeAffinePiece) touching u1*u2 along its remaining
-% convex-edge segment and the affine chord along the (now fully-contained) weak edge.
+% touches u1*u2 exactly along both of ITS two convex-edge sub-segments, since each is a
+% sub-segment of an original convex edge's own infinite line). The OTHER sub-triangle's own
+% remaining edges are: one sub-segment of the OTHER original convex edge (still convex, same
+% line), the fully-contained original weak edge, and the new internal seam -- exactly the
+% Appendix A.3 one-convex-edge case, NOT a bespoke construction. (An earlier version of this fix
+% used a bespoke quadratic here, touching u1*u2 along the remaining convex edge and the affine
+% CHORD along the weak edge; that is a valid boundary condition on the triangle's BOUNDARY but not
+% enough to pin down the unique tight envelope in the INTERIOR -- confirmed wrong by an
+% independent ground-truth check (3D convex hull of a dense sample of the graph over a
+% counterexample triangle, gap up to ~2.5): the true envelope over that sub-triangle is not a
+% single quadratic at all, so no single boundary-matching quadratic can equal it everywhere. The
+% caller (convEnvCPLQ's nCE==2 branch) now re-classifies and re-solves BOTH sub-triangles via
+% envelopeFromClassified, exactly like the nCE==3 case below -- this function only returns the
+% split's GEOMETRY (needsSplit, tri, faces, edgeList), not a final formula, except in the no-split
+% case. Re-verified to match ground truth to grid resolution on the original counterexample and on
+% a fresh random sample of 2-convex-edge triangles -- see session handoff.)
 %
 % The cevian's direction is forced, not free -- exactly analogous to splitThreeConvex: it is the
 % unique direction making the two pieces agree identically along the shared internal seam. q1 and
-% the "other" piece both touch u1*u2 along the SAME original convex edge (the one being split), so
-% their difference vanishes identically along that edge's line; being a quadratic vanishing on one
-% line, it factors as (that line) * (a second line) -- the second line is the seam, found by
-% seamPoint. Of the two candidate cevians (from the weak edge's first endpoint into the second
-% convex edge, or from its second endpoint into the first), exactly one lands strictly inside its
-% target edge and the other's intersection falls outside it -- verified across ~6500 random
-% 2-convex-edge triangles this session (never both valid, never neither); used here as the
-% selection rule, mirroring how twoEdgeQuadPlain already picks its own +/- branch by validity.
+% ANY quadratic touching u1*u2 along the SAME original convex edge (the one being split) agree
+% identically along that edge's whole line (both equal u1*u2 there) and therefore agree exactly at
+% the triangle's third vertex too (both equal u1*u2 there as well); q1 minus such a quadratic is
+% therefore a quadratic vanishing along that whole line, hence factors as (that line) * (a second
+% line) that must pass through the shared opposite vertex -- the second line is the seam, found by
+% seamPoint. `buildEdgeAffinePiece` supplies one convenient such placeholder quadratic (matching
+% u1*u2 along the convex edge and the affine chord along the weak edge) purely to locate this
+% seam -- its own value is NOT used as a final envelope piece (see above). Of the two candidate
+% cevians (from the weak edge's first endpoint into the second convex edge, or from its second
+% endpoint into the first), exactly one lands strictly inside its target edge and the other's
+% intersection falls outside it -- verified across ~6500 random 2-convex-edge triangles in the
+% original session (never both valid, never neither); used here as the selection rule, mirroring
+% how twoEdgeQuadPlain already picks its own +/- branch by validity.
 %
 % Special (measure-zero) case: if q1 itself is already exactly affine (in the edge's own
 % parameter) along the weak edge, it already touches the chord everywhere -- e.g. the mirror-
@@ -237,17 +260,16 @@ function [needsSplit, num6, den3, tri, faces, edgeList] = splitTwoConvexEdges(V,
         return
     end
     needsSplit = true;
-    d = lin(1); e = lin(2); f0 = lin(3);
+    num6 = []; den3 = [];   % recomputed by the caller, one envelopeFromClassified call per face
 
-    qFromA = buildEdgeAffinePiece(mw, qw, A, B);     % touches u1*u2 along P-B, chord along A-B
-    qFromB = buildEdgeAffinePiece(mh, qh, A, B);     % touches u1*u2 along P-A, chord along A-B
+    qFromA = buildEdgeAffinePiece(mw, qw, A, B);     % seam-finding aid only, see header above
+    qFromB = buildEdgeAffinePiece(mh, qh, A, B);     % seam-finding aid only, see header above
 
     [Ra, ta] = seamPoint(q1 - qFromA, mw, qw, P, B); % candidate: cevian from A into edge P-B
     if ta > 1e-9 && ta < 1 - 1e-9
         tri = [P; A; B; Ra];
-        faces = {[1 2 4], [2 4 3]};                  % T1={P,A,R} uses q1; T2={A,R,B} uses qFromA
+        faces = {[1 2 4], [2 4 3]};                  % T1={P,A,R} (2CE); T2={A,R,B} (1CE)
         edgeList = [1 2; 1 4; 4 3; 2 3; 2 4];         % P-A, P-R, R-B, A-B, A-R(internal seam)
-        qOther = qFromA;
     else
         [Rb, tb] = seamPoint(q1 - qFromB, mh, qh, P, A); % candidate: cevian from B into edge P-A
         if ~(tb > 1e-9 && tb < 1 - 1e-9)
@@ -255,19 +277,18 @@ function [needsSplit, num6, den3, tri, faces, edgeList] = splitTwoConvexEdges(V,
                 'splitTwoConvexEdges: neither candidate cevian lands inside its target edge.');
         end
         tri = [P; A; B; Rb];
-        faces = {[1 4 3], [4 2 3]};                  % T1={P,R,B} uses q1; T2={R,A,B} uses qFromB
+        faces = {[1 4 3], [4 2 3]};                  % T1={P,R,B} (2CE); T2={R,A,B} (1CE)
         edgeList = [1 3; 1 4; 4 2; 2 3; 3 4];         % P-B, P-R, R-A, A-B, B-R(internal seam)
-        qOther = qFromB;
     end
-
-    num6 = [beta*q1 + [0 0 0 d e f0]; beta*qOther + [0 0 0 d e f0]];
-    den3 = [0 0 1; 0 0 1];
 end
 
 function coef = buildEdgeAffinePiece(m1, q1c, Ap, Bp)
-% conv(u1*u2) that touches u1*u2 exactly along the convex edge y=m1*x+q1c AND touches, along the
-% (possibly vertical) line through Ap,Bp, the AFFINE CHORD interpolating u1*u2's values at Ap and
-% Bp -- the correct boundary condition along a triangle's weak edge (see splitTwoConvexEdges).
+% Seam-finding aid for splitTwoConvexEdges (NOT itself a final envelope piece -- see that
+% function's header): conv(u1*u2) that touches u1*u2 exactly along the convex edge y=m1*x+q1c AND
+% touches, along the (possibly vertical) line through Ap,Bp, the AFFINE CHORD interpolating
+% u1*u2's values at Ap and Bp. Used only so that q1 minus this placeholder vanishes identically
+% along the shared convex edge (both this placeholder and q1 equal u1*u2 there), which is what
+% makes seamPoint's line-factoring argument locate the correct cevian.
 % Both "match along a whole line" conditions are linear in the quadratic's 6 plain coefficients,
 % but together are RANK-DEFICIENT BY EXACTLY 1 (same pencil structure as twoEdgeQuadPlain's own
 % derivation): any solution plus a multiple of ellLine1*ellLineAB (the product of the two matched

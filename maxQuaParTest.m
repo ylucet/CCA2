@@ -262,23 +262,28 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             %    to EXACTLY the old formula whenever dirInSign==+1/dirOutSign==-1 (the previously
             %    assumed, still-correctly-handled case), so no previously-passing case is affected.
             %
-            % All three fixes are independently correct AND, together, close the previously-open
-            % gap: this triangle now fully ASSEMBLES and matches ground truth (supBilinearOverPoly)
-            % at both the sample points spot-checked here and, in a separate randomized sweep, at
-            % 200 random points to machine precision (see this session's own verification, not a
-            % committed test file, referenced in the session handoff).
+            % All three fixes were independently correct AND, together, closed the then-open gap:
+            % this triangle fully ASSEMBLED and matched ground truth (supBilinearOverPoly) at both
+            % the sample points spot-checked and, in a separate randomized sweep, at 200 random
+            % points to machine precision -- when g1/g2 came from the PRE-2026-07-17-session
+            % splitTwoConvexEdges, which returned two plain quadratics (q1 and a bespoke
+            % buildEdgeAffinePiece quadratic) for this triangle's split.
+            %
+            % UPDATE (2026-07-17, later session): that buildEdgeAffinePiece quadratic was found to
+            % be a genuine tightness bug (see convEnvCPLQ.m's header and the session handoff) and
+            % replaced with the correct Appendix A.3 rational (quadratic/linear) envelope for the
+            % "other" sub-triangle. conjPieceCPLQ cannot yet conjugate a rational piece (a
+            % pre-existing, separately-tracked gap -- see DESIGN.md), so buildG1G2ForTriangle can
+            % no longer build g1/g2 for THIS triangle at all; the three maxQuaPar assembly fixes
+            % above are no longer exercisable via this specific repro now that Step 1 refuses to
+            % (wrongly) hand it two plain quadratics. They remain covered by this file's OTHER
+            % assembly regression tests (e.g. maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying,
+            % assemblePiecesResolvesNearDuplicateApexCluster), which use different repro triangles
+            % untouched by the Step 1 fix. This test now just pins the new, correct, LOUD failure
+            % mode in place of the old silent-wrong-answer one.
             V = [2 1; 0 0; 1 0];
-            [g1, g2] = maxQuaParTest.buildG1G2ForTriangle(V);
-            g = maxQuaPar(g1, g2);
-            testCase.verifyClass(g, 'QuaPar');
-            samples = [1 2; 0.5 1.5; -1 3; 2 -1; 0 0; -2 -2; 3 3];
-            for i = 1:size(samples,1)
-                s = samples(i,:);
-                truth = maxQuaParTest.supBilinearOverPoly(s, V);
-                got = g.eval(s);
-                testCase.verifyEqual(got, truth, 'AbsTol', 1e-9, ...
-                    sprintf('mismatch at s=[%g %g]', s(1), s(2)));
-            end
+            testCase.verifyError(@() maxQuaParTest.buildG1G2ForTriangle(V), ...
+                'extractTriFace:rationalFaceNotSupported');
         end
 
         function maxQuaParResolvesBothHyperbolaCellsWithoutMisclassifying(testCase)
@@ -338,9 +343,21 @@ classdef maxQuaParTest < matlab.unittest.TestCase
         end
 
         function [Vt, frow] = extractTriFace(r, k)
-            % r: a 2-face RatPol (as produced by convEnvCPLQ's 3-convex-edge split). Returns face
-            % k's 3 vertices in CCW order and its (quadratic, since 2-convex-edge sub-triangles are
-            % never rational) coefficient row.
+            % r: a 2-face RatPol (as produced by convEnvCPLQ's 3-convex-edge split, or its
+            % 2-convex-edge split when a genuine split is needed). Returns face k's 3 vertices in
+            % CCW order and its coefficient row -- but only for a PLAIN QUADRATIC face (den =
+            % [0 0 1]): QuaPoly (unlike RatPol) has no denominator, and conjPieceCPLQ cannot yet
+            % conjugate a genuinely rational (quadratic/linear) piece (see convEnvCPLQ.m's
+            % 2-convex-edge fix, 2026 session: the "other" sub-triangle of a genuine split is
+            % exactly a 1-convex-edge Appendix A.3 RATIONAL envelope, not a plain quadratic like it
+            % used to be before that fix) -- silently dropping a nonzero denominator here would
+            % build the WRONG QuaPoly rather than fail loudly, so this errors clearly instead.
+            if any(abs(r.den(k,:) - [0 0 1]) > 1e-9)
+                error('extractTriFace:rationalFaceNotSupported', ...
+                    ['face %d is a genuinely rational envelope (den=[%g %g %g]); ' ...
+                     'conjPieceCPLQ does not yet support conjugating a rational piece ' ...
+                     '(see DESIGN.md/convEnvCPLQ.m).'], k, r.den(k,1), r.den(k,2), r.den(k,3));
+            end
             edgeIdx = find(r.F(:,1)==k | r.F(:,2)==k);
             vids = unique(r.E(edgeIdx,1:2));
             Vt = r.V(vids,:);
