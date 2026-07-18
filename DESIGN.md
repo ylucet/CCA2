@@ -540,16 +540,20 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     verified symbolically for general `mh,qh,mw,qw`). Yet `q1` still UNDERSHOOTS truth by up to
     ~0.38 at points in `T1`'s STRICT INTERIOR (tight on the entire boundary of `T1`, not tight
     inside it).
-    **Key finding this session**: at every one of ~70 random interior points checked in `T1`,
-    `max(q1, R_Aw)` matches ground truth EXACTLY (to solver precision) -- i.e. **`T2`'s own formula,
-    `R_Aw`, extended past its home triangle `T2` into `T1`, is exactly the missing piece** (not a
-    new, undiscovered third formula). However, this is NOT simply "take the pointwise max
-    everywhere" (already ruled out earlier this session in the ORIGINAL, non-recursive frame, for a
-    related reason): `R_Aw` is `>= q1` EVERYWHERE checked in `T1`, including close to `P`, where
-    `q1` is the correct (smaller) answer and `R_Aw` OVERSHOOTS truth by as much as ~2.8 -- so the
-    correct split is a genuine geometric boundary within `T1` (some points use `q1`, others `R_Aw`,
-    determined by POSITION, not by which value is larger, since `R_Aw` is unconditionally the larger
-    of the two throughout `T1`). This resolves the earlier confusion about what the "bubble" even
+    **Key finding this session (CORRECTED -- an earlier draft of this note overclaimed "matches
+    everywhere"; see the actual data below)**: at the SPECIFIC points identified by the `q1`-gap
+    scan (i.e. points where `q1` itself undershoots truth), `R_Aw` matches ground truth EXACTLY (6/6
+    checked, to solver precision) -- i.e. **`T2`'s own formula, `R_Aw`, extended past its home
+    triangle `T2` into `T1`, is the right formula for those specific failing points**, not a new,
+    undiscovered third formula. HOWEVER, a separate, broader check (~60 UNIFORM random points across
+    ALL of `T1`, not just the known-failing ones) found `R_Aw` OVERSHOOTS truth in the clear MAJORITY
+    of them (worst case ~2.8, many in the 0.1-1.8 range), essentially everywhere except a small
+    region -- so `R_Aw` is NOT simply valid over some large sub-region of `T1` glued to `q1` along
+    one boundary; it is only correct in the SAME small notch the barycentric grid scan (below)
+    independently identifies, and invalid (an overshooting, unusable candidate) essentially
+    everywhere else in `T1`. `R_Aw` is `>= q1` EVERYWHERE checked in `T1` (including deep in `q1`'s
+    correct territory near `P`), so the correct split is a genuine geometric boundary, not a value
+    comparison. This resolves the earlier confusion about what the "bubble" even
     is: it isn't that `q1` is wrong in some mysterious interior region for no visible reason -- it's
     that `T2`'s own rightful territory (where `R_Aw` is the tight envelope) extends further into
     what Part 2a's single cevian currently calls `T1` than that cevian accounts for. The real
@@ -623,6 +627,69 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     available this session -- worth re-deriving symbolically (analogous to `q1`'s own
     `edgeClipCevian` derivation, i.e. from a genuine closed-form gradient/dual-tangency condition)
     rather than continuing to fit noisy numerical transition points, which is the likely next step.
+  - **Part 2c, found later the SAME session -- Part 2b's notch closed, via a cleaner criterion,
+    but a related, possibly-broad consequence surfaced and is UNRESOLVED; see "Status" below before
+    trusting any of this as final.** Re-derived the `T1`/`T2` boundary from scratch as a genuine
+    C1 tangency condition rather than the earlier value-only match: writing `q1 - R_Aw` as one
+    rational expression and clearing denominators, the numerator factors (using that the anchor
+    vertex lies on its own edge's line) as `(that edge's line) * (a PERFECT SQUARE)`, i.e. a double
+    root -- `q1` and `R_Aw` agree in both VALUE and GRADIENT along the entire line through the
+    anchor vertex with slope `-sqrt(mh*mw)` (verified to ~7 significant figures numerically, and
+    exactly via the symbolic factorization). This slope depends ONLY on `mh,mw` -- `beta` and the
+    affine shift `lin` cancel out of the derivation completely (confirmed symbolically: the
+    `linDen` contribution to the numerator is exactly `(lin1 x+lin2 y+lin3)*D`, canceling the same
+    term from `qfull*D`). Replaced `edgeClipCevian` with `tangentCevian` (line through the anchor
+    vertex with this slope, intersected with the other convex edge) in `convEnvCPLQ.m`. Verified
+    exactly (ground truth, both resulting sub-regions) on the Part 2b repro triangle, and the
+    aggregate stress-test gap rate (same rng(2026) methodology) dropped further, from 23.1% to
+    9.3% (108/468 -> 68/731; the genuine-2CE-split COUNT itself changed between runs, 468 vs 731 --
+    not yet reconciled, possibly a difference in how many triangles error out vs split cleanly
+    between the two code versions, not independently confirmed as harmless).
+    **Related discovery, NOT part of the original Part 2 scope**: the residual ~9% turned out to
+    be entirely (at least in the one repro checked) attributable to a DIFFERENT, pre-existing code
+    path -- `nCE==3` (three convex edges, `splitThreeConvex`) -- which calls
+    `envelopeFromClassified`'s plain-quadratic case DIRECTLY on each of its 2 sub-triangles,
+    without ever checking whether THAT sub-triangle (itself exactly 2-convex-edge) needs the same
+    kind of further split `splitTwoConvexEdges` now checks for. Generalized `convEnvCPLQ.m` with a
+    new recursive `solveTriangleBF`, used uniformly by both the `nCE==2` and `nCE==3` branches (via
+    a new `assemblePiecesBF`, built on the already-existing, arbitrary-piece-count
+    `assembleTriangles`), so either branch's sub-triangles can themselves recurse into further
+    pieces. Checked against 9 sample "3 convex edge" triangles (the 8 used by currently-failing
+    tests, described below, plus the paper's own famous `T=(0,0),(3,3),(1,2))`: **all 9 of 9** now
+    produce 4 pieces (2 plain quadratic + 2 genuinely rational), not the previously-assumed-always
+    2. Spot-checked `T=(0,0),(3,3),(1,2)` specifically against the PRE-session code at 6 interior
+    points: 5 of 6 values are numerically IDENTICAL to machine precision, one differs by ~0.0018 --
+    i.e. the correction is real (confirmed by the perfect-square/tangency derivation, not a
+    hand-wave) but can be extremely small for a near-symmetric triangle, and apparently large
+    enough in `curv`'s existing tolerance check (`1e-9*scale`) to trigger a further split anyway.
+    **This is presented as a strong pattern from a SMALL, non-random sample (9 triangles, all
+    originally hand-picked by past sessions for unrelated reasons -- assembly-bug reproduction, not
+    randomly sampled) -- treat "essentially all 3-convex-edge triangles need 4 pieces" as a
+    plausible working hypothesis, NOT an established fact.** It has not been checked against a
+    proper random sample the way the `nCE==2` stress test was, nor proven analytically (unlike the
+    `nCE==2` tangency criterion itself, which IS a proven exact fact). It could still turn out that
+    some meaningful fraction of 3-convex-edge triangles genuinely need only 2 pieces and the 9
+    sampled ones are unusual in some way not yet identified.
+    **Status at end of session -- genuinely unresolved, needs a decision next time**: this
+    generalization, if kept, breaks 6 existing tests (`conjCPLQTest.
+    indefiniteTriangleThreeConvexEdgesUsesStep3` plus 5 `maxQuaParTest` cases, all going through
+    the shared `maxQuaParTest.buildG1G2ForTriangle` helper) because `conjPieceCPLQ` cannot yet
+    conjugate a rational piece (the same pre-existing, separately-tracked gap Part 1 already hit),
+    and EVERY one of the 5 distinct hand-picked "3 convex edge" triangles those tests use now
+    produces 2 rational sub-pieces -- meaning this is not 6 independent assertion tweaks but the
+    entire test-fixture STRATEGY those tests share (pick a 3-convex-edge triangle, derive `g1,g2`
+    via the live Step1+Step2 pipeline) becoming structurally incompatible with Step 1's own
+    (now more) correct behavior. Those 5 tests are regression tests for `maxQuaPar`'s OWN assembly
+    bugs (dedup, orphan half-edges, near-duplicate vertices, etc.), not for Step 1's tightness, so
+    one plausible fix discussed but NOT attempted is freezing each test's existing `g1,g2` (computed
+    once from the pre-session code) as hardcoded `QuaPar` fixtures, decoupling them from the live
+    pipeline -- not yet done, not yet validated, and there may be a better approach. **Next session
+    should start by deciding, deliberately, whether to keep this generalization (and follow through
+    on fixing the 6 tests) or scope it back out** (keep only `tangentCevian` replacing
+    `edgeClipCevian` for the standalone `nCE==2` path, revert `nCE==2`'s own sub-triangle loop and
+    the `nCE==3` loop to calling `envelopeFromClassified` directly as before, removing
+    `solveTriangleBF`/`assemblePiecesBF`) -- as of this writing NEITHER path has been completed;
+    the working tree contains the fuller (test-breaking) version, uncommitted.
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
