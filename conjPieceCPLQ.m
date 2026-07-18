@@ -36,10 +36,24 @@ function g = conjPieceCPLQ(p)
 %              TODO: rational pieces (RatPol input with a genuine nonzero denominator) -- NOT
 %              reducible to the cases above (there is no known "original quadratic" to fall back
 %              on when p IS the rational function itself, e.g. via a direct RatPol.conj call with
-%              no memory of a pre-envelope piece); it needs a genuinely new 2D critical-point/
-%              curved-region derivation (see DESIGN.md II.5.1 and cPLQ Appendix B / the reference
-%              plq_1piece.m "type 1" branch) and remains unimplemented (conjPieceCPLQTest/
-%              rationalRejected). For the WIRED conjCPLQ pipeline, this gap can be sidestepped:
+%              no memory of a pre-envelope piece). NOT an open derivation: the reference cPLQ
+%              package already has a complete, working recipe for exactly this case
+%              (plq_1piece.m's conjugateFunction, the "type 1" branch, i.e. ~obj.envelope(i).f.
+%              isLinear -- polynomial-divide num/den into quotient+remainder, parametrize a
+%              candidate dual point by a scalar t along the boundary, eliminate t between the two
+%              coordinate equations to get the parabola equation directly, then build vertex/edge
+%              subdifferential regions via functionNDomain.m's getSubdiffVertexT1/
+%              getSubDiffEdgeT1/getSubDiffVertexSpT1/conjugateExprVerticesT1/
+%              conjugateExprEdgesT1Poly). That recipe runs live on MATLAB `sym` objects
+%              (solve/factor/polynomialReduce/simplifyFraction) at runtime, per problem instance --
+%              unlike every other case here (and unlike RatPol/QuaPar's own numeric-coefficient
+%              storage), which uses a closed-form numeric formula derived ONCE, offline, matching
+%              this recipe (see e.g. QuaPar.m's own commented-out symbolic derivation
+%              scratch-work for that established pattern). Remains unimplemented (conjPieceCPLQTest/
+%              rationalRejected); the actual next step is deriving that closed form (running the
+%              cPLQ recipe symbolically once, then implementing the plain-arithmetic result), not
+%              inventing new math. See DESIGN.md II.5.1. For the WIRED conjCPLQ pipeline, this gap
+%              can be sidestepped:
 %              since f*=(conv f)*, Step 2 can conjugate the ORIGINAL per-triangle piece directly
 %              (now handled for indefinite quadratics too, above) instead of materializing and
 %              re-conjugating Step 1's rational envelope output, whenever the original piece is

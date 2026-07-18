@@ -135,25 +135,32 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         end
 
         function indefiniteTriangleThreeConvexEdgesUsesStep3(testCase)
-            % Three convex edges: Step 1 splits the triangle into two sub-triangle pieces, so the
+            % Three convex edges: Step 1 splits the triangle into sub-triangle pieces, so the
             % orchestrator needs Step 3 (max of conjugates, maxQuaPar) to combine their Step-2
             % conjugates. A strictly increasing vertex chain (both x and y increasing) makes all 3
             % pairwise slopes positive, i.e. all 3 edges convex for f=xy -- the same T=conv{(0,0),
-            % (3,3),(1,2)} example maxQuaParTest.m validates by hand; here conjCPLQ is called
-            % directly (end to end) and checked against the same closed-form ground truth (the sup
-            % of s.x-xy over T is attained on the boundary since the Hessian is indefinite).
+            % (3,3),(1,2)} example maxQuaParTest.m validates by hand.
+            %
+            % UPDATE (Part 2c, 2026-07-17/18 session): Step 1 used to always split a 3-convex-edge
+            % triangle into exactly 2 plain-quadratic sub-triangles; it now correctly recurses
+            % (convEnvCPLQ.m's solveTriangleBF/splitTwoConvexEdges) into each of those 2
+            % sub-triangles, since each is itself an ordinary 2-convex-edge triangle subject to the
+            % SAME tightness criterion (tangentCevian) already proven for the standalone
+            % nCE==2 case -- there is nothing special about a 3CE sub-triangle that would exempt
+            % it. For THIS triangle both sub-triangles need the further split, so Step 1 now
+            % produces 4 pieces (2 plain quadratic + 2 genuinely rational), not 2 -- confirmed
+            % correct (not a regression) per DESIGN.md's Part 2c. `conjPieceCPLQ` cannot yet
+            % conjugate a genuinely rational piece (a pre-existing, separately-tracked gap -- see
+            % conjPieceCPLQ.m's own TODO and DESIGN.md), so `conj('cplq')` on this triangle must now
+            % correctly error rather than silently combining only the 2 formerly-assumed pieces.
+            % This test now pins BOTH the corrected split count and the new, loud, correct failure
+            % mode (same "pin the loud failure instead of the old silent success" pattern already
+            % used elsewhere in this file's history -- see
+            % maxQuaParTest.matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces).
             V = [0 0; 3 3; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);
-            testCase.verifyEqual(convEnvCPLQ(q).nf, 2);   % confirms the 3-convex-edge split
-            g = q.conj('cplq');
-            testCase.verifyClass(g, 'QuaPar');
-            T = V;
-            testPts = [1.90 2.50; 1.70 2.00; 2.3431 1.9; 2.05 1.95; 0 0; 5 5; -3 2];
-            for i = 1:size(testPts,1)
-                s = testPts(i,:);
-                testCase.verifyEqual(g.eval(s), conjCPLQTest.supBilinearOverPoly(s, T), ...
-                    'AbsTol', 1e-8, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
-            end
+            testCase.verifyEqual(convEnvCPLQ(q).nf, 4);   % confirms the (now recursive) split
+            testCase.verifyError(@() q.conj('cplq'), 'conjPieceCPLQ:notImplemented');
         end
 
         function multiFacePieceStillNotImplemented(testCase)

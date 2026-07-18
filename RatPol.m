@@ -217,8 +217,24 @@ classdef RatPol
 
                 if any(flags==1)
                     % Checks if any x lies in the current polytope, evaluates them and
-                    % marks border points as a different colour
-                    fVal(flags==1) = RatPol.evalRational(obj.f(i,:),obj.den(i,:),x(flags==1,:));
+                    % marks border points as a different colour. A boundary point can be claimed
+                    % by more than one face (e.g. a vertex shared by several pieces); a genuinely
+                    % rational (RatPol Appendix A.3) piece has a REMOVABLE singularity (den==0)
+                    % exactly at its own anchor vertex, so it can report NaN there even though the
+                    % function is continuous and another matching face gives the true, finite
+                    % value -- don't let that NaN clobber an already-found finite value (only a
+                    % genuine finite/finite disagreement, i.e. an actual discontinuity, should
+                    % produce NaN; see docstring above).
+                    vi = RatPol.evalRational(obj.f(i,:),obj.den(i,:),x(flags==1,:));
+                    idx = find(flags==1);
+                    for j = 1:numel(idx)
+                        k = idx(j);
+                        if isinf(fVal(k)) || isnan(fVal(k))
+                            fVal(k) = vi(j);
+                        elseif ~isnan(vi(j)) && abs(vi(j)-fVal(k)) > sqrt(eps)
+                            fVal(k) = nan;
+                        end
+                    end
                     region(region~=-1 & flags==1) = 0;
                     region(region==-1 & flags==1) = i;
                 end
