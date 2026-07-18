@@ -246,11 +246,20 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % sliver triangles). Swapped in this triangle, which still produces a thin (~0.027,
             % same order of magnitude as the original 0.0074) edge-strip sub-triangle exercising
             % pickRep's search exactly as before, without hitting that separate unresolved issue.
+            % UPDATE (Part 2c, 2026-07-17/18 session): Step 1 now correctly recurses into each
+            % 3-convex-edge sub-triangle (see DESIGN.md's Part 2c), so this T produces 4 pieces
+            % (2 plain quadratic + 2 rational), not 2. Face 1 is still a plain quadratic (its own
+            % further recursive split wasn't needed), but it is now a SMALLER, further-split
+            % sub-triangle of the original first sub-triangle rather than that whole sub-triangle
+            % -- still thin enough to exercise the same pickRep bug this test documents, and its
+            % own conjugate now lands in the "tied vertex" 5-face degenerate case
+            % (conjPSDRank1QuadTriangleTie) rather than the generic 6-face one; both facts
+            % reverified against ground truth below, unaffected by which exact case it is.
             T = [3.1436 2.4929; 5.0857 4.1038; 9.0757 7.5555];
             E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(T, E, [0 1 0 0 0 0], F);           % f(x,y) = x*y over T
-            r = convEnvCPLQ(q);                             % Step 1: 2 sub-triangles
-            testCase.verifyEqual(r.nf, 2);
+            r = convEnvCPLQ(q);                             % Step 1: now 4 sub-pieces
+            testCase.verifyEqual(r.nf, 4);
             V1 = r.V(unique(r.E(r.F(:,1)==1 | r.F(:,2)==1, 1:2)), :);
             f1 = r.f(1,:);
             testCase.verifyLessThan(min(abs(diff(sort(V1(:,1))))), 0.05, ...
@@ -259,7 +268,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             p1 = QuaPoly(V1, E, f1(5:10), F);
             g = conjPieceCPLQ(p1);   % used to throw conjPieceCPLQ:internal here
             testCase.verifyClass(g, 'QuaPar');
-            testCase.verifyEqual(g.nf, 6);
+            testCase.verifyEqual(g.nf, 5);
 
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
             kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);

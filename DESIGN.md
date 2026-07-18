@@ -380,8 +380,11 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   The fully general case -- a multi-face original
   domain (`nf>1`), or a single non-triangular face — remains open: `convEnvCPLQ`'s own
   multi-face triangulation can produce a triangle piece with exactly ONE convex edge (a genuinely
-  rational envelope), which `conjPieceCPLQ` cannot conjugate yet (its own header TODO); the
-  3-convex-edge single-triangle case above never hits that gap, which is why it alone is solved.
+  rational envelope), which `conjPieceCPLQ` cannot conjugate yet (its own header TODO). **Revised
+  (Part 2c, below): the 3-convex-edge single-triangle case above is NO LONGER exempt from this
+  gap either** — it was solved on its own only as long as it never produced a rational piece; Part
+  2c's fix means it now correctly does (see Part 2c's own entry, and `conjCPLQ`'s "NOT implemented"
+  bullet, for the reasoning and current status).
   **Diagnosis (2026-07-17, later session): the 2026-07-15 "fix" above is itself NOT tight in
   general -- confirmed via ground truth independent of the whole conjugate/duality pipeline.**
   Found via a concrete counterexample, `T=(-9.95506,3.70366),(-9.345,-5.34552),(1.29049,5.31738)`
@@ -628,8 +631,8 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     `edgeClipCevian` derivation, i.e. from a genuine closed-form gradient/dual-tangency condition)
     rather than continuing to fit noisy numerical transition points, which is the likely next step.
   - **Part 2c, found later the SAME session -- Part 2b's notch closed, via a cleaner criterion,
-    but a related, possibly-broad consequence surfaced and is UNRESOLVED; see "Status" below before
-    trusting any of this as final.** Re-derived the `T1`/`T2` boundary from scratch as a genuine
+    which also turned out to apply, forced and unconditionally, to the pre-existing `nCE==3` code
+    path -- see "Status" below.** Re-derived the `T1`/`T2` boundary from scratch as a genuine
     C1 tangency condition rather than the earlier value-only match: writing `q1 - R_Aw` as one
     rational expression and clearing denominators, the numerator factors (using that the anchor
     vertex lies on its own edge's line) as `(that edge's line) * (a PERFECT SQUARE)`, i.e. a double
@@ -662,34 +665,63 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     i.e. the correction is real (confirmed by the perfect-square/tangency derivation, not a
     hand-wave) but can be extremely small for a near-symmetric triangle, and apparently large
     enough in `curv`'s existing tolerance check (`1e-9*scale`) to trigger a further split anyway.
-    **This is presented as a strong pattern from a SMALL, non-random sample (9 triangles, all
-    originally hand-picked by past sessions for unrelated reasons -- assembly-bug reproduction, not
-    randomly sampled) -- treat "essentially all 3-convex-edge triangles need 4 pieces" as a
-    plausible working hypothesis, NOT an established fact.** It has not been checked against a
-    proper random sample the way the `nCE==2` stress test was, nor proven analytically (unlike the
-    `nCE==2` tangency criterion itself, which IS a proven exact fact). It could still turn out that
-    some meaningful fraction of 3-convex-edge triangles genuinely need only 2 pieces and the 9
-    sampled ones are unusual in some way not yet identified.
-    **Status at end of session -- genuinely unresolved, needs a decision next time**: this
-    generalization, if kept, breaks 6 existing tests (`conjCPLQTest.
-    indefiniteTriangleThreeConvexEdgesUsesStep3` plus 5 `maxQuaParTest` cases, all going through
-    the shared `maxQuaParTest.buildG1G2ForTriangle` helper) because `conjPieceCPLQ` cannot yet
-    conjugate a rational piece (the same pre-existing, separately-tracked gap Part 1 already hit),
-    and EVERY one of the 5 distinct hand-picked "3 convex edge" triangles those tests use now
-    produces 2 rational sub-pieces -- meaning this is not 6 independent assertion tweaks but the
-    entire test-fixture STRATEGY those tests share (pick a 3-convex-edge triangle, derive `g1,g2`
-    via the live Step1+Step2 pipeline) becoming structurally incompatible with Step 1's own
-    (now more) correct behavior. Those 5 tests are regression tests for `maxQuaPar`'s OWN assembly
-    bugs (dedup, orphan half-edges, near-duplicate vertices, etc.), not for Step 1's tightness, so
-    one plausible fix discussed but NOT attempted is freezing each test's existing `g1,g2` (computed
-    once from the pre-session code) as hardcoded `QuaPar` fixtures, decoupling them from the live
-    pipeline -- not yet done, not yet validated, and there may be a better approach. **Next session
-    should start by deciding, deliberately, whether to keep this generalization (and follow through
-    on fixing the 6 tests) or scope it back out** (keep only `tangentCevian` replacing
-    `edgeClipCevian` for the standalone `nCE==2` path, revert `nCE==2`'s own sub-triangle loop and
-    the `nCE==3` loop to calling `envelopeFromClassified` directly as before, removing
-    `solveTriangleBF`/`assemblePiecesBF`) -- as of this writing NEITHER path has been completed;
-    the working tree contains the fuller (test-breaking) version, uncommitted.
+    **The "how often does this trigger" QUESTION is presented as a strong pattern from a SMALL,
+    non-random sample (9 triangles, all originally hand-picked by past sessions for unrelated
+    reasons -- assembly-bug reproduction, not randomly sampled) -- treat "essentially all
+    3-convex-edge triangles need 4 pieces" as a plausible working hypothesis, NOT an established
+    fact about FREQUENCY.** It has not been checked against a proper random sample the way the
+    `nCE==2` stress test was. This is a genuinely open, but low-stakes, item for a future session
+    (a random-sample stress test, analogous to the `nCE==2` one).
+    **Whether to APPLY the fix at all is, by contrast, not open.** The tangency criterion itself
+    (`tangentCevian`'s slope `-sqrt(mh*mw)`) is proven to depend only on a 2-convex-edge triangle's
+    own `mh,mw` -- nothing about `beta`, the affine shift, or how that triangle arose (standalone
+    `nCE==2`, or a `splitThreeConvex` sub-triangle) enters the derivation. A 3CE sub-triangle is an
+    ordinary 2CE triangle; there is no basis for exempting it from a criterion already proven to
+    hold for every 2CE triangle. So `solveTriangleBF`'s recursion is a forced consequence of Part
+    2c, not a scope expansion up for debate -- reverting it would mean knowingly reinstating a
+    formula already proven untight in some `nCE==3` cases. **Status: KEPT, decision resolved.**
+    This still breaks 6 existing tests (`conjCPLQTest.indefiniteTriangleThreeConvexEdgesUsesStep3`
+    plus 5 `maxQuaParTest` cases, all going through the shared `maxQuaParTest.buildG1G2ForTriangle`
+    helper) because `conjPieceCPLQ` cannot yet conjugate a rational piece (the same pre-existing,
+    separately-tracked gap Part 1 already hit -- see `conjPieceCPLQ.m`'s own entry below: the
+    closed-form recipe for this already exists in the reference `cPLQ/plq_1piece.m`, it just hasn't
+    been derived into CCA2's closed-form-coefficient style yet), and EVERY one of the 5 distinct
+    hand-picked "3 convex edge" triangles those tests use now produces 2 rational sub-pieces --
+    meaning this is not 6 independent assertion tweaks but the entire test-fixture STRATEGY those
+    tests share (pick a 3-convex-edge triangle, derive `g1,g2` via the live Step1+Step2 pipeline)
+    becoming structurally incompatible with Step 1's own (now more) correct behavior. Those 5 tests
+    are regression tests for `maxQuaPar`'s OWN assembly bugs (dedup, orphan half-edges, near-
+    duplicate vertices, etc.), not for Step 1's tightness, so the fix is to freeze each test's
+    existing `g1,g2` (computed once from the pre-session code) as hardcoded `QuaPar` fixtures,
+    decoupling them from the live pipeline. **DONE** (same session): all 6 fixed this way; full
+    suite verified back to passing.
+    **Two FURTHER tests broke for the identical reason** (not part of the original "6", found only
+    once the full suite was rerun after keeping the fix): `conjPieceCPLQTest.
+    pickRepFindsThinEdgeStripFace` and `convEnvCPLQTest.threeConvexEdgesSplit`, both hardcoding
+    `nf==2` for a 3-convex-edge triangle. Fixed the same way as `conjCPLQTest.
+    indefiniteTriangleThreeConvexEdgesUsesStep3` above (update the split-count assertion to 4;
+    `pickRepFindsThinEdgeStripFace`'s extracted face-1 sub-triangle is now smaller — a further-split
+    piece of the original first sub-triangle — landing in `conjPieceCPLQ`'s "tied vertex" 5-face
+    case (`conjPSDRank1QuadTriangleTie`) instead of the generic 6-face one; both reverified against
+    ground truth after updating).
+    **Also found and fixed, while diagnosing `threeConvexEdgesSplit`'s remaining failure after the
+    `nf` fix**: `RatPol.eval` (the main polytope-membership loop, not the edge-chain branch) blindly
+    overwrote `fVal` with whichever matching face was processed last, with no check at all —
+    unlike the documented policy ("`fval(i)=nan` if PC is discontinuous at `x(i)`"), which the
+    edge-chain branch actually implements but this one never did. This was silently harmless as
+    long as every piece was a plain quadratic (no matching face could ever evaluate to NaN on its
+    own), but a genuinely rational (Appendix A.3) piece's denominator is *exactly* zero at its own
+    anchor vertex by construction — a REMOVABLE singularity (the true limit exists and is finite),
+    not a real discontinuity — so it can report NaN at a vertex where OTHER matching faces
+    correctly report the true finite value. Confirmed exactly this on `threeConvexEdgesSplit`'s own
+    apex vertex `(1,1)`: 2 of the 4 matching faces (the plain-quadratic ones) correctly evaluate to
+    `1`, the other 2 (the rational ones, each anchored at that very vertex) evaluate to `NaN`, and
+    since faces are visited in order, the LAST one processed (a NaN) clobbered the correct answer.
+    Fixed by tracking, per point, whether a finite value has already been found: a later face's NaN
+    no longer overwrites an existing finite value, while a later face's genuinely DIFFERENT finite
+    value still correctly triggers NaN (preserving the documented real-discontinuity behavior).
+    Verified: `(1,1)` now evaluates to exactly `1`; full suite re-run clean (147/147) after this fix
+    plus the two `nf` fixes above.
 - `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
@@ -781,14 +813,21 @@ exists yet for):
 - `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
   method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
 - `conjCPLQ`'s own Step 3 for a genuinely multi-face original domain (`nf>1`) or a single
-  non-triangular face — the single-bounded-triangle/3-convex-edge case IS now implemented (see
-  `maxQuaPar.m`'s bullet above), but the fully general case needs `conjPieceCPLQ` to also handle a
-  1-convex-edge (genuinely rational) envelope piece, which `convEnvCPLQ`'s multi-face
-  triangulation can produce and which `conjPieceCPLQ` cannot conjugate yet — this is what still
-  confines `infConv`/`moreau`/`lasryLions`/`proxAverage` to full-domain-quadratic `f,g` for an
-  *exact* end-to-end round trip on a genuinely multi-face `f,g` (a bounded-triangle pair with 3
-  convex edges now works end to end; a multi-face pair still errors clearly at the final `conj`
-  call rather than silently giving a wrong answer).
+  non-triangular face — needs `conjPieceCPLQ` to also handle a 1-convex-edge (genuinely rational)
+  envelope piece, which `convEnvCPLQ`'s multi-face triangulation can produce and which
+  `conjPieceCPLQ` cannot conjugate yet — this is what still confines `infConv`/`moreau`/
+  `lasryLions`/`proxAverage` to full-domain-quadratic `f,g` for an *exact* end-to-end round trip on
+  a genuinely multi-face `f,g`. **Revised (Part 2c, this session): the single-bounded-triangle/
+  3-convex-edge case is NO LONGER exempt from this gap.** It was previously believed to work end to
+  end because it "never needs a rational piece" (see `maxQuaPar.m`'s bullet above) — Part 2c's fix
+  (recursively applying the proven `nCE==2` tightness split inside `splitThreeConvex`'s own
+  sub-triangles, since that criterion depends only on a triangle's own `mh,mw`, not on how it
+  arose) means a 3-convex-edge triangle now correctly produces 2 rational sub-pieces (alongside 2
+  plain-quadratic ones), so it hits the SAME `conjPieceCPLQ` rational-piece gap as the general
+  multi-face case. A bounded-triangle pair with 3 convex edges no longer works end to end for
+  `conj`'s Step 3 until that gap is closed; a multi-face pair still errors clearly at the final
+  `conj` call rather than silently giving a wrong answer, and so, now, does the 3CE single-triangle
+  case.
 
 **Next planned**: the **nonconvex-PLQ operator pipeline** (`conj`→`infConv`/`moreau`→
 `lasryLions`/`proxAverage`) that has been this project's stated focus is now code-complete (see
@@ -797,8 +836,11 @@ pipeline itself doesn't need:
 1. **`conjPieceCPLQ`'s own rational-piece TODO** (conjugate of a 1-convex-edge, genuinely
    rational envelope piece) is the highest-value next step: it is the single remaining gap in
    `conjCPLQ`'s Step 3, needed for `infConv`/`moreau`/`lasryLions`/`proxAverage` to work end to end
-   on a genuinely multi-face (not just single-triangle) `f,g`. The single-triangle/3-convex-edge
-   case is already done (`maxQuaPar.m`'s bullet above), since it never needs a rational piece.
+   -- now including the single-triangle/3-convex-edge case, not just the genuinely multi-face one
+   (see Part 2c's revision above). Not an open derivation: the reference `cPLQ/plq_1piece.m`
+   already has a complete, working symbolic recipe for exactly this case (see `conjPieceCPLQ.m`'s
+   own updated TODO comment for the specifics); the work is deriving the equivalent closed-form
+   numeric formula, matching every other `conjPieceCPLQ` case, not new math.
 2. **`partialConj`** for the `'cplq'`/`'pqp'` engines (II.4) — not started.
 3. **`add` for `RatPol`** (common-denominator sum) and the **`RatPar`** parent class (II.3) —
    deprioritized, nothing in the operator pipeline calls for either.

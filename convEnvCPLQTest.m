@@ -163,11 +163,15 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
 
         function threeConvexEdgesSplit(testCase)
             % triangle (0,0),(1,1),(3,2): all three edge slopes (1, 1/2, 2/3) positive => split
-            % into two sub-triangles (a 2-face RatPol). No closed form; check key properties.
+            % into two sub-triangles. No closed form; check key properties.
+            %
+            % UPDATE (Part 2c, 2026-07-17/18 session): Step 1 now correctly recurses into each of
+            % those 2 sub-triangles (see DESIGN.md's Part 2c), so this T produces 4 pieces (2 plain
+            % quadratic + 2 rational), not 2.
             V = [0 0; 1 1; 3 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             r = convEnvCPLQ(QuaPoly(V,E,[0 1 0 0 0 0],F));    % xy
             testCase.verifyClass(r, 'RatPol');
-            testCase.verifyEqual(r.nf, 2);
+            testCase.verifyEqual(r.nf, 4);
             % envelope equals xy at the three original vertices
             testCase.verifyEqual(r.eval([0 0; 1 1; 3 2]), [0; 1; 6], 'AbsTol', 1e-10);
             % finite and underestimates xy at interior points
