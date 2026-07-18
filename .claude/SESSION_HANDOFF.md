@@ -1,70 +1,61 @@
 # Session Handoff
 
-_Last updated: 2026-07-18T02:15:00Z_
+_Last updated: 2026-07-18T03:00:00Z_
 
 ## What happened this session
 
-Continued the Part 2 (2-convex-edge tightness) investigation. Found and fixed the actual root
-cause (Part 2c): the correct cevian is where `q1` and the neighboring Appendix A.3 piece are
-C1-TANGENT (a perfect-square factor when clearing denominators, not just equal in value) along the
-line through the anchor vertex with slope `-sqrt(mh*mw)` -- provably exact, independent of `beta`
-and the affine shift (both cancel out of the derivation completely). Replaces the session's earlier,
-still-imperfect `edgeClipCevian` criterion. Verified against ground truth; stress-test gap rate
-dropped from ~45% (session start) to 23.1% (first fix) to 9.3% (this fix).
+Resolved the decision left open by the prior session's WIP commit (`e6e936a`): whether to keep
+the recursive `nCE==3` generalization of the Part 2c tightness fix. **Resolved: KEEP it — it was
+never actually an open judgment call.** `tangentCevian`'s tightness criterion is proven to depend
+only on a 2-convex-edge triangle's own `mh,mw`, independent of how it arose, so a
+`splitThreeConvex` sub-triangle can't be exempt from it; reverting would mean knowingly
+reinstating a formula already proven untight. Corrected DESIGN.md/`conjCPLQ.m`/`conjPieceCPLQ.m`
+to remove the false "undecided" framing and the now-false "3CE already works end to end" claims
+(keeping the fix means the 3CE single-triangle case now also hits the pre-existing
+`conjPieceCPLQ` rational-piece gap). Also corrected that gap's own framing: the reference `cPLQ/`
+package (untracked, opened and read this session) already has a complete symbolic recipe for it
+(`plq_1piece.m`'s "type 1" branch) — the remaining work is deriving the closed-form numeric
+formula matching every other `conjPieceCPLQ` case, not open research.
 
-Diagnosing that remaining 9.3% found the SAME tightness issue also affects the separate `nCE==3`
-(three-convex-edge, `splitThreeConvex`) code path, which never checked it. Generalized
-`convEnvCPLQ.m` to apply the check recursively wherever a 2-convex-edge sub-triangle appears. This
-closes the gap in the one repro checked, but has a much bigger footprint than intended: of 9
-"3-convex-edge" triangles sampled (a small, non-random sample -- see DESIGN.md's hedge), all 9 now
-produce 4 pieces (2 quadratic + 2 rational) instead of 2, and `conjPieceCPLQ` can't yet conjugate a
-rational piece. This breaks 6 existing tests whose actual purpose is regression-testing
-`maxQuaPar`'s own assembly logic (not Step 1's tightness), via a shared helper
-(`maxQuaParTest.buildG1G2ForTriangle`) that can no longer build test fixtures the way it used to.
-**Committed as WIP, undecided** -- see Next steps.
+Fixed all 8 tests broken by keeping the fix (the original 6, plus 2 more found by re-running the
+full suite: `conjPieceCPLQTest.pickRepFindsThinEdgeStripFace`,
+`convEnvCPLQTest.threeConvexEdgesSplit`) — mostly by freezing `g1,g2` `QuaPar` fixtures from the
+pre-Part-2c pipeline or updating hardcoded piece-count assertions. While diagnosing the last
+failure, found and fixed a real bug in `RatPol.eval`: a genuinely rational piece has a removable
+(0/0) singularity at its own anchor vertex, and the eval loop let that NaN silently clobber an
+already-correct finite value from another matching face at a shared vertex. Full suite: 147/147
+passing. Committed as `083de95`.
 
 ## Where things stand
 
-- Branch: `main` @ `e6e936a` -- "WIP: convEnvCPLQ 2CE split -- exact tangency cevian, recursive 3CE
-  generalization (test-breaking, undecided)".
-- Pushed: no (not asked this session; see Next steps).
-- Full MATLAB suite: **73/79 passing** (6 failures, all attributable to the `nCE==3`
-  generalization described above -- `conjCPLQTest.indefiniteTriangleThreeConvexEdgesUsesStep3` and
-  5 `maxQuaParTest` cases: `splitCellAcceptsGenuineNonDegenerateParabola`,
-  `dedupHitsMergesCrossingsAtACellCorner`, `assemblePiecesResolvesNearDuplicateApexCluster`,
-  `checkOrphanHalfEdgesDropsProvablyDegenerateOrphanEdges`,
-  `insertPassthroughVerticesDropsNearDuplicateCrossingPoint`).
-- Untracked, not part of this repo: `cPLQ/`; not touched.
+- Branch: `main` @ `083de95` — "Keep Part 2c nCE==3 fix (decision resolved), fix all 8 broken
+  tests, fix RatPol.eval NaN bug".
+- Pushed: pending (asking user this session).
 
 ## Next steps
 
-- **Decide, deliberately, before doing anything else**: keep the `nCE==3` generalization (and
-  follow through on fixing the 6 broken tests -- likely by freezing each test's current `g1,g2` as
-  hardcoded `QuaPar` fixtures computed from the PRE-session code, decoupling them from the live
-  Step1+Step2 pipeline, since they test `maxQuaPar`'s assembly logic, not Step 1's tightness), OR
-  scope it back out (keep only `tangentCevian` replacing `edgeClipCevian` for the standalone
-  `nCE==2` path; revert `nCE==2`'s own sub-triangle loop and the `nCE==3` loop to calling
-  `envelopeFromClassified` directly as before; remove `solveTriangleBF`/`assemblePiecesBF`). Neither
-  path has been done. See DESIGN.md's `convEnvCPLQ.m` entry, "Part 2c", for the full derivation,
-  what's confirmed vs. hedged, and more detail on both options.
-- Whichever way that goes, the full MATLAB suite must be back to a passing count before
-  considering this session's work "done" -- do not push with 6 known failures.
-- Fill in the exact `[LOCATELLI]` citation in `DESIGN.md`'s reference list -- still not done.
-- Still open, unchanged from before: the 2/741 (0.3%) residual `maxQuaPar:internal` crashes (see
-  DESIGN.md history for repro triangles) -- not investigated this session.
-- Lower priority / untouched: `QuaPar.orderEdges`/`createP`'s "Face k has ... expected 2 but got
-  N" error on near-degenerate/thin triangles; `partialConj` for `'cplq'`/`'pqp'`; `add` for
-  `RatPol`/`RatPar`; conjugate engines `'pqp'`/`'graph'`; the standalone `RatPol.conj` gap.
+- **Highest value**: derive `conjPieceCPLQ`'s closed-form rational-piece conjugate formula from
+  the `cPLQ/plq_1piece.m` recipe (polynomial-divide num/den, parametrize a dual point by scalar
+  `t`, eliminate `t` to get the parabola equation, build vertex/edge subdifferential regions —
+  see `conjPieceCPLQ.m`'s own TODO comment for the full recipe). This is the single remaining gap
+  confining `infConv`/`moreau`/`lasryLions`/`proxAverage` to full-domain-quadratic inputs.
+- Lower priority, unchanged from before: exact `[LOCATELLI]` citation in DESIGN.md; 2/741 (0.3%)
+  residual `maxQuaPar:internal` crashes; `QuaPar.orderEdges`/`createP`'s near-degenerate-triangle
+  error; `partialConj` for `'cplq'`/`'pqp'`; `add` for `RatPol`/`RatPar`; conjugate engines
+  `'pqp'`/`'graph'`; standalone `RatPol.conj` gap; a proper random-sample stress test of how often
+  a 3-convex-edge triangle actually needs the further split (currently a 9/9 non-random sample —
+  a frequency question, separate from whether the fix is correct, which is settled).
 
 ## Relevant files
 
-- `convEnvCPLQ.m` -- `tangentCevian` (new, replaces `edgeClipCevian`, itself replaced
-  `seamPoint`/`buildEdgeAffinePiece` earlier this session) is the verified-correct Part 2c fix, no
-  known issues. `solveTriangleBF`/`assemblePiecesBF` (new) are the `nCE==3` generalization whose
-  scope is the open decision above -- reverting them is a self-contained, mechanical undo (see
-  DESIGN.md for exactly what to revert to).
-- `DESIGN.md` -- full derivation trail; search "Part 2c" under `convEnvCPLQ.m`'s entry for
-  everything from this session, including the hedged 9/9-sample finding and both paths forward.
-- `conjCPLQTest.m`, `maxQuaParTest.m` -- contain the 6 currently-failing tests; NOT yet touched
-  this session (the fix decision above determines what changes, if any, they need).
-- `cPLQ/` -- untracked clone of the original reference implementation; not touched this session.
+- `convEnvCPLQ.m` — `tangentCevian`/`solveTriangleBF`/`assemblePiecesBF` KEPT, decision resolved,
+  unchanged this session (already committed in `e6e936a`).
+- `RatPol.m` — `eval`'s main polytope-membership loop fixed: a later face's NaN (removable
+  singularity) no longer overwrites an already-found finite value; genuine disagreement still
+  correctly produces NaN.
+- `conjPieceCPLQ.m` — TODO comment rewritten (no functional change) to correctly point at the
+  `cPLQ/plq_1piece.m` recipe instead of describing an open derivation.
+- `DESIGN.md` — Part 2c entry rewritten; `maxQuaPar.m`/`conjCPLQ`/"Next planned" bullets updated.
+- `conjCPLQTest.m`, `maxQuaParTest.m`, `conjPieceCPLQTest.m`, `convEnvCPLQTest.m` — the 8 fixed
+  tests.
+- `cPLQ/` — untracked reference clone; opened and read this session, not modified.
