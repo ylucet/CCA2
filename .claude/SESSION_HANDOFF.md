@@ -1,6 +1,62 @@
 # Session Handoff
 
-_Last updated: 2026-07-18T13:00:00Z_
+_Last updated: 2026-07-18T15:20:00Z_
+
+## Update (new session): committed, then fixed the poly2orderUnbounded bug, found a second one
+
+Per user instruction ("commit then fix then consider which bug to fix"): committed the whole
+Phase 1 integration (commit `dc42bd3`, `cPLQ/` itself left untracked as instructed). Then chose
+to fix `region.poly2orderUnbounded` (not the `mergeL` tie-point gap) first, reasoning: it blocks
+biconjugate 100% of the time (every call), vs. the tie-point gap only affecting an exact
+symmetric-tie corner case — higher-leverage fix, and I already had a precise, principled root
+cause (not a guess).
+
+**Root cause (confirmed, not just a guess)**: `functionNDomain.conjugateOfPiecePoly` dispatches to
+`region.poly2orderUnbounded` whenever a region's `nv ~= size(ineqs,2)` (vertex count vs.
+inequality count mismatch) — but this mismatch signal is **not exclusive to genuinely unbounded
+regions**: it can ALSO happen on an ordinary BOUNDED region carrying redundant/non-essential
+inequality rows (tangent at an existing vertex, not cutting a new one) — exactly the same
+mismatch this session already found causing `testRegion/testCreation`'s flaky vertex-order issue.
+`poly2orderUnbounded`'s own search loop (`for i = 1:size(obj.ineqs,2), ... if <vertex i touches a
+ray edge>, break; end`) assumed a ray-adjacent vertex would always be found; when the region
+turns out not to actually be unbounded, the loop runs to completion without breaking, and the
+very next line (`obj.vx(i+1)`) reads past the end of the vertex array.
+
+**Fix** (`region.m`, `poly2orderUnbounded`): (1) search only up to `obj.nv` (not
+`size(obj.ineqs,2)`, which can exceed it) and track whether a ray-adjacent vertex was actually
+found; if not, return early (no seam to rotate the vertex cycle around, angle-sorted order is
+fine as-is) instead of reading out of bounds; (2) if the found vertex is the LAST one in angular
+order, wrap `i+1` via `mod(i,obj.nv)+1` instead of reading past the end there too — same
+wraparound-fix pattern already applied once before in this codebase's own `maxQuaPar.m` history.
+
+**Verified**: rerunning `testMaxMultiRegion/testMax` (the exact test that crashed here, ~372s
+before) no longer hits this error — it proceeds further into `biconjugateF` and, after ~438s, now
+fails on a DIFFERENT, later error (see below) — confirming the fix is real, not a coincidence.
+**No regressions**: `testMaxMultiRegion`'s `testPCE0`/`testPCE3`/`testPCE1` (3/3), `testcPLQ`'s 6
+non-biconjugate tests (6/6), and `cplqAdapterTest` (2/2) all still pass after this change.
+
+**Second bug found (NOT fixed, not yet diagnosed as deeply)**: `region.getNormalConeVertexQ`
+(line ~3166) throws `MATLAB:catenate:dimensionMismatch` ("Error using horzcat: Dimensions of
+arrays being concatenated are not consistent") at
+`obj.ptFeasible(obj.vars,[double(px),double(py)])` — called from
+`functionNDomain.conjugateOfPiecePoly` (line 987, `NCV = d0.getNormalConeVertexQ(x, y)`), from
+`plq.biconjugateF`. Likely `px`/`py` (probably from solving a QUADRATIC system, since "Q" suggests
+this is the vertex-normal-cone computation for a quadratic-edge case, i.e. a merged region with a
+curved boundary) come back with a different number of solutions each, so concatenating them
+element-wise fails. Not investigated further this session — same "each iteration costs 5+ minutes,
+don't guess without reading the actual algorithm first" discipline as the first bug, just not yet
+applied here.
+
+**Decision point for whoever continues**: biconjugate now has at least 2 confirmed distinct bugs found
+just by getting one test to run further each time a bug is fixed — there may be more beyond
+`getNormalConeVertexQ` too. Options going forward: (a) keep fixing biconjugate bugs one at a time
+(open-ended — each fix costs a 5-8 minute test cycle and may reveal another downstream bug), (b)
+pivot to the OTHER known bug (`mergeL`/`removeTangent` dropping the exact-tie point during Step 3
+`.maximum`, see the adapter section above) since Step 3 (not biconjugate) is what `conjCPLQ.m`
+actually needs for its own gap, or (c) stop chasing individual cPLQ bugs for now and wire the
+already-working Step 1-3 path into `conjCPLQ.m` itself (task not yet done — see adapter section
+above), treating both known bugs as tracked-but-deferred. Not decided this session pending user
+input.
 
 ## Update (same session, final): the adapter is built and validated
 
