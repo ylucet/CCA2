@@ -94,26 +94,22 @@ function r = convEnvCPLQ(obj)
         % [COAP] Appendix A.4 fix (see splitTwoConvexEdges): the single-quadratic formula is not
         % always the tightest envelope over the WHOLE triangle -- split into 2 sub-triangles,
         % UNLESS the special (measure-zero, e.g. mirror-symmetric) case where it already is one.
-        [needsSplit, numPlain, den3, triU, faces, edgeList] = splitTwoConvexEdges(Vbf, beta, lin, ce);
+        [needsSplit, numPlain, den3, triU, faces, ~] = splitTwoConvexEdges(Vbf, beta, lin, ce);
         if ~needsSplit
             numX = substituteQuadPlain(numPlain, M);
             denX = substituteLin(den3, M);
             r = RatPol(obj.V, obj.E, plainToStored(numX), obj.F, denX);
             return
         end
-        % Each sub-triangle is re-classified and solved via envelopeFromClassified (same pattern
-        % as the nCE==3 case below): the sub-triangle keeping P is still exactly 2-convex-edge
-        % (reproducing q1 unchanged), and the other sub-triangle is exactly 1-convex-edge (a
-        % genuine Appendix A.3 rational piece) -- see splitTwoConvexEdges's header for why.
-        numX = zeros(2,6); denX = zeros(2,3);
-        for k = 1:2
-            sub = triU(faces{k}, :);
-            [npk, dk] = envelopeFromClassified(sub, beta, lin, classifyConvexEdges(sub));
-            numX(k,:) = plainToStored(substituteQuadPlain(npk, M));
-            denX(k,:) = substituteLin(dk, M);
-        end
-        Vx = (Minv * triU')';
-        r  = assembleTwoTriangles(Vx, faces, edgeList, numX, denX);
+        % Each sub-triangle is itself solved via solveTriangleBF, NOT envelopeFromClassified
+        % directly: the sub-triangle keeping P is again exactly 2-convex-edge (same mh,mw), and
+        % REMAINS subject to the exact same tightness issue splitTwoConvexEdges itself fixes --
+        % solveTriangleBF recurses into it (and the other sub-triangle) exactly as needed. See
+        % solveTriangleBF's header and DESIGN.md's Part 2c for why a single further split of the
+        % ORIGINAL triangle is not always sufficient in general.
+        piecesBF = [solveTriangleBF(triU(faces{1},:), beta, lin), ...
+                    solveTriangleBF(triU(faces{2},:), beta, lin)];
+        r = assemblePiecesBF(piecesBF, M, Minv);
         return
     end
     if nCE <= 1
@@ -124,17 +120,54 @@ function r = convEnvCPLQ(obj)
         return
     end
 
-    % nCE == 3: split the triangle (in the bilinear frame) into two 2-convex-edge sub-triangles
-    [triU, faces, edgeList] = splitThreeConvex(Vbf);
-    num6 = zeros(2,6); den3 = zeros(2,3);
-    for k = 1:2
-        sub = triU(faces{k}, :);
-        [npk, dk] = envelopeFromClassified(sub, beta, lin, classifyConvexEdges(sub));
-        num6(k,:) = plainToStored(substituteQuadPlain(npk, M));
-        den3(k,:) = substituteLin(dk, M);
+    % nCE == 3: split the triangle (in the bilinear frame) into two 2-convex-edge sub-triangles,
+    % each solved via solveTriangleBF (see above -- either sub-triangle can itself need further
+    % splitting, exactly like the nCE==2 case, so this must NOT call envelopeFromClassified
+    % directly on them; see DESIGN.md's Part 2c for a repro where skipping this recursion silently
+    % gave a wrong answer).
+    [triU, faces, ~] = splitThreeConvex(Vbf);
+    piecesBF = [solveTriangleBF(triU(faces{1},:), beta, lin), ...
+                solveTriangleBF(triU(faces{2},:), beta, lin)];
+    r = assemblePiecesBF(piecesBF, M, Minv);
+end
+
+function pieces = solveTriangleBF(V, beta, lin)
+% Solve conv(beta*u1*u2+lin) over a triangle V (bilinear frame), returning a cell array of pieces
+% {V, num (plain), den (plain)} in the SAME bilinear frame -- a single piece if V has 0 or 1
+% convex edges, or 2 convex edges but no further split is needed; RECURSIVELY more pieces if a
+% 2-convex-edge triangle's own single-quadratic formula (q1) is not tight throughout it (see
+% splitTwoConvexEdges). This is what lets EITHER of splitTwoConvexEdges' own two sub-triangles, or
+% either of splitThreeConvex's two sub-triangles, need a further split themselves -- both produce
+% exactly-2-convex-edge sub-triangles, subject to the identical tightness issue as the original
+% triangle, so both must go through this same check rather than assuming a single split suffices.
+    ce = classifyConvexEdges(V);
+    if size(ce,1) == 2
+        [needsSplit, numPlain, den3, triU, faces, ~] = splitTwoConvexEdges(V, beta, lin, ce);
+        if needsSplit
+            pieces = [solveTriangleBF(triU(faces{1},:), beta, lin), ...
+                      solveTriangleBF(triU(faces{2},:), beta, lin)];
+            return
+        end
+    else
+        [numPlain, den3] = envelopeFromClassified(V, beta, lin, ce);
     end
-    Vx = (Minv * triU')';                  % sub-triangle vertices back in x-coords
-    r  = assembleTwoTriangles(Vx, faces, edgeList, num6, den3);
+    pieces = {struct('V', V, 'num', numPlain, 'den', den3)};
+end
+
+function r = assemblePiecesBF(piecesBF, M, Minv)
+% Transform a cell array of bilinear-frame {V,num,den} pieces (from solveTriangleBF) back to x,y
+% coordinates and assemble them into one connected RatPol via assembleTriangles (which derives
+% face adjacency from shared vertices/edges, so it handles any number of pieces, not just 2).
+    n = numel(piecesBF);
+    pieces = struct('V', {}, 'num6', {}, 'den3', {});
+    for i = 1:n
+        p = piecesBF{i};
+        Vx = ensureCCW((Minv * p.V')');
+        numX = plainToStored(substituteQuadPlain(p.num, M));
+        denX = substituteLin(p.den, M);
+        pieces(end+1) = struct('V', Vx, 'num6', numX, 'den3', denX); %#ok<AGROW>
+    end
+    r = assembleTriangles(pieces);
 end
 
 % ===================== local functions ======================================================
@@ -193,59 +226,55 @@ function [numPlain, den3] = envelopeFromClassified(V, beta, lin, ce)
 end
 
 function [needsSplit, num6, den3, tri, faces, edgeList] = splitTwoConvexEdges(V, beta, lin, ce)
-% [COAP] Appendix A.4 FIX, Part 1+2 (2026 sessions -- see DESIGN.md for the full derivation trail):
-% the single quadratic q1 = twoEdgeQuadPlain(...), which touches u1*u2 along BOTH classified convex
-% edges, is a valid convex minorant but NOT always the tightest one over the WHOLE triangle -- it
-% is only tight over a genuine SUB-region containing P, not the whole triangle. Reproduced and
-% confirmed on the paper's own Appendix A.4.3 example.
+% [COAP] Appendix A.4 FIX, Parts 1-2c (2026 sessions -- see DESIGN.md for the full derivation
+% trail): the single quadratic q1 = twoEdgeQuadPlain(...), which touches u1*u2 along BOTH
+% classified convex edges, is a valid convex minorant but NOT always the tightest one over the
+% WHOLE triangle -- it is only tight over a genuine SUB-region containing P, not the whole
+% triangle. Reproduced and confirmed on the paper's own Appendix A.4.3 example, whose own claim
+% ("the domain is the entire triangle") is false there too: q1(0.474343,0) = -0.042780 instead of
+% the true value 0 (f=xy is identically 0, hence >=0 is a valid global minorant, along that whole
+% weak edge).
 %
-% Fix: split the triangle by a cevian from ONE weak-edge endpoint into the OPPOSITE convex edge.
-% The sub-triangle containing the two convex edges' common vertex P keeps q1 UNCHANGED. The OTHER
-% sub-triangle's own remaining edges are: one sub-segment of the OTHER original convex edge (still
-% convex, same line), the fully-contained original weak edge, and the new internal seam -- exactly
-% the Appendix A.3 one-convex-edge case (Part 1, kept unchanged from the prior session).
+% Fix: split the triangle by a cevian from ONE convex edge's far vertex into the OPPOSITE convex
+% edge. The sub-triangle containing the two convex edges' common vertex P keeps q1 UNCHANGED. The
+% OTHER sub-triangle's own remaining edges are: one sub-segment of the OTHER original convex edge
+% (still convex, same line), the ORIGINAL weak edge's anchor vertex reclassified as the new
+% triangle's far vertex, and the new internal seam (itself always non-convex, checked on many
+% random triangles) -- exactly the Appendix A.3 one-convex-edge case, not a bespoke construction.
 %
-% Part 2 fix (this is the seam LOCATION itself, previously wrong): the cevian is NOT found by
-% factoring q1 against a placeholder quadratic that merely matches the AFFINE CHORD along the weak
-% edge (the old `buildEdgeAffinePiece`/`seamPoint` pair) -- that placeholder's touching condition on
-% the weak edge is not the actual condition that bounds q1's own region of tightness, and the old
-% seam was confirmed (via ground truth, ~session diagnosis) to sit at roughly HALF the correct
-% distance from P along the target edge, silently misclassifying a real wedge of the triangle
-% (between the old, too-close seam and the correct one) into q1's region where q1 in fact
-% undershoots truth by as much as ~2.5.
+% The cevian's direction is FORCED (not free), and is exactly the unique direction making q1 and
+% the OTHER sub-triangle's Appendix A.3 formula agree not just in VALUE but in GRADIENT along their
+% shared seam (a genuine C1, tangent contact, matching the smooth-fit pattern splitThreeConvex
+% already uses for the 3-convex-edge case). Derived by writing q1 - R_anchor (R_anchor = the
+% Appendix A.3 formula anchored at the far vertex of ONE convex edge, using the OTHER edge) as a
+% single rational expression and clearing denominators: using the fact that the anchor vertex lies
+% on its OWN edge's line, the resulting polynomial factors as (the used edge's line) times a PERFECT
+% SQUARE, (sqrt(mh*mw)*(x-x0) + (y-y0))^2, where (x0,y0) is the anchor vertex -- a double root, i.e.
+% tangency, not a transversal crossing. This means the correct cevian is simply the LINE THROUGH THE
+% FAR VERTEX WITH SLOPE -sqrt(mh*mw), intersected with the other convex edge -- remarkably, this
+% slope depends ONLY on mh and mw (beta and the affine shift `lin` cancel out of the derivation
+% completely, an exact algebraic fact, not an approximation). Verified against ground truth
+% (numerically maximized biconjugate) to solver precision, replacing an EARLIER, closely related but
+% still not fully correct criterion from this same session (matching only ONE classified edge's own
+% dual-tangency condition, `s_j(x,y) = far-endpoint x-coordinate`): that criterion is a valid
+% necessary condition (confirmed: q1 and the Appendix A.3 formula DO agree in value, though not
+% gradient, along its line) but not sufficient -- it under-corrects, still leaving a thin residual
+% region (found via a full barycentric grid scan) where q1 undershoots truth by as much as ~0.11 in
+% one repro triangle, immediately adjacent to that first-pass cevian. The gradient-tangency
+% criterion here supersedes it entirely and closes that residual gap (verified exactly, both
+% sub-regions matching ground truth on multiple repro triangles).
 %
-% Correct criterion, derived directly from [COAP]'s own Section A.1 dual formalism (eq. 11-14),
-% applied to q1 itself rather than assumed away: q1(x,y) = max_b of a concave quadratic in the dual
-% variable b (Section A.1's s_j(a,b), specialized here), valid exactly while the IMPLIED dual point
-% (a,b) = grad q1(x,y) keeps the classified edge's own tangency point s_j(a,b) = (a+b*m_j-q_j)/(2 m_j)
-% inside that edge's segment. Since q1 is quadratic, its gradient is affine in (x,y), so s_j(x,y) is
-% itself affine in (x,y) -- hence "s_j(x,y) = (far endpoint's x-coordinate)" is a genuine STRAIGHT
-% LINE in the primal plane (consistent with Locatelli's polyhedral-subdivision guarantee), not the
-% conic one gets by naively equating q1 to the OTHER sub-triangle's own rational formula (that
-% equality curve is a red herring: it is the locus where the two formulas happen to agree
-% numerically, not the true boundary of either one's own validity, and is a genuine conic, not a
-% line -- the false step an earlier session's numerical exploration got stuck on).
-% Given the classified edge (m_j,q_j) with far endpoint x-coordinate xFar (i.e. the far endpoint of
-% THIS SAME edge, not the other one), `edgeClipCevian` builds that line directly from q1's own plain
-% coefficients (no factoring, no placeholder) and intersects it with the OTHER convex edge to locate
-% the cevian -- exactly the same final "intersect a line with y=m*x+q" step the old `seamPoint` used,
-% just fed the correct line. Verified this now reproduces ground truth (numerically maximized
-% biconjugate) to solver precision on the paper's own Appendix A.4.3 example, including at the exact
-% wedge point the old seam misclassified, and the closed form for beta=1,lin=0 simplifies to the
-% clean xR = xP + sqrt(mh/mw)*(xA-xP) (verified symbolically) -- see DESIGN.md for the full
-% re-derivation and the general (beta,lin-dependent) form actually implemented below.
-%
-% Of the two candidate cevians (from the weak edge's first endpoint into the second convex edge, or
-% from its second endpoint into the first), exactly one lands strictly inside its target edge and
-% the other's intersection falls outside it -- same selection rule as before, mirroring how
-% twoEdgeQuadPlain already picks its own +/- branch by validity.
+% Of the two candidate cevians (from one convex edge's far vertex into the other edge, or vice
+% versa), exactly one lands strictly inside its target edge and the other's intersection falls
+% outside it -- same selection rule as before, mirroring how twoEdgeQuadPlain already picks its own
+% +/- branch by validity.
 %
 % Special (measure-zero) case: if q1 itself is already exactly affine (in the edge's own
 % parameter) along the weak edge, it already touches the chord everywhere -- e.g. the mirror-
 % symmetric triangle (0,0),(2,1),(1,2), where mh*mw=1 makes q1 constant along the weak edge -- no
-% split is needed (needsSplit=false); both candidate cevians degenerate (their seam runs parallel
-% to the target edge, so the intersection is at infinity) in exactly this case, but the weak-edge
-% curvature check below is the direct, cheap way to detect it up front.
+% split is needed (needsSplit=false); both candidate cevians degenerate (their direction runs
+% parallel to the target edge, so the intersection is at infinity) in exactly this case, but the
+% weak-edge curvature check below is the direct, cheap way to detect it up front.
     Bidx = ce(1,3); Aidx = ce(2,3); Pidx = setdiff(1:3, [Bidx Aidx]);
     P = V(Pidx,:); A = V(Aidx,:); B = V(Bidx,:);
     mh = ce(1,1); qh = ce(1,2);      % edge P-A
@@ -265,17 +294,17 @@ function [needsSplit, num6, den3, tri, faces, edgeList] = splitTwoConvexEdges(V,
     needsSplit = true;
     num6 = []; den3 = [];   % recomputed by the caller, one envelopeFromClassified call per face
 
-    qfull = beta*q1 + [0 0 0 lin(1) lin(2) lin(3)]; % plain [A B C D E F]: the ACTUAL piece near P
+    slope = -sqrt(mh*mw);   % forced tangency direction; independent of beta, lin (see header)
 
-    % candidate: cevian from A into edge P-B, via edge P-A's own clip condition (s_h(x,y) = xA)
-    [Ra, ta] = edgeClipCevian(qfull, mh, qh, A(1), mw, qw, P, B);
+    % candidate: cevian from A (edge h's far vertex), slope -sqrt(mh*mw), into edge P-B
+    [Ra, ta] = tangentCevian(A, slope, mw, qw, P, B);
     if ta > 1e-9 && ta < 1 - 1e-9
         tri = [P; A; B; Ra];
         faces = {[1 2 4], [2 4 3]};                  % T1={P,A,R} (2CE); T2={A,R,B} (1CE)
         edgeList = [1 2; 1 4; 4 3; 2 3; 2 4];         % P-A, P-R, R-B, A-B, A-R(internal seam)
     else
-        % candidate: cevian from B into edge P-A, via edge P-B's own clip condition (s_w(x,y) = xB)
-        [Rb, tb] = edgeClipCevian(qfull, mw, qw, B(1), mh, qh, P, A);
+        % candidate: cevian from B (edge w's far vertex), slope -sqrt(mh*mw), into edge P-A
+        [Rb, tb] = tangentCevian(B, slope, mh, qh, P, A);
         if ~(tb > 1e-9 && tb < 1 - 1e-9)
             error('convEnvCPLQ:internal', ...
                 'splitTwoConvexEdges: neither candidate cevian lands inside its target edge.');
@@ -286,25 +315,14 @@ function [needsSplit, num6, den3, tri, faces, edgeList] = splitTwoConvexEdges(V,
     end
 end
 
-function [R, t] = edgeClipCevian(qfull, mEdge, qEdge, xFar, mTarget, qTarget, Pp, otherEnd)
-% Locate where q1's own (dual) tangency point along the classified edge (mEdge,qEdge) reaches that
-% edge's FAR endpoint (x-coordinate xFar) -- the true boundary of q1's region of tightness -- and
-% intersect that line with the OTHER convex edge (mTarget,qTarget) to get the cevian's far end R.
-%
-% Derivation: for q(x,y) = A x^2+B xy+C y^2+D x+E y+F (qfull's plain coeffs), the implied dual point
-% is (a,b) = grad q = (2A x+B y+D, B x+2C y+E) ([COAP] Section A.1's constructive envelope theorem:
-% the optimal dual variable at (x,y) is exactly the gradient there). The edge's own unconstrained
-% tangency point is s(a,b) = (a+b*mEdge-qEdge)/(2*mEdge); setting s(x,y) = xFar and clearing the
-% factor of 2*mEdge gives the line p*x + q*y + r = 0 below. t is R's fractional position from Pp to
-% otherEnd along the target edge (0<t<1 required for R to lie strictly inside it) -- same convention
-% as the split's old seam-finding step.
-    Aq=qfull(1); Bq=qfull(2); Cq=qfull(3); Dq=qfull(4); Eq=qfull(5);
-    p = 2*Aq + mEdge*Bq;
-    q = Bq + 2*mEdge*Cq;
-    r = Dq + mEdge*Eq - qEdge - 2*mEdge*xFar;
-
-    denom = p + q*mTarget;
-    xR = -(q*qTarget + r)/denom;
+function [R, t] = tangentCevian(anchor, slope, mTarget, qTarget, Pp, otherEnd)
+% Line through `anchor` (a triangle vertex) with the given `slope`, intersected with the OTHER
+% convex edge y = mTarget*x + qTarget -- see splitTwoConvexEdges' header for the derivation of why
+% this direction (not `anchor`'s own position alone) locates the correct cevian. t is R's
+% fractional position from Pp to otherEnd along the target edge (0<t<1 required for R to lie
+% strictly inside it).
+    xA = anchor(1); yA = anchor(2);
+    xR = (yA - slope*xA - qTarget) / (mTarget - slope);
     yR = mTarget*xR + qTarget;
     R = [xR, yR];
     if abs(otherEnd(1)-Pp(1)) > abs(otherEnd(2)-Pp(2))
@@ -410,26 +428,6 @@ function [tri, faces, edgeList] = splitThreeConvex(V)
     tri = [vlow; vmid; vhigh; Pnew];          % indices 1=low, 2=mid, 3=high, 4=Pnew
     faces = {[1 2 4], [2 3 4]};               % T1={low,mid,Pnew}, T2={mid,high,Pnew}
     edgeList = [1 2; 2 3; 1 4; 4 3; 2 4];     % low-mid, mid-high, low-Pnew, Pnew-high, mid-Pnew(internal)
-end
-
-function r = assembleTwoTriangles(V, faces, edgeList, num6, den3)
-% Build a 2-face RatPol from two triangles sharing an edge. Edge orientation (which face is on
-% the left/right) is determined by a centroid side test, so F is consistent for the constructor.
-    ne = size(edgeList,1); nf = numel(faces);
-    E = [edgeList, ones(ne,1)];
-    cent = zeros(nf,2);
-    for k = 1:nf, cent(k,:) = mean(V(faces{k},:),1); end
-    F = zeros(ne,2);
-    for j = 1:ne
-        a = edgeList(j,1); b = edgeList(j,2); va = V(a,:); dir = V(b,:) - va;
-        for k = 1:nf
-            if all(ismember([a b], faces{k}))
-                cr = dir(1)*(cent(k,2)-va(2)) - dir(2)*(cent(k,1)-va(1)); % (b-a) x (cent-a)
-                if cr > 0, F(j,1) = k; else, F(j,2) = k; end
-            end
-        end
-    end
-    r = RatPol(V, E, num6, F, den3);
 end
 
 % ----- multi-face (Step 1 over a triangulated domain) ---------------------------------------
