@@ -11,9 +11,13 @@ function g = conjCPLQ(obj, idx)
 %
 % [input]  obj : QuaPoly, operable (degree<=2)
 %          idx : (optional) variable index 1 or 2 for the PARTIAL conjugate (not yet implemented)
-% [output] g   : the conjugate. Returned as a QuaPoly when it is itself quadratic-on-polyhedral
-%                (e.g. a full-domain strictly convex quadratic); otherwise it is a QuaPar
-%                (quadratic on a parabolic subdivision) -- see "not implemented" notes below.
+% [output] g   : the conjugate. QuaPoly when it is itself quadratic-on-polyhedral (e.g. a
+%                full-domain strictly convex quadratic); QuaPar for a single bounded-triangle
+%                piece (Case B); for a genuinely multi-face or non-triangular bounded domain
+%                (Case C, below), g is instead a cPLQ `functionNDomain` array (NOT a QuaPoly/
+%                QuaPar) -- evaluate it with `evalFunctionNDomain(g, s)`, not `g.eval(s)`. Case C
+%                does not (yet) support further composition (biconj/infConv/moreau/...): those
+%                call `.conj()` again on `g`, which only QuaPoly/QuaPar provide.
 %
 % STATUS (incremental implementation -- see DESIGN.md II.5.1):
 %   * IMPLEMENTED (exact): full-domain strictly convex quadratic -> full-domain quadratic.
@@ -26,16 +30,20 @@ function g = conjCPLQ(obj, idx)
 %     conjugated directly; a 3-convex-edge envelope splits into TWO 2-convex-edge sub-triangles
 %     (COAP Appendix A.5), each conjugated separately and combined via Step 3 (maxQuaPar,
 %     pointwise maximum) -- see conjSingleTriangle/conjMaxOfSubTriangles below.
-%   * TODO: Step 3 for a domain genuinely covered by more than one ORIGINAL piece (a multi-face
-%     input, nf>1) or a single non-triangular face -- convEnvCPLQ's own multi-face triangulation
-%     can produce a triangle piece with exactly ONE convex edge (a genuinely rational envelope),
-%     which conjPieceCPLQ cannot conjugate yet (see its own header TODO); the 3-convex-edge
-%     single-triangle case above never hits that gap, since both of its sub-triangles are
-%     provably 2-convex-edge (COAP Appendix A.5), so it is handled separately and exactly.
+%   * IMPLEMENTED (Phase 1, this session -- see DESIGN.md II.5.1 / .claude/SESSION_HANDOFF.md):
+%     Step 3 for a bounded domain genuinely covered by more than one ORIGINAL piece (nf>1) or a
+%     single non-triangular face, via the integrated cPLQ symbolic pipeline (quaPolyToPlq.m ->
+%     plq.triangulate -> plq.maximum), NOT the numeric conjPieceCPLQ/maxQuaPar path (which still
+%     cannot combine curved-edge QuaPars from independent triangles -- see maxQuaPar.m's own TODO).
+%     This is Case C below. NOTE the return-type caveat above: g is a functionNDomain array here,
+%     not a QuaPoly/QuaPar, so composition (biconj/infConv/moreau/...) is not supported for this
+%     case yet -- only direct conjugate + evalFunctionNDomain. `cPLQ`'s own biconjugateF has known
+%     open bugs (region.getNormalConeVertexQ) not needed for Case C itself.
 %
 % NOTE on arithmetic: the design target is exact symbolic + rational arithmetic
-%   ([COAP]/[JOGO]); this first version uses double precision for the closed-form quadratic
-%   case. Upgrading conjCPLQ to symbolic/rational coefficients is a follow-up.
+%   ([COAP]/[JOGO]); Case A/B use double precision for the closed-form quadratic case, while
+%   Case C uses cPLQ's own exact symbolic + rational arithmetic directly. Upgrading Case A/B to
+%   symbolic/rational coefficients (or Case C to closed-form numerics, Phase 2) is a follow-up.
 
     if nargin >= 2 && ~isempty(idx)
         error('PLQ:conjCPLQ:partialNotImplemented', ...
@@ -74,10 +82,22 @@ function g = conjCPLQ(obj, idx)
         return
     end
 
-    % ---- General case: [JOGO] Step 3 (max of conjugates) is still TODO ------------------
+    % ---- Case C: general bounded domain (nf>1 and/or a non-triangular face) -------------
+    % [JOGO] Step 3 (max of conjugates) via the integrated cPLQ symbolic pipeline (Phase 1;
+    % DESIGN.md II.5.1 / .claude/SESSION_HANDOFF.md) -- the case Case B's own numeric path
+    % (conjPieceCPLQ + maxQuaPar) cannot do, since maxQuaPar refuses curved-edge QuaPar inputs
+    % from independent triangles. g is a cPLQ functionNDomain array here, not a QuaPoly/QuaPar --
+    % see this function's own header for the return-type caveat.
+    if obj.isDomBounded
+        p = quaPolyToPlq(obj);
+        p = p.triangulate;
+        p = p.maximum;
+        g = p.maxConjugate;
+        return
+    end
+
     error('PLQ:conjCPLQ:notImplemented', ...
-        ['General ''cplq'' conjugate over more than one piece is not implemented yet: it needs ' ...
-         'Step 3 (pointwise maximum of the per-piece conjugates), which is not implemented. ' ...
+        ['General ''cplq'' conjugate over an unbounded multi-face domain is not implemented yet. ' ...
          'See DESIGN.md II.5.1.']);
 end
 
