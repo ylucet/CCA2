@@ -883,23 +883,28 @@ the plan:
    narrow `mergeL`/`removeTangent` limitation, not an adapter bug).
    **Confirmed timing/quality**: envelope+conjugate+max are correct and complete for every case
    tried; `cPLQ`'s own code needed no math fixes for these steps (only the 2 toolbox-compat bugs
-   above). **Biconjugate (`plq.biconjugateF`) is NOT yet reliable — 2 distinct bugs found so far**:
+   above). **Biconjugate (`plq.biconjugateF`) — 2 distinct bugs found, BOTH NOW FIXED (same
+   session, 2026-07-18)**:
    (1) `region.poly2orderUnbounded` had a reproducible unhandled-loop-fallthrough bug (index
-   overflow) — **FIXED** (new session, 2026-07-18): the caller's `nv~=size(ineqs,2)` dispatch
-   signal for "call `poly2orderUnbounded`" is not exclusive to genuinely unbounded regions (a
-   BOUNDED region with redundant/tangent inequality rows triggers the same mismatch, same root
-   cause as the `testRegion/testCreation` flakiness above); fixed by searching only up to `obj.nv`,
-   returning early when no ray-adjacent vertex is found, and wrapping the "found at the last
-   angular position" case via `mod` (same wraparound-fix pattern already used once in this
-   codebase's own `maxQuaPar.m`). Verified: no regressions (`testPCE0`/`testPCE3`/`testPCE1`,
-   `testcPLQ`'s 6 non-biconjugate tests, `cplqAdapterTest`'s 2 tests all still pass), and the fix
-   demonstrably lets `testMaxMultiRegion/testMax` proceed further than before (confirmed by hitting
-   a LATER, different error next). (2) `region.getNormalConeVertexQ` throws
-   `MATLAB:catenate:dimensionMismatch` (horzcat of inconsistently-sized candidate-point arrays) —
-   **NOT fixed yet**, found immediately after fixing (1), not deeply diagnosed. See
-   `.claude/SESSION_HANDOFF.md` for the full trace and the open prioritization decision (keep
-   fixing biconjugate bugs one at a time vs. pivot to the `mergeL` tie-point issue vs. wire
-   Steps 1-3 into `conjCPLQ.m` now and defer both).
+   overflow): the caller's `nv~=size(ineqs,2)` dispatch signal for "call `poly2orderUnbounded`" is
+   not exclusive to genuinely unbounded regions (a BOUNDED region with redundant/tangent
+   inequality rows triggers the same mismatch, same root cause as the `testRegion/testCreation`
+   flakiness above); fixed by searching only up to `obj.nv`, returning early when no ray-adjacent
+   vertex is found, and wrapping the "found at the last angular position" case via `mod` (same
+   wraparound-fix pattern already used once in this codebase's own `maxQuaPar.m`).
+   (2) `region.getNormalConeVertexQ` threw `MATLAB:catenate:dimensionMismatch`: it repeatedly does
+   `py = solve(ey, obj.vars(2))` on a possibly-quadratic-in-y constraint (hence the function's "Q"
+   suffix), which can return 2 roots, then immediately concatenates `[double(px), double(py)]` --
+   failing when `py` had 2 elements against a scalar `px`. Not a guess: 2 of the ~8 occurrences of
+   this exact pattern in the function ALREADY had an active `py = py(1);` selecting one root, while
+   6 others had it commented out or missing -- clear evidence of an incomplete prior edit. Fixed
+   all 6, using a slightly safer `isempty`-before-indexing order than the 2 pre-existing ones
+   (left untouched, not implicated in the crash).
+   **Verified**: `testMaxMultiRegion/testMax` (envelope->conjugate->max->`biconjugateF`, crashed
+   twice before) now passes (~535s); `testcPLQ`'s `testRectBiconj`/`testRect3Biconj` (previously
+   untested this session) now pass too (520s/76s). A 29-test regression sweep across
+   `testMaxMultiRegion`/`testcPLQ`/`cplqAdapterTest`/`conjCPLQTest` shows no regressions. See
+   `.claude/SESSION_HANDOFF.md` for full traces.
    **Wired into `conjCPLQ.m` itself (this session, user's choice of 3 options)**: `conjCPLQ.m` now
    has a Case C (general bounded domain, `nf>1` and/or non-triangular) that calls `quaPolyToPlq`
    -> `.triangulate` -> `.maximum` instead of erroring -- generalized `quaPolyToPlq.m` to accept
@@ -908,15 +913,14 @@ the plan:
    composition (`biconj`/`infConv`/`moreau`/...) is not supported for Case C yet for that reason.
    Verified via `conjCPLQTest.m`'s new `multiFaceBoundedDomainViaCPLQIntegration` (through the
    actual public `conj('cplq')` entry point) and a full-suite regression check (18/18 pass).
-   **Still open for Phase 1**: fix `getNormalConeVertexQ` (and whatever else surfaces after it) so
-   biconjugate is reliable, and the `mergeL`/`removeTangent` exact-tie-point gap -- both deferred
-   per the user's choice this session, unaffected by the Case C wiring (Case C never calls
-   biconjugate); convert `evalFunctionNDomain`'s output back into a `QuaPar` if/when a caller needs
-   the structured (not just numerically-evaluable) result, so Case C can support composition too;
-   run the remaining ~14 untested `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and
-   noisy (`maximumP`/`mergeL`/`removeTangent`'s repeated symbolic `isAlways` "truth unknown"
-   warnings/retries) remains
-   expected and fine for Phase 1 — it is exactly Phase 2's target, not a Phase 1 blocker.
+   **Still open for Phase 1**: `getNormalConeVertexQ` is now fixed (see biconjugate bullet above)
+   -- the remaining known bug is the `mergeL`/`removeTangent` exact-tie-point gap; convert
+   `evalFunctionNDomain`'s output back into a `QuaPar` if/when a caller needs the structured (not
+   just numerically-evaluable) result, so Case C can support composition (`biconj`/`infConv`/
+   `moreau`/...) too; run the remaining ~12 untested `testMaxMultiRegion` cases. `cPLQ`'s own code
+   being slow and noisy (`maximumP`/`mergeL`/`removeTangent`'s repeated symbolic `isAlways`
+   "truth unknown" warnings/retries) remains expected and fine for Phase 1 — it is exactly Phase
+   2's target, not a Phase 1 blocker.
 2. **Phase 2 (later) — improve performance**: once Phase 1 is integrated and fully tested, replace
    the symbolic computation with direct closed-form numeric formulas incrementally, one case/step
    at a time, validating each replacement against the Phase-1 symbolic result on the same inputs
