@@ -180,27 +180,47 @@ classdef region
            end
            %obj.vx(1:obj.nv)
            %obj.vy(1:obj.nv)
-           for i = 1:size(obj.ineqs,2)
-               
+           % Search only up to obj.nv (not size(obj.ineqs,2), which indexes obj.vx/vy here and can
+           % legitimately exceed obj.nv: obj.nv ~= size(obj.ineqs,2) -- the caller's own signal for
+           % "call poly2orderUnbounded, not poly2order" -- can ALSO happen on an ORDINARY BOUNDED
+           % region with redundant/non-essential inequality rows (tangent at an existing vertex,
+           % not cutting a new one), not only on a genuinely unbounded region with ray edges. See
+           % HISTORY below for the crash this produced and why "not found" is handled as a no-op
+           % rather than an error.
+           found = false;
+           for i = 1:obj.nv
              edges = obj.getEdges(obj.vx(i),obj.vy(i));
-             
+
              [nv1, vx, vy] = obj.vertexOfEdge(edges(1));
              [nv2, vx, vy] = obj.vertexOfEdge(edges(2));
 
              if nv1 == 1 | nv2 == 1
+                 found = true;
                  break
              end
-             
+
+           end
+           if ~found
+               % No vertex here is adjacent to a ray edge: this region is not actually unbounded
+               % (see comment above) -- there is no "seam" to rotate the vertex cycle around, so
+               % leave the angle-sorted order from above as-is instead of reading past the end of
+               % obj.vx/vy (obj.vx(i+1) below, with i==obj.nv, previously threw
+               % 'MATLAB:badsubscript' -- found via cplqAdapterTest/testMaxMultiRegion's
+               % testMax, a plq.biconjugateF call on a genuinely multi-triangle input).
+               return
            end
            %obj.print
            %i
            %obj.vx(i+1),obj.vy(i+1)
-           edges = obj.getEdges(obj.vx(i+1),obj.vy(i+1));
-             
+           iNext = mod(i, obj.nv) + 1;   % wrap: the found vertex can legitimately be the LAST one
+                                         % in angular order, same wraparound fix already applied
+                                         % elsewhere in this codebase (see maxQuaPar.m HISTORY).
+           edges = obj.getEdges(obj.vx(iNext),obj.vy(iNext));
+
            [nv1, vx, vy] = obj.vertexOfEdge(edges(1));
            [nv2, vx, vy] = obj.vertexOfEdge(edges(2));
            if nv1 == 1 | nv2 == 1
-             i = i + 1;
+             i = iNext;
            end
 
            vx = obj.vx;

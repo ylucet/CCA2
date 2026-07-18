@@ -883,18 +883,30 @@ the plan:
    narrow `mergeL`/`removeTangent` limitation, not an adapter bug).
    **Confirmed timing/quality**: envelope+conjugate+max are correct and complete for every case
    tried; `cPLQ`'s own code needed no math fixes for these steps (only the 2 toolbox-compat bugs
-   above). **Biconjugate (`plq.biconjugateF`) is NOT yet reliable**: `region.poly2orderUnbounded`
-   has a reproducible unhandled-loop-fallthrough bug (index overflow after ~372s) — same bug
-   *class* already fixed once in this codebase's own `maxQuaPar.m` history (a missing wraparound).
-   Not fixed yet (see `.claude/SESSION_HANDOFF.md` for why: a wrong wraparound guess risks a
-   silently-wrong result, and each biconjugate run costs 5-6+ minutes to verify).
+   above). **Biconjugate (`plq.biconjugateF`) is NOT yet reliable — 2 distinct bugs found so far**:
+   (1) `region.poly2orderUnbounded` had a reproducible unhandled-loop-fallthrough bug (index
+   overflow) — **FIXED** (new session, 2026-07-18): the caller's `nv~=size(ineqs,2)` dispatch
+   signal for "call `poly2orderUnbounded`" is not exclusive to genuinely unbounded regions (a
+   BOUNDED region with redundant/tangent inequality rows triggers the same mismatch, same root
+   cause as the `testRegion/testCreation` flakiness above); fixed by searching only up to `obj.nv`,
+   returning early when no ray-adjacent vertex is found, and wrapping the "found at the last
+   angular position" case via `mod` (same wraparound-fix pattern already used once in this
+   codebase's own `maxQuaPar.m`). Verified: no regressions (`testPCE0`/`testPCE3`/`testPCE1`,
+   `testcPLQ`'s 6 non-biconjugate tests, `cplqAdapterTest`'s 2 tests all still pass), and the fix
+   demonstrably lets `testMaxMultiRegion/testMax` proceed further than before (confirmed by hitting
+   a LATER, different error next). (2) `region.getNormalConeVertexQ` throws
+   `MATLAB:catenate:dimensionMismatch` (horzcat of inconsistently-sized candidate-point arrays) —
+   **NOT fixed yet**, found immediately after fixing (1), not deeply diagnosed. See
+   `.claude/SESSION_HANDOFF.md` for the full trace and the open prioritization decision (keep
+   fixing biconjugate bugs one at a time vs. pivot to the `mergeL` tie-point issue vs. wire
+   Steps 1-3 into `conjCPLQ.m` now and defer both).
    **Still open for Phase 1**: wire `quaPolyToPlq`/`evalFunctionNDomain` into `conjCPLQ.m`'s own
    `conj(f,'cplq')` call path for the general (`nf>1`) case (currently the adapter is invoked
-   directly, not from `conjCPLQ`); debug/fix `poly2orderUnbounded` so biconjugate is reliable;
-   convert `evalFunctionNDomain`'s output back into a `QuaPar` if/when a caller needs the
-   structured (not just numerically-evaluable) result; run the remaining ~14 untested
-   `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and noisy (`maximumP`/`mergeL`/
-   `removeTangent`'s repeated symbolic `isAlways` "truth unknown" warnings/retries) remains
+   directly, not from `conjCPLQ`); fix `getNormalConeVertexQ` (and whatever else surfaces after
+   it) so biconjugate is reliable; convert `evalFunctionNDomain`'s output back into a `QuaPar` if/
+   when a caller needs the structured (not just numerically-evaluable) result; run the remaining
+   ~14 untested `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and noisy (`maximumP`/
+   `mergeL`/`removeTangent`'s repeated symbolic `isAlways` "truth unknown" warnings/retries) remains
    expected and fine for Phase 1 — it is exactly Phase 2's target, not a Phase 1 blocker.
 2. **Phase 2 (later) — improve performance**: once Phase 1 is integrated and fully tested, replace
    the symbolic computation with direct closed-form numeric formulas incrementally, one case/step
