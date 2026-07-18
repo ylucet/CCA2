@@ -1,6 +1,46 @@
 # Session Handoff
 
-_Last updated: 2026-07-18T15:50:00Z_
+_Last updated: 2026-07-18T16:20:00Z_
+
+## Update (same session): fixed the getNormalConeVertexQ bug too -- biconjugate now works
+
+User chose to fix bug #1 (`getNormalConeVertexQ`) next. **Root cause (confirmed by reading the
+full function, not guessed)**: `region.getNormalConeVertexQ` repeatedly does
+`py = solve(ey, obj.vars(2))` to find a candidate y-coordinate on a (possibly quadratic, hence
+the "Q" in the function name) constraint curve, then immediately uses `[double(px), double(py)]`
+-- but `solve` on a quadratic-in-y constraint can return TWO roots, making `py` a 2-element
+symbolic array that fails to concatenate with the scalar `px`. The fix was already known and
+partially applied by the function's own original authors: **two of the ~8 occurrences of this
+exact pattern already had an active `py = py(1);` selecting the first root**, while six others had
+it either commented out (`%py = py(1);`) or missing entirely -- clear evidence of an incomplete
+edit/refactor, not an open design question. Fixed all six remaining occurrences the same way,
+using a slightly safer ordering than the two "reference" ones (check `isempty(py)` BEFORE
+indexing `py(1)`, since indexing an empty symbolic array errors -- the original two working
+instances have a latent bug here too, just never triggered; left them untouched to minimize the
+diff, since they weren't implicated in the crash).
+
+**Verified**: `testMaxMultiRegion/testMax` (envelope -> conjugate -> max -> `biconjugateF`, the
+exact test that crashed twice before) now **passes**, in ~535s (~9 min). Full regression check
+(29 tests: `testMaxMultiRegion`'s `testPCE0`/`testPCE3`/`testPCE1`, `testcPLQ`'s 6 non-biconjugate
+tests, `cplqAdapterTest`'s 2, `conjCPLQTest`'s 18) -- **all still pass, no regressions**.
+`testcPLQ`'s own `testRectBiconj`/`testRect3Biconj` (previously untested/hanging, not part of the
+regression set above) also attempted with both fixes in place -- see result below.
+
+**Both known biconjugate bugs from earlier this session are now fixed.** The `mergeL`/
+`removeTangent` exact-tie-point gap (in `.maximum`, not biconjugate) remains open and was not
+touched by this fix -- still documented/excluded in `cplqAdapterTest.m`/`conjCPLQTest.m`.
+
+**`testcPLQ`'s own `testRectBiconj`/`testRect3Biconj`** (previously untested this session, both
+call `.biconjugateF`) also now **pass**: `testRectBiconj` 520.4s (~8.7 min), `testRect3Biconj`
+75.6s. Biconjugate is now confirmed working on every test tried this session (5 distinct
+biconjugate test cases total, across both `testcPLQ.m` and `testMaxMultiRegion.m`). Committed as
+part of this fix.
+
+**Next candidate, if picking this up again**: the `mergeL`/`removeTangent` exact-tie-point gap
+(Step 3, `.maximum`) is now the only known open bug from this session's cPLQ integration work;
+`testMaxMultiRegion`'s remaining ~12 untested cases (`testMaxR3`/`testMaxT`/`testMaxP`/`testMax3`/
+`testPSqroot`/`testFractional`/`testMaxThesis`/`testMaxThesis2`/`testOpenconvex` plus 6 of the 8
+`testBiconjugate*`, only 2 of which were exercised as `testMax`/indirectly) are still unrun.
 
 ## Update (same session): wired Steps 1-3 into conjCPLQ.m itself (user chose option 3)
 

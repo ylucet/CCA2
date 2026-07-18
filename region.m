@@ -3158,18 +3158,27 @@ classdef region
                       px = obj.vx(j) - 0.1;
                       ey = subs(obj.ineqs(j).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
-                      %py = py(1);
+                      % py can have >1 root when obj.ineqs(j) is quadratic in y (this is
+                      % getNormalConeVertexQ, the curved/quadratic-edge case) -- reduce to a
+                      % single candidate BEFORE the isempty check (indexing an empty sym array
+                      % errors), matching the same fix already applied a few lines below in this
+                      % same function (see HISTORY: found via testMaxMultiRegion/testMax, a
+                      % plq.biconjugateF call, throwing horzcat:dimensionMismatch when py had 2
+                      % elements here but px stayed a scalar).
                       if isempty(py)
                           py = obj.vy(j);
+                      else
+                          py = py(1);
                       end
                       %obj.ptFeasible(obj.vars,[double(px),double(py)])
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(j) + 0.1;
                           ey = subs(obj.ineqs(j).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
-                          %py = py(1);
                           if isempty(py)
                             py = obj.vy(j);
+                          else
+                            py = py(1);
                           end
                       end
                       %obj.ptFeasible(obj.vars,[double(px),double(py)])
@@ -3185,16 +3194,21 @@ classdef region
                     px = obj.vx(k) - 0.1;
                       ey = subs(obj.ineqs(k).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
+                      % see the matching HISTORY comment above: reduce a possibly-multi-root py
+                      % (quadratic-in-y ineqs(k)) to a single candidate before use.
                       if isempty(py)
                           py = obj.vy(k);
+                      else
+                          py = py(1);
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(k) + 0.1;
                           ey = subs(obj.ineqs(k).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
-                          %py = py(1);
                           if isempty(py)
                             py = obj.vy(k);
+                          else
+                            py = py(1);
                           end
                       end
                 end
@@ -3267,9 +3281,12 @@ classdef region
                       px = obj.vx(j) - 0.1;
                       ey = subs(obj.ineqs(j+1).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
-                      %py = py(1);
+                      % see the matching HISTORY comment above: reduce a possibly-multi-root py
+                      % (quadratic-in-y ineqs(j+1)) to a single candidate before use.
                       if isempty(py)
                           py = obj.vy(j);
+                      else
+                          py = py(1);
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(j) + 0.1;
@@ -3292,9 +3309,12 @@ classdef region
                     px = obj.vx(k) - 0.1;
                       ey = subs(obj.ineqs(k).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
-                      %py = py(1);
+                      % see the matching HISTORY comment above: reduce a possibly-multi-root py
+                      % (quadratic-in-y ineqs(k)) to a single candidate before use.
                       if isempty(py)
                           py = obj.vy(k);
+                      else
+                          py = py(1);
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(k) + 0.1;
