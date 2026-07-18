@@ -825,24 +825,92 @@ exists yet for):
   arose) means a 3-convex-edge triangle now correctly produces 2 rational sub-pieces (alongside 2
   plain-quadratic ones), so it hits the SAME `conjPieceCPLQ` rational-piece gap as the general
   multi-face case. A bounded-triangle pair with 3 convex edges no longer works end to end for
-  `conj`'s Step 3 until that gap is closed; a multi-face pair still errors clearly at the final
-  `conj` call rather than silently giving a wrong answer, and so, now, does the 3CE single-triangle
+  `conj`'s Step 3 until that gap is closed via the NUMERIC path; **it now DOES work via the Phase 1
+  `cPLQ` integration below** (`quaPolyToPlq`/`evalFunctionNDomain`), same as the general multi-face
   case.
+  **RESOLVED for the general multi-face case, via Phase 1's `cPLQ` integration (this session)**:
+  `quaPolyToPlq.m` (CCA2 `QuaPoly` → cPLQ `plq`) + `evalFunctionNDomain.m` (numeric eval of a
+  `functionNDomain` result) close this gap end to end for the symbolic engine — see
+  `cplqAdapterTest.m`: a genuinely multi-triangle nonconvex PLQ (`f=xy` over a square split into 2
+  independent triangles — exactly the case `maxQuaPar`'s own curved-edge restriction blocks
+  numerically) now conjugates correctly through `quaPolyToPlq` → `.triangulate` → `.maximum` →
+  `evalFunctionNDomain`, checked against numeric sup-sampling ground truth at 9 points. One
+  narrow, documented exception: an exact symmetric TIE point (`s=(0.5,0.5)`, where both original
+  triangles' own vertex cones meet) is not covered by the assembled region partition — a limitation
+  of the vendored `functionNDomain.mergeL`/`region.removeTangent`, not of the adapter — flagged,
+  not fixed, per `.claude/SESSION_HANDOFF.md`. This does not yet wire into `conjCPLQ.m`'s own
+  `conj(f,'cplq')` call path (the adapter is currently invoked directly, not from `conjCPLQ`) —
+  see "Next planned" below.
 
-**Next planned**: the **nonconvex-PLQ operator pipeline** (`conj`→`infConv`/`moreau`→
-`lasryLions`/`proxAverage`) that has been this project's stated focus is now code-complete (see
-above) — remaining work is either widening its *scope* or growing the toolbox in directions the
-pipeline itself doesn't need:
-1. **`conjPieceCPLQ`'s own rational-piece TODO** (conjugate of a 1-convex-edge, genuinely
-   rational envelope piece) is the highest-value next step: it is the single remaining gap in
-   `conjCPLQ`'s Step 3, needed for `infConv`/`moreau`/`lasryLions`/`proxAverage` to work end to end
-   -- now including the single-triangle/3-convex-edge case, not just the genuinely multi-face one
-   (see Part 2c's revision above). Not an open derivation: the reference `cPLQ/plq_1piece.m`
-   already has a complete, working symbolic recipe for exactly this case (see `conjPieceCPLQ.m`'s
-   own updated TODO comment for the specifics); the work is deriving the equivalent closed-form
-   numeric formula, matching every other `conjPieceCPLQ` case, not new math.
-2. **`partialConj`** for the `'cplq'`/`'pqp'` engines (II.4) — not started.
-3. **`add` for `RatPol`** (common-denominator sum) and the **`RatPar`** parent class (II.3) —
+**Next planned — REVISED (this session), superseding the "closed-form derivation" plan below**:
+prior sessions tried to close `conjCPLQ`'s Step 3 gap by deriving a closed-form numeric conjugate
+for a single genuinely-rational `RatPol` piece (item 1, struck through below). Two findings changed
+the plan:
+- That single-triangle rational-piece conjugate turns out to be **dead code from the wired
+  pipeline's point of view**: `conjSingleTriangle` always succeeds by conjugating the *original*
+  quadratic piece directly, or an envelope that is affine/rank-1-PSD-quadratic — never a genuinely
+  rational one. The *actual* remaining blocker for Step 3 on a genuinely multi-triangle input is
+  `maxQuaPar`'s own documented restriction to purely polyhedral (non-curved) domains — confirmed by
+  a direct test (`f=xy` on a 2-triangle square: each triangle's conjugate is a correct 6-face curved
+  `QuaPar`, but `maxQuaPar(g1,g2)` errors immediately on the curved edges).
+- Per **user decision (2026-07-18)**: rather than deriving new closed-form numeric machinery for
+  this (curved-edge `maxQuaPar`, or the rational-piece conjugate) from scratch, **integrate the
+  reference `cPLQ` package (almost as-is, symbolic) first** — this is actually what engine `'cplq'`
+  was always specified to be (see §0 point 3: *"`'cplq'` — symbolic per-piece conjugate (`cPLQ`
+  Lagrange-multiplier method)"*) — the numeric closed-form code built so far
+  (`conjCPLQ.m`/`conjPieceCPLQ.m`/`convEnvCPLQ.m`/`maxQuaPar.m`) is a partial, faster reimplementation
+  of a SUBSET of what `cPLQ` already does symbolically, not a replacement for it. **Two-phase plan:**
+
+1. **Phase 1 — integrate `cPLQ` (almost as-is) and get it fully tested. IN PROGRESS, core adapter
+   DONE (this session).** Copied the 9-file runtime dependency closure (`plq.m`, `plq_1p.m`,
+   `plq_1piece.m`, `functionNDomain.m`, `region.m`, `domain.m`, `symbolicFunction.m`,
+   `conjugateExpr.m`, `yIntercept.m` — NOT `quadQuad`/`qq_conj`, which turned out to be unused
+   offline derivation scripts, correcting this section's own earlier claim) plus their 5 test
+   suites into the CCA2 repo root (from the untracked `cPLQ/` reference clone). Fixed 2 toolbox-
+   version-compat bugs found while establishing a passing baseline (`isequal(sym,double)` no
+   longer works in the current Symbolic Math Toolbox; `plq.m`'s `pieces` property was mistyped,
+   silently breaking all of `testMaxMultiRegion.m`'s 24 tests) — see `.claude/SESSION_HANDOFF.md`
+   for full diagnosis. Built the thin adapter: `quaPolyToPlq.m` (CCA2 `QuaPoly` → cPLQ `plq`, per-
+   face via `QuaPoly.matrixForm` → a `sym` expression → `domain`+`symbolicFunction`+`plq_1p`) and
+   `evalFunctionNDomain.m` (numeric eval of a `functionNDomain` result at a dual point, for this
+   codebase's standard numeric-sup-sampling test convention — no conversion back to `QuaPar` yet,
+   deliberately, since that would reintroduce the exact curved-edge assembly problem `cPLQ` already
+   solves symbolically). Validated in `cplqAdapterTest.m`: a single one-convex-edge triangle
+   through `.conjugate` matches CCA2's own existing numeric `conjPieceCPLQ` exactly; a genuinely
+   multi-triangle nonconvex PLQ (`f=xy` over a square split into 2 independent triangles — the case
+   `maxQuaPar` itself cannot do numerically) through `.triangulate`→`.maximum` matches the true
+   numeric sup at 9 test points (one exact symmetric tie point excluded and documented — a
+   narrow `mergeL`/`removeTangent` limitation, not an adapter bug).
+   **Confirmed timing/quality**: envelope+conjugate+max are correct and complete for every case
+   tried; `cPLQ`'s own code needed no math fixes for these steps (only the 2 toolbox-compat bugs
+   above). **Biconjugate (`plq.biconjugateF`) is NOT yet reliable**: `region.poly2orderUnbounded`
+   has a reproducible unhandled-loop-fallthrough bug (index overflow after ~372s) — same bug
+   *class* already fixed once in this codebase's own `maxQuaPar.m` history (a missing wraparound).
+   Not fixed yet (see `.claude/SESSION_HANDOFF.md` for why: a wrong wraparound guess risks a
+   silently-wrong result, and each biconjugate run costs 5-6+ minutes to verify).
+   **Still open for Phase 1**: wire `quaPolyToPlq`/`evalFunctionNDomain` into `conjCPLQ.m`'s own
+   `conj(f,'cplq')` call path for the general (`nf>1`) case (currently the adapter is invoked
+   directly, not from `conjCPLQ`); debug/fix `poly2orderUnbounded` so biconjugate is reliable;
+   convert `evalFunctionNDomain`'s output back into a `QuaPar` if/when a caller needs the
+   structured (not just numerically-evaluable) result; run the remaining ~14 untested
+   `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and noisy (`maximumP`/`mergeL`/
+   `removeTangent`'s repeated symbolic `isAlways` "truth unknown" warnings/retries) remains
+   expected and fine for Phase 1 — it is exactly Phase 2's target, not a Phase 1 blocker.
+2. **Phase 2 (later) — improve performance**: once Phase 1 is integrated and fully tested, replace
+   the symbolic computation with direct closed-form numeric formulas incrementally, one case/step
+   at a time, validating each replacement against the Phase-1 symbolic result on the same inputs
+   before moving to the next (the same "derive once, implement in plain arithmetic" pattern already
+   used for e.g. `conjBilinearXYoneCE`/`conjPSDRank1QuadTriangle`) — go carefully and slowly,
+   comparing against the working (Phase 1) code at each step, rather than re-deriving the whole
+   pipeline's math from scratch in one jump (the failure mode of the prior two sessions' abandoned
+   `conjPieceCPLQ` rational-piece attempt).
+3. ~~**`conjPieceCPLQ`'s own rational-piece TODO**~~ — superseded by the plan above; do not resume
+   the single-RatPol-piece closed-form derivation as a standalone task (see `conjPieceCPLQ.m`'s
+   header and `.claude/SESSION_HANDOFF.md` for the full diagnosis of why it was mis-scoped).
+4. **`partialConj`** for the `'cplq'`/`'pqp'` engines (II.4) — not started; `cPLQ`'s own
+   `conjugateExpr`/Lagrange-multiplier machinery already supports a single-variable restriction, so
+   this may fall out of the Phase 1 integration for the `'cplq'` engine specifically.
+5. **`add` for `RatPol`** (common-denominator sum) and the **`RatPar`** parent class (II.3) —
    deprioritized, nothing in the operator pipeline calls for either.
 
 ---
@@ -1143,14 +1211,33 @@ end
 
 #### II.5.1 Engine `'cplq'` — symbolic per-piece conjugate (default; the [JOGO] algorithm)
 
-*Source:* `cPLQ` (`conjugateExpr`, `plq_1p`, `functionNDomain`, `region`, `quadQuad`/`qq_conj`).
+*Source:* integrated (2026-07-18, Phase 1 — see "Next planned" above) from the reference `cPLQ`
+package, almost as-is: `plq.m`, `plq_1p.m`, `functionNDomain.m`, `region.m`, `domain.m`,
+`symbolicFunction.m`, `conjugateExpr.m`, `yIntercept.m` now live at the CCA2 repo root (copied
+from the untracked `cPLQ/` reference clone, which stays untracked/unused going forward). These 8
+files are `plq.m`'s own runtime dependency closure, confirmed by grep. `plq_1piece.m` (2603 lines)
+was copied in too, separately: it is an OLDER, largely-parallel per-piece implementation with the
+same method names as `plq_1p.m` (`triangulate`/`convexEnvelope`/`conjugateFunction`/
+`maximumConjugate`/`biconjugateP`) but is never called by `plq.m` itself (which only ever
+constructs `plq_1p` objects) — it is however the class `testMaxMultiRegion.m`'s 24 tests
+(including 8 `testBiconjugate*` cases) exercise directly, so it earns its place as "relevant"
+despite being dead code from `plq.m`'s own point of view; treat it as a second, independently-
+tested implementation of the same per-piece algorithm, not a stale leftover to delete.
+`quadQuad.m`/`qq_conj.m`/`quadLinear.m`/`conjQuad.m`/`conjR.m`/`checkConvex.m`/
+`subdiffParabolicEdge.m`/`vertexNan.m`/`quadquad1.m`/`plots.m`/`plot2.m` remain standalone offline
+derivation *scripts* with no live call sites from any of the 9 files above or their test suites —
+confirmed by grep across all of them, not just the production files — and were NOT copied in
+(correcting this section's earlier "quadQuad/qq_conj" source claim below, which was aspirational/
+inaccurate). The existing test suites (`testcPLQ.m`, `testfunctionNDomain.m`, `testRegion.m`,
+`testSymbolicFunction.m`, `testMaxMultiRegion.m`) were copied alongside the code and mostly pass
+as-is (see `.claude/SESSION_HANDOFF.md` for the one known exception and timings).
 
 **Method** — exactly the three steps of [JOGO]/[COAP]:
 1. **Convex envelope of each quadratic piece** `conv(qᵢ+I_{Pᵢ})` → rational(quad÷linear) on a
-   polyhedral subdivision (`plq_1p.convexEnvelope`; bilinear `x*y` / quad-on-quad handled by the
-   closed-form `quadQuad`/`qq_conj`, the symbolic complement to deepak's numeric subdivision).
+   polyhedral subdivision (`plq_1p.convexEnvelope`).
 2. **Conjugate of each rational piece** via Lagrange multipliers `sup{s·x − r(x) : g(x)=0}`
-   (`conjugateExpr`) → quadratic on a parabolic subdivision.
+   (`conjugateExpr`, called from `plq_1p.conjugateFunction`) → quadratic on a parabolic
+   subdivision.
 3. **Maximum of the conjugates** (`functionNDomain.maximumP`, region splitting) → `f*` as a
    quadratic-on-parabolic function. (Computing the conjugate of *that* again gives `f**`.)
 
