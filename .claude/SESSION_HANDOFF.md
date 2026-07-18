@@ -1,6 +1,43 @@
 # Session Handoff
 
-_Last updated: 2026-07-18T15:20:00Z_
+_Last updated: 2026-07-18T15:50:00Z_
+
+## Update (same session): wired Steps 1-3 into conjCPLQ.m itself (user chose option 3)
+
+Given the choice between (a) keep chasing biconjugate bugs, (b) pivot to the `mergeL` tie-point
+gap, or (c) wire the already-working Steps 1-3 into `conjCPLQ.m` now and defer both bugs, the
+user chose **(c)**. Done:
+
+- **`quaPolyToPlq.m` generalized**: no longer requires triangular faces -- builds one `plq_1p` per
+  QuaPoly face regardless of vertex count, relying on cPLQ's own `plq.triangulate` (fan
+  triangulation) to split non-triangular faces, same as cPLQ's own test files already do for
+  non-triangular `plq_1p` domains built directly.
+- **`conjCPLQ.m` Case C added**: for a bounded domain that doesn't fit Case A (full-domain
+  quadratic) or Case B (single triangle), route through `quaPolyToPlq` -> `.triangulate` ->
+  `.maximum` instead of erroring. **Return-type caveat, documented in the function's own header**:
+  `g` for Case C is a cPLQ `functionNDomain` array, NOT a `QuaPoly`/`QuaPar` -- evaluate with
+  `evalFunctionNDomain(g,s)`, not `g.eval(s)`; composition (`biconj`/`infConv`/`moreau`/...) is
+  NOT supported for Case C yet, since those call `.conj()` again on `g`, which only `QuaPoly`/
+  `QuaPar` provide. An unbounded multi-face domain still errors clearly (Case C requires
+  `isDomBounded`).
+- **Tests**: `conjCPLQTest.m`'s old `multiFacePieceStillNotImplemented` (an unbounded 4-cone-fan
+  example) renamed to `multiFaceUnboundedDomainStillNotImplemented` with an added
+  `isDomBounded`==false check -- still passes unchanged, since it was always testing the
+  unbounded case, which Case C doesn't touch. New
+  `multiFaceBoundedDomainViaCPLQIntegration` reuses `cplqAdapterTest`'s 2-triangle-square example
+  but goes through the actual PUBLIC `q.conj('cplq')` entry point (not `quaPolyToPlq` directly),
+  validating the wiring itself, not just the standalone adapter functions.
+- **Verified**: both new/changed tests pass, and the FULL `conjCPLQTest` suite (18 tests) passes
+  with no regressions.
+- **Committed**: (see commit after this handoff update).
+
+This closes the concrete goal `conjCPLQ.m`'s own file header has flagged since early this
+session's start: "general `'cplq'` conjugate over more than one piece is not implemented" is no
+longer true for bounded domains (with the documented functionNDomain-vs-QuaPar return-type
+caveat). The 2 known open bugs (`region.getNormalConeVertexQ` in biconjugate;
+`mergeL`/`removeTangent`'s exact-tie-point gap in `.maximum`) remain deferred, per the user's
+choice, and are unaffected by this wiring (Case C doesn't call biconjugate at all, and the tie-
+point gap is a narrow, already-documented exception in the one test that could hit it).
 
 ## Update (new session): committed, then fixed the poly2orderUnbounded bug, found a second one
 

@@ -163,17 +163,48 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyError(@() q.conj('cplq'), 'conjPieceCPLQ:notImplemented');
         end
 
-        function multiFacePieceStillNotImplemented(testCase)
-            % A multi-face domain (nf>1) still needs Step 3 (not implemented), even though the
-            % single-triangle case is now handled. Reuses the known-good 4-face V/E/F geometry
-            % from plqvcAliasStillWorks below (a fan of 4 unbounded cones around the origin).
+        function multiFaceUnboundedDomainStillNotImplemented(testCase)
+            % An UNBOUNDED multi-face domain (nf>1) still needs its own implementation (Case C
+            % only covers bounded domains). Reuses the known-good 4-face V/E/F geometry from
+            % plqvcAliasStillWorks below (a fan of 4 unbounded cones around the origin).
             V = [0 0;-1 0; 0 1;1 0;0 -1];
             E = [1 2 0;1 3 0;1 4 0;1 5 0];
             f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
             F = [1 2;2 3;3 4;4 1];
             p = QuaPoly(V,E,f,F);
             testCase.verifyEqual(p.nf, 4);
+            testCase.verifyFalse(p.isDomBounded);
             testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
+        end
+
+        function multiFaceBoundedDomainViaCPLQIntegration(testCase)
+            % Case C (Phase 1 cPLQ integration, this session): a genuinely multi-triangle BOUNDED
+            % nonconvex PLQ now conjugates end to end through the wired-in conjCPLQ dispatch --
+            % exactly the case Case B's own numeric path (conjPieceCPLQ+maxQuaPar) cannot do
+            % (maxQuaPar refuses curved-edge QuaPar inputs from independent triangles). Reuses
+            % cplqAdapterTest's f=xy-over-a-diagonally-split-square example, but now going through
+            % the PUBLIC conj('cplq') entry point rather than calling quaPolyToPlq directly.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 1 2; 2 0; 2 0];
+            f = [0 1 0 0 0 0; 0 1 0 0 0 0];   % xy on both faces
+            q = QuaPoly(V, E, f, F);
+            testCase.verifyEqual(q.nf, 2);
+            testCase.verifyTrue(q.isDomBounded);
+
+            g = q.conj('cplq');
+            testCase.verifyClass(g, 'functionNDomain');
+
+            nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt));
+            Xg = uu(:); Yg = vv(:); xyg = Xg.*Yg;
+            % s=(0.5,0.5) excluded: documented exact-tie-point gap in the vendored cPLQ mergeL --
+            % see cplqAdapterTest.m / .claude/SESSION_HANDOFF.md.
+            S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6; 2 2];
+            for i = 1:size(S,1)
+                sup = max(S(i,1)*Xg + S(i,2)*Yg - xyg);
+                gv = evalFunctionNDomain(g, S(i,:));
+                testCase.verifyEqual(gv, sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
+            end
         end
 
         function cubicRejectedByOperators(testCase)

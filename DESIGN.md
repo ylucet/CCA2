@@ -900,13 +900,22 @@ the plan:
    `.claude/SESSION_HANDOFF.md` for the full trace and the open prioritization decision (keep
    fixing biconjugate bugs one at a time vs. pivot to the `mergeL` tie-point issue vs. wire
    Steps 1-3 into `conjCPLQ.m` now and defer both).
-   **Still open for Phase 1**: wire `quaPolyToPlq`/`evalFunctionNDomain` into `conjCPLQ.m`'s own
-   `conj(f,'cplq')` call path for the general (`nf>1`) case (currently the adapter is invoked
-   directly, not from `conjCPLQ`); fix `getNormalConeVertexQ` (and whatever else surfaces after
-   it) so biconjugate is reliable; convert `evalFunctionNDomain`'s output back into a `QuaPar` if/
-   when a caller needs the structured (not just numerically-evaluable) result; run the remaining
-   ~14 untested `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and noisy (`maximumP`/
-   `mergeL`/`removeTangent`'s repeated symbolic `isAlways` "truth unknown" warnings/retries) remains
+   **Wired into `conjCPLQ.m` itself (this session, user's choice of 3 options)**: `conjCPLQ.m` now
+   has a Case C (general bounded domain, `nf>1` and/or non-triangular) that calls `quaPolyToPlq`
+   -> `.triangulate` -> `.maximum` instead of erroring -- generalized `quaPolyToPlq.m` to accept
+   non-triangular faces too (relies on `plq.triangulate`'s own fan-splitting). `g` for Case C is a
+   `functionNDomain` array (NOT `QuaPoly`/`QuaPar`) -- documented in `conjCPLQ.m`'s own header;
+   composition (`biconj`/`infConv`/`moreau`/...) is not supported for Case C yet for that reason.
+   Verified via `conjCPLQTest.m`'s new `multiFaceBoundedDomainViaCPLQIntegration` (through the
+   actual public `conj('cplq')` entry point) and a full-suite regression check (18/18 pass).
+   **Still open for Phase 1**: fix `getNormalConeVertexQ` (and whatever else surfaces after it) so
+   biconjugate is reliable, and the `mergeL`/`removeTangent` exact-tie-point gap -- both deferred
+   per the user's choice this session, unaffected by the Case C wiring (Case C never calls
+   biconjugate); convert `evalFunctionNDomain`'s output back into a `QuaPar` if/when a caller needs
+   the structured (not just numerically-evaluable) result, so Case C can support composition too;
+   run the remaining ~14 untested `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and
+   noisy (`maximumP`/`mergeL`/`removeTangent`'s repeated symbolic `isAlways` "truth unknown"
+   warnings/retries) remains
    expected and fine for Phase 1 — it is exactly Phase 2's target, not a Phase 1 blocker.
 2. **Phase 2 (later) — improve performance**: once Phase 1 is integrated and fully tested, replace
    the symbolic computation with direct closed-form numeric formulas incrementally, one case/step
