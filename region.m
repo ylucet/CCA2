@@ -348,35 +348,51 @@ classdef region
                  return
              end     
             l = [];
+            % HISTORY: v1/v2 used to be fixed-shape 3D arrays, one 1x2 "slab"
+            % per edge, on the assumption every edge has exactly 2 endpoints.
+            % That's only true for a bounded polygon's edges (segments
+            % between 2 vertices) -- an unbounded region can have a "ray"
+            % edge with just 1 finite endpoint (the placeholder "vertex at
+            % infinity" scheme in region.getVertices doesn't guarantee a
+            % matching point on every arbitrary-slope unbounded edge), which
+            % crashed the fixed-shape assignment below (testOpenconvex).
+            % Cell arrays hold the variable-length endpoint lists instead;
+            % the comparison further down now compares sizes too, treating a
+            % genuine shape mismatch as "not the same edge" rather than
+            % crashing.
+            v1 = {};
             for i = 1:size(obj1.ineqs,2)
-                v1(i,:,:) = obj1.getEndpoints(i);
+                v1{i} = obj1.getEndpoints(i);
                 l = [l,obj1.ineqs(i).f];
             end
             l2 = [];
             rm = [];
+            v2 = {};
             for i = 1:size(obj2.ineqs,2)
-              v2(i,:,:) = obj2.getEndpoints(i);
+              v2{i} = obj2.getEndpoints(i);
               ladd = true;
               lsub = false;
               for j = 1:size(obj1.ineqs,2)
                 %  i,j
                   %obj1.ineqs(j).f
-                if (obj2.ineqs(i) == obj1.ineqs(j)) 
-                    lv = true;
-                    for i1 = 1:size(v1,2)
-                        for i2 = 1:size(v1,3)
-                            lv = lv & (v1(j,i1,i2) == v2(i,i1,i2));
+                if (obj2.ineqs(i) == obj1.ineqs(j))
+                    lv = isequal(size(v1{j}),size(v2{i}));
+                    if lv
+                        for i1 = 1:size(v1{j},1)
+                            for i2 = 1:size(v1{j},2)
+                                lv = lv & (v1{j}(i1,i2) == v2{i}(i1,i2));
+                            end
                         end
                     end
                     if lv
                       rm = [rm,j];
                       ladd = false;
-                    else 
-                      ladd = false;  
-                      lsub = true;  
-                    end  
+                    else
+                      ladd = false;
+                      lsub = true;
+                    end
                 %f = [f0.simplify];
-                    
+
                     break;
                 end
               end
@@ -2348,12 +2364,22 @@ classdef region
      end 
 
      function obj = getVertices(obj)
-         
+
        obj.nv=0;
-       vx=sym.empty();
-       vy=sym.empty();
-       %obj.vx=[];
-       %obj.vy=[];
+       % HISTORY: obj.vx/obj.vy must be reset here, not just obj.nv -- this
+       % method is called more than once on the same (already-populated)
+       % object (e.g. region.removeTangent calls it again after deleting
+       % some ineqs). Without clearing them, the "vertex at infinity"
+       % placeholder-point phase below (which always appends via
+       % obj.nv=obj.nv+1; obj.vx(obj.nv)=..., never replaces) piles new
+       % placeholder points on top of the ones a previous call already
+       % added, instead of recomputing from scratch -- producing duplicate
+       % vertices at the same coordinates. Those duplicates then make
+       % region.getEndpoints return more than 2 points for an edge that
+       % genuinely only has 2, which crashes region.minus's fixed-size
+       % v1(i,:,:) assignment (testOpenconvex).
+       obj.vx=sym.empty();
+       obj.vy=sym.empty();
        t1 = sym('t1');
        t2 = sym('t2');
        varsTemp = [t1,t2];
@@ -2486,9 +2512,35 @@ classdef region
              obj.vx(obj.nv) = -intmax;
              obj.vy(obj.nv) = obj.vy(i);
            end
-           
+
        end
-       
+
+       % HISTORY: the "vertex at infinity" placeholder loop above can
+       % legitimately re-derive a point that a separate mechanism already
+       % put in obj.vx/obj.vy -- e.g. once some other operation has added an
+       % explicit +-intmax boundary ineq (turning what was an unbounded
+       % direction into a literal, very-large-but-finite line), the ordinary
+       % pairwise-intersection phase earlier in this function can solve that
+       % boundary ineq against another edge and land on the exact same
+       % (x,+-intmax) point this per-vertex loop also generates as an
+       % "at infinity" projection -- and only the finite-vertex subphase
+       % above (before this loop) deduplicates via unique(rows); nothing
+       % deduplicates the combined finite+infinite list once this loop has
+       % run. The resulting duplicate vertices make region.getEndpoints
+       % return more than 2 points for an edge that only has 2 distinct
+       % ones, which crashes region.minus's fixed-size v1(i,:,:) assignment
+       % (testOpenconvex). Dedup the full list here, mirroring the earlier
+       % finite-only dedup.
+       if obj.nv ~= 0
+         V = [obj.vx(:), obj.vy(:)];
+         V = unique(V,"rows");
+         if obj.nv ~= size(V,1)
+           obj.nv = size(V,1);
+           obj.vx = V(:,1)';
+           obj.vy = V(:,2)';
+         end
+       end
+
      end
 
      function [edgeNo] = getEdgeNosInf2(obj, vars)
