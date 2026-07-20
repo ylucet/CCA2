@@ -1366,7 +1366,24 @@ classdef region
             for i = 1:size(obj.ineqs,2)
                 l = false;
                 for j = 1:nP
-                    if (abs(double(obj.ineqs(i).subsF(obj.vars,[px(j),py(j)]).f)) < 1.0d-8)
+                    val = obj.ineqs(i).subsF(obj.vars,[px(j),py(j)]).f;
+                    % HISTORY: for a genuinely non-polynomial piece (e.g. a
+                    % sqrt/fractional-power term, as in testFractional), the
+                    % substituted expression can retain symbolic structure
+                    % that doesn't auto-cancel (e.g. sqrt(3) terms across
+                    % different constraints) -- double() then errors
+                    % ("Unable to convert expression containing symbolic
+                    % variables") instead of evaluating. simplify() first
+                    % resolves the cases that are genuinely just an
+                    % unreduced constant; if it's still not a evaluable
+                    % constant after that, this ineq truly isn't (near) zero
+                    % at this vertex, so treat it as such rather than crash.
+                    try
+                        v = abs(double(simplify(val)));
+                    catch
+                        v = Inf;
+                    end
+                    if (v < 1.0d-8)
                         l = true;
                         break
                     end

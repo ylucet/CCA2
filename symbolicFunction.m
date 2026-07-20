@@ -773,7 +773,21 @@ classdef symbolicFunction
                 if isequal(class(obj.getNum),'double')
                     d = 0;
                 else
-                  d = polynomialDegree(obj.getNum);
+                  % HISTORY: polynomialDegree errors ("Polynomial expression
+                  % expected") on a genuinely non-polynomial numerator (e.g.
+                  % one involving a fractional power/sqrt term, as in
+                  % testFractional's conjugate expressions) rather than
+                  % returning a value -- but degreeNum/degreeDen are boolean
+                  % predicates' building blocks (isPolynomial, isQuad), which
+                  % already handle "the degree isn't 0/2" correctly; they
+                  % just need a degree value to compare against, not a crash.
+                  % Inf is unambiguously "not a polynomial of any finite
+                  % degree", matching every caller's existing comparison.
+                  try
+                    d = polynomialDegree(obj.getNum);
+                  catch
+                    d = Inf;
+                  end
                 end
             end
 
@@ -781,7 +795,11 @@ classdef symbolicFunction
                 if isequal(class(obj.getDen),'double')
                     d = 0;
                 else
-                  d = polynomialDegree(obj.getDen);
+                  try
+                    d = polynomialDegree(obj.getDen);
+                  catch
+                    d = Inf;
+                  end
                 end
             end
 

@@ -146,14 +146,22 @@ classdef plq_1piece
            fprintf("},x=-5..5,y=-5..5,color=[red,blue,yellow,green],nolines)) \n")
            
             
-           for j=1:size(obj.envelope,2) 
+           for j=1:size(obj.envelope,2)
 
            if (size(obj.conjfia,1) > 0)
                   obj.conjugates(obj.conjfia(j):obj.conjfia(j+1)-1).printM
-             
+
            end
            end
-           obj.maxConjugate.printM;
+           % HISTORY: maxConjugate is only populated by .maximum
+           % (maximumConjugate); a piece that only went through
+           % .convexEnvelope/.conjugate(/.biconjugateP), never .maximum, has
+           % an empty maxConjugate here, and functionNDomain.printM
+           % unconditionally indexes objL(1) -- errors on an empty array
+           % rather than just having nothing further to print.
+           if ~isempty(obj.maxConjugate)
+             obj.maxConjugate.printM;
+           end
          end
 
          function plotMaxConjugateDomain(obj)
@@ -2454,8 +2462,18 @@ classdef plq_1piece
                 %conjf(i).print
                 conjugates = [conjugates,functionNDomain([conjf(i)],conjd(i))];
             end
-            disp('b4 merge')
-            conjugates.printL
+            %disp('b4 merge')
+            % HISTORY: this leftover debug print crashed on a rational
+            % (non-polynomial-denominator) conjugate expression --
+            % symbolicFunction.print's isPolynomial/degreeDen chain calls
+            % polynomialDegree on the denominator unconditionally, which
+            % errors ("Polynomial expression expected") for a genuinely
+            % rational expression rather than just reporting isPolynomial
+            % false. Purely diagnostic output with no effect on conjugates
+            % itself (testFractional, whose conjugate is exactly such a
+            % rational expression) -- commented out like its sibling debug
+            % lines above.
+            %conjugates.printL
             conjugates = conjugates.mergeL;
 
             for i = 1:size(conjugates,2)
