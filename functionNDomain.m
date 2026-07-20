@@ -667,7 +667,18 @@ classdef functionNDomain
           end
          
           
-          function objL2 = addEq(objL)  
+          function objL2 = addEq(objL)
+          % HISTORY: objL2 must start initialized -- if objL is empty, or no
+          % entry ever satisfies both isempty(r) and r.nv==size(r.ineqs,2)
+          % below, the loop body never executes/never assigns objL2, and
+          % MATLAB errors with "output argument not assigned" rather than
+          % returning a well-defined empty result (hit via
+          % plq.biconjugateF -> bc.addEq when bc, the merged
+          % conjugateOfPiecePoly result, comes out empty for a given
+          % domain -- testMaxMultiRegion/testPCE2's domain is one such case,
+          % a separate, still-open gap in the biconjugate pipeline upstream
+          % of this function -- see testPCE2's own comment).
+          objL2 = functionNDomain.empty();
           ia(1) = 1;
           n = 0;
           for i = 1:size(objL,2)
