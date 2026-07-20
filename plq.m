@@ -95,14 +95,25 @@ classdef plq
               return
           end
           disp('maxConj')
-          obj.maxConjugate.printM;
+          % HISTORY: lMax/lBiconj only track whether .maximum/.biconjugateF
+          % were called, not whether they produced a non-empty result --
+          % functionNDomain.addEq (used by biconjugateF) can legitimately
+          % return an empty array for a domain where the merged biconjugate
+          % comes out empty (see testMaxMultiRegion/testMaxThesis), and
+          % printM unconditionally indexes objL(1), erroring on an empty
+          % array rather than just having nothing to print.
+          if ~isempty(obj.maxConjugate)
+            obj.maxConjugate.printM;
+          end
           %obj.maxConjugate.printM2;
           if ~obj.lBiconj
               return
           end
-          obj.biconjugate.printM;
+          if ~isempty(obj.biconjugate)
+            obj.biconjugate.printM;
+          end
           %obj.maxConjugate.printM2;
-       
+
       end
 
       function plotMaxConjugateDomain(obj)
