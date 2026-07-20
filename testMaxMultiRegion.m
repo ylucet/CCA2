@@ -147,9 +147,14 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
         function testPCE2 (testCase)
             d=domain([0,0;1,0;2,1],testCase.x,testCase.y);
             testCase.PCE1 = plq(plq_1piece(d,symbolicFunction(testCase.x*testCase.y)));
-             testCase.PCE1 = testCase.PCE1.convexEnvelope;
-            %  testCase.PCE1 = testCase.PCE1.maximum;
-            %  testCase.PCE1 = testCase.PCE1.biconjugateF;
+            % .maximum (which runs convexEnvelope internally) must run before
+            % printDomainMaple -- printDomainMaple's per-piece Mprint reads
+            % maxConjugate unconditionally, which stays empty (and crashes
+            % Mprint) if only convexEnvelope has run. .biconjugateF is left
+            % disabled: it hits a separate, still-open bug
+            % (functionNDomain.addEq errors with an unassigned output when
+            % the biconjugate result is empty for this domain).
+             testCase.PCE1 = testCase.PCE1.maximum;
              testCase.PCE1.print;
             %
             testCase.PCE1.printDomainMaple;
