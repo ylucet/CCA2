@@ -1124,19 +1124,40 @@ classdef functionNDomain
                 eq2 = y - g(2).f;
                 %if obj.f.isQuad
                     s12 = solve([eq1,eq2],obj.d.vars);
-                    if isempty (s12) | isempty(s12.s_1)
+                    % HISTORY: s12 is the struct solve() returns for a
+                    % multi-variable system (fields named after each dual
+                    % variable). useFallback covers two cases the same way:
+                    % (1) no solution at all (the original isempty check),
+                    % and (2) a solution exists but sits exactly on a
+                    % singularity of eq1/eq2's own denominator (e.g. a
+                    % fractional-power/sqrt term whose argument vanishes
+                    % there -- testFractional's domain has such a point),
+                    % making the direct substitution below divide by zero.
+                    % Both fall back to the same coeffs-based linear
+                    % elimination, which needs no point evaluation at all.
+                    useFallback = isempty(s12) || isempty(s12.s_1);
+                    if ~useFallback
+                        try
+                            % subs needs the field VALUES as an array
+                            % matching obj.d.vars's order, not the struct
+                            % itself (subs errored: "Substitution expression
+                            % X must be a symbolic, cell, or numeric array").
+                            ineq = subs(eq2,obj.d.vars,[s12.s_1,s12.s_2]);
+                        catch
+                            useFallback = true;
+                        end
+                    end
+                    if useFallback
                        c1 = coeffs(eq1,obj.d.vars(1));
                        c2 = coeffs(eq2,obj.d.vars(1));
-                       
+
                        if size(c1,2) == 2
                            ineq = c2(2)*eq1 - c1(2)*eq2;
                        else
                            ineq = c2*eq1 - c1*eq2;
-                       end    
+                       end
                        %ineq = c2(2)*eq1 - c1(2)*eq2;
-                       
-                    else
-                    ineq = subs(eq2,obj.d.vars,s12);
+
                     end
                 %else
                 %    ineq = eq1+eq2;
