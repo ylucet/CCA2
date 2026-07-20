@@ -197,9 +197,9 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt));
             Xg = uu(:); Yg = vv(:); xyg = Xg.*Yg;
-            % s=(0.5,0.5) excluded: documented exact-tie-point gap in the vendored cPLQ mergeL --
-            % see cplqAdapterTest.m / .claude/SESSION_HANDOFF.md.
-            S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6; 2 2];
+            % s=(0.5,0.5): exact tie point between the two triangles' vertex cones -- see
+            % cplqAdapterTest.m / functionNDomain.maximumP's HISTORY comment / SESSION_HANDOFF.md.
+            S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6; 2 2; 0.5 0.5];
             for i = 1:size(S,1)
                 sup = max(S(i,1)*Xg + S(i,2)*Yg - xyg);
                 gv = evalFunctionNDomain(g, S(i,:));

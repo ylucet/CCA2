@@ -2905,7 +2905,18 @@ classdef region
 %      % wont work cause of intersection vs union
      function [l,obj] = merge (obj, obj2)
          l = false;
-         n = 0; 
+         % HISTORY: an empty (0x0) region can reach here from an upstream
+         % copy-through that didn't check isempty after a simplification
+         % step revealed a domain to be infeasible (see functionNDomain.
+         % mergeL/maximumP's own HISTORY comments -- this was unreachable
+         % before functionNDomain.maximumP stopped discarding lSing pairs).
+         % obj.ineqs/obj2.ineqs on a 0x0 region array below has no elements
+         % to index, which errors rather than behaving like an empty set;
+         % merging with an empty region is a no-op, so just say so.
+         if isempty(obj) || isempty(obj2)
+             return
+         end
+         n = 0;
          lQuad1 = false;
          nmq1 = 0;
          for i =1:size(obj.ineqs,2)

@@ -392,10 +392,10 @@ classdef functionNDomain
                  n = n + 1;
                  objL(n) = functionNDomain([objL1(i).f(1), objL2(j).f(1)],rf);
 
-                 
+
                end
              end
-                      
+
          end
 
          function objR3 = maximumP(objL, lmerge) %, f, r2)
@@ -411,33 +411,58 @@ classdef functionNDomain
              end
              %objL(i).f.printL
              [l, fmax, ind, lSing] = objL(i).d.maximum(objL(i).f);
-             
-             
-             if lSing
-                continue
-             end
-             if l
+
+             % HISTORY (tie-point fix): region.maxArray sets lSing when it
+             % cannot find an interior probe point where f1~=f2 to decide
+             % which of f1,f2 dominates -- but for a region whose only
+             % vertices are curve (e.g. parabola) intersections, an affine
+             % f1-f2 can be tied at every vertex while still genuinely
+             % changing sign in the interior (e.g. two independent triangles'
+             % conjugates overlapping in a lens bounded by two parabolas
+             % meeting exactly where f1==f2). Discarding the pair here (the
+             % old behaviour) silently dropped that whole overlap region from
+             % the assembled partition, producing a real coverage gap at the
+             % tie point (not a tolerance artifact) -- see cplqAdapterTest.m /
+             % conjCPLQTest.m's exact-tie-point cases and
+             % .claude/SESSION_HANDOFF.md. splitmax3 makes its own sign
+             % decision directly from a region vertex and handles the tied
+             % case correctly (falls back to a well-defined split rather than
+             % guessing), so when lSing fires we must still fall through to
+             % it instead of skipping -- mirrors what maxEqDom already does
+             % (it captures lSing but never checks it, always falling
+             % through to splitmax3 when l is false).
+             if ~lSing && l
                n = n + 1;
                objR(n) = functionNDomain([fmax],objL(i).d);
                continue
-             end  
+             end
              ineqs = objL(i).d.splitmax3 (objL(i).f(1),objL(i).f(2));
-             ineqs1 = sym.empty ;          
+             ineqs1 = sym.empty ;
              for k = 1: size(objL(i).d.ineqs,2)
                ineqs1(k) = objL(i).d.ineqs(k).f;
              end
              ineqs1(size(objL(i).d.ineqs,2)+1) = ineqs(1).f;
              d1 = region(ineqs1,objL(i).d.vars);
-             
+
               d1 = d1.simplifyUnboundedRegion ;
-             n = n + 1;
-             objR(n) = functionNDomain([objL(i).f(1)],d1);
+             % HISTORY (tie-point fix follow-up): one of the two split halves
+             % can simplify down to empty (the split boundary can coincide
+             % with an existing edge of a degenerate/tangent domain) -- must
+             % not add an empty-domain piece here, same class of gap as
+             % mergeL's (see its own HISTORY comment); an empty-domain
+             % functionNDomain surviving into mergeL crashes region.merge
+             % (obj2.ineqs(i) on a 0x0 region has no elements to index).
+             if ~isempty(d1)
+               n = n + 1;
+               objR(n) = functionNDomain([objL(i).f(1)],d1);
+             end
              ineqs1(size(objL(i).d.ineqs,2)+1) = ineqs(2).f;
              d1 = region(ineqs1,objL(i).d.vars);
-             d00 = d1; 
              d1 = d1.simplifyUnboundedRegion ;
-             n = n + 1;
-             objR(n) = functionNDomain([objL(i).f(2)],d1);
+             if ~isempty(d1)
+               n = n + 1;
+               objR(n) = functionNDomain([objL(i).f(2)],d1);
+             end
  
              
            end
@@ -450,9 +475,8 @@ classdef functionNDomain
                objR3 = jSort(objR);
                return
             end
-             
+
            objR2 = mergeL(objR);
-           
             objR3 = mergeL(objR2);
            % objR2 = mergeL(objR3);
             % disp("aft merge")
@@ -802,7 +826,7 @@ classdef functionNDomain
              
           end
          
-          function [objL2,index] = mergeL(objL)  
+          function [objL2,index] = mergeL(objL)
           ia(1) = 1;
           n = 0;
           for i = 1:size(objL,2)
@@ -841,11 +865,21 @@ classdef functionNDomain
                 if marked(i)
                    continue
                 end
-                 
-                m = m + 1;
-                objL2(m) = objL(i);
+
                 marked(i) = true;
-                index(m) = i;
+                % HISTORY (tie-point fix follow-up): objL(i).d can already be
+                % empty here (e.g. a maximumP split half from an earlier,
+                % unrelated merge round that simplified to empty) even when
+                % there's no same-valued partner to merge with -- don't copy
+                % it forward uncheck (crashes region.merge/removeTangent
+                % later when reused as a same-valued partner elsewhere; see
+                % maximumP/mergeL's other HISTORY comments for the class of
+                % bug this belongs to).
+                if ~isempty(objL(i).d)
+                  m = m + 1;
+                  objL2(m) = objL(i);
+                  index(m) = i;
+                end
             else
               
                r = objL(i).d;
@@ -864,6 +898,19 @@ classdef functionNDomain
                    end
                  end
                end
+               marked(i) = true;
+               % HISTORY (tie-point fix follow-up): r (seeded from objL(i).d)
+               % can already be empty here -- e.g. objL(i).d itself was an
+               % empty domain surviving an earlier unguarded copy-through, in
+               % which case region.merge's own empty-operand guard leaves r
+               % unchanged (still empty) throughout the accumulation loop
+               % above. r.nv below (and removeTangent further down) both
+               % assume a scalar, non-empty region; skip this piece entirely
+               % rather than erroring, matching the isempty guards already
+               % used by region.merge and functionNDomain.mtimes elsewhere.
+               % This path was unreachable before maximumP stopped discarding
+               % lSing pairs (see maximumP's own HISTORY comment).
+               if ~isempty(r)
                % Removing inf from vertices - to be removed later
                %%%%%%%%%%%%%%%
             nP = 0;
@@ -879,14 +926,16 @@ classdef functionNDomain
               py(nP) = r.vy(j);
             end
             %%%%%%%%%%%%%%%%%%%%%%
-               m = m + 1;
              %  disp('b4 simp')
                r = r.simplifyUnboundedRegion;
              %  disp('aft simp')
-               r = r.removeTangent (nP, px,py);
-               objL2(m) = functionNDomain([objL(i).f],r);
-               marked(i) = true;
-               index(m) = i;
+               if ~isempty(r)
+                 m = m + 1;
+                 r = r.removeTangent (nP, px,py);
+                 objL2(m) = functionNDomain([objL(i).f],r);
+                 index(m) = i;
+               end
+               end
                for j=ia(i):ia(i+1)-1
                  if marked(ja(j))
                    continue
@@ -906,13 +955,17 @@ classdef functionNDomain
                      end
                    end
                  end
-                m = m + 1;
                 r = r.simplifyUnboundedRegion;
-                r = r.removeTangent (nP, px,py);
-                objL2(m) = functionNDomain([objL(i).f],r);
-                 marked(i) = true;
-                 index(m) = i;
-                 marked(ja(j)) = true;
+                marked(i) = true;
+                marked(ja(j)) = true;
+                % HISTORY (tie-point fix follow-up): see the matching guard
+                % above -- an accumulated merge can still simplify to empty.
+                if ~isempty(r)
+                  m = m + 1;
+                  r = r.removeTangent (nP, px,py);
+                  objL2(m) = functionNDomain([objL(i).f],r);
+                  index(m) = i;
+                end
 
                  
                end
