@@ -46,18 +46,14 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
 
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt));
             Xg = uu(:); Yg = vv(:); xyg = Xg.*Yg;
-            % s=(0.5,0.5) is DELIBERATELY EXCLUDED: an exact symmetric tie point where both
-            % triangles' own off-diagonal-vertex cones meet (true sup 0.5, attained at BOTH
-            % (1,0) [triangle 1] and (0,1) [triangle 2] simultaneously) -- functionNDomain.mergeL/
-            % removeTangent hit repeated "isAlways: TruthUnknown" warnings assembling this exact
-            % junction (confirmed via a scratch debug script: at s=(0.5,0.5), all 8 assembled
-            % regions' worst inequality is violated by 0.5-1, not a small residual, i.e. a genuine
-            % gap in the assembled partition at this one degenerate point, not a tolerance issue).
-            % A documented, narrow limitation of the vendored cPLQ merge logic at an exact tie
-            % between two INDEPENDENT triangles' own vertices -- not seen at any other point tried
-            % here, and not a flaw in quaPolyToPlq/evalFunctionNDomain themselves. See
-            % .claude/SESSION_HANDOFF.md.
-            S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6; 2 2];
+            % s=(0.5,0.5) is an exact symmetric tie point where both triangles' own
+            % off-diagonal-vertex cones meet (true sup 0.5, attained at BOTH (1,0) [triangle 1]
+            % and (0,1) [triangle 2] simultaneously). Previously excluded here: region.maxArray's
+            % overlap-domain vertices are themselves exactly on the f1==f2 tie line at this
+            % junction, so its interior-probe heuristic gave up (lSing) and functionNDomain.
+            % maximumP discarded the whole overlap region instead of falling back to splitmax3 --
+            % fixed in maximumP (see its own HISTORY comment / .claude/SESSION_HANDOFF.md).
+            S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6; 2 2; 0.5 0.5];
             for i = 1:size(S,1)
                 sup = max(S(i,1)*Xg + S(i,2)*Yg - xyg);
                 gv = evalFunctionNDomain(p.maxConjugate, S(i,:));
