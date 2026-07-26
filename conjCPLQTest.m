@@ -193,7 +193,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyTrue(q.isDomBounded);
 
             g = q.conj('cplq');
-            testCase.verifyClass(g, 'functionNDomain');
+            testCase.verifyClass(g, 'QuaParCPLQ');
 
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt));
             Xg = uu(:); Yg = vv(:); xyg = Xg.*Yg;
@@ -202,7 +202,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 6 2; -1 6; 2 2; 0.5 0.5];
             for i = 1:size(S,1)
                 sup = max(S(i,1)*Xg + S(i,2)*Yg - xyg);
-                gv = evalFunctionNDomain(g, S(i,:));
+                gv = g.eval(S(i,:));
                 testCase.verifyEqual(gv, sup, 'AbsTol', 2e-3, sprintf('s=%d', i));
             end
         end

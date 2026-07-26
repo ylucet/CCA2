@@ -14,10 +14,13 @@ function g = conjCPLQ(obj, idx)
 % [output] g   : the conjugate. QuaPoly when it is itself quadratic-on-polyhedral (e.g. a
 %                full-domain strictly convex quadratic); QuaPar for a single bounded-triangle
 %                piece (Case B); for a genuinely multi-face or non-triangular bounded domain
-%                (Case C, below), g is instead a cPLQ `functionNDomain` array (NOT a QuaPoly/
-%                QuaPar) -- evaluate it with `evalFunctionNDomain(g, s)`, not `g.eval(s)`. Case C
-%                does not (yet) support further composition (biconj/infConv/moreau/...): those
-%                call `.conj()` again on `g`, which only QuaPoly/QuaPar provide.
+%                (Case C, below), g is a QuaParCPLQ -- a thin wrapper around cPLQ's own
+%                `functionNDomain` array (NOT a QuaPoly/QuaPar: see QuaParCPLQ.m's own header for
+%                why) that provides the same operator surface (conj/add/scalarMul/addQuadratic/
+%                eval), so biconj/infConv/moreau/proxAverage compose with it exactly as they do
+%                with QuaPoly/QuaPar -- see QuaParCPLQ.m for the STATUS/limitations of that
+%                composition (in particular biconjugateF's known open mergeL/removeTangent exact-
+%                tie-point gap -- DESIGN.md II.5.1 -- is inherited by QuaParCPLQ.conj).
 %
 % STATUS (incremental implementation -- see DESIGN.md II.5.1):
 %   * IMPLEMENTED (exact): full-domain strictly convex quadratic -> full-domain quadratic.
@@ -35,10 +38,11 @@ function g = conjCPLQ(obj, idx)
 %     single non-triangular face, via the integrated cPLQ symbolic pipeline (quaPolyToPlq.m ->
 %     plq.triangulate -> plq.maximum), NOT the numeric conjPieceCPLQ/maxQuaPar path (which still
 %     cannot combine curved-edge QuaPars from independent triangles -- see maxQuaPar.m's own TODO).
-%     This is Case C below. NOTE the return-type caveat above: g is a functionNDomain array here,
-%     not a QuaPoly/QuaPar, so composition (biconj/infConv/moreau/...) is not supported for this
-%     case yet -- only direct conjugate + evalFunctionNDomain. `cPLQ`'s own biconjugateF has known
-%     open bugs (region.getNormalConeVertexQ) not needed for Case C itself.
+%     This is Case C below. g is a QuaParCPLQ (see the return-type note above and QuaParCPLQ.m):
+%     composition (biconj/infConv/moreau/proxAverage) IS supported, by driving the same per-piece
+%     machinery `plq.biconjugateF` already used (functionNDomain.conjugateOfPiecePoly/mergeL/
+%     addEq) -- inheriting that recipe's own known open mergeL/removeTangent exact-tie-point gap
+%     (DESIGN.md II.5.1) for domains it affects.
 %
 % NOTE on arithmetic: the design target is exact symbolic + rational arithmetic
 %   ([COAP]/[JOGO]); Case A/B use double precision for the closed-form quadratic case, while
@@ -86,13 +90,13 @@ function g = conjCPLQ(obj, idx)
     % [JOGO] Step 3 (max of conjugates) via the integrated cPLQ symbolic pipeline (Phase 1;
     % DESIGN.md II.5.1 / .claude/SESSION_HANDOFF.md) -- the case Case B's own numeric path
     % (conjPieceCPLQ + maxQuaPar) cannot do, since maxQuaPar refuses curved-edge QuaPar inputs
-    % from independent triangles. g is a cPLQ functionNDomain array here, not a QuaPoly/QuaPar --
-    % see this function's own header for the return-type caveat.
+    % from independent triangles. g is a QuaParCPLQ here, not a QuaPoly/QuaPar -- see this
+    % function's own header and QuaParCPLQ.m for the return-type rationale.
     if obj.isDomBounded
         p = quaPolyToPlq(obj);
         p = p.triangulate;
         p = p.maximum;
-        g = p.maxConjugate;
+        g = QuaParCPLQ(p.maxConjugate);
         return
     end
 

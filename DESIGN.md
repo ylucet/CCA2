@@ -908,19 +908,40 @@ the plan:
    **Wired into `conjCPLQ.m` itself (this session, user's choice of 3 options)**: `conjCPLQ.m` now
    has a Case C (general bounded domain, `nf>1` and/or non-triangular) that calls `quaPolyToPlq`
    -> `.triangulate` -> `.maximum` instead of erroring -- generalized `quaPolyToPlq.m` to accept
-   non-triangular faces too (relies on `plq.triangulate`'s own fan-splitting). `g` for Case C is a
-   `functionNDomain` array (NOT `QuaPoly`/`QuaPar`) -- documented in `conjCPLQ.m`'s own header;
-   composition (`biconj`/`infConv`/`moreau`/...) is not supported for Case C yet for that reason.
-   Verified via `conjCPLQTest.m`'s new `multiFaceBoundedDomainViaCPLQIntegration` (through the
-   actual public `conj('cplq')` entry point) and a full-suite regression check (18/18 pass).
-   **Still open for Phase 1**: `getNormalConeVertexQ` is now fixed (see biconjugate bullet above)
-   -- the remaining known bug is the `mergeL`/`removeTangent` exact-tie-point gap; convert
-   `evalFunctionNDomain`'s output back into a `QuaPar` if/when a caller needs the structured (not
-   just numerically-evaluable) result, so Case C can support composition (`biconj`/`infConv`/
-   `moreau`/...) too; run the remaining ~12 untested `testMaxMultiRegion` cases. `cPLQ`'s own code
-   being slow and noisy (`maximumP`/`mergeL`/`removeTangent`'s repeated symbolic `isAlways`
-   "truth unknown" warnings/retries) remains expected and fine for Phase 1 — it is exactly Phase
-   2's target, not a Phase 1 blocker.
+   non-triangular faces too (relies on `plq.triangulate`'s own fan-splitting). `g` for Case C was
+   originally a raw `functionNDomain` array (NOT `QuaPoly`/`QuaPar`), with composition
+   (`biconj`/`infConv`/`moreau`/...) unsupported -- see the next bullet for the follow-up session
+   that closed this gap. Verified via `conjCPLQTest.m`'s new `multiFaceBoundedDomainViaCPLQIntegration`
+   (through the actual public `conj('cplq')` entry point) and a full-suite regression check
+   (18/18 pass).
+   **`QuaParCPLQ` return type added (follow-up session, 2026-07-24)**: Case C's `g` is now a
+   `QuaParCPLQ` (`QuaParCPLQ.m`) -- a thin wrapper around the same `functionNDomain` array that
+   implements `conj`/`add`/`scalarMul`/`addQuadratic`/`addScaledEnergy`/`eval`, the exact operator
+   surface `infConv.m`/`moreau.m`/`proxAverage.m`/`QuaPar.biconj` call by plain function name (so
+   none of those 4 files needed changing at all -- MATLAB dispatches to whichever class the
+   operand actually is). `conj` reuses `plq.biconjugateF`'s own recipe
+   (`functionNDomain.conjugateOfPiecePoly` -> `mergeL` -> `addEq`), generalized into a standalone,
+   recursively-composable operator instead of being fused into the `plq` class; `add` overlays two
+   full-plane piecewise functions pairwise (same domain-intersection idiom as
+   `functionNDomain.times`/`mtimes`) and sums their values per overlap cell. `toQuaPar.m` passes a
+   `QuaParCPLQ` through unchanged (it is not converted to a true geometric `QuaPar` -- see
+   `QuaParCPLQ.m`'s own header for why that's a separate, larger, still-open task).
+   Verified: `conj`/`scalarMul`/`addQuadratic`/`addScaledEnergy`/`add` checked against direct
+   arithmetic (Fenchel-Young inequality, exact scale/shift ratios) on the xy-over-split-square
+   example; `biconj(q,'cplq')` and `moreau(q,1,'cplq')` run end to end without erroring. The
+   conjugate-of-conjugate result was cross-checked byte-for-byte against `plq.biconjugateF`
+   called directly on the same piece -- both give the exact same (incomplete, 1-piece) answer,
+   confirming the known `mergeL`/`removeTangent` exact-tie-point gap (next paragraph) is inherited
+   unchanged, not worsened, by the new wrapper. Full regression: `conjCPLQTest`/`infConvTest`/
+   `QuaParTest`/`cplqAdapterTest` all still pass (33/33) after this change.
+   **Still open for Phase 1**: `getNormalConeVertexQ` is fixed (see biconjugate bullet above) --
+   the remaining known bug is the `mergeL`/`removeTangent` exact-tie-point gap, which
+   `QuaParCPLQ.conj` now inherits when composing (see above); a true geometric `QuaPar`
+   reconstruction (V/E/Ec/F/P) of a Case C conjugate remains a separate, larger, unstarted task;
+   run the remaining ~12 untested `testMaxMultiRegion` cases. `cPLQ`'s own code being slow and
+   noisy (`maximumP`/`mergeL`/`removeTangent`'s repeated symbolic `isAlways` "truth unknown"
+   warnings/retries) remains expected and fine for Phase 1 — it is exactly Phase 2's target, not a
+   Phase 1 blocker.
 2. **Phase 2 (later) — improve performance**: once Phase 1 is integrated and fully tested, replace
    the symbolic computation with direct closed-form numeric formulas incrementally, one case/step
    at a time, validating each replacement against the Phase-1 symbolic result on the same inputs
