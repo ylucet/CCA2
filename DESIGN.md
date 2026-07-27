@@ -853,6 +853,10 @@ the plan:
   `maxQuaPar`'s own documented restriction to purely polyhedral (non-curved) domains — confirmed by
   a direct test (`f=xy` on a 2-triangle square: each triangle's conjugate is a correct 6-face curved
   `QuaPar`, but `maxQuaPar(g1,g2)` errors immediately on the curved edges).
+  **Partly lifted (2026-07-27)**: `maxQuaPar` now accepts **one** curved input (see the Phase 2
+  checkpoint below). What still blocks the general multi-triangle case numerically is the remaining
+  two-curved-inputs / split-a-cell-that-already-has-an-arc case, both of which need conic-conic
+  intersection and currently error clearly.
 - Per **user decision (2026-07-18)**: rather than deriving new closed-form numeric machinery for
   this (curved-edge `maxQuaPar`, or the rational-piece conjugate) from scratch, **integrate the
   reference `cPLQ` package (almost as-is, symbolic) first** — this is actually what engine `'cplq'`
@@ -958,19 +962,43 @@ the plan:
    why Case C falls back to the slow full-domain symbolic pipeline (`quaPolyToPlq` ->
    `.triangulate` -> `.maximum`) instead of per-triangle closed-form conjugate + a numeric
    `maxQuaPar` combine. Closing that TODO is therefore the concrete next Phase 2 step.
-   **Checkpoint (this session, first increment)**: `clipArcByHalfPlane.m` — clip a parabola arc
-   against a half-plane, the core new geometric primitive `maxQuaPar`'s curved-edge case needs
+   **Checkpoint (2026-07-26 session, first increment)**: `clipArcByHalfPlane.m` — clip a parabola
+   arc against a half-plane, the core new geometric primitive `maxQuaPar`'s curved-edge case needs
    (its own `clipByFace`/`clipPolyHalfPlane` loop applied to one curved cell edge). Implemented and
    validated STANDALONE (`clipArcByHalfPlaneTest.m`, 7/7 pass) against hand-derived axis-aligned
-   cases and an independently-constructed rotated/shifted parabola cross-check. Deliberately NOT
-   yet wired into `maxQuaPar.m` itself: doing so safely means tracking a curved edge through
-   `clipPolyHalfPlane`'s several interacting branches (bounded/unbounded cell, 1 vs 2 crossings, a
-   curve turning a piece bounded partway through a chained sequence of clips) and re-validating
-   against `maxQuaParTest.m`'s own dense regression history (that file's HISTORY comments document
-   several sessions' worth of subtle, non-crashing wrong-answer bugs in the polyhedral-only case
-   alone) — right-sized as its own next session/step rather than rushed in this one. See
-   `maxQuaPar.m`'s own TODO comment and `.claude/SESSION_HANDOFF.md` for the concrete pick-up
-   point.
+   cases and an independently-constructed rotated/shifted parabola cross-check.
+
+   **Checkpoint (2026-07-27 session, second increment — DONE)**: that primitive is now WIRED into
+   `maxQuaPar.m`, which accepts **exactly one** curved input (the case
+   `conjBilinearXYoneCE`/`conjIndefiniteQuadTriangle`-with-1-convex-edge produces). Design points:
+   - Since `max` is symmetric, the operands are **swapped** so the curved one is always `g1`. The
+     `(k,l)` loop only ever clips a `g1` face against a `g2` face's half-planes, so with that
+     normalization the only new primitive needed is arc-vs-half-plane clipping — never
+     polygon-vs-conic-side, and never (for this step) conic-conic.
+   - The polyhedral clip path is left **byte-identical** (`clipPolyHalfPlaneStraight`); the curved
+     case goes through a separate `clipPolyHalfPlaneCurved`. `maxQuaPar.m`'s own HISTORY documents
+     several sessions of subtle wrong-**answer** bugs in that straight path, so generalizing it in
+     place would have put those fixes at risk for no benefit.
+   - `facePoly` now reports a face's arc as `curveAfter`/`curveEc`, sign-normalized positive on the
+     face interior via an exact index test (`F(j,1)==k`) rather than an interior sample.
+   - The `(u,v)` parabola frame moved to `parabolaArcFrame.m`, shared by `clipArcByHalfPlane.m` and
+     `maxQuaPar.m` so the two cannot drift apart.
+
+   Validation (randomized sweep over convex quadrilaterals split by a diagonal — the "two adjacent
+   sub-pieces of one domain" configuration `maxQuaPar`'s scoping caveat requires; ground truth =
+   closed-form sup of the bilinear objective): of 115 sampled splits, **85 assembled, exact to
+   ~1e-14 at every straight-edge midpoint (340/340) and every interior point (5100/5100)**, with
+   **zero `maxQuaPar:internal` crashes**. The other 30 hit the documented `notImplemented` guard
+   for a cell that already carries an arc AND needs splitting (conic-conic) — the natural next
+   step. Evaluating *exactly at* a result vertex
+   disagrees ~0.8% of the time, but that is **pre-existing** `QuaPar.eval` point location, not new:
+   the same sweep on purely polyhedral pairs disagrees ~1.4% of the time at result vertices.
+   Two bugs found and fixed along the way, both recorded in `maxQuaPar.m`: a degenerate-arc
+   relabelling in the dedup step (the clip line is *tangent* to the parabola at the arc's own
+   endpoint — structural, since a conjugate is C1 where its pieces join), and an off-by-one in
+   `localEdgeLists`' `curveAfter`→`Ep` row mapping for unbounded pieces (latent: no prior test
+   produced a curved piece at all). Regression tests: `maxQuaParTest`'s five
+   `maxQuaParCombines…`/`…Curved…`/`…Rejects…`/`facePoly…` tests.
 3. ~~**`conjPieceCPLQ`'s own rational-piece TODO**~~ — superseded by the plan above; do not resume
    the single-RatPol-piece closed-form derivation as a standalone task (see `conjPieceCPLQ.m`'s
    header and `.claude/SESSION_HANDOFF.md` for the full diagnosis of why it was mis-scoped).

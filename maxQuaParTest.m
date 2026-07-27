@@ -328,9 +328,200 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyClass(g, 'QuaPar');
             maxQuaParTest.verifyAgainstGroundTruth(testCase, g);
         end
+
+        % ---------------- curved (parabolic) input edges ----------------
+
+        function maxQuaParCombinesOneCurvedInputWithAPolyhedralOne(testCase)
+            % The first end-to-end exercise of maxQuaPar's curved-edge support (previously its
+            % standing TODO: it rejected ANY input with a nonzero Ec row). Q = the convex
+            % quadrilateral (0,0),(3,-5),(4,-4),(2,-1), split by the diagonal (0,0)-(4,-4) into
+            %   T1 = (0,0),(3,-5),(4,-4)  -- exactly ONE convex (positive-slope) edge for x*y, so
+            %                                conjPieceCPLQ's conjBilinearXYoneCE path gives a g1
+            %                                with a genuine PARABOLA arc (COAP B.2);
+            %   T2 = (0,0),(4,-4),(2,-1)  -- ZERO convex edges, so g2 is the purely polyhedral
+            %                                3-cone conjugate.
+            % max(g1,g2) is then exactly sup_{x in Q} <s,x> - x1*x2, checkable in closed form
+            % (supBilinearOverPoly over each triangle -- the sup over Q is the larger of the two,
+            % since Q = T1 union T2).
+            %
+            % Both operand ORDERS are checked: max is symmetric and maxQuaPar swaps internally so
+            % the curved operand is always g1 (its (k,l) loop only ever clips a g1 face against a
+            % g2 face's half-planes, so only arc-vs-half-plane clipping is ever needed, never
+            % polygon-vs-conic-side). The two orders must give the same values.
+            %
+            % REGRESSION (the bug this fixture found): the clip line through the arc's own endpoint
+            % is TANGENT to the parabola there -- structural here, not contrived, since a
+            % conjugate's curved edge meets its neighbouring straight edges tangentially, and the
+            % other operand's face boundaries run along those same tangent lines. The clip then
+            % keeps only a single point of the arc, and maxQuaPar's dedup step used to SHIFT the
+            % "this edge is a parabola" label onto the neighbouring straight edge instead of
+            % dropping it, which then failed to pair with that edge's genuine straight neighbour
+            % (maxQuaPar:internal, "no matching neighbour"). See dedupConsecutiveTracked.
+            [T1, T2] = maxQuaParTest.curvedFixtureTriangles();
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            testCase.verifyTrue(any(g1.Ec(:) ~= 0), 'g1 should carry a parabolic edge');
+            testCase.verifyTrue(all(g2.Ec(:) == 0), 'g2 should be purely polyhedral');
+
+            gA = maxQuaPar(g1, g2);
+            gB = maxQuaPar(g2, g1);   % swapped: must be handled identically
+            testCase.verifyClass(gA, 'QuaPar');
+            testCase.verifyClass(gB, 'QuaPar');
+            % The parabola arc must SURVIVE into the result -- if it were silently dropped, the
+            % values could still look right on a coarse sample while the domain was wrong.
+            testCase.verifyTrue(any(gA.Ec(:) ~= 0), 'the result should retain a curved edge');
+            testCase.verifyTrue(any(gB.Ec(:) ~= 0), 'the result should retain a curved edge');
+
+            S = maxQuaParTest.curvedSamplePoints(gA);
+            for i = 1:size(S,1)
+                s = S(i,:);
+                truth = max(maxQuaParTest.supBilinearOverPoly(s, T1), ...
+                            maxQuaParTest.supBilinearOverPoly(s, T2));
+                testCase.verifyEqual(gA.eval(s), truth, 'AbsTol', 1e-9, ...
+                    sprintf('curved first: s=(%.4f,%.4f)', s(1), s(2)));
+                testCase.verifyEqual(gB.eval(s), truth, 'AbsTol', 1e-9, ...
+                    sprintf('polyhedral first: s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
+        function maxQuaParCurvedMatchesGroundTruthOnRandomQuadrilaterals(testCase)
+            % Four further curved fixtures, drawn from a randomized sweep over convex
+            % quadrilaterals split by a diagonal (the same "two adjacent sub-pieces of one domain"
+            % configuration maxQuaPar's header scoping caveat requires), keeping those splits where
+            % exactly one sub-triangle has one convex edge and the other has none. Each is checked
+            % against the closed-form sup over its own quadrilateral. These pin the curved path
+            % against arrangements with different face/vertex counts and different arc orientations
+            % than the hand-picked fixture above, all of which the sweep verified to ~1e-14.
+            Ts = { [2.621204977828703 -1.5942228342029998; 0.95035913319170806 3.1302153591019519; -0.52456888336999097 1.978798322485771]
+                   [-1.7500476464784906 1.7560710933062524; -1.333215970360937 -1.6455512146039442; 2.7678673998769212 -7.6405033597373295]
+                   [1.0744114907822744 -0.16000616077948826; -4.4353377345911564 -2.8870698882442816; 3.0122988958821439 -9.2101103505506821]
+                   [7.6859117785392446 -2.4287602783232871; -0.34888783126826112 1.669885416366919; -4.0138290415293412 1.4849569048836258] };
+            Us = { [2.621204977828703 -1.5942228342029998; -0.52456888336999097 1.978798322485771; 0.31358038961980822 0.038009959467080398]
+                   [-1.7500476464784906 1.7560710933062524; 2.7678673998769212 -7.6405033597373295; 5.0563561917953432 -2.6420118716252645]
+                   [1.0744114907822744 -0.16000616077948826; 3.0122988958821439 -9.2101103505506821; 2.7985413524983773 -1.1147595229367717]
+                   [7.6859117785392446 -2.4287602783232871; -4.0138290415293412 1.4849569048836258; 0.80205423362065431 -1.4026446491948206] };
+            for ti = 1:numel(Ts)
+                T1 = Ts{ti}; T2 = Us{ti};
+                [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+                g = maxQuaPar(g1, g2);
+                testCase.verifyClass(g, 'QuaPar');
+                testCase.verifyTrue(any(g.Ec(:) ~= 0), ...
+                    sprintf('fixture %d: the result should retain a curved edge', ti));
+                S = maxQuaParTest.curvedSamplePoints(g);
+                for i = 1:size(S,1)
+                    s = S(i,:);
+                    truth = max(maxQuaParTest.supBilinearOverPoly(s, T1), ...
+                                maxQuaParTest.supBilinearOverPoly(s, T2));
+                    testCase.verifyEqual(g.eval(s), truth, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                        sprintf('fixture %d: s=(%.4f,%.4f)', ti, s(1), s(2)));
+                end
+            end
+        end
+
+        function maxQuaParRejectsTwoCurvedInputs(testCase)
+            % Both operands curved needs genuine conic-conic intersection (a cell edge that is one
+            % parabola clipped by another). Out of scope for the single-curved-edge step; must fail
+            % loudly rather than silently mis-clip one arc against the other's chord.
+            [T1, ~] = maxQuaParTest.curvedFixtureTriangles();
+            [g1, ~] = maxQuaParTest.buildCurvedG1G2(T1, T1);
+            testCase.verifyError(@() maxQuaPar(g1, g1), 'maxQuaPar:notImplemented');
+        end
+
+        function maxQuaParRejectsSplittingACellThatAlreadyCarriesAnArc(testCase)
+            % The other documented curved-case limit: a cell that already carries a parabolic edge
+            % AND whose winner is undecided would have to be split along a SECOND curve, needing
+            % conic-conic intersection and possibly leaving a piece bounded by two separate arcs --
+            % which a piece, with its single Ec slot, cannot carry. This is not rare (it accounted
+            % for ~30 of 115 sampled quadrilateral splits), so it must fail loudly rather than
+            % silently drop the existing arc.
+            %
+            % Guard placement note: decideWinner samples the ARC'S OWN MIDPOINT in addition to the
+            % cell's vertices, precisely so that a curved cell whose winner really is decided by a
+            % single row (the common case) never reaches this guard -- a curved cell's boundary
+            % bulges away from the chord between its arc endpoints, so the vertices alone can miss
+            % a sign change that happens along the arc.
+            T1 = [5.0563561917953432 -2.6420118716252645; -1.7500476464784906 1.7560710933062524; -1.333215970360937 -1.6455512146039442];
+            T2 = [5.0563561917953432 -2.6420118716252645; -1.333215970360937 -1.6455512146039442; 2.7678673998769212 -7.6405033597373295];
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            testCase.verifyError(@() maxQuaPar(g1, g2), 'maxQuaPar:notImplemented');
+        end
+
+        function facePolyReportsACurvedFaceAsAnArcOrientedIntoTheFace(testCase)
+            % Unit-level check of the two facts everything above rests on, verified WITHOUT going
+            % through maxQuaPar: for the curved fixture's g1, exactly one boundary edge of the
+            % parabolic face is a conic, and QuaPar's own orientation invariant (evalConic > 0 on
+            % the LEFT of the stored directed edge, i.e. on face F(j,1)) holds -- which is what
+            % lets facePoly fix a face's arc orientation by an exact index test (F(j,1)==k) rather
+            % than by an interior sample point.
+            [T1, T2] = maxQuaParTest.curvedFixtureTriangles();
+            [g1, ~] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            j = find(any(g1.Ec ~= 0, 2));
+            testCase.verifyNumElements(j, 1, 'expected exactly one parabolic edge');
+            testCase.verifyEqual(g1.E(j,3), 1, 'a curved edge must be a bounded ARC, not a ray');
+
+            % b^2-4ac == 0: a genuine parabola, the only curve QuaPar can represent.
+            ec = g1.Ec(j,:);
+            testCase.verifyEqual(ec(2)^2 - 4*ec(1)*ec(3), 0, 'AbsTol', 1e-9);
+
+            % Both stored endpoints lie ON the conic, and the conic is positive on the left face's
+            % own interior (sampled just off the arc's midpoint, along the left normal).
+            A = g1.V(g1.E(j,1),:); B = g1.V(g1.E(j,2),:);
+            testCase.verifyEqual(QuaPar.evalConic(ec, A), 0, 'AbsTol', 1e-8);
+            testCase.verifyEqual(QuaPar.evalConic(ec, B), 0, 'AbsTol', 1e-8);
+
+            mid = 0.5*(A+B); d = (B-A)/norm(B-A); nLeft = [-d(2), d(1)];
+            [~, regLeft] = g1.eval(mid + 1e-3*nLeft);
+            testCase.verifyEqual(regLeft, g1.F(j,1), ...
+                'the face on the left of the directed curved edge should be F(j,1)');
+        end
     end
 
     methods (Static)
+        function [T1, T2] = curvedFixtureTriangles()
+            % Q = (0,0),(3,-5),(4,-4),(2,-1) split by the diagonal (0,0)-(4,-4). T1 has exactly one
+            % convex (positive-slope) edge for x*y -> a curved conjugate; T2 has none -> polyhedral.
+            % Both are given CCW, as conjPieceCPLQ's own conventions expect.
+            T1 = [0 0; 3 -5; 4 -4];
+            T2 = [0 0; 4 -4; 2 -1];
+        end
+
+        function [g1, g2] = buildCurvedG1G2(T1, T2)
+            % Step-2 conjugates of f(x,y)=x*y over each of two triangles, built from the real
+            % pipeline (conjPieceCPLQ) rather than hard-coded coefficients -- unlike frozenG1G2,
+            % nothing here depends on Step 1 (convEnvCPLQ), since f=x*y is fed to Step 2 directly.
+            E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            g1 = conjPieceCPLQ(QuaPoly(maxQuaParTest.toCCW(T1), E, [0 1 0 0 0 0], F));
+            g2 = conjPieceCPLQ(QuaPoly(maxQuaParTest.toCCW(T2), E, [0 1 0 0 0 0], F));
+        end
+
+        function T = toCCW(T)
+            a = (T(2,1)-T(1,1))*(T(3,2)-T(1,2)) - (T(2,2)-T(1,2))*(T(3,1)-T(1,1));
+            if a < 0, T = T([1 3 2],:); end
+        end
+
+        function S = curvedSamplePoints(g)
+            % A deterministic spread of check points for a curved result: the arrangement's own
+            % vertices nudged slightly INWARD toward the centroid, the midpoints of its straight
+            % edges, and two rings around the centroid.
+            %
+            % The nudge is deliberate. Evaluating EXACTLY at a vertex of the result exercises
+            % QuaPar.eval's exact (no-tolerance) point-location test, which at a corner can leave a
+            % point unclaimed (+Inf) or claimed by an adjacent face -- a pre-existing property of
+            % the polyhedral path too (measured on a randomized sweep: ~1.4% of result vertices on
+            % the purely polyhedral path, ~0.8% on the curved one; both were exact at every edge
+            % midpoint and every interior point). That is a separate, longstanding point-location
+            % issue, not something the curved-edge work introduced or should be pinned on here.
+            C = mean(g.V,1);
+            R = max(1, max(vecnorm(g.V - C, 2, 2)));
+            S = C + 0.999*(g.V - C);
+            for j = 1:size(g.E,1)
+                if g.E(j,3) ~= 1, continue; end
+                S(end+1,:) = 0.5*(g.V(g.E(j,1),:) + g.V(g.E(j,2),:)); %#ok<AGROW>
+            end
+            th = (0:11)'*pi/6;
+            S = [S; C + 0.35*R*[cos(th) sin(th)]; C + 1.7*R*[cos(th) sin(th)]; C];
+        end
+
+
         function [g1, g2] = buildG1G2()
             % q1 over T1=(0,0),(1,2),(2,2) and q2 over T2=(1,2),(2,2),(3,3): the rank-1 PSD convex
             % envelopes of f(x,y)=xy given in closed form by 3-edge.tex eq (eq:q1)/(eq:q2).

@@ -6,14 +6,18 @@ function [status, Xnew] = clipArcByHalfPlane(Ec, X0, X1, nrm, c)
 %   .claude/SESSION_HANDOFF.md "Phase 2" -- go one small step at a time, validate each in
 %   isolation before composing).
 %
-% STATUS: this primitive is implemented and validated STANDALONE (clipArcByHalfPlaneTest.m) against
-%   hand-derived and independently-constructed (rotated/shifted) parabola cases. It is NOT YET
-%   WIRED into maxQuaPar.m's own clipByFace/clipPolyHalfPlane/assemblePieces pipeline -- that
-%   wiring needs to track a curved edge's position through clipPolyHalfPlane's several interacting
-%   branches (bounded/unbounded cell, 1 vs 2 crossings, a curve turning a piece bounded partway
-%   through a chained sequence of clips within one clipByFace call) and re-validate end to end
-%   against maxQuaPar's own dense regression history (maxQuaParTest.m) -- deliberately left for a
-%   following session/step rather than rushed (see SESSION_HANDOFF.md).
+% STATUS: implemented and validated STANDALONE (clipArcByHalfPlaneTest.m) against hand-derived and
+%   independently-constructed (rotated/shifted) parabola cases, AND now WIRED into maxQuaPar.m --
+%   see its clipPolyHalfPlaneCurved, which calls this per curved cell edge while threading the
+%   arc's position through each of clipPolyHalfPlane's keep/cut branches, and maxQuaPar.m's own
+%   header for the end-to-end validation of that path. One caveat carried there: within
+%   maxQuaPar's supported regime the 'cut' status below is never actually reached (the other
+%   operand's face boundaries are TANGENT to the parabola there, so a clip keeps the arc whole or
+%   reduces it to a point), so that branch stays covered by this file's own direct tests rather
+%   than end to end.
+%
+%   The (u,v)-frame construction itself now lives in parabolaArcFrame.m, shared with maxQuaPar.m's
+%   arc midpoint/tangent and arc-bulge tests so the two cannot drift apart.
 %
 % [input]  Ec  : 1x6 conic [a b c d e f] for a*x^2+b*xy+c*y^2+d*x+e*y+f=0, a genuine PARABOLA
 %                (b^2-4ac==0, checked). X0, X1 : 1x2 points, both already known to lie on Ec (a
@@ -24,38 +28,21 @@ function [status, Xnew] = clipArcByHalfPlane(Ec, X0, X1, nrm, c)
 %                    'cut'     -> exactly one endpoint was outside and is replaced by the single
 %                                 new crossing point; Xnew = [X0new; X1new] (only one row changed).
 %
-% METHOD: rewrite the parabola in its own (u,v) frame, v = q(u) = -(lam*u^2+du*u+f)/dv, where
-%   (uDir,nullDir) is the orthonormal eigenbasis of the quadratic part Q=[a b/2;b/2 c] (nullDir:
-%   the zero-eigenvalue eigenvector = the conic's own axis direction; uDir = rot90(nullDir),
-%   guaranteed transverse since a genuine parabola's Q has rank exactly 1), and lam=uDir*Q*uDir',
-%   du=[d e]*uDir', dv=[d e]*nullDir'. u is a GLOBAL, monotonic parameter for every point of the
-%   conic (not just this arc), so ordering two points by u correctly orders them along the finite
-%   ("short") arc between them whenever that arc doesn't need to detour through infinity -- always
-%   true here, since a QuaPar curved edge is by construction never an unbounded curved ray (see
-%   QuaPar.m's own header). nrm*X(u)'-c is then an explicit quadratic in u (X(u) itself affine in u
-%   for its uDir component and quadratic-in-u via q(u) for its nullDir component): solved directly
-%   for u, then converted back to a point via X(u) -- no line-conic-intersection-then-reproject
-%   detour needed, and no ambiguity about which of the (up to 2) roots of the FULL conic-vs-line
+% METHOD: rewrite the parabola in its own (u,v) frame, v = q(u) = -(lam*u^2+du*u+f)/dv -- see
+%   parabolaArcFrame.m, which owns that construction (it is shared with maxQuaPar.m's curved-edge
+%   clipping) and documents why u is a GLOBAL, monotonic parameter for every point of the conic, so
+%   ordering two points by u correctly orders them along the finite ("short") arc between them
+%   whenever that arc doesn't need to detour through infinity -- always true here, since a QuaPar
+%   curved edge is by construction never an unbounded curved ray (see QuaPar.m's own header).
+%   nrm*X(u)'-c is then an explicit quadratic in u (fr.lineCoeffs): solved directly for u, then
+%   converted back to a point via fr.point -- no line-conic-intersection-then-reproject detour
+%   needed, and no ambiguity about which of the (up to 2) roots of the FULL conic-vs-line
 %   intersection is the one actually on this arc (picked by u-range membership instead).
     tol = 1e-8;
-    Q = [Ec(1), Ec(2)/2; Ec(2)/2, Ec(3)];
-    delta = Ec(2)^2 - 4*Ec(1)*Ec(3);
-    if abs(delta) > 1e-6*(norm(Q,'fro')+1)^2
-        error('clipArcByHalfPlane:notParabola', 'Ec is not a parabola (b^2-4ac=%g).', delta);
-    end
-    [V,D] = eig(Q);
-    [~,i0] = min(abs(diag(D)));
-    iu = 3 - i0;
-    nullDir = V(:,i0)'/norm(V(:,i0));
-    uDir = V(:,iu)'/norm(V(:,iu));
-    lam = uDir*Q*uDir'; dv = [Ec(4) Ec(5)]*nullDir'; du = [Ec(4) Ec(5)]*uDir'; f = Ec(6);
-    if abs(dv) < 1e-10*(abs(lam)+abs(du)+1)
-        error('clipArcByHalfPlane:degenerateAxis', ...
-            'Conic does not depend on v (dv~0): not a genuine parabola in this frame.');
-    end
-    Xu = @(u) u*uDir + (-(lam*u.^2+du*u+f)/dv)*nullDir;
+    fr = parabolaArcFrame(Ec, 'clipArcByHalfPlane');
+    Xu = fr.point;
 
-    u0 = dot(X0, uDir); u1 = dot(X1, uDir);
+    u0 = fr.uOf(X0); u1 = fr.uOf(X1);
     v0 = nrm*X0' - c; v1 = nrm*X1' - c;
     in0 = v0 <= tol; in1 = v1 <= tol;
 
@@ -69,10 +56,8 @@ function [status, Xnew] = clipArcByHalfPlane(Ec, X0, X1, nrm, c)
     % Exactly one endpoint outside: solve the quadratic-in-u restriction of nrm*X(u)'-c directly
     % (substitute q(u)=-(lam u^2+du u+f)/dv into nrm*X(u)'-c), then keep whichever root lies
     % within this arc's own [u0,u1] span (up to a small tolerance).
-    A2 = -(nrm*nullDir')*lam/dv;
-    A1 = nrm*uDir' - (nrm*nullDir')*du/dv;
-    A0 = -(nrm*nullDir')*f/dv - c;
-    roots_u = solveQuadLocal(A2, A1, A0);
+    A = fr.lineCoeffs(nrm, c);
+    roots_u = solveQuadLocal(A(1), A(2), A(3));
     uLo = min(u0,u1); uHi = max(u0,u1);
     marg = 1e-6*(1+abs(uLo)+abs(uHi));
     cand = roots_u(roots_u >= uLo-marg & roots_u <= uHi+marg);

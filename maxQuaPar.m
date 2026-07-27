@@ -133,23 +133,61 @@ function g = maxQuaPar(g1, g2)
 %     exactly what conjPSDRank1QuadTriangle/conjPSDRank1QuadTriangleTie/conjLinearTriangle produce.
 %     The face FUNCTIONS may still be genuinely quadratic; only the DOMAIN boundaries must be
 %     polyhedral for this version.
-%   * TODO: g1 or g2 with a curved (parabolic) input edge (conjBilinearXYoneCE /
-%     conjIndefiniteQuadTriangle-with-1-convex-edge output) -- needs face-vs-conic clipping
-%     (clipByConicSide) and possibly conic-conic intersection; not implemented, errors clearly.
-%     PARTIAL PROGRESS (Phase 2 scoping session, see DESIGN.md/SESSION_HANDOFF.md): the core new
-%     primitive this needs -- clipping a parabola ARC against a half-plane, i.e. clipByFace's
-%     inner clipPolyHalfPlane loop applied to one curved cell edge -- now exists standalone as
-%     clipArcByHalfPlane.m, validated (clipArcByHalfPlaneTest.m) against hand-derived and
-%     independently-rotated/shifted parabola cases. It is NOT yet wired into clipByFace/
-%     clipPolyHalfPlane/assemblePieces below (that requires tracking a curved edge through their
-%     several interacting branches and re-validating against this file's own dense regression
-%     history) -- left for a following session/step, deliberately not rushed.
+%   * IMPLEMENTED (this session): exactly ONE of g1/g2 carrying curved (parabolic) input edges --
+%     conjBilinearXYoneCE / conjIndefiniteQuadTriangle-with-1-convex-edge output. Since max is
+%     symmetric, the two operands are SWAPPED below if needed so the curved one is always g1: the
+%     (k,l) loop only ever clips polyK (a g1 face) against polyL's (a g2 face's) half-planes, so
+%     with that normalization the only new geometric primitive needed is arc-vs-half-plane
+%     clipping (clipArcByHalfPlane.m), never polygon-vs-conic-side clipping. A curved cell edge is
+%     threaded through clipByFace by clipPolyHalfPlaneCurved (the polyhedral path,
+%     clipPolyHalfPlaneStraight, is left untouched -- see its own dense HISTORY below for why that
+%     matters).
+%   * TODO: BOTH inputs curved -- needs genuine conic-conic intersection; not implemented, errors
+%     clearly. Also not implemented, and likewise erroring clearly rather than guessing: a clip
+%     line that cuts one arc TWICE (the arc bulging across it between its own two endpoints -- the
+%     result is either disconnected or has two separate arcs, neither representable as one QuaPar
+%     face; see clipPolyHalfPlaneCurved), and splitting a cell that ALREADY carries an arc (see
+%     splitCell, which would need conic-conic intersection for the same reason). That last one is
+%     NOT rare: on a randomized sweep over convex quadrilaterals split by a diagonal (the
+%     configuration this file's scoping caveat requires), 30 of 115 such splits hit it, versus 85
+%     that assembled correctly. It is the natural next step after this one.
+%
+%   VALIDATION of the curved case (randomized sweep, same generator as the counts above; ground
+%   truth = the closed-form sup of the bilinear objective over the quadrilateral):
+%     - Of 115 sampled splits: 85 assembled, 30 hit the split-a-curved-cell guard, and ZERO hit
+%       either the arc-bulge guard or maxQuaPar:internal. (The arc-bulge case is therefore a
+%       defensive guard, not an observed configuration -- the sweep never produced one, consistent
+%       with the tangency structure described below.)
+%     - Those 85 results were checked at every result VERTEX, every straight-edge MIDPOINT, and 60
+%       generic interior points each. Exact (to ~1e-14) at every edge midpoint (340/340) and every
+%       interior point (5100/5100).
+%     - Exactly AT a result vertex, ~0.8% (9/1105) disagree -- QuaPar.eval's exact, no-tolerance
+%       point location can leave a corner unclaimed (+Inf) or claimed by an adjacent face. This is
+%       PRE-EXISTING, not introduced here: the same sweep restricted to purely POLYHEDRAL pairs
+%       (untouched code path) disagrees at ~1.4% (5/356) of result vertices, i.e. slightly more
+%       often, while likewise being exact at every edge midpoint and interior point. Probing rings
+%       of radius as small as 1e-8 around every disagreeing vertex gives the right answer to
+%       ~1e-15, confirming the geometry is right and only the exactly-at-a-corner tie-break is at
+%       issue. Tracked separately; see maxQuaParTest.curvedSamplePoints.
+%     - A clip that cuts an arc STRICTLY BETWEEN its endpoints never arose in the supported regime:
+%       there, the other operand's face boundaries are tangent lines to the parabola (a conjugate
+%       is C1 where its pieces join), so a clip either keeps the arc whole or reduces it to a
+%       point. Such cuts DO occur for unrelated (non-adjacent) triangle pairs, but those violate
+%       this file's scoping caveat and are already wrong on the pre-existing polyhedral path too
+%       (14 of 15 such polyhedral pairs give wrong answers), so they are not usable as evidence
+%       either way. That branch of clipPolyHalfPlaneCurved is therefore currently covered only by
+%       clipArcByHalfPlaneTest's own direct 'cut' tests, not end to end.
 
-    if (~isempty(g1.Ec) && any(g1.Ec(:)~=0)) || (~isempty(g2.Ec) && any(g2.Ec(:)~=0))
+    curved1 = hasCurvedEdge(g1); curved2 = hasCurvedEdge(g2);
+    if curved1 && curved2
         error('maxQuaPar:notImplemented', ...
-            ['maxQuaPar currently requires both inputs to have purely polyhedral domains (no ' ...
-             'curved/parabolic edges); at least one input has a nonzero Ec row.']);
+            ['maxQuaPar supports at most ONE curved (parabolic-edge) input; both g1 and g2 have a ' ...
+             'nonzero Ec row, which needs conic-conic intersection (not implemented).']);
     end
+    if curved2
+        tmp = g1; g1 = g2; g2 = tmp;   % max is symmetric; normalize the curved operand to be g1
+    end
+    assertCurvedEdgesAreArcs(g1);
     assertFullDomain(g1, 'g1');
     assertFullDomain(g2, 'g2');
 
@@ -164,7 +202,7 @@ function g = maxQuaPar(g1, g2)
             f1row = g1.f(k,:); f2row = g2.f(l,:);
             [decided, winRow] = decideWinner(cell, f1row, f2row);
             if decided
-                cell.curveAfter = 0; cell.curveEc = []; cell.f = winRow;
+                cell.f = winRow;   % cell already carries its own curveAfter/curveEc (0/[] if none)
                 pieces(end+1) = cell; %#ok<AGROW>
                 continue
             end
@@ -328,6 +366,34 @@ function tf = isSubsumed(a, b)
     tf = true;
 end
 
+function tf = hasCurvedEdge(g)
+    tf = ~isempty(g.Ec) && any(g.Ec(:) ~= 0);
+end
+
+function tf = pieceIsCurved(p)
+% Whether a poly/cell/piece actually carries a PARABOLIC edge. Deliberately NOT just
+% `p.curveAfter ~= 0`: boundedPiece tags every piece it builds with curveAfter = "the closing
+% edge", including the isStraight case where curveEc is all zeros, and two long-standing
+% behaviours depend on that tag staying set (samePieceGeometry and dropSubsumedPieces both use
+% curveAfter~=0 to opt splitCell's pieces out of dedup/subsumption entirely). So the tag alone
+% means "this piece came from a split", and only a nonzero conic means "this edge is curved".
+    tf = p.curveAfter ~= 0 && ~isempty(p.curveEc) && any(p.curveEc ~= 0);
+end
+
+function assertCurvedEdgesAreArcs(g)
+% A curved edge must be a bounded ARC (E(j,3)==1). QuaPar has no representation for an unbounded
+% curved ray (see QuaPar.m's header and splitCell's own note), and every downstream step here --
+% facePoly's CCW curve index, clipPolyHalfPlaneCurved's arc clipping, localEdgeLists' Ec row --
+% assumes the curve sits on a segment between two finite vertices.
+    if isempty(g.Ec), return; end
+    for j = 1:size(g.Ec,1)
+        if any(g.Ec(j,:) ~= 0) && g.E(j,3) == 0
+            error('maxQuaPar:notImplemented', ...
+                'edge %d is a curved RAY; QuaPar curved edges must be bounded arcs.', j);
+        end
+    end
+end
+
 function assertFullDomain(g, name)
     if g.nv == 0 && g.nf == 1, return; end   % bare full-domain quadratic
     if any(g.F(:) == 0)
@@ -356,17 +422,43 @@ function poly = facePoly(obj, k)
 % re-appended, regardless of n. See this session's inspect_P.m/test_facePoly.m investigation
 % (verified against real conjPSDRank1QuadTriangle output by hand; an earlier draft of this
 % function wrongly re-appended the apex when n>2, producing a duplicate vertex).
+%
+% CURVED EDGE: at most one boundary edge of face k may carry a nonzero conic Ec(j,:) (a parabola
+% arc). It is reported as poly.curveAfter = the index i of the CCW boundary edge poly.V(i) ->
+% poly.V(i+1) that IS the arc (wrapping to poly.V(nv)->poly.V(1) when the face is bounded), 0 when
+% the face is purely polyhedral -- the SAME "vertex index the curve starts at" convention
+% splitCell/boundedPiece already use for the pieces they build. Mapping the walk position t of the
+% curved element to that CCW index: the CW walk's element t is the edge V_cw(t-1)->V_cw(t) and
+% flipud reverses the list, giving i = n+1-t for a bounded face (n elements, nv=n vertices; t==1 is
+% the closing edge, i=n) and i = n-t for an unbounded one (n elements, nv=n-1 vertices, since the
+% two rays contribute one and zero vertices respectively -- see above). Its conic is returned as
+% poly.curveEc, SIGN-NORMALIZED so that evalConic(poly.curveEc,.) > 0 on face k's own interior:
+% QuaPar's orientation invariant already guarantees Ec(j,:) > 0 on the LEFT of V(E(j,1))->V(E(j,2)),
+% i.e. on face F(j,1), so this is an exact index test (F(j,1)==k ? keep : flip), with no need for
+% an interior sample point. clipPolyHalfPlaneCurved relies on that convention to know which side of
+% the arc is inside.
     if obj.nv == 0   % bare full-domain quadratic: the "face" IS all of R^2, no boundary at all
         poly.V = zeros(0,2); poly.dirIn = []; poly.dirOut = [];
         poly.dirInSign = []; poly.dirOutSign = [];
+        poly.curveAfter = 0; poly.curveEc = [];
         return
     end
     Pk = obj.P{k};
     n = numel(Pk);
     V = zeros(0,2); dirIn = []; dirOut = []; dirInSign = []; dirOutSign = [];
+    curveT = 0; curveEc = [];
     for t = 1:n
         j = abs(Pk(t)); s = sign(Pk(t));
         a = obj.E(j,1); b = obj.E(j,2);
+        if ~isempty(obj.Ec) && any(obj.Ec(j,:) ~= 0)
+            if curveT ~= 0
+                error('maxQuaPar:notImplemented', ...
+                    ['face %d has more than one curved edge; a piece here carries at most one ' ...
+                     '(QuaPar''s own per-piece Ec slot).'], k);
+            end
+            curveT = t;
+            if obj.F(j,1) == k, curveEc = obj.Ec(j,:); else, curveEc = -obj.Ec(j,:); end
+        end
         if obj.E(j,3) == 0   % ray: column 1 is always the finite apex
             apex = obj.V(a,:); d = obj.V(b,:) - apex; d = d/norm(d);
             if t == 1
@@ -389,6 +481,15 @@ function poly = facePoly(obj, k)
     poly.dirOut = dirIn;
     poly.dirInSign = dirOutSign;
     poly.dirOutSign = dirInSign;
+    if curveT == 0
+        poly.curveAfter = 0; poly.curveEc = [];
+    elseif isempty(poly.dirIn)
+        poly.curveAfter = n + 1 - curveT;   % bounded: nv = n (see the CURVED EDGE note above)
+        poly.curveEc = curveEc;
+    else
+        poly.curveAfter = n - curveT;       % unbounded: nv = n-1
+        poly.curveEc = curveEc;
+    end
 end
 
 % ============================================================================================
@@ -398,6 +499,14 @@ function cell = clipByFace(polyK, polyL)
 % boundary half-plane of polyL in turn (Sutherland-Hodgman style). Returns [] if the result is
 % empty or degenerates below a proper 2D cell.
     cell = polyK;
+    if polyL.curveAfter ~= 0
+        % polyConstraints below turns polyL's boundary into HALF-PLANES, which a parabolic edge is
+        % not. maxQuaPar normalizes the curved operand to be g1 (see its header) precisely so that
+        % polyL -- always a g2 face -- is purely polyhedral; reaching here means that normalization
+        % was bypassed.
+        error('maxQuaPar:internal', ...
+            'clipByFace: polyL carries a curved edge, but only polyK (a g1 face) may be curved.');
+    end
     cons = polyConstraints(polyL);
     for i = 1:size(cons,1)
         cell = clipPolyHalfPlane(cell, cons(i,1:2), cons(i,3));
@@ -413,7 +522,12 @@ function cell = clipByFace(polyK, polyL)
     % sub-portion (see maxQuaPar.m header HISTORY). Explicitly re-insert any polyK/polyL vertex
     % that lies in the open interior of one of cell's own edges to restore that missing corner.
     cell = insertPassthroughVertices(cell, [polyK.V; polyL.V]);
-    if size(cell.V,1) < 1 || (isempty(cell.dirIn) && size(cell.V,1) < 3)
+    % A BOUNDED cell normally needs 3 vertices to have positive area -- but a bounded cell with a
+    % curved edge can legitimately be a two-vertex "lens" (one parabola arc plus one straight
+    % chord/cut edge between the same two endpoints), which does.
+    minV = 3;
+    if pieceIsCurved(cell), minV = 2; end
+    if size(cell.V,1) < 1 || (isempty(cell.dirIn) && size(cell.V,1) < minV)
         cell = []; return
     end
 end
@@ -454,9 +568,18 @@ function cell = insertPassthroughVertices(cell, pts)
 % Decoupling them resolves this: tolSnap only ever causes p to be treated as coincident with a
 % vertex the cell construction already produced (never changes whether a genuinely new point gets
 % inserted), so it cannot manufacture the kind of wrong topology `tol` did.
+%
+% CURVED EDGE: the cell's arc (cell.curveAfter, if any) is SKIPPED by the onOpenSegment scan. That
+% test asks whether p lies on the straight segment between two consecutive vertices, which for an
+% arc is its CHORD, not the boundary -- a `pts` entry on that chord is strictly inside the cell (or
+% strictly outside it), never a missing corner of it, so splitting there would invent a vertex that
+% is not on the boundary at all. Every insertion BEFORE the arc's own start vertex shifts it by
+% one, so cell.curveAfter is updated alongside cell.V.
     if isempty(pts), return; end
     tol = 1e-7;
     tolSnap = 1e-4;
+    ciSkip = 0;
+    if pieceIsCurved(cell), ciSkip = cell.curveAfter; end
     for pi = 1:size(pts,1)
         p = pts(pi,:);
         again = true;
@@ -466,27 +589,36 @@ function cell = insertPassthroughVertices(cell, pts)
             if nv == 0 || any(all(abs(cell.V - p) < tolSnap, 2)), break; end
             if isempty(cell.dirIn)
                 for i = 1:nv
+                    if i == ciSkip, continue; end            % the arc: not a straight edge
                     j = mod(i,nv)+1;
                     if onOpenSegment(cell.V(i,:), cell.V(j,:), p, tol)
-                        cell.V = [cell.V(1:i,:); p; cell.V(i+1:end,:)];
+                        cell = insertVertexAt(cell, i, p);
                         again = true; break
                     end
                 end
             else
                 for i = 1:nv-1
+                    if i == ciSkip, continue; end            % the arc: not a straight edge
                     if onOpenSegment(cell.V(i,:), cell.V(i+1,:), p, tol)
-                        cell.V = [cell.V(1:i,:); p; cell.V(i+1:end,:)];
+                        cell = insertVertexAt(cell, i, p);
                         again = true; break
                     end
                 end
                 if ~again && onOpenRay(cell.V(1,:), cell.dirIn, p, tol)
-                    cell.V = [p; cell.V]; again = true;
+                    cell = insertVertexAt(cell, 0, p); again = true;
                 elseif ~again && onOpenRay(cell.V(end,:), cell.dirOut, p, tol)
-                    cell.V = [cell.V; p]; again = true;
+                    cell.V = [cell.V; p]; again = true;   % appended last: shifts no earlier index
                 end
             end
         end
     end
+end
+
+function cell = insertVertexAt(cell, i, p)
+% Insert p into cell.V right after row i (i==0 prepends), keeping cell.curveAfter -- an index INTO
+% cell.V -- pointing at the same arc.
+    cell.V = [cell.V(1:i,:); p; cell.V(i+1:end,:)];
+    if cell.curveAfter > i, cell.curveAfter = cell.curveAfter + 1; end
 end
 
 function tf = onOpenSegment(a, b, p, tol)
@@ -563,6 +695,255 @@ function s = sign2(v, tol)
 end
 
 function poly2 = clipPolyHalfPlane(poly, nrm, c)
+% Clip poly by the half-plane {nrm*x'<=c}, dispatching on whether poly carries a parabolic edge.
+%
+% The two paths are kept SEPARATE deliberately. clipPolyHalfPlaneStraight below is the original,
+% purely polyhedral implementation, left byte-identical: its own HISTORY comment documents several
+% sessions' worth of subtle, non-crashing WRONG-ANSWER bugs (a wraparound-index bug, an
+% endpoint-ordering "bowtie" bug, a degenerate parallel-ray case), so generalizing it in place --
+% rather than adding a parallel curve-aware path that the polyhedral case never enters -- would
+% have put every one of those hard-won fixes back at risk for no benefit. Once a clip removes a
+% cell's arc entirely, the result is plain polyhedral again and subsequent clips go back through
+% the straight path.
+    if pieceIsCurved(poly)
+        poly2 = clipPolyHalfPlaneCurved(poly, nrm, c);
+        return
+    end
+    poly2 = clipPolyHalfPlaneStraight(poly, nrm, c);
+    if ~isempty(poly2), poly2.curveAfter = 0; poly2.curveEc = []; end
+end
+
+function poly2 = clipPolyHalfPlaneCurved(poly, nrm, c)
+% Clip a poly carrying exactly ONE curved (parabolic) boundary edge by the half-plane {nrm*x'<=c}.
+%
+% Same node/pair indexing and the same four keep/cut branches as clipPolyHalfPlaneStraight (see its
+% header for the derivation of each); what is added here is (a) crossings that land on the arc are
+% computed ON THE ARC (clipArcByHalfPlane) instead of on its chord, and (b) the arc's position is
+% threaded through each branch's vertex-list surgery.
+%
+% Threading the arc: poly.curveAfter is a VERTEX index -- the arc runs poly.V(i) -> poly.V(i+1)
+% (wrapping to poly.V(nv)->poly.V(1) when bounded) -- the same convention splitCell/boundedPiece
+% already use. Internally it is first converted to this function's own boundary-EDGE/node-pair
+% numbering (identical to the straight path's `pairs`): for a bounded poly, edge p is
+% V(p)->V(p mod nv+1), so cE = i; for an unbounded one, node 1 is the dirIn ray marker and node j+1
+% is V(j), so edge p connects V(p-1)->V(p) and cE = i+1. Each branch below then maps original edge
+% indices to output edge indices in closed form (see the per-branch comments), and the result is
+% converted back to a vertex index. Rays are never curved (assertCurvedEdgesAreArcs), so cE is
+% never 1 or m.
+%
+% NOT IMPLEMENTED, and detected rather than silently mishandled: the clip line cutting the arc
+% TWICE while both of the arc's own endpoints stay on the same side (the arc bulging across it in
+% between). Unlike a convex polygon, a face bounded on one side by a parabola is not convex, so
+% "at most 2 boundary crossings, on 2 distinct edges" -- the invariant the straight path is built
+% on -- can genuinely fail. The result of such a clip is either DISCONNECTED (two components) or a
+% single region whose boundary carries TWO separate arcs; neither is representable as one QuaPar
+% face, so this errors loudly (arcBulgesAcross below).
+    nv = size(poly.V,1);
+    tol = 1e-9*(1+abs(c)+norm(nrm));
+    val = poly.V*nrm' - c;
+    unbounded = ~isempty(poly.dirIn);
+    ci = poly.curveAfter;
+    iA = ci; iB = mod(ci, nv) + 1;               % the arc's own two endpoints, in walk order
+    X0 = poly.V(iA,:); X1 = poly.V(iB,:);
+    if unbounded, cE = ci + 1; else, cE = ci; end
+
+    if arcBulgesAcross(poly.curveEc, X0, X1, nrm, c)
+        error('maxQuaPar:notImplemented', ...
+            ['clipPolyHalfPlaneCurved: the clip line cuts this cell''s parabolic edge TWICE (both ' ...
+             'arc endpoints on the same side, the arc bulging across in between). The clipped cell ' ...
+             'is then either disconnected or bounded by two separate arcs, neither of which is ' ...
+             'representable as a single QuaPar face.']);
+    end
+
+    if unbounded
+        inSign = sign2(poly.dirIn*nrm', tol);
+        if inSign == 0, inSign = sign2(val(1), tol); end
+        outSign = sign2(poly.dirOut*nrm', tol);
+        if outSign == 0, outSign = sign2(val(end), tol); end
+        st = [inSign; sign2(val,tol); outSign];
+    else
+        st = sign2(val,tol);
+    end
+    m = numel(st);
+
+    % Sound now that arcBulgesAcross has ruled out the arc leaving and re-entering: with every node
+    % inside (resp. outside) and no bulge, the WHOLE boundary -- arc included -- is inside (outside).
+    if all(st <= 0), poly2 = poly; return; end
+    if all(st >= 0) && any(st > 0), poly2 = []; return; end
+
+    pairs = [(1:m-1)', (2:m)'];
+    if ~unbounded, pairs = [pairs; m 1]; end
+    cross = find((st(pairs(:,1)) > 0) ~= (st(pairs(:,2)) > 0));
+    xpt = @(p) crossingPointCurved(poly, val, nrm, c, p, m, unbounded, cE, X0, X1, tol);
+
+    if ~unbounded
+        if numel(cross) ~= 2
+            error('maxQuaPar:internal', ...
+                'clipPolyHalfPlaneCurved: expected 2 crossings on a bounded cell, found %d.', numel(cross));
+        end
+        p1 = cross(1); p2 = cross(2); Xa = xpt(p1); Xb = xpt(p2);
+        midIdx = mod((p1):(p2-1), nv) + 1;
+        if isempty(midIdx) || all(st(midIdx) <= 0)
+            Vnew = [Xa; poly.V(midIdx,:); Xb];   % kept arc runs forward from Xa; cut edge closes it
+            pStart = p1;
+        else
+            keepIdx = mod((p2):(p1-1+nv), nv) + 1;
+            Vnew = [Xb; poly.V(keepIdx,:); Xa];  % kept arc is the wrapped complement (see straight path)
+            pStart = p2;
+        end
+        % Output edge q (q=1..numel(Vnew)-1) is the surviving part of original edge
+        % mod(pStart+q-2,nv)+1; output edge numel(Vnew) is the brand-new straight cut edge.
+        qCurve = mod(cE - pStart, nv) + 1;
+        if qCurve > numel(Vnew)-1, qCurve = 0; end
+        poly2 = finishCurved(Vnew, qCurve, poly, [], [], [], [], true);
+        return
+    end
+
+    if numel(cross) == 2
+        p1 = cross(1); p2 = cross(2); Xa = xpt(p1); Xb = xpt(p2);
+        if st(1) <= 0   % both ray ends inside: discard the middle bulge, keep both rays
+            keepBefore = poly.V(1:p1-1,:);
+            keepAfter  = poly.V(p2:nv,:);
+            Vnew = [keepBefore; Xa; Xb; keepAfter];
+            % Output edges: 1..p1-1 are original edges 1..p1-1; p1 is the surviving tail of edge
+            % p1; p1+1 is the new cut edge; p1+2 is the surviving head of edge p2; and p1+2+r is
+            % original edge p2+r.
+            if cE <= p1
+                qE = cE;
+            elseif cE >= p2
+                qE = cE - p2 + p1 + 2;
+            else
+                qE = 0;
+            end
+            poly2 = finishCurved(Vnew, max(qE-1,0), poly, poly.dirIn, poly.dirInSign, ...
+                poly.dirOut, poly.dirOutSign, false);
+        else            % both ray ends outside: keep only the middle; the result becomes bounded
+            Vnew = [Xa; poly.V((p1):(p2-1),:); Xb];
+            % Output edge q is original edge p1+q-1 for q=1..p2-p1+1; the last is the cut edge.
+            if cE >= p1 && cE <= p2, qE = cE - p1 + 1; else, qE = 0; end
+            poly2 = finishCurved(Vnew, qE, poly, [], [], [], [], true);
+        end
+        return
+    end
+    if numel(cross) ~= 1
+        error('maxQuaPar:internal', ...
+            'clipPolyHalfPlaneCurved: expected 1 or 2 crossings on an unbounded cell, found %d.', numel(cross));
+    end
+    % Exactly one end outside: keep the inside end up to the single crossing and replace the
+    % outside end's ray with one running along the clip line (same construction, and the same
+    % default replaced-ray signs, as the straight path -- see its own comment for the derivation).
+    p = cross(1); X = xpt(p);
+    if st(1) <= 0   % dirIn side inside, dirOut side outside: keep 1..p, replace dirOut
+        Vnew = [poly.V(1:min(p-1,nv),:); X];
+        % Output edge k is original edge k for k=1..p (edge p surviving as its tail V(p-1)->X).
+        if cE <= p, qE = cE; else, qE = 0; end
+        poly2 = finishCurved(Vnew, max(qE-1,0), poly, poly.dirIn, poly.dirInSign, ...
+            [-nrm(2), nrm(1)], -1, false);
+    else            % dirOut side inside, dirIn side outside: keep p+1..m, replace dirIn
+        Vnew = [X; poly.V(max(p,1):nv,:)];
+        % Output edge 1 is the new ray; output edge 2 is the surviving head X->V(p) of original
+        % edge p; output edge 2+r is original edge p+r.
+        if cE >= p, qE = cE - p + 2; else, qE = 0; end
+        poly2 = finishCurved(Vnew, max(qE-1,0), poly, [nrm(2), -nrm(1)], 1, ...
+            poly.dirOut, poly.dirOutSign, false);
+    end
+end
+
+function poly2 = finishCurved(Vnew, curveAfter, poly, dirIn, dirInSign, dirOut, dirOutSign, bounded)
+% Assemble one clipPolyHalfPlaneCurved result: run the same consecutive-duplicate removal the
+% straight path uses, keeping curveAfter (an index INTO Vnew) pointing at the same arc, then apply
+% the minimum-vertex test. A BOUNDED result normally needs 3 vertices, but only 2 when it keeps the
+% arc (a "lens": one parabola arc closed by one straight cut edge -- see clipByFace's own note).
+    [Vnew, curveAfter] = dedupConsecutiveTracked(Vnew, curveAfter);
+    if isempty(Vnew), poly2 = []; return; end
+    minV = 3;
+    if ~bounded, minV = 1; elseif curveAfter ~= 0, minV = 2; end
+    if size(Vnew,1) < minV, poly2 = []; return; end
+    poly2.V = Vnew;
+    poly2.dirIn = dirIn; poly2.dirOut = dirOut;
+    poly2.dirInSign = dirInSign; poly2.dirOutSign = dirOutSign;
+    poly2.curveAfter = curveAfter;
+    if curveAfter == 0, poly2.curveEc = []; else, poly2.curveEc = poly.curveEc; end
+end
+
+function [V, q] = dedupConsecutiveTracked(V, q)
+% dedupConsecutive with index tracking: dropping row d (because it duplicates row d-1) shifts every
+% index above d down by one, and maps d itself onto d-1 -- both covered by subtracting the number
+% of dropped rows at or below q.
+%
+% DEGENERATE ARC: the arc's own two endpoint rows can themselves collapse together, so this cannot
+% just shift q blindly. That happens whenever the clip line is TANGENT to the parabola at one of
+% the arc's own endpoints -- not a contrived case but a structural one here, since a conjugate's
+% curved edge meets its neighbouring straight edges exactly tangentially (the conjugate is C1 where
+% its pieces join), and the OTHER operand's face boundaries frequently run along that same tangent
+% line. The clip then keeps only a single point of the arc, so the arc is GONE from the result and q
+% must become 0. Shifting it instead silently moved the "this edge is a parabola" label onto the
+% neighbouring STRAIGHT edge, which then failed to pair with that edge's genuine straight neighbour
+% (maxQuaPar:internal, "no matching neighbour") -- found on the very first curved end-to-end
+% fixture, maxQuaParTest.maxQuaParCombinesOneCurvedInputWithAPolyhedralOne.
+    tol = sqrt(eps);
+    n = size(V,1);
+    keep = true(n,1);
+    for i = 2:n
+        if norm(V(i,:)-V(i-1,:)) < tol, keep(i) = false; end
+    end
+    if n > 1 && norm(V(1,:)-V(end,:)) < tol, keep(n) = false; end
+    if q > 0
+        qb = mod(q, n) + 1;                       % the arc runs row q -> row qb
+        if norm(V(q,:) - V(qb,:)) < tol
+            q = 0;                                % zero-length arc: it did not survive the clip
+        else
+            q = q - sum(~keep(1:min(q,n)));
+            if q < 1, q = 0; end
+        end
+    end
+    V = V(keep,:);
+end
+
+function tf = arcBulgesAcross(Ec, X0, X1, nrm, c)
+% True iff the arc from X0 to X1 leaves the half-plane {nrm*x'<=c} and comes back (or vice versa)
+% strictly BETWEEN its own two endpoints -- i.e. both endpoints agree on which side they are on,
+% but the arc's own extremum of nrm*x'-c along the arc lies in between and disagrees. Restricted
+% to the conic, nrm*x'-c is the explicit quadratic A2*u^2+A1*u+A0 in the frame's parameter u
+% (parabolaArcFrame), so the extremum is at u=-A1/(2*A2) in closed form; a genuine parabola arc can
+% cross a line at most twice, so checking that single stationary point is exhaustive.
+    tolS = 1e-8;
+    v0 = nrm*X0' - c; v1 = nrm*X1' - c;
+    if (v0 <= tolS) ~= (v1 <= tolS), tf = false; return; end   % opposite sides: one crossing, fine
+    fr = parabolaArcFrame(Ec, 'maxQuaPar');
+    A = fr.lineCoeffs(nrm, c);
+    if abs(A(1)) <= 1e-12*(1+abs(A(2))+abs(A(3))), tf = false; return; end   % affine in u: no bulge
+    ustar = -A(2)/(2*A(1));
+    u0 = fr.uOf(X0); u1 = fr.uOf(X1);
+    lo = min(u0,u1); hi = max(u0,u1);
+    if ustar <= lo || ustar >= hi, tf = false; return; end
+    vstar = A(1)*ustar^2 + A(2)*ustar + A(3);
+    inEnds = (v0 <= tolS);
+    marg = 1e-9*(1 + abs(v0) + abs(v1));
+    tf = (inEnds && vstar > marg) || (~inEnds && vstar < -marg);
+end
+
+function pt = crossingPointCurved(poly, val, nrm, c, pairIdx, m, unbounded, cE, X0, X1, tol)
+% crossingPoint, except that a crossing landing on the cell's parabolic edge is solved ON THE ARC
+% (clipArcByHalfPlane) rather than on the arc's chord.
+    if pairIdx ~= cE
+        pt = crossingPoint(poly, val, nrm, c, pairIdx, m, unbounded);
+        return
+    end
+    x0Inside = (nrm*X0' - c) <= tol;
+    [status, Xnew] = clipArcByHalfPlane(poly.curveEc, X0, X1, nrm, c);
+    if strcmp(status, 'cut')
+        if x0Inside, pt = Xnew(2,:); else, pt = Xnew(1,:); end
+        return
+    end
+    % clipArcByHalfPlane classified the arc as wholly inside/outside using its own endpoint
+    % tolerance, while this function's caller (sign2, on a scaled tolerance) saw the endpoints
+    % straddle the line. The two only disagree when the sign flip sits within tolerance of one of
+    % the arc's own endpoints -- in which case that endpoint IS the crossing, to available precision.
+    if x0Inside, pt = X1; else, pt = X0; end
+end
+
+function poly2 = clipPolyHalfPlaneStraight(poly, nrm, c)
 % Clip poly by the half-plane {nrm*x'<=c}. A line crosses a convex region's boundary in at most 2
 % points, so only 0, 1 (unbounded only, mixed end-status), or 2 crossings are possible.
 %
@@ -739,6 +1120,13 @@ function [decided, winRow] = decideWinner(cell, f1row, f2row)
     if size(cell.V,1) > 0
         vals = QuaPar.evalPoly(diffRow, cell.V);
     end
+    if pieceIsCurved(cell)
+        % A curved cell's boundary bulges away from the chord between the arc's two endpoints, so
+        % the vertices alone can miss a sign change that happens along the arc. Add the arc's own
+        % midpoint (a genuine point of the closed cell, and not one of its vertices) as an extra
+        % sample; this can only make the domination test STRICTER, never wrongly "decide" a cell.
+        vals(end+1,1) = QuaPar.evalPoly(diffRow, arcMidpoint(cell)); %#ok<AGROW>
+    end
     if ~isempty(cell.dirIn)
         vals(end+1,1) = asymptoticSign(diffRow, cell.V(1,:), cell.dirIn); %#ok<AGROW>
         vals(end+1,1) = asymptoticSign(diffRow, cell.V(end,:), cell.dirOut); %#ok<AGROW>
@@ -751,6 +1139,42 @@ function [decided, winRow] = decideWinner(cell, f1row, f2row)
         decided = true; winRow = f2row; return
     end
     decided = false; winRow = [];
+end
+
+function [X0, X1] = curveEndpoints(piece)
+% The parabolic edge's own two endpoints, in the piece's CCW walk order: piece.V(i) -> piece.V(i+1)
+% for i = piece.curveAfter (wrapping to piece.V(nv)->piece.V(1) for a bounded piece; an unbounded
+% piece's arc always sits strictly between two real vertices, so the wrap never triggers there).
+    nv = size(piece.V,1);
+    i = piece.curveAfter;
+    X0 = piece.V(i,:);
+    X1 = piece.V(mod(i,nv)+1,:);
+end
+
+function pt = arcMidpoint(piece)
+% The point halfway (in the parabola frame's own parameter u) along the piece's arc -- a genuine
+% boundary point of the piece that is not one of its vertices.
+    [X0, X1] = curveEndpoints(piece);
+    fr = parabolaArcFrame(piece.curveEc, 'maxQuaPar');
+    pt = fr.point(0.5*(fr.uOf(X0) + fr.uOf(X1)));
+end
+
+function pt = insideArcSample(piece)
+% A point strictly INSIDE the piece, just off the midpoint of its arc. By the CCW convention every
+% piece here obeys (polyConstraints' "interior is on the LEFT of each edge's direction of travel"),
+% the interior is on the left of the arc walked X0 -> X1, so stepping from the arc's midpoint along
+% the left normal of its tangent lands inside -- for ANY piece shape, including a two-vertex lens
+% whose centroid sits on its own boundary. Used to fix a curved edge's conic SIGN, which is the one
+% thing a vertex (always ON the arc, where the conic vanishes) cannot decide.
+    [X0, X1] = curveEndpoints(piece);
+    fr = parabolaArcFrame(piece.curveEc, 'maxQuaPar');
+    u0 = fr.uOf(X0); u1 = fr.uOf(X1);
+    um = 0.5*(u0+u1);
+    t = fr.tangent(um);
+    if u1 < u0, t = -t; end          % orient the tangent along the walk, from X0 towards X1
+    t = t/norm(t);
+    h = 1e-4*(1 + norm(X1-X0));
+    pt = fr.point(um) + h*[-t(2), t(1)];
 end
 
 function s = asymptoticSign(diffRow, apex, dir)
@@ -780,6 +1204,17 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
 % Delta==0), asserted here, and requires exactly 2 boundary crossings (asserted too) -- both are
 % theorems about this pipeline's own adjacent sub-pieces, not generic facts, so a violation errors
 % loudly.
+    if pieceIsCurved(cell)
+        % Splitting a cell that ALREADY has an arc would need the intersection of the splitting
+        % conic with that arc (conic-conic), and could leave one of the two halves bounded by two
+        % separate arcs -- which a piece, with its single Ec slot, cannot carry. Not implemented;
+        % errors rather than silently dropping the existing arc. (decideWinner samples the arc's
+        % own midpoint precisely so a curved cell whose winner IS decided never reaches here.)
+        error('maxQuaPar:notImplemented', ...
+            ['maxQuaPar:splitCell: this cell already carries a parabolic edge and its winner is ' ...
+             'undecided, so it would have to be split along a second curve (conic-conic ' ...
+             'intersection); not implemented.']);
+    end
     diffRow = f1row - f2row;
     a = diffRow(5)/2; b = diffRow(6); c = diffRow(7)/2;
     d = diffRow(8); e = diffRow(9); f = diffRow(10);
@@ -949,7 +1384,11 @@ end
 
 function piece = assignSide(piece, diffRow, f1row, f2row) %#ok<INUSD>
 % Tag which row (f1row or f2row) wins on this piece, using any vertex strictly interior to it
-% (not one of the two curve endpoints) if available, else the curve-chord midpoint.
+% (not one of the two curve endpoints) if available, else the curve-chord midpoint. Also normalizes
+% the piece's own curve orientation to the convention facePoly establishes and
+% clipPolyHalfPlaneCurved relies on: evalConic(piece.curveEc,.) > 0 on the piece's OWN interior.
+% (splitCell builds edgeEc once from f1row-f2row, so it is positive where f1 wins -- i.e. correct
+% for one of the two pieces it splits into and inverted for the other.)
     if size(piece.V,1) > 2
         samplePt = piece.V(2,:);   % V(1)=one curve endpoint, V(end)=the other; V(2) is a real vertex
     else
@@ -957,6 +1396,9 @@ function piece = assignSide(piece, diffRow, f1row, f2row) %#ok<INUSD>
     end
     d = QuaPar.evalPoly(diffRow, samplePt);
     if d >= 0, piece.f = f1row; else, piece.f = f2row; end
+    if pieceIsCurved(piece) && QuaPar.evalConic(piece.curveEc, insideArcSample(piece)) < 0
+        piece.curveEc = -piece.curveEc;
+    end
 end
 
 function edges = cellEdgeList(cell)
@@ -1108,7 +1550,19 @@ function [allNV, allE, allEc] = localEdgeLists(pieces)
             Ep(ne,:) = [nv, 0, 0];    % outgoing ray: apex = local vertex nv
         end
         if piece.curveAfter > 0
-            Ecp(piece.curveAfter,:) = piece.curveEc;
+            % piece.curveAfter is a VERTEX index: the arc runs piece.V(i) -> piece.V(i+1) (wrapping
+            % to V(nv)->V(1) when bounded). For a BOUNDED piece that is Ep row i directly, since
+            % row i is exactly the edge (i, i mod nv + 1). For an UNBOUNDED one it is row i+1: Ep's
+            % first row is the incoming RAY, so the edge V(i)->V(i+1) sits one row further down.
+            % (Getting this wrong put the conic on the edge PRECEDING the arc -- a latent bug, since
+            % no test in this repo produced a curved piece before curved INPUTS were supported: the
+            % only other producer, splitCell's isStraight==false branch, was never reached by the
+            % suite. Verified by instrumenting splitCell across maxQuaParTest and cplqAdapterTest.)
+            if isempty(piece.dirIn)
+                Ecp(piece.curveAfter,:) = piece.curveEc;
+            else
+                Ecp(piece.curveAfter+1,:) = piece.curveEc;
+            end
         end
         allE{p} = Ep; allEc{p} = Ecp;
     end
@@ -1212,6 +1666,11 @@ function opp = matchHalfEdges(pieces, HE)
         end
         for h2 = h+1:m
             if HE(h2).piece == HE(h).piece || HE(h2).isSeg ~= HE(h).isSeg, continue; end
+            % A parabolic edge and a straight one can share both endpoints (the arc and the chord
+            % of a two-vertex "lens" cell, or an arc and the cut edge that closed the cell it was
+            % split from) while being completely different boundaries, so endpoint coincidence
+            % alone must not pair them: a curved half-edge only ever matches another curved one.
+            if any(HE(h2).ec ~= 0) ~= any(HE(h).ec ~= 0), continue; end
             if HE(h).isSeg
                 % Segment: each piece walks it in its own CCW order, necessarily reversed between
                 % two pieces sharing it -- so endpoints match SWAPPED.
@@ -1366,13 +1825,19 @@ function [V, E, Ec, F] = buildFinalEdgesAndFaces(pieces, HE, opp, V, rootOf)
         ecRow = HE(h).ec; if all(ecRow==0), ecRow = HE(h2).ec; end
         if any(ecRow ~= 0)
             % QuaPar's orientation invariant requires evalConic(Ec(j,:),.) > 0 on the LEFT of the
-            % stored directed edge V(E(j,1))->V(E(j,2)). A curved edge's Ec row is built once in
-            % splitCell from f1row-f2row and reused unchanged for both neighbouring pieces, so its
-            % sign is tied to "f1 wins" globally, not to whichever piece ends up on the left of
-            % (aG,bG) here -- flip if it doesn't evaluate positive on HE(h).piece's own interior
-            % (which is always on the left of (aG,bG) by construction).
-            Vp = pieces(HE(h).piece).V;
-            if size(Vp,1) > 2, samplePt = Vp(2,:); else, samplePt = mean(Vp,1); end
+            % stored directed edge V(E(j,1))->V(E(j,2)). Each piece normalizes its own curveEc to
+            % be positive on its OWN interior (facePoly / assignSide), and HE(h).piece is on the
+            % left of (aG,bG) by construction, so this is normally already correct -- but ecRow may
+            % have been taken from HE(h2) (the RIGHT-hand piece) when HE(h)'s own row is zero, so
+            % re-establish it here rather than assume. The sample must be strictly INSIDE the piece
+            % and off the arc: a vertex will not do, since a curved piece's vertices can all lie ON
+            % the arc, where the conic vanishes and its sign carries no information.
+            if any(pieces(HE(h).piece).curveEc ~= 0)
+                samplePt = insideArcSample(pieces(HE(h).piece));
+            else
+                Vp = pieces(HE(h).piece).V;
+                if size(Vp,1) > 2, samplePt = Vp(2,:); else, samplePt = mean(Vp,1); end
+            end
             if QuaPar.evalConic(ecRow, samplePt) < 0
                 ecRow = -ecRow;
             end
