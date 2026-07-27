@@ -445,6 +445,34 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyError(@() maxQuaPar(g1, g2), 'maxQuaPar:notImplemented');
         end
 
+        function maxQuaParResultsAreValidArrangements(testCase)
+            % The structural invariant a subdivision must satisfy, checked directly on the OUTPUT:
+            % any two distinct edges (segment, ray, or parabolic arc) meet either in the empty set
+            % or in a proper face -- i.e. at a SHARED ENDPOINT. Anywhere that fails, a vertex is
+            % missing and the arrangement is invalid: an edge would silently border two different
+            % faces along one stretch, which is exactly the class of silent-wrong-adjacency bug
+            % maxQuaPar.m's HISTORY is full of (and what clipByFace's insertPassthroughVertices
+            % exists to prevent for straight edges).
+            %
+            % This is a genuinely INDEPENDENT check of the assembled result: it never consults
+            % maxQuaPar's own piece bookkeeping (curveAfter, half-edge matching, F), only the final
+            % V/E/Ec geometry, so it cannot be satisfied by the same reasoning that produced it.
+            % Checked here on both the polyhedral and the curved fixtures, so it also pins the
+            % pre-existing path.
+            [Tc1, Tc2] = maxQuaParTest.curvedFixtureTriangles();
+            [gc1, gc2] = maxQuaParTest.buildCurvedG1G2(Tc1, Tc2);
+            [gp1, gp2] = maxQuaParTest.buildG1G2();
+            cases = { maxQuaPar(gc1, gc2), 'curved fixture'
+                      maxQuaPar(gc2, gc1), 'curved fixture (swapped)'
+                      maxQuaPar(gp1, gp2), 'polyhedral 3-edge.tex fixture' };
+            for c = 1:size(cases,1)
+                [nBad, worst, msg] = maxQuaParTest.arrangementViolations(cases{c,1});
+                testCase.verifyEqual(nBad, 0, ...
+                    sprintf('%s: %d edge pair(s) meet off a shared endpoint (worst %g); %s', ...
+                        cases{c,2}, nBad, worst, msg));
+            end
+        end
+
         function facePolyReportsACurvedFaceAsAnArcOrientedIntoTheFace(testCase)
             % Unit-level check of the two facts everything above rests on, verified WITHOUT going
             % through maxQuaPar: for the curved fixture's g1, exactly one boundary edge of the
@@ -496,6 +524,71 @@ classdef maxQuaParTest < matlab.unittest.TestCase
         function T = toCCW(T)
             a = (T(2,1)-T(1,1))*(T(3,2)-T(1,2)) - (T(2,2)-T(1,2))*(T(3,1)-T(1,1));
             if a < 0, T = T([1 3 2],:); end
+        end
+
+        function [nBad, worst, msg] = arrangementViolations(g)
+            % Count pairs of distinct edges of g that meet somewhere OTHER than at a vertex the two
+            % edges share. Each edge is sampled along its own natural parameter -- an arc along the
+            % parabola frame's u (NOT along its chord), a segment linearly, a ray over a stretch
+            % comfortably beyond the arrangement's own extent -- with the endpoints excluded, since
+            % meeting AT a shared endpoint is exactly what a valid arrangement allows.
+            nBad = 0; worst = 0; msg = '';
+            ne = size(g.E,1);
+            sc = 1 + max(abs(g.V(:)));
+            tolOn = 1e-7*sc;      % "this sample lies on that edge"
+            tolVtx = 1e-5*sc;     % "...but it is (within noise) their shared endpoint, so it's fine"
+            openPts = cell(1,ne); densePts = cell(1,ne);
+            for j = 1:ne
+                densePts{j} = maxQuaParTest.edgeSamples(g, j, 400);
+                s = maxQuaParTest.edgeSamples(g, j, 60);
+                openPts{j} = s(2:end-1,:);
+            end
+            for i = 1:ne
+                for j = i+1:ne
+                    shared = intersect(g.E(i,1:2), g.E(j,1:2));
+                    hit = false; d = 0;
+                    for r = 1:size(openPts{i},1)
+                        p = openPts{i}(r,:);
+                        if min(vecnorm(densePts{j} - p, 2, 2)) >= tolOn, continue; end
+                        atShared = false;
+                        for sv = shared(:)'
+                            if norm(p - g.V(sv,:)) < tolVtx, atShared = true; break; end
+                        end
+                        if ~atShared
+                            hit = true;
+                            dv = inf;
+                            for sv = shared(:)', dv = min(dv, norm(p - g.V(sv,:))); end
+                            d = max(d, min(dv, 1e6));
+                        end
+                    end
+                    if hit
+                        nBad = nBad + 1; worst = max(worst, d);
+                        if isempty(msg)
+                            msg = sprintf('first offending pair: edges %d and %d', i, j);
+                        end
+                    end
+                end
+            end
+        end
+
+        function S = edgeSamples(g, j, n)
+            % n points along edge j, endpoints included, in the edge's own natural parameter.
+            A = g.V(g.E(j,1),:);
+            if g.E(j,3) == 1
+                B = g.V(g.E(j,2),:);
+                if any(g.Ec(j,:) ~= 0)
+                    fr = parabolaArcFrame(g.Ec(j,:), 'maxQuaParTest');
+                    u = linspace(fr.uOf(A), fr.uOf(B), n)';
+                    S = zeros(n,2);
+                    for k = 1:n, S(k,:) = fr.point(u(k)); end
+                else
+                    t = linspace(0,1,n)'; S = A + t.*(B-A);
+                end
+            else
+                d = g.V(g.E(j,2),:) - A; d = d/norm(d);
+                L = 3*(1 + max(abs(g.V(:))));
+                t = linspace(0,L,n)'; S = A + t.*d;
+            end
         end
 
         function S = curvedSamplePoints(g)

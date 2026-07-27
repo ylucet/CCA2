@@ -993,6 +993,18 @@ the plan:
    step. Evaluating *exactly at* a result vertex
    disagrees ~0.8% of the time, but that is **pre-existing** `QuaPar.eval` point location, not new:
    the same sweep on purely polyhedral pairs disagrees ~1.4% of the time at result vertices.
+
+   **Arrangement validity.** Every subdivision must satisfy: any two edges (segment, ray, arc) meet
+   in the empty set or in a proper face — otherwise a vertex is missing. This is now checked
+   *independently* of `maxQuaPar`'s own bookkeeping, on the final `V/E/Ec` geometry alone, with arcs
+   sampled along the parabola rather than along their chords: **zero violations across all 109
+   assembled results** (test: `maxQuaParTest.maxQuaParResultsAreValidArrangements`, which also pins
+   the pre-existing polyhedral fixture). The input-side counterpart — a face vertex landing in the
+   open *interior* of an arc, which would force splitting that arc into two sub-arcs and so needs a
+   piece to carry more than one curve — likewise never occurred, and is now **detected and raised**
+   rather than silently ignored (`insertPassthroughVertices`); previously such a point would have
+   left one arc bordering two different faces, the same silent-wrong-adjacency class of bug that
+   motivated `insertPassthroughVertices` for straight edges in the first place.
    Two bugs found and fixed along the way, both recorded in `maxQuaPar.m`: a degenerate-arc
    relabelling in the dedup step (the clip line is *tangent* to the parabola at the arc's own
    endpoint — structural, since a conjugate is C1 where its pieces join), and an off-by-one in

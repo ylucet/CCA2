@@ -169,6 +169,15 @@ function g = maxQuaPar(g1, g2)
 %       of radius as small as 1e-8 around every disagreeing vertex gives the right answer to
 %       ~1e-15, confirming the geometry is right and only the exactly-at-a-corner tie-break is at
 %       issue. Tracked separately; see maxQuaParTest.curvedSamplePoints.
+%     - ARRANGEMENT VALIDITY was checked directly on the assembled results, independently of this
+%       file's own piece bookkeeping (curveAfter, half-edge matching, F) -- using only the final
+%       V/E/Ec geometry: every pair of distinct edges must meet in the empty set or in a proper
+%       face, i.e. only at a shared endpoint, with arcs sampled along the parabola itself rather
+%       than along their chords. Zero violations across all 109 results the sweep assembled. The
+%       INPUT-side counterpart of the same invariant -- a face vertex landing in the open interior
+%       of an arc, which would force that arc to be split into two sub-arcs -- likewise never
+%       occurred (0 occurrences), and is now DETECTED rather than silently ignored; see
+%       insertPassthroughVertices. Regression test: maxQuaParTest.maxQuaParResultsAreValidArrangements.
 %     - A clip that cuts an arc STRICTLY BETWEEN its endpoints never arose in the supported regime:
 %       there, the other operand's face boundaries are tangent lines to the parabola (a conjugate
 %       is C1 where its pieces join), so a clip either keeps the arc whole or reduces it to a
@@ -575,6 +584,23 @@ function cell = insertPassthroughVertices(cell, pts)
 % strictly outside it), never a missing corner of it, so splitting there would invent a vertex that
 % is not on the boundary at all. Every insertion BEFORE the arc's own start vertex shifts it by
 % one, so cell.curveAfter is updated alongside cell.V.
+%
+% ...but skipping the CHORD must not mean ignoring the ARC. This whole function exists to maintain
+% the arrangement invariant that any two edges meet in the empty set or in a proper face (a shared
+% vertex / a shared whole edge) -- wherever that fails, the missing vertex has to be added. That
+% applies to an arc exactly as it does to a segment: if a `pts` point lies in the OPEN INTERIOR of
+% the arc, the neighbouring face differs on either side of it, so the arc must be split there into
+% two sub-arcs (of the same parabola). A piece carries only ONE curve slot (curveAfter/curveEc), so
+% it cannot represent the two sub-arcs that split would produce; rather than let the arc silently
+% span two different neighbours -- precisely the silent-wrong-adjacency failure mode the collinear
+% straight-edge case above was fixed for -- this is DETECTED and raised.
+%
+% Measured, not assumed: over a randomized sweep of 109 assembled curved results, NO vertex of
+% either input ever landed in the open interior of an arc (the conjugate's arc meets its
+% neighbours tangentially, and the other operand's face vertices sit off it), so this guard never
+% fires in the supported regime -- see maxQuaPar.m's header VALIDATION note. Lifting it means
+% generalizing a piece to carry several arcs (curveAfter becoming a set), which also breaks
+% clipPolyHalfPlaneCurved's "at most 2 crossings" invariant -- deliberately left out of this step.
     if isempty(pts), return; end
     tol = 1e-7;
     tolSnap = 1e-4;
@@ -587,6 +613,13 @@ function cell = insertPassthroughVertices(cell, pts)
             again = false;
             nv = size(cell.V,1);
             if nv == 0 || any(all(abs(cell.V - p) < tolSnap, 2)), break; end
+            if ciSkip ~= 0 && onOpenArc(cell, p, tolSnap)
+                error('maxQuaPar:notImplemented', ...
+                    ['insertPassthroughVertices: a face vertex lies in the open interior of this ' ...
+                     'cell''s parabolic edge, so that arc borders two different neighbours and must ' ...
+                     'be split there into two sub-arcs. A piece carries only one curve slot, so ' ...
+                     'this is not representable yet (see this function''s header).']);
+            end
             if isempty(cell.dirIn)
                 for i = 1:nv
                     if i == ciSkip, continue; end            % the arc: not a straight edge
@@ -619,6 +652,24 @@ function cell = insertVertexAt(cell, i, p)
 % cell.V -- pointing at the same arc.
     cell.V = [cell.V(1:i,:); p; cell.V(i+1:end,:)];
     if cell.curveAfter > i, cell.curveAfter = cell.curveAfter + 1; end
+end
+
+function tf = onOpenArc(cell, p, tolSnap)
+% Does p lie ON the cell's parabola arc, strictly between the arc's own two endpoints? Two
+% conditions, both needed: p satisfies the conic (to a scale-relative tolerance), AND its frame
+% parameter u lies strictly inside the arc's own u-span. Since u is a global monotonic parameter
+% along the whole conic (parabolaArcFrame), the second test is exactly "between the endpoints
+% along the arc" -- no chord/arc confusion. The endpoint margin reuses tolSnap, matching the
+% caller's own "p is already one of this cell's vertices" pre-check, so a p that coincides with an
+% arc ENDPOINT is never reported as interior to it.
+    [X0, X1] = curveEndpoints(cell);
+    ec = cell.curveEc;
+    if abs(QuaPar.evalConic(ec, p)) > 1e-7*(1 + max(abs(ec))), tf = false; return; end
+    fr = parabolaArcFrame(ec, 'maxQuaPar');
+    u0 = fr.uOf(X0); u1 = fr.uOf(X1); up = fr.uOf(p);
+    lo = min(u0,u1); hi = max(u0,u1);
+    if hi - lo < tolSnap, tf = false; return; end
+    tf = up > lo + tolSnap && up < hi - tolSnap;
 end
 
 function tf = onOpenSegment(a, b, p, tol)
