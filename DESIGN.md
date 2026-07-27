@@ -950,6 +950,27 @@ the plan:
    comparing against the working (Phase 1) code at each step, rather than re-deriving the whole
    pipeline's math from scratch in one jump (the failure mode of the prior two sessions' abandoned
    `conjPieceCPLQ` rational-piece attempt).
+   **Scoping (2026-07-26 session)**: Cases A/B (single quadratic pieces / single triangles) are
+   ALREADY closed-form numeric — `conjPieceCPLQ`/`convEnvCPLQ` derive them in plain arithmetic, no
+   symbolic engine involved. The actual Phase 2 bottleneck is entirely in Case C (multi-piece
+   domains): `maxQuaPar.m` (Step 3, combining independently-conjugated triangles) explicitly
+   refuses any input with a curved (parabolic) edge — see its own header TODO — which is exactly
+   why Case C falls back to the slow full-domain symbolic pipeline (`quaPolyToPlq` ->
+   `.triangulate` -> `.maximum`) instead of per-triangle closed-form conjugate + a numeric
+   `maxQuaPar` combine. Closing that TODO is therefore the concrete next Phase 2 step.
+   **Checkpoint (this session, first increment)**: `clipArcByHalfPlane.m` — clip a parabola arc
+   against a half-plane, the core new geometric primitive `maxQuaPar`'s curved-edge case needs
+   (its own `clipByFace`/`clipPolyHalfPlane` loop applied to one curved cell edge). Implemented and
+   validated STANDALONE (`clipArcByHalfPlaneTest.m`, 7/7 pass) against hand-derived axis-aligned
+   cases and an independently-constructed rotated/shifted parabola cross-check. Deliberately NOT
+   yet wired into `maxQuaPar.m` itself: doing so safely means tracking a curved edge through
+   `clipPolyHalfPlane`'s several interacting branches (bounded/unbounded cell, 1 vs 2 crossings, a
+   curve turning a piece bounded partway through a chained sequence of clips) and re-validating
+   against `maxQuaParTest.m`'s own dense regression history (that file's HISTORY comments document
+   several sessions' worth of subtle, non-crashing wrong-answer bugs in the polyhedral-only case
+   alone) — right-sized as its own next session/step rather than rushed in this one. See
+   `maxQuaPar.m`'s own TODO comment and `.claude/SESSION_HANDOFF.md` for the concrete pick-up
+   point.
 3. ~~**`conjPieceCPLQ`'s own rational-piece TODO**~~ — superseded by the plan above; do not resume
    the single-RatPol-piece closed-form derivation as a standalone task (see `conjPieceCPLQ.m`'s
    header and `.claude/SESSION_HANDOFF.md` for the full diagnosis of why it was mis-scoped).

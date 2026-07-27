@@ -1,97 +1,105 @@
 # Session Handoff
 
-_Last updated: 2026-07-20T00:00:00Z_
+_Last updated: 2026-07-27T00:00:00Z_
 
-## What happened this session
+## What happened this session (and the one just before it)
 
-Fixed all 5 remaining `testMaxMultiRegion` failures the prior session's handoff flagged as the
-next thing to fix — the suite now passes 24/24. Each fix followed the same pattern: reproduce
-standalone with a scratch script, isolate the exact crash line, verify the minimal fix against a
-captured pre-fix baseline, then run the full suite before committing. Several fixes uncovered
-further latent bugs one layer deeper (each already reachable only because an earlier fix in the
-same chain stopped short-circuiting past it):
+**Previous session**: gave Case C's conjugate (`conjCPLQ.m`, general bounded multi-face/non-
+triangular domain) a composable return type. New class `QuaParCPLQ.m` wraps the raw
+`functionNDomain` array Case C used to return in the same operator surface (`conj`/`add`/
+`scalarMul`/`addQuadratic`/`addScaledEnergy`/`eval`) that `QuaPoly`/`QuaPar` already expose, so
+`infConv.m`/`moreau.m`/`proxAverage.m`/`QuaPar.biconj` compose with it with **zero changes** to any
+of those four files (MATLAB dispatches on the operand's actual class). `toQuaPar.m` passes a
+`QuaParCPLQ` through unchanged rather than erroring. Verified: `conjCPLQTest`/`infConvTest`/
+`QuaParTest`/`cplqAdapterTest` all pass (33/33); Fenchel-Young inequality and exact scale/shift
+checks against `g.eval`; `biconj(q,'cplq')`/`moreau(q,1,'cplq')` run end to end; the conjugate-of-
+conjugate result matches `plq.biconjugateF` called directly, byte for byte (confirming the known
+`mergeL`/`removeTangent` exact-tie-point gap is inherited unchanged, not worsened). Committed and
+pushed (`28806ef`).
 
-- **`testOpenconvex`**: `region.getVertices` never reset `obj.vx`/`obj.vy` at the top (dead
-  commented-out reset lines), so calling it again on an already-populated region (as
-  `removeTangent` does) piled duplicate "vertex at infinity" placeholder points on top of existing
-  ones; separately, nothing deduplicated the combined finite+infinite vertex list once an explicit
-  `±intmax` boundary inequality made the two phases independently re-derive the same point. That fed
-  `region.minus`, which assumed every polygon edge has exactly 2 endpoints (a fixed-shape 3D array)
-  — false for unbounded "ray" edges with only 1 finite endpoint. Switched to cell arrays.
-- **`testPCE2`**: the test itself was inconsistent with its siblings (`testPCE0`/`1`/`3`) — it
-  called only `.convexEnvelope`, with `.maximum`/`.biconjugateF` commented out, but still
-  unconditionally called `.printDomainMaple`, which reads `maxConjugate` (populated only by
-  `.maximum`) and crashed on the empty array. Uncommented `.maximum`; left `.biconjugateF` disabled
-  (separate bug below). Also fixed `functionNDomain.addEq`, which never initialized its output, so
-  an empty biconjugate result (as for this domain) left the output unassigned rather than empty.
-- **`testFractional`**: a 6-layer cascade, all stemming from a genuinely rational/sqrt conjugate
-  expression that code elsewhere assumed was a plain polynomial: a leftover debug print crashed
-  `symbolicFunction.print`'s polynomial-degree chain; `degreeNum`/`degreeDen` needed a try/catch
-  around `polynomialDegree` (returns `Inf` instead of erroring on non-polynomial input);
-  `functionNDomain.getInterior` passed a `solve()` struct directly to `subs` instead of its field
-  values, and separately needed a fallback for when the solved point sits exactly on the sqrt
-  term's own singularity; `region.simplifyOpenRegion1` needed `simplify()` before `double()`; and
-  `plq_1piece.Mprint` had the same unpopulated-`maxConjugate` gap as `testPCE2` (fixed generally
-  this time, not per-test).
-- **`testMaxThesis`/`testMaxThesis2`**: one shared fix — `plq.printDomainMaple`'s own top-level
-  `maxConjugate`/`biconjugate` print calls had the exact same unguarded-empty-array bug just fixed
-  in `plq_1piece.Mprint`, newly reachable because the `addEq` fix above made an empty biconjugate a
-  non-crashing (but still empty) result for the first time.
+**This session**: started Phase 2 (DESIGN.md II.5.1 "improve performance"). Scoping first:
+Cases A/B (single quadratic pieces / single triangles) are **already** closed-form numeric
+(`conjPieceCPLQ`/`convEnvCPLQ`) — the real Phase 2 bottleneck is entirely in Case C, and
+specifically in **`maxQuaPar.m`'s own stated TODO**: it refuses any input QuaPar with a curved
+(parabolic) edge, which is exactly why Case C falls back to the slow full-domain symbolic pipeline
+(`quaPolyToPlq -> triangulate -> maximum`) instead of per-triangle closed-form conjugate + a
+numeric `maxQuaPar` combine.
 
-Each fix was committed separately (5 commits) after its own full-suite regression check.
+Built and validated the core new primitive that TODO needs: **`clipArcByHalfPlane.m`** — clip a
+parabola arc against a half-plane (the operation `maxQuaPar`'s own `clipByFace`/`clipPolyHalfPlane`
+loop would need to apply to a curved cell edge). Verified standalone via
+`clipArcByHalfPlaneTest.m` (7/7 pass): hand-derived axis-aligned cases (vertical/horizontal clips,
+fully-inside, fully-outside, cut-near-endpoint, cut-far-endpoint) plus an independently-constructed
+rotated+shifted parabola cross-check (conic coefficients re-derived via direct symbolic
+substitution, not reusing the primitive's own math, then checked that the clip result is the same
+rigid transform applied to the axis-aligned answer) and a rejects-non-parabola guard test.
+
+**Deliberately stopped there** (user's explicit choice, given 3 options) rather than wiring this
+into `maxQuaPar.m` itself this session: doing so safely means tracking a curved edge through
+`clipPolyHalfPlane`'s several interacting branches (bounded vs. unbounded cell, 1 vs. 2 crossings,
+a curve turning a piece bounded partway through a *chained sequence* of clips within one
+`clipByFace` call) and re-validating against `maxQuaParTest.m`'s own dense regression history —
+that file's HISTORY comments document several sessions' worth of subtle, non-crashing
+wrong-**answer** bugs in the polyhedral-only case alone (not just crashes), so rushing the
+curved-edge extension in the time left this session risked exactly that failure mode on code much
+harder to stress-test on short notice. Right-sized as its own next session/step instead.
 
 ## Where things stand
 
-- Branch: `main` @ `5ca844d` — "Fix testMaxThesis/testMaxThesis2: plq.printDomainMaple had the
-  same unguarded-empty-array bug as plq_1piece.Mprint"
-- Pushed: pending (this session's 5 fix commits were pushed together with the prior session's
-  tie-point commit partway through — see `git log @{u}..HEAD` for what's actually unpushed now)
-- `testMaxMultiRegion` full suite: **24/24 pass** — Phase 1 (the cPLQ symbolic integration) is now
-  fully green.
-- `cplqAdapterTest.m`/`conjCPLQTest.m`: still 20/20 pass, unaffected by this session's fixes.
+- Branch: `main` @ `28806ef` — "Add QuaParCPLQ: give Case C conjugates a composable QuaPar-like
+  return type" (pushed). **This session's `clipArcByHalfPlane.m`/`clipArcByHalfPlaneTest.m` +
+  `maxQuaPar.m`/`DESIGN.md` doc updates are NOT YET COMMITTED** — do that first if continuing.
+- `conjCPLQTest`/`infConvTest`/`QuaParTest`/`cplqAdapterTest`: 33/33 pass (unaffected by this
+  session — `clipArcByHalfPlane.m` is a new, standalone, unwired file).
+  `clipArcByHalfPlaneTest`: 7/7 pass (new this session).
+- `testMaxMultiRegion` full suite: still 24/24 pass (Phase 1 unaffected).
 - `cPLQ/` (the original reference clone) remains intentionally untracked, per explicit user
   instruction — do not `git add` it.
 
 ## Next steps
 
-With Phase 1 fully solid (all tests green), the natural next steps are the ones the prior
-handoff already had queued and this session didn't touch:
-
-- **Give Case C a proper `QuaPar`-like return type** (convert `evalFunctionNDomain`'s underlying
-  `functionNDomain` result into something with its own `.conj()`), so `biconj`/`infConv`/`moreau`/
-  `proxAverage` can compose with a genuinely multi-face nonconvex conjugate, not just evaluate it.
-- **Phase 2**: replace `cPLQ`'s symbolic computation with closed-form numeric formulas
-  incrementally, one case/step at a time, validating each against the working Phase-1 symbolic
-  result before moving to the next — this is what actually fixes the slowness (a single
-  biconjugate/maximum run over a nontrivial multi-piece domain can cost 5-20+ minutes; this
-  session's full-suite runs routinely took 35-50 minutes each).
-- A few defensive/fallback code paths added this session were only exercised by the specific
-  failing test they fixed (e.g. the `region.minus` cell-array rewrite's fallback branch, the
-  `getInterior` singularity fallback). Worth keeping in mind if a *new* nonconvex domain surfaces
-  a related crash — check whether it's hitting one of these same fallback branches before assuming
-  a brand-new bug.
-- Unrelated, longstanding, lower-priority items (unaffected by this or the prior session, still
-  open): exact `[LOCATELLI]` citation in `DESIGN.md`; 2/741 residual `maxQuaPar:internal` crashes;
-  `QuaPar.orderEdges`/`createP`'s near-degenerate-triangle error; `partialConj` for
-  `'cplq'`/`'pqp'`; `add` for `RatPol`/`RatPar`; conjugate engines `'pqp'`/`'graph'`; the
-  pre-existing `testRegion/testCreation` toolbox-compat failure (`isequal(sym,double)`, unrelated
-  to Phase 1).
+1. **Wire `clipArcByHalfPlane.m` into `maxQuaPar.m`** for the single-curved-edge case (one of
+   `g1`/`g2` has curved edges, the other purely polyhedral — the narrower slice the user chose
+   over full curved-vs-curved support). Concretely: `clipByFace`'s per-half-plane loop needs a
+   branch that, when clipping a cell edge that carries a curve (`curveAfter`/`curveEc`, see
+   `maxQuaPar.m`'s own `boundedPiece`/`splitCell` for how those are set), calls
+   `clipArcByHalfPlane` instead of the current straight-edge crossing math, and correctly threads
+   the resulting single 'cut' replacement point back into the cell's vertex list (mind
+   `insertPassthroughVertices`'s existing pass-through-vertex logic — a curved edge may need the
+   analogous treatment). Validate against a NEW ground-truth case built the same way
+   `maxQuaParTest.buildG1G2ForTriangle` does, but starting from a triangle whose convex envelope
+   has exactly one convex edge (so Step 2 gives a curved-edge QuaPar via `conjBilinearXYoneCE`/
+   `conjIndefiniteQuadTriangle`), combined via `maxQuaPar` with an adjacent all-polyhedral piece,
+   checked against `supBilinearOverPoly`-style closed-form or dense numeric sup ground truth.
+2. Once single-curved-edge `maxQuaPar` is solid, extend to both inputs curved (conic-conic
+   intersection) — larger, do only after step 1 is fully validated.
+3. Once `maxQuaPar` handles curved edges, revisit `conjCPLQ.m`'s Case C: it could then dispatch to
+   a per-triangle `conjPieceCPLQ` + numeric `maxQuaPar` combine instead of the symbolic
+   `quaPolyToPlq`/`triangulate`/`maximum` pipeline, which is the actual Phase 2 performance win.
+4. Give Case C a proper `QuaPar`-like return type: **done** last session (`QuaParCPLQ.m`) — see
+   above; the remaining piece is a true GEOMETRIC `QuaPar` reconstruction (V/E/Ec/F/P) if/when a
+   caller needs the structured (not just composable-but-symbolic) representation — separate,
+   larger, still-open task, not blocking anything else.
+5. Close the `mergeL`/`removeTangent` exact-tie-point gap in `functionNDomain`/`plq.biconjugateF`
+   (inherited by `QuaParCPLQ.conj`) — the one remaining known correctness bug in the Case-C
+   conjugate pipeline, confirmed still present via last session's byte-for-byte comparison.
+6. Run the remaining ~12 untested `testMaxMultiRegion` cases.
+7. Lower-priority, longstanding, unaffected: exact `[LOCATELLI]` citation in `DESIGN.md`; 2/741
+   residual `maxQuaPar:internal` crashes; `QuaPar.orderEdges`/`createP`'s near-degenerate-triangle
+   error; `partialConj` for `'cplq'`/`'pqp'`; `add` for `RatPol`/`RatPar`; conjugate engines
+   `'pqp'`/`'graph'`; the pre-existing `testRegion/testCreation` toolbox-compat failure.
 
 ## Relevant files
 
-- `region.m` — `getVertices` (dedup fix), `minus` (cell-array rewrite), `simplifyOpenRegion1`
-  (`simplify()`-before-`double()` fallback); search "HISTORY" comments for the reasoning behind
-  each.
-- `functionNDomain.m` — `addEq` (empty-output init), `getInterior` (struct-to-array fix +
-  singularity fallback); same HISTORY-comment convention.
-- `symbolicFunction.m` — `degreeNum`/`degreeDen` (try/catch around `polynomialDegree`).
-- `plq_1piece.m` — `Mprint` (empty-`maxConjugate` guard), `conjugateFunction` (leftover debug
-  print removed).
-- `plq.m` — `printDomainMaple` (empty-`maxConjugate`/`biconjugate` guards, same class as
-  `plq_1piece.Mprint`'s fix).
-- `testMaxMultiRegion.m` — `testPCE2`'s `.maximum` call restored; all 24 tests pass, no more
-  backlog of untested cases in this file.
-- `conjCPLQ.m` — Case C (general bounded multi-face/non-triangular domain via the `cPLQ`
-  pipeline); see its own header for the `functionNDomain`-vs-`QuaPoly`/`QuaPar` return-type caveat
-  (still open, see Next steps).
-- `DESIGN.md` §0 point 3-4 and "Next planned"/II.5.1 — the full two-phase plan and current status.
+- `clipArcByHalfPlane.m` / `clipArcByHalfPlaneTest.m` — this session's new, validated-but-unwired
+  primitive; start here for next steps item 1.
+- `maxQuaPar.m` — Step 3 combine; its own header TODO (just above the curved-edge note added this
+  session) is the exact place the wiring goes; `clipByFace`/`clipPolyHalfPlane`/`splitCell`/
+  `assemblePieces` are the functions that would need touching, in roughly that order.
+- `conjPieceCPLQ.m` — `conjBilinearXYoneCE`/`conjIndefiniteQuadTriangle` (1-convex-edge case) are
+  the source of curved-edge QuaPars to test against.
+- `maxQuaParTest.m` — existing regression suite (polyhedral-only so far); its `frozenG1G2`/
+  `buildG1G2ForTriangle` pattern is the template for a new curved-edge fixture.
+- `QuaParCPLQ.m` / `conjCPLQ.m` / `toQuaPar.m` — previous session's Case C return-type work (done,
+  committed).
+- `DESIGN.md` §II.5.1 / Phase 2 bullet — full scoping/status writeup for both sessions.

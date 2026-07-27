@@ -136,6 +136,14 @@ function g = maxQuaPar(g1, g2)
 %   * TODO: g1 or g2 with a curved (parabolic) input edge (conjBilinearXYoneCE /
 %     conjIndefiniteQuadTriangle-with-1-convex-edge output) -- needs face-vs-conic clipping
 %     (clipByConicSide) and possibly conic-conic intersection; not implemented, errors clearly.
+%     PARTIAL PROGRESS (Phase 2 scoping session, see DESIGN.md/SESSION_HANDOFF.md): the core new
+%     primitive this needs -- clipping a parabola ARC against a half-plane, i.e. clipByFace's
+%     inner clipPolyHalfPlane loop applied to one curved cell edge -- now exists standalone as
+%     clipArcByHalfPlane.m, validated (clipArcByHalfPlaneTest.m) against hand-derived and
+%     independently-rotated/shifted parabola cases. It is NOT yet wired into clipByFace/
+%     clipPolyHalfPlane/assemblePieces below (that requires tracking a curved edge through their
+%     several interacting branches and re-validating against this file's own dense regression
+%     history) -- left for a following session/step, deliberately not rushed.
 
     if (~isempty(g1.Ec) && any(g1.Ec(:)~=0)) || (~isempty(g2.Ec) && any(g2.Ec(:)~=0))
         error('maxQuaPar:notImplemented', ...
