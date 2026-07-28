@@ -6,6 +6,13 @@
 # CCA2. The reason is that shipping both would leave users wondering which version to use.
 cPLQ/
 
+# Reference papers, kept LOCAL only. These are third-party COPYRIGHTED PDFs and must never ship in
+# a public release; CCA2 is private today but is intended to be made public. DESIGN.md and the
+# source headers cite them by their [TAG] and filename so the local copies remain findable, but the
+# files themselves are not distributed -- see README.md's references section for the full citations,
+# which is what a public reader needs.
+reference/
+
 # MATLAB / editor cruft
 *.asv
 *.m~

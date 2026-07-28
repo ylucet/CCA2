@@ -4,7 +4,10 @@
 Optimization). 2D primary, 1D as a thin degenerate case. General PLQ (occasionally PLC),
 **no grid/LLT algorithms**.
 
-**Authoritative references** (PDFs in `reference/`):
+**Authoritative references.** The PDFs live in a local `reference/` directory that is **deliberately
+not tracked by git** — they are third-party copyrighted works and must not ship in a public release.
+Each is cited below by tag, full bibliographic reference and filename, so a reader can obtain their
+own copy and a local checkout stays navigable.
 - **[COAP]** Karmarkar & Lucet, *Computing the convex envelope of bivariate PLQ functions
   in linear time*, Comput. Optim. Appl. 94 (2026) 747–780. (`KARMARKAR-26-convex-envelope.pdf`)
 - **[JOGO]** Karmarkar & Lucet, *A linear-time algorithm to compute the conjugate of
