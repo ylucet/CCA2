@@ -1,13 +1,13 @@
 classdef QuaParTest < matlab.unittest.TestCase
     % Tests for QuaPar (quadratic on a parabolic subdivision).
-    % Covers: equivalence to QuaPoly on linear-edge inputs, full-domain evaluation,
+    % Covers: equivalence to QuaPol on linear-edge inputs, full-domain evaluation,
     % parabola validation, evaluation across a genuine parabolic edge, and the conic helpers.
 
     methods (Test)
-        function linearEdgesMatchQuaPoly(testCase)
-            % A QuaPar built from linear edges must evaluate identically to the QuaPoly
+        function linearEdgesMatchQuaPol(testCase)
+            % A QuaPar built from linear edges must evaluate identically to the QuaPol
             % built from the same data (polyhedral subdivision = special parabolic subdivision).
-            pPoly = QuaPoly.oneNorm();      % |x| + |y|, finite everywhere
+            pPoly = QuaPol.oneNorm();      % |x| + |y|, finite everywhere
             pPar  = QuaPar.oneNorm();       % same data via the (V,E,f,F) constructor (Ec=0)
             [X,Y] = meshgrid(linspace(-1.7,1.7,23), linspace(-1.3,1.3,19));
             P = [X(:)+0.013, Y(:)+0.007];   % small offset to avoid exact edge points

@@ -1,13 +1,13 @@
-function h = addQuaPoly(f, g)
-% addQuaPoly  Pointwise sum h = f+g of two QuaPoly functions (the geometry behind QuaPoly.add).
+function h = addQuaPol(f, g)
+% addQuaPol  Pointwise sum h = f+g of two QuaPol functions (the geometry behind QuaPol.add).
 %
 % objective: h(x) = f(x) + g(x) for all x. h's domain is the INTERSECTION of f's and g's domains
 %   (finite exactly where both f and g are finite); outside that intersection h is implicitly
-%   +infinity, the same convention QuaPoly itself already uses for a bounded domain (F(j,:) has a
+%   +infinity, the same convention QuaPol itself already uses for a bounded domain (F(j,:) has a
 %   0 entry on the side where the function is +infinity).
 %
-% [input]  f, g : QuaPoly, both operable (quadratic numerator, degree<=2 -- see assertOperable)
-% [output] h    : QuaPoly with h.f(k,:) = the sum of whichever f-piece and g-piece overlap there
+% [input]  f, g : QuaPol, both operable (quadratic numerator, degree<=2 -- see assertOperable)
+% [output] h    : QuaPol with h.f(k,:) = the sum of whichever f-piece and g-piece overlap there
 %
 % METHOD: overlay f's and g's polyhedral subdivisions by pairwise convex-polygon clipping --
 %   every face of f against every face of g (Sutherland-Hodgman half-plane clipping, adapted from
@@ -20,17 +20,17 @@ function h = addQuaPoly(f, g)
 %   half-edges to build the final V/E/F. The one substantive difference from maxQuaPar: its inputs
 %   are always full-domain (finite everywhere), so an edge with no matching neighbour is an
 %   internal-consistency ERROR there. Here f or g (or both) may have a genuinely bounded domain
-%   (the ordinary QuaPoly case), so an edge with no neighbour is not an error -- it is exactly
+%   (the ordinary QuaPol case), so an edge with no neighbour is not an error -- it is exactly
 %   where f's or g's own domain boundary passes through, and becomes a real boundary edge of h's
-%   domain (F=0 on the open side), the same way any bounded QuaPoly already represents its domain.
+%   domain (F=0 on the open side), the same way any bounded QuaPol already represents its domain.
 %
-% STATUS: implemented for two general QuaPoly objects (bounded or unbounded domain, any number of
+% STATUS: implemented for two general QuaPol objects (bounded or unbounded domain, any number of
 %   faces each). Not yet extended to QuaPar (would need Ec/curved-edge clipping) or RatPol (would
 %   need a common-denominator sum) -- see DESIGN.md's Implementation status section.
 
     % --- degenerate/trivial full-domain cases: no geometry needed at all ---
     if f.nv == 0 && g.nv == 0        % both finite everywhere: h is the single summed quadratic
-        h = QuaPoly(f.f + g.f);
+        h = QuaPol(f.f + g.f);
         return
     end
     if f.nv == 0                     % f finite everywhere: add its row to every g face, keep g's
@@ -55,14 +55,14 @@ function h = addQuaPoly(f, g)
         end
     end
     if isempty(pieces)
-        error('addQuaPoly:noOverlap', 'add: f''s and g''s domains do not overlap anywhere.');
+        error('addQuaPol:noOverlap', 'add: f''s and g''s domains do not overlap anywhere.');
     end
     h = assemblePiecesAdd(pieces);
 end
 
 % ============================================================================================
 % ----- extracting a face's boundary as {V (CCW finite vertices), dirIn, dirOut} --------------
-% (identical to maxQuaPar.m's facePoly, just applied to a QuaPoly instead of a QuaPar -- both
+% (identical to maxQuaPar.m's facePoly, just applied to a QuaPol instead of a QuaPar -- both
 % classes share the same V/E/F/P field layout, so the same code works verbatim)
 function poly = facePoly(obj, k)
     if obj.nv == 0
@@ -163,7 +163,7 @@ function cons = polyConstraints(poly)
 % BUGFIX (found while implementing addQuaPar.m): a BOUNDED poly (dirIn empty) is a closed
 % cycle of nv edges (1,2),...,(nv-1,nv),(nv,1) -- the old "for i=1:nv-1" loop always dropped
 % the closing edge (nv,1), so clipByFace never enforced that one constraint of polyL. Silent
-% under-constraining, not caught by the existing test suite (see addQuaPolyTest.m's new
+% under-constraining, not caught by the existing test suite (see addQuaPolTest.m's new
 % missingClosingEdgeConstraintIsEnforced regression test). An UNBOUNDED poly's nv-1 real-vertex
 % edges (1,2),...,(nv-1,nv) do NOT wrap (the two ends connect to rays, not to each other), so
 % that case is unaffected: `last` below is nv-1 for it, exactly as before.
@@ -222,7 +222,7 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
 
     if ~unbounded
         if numel(cross) ~= 2
-            error('addQuaPoly:internal', ...
+            error('addQuaPol:internal', ...
                 'clipPolyHalfPlane: expected 2 crossings on a bounded poly, found %d.', numel(cross));
         end
         p1 = cross(1); p2 = cross(2); X1 = xpt(p1); X2 = xpt(p2);
@@ -254,7 +254,7 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
         return
     end
     if numel(cross) ~= 1
-        error('addQuaPoly:internal', ...
+        error('addQuaPol:internal', ...
             'clipPolyHalfPlane: expected 1 or 2 crossings on an unbounded poly, found %d.', numel(cross));
     end
     p = cross(1); X = xpt(p);
@@ -305,10 +305,10 @@ function V = dedupConsecutive(V)
 end
 
 % ============================================================================================
-% ----- reassembling clipped+summed pieces into one QuaPoly -----------------------------------
+% ----- reassembling clipped+summed pieces into one QuaPol -----------------------------------
 function h = assemblePiecesAdd(pieces)
 % Adapted from maxQuaPar.m's assemblePieces: same coordinate-dedup + half-edge pairing, but (a)
-% no Ec/curved edges at all (QuaPoly is purely polyhedral) and (b) an edge with no matching
+% no Ec/curved edges at all (QuaPol is purely polyhedral) and (b) an edge with no matching
 % neighbour is NOT an error -- f or g may have a bounded domain, so an unpaired edge is exactly
 % where that domain boundary passes through, and becomes a genuine boundary edge of h (F=0 on the
 % open side), using the same left/right convention as a paired edge (see maxQuaPar.m header
@@ -378,7 +378,7 @@ function h = assemblePiecesAdd(pieces)
             % No neighbour: a genuine domain-boundary edge of h (f's or g's own domain boundary
             % passes through here). Same left/right rule as a paired edge below: the piece is on
             % the LEFT of stored (a,b) for a segment or an outgoing ray, on the RIGHT for an
-            % incoming ray; the missing side is 0 (infinity), QuaPoly's own convention.
+            % incoming ray; the missing side is 0 (infinity), QuaPol's own convention.
             if he.isSeg || he.rayOut
                 F(end+1,:) = [he.piece, 0]; %#ok<AGROW>
             else
@@ -400,5 +400,5 @@ function h = assemblePiecesAdd(pieces)
 
     fMat = zeros(n,10);
     for p = 1:n, fMat(p,:) = pieces(p).f; end
-    h = QuaPoly(V, E, fMat, F);
+    h = QuaPol(V, E, fMat, F);
 end

@@ -1,10 +1,10 @@
-classdef addQuaPolyTest < matlab.unittest.TestCase
-    % Tests for QuaPoly.add / addQuaPoly.m: pointwise sum of two QuaPoly functions.
+classdef addQuaPolTest < matlab.unittest.TestCase
+    % Tests for QuaPol.add / addQuaPol.m: pointwise sum of two QuaPol functions.
 
     methods (Test)
         function bothFullDomainSumsCoefficients(testCase)
-            f = QuaPoly.energy();   % 0.5*(x^2+y^2), full domain
-            g = QuaPoly.energy();
+            f = QuaPol.energy();   % 0.5*(x^2+y^2), full domain
+            g = QuaPol.energy();
             h = f.add(g);
             testCase.verifyEqual(h.nv, 0);
             testCase.verifyEqual(h.nf, 1);
@@ -12,8 +12,8 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
         end
 
         function fullDomainPlusBoundedKeepsBoundedDomain(testCase)
-            f = QuaPoly.energy();              % 0.5*(x^2+y^2), full domain
-            g = addQuaPolyTest.squareLinear([0 0], [0 1 0]);   % g(x,y)=x on [0,2]x[0,2]
+            f = QuaPol.energy();              % 0.5*(x^2+y^2), full domain
+            g = addQuaPolTest.squareLinear([0 0], [0 1 0]);   % g(x,y)=x on [0,2]x[0,2]
             h = f.add(g);
             testCase.verifyEqual(h.nv, g.nv);
             testCase.verifyEqual(h.nf, g.nf);
@@ -24,11 +24,11 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
         function twoOverlappingSquaresSumOnTheirIntersection(testCase)
             % f(x,y)=x on [0,2]x[0,2]; g(x,y)=y on [1,3]x[1,3]. Overlap = [1,2]x[1,2],
             % h(x,y)=x+y there, +Inf everywhere else (independently computable ground truth).
-            f = addQuaPolyTest.squareLinear([0 0], [0 1 0]);
-            g = addQuaPolyTest.squareLinear([1 1], [0 1 0]);
+            f = addQuaPolTest.squareLinear([0 0], [0 1 0]);
+            g = addQuaPolTest.squareLinear([1 1], [0 1 0]);
             h = f.add(g);
 
-            testCase.verifyClass(h, 'QuaPoly');
+            testCase.verifyClass(h, 'QuaPol');
             testCase.verifyEqual(h.eval([1.5 1.5]), 1.5+1.5, 'AbsTol', 1e-10);   % inside the overlap
             testCase.verifyEqual(h.eval([0.5 0.5]), Inf);                        % inside f only
             testCase.verifyEqual(h.eval([2.5 2.5]), Inf);                        % inside g only
@@ -43,17 +43,17 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
             % four sides, so a point outside g along exactly that side (but inside f) was wrongly
             % treated as inside the overlap. twoOverlappingSquaresSumOnTheirIntersection's own
             % sample points didn't happen to probe that missing side; this one does.
-            f = addQuaPolyTest.squareLinear([0 0], [0 1 0]);   % [0,2]x[0,2]
-            g = addQuaPolyTest.squareLinear([1 1], [0 1 0]);   % [1,3]x[1,3]
+            f = addQuaPolTest.squareLinear([0 0], [0 1 0]);   % [0,2]x[0,2]
+            g = addQuaPolTest.squareLinear([1 1], [0 1 0]);   % [1,3]x[1,3]
             h = f.add(g);
             testCase.verifyEqual(h.eval([1.5 0.5]), Inf);   % inside f, outside g (y<1): must be Inf
             testCase.verifyEqual(h.eval([0.5 1.5]), Inf);   % inside f, outside g (x<1): must be Inf
         end
 
         function noOverlapErrors(testCase)
-            f = addQuaPolyTest.squareLinear([0 0], [0 1 0]);
-            g = addQuaPolyTest.squareLinear([10 10], [0 0 1]);
-            testCase.verifyError(@() f.add(g), 'addQuaPoly:noOverlap');
+            f = addQuaPolTest.squareLinear([0 0], [0 1 0]);
+            g = addQuaPolTest.squareLinear([10 10], [0 0 1]);
+            testCase.verifyError(@() f.add(g), 'addQuaPol:noOverlap');
         end
 
         function nestedUnboundedQuadrantsExerciseRayClipping(testCase)
@@ -61,11 +61,11 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
             % {x>=-1,y>=-1} (apex (-1,-1)). The first quadrant is a strict SUBSET of the second,
             % so the overlap is exactly the first quadrant, and h(x,y)=x+y there -- ground truth
             % independently computable since the domains nest.
-            f = addQuaPolyTest.quadrant([0 0], [0 1 0]);
-            g = addQuaPolyTest.quadrant([-1 -1], [0 1 0]);
+            f = addQuaPolTest.quadrant([0 0], [0 1 0]);
+            g = addQuaPolTest.quadrant([-1 -1], [0 1 0]);
             h = f.add(g);
 
-            testCase.verifyClass(h, 'QuaPoly');
+            testCase.verifyClass(h, 'QuaPol');
             testCase.verifyEqual(h.eval([1 1]), 1+1, 'AbsTol', 1e-10);      % inside both
             testCase.verifyEqual(h.eval([-0.5 -0.5]), Inf);                 % inside g only, not f
             testCase.verifyEqual(h.eval([-2 -2]), Inf);                     % inside neither
@@ -82,7 +82,7 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
             F = [1 0; 1 0; 1 0; 1 0];
             f = zeros(1,10);
             f(8) = coeffXYconst(1); f(9) = coeffXYconst(2); f(10) = coeffXYconst(3);
-            p = QuaPoly(V, E, f, F);
+            p = QuaPol(V, E, f, F);
         end
 
         function p = quadrant(apex, coeffXYconst)
@@ -93,7 +93,7 @@ classdef addQuaPolyTest < matlab.unittest.TestCase
             F = [1 0; 0 1];
             f = zeros(1,10);
             f(8) = coeffXYconst(1); f(9) = coeffXYconst(2); f(10) = coeffXYconst(3);
-            p = QuaPoly(V, E, f, F);
+            p = QuaPol(V, E, f, F);
         end
     end
 end

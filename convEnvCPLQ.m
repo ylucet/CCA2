@@ -6,9 +6,9 @@ function r = convEnvCPLQ(obj)
 %     [COAP] Karmarkar & Lucet, Comput. Optim. Appl. 94 (2026) 747-780 (Sect. 3, Appendix A);
 %     [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34.
 %
-% [input]  obj : QuaPoly with a SINGLE piece (nf==1: full domain nv==0, or one face).
+% [input]  obj : QuaPol with a SINGLE piece (nf==1: full domain nv==0, or one face).
 %                Operable (quadratic numerator; cubic rejected). A bounded-triangle face must be
-%                a valid QuaPoly: with F=[k 0] (face on the left of each directed edge) the
+%                a valid QuaPol: with F=[k 0] (face on the left of each directed edge) the
 %                vertices are listed counter-clockwise. The single-piece result reuses obj's
 %                domain, so an inconsistent winding would make eval miss the interior.
 % [output] r   : RatPol = conv(q + I_P).
@@ -43,7 +43,7 @@ function r = convEnvCPLQ(obj)
         return
     end
 
-    [L,Q,~] = QuaPoly.matrixForm(obj.f(1,:));
+    [L,Q,~] = QuaPol.matrixForm(obj.f(1,:));
     ev    = eig(Q);
     isPSD = all(ev >= -sqrt(eps));
     isNSD = all(ev <=  sqrt(eps));
@@ -69,7 +69,7 @@ function r = convEnvCPLQ(obj)
 
     % ---- Concave over a triangle: affine interpolation of the 3 vertex values ---------------
     if isNSD
-        z   = QuaPoly.evalPoly(obj.f(1,:), obj.V);
+        z   = QuaPol.evalPoly(obj.f(1,:), obj.V);
         abc = [obj.V, ones(3,1)] \ z;
         r = RatPol(obj.V, obj.E, [0 0 0 abc(1) abc(2) abc(3)], obj.F);
         return
@@ -439,7 +439,7 @@ function r = convEnvMultiFace(obj)
         tris = extractFaceTrianglesCCW(obj, i);
         q6   = obj.f(i, 5:10);                 % the (quadratic) numerator on face i
         for t = 1:numel(tris)
-            qT = QuaPoly(tris{t}, [1 2 1; 2 3 1; 3 1 1], q6, [1 0; 1 0; 1 0]);
+            qT = QuaPol(tris{t}, [1 2 1; 2 3 1; 3 1 1], q6, [1 0; 1 0; 1 0]);
             rT = convEnvCPLQ(qT);              % single-triangle path (1 or 2 output faces)
             for g = 1:rT.nf
                 Vg = ensureCCW(rT.V(faceVertexIndices(rT, g), :));

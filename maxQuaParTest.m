@@ -517,8 +517,8 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             % pipeline (conjPieceCPLQ) rather than hard-coded coefficients -- unlike frozenG1G2,
             % nothing here depends on Step 1 (convEnvCPLQ), since f=x*y is fed to Step 2 directly.
             E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            g1 = conjPieceCPLQ(QuaPoly(maxQuaParTest.toCCW(T1), E, [0 1 0 0 0 0], F));
-            g2 = conjPieceCPLQ(QuaPoly(maxQuaParTest.toCCW(T2), E, [0 1 0 0 0 0], F));
+            g1 = conjPieceCPLQ(QuaPol(maxQuaParTest.toCCW(T1), E, [0 1 0 0 0 0], F));
+            g2 = conjPieceCPLQ(QuaPol(maxQuaParTest.toCCW(T2), E, [0 1 0 0 0 0], F));
         end
 
         function T = toCCW(T)
@@ -621,13 +621,13 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             s2v2 = sqrt(2);
             A1 = [12-8*s2v2, 6*s2v2-8; 6*s2v2-8, 6-4*s2v2];
             V1 = [0 0; 1 2; 2 2]; E1 = [1 2 1; 2 3 1; 3 1 1]; F1 = [1 0; 1 0; 1 0];
-            p1 = QuaPoly(V1, E1, [A1(1,1) A1(1,2) A1(2,2) 0 0 0], F1);
+            p1 = QuaPol(V1, E1, [A1(1,1) A1(1,2) A1(2,2) 0 0 0], F1);
             g1 = conjPieceCPLQ(p1);
 
             A2 = [6-4*s2v2, 6*s2v2-8; 6*s2v2-8, 12-8*s2v2];
             b2 = [9-6*s2v2; 6*s2v2-9];
             V2 = [1 2; 2 2; 3 3]; E2 = [1 2 1; 2 3 1; 3 1 1]; F2 = [1 0; 1 0; 1 0];
-            p2 = QuaPoly(V2, E2, [A2(1,1) A2(1,2) A2(2,2) b2(1) b2(2) 0], F2);
+            p2 = QuaPol(V2, E2, [A2(1,1) A2(1,2) A2(2,2) b2(1) b2(2) 0], F2);
             g2 = conjPieceCPLQ(p2);
         end
 
@@ -637,7 +637,7 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             % closed-form coefficients, so it works for any T with all 3 edges convex for u1*u2
             % (f(x,y)=xy genuinely nonconvex on it), not just the one 3-edge.tex example.
             E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(T, E, [0 1 0 0 0 0], F);   % f(x,y) = x*y over T (c=[A11 A12 A22 d e f])
+            q = QuaPol(T, E, [0 1 0 0 0 0], F);   % f(x,y) = x*y over T (c=[A11 A12 A22 d e f])
             r = convEnvCPLQ(q);
             if r.nf ~= 2
                 error('buildG1G2ForTriangle:unexpectedSplit', ...
@@ -645,8 +645,8 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
             [V1, f1] = maxQuaParTest.extractTriFace(r, 1);
             [V2, f2] = maxQuaParTest.extractTriFace(r, 2);
-            p1 = QuaPoly(V1, E, f1(5:10), F);
-            p2 = QuaPoly(V2, E, f2(5:10), F);
+            p1 = QuaPol(V1, E, f1(5:10), F);
+            p2 = QuaPol(V2, E, f2(5:10), F);
             g1 = conjPieceCPLQ(p1);
             g2 = conjPieceCPLQ(p2);
         end
@@ -782,12 +782,12 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             % r: a 2-face RatPol (as produced by convEnvCPLQ's 3-convex-edge split, or its
             % 2-convex-edge split when a genuine split is needed). Returns face k's 3 vertices in
             % CCW order and its coefficient row -- but only for a PLAIN QUADRATIC face (den =
-            % [0 0 1]): QuaPoly (unlike RatPol) has no denominator, and conjPieceCPLQ cannot yet
+            % [0 0 1]): QuaPol (unlike RatPol) has no denominator, and conjPieceCPLQ cannot yet
             % conjugate a genuinely rational (quadratic/linear) piece (see convEnvCPLQ.m's
             % 2-convex-edge fix, 2026 session: the "other" sub-triangle of a genuine split is
             % exactly a 1-convex-edge Appendix A.3 RATIONAL envelope, not a plain quadratic like it
             % used to be before that fix) -- silently dropping a nonzero denominator here would
-            % build the WRONG QuaPoly rather than fail loudly, so this errors clearly instead.
+            % build the WRONG QuaPol rather than fail loudly, so this errors clearly instead.
             if any(abs(r.den(k,:) - [0 0 1]) > 1e-9)
                 error('extractTriFace:rationalFaceNotSupported', ...
                     ['face %d is a genuinely rational envelope (den=[%g %g %g]); ' ...

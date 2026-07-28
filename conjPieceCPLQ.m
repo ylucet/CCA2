@@ -18,7 +18,7 @@ function g = conjPieceCPLQ(p)
 %                mean formula is PROVABLY always rank-1 PSD (b^2-4ac=0 identically, any slopes),
 %                never strictly indefinite -- see conjPieceCPLQTest for the discriminant proof
 %                and NOTES below on why the "raw indefinite bilinear, 2 convex edges" case is a
-%                case is UNREACHABLE from a QuaPoly conjugate/biconjugate -- see NOTES.
+%                case is UNREACHABLE from a QuaPol conjugate/biconjugate -- see NOTES.
 %              - pure BILINEAR f = x*y with ZERO convex edges -> three-cone piecewise-linear
 %                QuaPar (max of vertex linears, same construction as the affine case);
 %              - pure BILINEAR f = x*y with exactly ONE convex edge -> six-face PARABOLIC QuaPar
@@ -32,7 +32,7 @@ function g = conjPieceCPLQ(p)
 %                VALUE only) and the rotation (a linear change of the DUAL variable, pushed
 %                through vertices/conics/orientation by pushforwardQuaParDual). Two convex edges
 %                is the same unreachable-by-design branch as the pure bilinear case (see NOTES).
-%              den = 1 (no rational denominator). p may be a QuaPoly, QuaPar, or RatPol.
+%              den = 1 (no rational denominator). p may be a QuaPol, QuaPar, or RatPol.
 %              TODO: rational pieces (RatPol input with a genuine nonzero denominator) -- NOT
 %              reducible to the cases above (there is no known "original quadratic" to fall back
 %              on when p IS the rational function itself, e.g. via a direct RatPol.conj call with
@@ -68,12 +68,12 @@ function g = conjPieceCPLQ(p)
 %
 % READ THIS AS "UNREACHABLE BY DESIGN", NOT AS A TOOLBOX LIMITATION. (Corrected repeatedly; an
 % earlier wording of this note -- "a hyperbola dead end" -- kept being re-read as a gap in what
-% CCA2 can express, and reported as such.) CCA2's goal is QuaPoly conjugate/biconjugate; it is NOT
-% to cover every possible RatPol/QuaPar. Everything downstream of a QuaPoly is a SPECIAL case, and
-% the special-ness is load-bearing: the convex envelope of a QuaPoly triangle is a very special
+% CCA2 can express, and reported as such.) CCA2's goal is QuaPol conjugate/biconjugate; it is NOT
+% to cover every possible RatPol/QuaPar. Everything downstream of a QuaPol is a SPECIAL case, and
+% the special-ness is load-bearing: the convex envelope of a QuaPol triangle is a very special
 % RatPol, and the conjugate of those triangles is a very special QuaPar (e.g. a parabolic edge only
 % ever occurs surrounded by TWO PARALLEL RAYS). Hyperbolic edges therefore never need storing:
-% they NEVER arise from a QuaPoly conjugate/biconjugate, nor from any intermediate computation --
+% they NEVER arise from a QuaPol conjugate/biconjugate, nor from any intermediate computation --
 % see [COAP]/[JOGO] (Karmarkar & Lucet 2026; DESIGN.md's reference list) and QuaPar.m's own
 % assertParabolicEdges.
 %
@@ -96,8 +96,8 @@ function g = conjPieceCPLQ(p)
 % f*(s) = <s,v_i> - q(v_i);  on the strip of edge (v_i,v_j) with e = v_j - v_i,
 % f*(s) = <s,v_i> - q(v_i) + (<s,e> - <grad q(v_i),e>)^2 / (2 e' A e).
 
-    if ~(isa(p,'QuaPoly') || isa(p,'QuaPar') || isa(p,'RatPol'))
-        error('conjPieceCPLQ:type','Input must be a QuaPoly/QuaPar/RatPol piece.');
+    if ~(isa(p,'QuaPol') || isa(p,'QuaPar') || isa(p,'RatPol'))
+        error('conjPieceCPLQ:type','Input must be a QuaPol/QuaPar/RatPol piece.');
     end
     if p.nf ~= 1 || p.nv ~= 3 || p.ne ~= 3 || ~p.isDomBounded
         error('conjPieceCPLQ:notImplemented', ...
@@ -107,7 +107,7 @@ function g = conjPieceCPLQ(p)
         error('conjPieceCPLQ:notImplemented', ...
             'Conjugate of a rational piece (-> parabolic) is not implemented yet (needs curved orderEdges).');
     end
-    [L,Q,C] = QuaPoly.matrixForm(p.f(1,:));
+    [L,Q,C] = QuaPol.matrixForm(p.f(1,:));
     if ~isempty(C)
         error('conjPieceCPLQ:notImplemented','Quadratic numerator required (got a cubic).');
     end
@@ -623,7 +623,7 @@ function g = pushforwardQuaParDual(gU, M)
     nf = size(gU.f,1);
     fNew = zeros(nf,6);
     for k = 1:nf
-        [Lk,Hk,Ck] = QuaPoly.matrixForm(gU.f(k,:));
+        [Lk,Hk,Ck] = QuaPol.matrixForm(gU.f(k,:));
         if ~isempty(Ck)
             error('conjPieceCPLQ:internal','pushforwardQuaParDual: cubic face not supported.');
         end

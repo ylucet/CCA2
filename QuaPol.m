@@ -1,8 +1,17 @@
-classdef QuaPoly < RatPol & QuaPar
-   % QuaPoly: a value class for piecewise QUAdratic functions on a POLYhedral subdivision.
+classdef QuaPol < RatPol & QuaPar
+   % QuaPol: a value class for piecewise QUAdratic functions on a POLYhedral subdivision.
    % This is the leaf (input) type of the CCA2 class hierarchy described in DESIGN.md:
-   %   RatPar (rational cubic/linear on parabolic) > RatPol, QuaPar > QuaPoly.
+   %   RatPar (rational cubic/linear on parabolic) > RatPol, QuaPar > QuaPol.
    % It is the evolved release class (formerly PLQVC; PLQVC is kept as a thin alias).
+   %
+   % RENAMED 2026-07-27 from `QuaPoly` to `QuaPol`, so that all four type names are the uniform
+   % 3+3 combinations of the two axes (Rat|Qua) x (Pol|Par) -- see RatPar.m. The old name also
+   % read as "quadratic POLYnomial", which is the OTHER axis: `Pol` here abbreviates POLYHEDRAL
+   % (the subdivision), and it is the Rat/Qua axis that says polynomial-vs-rational. The
+   % companion files renamed with it: addQuaPoly -> addQuaPol, quaPolyToPlq -> quaPolToPlq,
+   % addQuaPolyTest -> addQuaPolTest. No compatibility shim was left for the old name: CCA2 has
+   % no tagged release, so nothing external can depend on it (PLQVC, which predates the toolbox's
+   % reorganization and WAS released, does keep its alias).
    % Convex-analysis operators (conj/partialConj/biconj, and later add/moreau/...) are defined
    % here and dispatch to the engine functions (conjCPLQ for the 'cplq' engine).
    % NOTE: the data structure stores up to CUBIC coefficients (10 per face); cubic functions are
@@ -20,14 +29,14 @@ classdef QuaPoly < RatPol & QuaPar
    % polynomials with CONNECTED domain forming a polyhedral partition. Disconnected domains are not supported.
    
    % All nine mesh properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
-   % declares them verbatim as they used to appear here; QuaPoly -- quadratic on a polyhedral
+   % declares them verbatim as they used to appear here; QuaPol -- quadratic on a polyhedral
    % subdivision -- is the specialization that adds nothing of its own (no per-face denominator
    % like RatPol's `den`, no per-edge conic like QuaPar's `Ec`). See RatPar.m for the hierarchy
    % and for why the four types are siblings rather than a chain.
    
    % Class methods
    methods
-       function obj = QuaPoly(varargin) % constructor
+       function obj = QuaPol(varargin) % constructor
             % No-argument path writes NOTHING -- see RatPar.m's CONSTRUCTOR PROTOCOL note. This is
             % what lets a subclass built by multiple inheritance re-run this constructor on its
             % second inheritance path without clobbering state the first path already wrote.
@@ -42,7 +51,7 @@ classdef QuaPoly < RatPol & QuaPar
                 obj.V = varargin{1}; obj.E = varargin{2}; obj.F = varargin{4}; 
                 [nv,n2] = size(obj.V);[ne,n3] = size(obj.E);[nf, n6] = size(obj.f);[ne1, n22] = size(obj.F); 
                 i = [(n2==2), (n3==3) && (ne==ne1), ((n6==6)||(n6==10)) && (nf>0), n22==2  && (ne==ne1)];
-                if ~all(i), error(sprintf("Invalid matrix size in QuaPoly constructor. Validation vector: [V, E, f, F]=[%i, %i, %i, %i]",i));end %#ok<SPERR>
+                if ~all(i), error(sprintf("Invalid matrix size in QuaPol constructor. Validation vector: [V, E, f, F]=[%i, %i, %i, %i]",i));end %#ok<SPERR>
                 obj.nv=nv; obj.ne=ne; obj.nf=nf;
                 obj.P = obj.createP();
                 %fix nf for degenerate cases
@@ -70,7 +79,7 @@ classdef QuaPoly < RatPol & QuaPar
                     end
                 end
              else
-                error("Invalid input arguments in QuaPoly constructor; need 4 arguments but got %i", nargin);
+                error("Invalid input arguments in QuaPol constructor; need 4 arguments but got %i", nargin);
             end        
             obj = obj.setPinnedDefaults();   % den:=1, Ec:=0 -- see RatPar.setPinnedDefaults
             obj.dom = obj.createDom;
@@ -97,7 +106,7 @@ classdef QuaPoly < RatPol & QuaPar
        end   
        function [fVal,region] = eval(obj,x)
         % objective:  Evaluates PC function on x
-        % [input]  obj of type QuaPoly to access V, E, f, P
+        % [input]  obj of type QuaPol to access V, E, f, P
         %          x : kx2 matrix containing points to evaluate at
         % [output]  fval : kx2 values where fval(i) = PC(x(i)) where fval(i)=nan if PC is discontinuous at x(i)
         %           region : returns region in which the point was found; used for
@@ -107,14 +116,14 @@ classdef QuaPoly < RatPol & QuaPar
            
             if obj.nv==0%cubic function defined everywhere
                 region = ones(size(x,1),1);
-                fVal = QuaPoly.evalPoly(obj.f,x);
+                fVal = QuaPol.evalPoly(obj.f,x);
                 return;
             elseif max(obj.F,[],'all')==0 %edge chain   
                 fVal=Inf * ones(size(x,1),1);
                 for i=1:obj.ne%loop on each edge
-                    b = QuaPoly.belongToEdge(obj.V(obj.E(i,1),:),obj.V(obj.E(i,2),:),x);%true if x belongs to edge i                    
+                    b = QuaPol.belongToEdge(obj.V(obj.E(i,1),:),obj.V(obj.E(i,2),:),x);%true if x belongs to edge i                    
                     if any(b)
-                        R = QuaPoly.evalPoly(obj.f(i,:),x(b,:)); 
+                        R = QuaPol.evalPoly(obj.f(i,:),x(b,:)); 
                         ib=find(b);
                         for j=1:length(ib)
                            if isinf(fVal(ib(j)))
@@ -139,7 +148,7 @@ classdef QuaPoly < RatPol & QuaPar
             E2 = edges(1:m/2,2);
             E3 = edges(m/2+1:m,1);
             E4 = edges(m/2+1:m,2);
-            coefficients = QuaPoly.lineEquation([E1 E2],[E3 E4]);%[-(E4-E2), E3-E1, E1.*E4-E3.*E2];
+            coefficients = QuaPol.lineEquation([E1 E2],[E3 E4]);%[-(E4-E2), E3-E1, E1.*E4-E3.*E2];
 
             % to figure out the polytope that contains the point:  
             %   since the number of functions represent the number of polytopes, the
@@ -155,14 +164,14 @@ classdef QuaPoly < RatPol & QuaPar
                     % Checks if any x lies in the current polytope, evaluates them and
                     % marks border points as a different colour
                     %fVal(flags==1) = obj.plqvc_funcval2d(f(i,:),x(flags==1,:)');
-                    fVal(flags==1) = QuaPoly.evalPoly(obj.f(i,:),x(flags==1,:));
+                    fVal(flags==1) = QuaPol.evalPoly(obj.f(i,:),x(flags==1,:));
                     region(region~=-1 & flags==1) = 0;
                     region(region==-1 & flags==1) = i;
                 end
             end
        end
        function dom = createDom(obj)
-           % return the domain of the QuaPoly function; in addition store it in obj.Dom
+           % return the domain of the QuaPol function; in addition store it in obj.Dom
            % output: Dom: struct as explained in the class properties
            % dim=0
            dom.dim=0;dom.P=[];dom.isConvex=false;
@@ -176,7 +185,7 @@ classdef QuaPoly < RatPol & QuaPar
                if (obj.nv==2) && (obj.ne==1) %segment or ray
                    dom.isConvex=true;
                else %chain of edges
-                   if QuaPoly.isCollinear(obj.V,sqrt(eps))
+                   if QuaPol.isCollinear(obj.V,sqrt(eps))
                        dom.isConvex=true;
                    end
                    %Error("Found 0 face but not full domain, not needle, not segment/ray, or not boundary of slice. What is it?");
@@ -317,12 +326,12 @@ classdef QuaPoly < RatPol & QuaPar
        %input: k: face index
        %output: isConvex: true if the face is convex and the function is convex on that face
             c = obj.f(k,:);
-            [~,Q,C] = QuaPoly.matrixForm(c);
+            [~,Q,C] = QuaPol.matrixForm(c);
             isConvex = obj.dom.isConvex;if ~isConvex, return;end%check that domain is convex first
             
             if sum(abs(C),'all') < sqrt(eps)  %quadratic function; treat as special case for clarity AND performance
                                     % e.g. face with a large number of vertexes
-                isConvex = QuaPoly.isPositiveSemidefinite(Q);
+                isConvex = QuaPol.isPositiveSemidefinite(Q);
                 return;
             else%cubic function; need Hessian to be positive semi-definite on all vertexes & all ray directions
                 J = abs(obj.P{k})'; %edge indexes of Face k                
@@ -336,8 +345,8 @@ classdef QuaPoly < RatPol & QuaPar
                     Dir = obj.V(Ir(:,2),:) - obj.V(Ir(:,1),:);
                     Vect = [Vect; Dir];
                 end
-                H = QuaPoly.evalHessian(obj.f(k,:),Vect);%returns hypermatrix of size 2x2xsize(Vect,1)
-                isConvex = QuaPoly.isPositiveSemidefinite(H);
+                H = QuaPol.evalHessian(obj.f(k,:),Vect);%returns hypermatrix of size 2x2xsize(Vect,1)
+                isConvex = QuaPol.isPositiveSemidefinite(H);
             end
         
        end
@@ -352,7 +361,7 @@ classdef QuaPoly < RatPol & QuaPar
             k = sum(obj.F(j,:)>0);%number of nonzero face indexes for edge j
             if k==0%case function is only defined on the edge
                 isContinuous=true;%continuity is always true for cubic polynomial
-                isConvex = QuaPoly.isCubicConvexOnEdge(obj.f(j,:),obj.V(obj.E(j,1),:),obj.V(obj.E(j,2),:),obj.E(j,3));
+                isConvex = QuaPol.isCubicConvexOnEdge(obj.f(j,:),obj.V(obj.E(j,1),:),obj.V(obj.E(j,2),:),obj.E(j,3));
                 return;
             end
             
@@ -375,10 +384,10 @@ classdef QuaPoly < RatPol & QuaPar
             %Algorithm 3, p. 40. University of British Columbia. Retrieved from http://hdl.handle.net/2429/70675
             % The common boundary is a^T x = beta; it goes through V(1,:) and V(2,:)            
             V = [obj.V(obj.E(j,1),:);obj.V(obj.E(j,2),:)];%V1=V(1,:); V2=V(2,:);
-            c = QuaPoly.lineEquation(V(1,:),V(2,:));a=c(1,1:2)'; beta=c(1,3);
+            c = QuaPol.lineEquation(V(1,:),V(2,:));a=c(1,1:2)'; beta=c(1,3);
             
-            [~,g1] = QuaPoly.evalHessian(obj.f(obj.F(j,1),:),V);
-            [~,g2] = QuaPoly.evalHessian(obj.f(obj.F(j,2),:),V);
+            [~,g1] = QuaPol.evalHessian(obj.f(obj.F(j,1),:),V);
+            [~,g2] = QuaPol.evalHessian(obj.f(obj.F(j,2),:),V);
             delta1 = (g1(:,1)-g2(:,1)) ./ a;
             if norm(delta1(1)-delta1(2)) > sqrt(eps), error("Unable to compute delta1");end
             delta2 = (g1(:,2)-g2(:,2)) ./ a;
@@ -393,8 +402,8 @@ classdef QuaPoly < RatPol & QuaPar
             
             if norm(obj.f(obj.F(j,1),:))<sqrt(eps) && norm(obj.f(obj.F(j,2),:))<sqrt(eps) %function is quadratic on adjacent faces
 %                 %Theorem 3.8, p. 28.                
-%                 [L1,Q1] = QuaPoly.matrixForm(obj.f(obj.F(j,1),:));
-%                 [L2,Q2] = QuaPoly.matrixForm(obj.f(obj.F(j,2),:));
+%                 [L1,Q1] = QuaPol.matrixForm(obj.f(obj.F(j,1),:));
+%                 [L2,Q2] = QuaPol.matrixForm(obj.f(obj.F(j,2),:));
 % 
 %                 delta1 = ((Q1-Q2)*V(1,:)'+L1-L2) ./ a;
 %                 if norm(delta1(1)-delta1(2)) > sqrt(eps), error("Unable to compute delta1");end
@@ -415,7 +424,7 @@ classdef QuaPoly < RatPol & QuaPar
 %             assume(x,'real');assume(y,'real');
 %             X=[x, y];
 %             c = sym('c',[1,10]); assume(c,'real');
-%             [H,g] = QuaPoly.evalHessian(c,X);
+%             [H,g] = QuaPol.evalHessian(c,X);
 %             expand(g)
             %and we obtain
             %g = [(c1*x^2)/2 + c2*x*y + c5*x + (c3*y^2)/2 + c6*y + c8; (c2*x^2)/2 + c3*x*y + c6*x + (c4*y^2)/2 + c7*y + c9];
@@ -444,7 +453,7 @@ classdef QuaPoly < RatPol & QuaPar
             V1=obj.V(obj.E(j,1),:);V2=obj.V(obj.E(j,2),:);t=linspace(0,1,4);
             X=(V1' + t.*(V2-V1)')';%4 equi-spaced points between V1 and V2 included
             c1 = obj.f(obj.F(j,1),:);c2=obj.f(obj.F(j,2),:);
-            fVal1 = QuaPoly.evalPoly(c1,X);fVal2=QuaPoly.evalPoly(c2,X);
+            fVal1 = QuaPol.evalPoly(c1,X);fVal2=QuaPol.evalPoly(c2,X);
             b = norm(fVal1-fVal2)<sqrt(eps);
        end
        function b = isConvex(obj)%TO BE TESTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -559,7 +568,7 @@ classdef QuaPoly < RatPol & QuaPar
        end
        function assertOperable(obj)
        % objective: error unless obj is a valid input to convex-analysis operators.
-       %   QuaPoly is quadratic on a polyhedral subdivision, so operators require degree<=2.
+       %   QuaPol is quadratic on a polyhedral subdivision, so operators require degree<=2.
        %   Cubic functions remain storable and accepted by isConvex, but are rejected here.
             if obj.degree > 2
                 error('PLQ:op:unsupportedType', ...
@@ -569,9 +578,9 @@ classdef QuaPoly < RatPol & QuaPar
        end
        function g = conj(obj, engine)
        % objective: Legendre-Fenchel conjugate f*(s) = sup_x <s,x> - f(x)
-       % [input]  obj   : QuaPoly (quadratic on polyhedral); must be operable (degree<=2)
+       % [input]  obj   : QuaPol (quadratic on polyhedral); must be operable (degree<=2)
        %          engine: 'cplq' (default, symbolic per-piece) | 'pqp' | 'graph'
-       % [output] g     : the conjugate (QuaPoly when quadratic-on-polyhedral; otherwise QuaPar)
+       % [output] g     : the conjugate (QuaPol when quadratic-on-polyhedral; otherwise QuaPar)
             obj.assertOperable();
             if nargin < 2, engine = 'cplq'; end
             switch lower(engine)
@@ -585,7 +594,7 @@ classdef QuaPoly < RatPol & QuaPar
        end
        function g = partialConj(obj, idx, engine)
        % objective: partial conjugate w.r.t. variable idx (1 or 2)
-       % [input]  obj   : QuaPoly, operable; idx: 1 or 2; engine: 'pqp' | 'cplq'
+       % [input]  obj   : QuaPol, operable; idx: 1 or 2; engine: 'pqp' | 'cplq'
        % [output] g     : the partial conjugate
             obj.assertOperable();
             if nargin < 3, engine = 'cplq'; end
@@ -608,8 +617,8 @@ classdef QuaPoly < RatPol & QuaPar
        end
        function h = scalarMul(obj, c)
        % objective: (c*f)(x) = c*f(x), scaling the function by a real constant c
-       % [input]  obj: QuaPoly, operable (degree<=2); c: nonzero real scalar
-       % [output] h  : QuaPoly, same domain (V/E/F/P/dom unchanged), coefficients scaled by c
+       % [input]  obj: QuaPol, operable (degree<=2); c: nonzero real scalar
+       % [output] h  : QuaPol, same domain (V/E/F/P/dom unchanged), coefficients scaled by c
             obj.assertOperable();
             h = obj;
             h.f = c * obj.f;
@@ -619,17 +628,17 @@ classdef QuaPoly < RatPol & QuaPar
             h = scalarMul(obj, -1);
        end
        function h = add(obj, obj2)
-       % objective: (f+g)(x) = f(x)+g(x), the pointwise sum of two QuaPoly functions
-       % [input]  obj, obj2: QuaPoly, both operable (degree<=2)
-       % [output] h: QuaPoly, domain = overlay of obj's and obj2's domains (only where BOTH are
-       %             finite -- see addQuaPoly.m header for the full algorithm)
+       % objective: (f+g)(x) = f(x)+g(x), the pointwise sum of two QuaPol functions
+       % [input]  obj, obj2: QuaPol, both operable (degree<=2)
+       % [output] h: QuaPol, domain = overlay of obj's and obj2's domains (only where BOTH are
+       %             finite -- see addQuaPol.m header for the full algorithm)
             obj.assertOperable(); obj2.assertOperable();
-            h = addQuaPoly(obj, obj2);
+            h = addQuaPol(obj, obj2);
        end
        function h = addQuadratic(obj, A, b, c)
        % objective: h(x) = f(x) + (1/2 x'Ax + b'x + c), adding a FULL-DOMAIN quadratic to f
-       % [input]  obj: QuaPoly, operable (degree<=2); A: 2x2 (symmetric); b: 2x1 or 1x2; c: scalar
-       % [output] h  : QuaPoly, same domain/mesh as obj (a full-domain quadratic is finite
+       % [input]  obj: QuaPol, operable (degree<=2); A: 2x2 (symmetric); b: 2x1 or 1x2; c: scalar
+       % [output] h  : QuaPol, same domain/mesh as obj (a full-domain quadratic is finite
        %               everywhere, so it never restricts obj's domain -- only its per-face
        %               coefficients, columns 5:10 = [x^2 xy y^2 x y const], change, identically
        %               on every face)
@@ -640,8 +649,8 @@ classdef QuaPoly < RatPol & QuaPar
        end
        function h = addScaledEnergy(obj, alpha)
        % objective: h(x) = f(x) + alpha*(x1^2+x2^2), a convenience wrapper over addQuadratic
-       % [input]  obj: QuaPoly, operable (degree<=2); alpha: real scalar
-       % [output] h  : QuaPoly, same domain/mesh as obj
+       % [input]  obj: QuaPol, operable (degree<=2); alpha: real scalar
+       % [output] h  : QuaPol, same domain/mesh as obj
             h = addQuadratic(obj, 2*alpha*eye(2), [0;0], 0);
        end
 
@@ -654,7 +663,7 @@ classdef QuaPoly < RatPol & QuaPar
         %       x: Nx2 array storing points x(i,1:2). If x is ommitted c must be a quadratic function
         %output H: 2x2xN hypermatrix such that H(:,:,i) is the Hessian at point x(i,:)
         %       g: 2xN matrix such that g(:,i) is the gradient at point x(i,:)
-            [L,Q,C] = QuaPoly.matrixForm(c);
+            [L,Q,C] = QuaPol.matrixForm(c);
             if (nargin < 2) && (nargout<2)
                 if (sum(abs(C),'all') < sqrt(eps))%quadratic function does not need x when no gradient is requested
                     H = Q;g=[];return;
@@ -694,7 +703,7 @@ classdef QuaPoly < RatPol & QuaPar
             C = C.*Cw;
             c = [zeros(1,10-size(c,2)),c];
             P = C*c';%cubic polynomial
-            coeff = QuaPoly.lineEquation(v1,v2);
+            coeff = QuaPol.lineEquation(v1,v2);
             if abs(coeff(2))<sqrt(eps) %line x = constant                
                 f = subs(P,x,-coeff(3)/coeff(1));%function on y only
                 ddf = diff(f,2);%this is a linear function
@@ -738,7 +747,7 @@ classdef QuaPoly < RatPol & QuaPar
             if size(c,2)>10
                 error("Not implemented for coefficient vector of size greater than 10, i.e. for polynomial of degree higher than cubic");
             end 
-            [L,Q,C] = QuaPoly.matrixForm(c);
+            [L,Q,C] = QuaPol.matrixForm(c);
             fVal = 0.5 * dot((x*Q)',x')' + x * L + c(end);%vectorized version
             if ~isempty(C)%cubic function
                 for i=1:size(x,1)
@@ -789,7 +798,7 @@ classdef QuaPoly < RatPol & QuaPar
             if any(size(V1)~=[1,2]) || any(size(V1)~=size(V2)),error("belongToEdge:dimensionMismatch","V1 and V2 must be the same dimension");end
             b = false(size(X,1),1);
             for i=1:size(X,1)%isCollinear is vectorized on X, but not on V1 and V2 so need to loop
-                b(i) = QuaPoly.isCollinear([V1;V2;X(i,:)],tol);
+                b(i) = QuaPol.isCollinear([V1;V2;X(i,:)],tol);
             end
             Xb = X(b,:);%only check withing range for collinear points
             if isSegment
@@ -832,17 +841,17 @@ classdef QuaPoly < RatPol & QuaPar
             E = [1 2 0; 1 3 0; 1 4 0; 1 5 0];
             f = [0 0 0 -1 -1 0;0 0 0 -1  1 0;0 0 0  1  1 0;0 0 0  1 -1 0];
             F = [1 2;2 3;3 4;4 1];
-            p = QuaPoly(V,E,f,F); 
+            p = QuaPol(V,E,f,F); 
         end
         function p = oneNormConjugate()
             V = [-1 -1; -1 1; 1 1; 1 -1];
             E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
             f = [0 0 0 0 0 0];
             F = [0 1; 0 1; 0 1; 0 1];
-            p = QuaPoly(V,E,f,F);
+            p = QuaPol(V,E,f,F);
         end
         function p = energy()%half the norm squared
-            p = QuaPoly([1 0 1 0 0 0]);%x^2/2 + y^2/2
+            p = QuaPol([1 0 1 0 0 0]);%x^2/2 + y^2/2
         end
         function p = cubic1()
             %cubic function defined on the 4 quadrants
@@ -855,15 +864,15 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)*(1./[1/6, 1/2, 1/2, 1/6, 1/2, 1, 1/2, 1, 1, 1]);
             f = f.* Cw;%fix after modifying weights internally
             F = [1 2;2 3;3 4;4 1]; 
-            p = QuaPoly(V,E,f,F);
+            p = QuaPol(V,E,f,F);
         end
         function P = examples()
-           %P=QuaPoly.examples; for i=1:length(P),plot(P{i});title(i+": "+P{i}.nf+" faces");pause;end
+           %P=QuaPol.examples; for i=1:length(P),plot(P{i});title(i+": "+P{i}.nf+" faces");pause;end
            % 1 One norm
-            P{1}=QuaPoly.oneNorm();
-            P{2}=QuaPoly.oneNormConjugate();
-            P{3}=QuaPoly.energy();
-            P{4}=QuaPoly.cubic1();
+            P{1}=QuaPol.oneNorm();
+            P{2}=QuaPol.oneNormConjugate();
+            P{3}=QuaPol.energy();
+            P{4}=QuaPol.cubic1();
             %all examples below were fixed after a weight change in the eval functions
             invW = 1./[1/6, 1/2, 1/2, 1/6, 1/2, 1, 1/2, 1, 1, 1];
             % 5 simple convex function (containing 4 pieces)
@@ -879,7 +888,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [1 2;2 3;3 4;4 1];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 6 Concave function at multiple points
             %     -x^2- y^2     x<0    y<0
             %     -x^2-2y^2     x<0    y>=0
@@ -892,7 +901,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [1 2;2 3;3 4;4 1];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 7 Finite polytope with infinity on the outside
             %       x^2+2xy+y^2     -1<=x<=1,-1<=y<=1
             %       infinity        otherwise
@@ -903,7 +912,7 @@ classdef QuaPoly < RatPol & QuaPar
             f = [zeros(size(f,1),10-size(f,2)),f];
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 8 Difference indefinite
             %       x^2+y^2     x<0    y>=0
             %       x^2+xy+y^2  x>=0   y>=0
@@ -915,7 +924,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [1 2; 2 0;0 1];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 9 Single triangular Piece (Non box domain)
             %       x^2+2xy+y^2     (x,y) in Triangle with vertexes (0,0),(1,0),(0.5,1)
             %       infinity        otherwise
@@ -926,7 +935,7 @@ classdef QuaPoly < RatPol & QuaPar
             f = [zeros(size(f,1),10-size(f,2)),f];
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 10 Unbounded triangle piece (Non box domain)
             %       x^2+2xy+y^2     5y/6 <= x <= 10y    y>=0
             %       infinity        otherwise
@@ -937,7 +946,7 @@ classdef QuaPoly < RatPol & QuaPar
             f = [zeros(size(f,1),10-size(f,2)),f];
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 11 Fenchel Conjugate of a C1 2 piece function
             %       1/4(x^2-2xy+2y^2)   x>=y
             %       1/8(x^2-2xy+3y^2)   x<y
@@ -949,7 +958,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [2 1;1 2];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 12 Difference Indefinite Extended
             %       3x^2+xy+y^2     x<0    
             %       x^2+2xy+y^2     x>=0   
@@ -960,7 +969,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [1 2;2 1];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 13 Simple cubic function
             %       -x^3-y^3+ x^2+ y^2      x<0    y<0
             %       -x^2+y^3+ x^2+2y^2      x<0    y>=0
@@ -975,7 +984,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [1 2;2 3;3 4;4 1];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 14 Semi bounded cubic
             %       x^3+y^3  +y^2       0<x<1       0<=y<=1
             %       x^3+xy^2+y^3        x>=1        0<=y<=1
@@ -987,7 +996,7 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [1 0;1 0;1 0;1 2;2 0;0 2];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 15 Semi bounded cubic (exactly same as above but slightly changed matrices)
             %       x^3+y^3  +y^2       0<x<1   0<=y<=1
             %       x^3+xy^2+y^3        x>=1    0<=y<=1
@@ -998,42 +1007,42 @@ classdef QuaPoly < RatPol & QuaPar
             Cw= ones(size(f,1),1)* invW;
             f = f .* Cw;
             F = [0 1; 0 1; 0 1; 2 1; 2 0; 0 2];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 16 half-star domain with 5 rays
             V = [0,0; -1,0; -1,-1; 0,1; 1,1; 1,0];
             E = [1,2,0; 1,3,0; 1,4,0; 1,5,0; 1,6,0];
             F = [0,1; 1,2; 2,3; 3,4; 4,0]; 
             f = zeros(4,1);
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 17 bounded domain with vertexes equispaced on the unit circle
             nv=10;N=(0:nv-1)';
             V = [cos(N*2*pi/nv), sin(N*2*pi/nv)];
             E = [(1:nv)', [(2:nv)';1], ones(nv,1)];
             F = [ones(nv,1), zeros(nv,1)];
             f = 0;
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 18 unbounded domain with 4 parallel rays
             V = [[(1:5)', zeros(5,1)];(1:4)',ones(4,1)];
             E = [1,2,1; 2,3,1; 3,4,1; 4,5,0;1,6,0;2,7,0;3,8,0;4,9,0];
             F = [1,0  ; 2,0  ;  3,0 ;   4,0;  0,1; 1,2 ; 2,3 ; 3,4 ];
             f = zeros(4,1);
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 19 unbounded grid of Tic-Tac-Toe
             V = [0,0; 1,0; -1,1; 0,1; 1,1; 2,1; -1,2; 0,2; 1,2; 2,2; 0,3; 1,3];
             E = [4,1,0; 5,2,0; 4,3,0; 4,5,1; 5, 6,0; 4,8,1; 5,9,1; 8,7,0; 8,9,1; 9,10,0; 8,11,0; 9,12,0];
             F = [2,1  ; 3,2  ; 1,4  ; 5,2  ; 6,3   ; 4,5  ; 5,6  ; 4,7  ; 8,5  ; 9,6   ; 7,8   ; 8,9   ];
             f = zeros(9,1);
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
         end 
         function P = examples2()%degenerate cases; domain is always connected
-           %P=QuaPoly.examples; for i=1:length(P),plot(P{i});title(i+": "+P{i}.nf+" faces");pause;end
+           %P=QuaPol.examples; for i=1:length(P),plot(P{i});title(i+": "+P{i}.nf+" faces");pause;end
            %needle
            %1 needle function
             V = [0 0];
             E = [];
             f = [1 2 3];%x+2y+3
             F = [];           
-            P{1}=QuaPoly(V,E,f,F);
+            P{1}=QuaPol(V,E,f,F);
             %NEED TO FIX REPRESENTATION PROBLEM: NEEDLE, SEGMENT, RAY OK BUT LINE HAS 2 EDGES BUT 1 ROW IN f. SAME FOR
             %CHAIN OF EDGES. NEED TO REPRESENT CORRECTLY FUNCTIONS WITH DIMENSION 1 DOMAIN
             % 2 segment
@@ -1041,49 +1050,49 @@ classdef QuaPoly < RatPol & QuaPar
             E = [1 2 1];
             f = [1 0 0 0 0 0];%0.5 x^2
             F = [0 0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 3 ray
             V = [0 0;1 0];
             E = [1 2 0];
             f = [1 0 0 0 0 0];%x^2
             F = [0 0];
-            P{end+1} = QuaPoly(V,E,f,F);    
+            P{end+1} = QuaPol(V,E,f,F);    
            % 4 line
             V = [0 0;1 0; -1 0];
             E = [1 2 0; 1 3 0];
             f = [1 0 0 0 0 0;1 0 0 0 0 0];%x^2
             F = [0 0;0 0];
-            P{end+1} = QuaPoly(V,E,f,F);               
+            P{end+1} = QuaPol(V,E,f,F);               
             % 5 bounded slice boundary
             V = [0 0;1 0;0 1];
             E = [1 2 1;1 3 1];
             f = [1 0 0 0 0 0;0 0 1 0 0 0];
             F = [0 0;0 0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 6 half-bounded slice boundary
             V = [0 0;1 0;0 1];
             E = [1 2 0;1 3 1];
             f = [1 0 0 0 0 0;0 0 1 0 0 0];
             F = [0 0;0 0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 7 unbounded slice boundary
             V = [0 0;1 0;0 1];
             E = [1 2 0;1 3 0];
             f = [1 0 0 0 0 0;0 0 1 0 0 0];
             F = [0 0;0 0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 8 half-space
             V = [0 0;1 0;-1 0];
             E = [1 2 0;1 3 0];
             f = [1 0 0 0 0 0];%0.5 x^2
             F = [1 0;0 1];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 9 3 parallel rays with dimension two domain
             V = [0 2; -0.5 2.5; 3 1.25; 2 1; 5 1.75; 5.5 3.25; 6 2.75; 2.5 1.75];
             E = [4 3 1; 5 3 1; 7 6 0; 1 2 0; 7 5 1; 1 4 1; 3 8 0];
             F = [1 0;0 2; 2 0; 0 1; 0 2; 1 0; 1 2];
             f = [0;0];        
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 10 chain of edges, domain is a staircase
             V = [0 0; 1 0; 1 1; 2 1; 2 2; 3 2];
             E = [1 2 1; 2 3 1; 3 4 1; 4 5 1; 5 6 1];
@@ -1093,7 +1102,7 @@ classdef QuaPoly < RatPol & QuaPar
                  0 0 0 0 2 0 0 0 0 2; %x^2 + 2
                  0 0 0 0 0 0 2 0 0 6; %y^2 + 1
                  0 0 0 0 2 0 0 0 0 10];%x^2 + 2
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
         end
         function P = examplesNonconvex()
             % 1 energy on nonconvex domain
@@ -1101,13 +1110,13 @@ classdef QuaPoly < RatPol & QuaPar
             E = [1,2,1; 2,3,1; 1,4,1; 3,5,1; 4,5,1];
             F = [1,0  ; 1,0  ; 0,1  ; 1,0  ; 0,1  ];
             f = [1,0,1,0,0,0];
-            P{1} = QuaPoly(V,E,f,F);   
+            P{1} = QuaPol(V,E,f,F);   
             % 2 W epigraph of W function
             V = [-2,1;-1,0;0,1;1,0;2,1];
             E = [2,1,0;2,3,1;3,4,1;4,5,0];
             F = [0,1  ; 1,0 ; 1,0 ; 1,0 ];
             f = [1,0,1,0,0,0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             
         end
         function P = examplesDiscontinuous()
@@ -1116,25 +1125,25 @@ classdef QuaPoly < RatPol & QuaPar
             E = [1,2,0;1,3,0];
             F = [1,2;2,1];
             f = [0;1];
-            P{1} = QuaPoly(V,E,f,F);
+            P{1} = QuaPol(V,E,f,F);
             % 2: linear function on each of 2 half-planes
             V = [0,0;1,0;-1,0];
             E = [1,2,0;1,3,0];
             F = [1,2;2,1];
             f = [0 0 0;1 0 0];%0 on Face 1 (y>=0); x on Face 2 (y<=0)
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 3: quadratic function on each of 2 half-planes; continuous at 2 vertexes
             V = [0,0;1,0;-1,0];
             E = [1,2,0;1,3,0];
             F = [1,2;2,1];%x^2 on Face 1; y^2+x on Face 2
             f = [2 0 0 0 0 0; 0 0 2 1 0 0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             % 4: cubic function  on each of 2 half-planes; continuous at 3 vertexes
             V = [0,0;1,0;-1,0];
             E = [1,2,0;1,3,0];
             F = [1,2;2,1];%x^2 on Face 1; y^2+x on Face 2
             f = [6 0 0 0 0 0 0 -1 1 0; 6 0 0 0 0 0 0 -1 0 0];
-            P{end+1} = QuaPoly(V,E,f,F);
+            P{end+1} = QuaPol(V,E,f,F);
             
         end
   end

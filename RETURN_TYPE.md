@@ -6,7 +6,7 @@
 
 | Input | `conj` returns | Where |
 |---|---|---|
-| Full-domain strictly convex quadratic | `QuaPoly` | `conjCPLQ.m` Case A |
+| Full-domain strictly convex quadratic | `QuaPol` | `conjCPLQ.m` Case A |
 | Single bounded triangle | `QuaPar` | Case B (`conjSingleTriangle`) |
 | General bounded domain | `QuaParCPLQ` | Case C (symbolic wrapper) |
 
@@ -24,7 +24,7 @@ its very first line of code.
 
 ## Constraint that removes two of the naive options
 
-`QuaPoly` is a **special case of `RatPol`** (a `RatPol` with denominator `[0 0 1]`). So the
+`QuaPol` is a **special case of `RatPol`** (a `RatPol` with denominator `[0 0 1]`). So the
 candidate return types are not three independent classes — really only **`RatPol`** and
 **`QuaPar`** are distinct, and both are special cases of **`RatPar`** (rational cubic/linear on a
 parabolic subdivision), the parent `DESIGN.md` II.3 already proposes but which was never built.
@@ -41,23 +41,23 @@ parabolic subdivision), the parent `DESIGN.md` II.3 already proposes but which w
 
 ### Option B — always return `QuaPar`
 
-Widen every result to `QuaPar`, converting `QuaPoly` results up (`toQuaPar.m` already does this).
+Widen every result to `QuaPar`, converting `QuaPol` results up (`toQuaPar.m` already does this).
 
 - **Pro:** single return type; small change; `toQuaPar` exists.
-- **Con:** **wrong for the biconjugate direction.** `f**` of a nonconvex `QuaPoly` is a `RatPol`
+- **Con:** **wrong for the biconjugate direction.** `f**` of a nonconvex `QuaPol` is a `RatPol`
   (a genuinely rational convex envelope, [COAP] A.3/A.4) — `QuaPar` has no denominator and cannot
   represent it. Also forces a full-domain quadratic to carry an empty mesh. Fails on the type
   cycle `DESIGN.md` II.2 actually needs.
 
 ### Option C — build `RatPar` as a real parent; return `RatPar` with a type flag *(recommended)*
 
-Make `RatPol` and `QuaPar` (and hence `QuaPoly`) inherit from `RatPar`. Every operator returns a
-`RatPar` carrying a **type flag** recording what it actually is — `QuaPoly` | `RatPol` | `QuaPar` —
+Make `RatPol` and `QuaPar` (and hence `QuaPol`) inherit from `RatPar`. Every operator returns a
+`RatPar` carrying a **type flag** recording what it actually is — `QuaPol` | `RatPol` | `QuaPar` —
 so callers get one static type while the tight structure stays available and cheaply checkable.
 
 - **Pro:**
   - One return type; downstream code needs no class dispatch.
-  - Matches the type cycle in `DESIGN.md` II.2 (`conj: QuaPoly → QuaPar`, `convEnv: QuaPoly →
+  - Matches the type cycle in `DESIGN.md` II.2 (`conj: QuaPol → QuaPar`, `convEnv: QuaPol →
     RatPol`) without lying about either.
   - Operators can be written once on `RatPar` and specialized where a subtype allows something
     faster, instead of N×N pairings.
@@ -69,11 +69,11 @@ so callers get one static type while the tight structure stays available and che
 
 ### Option D — return `RatPar` with no flag, inferring the type on demand
 
-Same as C but derive "is this really a `QuaPoly`?" by inspecting the data (all denominators
+Same as C but derive "is this really a `QuaPol`?" by inspecting the data (all denominators
 `[0 0 1]`, all `Ec` rows zero, …).
 
 - **Pro:** no flag to keep in sync — cannot go stale.
-- **Con:** repeated O(n) scans; and inference cannot distinguish *"this is structurally a QuaPoly"*
+- **Con:** repeated O(n) scans; and inference cannot distinguish *"this is structurally a QuaPol"*
   from *"this is a RatPol that happens to be polynomial right now"*, which matters for choosing an
   algorithm. A flag set at construction states intent; inference only observes the current values.
 
@@ -120,14 +120,14 @@ operator ever *produces* cubics rather than merely tolerating them.
 ### Original recommendation, for the record
 
 **Option C**, matching your reading: everything returns a `RatPar` carrying a type flag indicating
-whether it is in fact a `RatPol`, `QuaPoly`, or `QuaPar`.
+whether it is in fact a `RatPol`, `QuaPol`, or `QuaPar`.
 
 Two design points worth settling before implementation:
 
-1. **Flag vs. `isa`.** If `RatPol`/`QuaPar`/`QuaPoly` become genuine subclasses, MATLAB's own
+1. **Flag vs. `isa`.** If `RatPol`/`QuaPar`/`QuaPol` become genuine subclasses, MATLAB's own
    `isa`/`class` already *is* the flag, and a separate field risks disagreeing with the actual
    class. Suggested rule: **use real subclasses as the source of truth**, and expose a
-   `kind()` method returning `'QuaPoly'|'RatPol'|'QuaPar'` for callers who want a plain string to
+   `kind()` method returning `'QuaPol'|'RatPol'|'QuaPar'` for callers who want a plain string to
    switch on. That gives the ergonomics of a flag with no possibility of drift.
    The alternative — one concrete `RatPar` class with a stored flag and no subclasses — is simpler
    to implement but gives up MATLAB's dispatch, which the current operator code relies on heavily
@@ -145,7 +145,7 @@ by 0.2. If 0.1 is meant to be usable by other projects, this should land first.
 ## Scope guard
 
 Building `RatPar` does **not** mean implementing every possible `RatPar`. Per `SUPPORT_MATRIX.md`
-§0, CCA2's goal is `QuaPoly` conjugate/biconjugate; the `RatPol`s and `QuaPar`s that arise are very
+§0, CCA2's goal is `QuaPol` conjugate/biconjugate; the `RatPol`s and `QuaPar`s that arise are very
 special cases (e.g. a parabolic edge only ever occurs surrounded by two parallel rays, and
 hyperbolic edges never arise at all). `RatPar` is needed here as a **common type**, not as a
 general rational-cubic-on-parabolic engine.

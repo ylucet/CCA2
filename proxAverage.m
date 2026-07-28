@@ -12,17 +12,17 @@ function h = proxAverage(f, g, lambda, mu, engine)
 %   conjugations feed a weighted add, a third conjugation recovers T_mu*P, then P falls out after
 %   subtracting back 1/2||.||^2 and rescaling by 1/mu.
 %
-% [input]  f, g   : QuaPoly | QuaPar, operable (degree<=2), BOTH CONVEX
+% [input]  f, g   : QuaPol | QuaPar, operable (degree<=2), BOTH CONVEX
 %          lambda : real scalar in [0,1] (weight on f; g gets 1-lambda)
 %          mu     : positive real scalar (the shared Moreau-envelope parameter)
 %          engine : conjugate engine, 'cplq' (default) | 'pqp' | 'graph'
-% [output] h      : QuaPoly | QuaPar, the proximal average P
+% [output] h      : QuaPol | QuaPar, the proximal average P
 %
 % CAVEAT (DESIGN.md II.6): like infConv, the last step is a genuine biconjugation (not pure
 %   algebra, unlike moreau/lasryLions), so this is valid (returns the actual proximal average)
 %   only for f,g both convex; NOT checked here.
 %
-% METHOD: conj(gf,engine)/conj(gg,engine) may each come back as either QuaPoly or QuaPar (see
+% METHOD: conj(gf,engine)/conj(gg,engine) may each come back as either QuaPol or QuaPar (see
 %   infConv.m's own header for why), and add only accepts same-class operands, so both are
 %   promoted via toQuaPar.m before the weighted add -- same plumbing as infConv.
     if nargin < 5, engine = 'cplq'; end

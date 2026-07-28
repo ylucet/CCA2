@@ -7,11 +7,11 @@ function h = lasryLions(f, lambda, mu, engine)
 %   -- f need not be convex, only lambda,mu small enough that each moreau call's own
 %   positive-definiteness condition holds (see moreau.m).
 %
-% [input]  f      : QuaPoly | QuaPar, operable (degree<=2); need NOT be convex
+% [input]  f      : QuaPol | QuaPar, operable (degree<=2); need NOT be convex
 %          lambda : positive real scalar (inner envelope parameter)
 %          mu     : positive real scalar (outer envelope parameter)
 %          engine : conjugate engine, 'cplq' (default) | 'pqp' | 'graph'
-% [output] h      : QuaPoly | QuaPar, the Lasry-Lions double envelope
+% [output] h      : QuaPol | QuaPar, the Lasry-Lions double envelope
     if nargin < 4, engine = 'cplq'; end
     h = negate(moreau(negate(moreau(f, lambda, engine)), mu, engine));
 end

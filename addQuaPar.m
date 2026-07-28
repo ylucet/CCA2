@@ -2,12 +2,12 @@ function h = addQuaPar(f, g)
 % addQuaPar  Pointwise sum h = f+g of two QuaPar functions (the geometry behind QuaPar.add).
 %
 % objective: h(x) = f(x) + g(x) for all x. h's domain is the INTERSECTION of f's and g's domains;
-%   outside that intersection h is implicitly +infinity, same convention as QuaPoly/addQuaPoly.m.
+%   outside that intersection h is implicitly +infinity, same convention as QuaPol/addQuaPol.m.
 %
 % [input]  f, g : QuaPar, both operable (quadratic numerator, degree<=2 -- see assertOperable)
 % [output] h    : QuaPar with h.f(k,:) = the sum of whichever f-piece and g-piece overlap there
 %
-% METHOD: generalizes addQuaPoly.m's pairwise convex-polygon clipping (Sutherland-Hodgman, every
+% METHOD: generalizes addQuaPol.m's pairwise convex-polygon clipping (Sutherland-Hodgman, every
 %   face of f against every face of g) to allow ONE curved (parabolic-arc, "Ec") edge per face.
 %   Every boundary edge -- straight or curved -- and every clipping constraint -- a face's linear
 %   half-plane or its one conic (Ec) side -- is represented uniformly as a 6-coefficient row
@@ -20,7 +20,7 @@ function h = addQuaPar(f, g)
 %   straight edge, degree<=4 for the curved edge) whose real roots (via the ordinary quadratic
 %   formula, or MATLAB's roots() for the quartic) are exactly where that edge crosses that
 %   constraint -- found directly, not via an endpoint-sign-disagreement shortcut, since (unlike
-%   the pure-linear case in addQuaPoly.m/maxQuaPar.m) a conic constraint can cross even a STRAIGHT
+%   the pure-linear case in addQuaPol.m/maxQuaPar.m) a conic constraint can cross even a STRAIGHT
 %   edge twice while agreeing in sign at both its endpoints (a dip-and-return), so both endpoints'
 %   signs are never sufficient on their own.
 %
@@ -67,7 +67,7 @@ end
 % ============================================================================================
 % ----- extracting a face's boundary as {V, dirIn, dirOut, curveAfter, curveEc} ----------------
 function poly = facePoly(obj, k)
-% Boundary of face k, exactly like QuaPoly/maxQuaPar's facePoly (CCW finite vertices poly.V, plus
+% Boundary of face k, exactly like QuaPol/maxQuaPar's facePoly (CCW finite vertices poly.V, plus
 % ray directions dirIn/dirOut for an unbounded face), PLUS: poly.curveAfter (0, or the index i
 % such that the edge from poly.V(i) to poly.V(mod(i,nv)+1) is the one curved arc) and poly.curveEc
 % (that edge's conic, oriented so evalConic(curveEc,x)<=0 means "inside face k" -- the SAME
@@ -402,7 +402,7 @@ end
 % ============================================================================================
 % ----- clipping poly by one constraint row [a b c d e f] (evalConic<=0 means inside) ---------
 function poly2 = clipPolyByConstraint(poly, ecRow)
-% Generalizes clipPolyHalfPlane (addQuaPoly.m/maxQuaPar.m) to a possibly-conic constraint against
+% Generalizes clipPolyHalfPlane (addQuaPol.m/maxQuaPar.m) to a possibly-conic constraint against
 % a poly that may itself have one curved edge. Every boundary edge is split into constant-sign
 % "atoms" (straight edges via the ordinary quadratic formula on t; the curved edge via roots() on
 % a quartic in u, see curveAtoms) and the single surviving run of kept atoms is rebuilt into the
@@ -562,7 +562,7 @@ function cell = clipByFace(polyK, polyL)
 end
 
 function poly = insertPassthroughVertices(poly, pts)
-% Same fix as addQuaPoly.m/maxQuaPar.m (re-insert a polyK/polyL vertex lying in the open interior
+% Same fix as addQuaPol.m/maxQuaPar.m (re-insert a polyK/polyL vertex lying in the open interior
 % of one of cell's own STRAIGHT edges, needed when two collinear edges make one half-plane clip a
 % geometric no-op -- see maxQuaPar.m header HISTORY); the one curved edge (poly.curveAfter) is
 % skipped by this straight-line test and left alone (its own two endpoints are always genuine
@@ -625,7 +625,7 @@ end
 % ============================================================================================
 % ----- reassembling clipped+summed pieces into one QuaPar -------------------------------------
 function h = assemblePiecesAdd(pieces)
-% Adapted from addQuaPoly.m's assemblePiecesAdd (unmatched edge -> genuine domain-boundary edge of
+% Adapted from addQuaPol.m's assemblePiecesAdd (unmatched edge -> genuine domain-boundary edge of
 % h, not an error, since f/g may have a bounded domain -- see that file's header) generalized with
 % maxQuaPar.m's Ec bookkeeping (piece.curveAfter/curveEc -> an Ec column in the final edge list) to
 % build a QuaPar.
@@ -702,7 +702,7 @@ function h = assemblePiecesAdd(pieces)
         E(end+1,:) = [he.a, he.b, he.isSeg]; %#ok<AGROW>
         if isempty(opp)
             % No neighbour: a genuine domain-boundary edge of h (f's or g's own domain boundary
-            % passes through here), same left/right convention as addQuaPoly.m's assemblePiecesAdd.
+            % passes through here), same left/right convention as addQuaPol.m's assemblePiecesAdd.
             Ec(end+1,:) = he.ec; %#ok<AGROW>
             if he.isSeg || he.rayOut
                 F(end+1,:) = [he.piece, 0]; %#ok<AGROW>

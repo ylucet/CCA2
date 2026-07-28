@@ -29,7 +29,7 @@ classdef (Abstract) Rat
    %
    % NOT MODELLED AS A TYPE: the numerator's DEGREE. `f` is stored in the 10-wide cubic basis, so
    % a cubic numerator is representable, but nothing in this toolbox DISPATCHES on degree -- every
-   % consumer either rejects a cubic outright (conjPieceCPLQ, quaPolyToPlq, assertOperable) or
+   % consumer either rejects a cubic outright (conjPieceCPLQ, quaPolToPlq, assertOperable) or
    % ignores the distinction (isConvex is the sole acceptor). A type should track what changes the
    % ALGORITHM, not what changes the data's shape; degree changes only a guard, so it stays a
    % runtime check rather than becoming a `Cub` class. Making it a type would double the lattice

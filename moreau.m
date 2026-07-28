@@ -11,10 +11,10 @@ function h = moreau(f, mu, engine)
 %   regrouping of the definition of conjugate -- no biconjugation, no convexity assumption on f
 %   at all -- which is why it calls conj only ONCE.
 %
-% [input]  f      : QuaPoly | QuaPar, operable (degree<=2); need NOT be convex
+% [input]  f      : QuaPol | QuaPar, operable (degree<=2); need NOT be convex
 %          mu     : positive real scalar (the envelope parameter)
 %          engine : conjugate engine, 'cplq' (default) | 'pqp' | 'graph'
-% [output] h      : QuaPoly | QuaPar, the Moreau envelope e_mu*f
+% [output] h      : QuaPol | QuaPar, the Moreau envelope e_mu*f
     if nargin < 3, engine = 'cplq'; end
     g = addQuadratic(scalarMul(f, mu), eye(2), [0;0], 0);       % T_mu f = mu*f + 1/2||.||^2
     h = addScaledEnergy(scalarMul(conj(g, engine), -1/mu), 1/(2*mu));

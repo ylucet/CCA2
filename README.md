@@ -13,14 +13,14 @@ in `copyright.txt`.
 
 ## Scope
 
-**CCA2's goal is the conjugate and biconjugate of a `QuaPoly`.** That is the design target, and it
+**CCA2's goal is the conjugate and biconjugate of a `QuaPol`.** That is the design target, and it
 is what determines which cases are implemented.
 
-Everything downstream of a `QuaPoly` is a *special case*, and the special-ness is load-bearing:
-the convex envelope of a `QuaPoly` triangle is a very special `RatPol`, and the conjugate of those
+Everything downstream of a `QuaPol` is a *special case*, and the special-ness is load-bearing:
+the convex envelope of a `QuaPol` triangle is a very special `RatPol`, and the conjugate of those
 triangles is a very special `QuaPar` (for instance, a parabolic edge only ever occurs surrounded by
 two parallel rays). **Hyperbolic edges therefore never arise** and are not representable — not as a
-limitation, but because no `QuaPoly` conjugate/biconjugate or intermediate computation can produce
+limitation, but because no `QuaPol` conjugate/biconjugate or intermediate computation can produce
 one.
 
 This matters when reading the source: several `notImplemented` guards protect *unreachable*
@@ -60,14 +60,14 @@ order — a genuine diamond, because that is what a product lattice is:
              /    \
         RatPol    QuaPar   rational on polyhedral / quadratic on parabolic
              \    /
-             QuaPoly       quadratic on polyhedral  — the input type
+             QuaPol       quadratic on polyhedral  — the input type
 
         QuaParCPLQ         same maths as QuaPar, still in symbolic form (no mesh)
 ```
 
 ```matlab
 g = f.conj();          % always a RatPar
-g.kind()               % 'QuaPoly' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
+g.kind()               % 'QuaPol' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
 g.isMeshed()           % false only for the symbolic QuaParCPLQ form
 
 isa(g, 'Qua')          % ask about ONE axis: is the function a polynomial?
@@ -76,10 +76,15 @@ isa(g, 'Pol')          % ...is the subdivision polyhedral?
 
 The axis markers are what let you query one axis without enumerating combinations, and they keep
 working when a type is added. All data lives on `RatPar` alone — MATLAB makes a property defined in
-two superclasses fatal *and* unresolvable, so `QuaPoly < RatPol & QuaPar` requires it. Each type's
+two superclasses fatal *and* unresolvable, so `QuaPol < RatPol & QuaPar` requires it. Each type's
 pinned values are enforced instead by validators that read the object's own traits, so no type can
 be made to lie about itself. `kind()` is derived from the real class, never stored, so it cannot
 drift. See `RETURN_TYPE.md` and `RatPar.m`.
+
+> **Renamed 2026-07-27:** `QuaPoly` → `QuaPol` (and with it `addQuaPoly` → `addQuaPol`,
+> `quaPolyToPlq` → `quaPolToPlq`), so all four type names are the uniform 3+3 combinations of the
+> two axes. No shim was left for the old name — CCA2 has no tagged release, so nothing external can
+> depend on it. `PLQVC`, which *was* released, keeps its alias.
 
 **Not modelled as a type: the numerator's degree.** `f` is stored in the 10-wide cubic basis, but
 nothing *dispatches* on degree — every consumer either rejects a cubic outright or ignores the
@@ -98,15 +103,15 @@ addpath('/path/to/CCA2');
 V = [0 0; 1 0; 0 1];
 E = [1 2 1; 2 3 1; 3 1 1];      % [from to isSegment]
 F = [1 0; 1 0; 1 0];            % [leftFace rightFace], 0 = +infinity
-f = QuaPoly(V, E, [0 1 0 0 0 0], F);   % coeffs [x^2 xy y^2 x y 1]
+f = QuaPol(V, E, [0 1 0 0 0 0], F);   % coeffs [x^2 xy y^2 x y 1]
 
 g = f.conj();                   % Fenchel conjugate  -> RatPar (kind 'QuaPar')
 g.eval([0.3 0.7])               % ans = 0.7
 
 % full-domain strictly convex quadratic
-q = QuaPoly([1 0 1 0 0 0]);     % (x^2 + y^2)/2
-q.conj().kind()                 % 'QuaPoly'
-q.biconj().kind()               % 'QuaPoly' -- back to itself
+q = QuaPol([1 0 1 0 0 0]);     % (x^2 + y^2)/2
+q.conj().kind()                 % 'QuaPol'
+q.biconj().kind()               % 'QuaPol' -- back to itself
 ```
 
 **`biconj` does not yet work for every input.** It is `conj∘conj`, so it needs the *conjugate* to
@@ -115,7 +120,7 @@ unbounded multi-face domain, which `conjCPLQ` does not handle. Current coverage:
 
 | Input | `conj` | `biconj` |
 |---|---|---|
-| Full-domain strictly convex quadratic | ✅ `QuaPoly` | ✅ |
+| Full-domain strictly convex quadratic | ✅ `QuaPol` | ✅ |
 | **Single bounded triangle** | ✅ `QuaPar` | ❌ `PLQ:conjCPLQ:notImplemented` |
 | General bounded multi-face domain | ✅ `QuaParCPLQ` | ✅ (symbolic) |
 
@@ -131,7 +136,7 @@ single-triangle path does not. Closing it needs conjugation of an unbounded mult
 | `conj(f, engine)` | Fenchel conjugate `f*` | `engine='cplq'` (default) is the **only** one implemented |
 | `biconj(f)` | `f** = conj(conj(f))` | closed convex envelope |
 | `convEnv(f)` | convex envelope | via `biconj`, or `convEnvCPLQ` directly |
-| `add`, `sub` | pointwise `f±g` | `QuaPoly` and `QuaPar`; **not** `RatPol` |
+| `add`, `sub` | pointwise `f±g` | `QuaPol` and `QuaPar`; **not** `RatPol` |
 | `scalarMul`, `negate` | `c·f`, `−f` | all types |
 | `addQuadratic(f,A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | all types |
 | `infConv(f,g)` | inf-convolution | **convex `f,g` only** |
@@ -171,7 +176,7 @@ leave users wondering which to use.
 | `Rat.m`, `Qua.m` | function-type axis markers (rational ⊃ polynomial) |
 | `Par.m`, `Pol.m` | subdivision-type axis markers (parabolic ⊃ polyhedral) |
 | `RatPar.m` | abstract parent of all function types; holds all data; `kind()`, `isMeshed()` |
-| `QuaPoly.m` | quadratic on polyhedral — the input type |
+| `QuaPol.m` | quadratic on polyhedral — the input type |
 | `QuaPar.m` | quadratic on parabolic — the conjugate's type |
 | `RatPol.m` | rational on polyhedral — the convex envelope's type |
 | `QuaParCPLQ.m` | conjugate still in symbolic form |
@@ -180,7 +185,7 @@ leave users wondering which to use.
 | `conjPieceCPLQ.m` | Step 2 — conjugate of one envelope piece |
 | `maxQuaPar.m` | Step 3 — pointwise max of two full-domain conjugates |
 | `clipArcByHalfPlane.m`, `parabolaArcFrame.m` | parabola-arc geometry primitives |
-| `addQuaPoly.m`, `addQuaPar.m` | pointwise addition |
+| `addQuaPol.m`, `addQuaPar.m` | pointwise addition |
 | `infConv.m`, `moreau.m`, `lasryLions.m`, `proxAverage.m` | derived operators |
 | `SUPPORT_MATRIX.md` | what works, what does not, generated from the error guards |
 | `RETURN_TYPE.md` | why `RatPar` exists |

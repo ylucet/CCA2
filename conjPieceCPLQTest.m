@@ -7,7 +7,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % q = x^2 + y^2 over the triangle (0,0),(1,0),(0,1).
             A = [2 0; 0 2]; b = [0; 0]; cc = 0;
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            p = QuaPoly(V, E, [2 0 2 0 0 0], F);          % x^2 + y^2
+            p = QuaPol(V, E, [2 0 2 0 0 0], F);          % x^2 + y^2
             g = conjPieceCPLQ(p);
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 7);
@@ -35,7 +35,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
 
         function conjugateFiniteEverywhere(testCase)
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            g = conjPieceCPLQ(QuaPoly(V, E, [2 0 2 0 0 0], F));
+            g = conjPieceCPLQ(QuaPol(V, E, [2 0 2 0 0 0], F));
             vals = g.eval([100 100; -100 50; 0 0; -30 -70]);
             testCase.verifyTrue(all(isfinite(vals)));   % conjugate of a piece over a bounded set
         end
@@ -45,7 +45,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             A = [2 1; 1 3]; b = [1; -2]; cc = 0.5;
             V = [0 0; 2 0; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];     % stored: matrixForm reads Q=[..],L=b,const
-            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            g = conjPieceCPLQ(QuaPol(V, E, f6, F));
             testCase.verifyEqual(g.nf, 7);
             qf = @(x) 0.5*x'*A*x + b'*x + cc;
             gq = @(x) A*x + b;
@@ -65,7 +65,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % ell(x) = -x over the triangle (0,0),(1,0),(0,1). Vertex values ell = 0,-1,0, so
             % f*(s) = max_i(<s,v_i> - ell(v_i)) = max(0, s1+1, s2), a 3-cone piecewise-linear QuaPar.
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            g = conjPieceCPLQ(QuaPoly(V, E, [0 0 0 -1 0 0], F));   % ell = -x
+            g = conjPieceCPLQ(QuaPol(V, E, [0 0 0 -1 0 0], F));   % ell = -x
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 3);
             S = [-2 -1; 3 -1; -1 2; 0.5 0.5; -1 0];
@@ -80,7 +80,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % the triangle (0,0),(2,0),(0,2): sup_{x in T} <s,x> - q(x) is attained at a vertex, so
             % f*(s) = max_i(<s,v_i> - q(v_i)) with q-values 0,-4,-4.
             V = [0 0; 2 0; 0 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [-2 0 -2 0 0 0], F);            % -(x^2+y^2)
+            q = QuaPol(V, E, [-2 0 -2 0 0 0], F);            % -(x^2+y^2)
             r = convEnvCPLQ(q);                                % Step 1 -> affine envelope (RatPol)
             g = conjPieceCPLQ(r);                              % Step 2 -> 3-cone conjugate
             testCase.verifyEqual(g.nf, 3);
@@ -99,7 +99,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % against the numeric sup f*(s) = max_{x in T} <s,x> - xy over a fine triangle grid.
             V = [0 0; 2 0; 1 1];                          % CCW; one convex edge (1,1)-(0,0), m=1
             E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            g = conjPieceCPLQ(QuaPoly(V, E, [0 1 0 0 0 0], F));
+            g = conjPieceCPLQ(QuaPol(V, E, [0 1 0 0 0 0], F));
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 6);
             nt = 200; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
@@ -119,7 +119,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % xy = 0,0,0, so f*(s) = max(0, s1, s2), a 3-cone piecewise-linear QuaPar. Cross-check
             % against the numeric sup over the triangle too.
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            g = conjPieceCPLQ(QuaPoly(V, E, [0 1 0 0 0 0], F));
+            g = conjPieceCPLQ(QuaPol(V, E, [0 1 0 0 0 0], F));
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 3);
             S = [-2 -1; 3 -1; -1 2; 0.5 0.5; -1 -1];
@@ -144,12 +144,12 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % This pins an UNREACHABLE-BY-DESIGN branch, NOT a toolbox limitation. (Renamed from
             % bilinearTwoConvexEdgesDocumentedLimitation: the old name, and the "QuaPar cannot
             % represent this" framing, kept being re-read as a gap in what CCA2 can express and
-            % reported as such.) CCA2's goal is QuaPoly conjugate/biconjugate -- NOT covering every
-            % possible RatPol/QuaPar. Everything downstream of a QuaPoly is a SPECIAL case: the
-            % convex envelope of a QuaPoly triangle is a very special RatPol, and the conjugate of
+            % reported as such.) CCA2's goal is QuaPol conjugate/biconjugate -- NOT covering every
+            % possible RatPol/QuaPar. Everything downstream of a QuaPol is a SPECIAL case: the
+            % convex envelope of a QuaPol triangle is a very special RatPol, and the conjugate of
             % those triangles is a very special QuaPar (e.g. a parabolic edge only ever occurs
             % surrounded by two parallel rays). Hyperbolic edges therefore never need storing --
-            % they NEVER arise from a QuaPoly conjugate/biconjugate or any intermediate step; see
+            % they NEVER arise from a QuaPol conjugate/biconjugate or any intermediate step; see
             % [COAP]/[JOGO] and QuaPar.assertParabolicEdges.
             %
             % Feeding conjPieceCPLQ a RAW indefinite 2-convex-edge piece (as this test does, on
@@ -165,7 +165,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % before Step 2 sees it. So the error below is an ASSERTION that this invariant holds,
             % not a missing feature -- there is nothing here to implement.
             V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);
             testCase.verifyError(@() conjPieceCPLQ(q), 'conjPieceCPLQ:notImplemented');
         end
 
@@ -177,7 +177,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             A = lam*(u*u'); b = [0.4; -0.6]; cc = 0.2;
             V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
-            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            g = conjPieceCPLQ(QuaPol(V, E, f6, F));
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 6);
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
@@ -213,15 +213,15 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % itself is exercised independently (from a different, mirror-symmetric starting
             % triangle) by psdRank1QuadraticTieEndToEnd.
             V = [1 1; 4 3; 3 5]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
             r = convEnvCPLQ(q);                            % Step 1 -> 2 rank-1 PSD sub-triangles
             testCase.verifyEqual(r.nf, 2);
             iVs = unique(r.E(r.F(:,1)==1 | r.F(:,2)==1, 1:2));
             V1 = r.V(iVs, :);
-            [L, Q, C] = QuaPoly.matrixForm(r.f(1,:));
+            [L, Q, C] = QuaPol.matrixForm(r.f(1,:));
             testCase.verifyEmpty(C);
             testCase.verifyEqual(min(eig(Q)), 0, 'AbsTol', 1e-8);   % rank-1 PSD, as proven
-            p1 = QuaPoly(V1, E, r.f(1,5:10), F);
+            p1 = QuaPol(V1, E, r.f(1,5:10), F);
             g = conjPieceCPLQ(p1);                          % Step 2
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 5);
@@ -268,7 +268,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % reverified against ground truth below, unaffected by which exact case it is.
             T = [3.1436 2.4929; 5.0857 4.1038; 9.0757 7.5555];
             E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(T, E, [0 1 0 0 0 0], F);           % f(x,y) = x*y over T
+            q = QuaPol(T, E, [0 1 0 0 0 0], F);           % f(x,y) = x*y over T
             r = convEnvCPLQ(q);                             % Step 1: now 4 sub-pieces
             testCase.verifyEqual(r.nf, 4);
             V1 = r.V(unique(r.E(r.F(:,1)==1 | r.F(:,2)==1, 1:2)), :);
@@ -276,7 +276,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             testCase.verifyLessThan(min(abs(diff(sort(V1(:,1))))), 0.05, ...
                 'expected the thin sliver sub-triangle this bug depends on');
 
-            p1 = QuaPoly(V1, E, f1(5:10), F);
+            p1 = QuaPol(V1, E, f1(5:10), F);
             g = conjPieceCPLQ(p1);   % used to throw conjPieceCPLQ:internal here
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 5);
@@ -285,7 +285,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             kk = (uu+vv <= 1); uu = uu(kk); vv = vv(kk);
             Xg = V1(1,1)+uu*(V1(2,1)-V1(1,1))+vv*(V1(3,1)-V1(1,1));
             Yg = V1(1,2)+uu*(V1(2,2)-V1(1,2))+vv*(V1(3,2)-V1(1,2));
-            qg = QuaPoly.evalPoly(f1, [Xg Yg]);
+            qg = QuaPol.evalPoly(f1, [Xg Yg]);
             S = [1 1; 0.5 0.2; 2 1; -1 1];
             for i = 1:size(S,1)
                 sup = max(S(i,1)*Xg + S(i,2)*Yg - qg);
@@ -307,7 +307,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
                 V = V([1 3 2],:);
             end
             f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
-            g = conjPieceCPLQ(QuaPoly(V, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]));
+            g = conjPieceCPLQ(QuaPol(V, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]));
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 5);
             nt = 220; [uu2,vv2] = meshgrid(linspace(0,1,nt)); uu2 = uu2(:); vv2 = vv2(:);
@@ -330,9 +330,9 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             % non-origin vertices in the rotated t-coordinate. Now dispatches to
             % conjPSDRank1QuadTriangleTie (5 faces).
             V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);          % xy, two convex edges
             r = convEnvCPLQ(q);                            % Step 1 -> rank-1 PSD quadratic
-            [L, Q, C] = QuaPoly.matrixForm(r.f(1,:));
+            [L, Q, C] = QuaPol.matrixForm(r.f(1,:));
             testCase.verifyEmpty(C);
             testCase.verifyEqual(min(eig(Q)), 0, 'AbsTol', 1e-8);
             g = conjPieceCPLQ(r);                          % Step 2 -> conjPSDRank1QuadTriangleTie
@@ -361,7 +361,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             A = [0 3; 3 0]; b = [2; 1]; cc = 0.5;
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
-            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            g = conjPieceCPLQ(QuaPol(V, E, f6, F));
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 3);
             qf = @(x) 0.5*x'*A*x + b'*x + cc;
@@ -394,7 +394,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             A = [2 1; 1 -2]; b = [0.5; 0.5]; cc = 0.2;
             V = [0 0; 2 0; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
-            g = conjPieceCPLQ(QuaPoly(V, E, f6, F));
+            g = conjPieceCPLQ(QuaPol(V, E, f6, F));
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 6);
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt)); uu = uu(:); vv = vv(:);
@@ -418,7 +418,7 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
 
         function nonTriangleRejected(testCase)
             V = [0 0; 1 0; 1 1; 0 1]; E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0;1 0;1 0;1 0];
-            q = QuaPoly(V, E, [2 0 2 0 0 0], F);
+            q = QuaPol(V, E, [2 0 2 0 0 0], F);
             testCase.verifyError(@() conjPieceCPLQ(q), 'conjPieceCPLQ:notImplemented');
         end
     end

@@ -1,6 +1,6 @@
 classdef addQuaParTest < matlab.unittest.TestCase
     % Tests for QuaPar.add / addQuaPar.m: pointwise sum of two QuaPar functions, generalizing
-    % addQuaPoly.m to allow one curved (parabolic-arc) edge per face. See addQuaPar.m's header for
+    % addQuaPol.m to allow one curved (parabolic-arc) edge per face. See addQuaPar.m's header for
     % the algorithm (uniform 6-coefficient constraint rows, straight edges parametrized in t,
     % the one curved edge parametrized in u via an axis-rotation of its parabola).
 
@@ -14,9 +14,9 @@ classdef addQuaParTest < matlab.unittest.TestCase
             testCase.verifyEqual(h.eval([1 2]), 1^2 + 2^2, 'AbsTol', 1e-10);
         end
 
-        function straightOnlyMatchesQuaPolyBehaviour(testCase)
+        function straightOnlyMatchesQuaPolBehaviour(testCase)
             % Both operands purely polyhedral (all-zero Ec): addQuaPar must behave exactly like
-            % addQuaPoly's own overlapping-squares case (same regression the QuaPoly test covers).
+            % addQuaPol's own overlapping-squares case (same regression the QuaPol test covers).
             f = addQuaParTest.squarePar([0 0], [0 1 0]);   % f(x,y)=x on [0,2]x[0,2]
             g = addQuaParTest.squarePar([1 1], [0 1 0]);   % g(x,y)=y on [1,3]x[1,3]
             h = f.add(g);

@@ -65,7 +65,7 @@ This document is a **design proposal**; large parts of it describe intended, not
 code. Cross-check the actual repo file list before assuming an operator or engine exists.
 
 **Implemented** (MATLAB, in the repo root):
-- Classes `QuaPoly` (leaf/input type, formerly `PLQVC`), `QuaPar` (conjugate `f*`), `RatPol`
+- Classes `QuaPol` (leaf/input type, formerly `PLQVC`), `QuaPar` (conjugate `f*`), `RatPol`
   (convex envelope `f**`), `QuaParCPLQ` (a conjugate still in cPLQ's symbolic form) — **now
   organized as II.3's `RatPar` hierarchy** (built 2026-07-27), giving every operator a single
   static return type. The design is a **two-axis product lattice**, not a list: a piecewise
@@ -75,12 +75,12 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   queried alone — `isa(f,'Qua')`, `isa(f,'Pol')` — and the four named types are the grid's cells,
   with inheritance following the grid's own partial order:
   `RatPar < Rat & Par`, `RatPol < RatPar & Pol`, `QuaPar < RatPar & Qua`,
-  `QuaPoly < RatPol & QuaPar` (a genuine diamond — that is what a product lattice is);
+  `QuaPol < RatPol & QuaPar` (a genuine diamond — that is what a product lattice is);
   `QuaParCPLQ < RatPar & Qua` carries the same maths as a `QuaPar` but no mesh, so it deliberately
   does NOT inherit from `QuaPar` (`isMeshed()` is the intended test).
   **All data lives on `RatPar` alone** — including `den` and `Ec` — because MATLAB makes a property
   defined in two superclasses fatal AND unresolvable (`conflictingSuperClassProperty`;
-  `RedefinedProperty` in the child), which would otherwise make `QuaPoly` unconstructible. Each
+  `RedefinedProperty` in the child), which would otherwise make `QuaPol` unconstructible. Each
   type's pinned value is therefore enforced by `set.den`/`set.Ec` validators that read the object's
   own traits: one definition site, whole lattice, and no type can lie about itself. `kind()`
   returns the concrete type name derived from `class(obj)` rather than stored, so it cannot drift.
@@ -448,7 +448,7 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     `conjPieceCPLQ` cannot conjugate yet (the SAME pre-existing gap already flagged above for the
     multi-face/non-triangular case) -- `maxQuaParTest.buildG1G2ForTriangle`/`extractTriFace` now
     detect this and error clearly (`extractTriFace:rationalFaceNotSupported`) instead of silently
-    dropping the denominator and building the wrong `QuaPoly`, which is what `
+    dropping the denominator and building the wrong `QuaPol`, which is what `
     matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces` (the one test that exercises
     this exact triangle) was unwittingly doing before; that test now pins the new loud failure
     instead of the old silent one (its own three `maxQuaPar` assembly-bug fixes remain covered by
@@ -552,7 +552,7 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     considerably this session but not yet resolved.** Concrete repro (from a fresh `rng(2026)`
     stress script, its first failing triangle): `V=(-5.2645,3.4904),(3.1062,0.5450),(5.0430,7.7766)`,
     `f6=[0.3963 0.8289 0.0284 -2.4834 2.1149 -5.5999]` (i.e. `q=0.5*x'Hx+L'x+kappa` with
-    `H=[[0.3963,0.8289],[0.8289,0.0284]]`, `L=[-2.4834,2.1149]`, `kappa=-5.5999` -- QuaPoly's stored
+    `H=[[0.3963,0.8289],[0.8289,0.0284]]`, `L=[-2.4834,2.1149]`, `kappa=-5.5999` -- QuaPol's stored
     convention, NOT plain `[A B C D E F]`; `mh=0.275376,qh=-2.551975,mw=1.578980,qw=7.945196` in the
     bilinear frame, a much bigger `mh`/`mw` ratio than the paper's own `1`/`0.5` example, where no
     such further split is needed at all -- see below). With Part 2a's corrected cevian, `T1` (the
@@ -743,13 +743,13 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     value still correctly triggers NaN (preserving the documented real-discontinuity behavior).
     Verified: `(1,1)` now evaluates to exactly `1`; full suite re-run clean (147/147) after this fix
     plus the two `nf` fixes above.
-- `scalarMul`/`negate` — an instance method on each of `QuaPoly`/`QuaPar`/`RatPol` (trivial:
+- `scalarMul`/`negate` — an instance method on each of `QuaPol`/`QuaPar`/`RatPol` (trivial:
   scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
-- `add` — `QuaPoly` and `QuaPar` (`QuaPoly.add`/`QuaPar.add`, in `addQuaPoly.m`/`addQuaPar.m`):
+- `add` — `QuaPol` and `QuaPar` (`QuaPol.add`/`QuaPar.add`, in `addQuaPol.m`/`addQuaPar.m`):
   overlays the two domain subdivisions by pairwise convex-polygon clipping and sums the two
   quadratics on each overlap cell (always exactly one quadratic per cell — no case-split needed,
-  unlike `maxQuaPar`'s pointwise max). `QuaPoly.add` (straight edges only) is the base case,
+  unlike `maxQuaPar`'s pointwise max). `QuaPol.add` (straight edges only) is the base case,
   adapted from `maxQuaPar.m`'s facePoly/clipByFace machinery, generalized to allow an unmatched
   edge to become a genuine domain-boundary edge rather than an error, since unlike `maxQuaPar`'s
   inputs, `add`'s inputs need not be full-domain. `QuaPar.add` generalizes this further to allow
@@ -766,24 +766,24 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   ray, a non-single-branch (double-line-degenerate) parabola, a new *unbounded curved* ray, or
   more than one disjoint surviving piece (other than the two-rays-survive-with-a-middle-gap
   shape, also not implemented) all error clearly rather than being silently mishandled — see
-  `addQuaPar.m`'s header STATUS block. See `addQuaPolyTest.m`/`addQuaParTest.m`. **Not yet
+  `addQuaPar.m`'s header STATUS block. See `addQuaPolTest.m`/`addQuaParTest.m`. **Not yet
   extended to `RatPol`** (would need a common-denominator sum).
-  - Found and fixed while building this: `polyConstraints` (shared by `addQuaPoly.m` and
+  - Found and fixed while building this: `polyConstraints` (shared by `addQuaPol.m` and
     `maxQuaPar.m`) looped `1:nv-1` for a BOUNDED poly, silently dropping its closing edge
     `(nv,1)` — under-constraining `clipByFace` by exactly one of `polyL`'s half-planes. Fixed in
     both files (loop now wraps for bounded polys, unaffected for unbounded ones); regression test
-    added to `addQuaPolyTest.m`.
+    added to `addQuaPolTest.m`.
 - `infConv.m` — `conj(add(conj(f,engine),conj(g,engine)),engine)` (II.6), valid for `f,g` both
   convex. Thin composition, no new geometry: since `conj(f,engine)` may come back as either
-  `QuaPoly` (conjCPLQ's full-domain-quadratic shortcut) or `QuaPar` (its general single-piece
-  case), and `QuaPoly.add`/`QuaPar.add` only accept same-class operands, both conjugates are
-  first promoted to `QuaPar` (a lossless relabeling — `QuaPoly` and `QuaPar` share the same
+  `QuaPol` (conjCPLQ's full-domain-quadratic shortcut) or `QuaPar` (its general single-piece
+  case), and `QuaPol.add`/`QuaPar.add` only accept same-class operands, both conjugates are
+  first promoted to `QuaPar` (a lossless relabeling — `QuaPol` and `QuaPar` share the same
   `V/E/f/F` layout, `QuaPar` just adds an all-zero `Ec`) before calling `add`. Exercised
   end-to-end (both `conj` calls and the final `conj` all round-trip) only on full-domain
   quadratics so far — a bounded-triangle `f,g` pair currently can't complete the final `conj`
   step, since that would land the summed `QuaPar` in `conjCPLQ`'s still-unimplemented Step 3
   (max of conjugates over a multi-face domain). See `infConvTest.m`.
-- `addQuadratic`/`addScaledEnergy` — instance methods on both `QuaPoly` and `QuaPar`. Simpler
+- `addQuadratic`/`addScaledEnergy` — instance methods on both `QuaPol` and `QuaPar`. Simpler
   than `add`: the added term is a FULL-DOMAIN quadratic, so it never restricts the domain and
   needs no overlay/clipping — just bump columns 5:10 (`[x^2 xy y^2 x y const]`) of `f` by
   `[A(1,1) A(1,2) A(2,2) b(1) b(2) c]` identically on every face/edge row. `addScaledEnergy(f,
@@ -811,7 +811,7 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   already-tested `moreau.m` rather than a hand-derived closed form for `P` itself. See
   `proxAverageTest.m`.
 - `toQuaPar.m` — extracted shared helper (originally local to `infConv.m`, now also used by
-  `proxAverage.m`): promotes a `QuaPoly` conjugate to the equivalent `QuaPar` (lossless
+  `proxAverage.m`): promotes a `QuaPol` conjugate to the equivalent `QuaPar` (lossless
   relabeling, all-zero `Ec`) so two conjugates of possibly-different returned type can be
   `add`-ed together.
 
@@ -824,12 +824,12 @@ full-domain-quadratic `f,g` end to end — see their own bullets above).
 **NOT implemented** (II.5.2/II.5.3 and parts of II.4/II.6 describe the intended design; no code
 exists yet for):
 - Conjugate engine **`'pqp'`** (parametric-QP, Jakee Khan [JAKEE-13]) — `conj(f,'pqp')` already
-  errors explicitly in code (`QuaPoly.conj`, `PLQ:conj:engine`, "not implemented yet; use
+  errors explicitly in code (`QuaPol.conj`, `PLQ:conj:engine`, "not implemented yet; use
   'cplq'"), it does not silently fall back or give a wrong answer.
 - Conjugate engine **`'graph'`** (point-cloud + neighbour-graph, Tasnuva Haque
   [HAQUE-17]/[HAQUE-18]) — same: `conj(f,'graph')` errors explicitly, not ported.
 - `RatPar` (the abstract storage-umbrella parent class, II.3).
-- `add` for `RatPol` (`QuaPoly`/`QuaPar` are both done — see above).
+- `add` for `RatPol` (`QuaPol`/`QuaPar` are both done — see above).
 - `partialConj` — not implemented for any engine.
 - `convEnvDirect` (the `'direct'` envelope method built on Kumar's/Karmarkar's per-piece
   method, II.6) — not ported; `convEnv(f,'direct')` does not exist.
@@ -847,14 +847,14 @@ exists yet for):
   plain-quadratic ones), so it hits the SAME `conjPieceCPLQ` rational-piece gap as the general
   multi-face case. A bounded-triangle pair with 3 convex edges no longer works end to end for
   `conj`'s Step 3 until that gap is closed via the NUMERIC path; **it now DOES work via the Phase 1
-  `cPLQ` integration below** (`quaPolyToPlq`/`evalFunctionNDomain`), same as the general multi-face
+  `cPLQ` integration below** (`quaPolToPlq`/`evalFunctionNDomain`), same as the general multi-face
   case.
   **RESOLVED for the general multi-face case, via Phase 1's `cPLQ` integration (this session)**:
-  `quaPolyToPlq.m` (CCA2 `QuaPoly` → cPLQ `plq`) + `evalFunctionNDomain.m` (numeric eval of a
+  `quaPolToPlq.m` (CCA2 `QuaPol` → cPLQ `plq`) + `evalFunctionNDomain.m` (numeric eval of a
   `functionNDomain` result) close this gap end to end for the symbolic engine — see
   `cplqAdapterTest.m`: a genuinely multi-triangle nonconvex PLQ (`f=xy` over a square split into 2
   independent triangles — exactly the case `maxQuaPar`'s own curved-edge restriction blocks
-  numerically) now conjugates correctly through `quaPolyToPlq` → `.triangulate` → `.maximum` →
+  numerically) now conjugates correctly through `quaPolToPlq` → `.triangulate` → `.maximum` →
   `evalFunctionNDomain`, checked against numeric sup-sampling ground truth at 9 points. One
   narrow, documented exception: an exact symmetric TIE point (`s=(0.5,0.5)`, where both original
   triangles' own vertex cones meet) is not covered by the assembled region partition — a limitation
@@ -895,8 +895,8 @@ the plan:
    version-compat bugs found while establishing a passing baseline (`isequal(sym,double)` no
    longer works in the current Symbolic Math Toolbox; `plq.m`'s `pieces` property was mistyped,
    silently breaking all of `testMaxMultiRegion.m`'s 24 tests) — see `.claude/SESSION_HANDOFF.md`
-   for full diagnosis. Built the thin adapter: `quaPolyToPlq.m` (CCA2 `QuaPoly` → cPLQ `plq`, per-
-   face via `QuaPoly.matrixForm` → a `sym` expression → `domain`+`symbolicFunction`+`plq_1p`) and
+   for full diagnosis. Built the thin adapter: `quaPolToPlq.m` (CCA2 `QuaPol` → cPLQ `plq`, per-
+   face via `QuaPol.matrixForm` → a `sym` expression → `domain`+`symbolicFunction`+`plq_1p`) and
    `evalFunctionNDomain.m` (numeric eval of a `functionNDomain` result at a dual point, for this
    codebase's standard numeric-sup-sampling test convention — no conversion back to `QuaPar` yet,
    deliberately, since that would reintroduce the exact curved-edge assembly problem `cPLQ` already
@@ -931,10 +931,10 @@ the plan:
    `testMaxMultiRegion`/`testcPLQ`/`cplqAdapterTest`/`conjCPLQTest` shows no regressions. See
    `.claude/SESSION_HANDOFF.md` for full traces.
    **Wired into `conjCPLQ.m` itself (this session, user's choice of 3 options)**: `conjCPLQ.m` now
-   has a Case C (general bounded domain, `nf>1` and/or non-triangular) that calls `quaPolyToPlq`
-   -> `.triangulate` -> `.maximum` instead of erroring -- generalized `quaPolyToPlq.m` to accept
+   has a Case C (general bounded domain, `nf>1` and/or non-triangular) that calls `quaPolToPlq`
+   -> `.triangulate` -> `.maximum` instead of erroring -- generalized `quaPolToPlq.m` to accept
    non-triangular faces too (relies on `plq.triangulate`'s own fan-splitting). `g` for Case C was
-   originally a raw `functionNDomain` array (NOT `QuaPoly`/`QuaPar`), with composition
+   originally a raw `functionNDomain` array (NOT `QuaPol`/`QuaPar`), with composition
    (`biconj`/`infConv`/`moreau`/...) unsupported -- see the next bullet for the follow-up session
    that closed this gap. Verified via `conjCPLQTest.m`'s new `multiFaceBoundedDomainViaCPLQIntegration`
    (through the actual public `conj('cplq')` entry point) and a full-suite regression check
@@ -980,7 +980,7 @@ the plan:
    symbolic engine involved. The actual Phase 2 bottleneck is entirely in Case C (multi-piece
    domains): `maxQuaPar.m` (Step 3, combining independently-conjugated triangles) explicitly
    refuses any input with a curved (parabolic) edge — see its own header TODO — which is exactly
-   why Case C falls back to the slow full-domain symbolic pipeline (`quaPolyToPlq` ->
+   why Case C falls back to the slow full-domain symbolic pipeline (`quaPolToPlq` ->
    `.triangulate` -> `.maximum`) instead of per-triangle closed-form conjugate + a numeric
    `maxQuaPar` combine. Closing that TODO is therefore the concrete next Phase 2 step.
    **Checkpoint (2026-07-26 session, first increment)**: `clipArcByHalfPlane.m` — clip a parabola
@@ -1049,12 +1049,12 @@ the plan:
    + `dom`). It already represents quadratic-on-polyhedral functions and all degenerate
    1D cases, and ships the linear-time convexity test.
 2. **Three function families must be storable** (per [COAP]/[JOGO]):
-   - **`QuaPoly`** — quadratic on a *polyhedral* subdivision (the input; the released type).
+   - **`QuaPol`** — quadratic on a *polyhedral* subdivision (the input; the released type).
    - **`RatPol`** — quadratic÷linear on a *polyhedral* subdivision (the convex envelope `f**`).
    - **`QuaPar`** — quadratic on a *parabolic* subdivision (the conjugate `f*`).
    Organize these as a **class hierarchy** whose most general parent **`RatPar`** is *rational
    (cubic÷linear) on parabolic* — a pure storage umbrella the user may populate with **any** such
-   function; the three *operated* families (**`RatPol`**, **`QuaPar`**, **`QuaPoly`**) are its
+   function; the three *operated* families (**`RatPol`**, **`QuaPar`**, **`QuaPol`**) are its
    specializations, ending at the released quadratic-on-polyhedral class.
 3. **Three conjugate engines** behind one `conj(f, engine)`:
    - **`'pqp'`** — exact parametric-QP conjugate (Scilab `pQP` port; Jakee Khan's M.Sc. thesis
@@ -1192,7 +1192,7 @@ keep only the **Fitzpatrick** routine and the **nonconvex test functions** as ex
    Every derived operator inherits all three engines for free.
 4. **Storage is general; operators are restricted.** The user may store **any `RatPar`**
    function (rational cubic÷linear on parabolic, including cubic numerators). **Operators apply
-   only to the specific subclasses** `QuaPoly`/`QuaPar`/`RatPol`: the three operated families
+   only to the specific subclasses** `QuaPol`/`QuaPar`/`RatPol`: the three operated families
    round-trip under conjugation (II.2), but a bare `RatPar` (rational-on-parabolic, or any cubic
    numerator) is **rejected** by `conj`/`add`/`moreau`/… The **one exception is `isConvex`** (and
    the convexity sub-tests), which **is allowed on cubic polynomials** — the released
@@ -1210,7 +1210,7 @@ boundary type**:
 
 | Class | Function on a piece | Domain boundary | Role | Operator input? |
 |-------|---------------------|-----------------|------|-----------------|
-| **`QuaPoly`** | quadratic `½xᵀQx+qᵀx+κ` | polyhedral (lines) | input `f` (released `PLQVC`) | ✅ yes (`isConvex` also accepts cubic) |
+| **`QuaPol`** | quadratic `½xᵀQx+qᵀx+κ` | polyhedral (lines) | input `f` (released `PLQVC`) | ✅ yes (`isConvex` also accepts cubic) |
 | **`RatPol`** | `(quad)÷(linear)` `r=(ax²+bxy+cy²+dx+ey+f)/(gx+hy+k)` | polyhedral | convex envelope `f**` = `conv f` | ✅ yes |
 | **`QuaPar`** | quadratic, often parabolic `qₚ` (`a>0,c>0,b²−4ac=0`) | parabolic (`b²−4ac=0` conics) | conjugate `f*` | ✅ yes |
 | **`RatPar`** (parent) | `(cubic)÷(linear)` | parabolic | storage umbrella for **any** of the above | ❌ storable, **not** an operator input |
@@ -1229,7 +1229,7 @@ the *parabolic* family.
 
 ```
               conj                          conj
-  QuaPoly  ───────────▶  QuaPar (f*)  ───────────▶  RatPol (f**)
+  QuaPol  ───────────▶  QuaPar (f*)  ───────────▶  RatPol (f**)
  (quad/polyhedral)            │                          │
         ▲                     │ conj                     │ conj
         │                     ▼                          ▼
@@ -1237,7 +1237,7 @@ the *parabolic* family.
             biconj = convEnv     (f** = conv f, quad÷linear / polyhedral)
 ```
 
-- `conj(QuaPoly)` → `QuaPar`  ([JOGO]: `f*` is quadratic on parabolic).
+- `conj(QuaPol)` → `QuaPar`  ([JOGO]: `f*` is quadratic on parabolic).
 - `conj(QuaPar)` = `f**` → `RatPol`  ([COAP] Step 4: `conv f` is quad÷linear on polyhedral).
 - `conj(RatPol)` = `conj(conv f)` = `f*` → `QuaPar` (conjugate of the envelope = conjugate).
 - `convEnv(f)` = `biconj(f)` = `conj(conj(f))` → `RatPol`.
@@ -1261,7 +1261,7 @@ the *parabolic* family.
                      │ specialize: linear edges (polyhedral)
                      ▼
         ┌────────────────────────────────────┐
-        │ QuaPoly   (= released PLQVC)         │
+        │ QuaPol   (= released PLQVC)         │
         │ quadratic on polyhedral             │
         │ input type; linear-time isConvex    │
         └────────────────────────────────────┘
@@ -1274,10 +1274,10 @@ the *parabolic* family.
   a `den(:,3)` linear-denominator matrix (`den=[0 0 1]` ⇒ polynomial), and edges that may be
   **conic arcs**. Provides `eval`/`plot`/converters **and `isConvex`** (which accepts cubics);
   **no convex-analysis operators**. The user may instantiate and store any `RatPar`.
-- **`RatPol`** (`f**`), **`QuaPar`** (`f*`), **`QuaPoly`** (input): the three *operated*
-  families. `QuaPoly` is the released `PLQVC` essentially verbatim (the leaf class).
+- **`RatPol`** (`f**`), **`QuaPar`** (`f*`), **`QuaPol`** (input): the three *operated*
+  families. `QuaPol` is the released `PLQVC` essentially verbatim (the leaf class).
 - **Reject rule:** every operator (`conj`,`add`,`moreau`,…) calls `obj.assertOperable`, which
-  errors unless `obj` is one of `QuaPoly`/`QuaPar`/`RatPol` with a **quadratic** numerator;
+  errors unless `obj` is one of `QuaPol`/`QuaPar`/`RatPol` with a **quadratic** numerator;
   a bare `RatPar` or any cubic numerator ⇒ `error('PLQ:op:unsupportedType', …)`. **`isConvex`
   is exempt** — it accepts cubic polynomials (released convexity machinery).
 
@@ -1304,7 +1304,7 @@ the object *is* a released `PLQVC` and every existing method works unchanged.
 | `partialConj` | `g = partialConj(f, idx, engine)` | conjugate w.r.t. variable `idx` | engine ∈ {`'pqp'`,`'cplq'`} only |
 | `biconj` | `g = biconj(f, engine)` | `f** = conj(conj(f))` | `conj∘conj` — nonconvex `f` needs `engine='cplq'` for the first `conj` (II.5/II.6) |
 | `convEnv` | `h = convEnv(f, method)` | convex envelope; `method`=`'biconj'`(default `'cplq'`) \| `'direct'`(Kumar+Karmarkar, [KUMAR-20]/[COAP]) | `biconj` / `convEnvDirect` — see II.6 note on engine choice |
-| `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add — **implemented for `QuaPoly` and `QuaPar`** (`addQuaPoly.m`/`addQuaPar.m`); `RatPol` still open, see Implementation status above |
+| `add` | `h = add(f, g)` | pointwise `f+g` | domain overlay + coeff/rational add — **implemented for `QuaPol` and `QuaPar`** (`addQuaPol.m`/`addQuaPar.m`); `RatPol` still open, see Implementation status above |
 | `sub` | `h = sub(f, g)` | `f − g` | `add(f, negate(g))` |
 | `scalarMul`,`negate` | `c·f`, `−f` | coeff scaling | — implemented on all three classes |
 | `addQuadratic` | `addQuadratic(f, A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | per-face coeff update |
@@ -1314,7 +1314,7 @@ the object *is* a released `PLQVC` and every existing method works unchanged.
 | `proxAverage` | `proxAverage(f,g,lambda,mu,engine)` | proximal average | **reduces directly to `conj`** (two conjugations sandwiching a weighted `add`, II.6) — **not** a composition of `moreau` calls; convex `f,g` only, like `infConv` |
 | `eval`,`isConvex`,`plot`,… | (unchanged) | evaluation / tests / display | existing `PLQVC` code |
 
-Static factories: keep `QuaPoly.examples*`,`oneNorm`,`energy`; add `QuaPoly.l1Norm`,`linfNorm`,
+Static factories: keep `QuaPol.examples*`,`oneNorm`,`energy`; add `QuaPol.l1Norm`,`linfNorm`,
 `indicator`, `nonconvexW`, and the [JOGO]/[COAP] worked examples (Fig. 2 functions) as a
 golden test set.
 
@@ -1323,7 +1323,7 @@ golden test set.
 ```matlab
 function g = conj(obj, engine)
 % objective: Fenchel conjugate of an allowed 2D PLQ-family function
-% [input]  obj    : QuaPoly | RatPol | QuaPar  (bare RatPar & cubic rejected)
+% [input]  obj    : QuaPol | RatPol | QuaPar  (bare RatPar & cubic rejected)
 %          engine : 'cplq' (default, symbolic, exact) | 'pqp' | 'graph'
 % [output] g      : the conjugate (type per the II.2 cycle)
     obj.assertOperable();                 % reject cubic / rational-on-parabolic
@@ -1410,7 +1410,7 @@ Represent the graph of `f` as a **point cloud with a neighbour graph**: each ent
 point `x`, value `y=f(x)`, and subgradient(s) `s∈∂f(x)`; adjacency = the mesh neighbour graph.
 The Legendre transform is a **primal↔dual swap**: dual point = subgradient `s`, dual value =
 `sᵀx−f(x)`, entity types swap (Face↔Vertex, Ray↔Ray, Segment↔Segment); reconnect via the same
-adjacency. Convert `QuaPoly→PLQVG` (gradients from `evalHessian`; vertex normal-cone fans from
+adjacency. Convert `QuaPol→PLQVG` (gradients from `evalHessian`; vertex normal-cone fans from
 `region`/`getSubdiffVertex*` give subgradients at kinks), `PLQVG.conjugate`, then back to the
 class. Fast, geometric, no symbolic solve; great for many pieces, visualization, and as an
 independent cross-check of the exact engines. **`partialConj` is not implemented for `'graph'`**
@@ -1515,7 +1515,7 @@ see Implementation status) and `addQuadratic`/`addScaledEnergy`; it needs no cal
 
 `add` is the other primitive needing real geometry: **overlay the two domain subdivisions and
 add functions per overlapping piece** (sum quadratics, or add rationals over a common
-denominator) — implemented for `QuaPoly`/`QuaPar` (`addQuaPoly.m`/`addQuaPar.m`, curved
+denominator) — implemented for `QuaPol`/`QuaPar` (`addQuaPol.m`/`addQuaPar.m`, curved
 boundaries handled by intersecting parabolic arcs via an axis-rotation parametrization, see
 Implementation status); `RatPol` (common-denominator sum) remains open.
 
@@ -1526,21 +1526,21 @@ CCA2/
   RatPar.m            % abstract parent: rational(cubic÷linear) on parabolic; storage + eval/plot/convert/isConvex
   RatPol.m            % quad÷linear on polyhedral    (convex envelope f**)
   QuaPar.m            % quadratic on parabolic        (conjugate f*)
-  QuaPoly.m           % quadratic on polyhedral       (= released PLQVC; input type)
-  PLQVC.m             % thin alias of QuaPoly (backward compatibility)
+  QuaPol.m           % quadratic on polyhedral       (= released PLQVC; input type)
+  PLQVC.m             % thin alias of QuaPol (backward compatibility)
   conjCPLQ.m          % Engine 'cplq': symbolic per-piece conjugate (default; [JOGO] 3 steps)
   conjPQP.m           % Engine 'pqp' : parametric-QP / KKT conjugate (+ partial variant); convex only [JAKEE-13]
   conjGraph.m         % Engine 'graph': point-cloud + neighbour-graph conjugate (PLQVG); convex only [HAQUE-17]/[HAQUE-18]
   convEnvDirect.m     % direct convex-envelope path (Kumar cvxEnv2d [KUMAR-20] + Karmarkar assembly [COAP])
-  addQuaPoly.m        % IMPLEMENTED: QuaPoly.add's domain-overlay sum (polygon clipping adapted
+  addQuaPol.m        % IMPLEMENTED: QuaPol.add's domain-overlay sum (polygon clipping adapted
                       % from maxQuaPar.m); RatPol add not yet extended -- see II.4
   addQuaPar.m         % IMPLEMENTED: add extended to QuaPar (curved/Ec-edge clipping via an
                       % axis-rotation parabola parametrization) -- prerequisite for infConv and
                       % proxAverage; see Implementation status for its STATUS/scope notes
-  % addQuadratic/addScaledEnergy: IMPLEMENTED as instance methods directly on QuaPoly/QuaPar
+  % addQuadratic/addScaledEnergy: IMPLEMENTED as instance methods directly on QuaPol/QuaPar
   % (no separate file -- trivial per-face coefficient bump, no domain overlay/clipping needed,
-  % unlike add's addQuaPoly.m/addQuaPar.m); prerequisite for moreau and proxAverage
-  toQuaPar.m          % IMPLEMENTED: promote a QuaPoly conjugate to QuaPar (lossless relabeling)
+  % unlike add's addQuaPol.m/addQuaPar.m); prerequisite for moreau and proxAverage
+  toQuaPar.m          % IMPLEMENTED: promote a QuaPol conjugate to QuaPar (lossless relabeling)
                       % so infConv/proxAverage can add two conjugates of possibly-different type
   infConv.m           % IMPLEMENTED: conj(add(conj f,conj g)); convex f,g only (II.6); see
                       % Implementation status for scope (full-domain quadratics round-trip end to
@@ -1555,7 +1555,7 @@ CCA2/
     kktConjFace.m                     % QQ/QL/LL closed-form face conjugates (lft2.sci)
     quadQuadEnv.m                     % cPLQ symbolic bilinear x*y / quad-quad envelope
     overlayAdd.m                      % domain-overlay addition (PLCHC.add + unionHull) -- for
-                                      % QuaPoly this role is filled by the real addQuaPoly.m above
+                                      % QuaPol this role is filled by the real addQuaPol.m above
     parabolicGeom.m                   % conic-arc edge intersection / parabolic-region ops
     lcon2vert.m vert2lcon.m unionHull.m intersectionHull.m
   PLQTest.m  PLQConjugateTest.m  PLQOperatorTest.m  PLQTypeCycleTest.m
@@ -1582,8 +1582,8 @@ CCA2/
 
 | Target capability | Primary source(s) | Notes |
 |-------------------|-------------------|-------|
-| Data structure `V/E/f/F/P/dom` | released `PLQVC` | becomes leaf class `QuaPoly`; superset adds `Ec`,`den` |
-| Class hierarchy (rational/parabolic types) | [COAP]/[JOGO] defs; `cPLQ.region` (parabolic ineqs) | `RatPar`→`RatPol`/`QuaPar`→`QuaPoly` |
+| Data structure `V/E/f/F/P/dom` | released `PLQVC` | becomes leaf class `QuaPol`; superset adds `Ec`,`den` |
+| Class hierarchy (rational/parabolic types) | [COAP]/[JOGO] defs; `cPLQ.region` (parabolic ineqs) | `RatPar`→`RatPol`/`QuaPar`→`QuaPol` |
 | Convexity tests | released `PLQVC` | unchanged |
 | **conjugate Engine `'cplq'`** (default) | **`cPLQ`** (`conjugateExpr`,`convexEnvelope`,`maximumP`), Tanmaya Karmarkar | the symbolic [JOGO] 3-step pipeline; bilinear `x*y` via `quadQuad`; convex **and** nonconvex |
 | **conjugate Engine `'pqp'`** | Scilab `parametric_ME.sci` (Jakee Khan, [JAKEE-13]) + `lft2.sci` closed forms (Bryan Gardiner, [GARDINER-13]) | KKT parametric-QP + QQ/QL/LL closed forms; **convex only** |
@@ -1606,11 +1606,11 @@ CCA2/
 **Resolved:**
 1. **Class names & hierarchy** → `RatPar` (rational cubic÷linear on parabolic, storage umbrella)
    ⊃ `RatPol` (quad÷linear / polyhedral, `f**`), `QuaPar` (quadratic / parabolic, `f*`) ⊃
-   `QuaPoly` (quadratic / polyhedral, released `PLQVC` leaf, input).
+   `QuaPol` (quadratic / polyhedral, released `PLQVC` leaf, input).
 2. **Curved boundaries** → quadratic level-set arcs with **b²−4ac=0** (parabolas; lines
    degenerate). Ellipse/hyperbola arcs do **not** occur ([COAP]/[JOGO]).
 3. **Storage vs operators** → the user may store **any `RatPar`**; operators apply only to
-   `QuaPoly`/`QuaPar`/`RatPol` with quadratic numerator (validated by `assertOperable`). A bare
+   `QuaPol`/`QuaPar`/`RatPol` with quadratic numerator (validated by `assertOperable`). A bare
    `RatPar` / rational-on-parabolic is rejected as an operator input.
 4. **Cubic** → quadratic numerator for all operators; **cubic polynomials are allowed for
    `isConvex` only** (released convexity machinery). Cubic otherwise storable, not operated on.
@@ -1626,7 +1626,7 @@ CCA2/
    per-piece method [KUMAR-20] (`codeOld/deepak`) as extended by Karmarkar's [COAP] Step 4
    assembly, `'direct'`, as a faster alternative/cross-check. **Not** parametric-QP (a previous
    version of this document mislabeled Kumar's method as such; see I.4).
-8. **Backward compatibility** → keep **`PLQVC` as a thin alias of `QuaPoly`** (so existing code
+8. **Backward compatibility** → keep **`PLQVC` as a thin alias of `QuaPol`** (so existing code
    and tests calling `PLQVC(...)` keep working).
 9. **`partialConj`** → exposed for the **`'pqp'` and `'cplq'`** engines only (the `'graph'`
    partial conjugate is left unimplemented for now).
@@ -1641,7 +1641,7 @@ CCA2/
     (1-λ)(T_μg)^*)` where `T_μh:=μh+½‖·‖²`, so `P` needs three `conj` calls (two in, one out)
     around a weighted `add`, and **no call to `moreau` itself** (II.6 derivation above). Like
     `infConv`, valid only for `f,g` both convex. Build-order consequence: `proxAverage` and
-    `infConv` both require `add` to work on `QuaPar` (not just `QuaPoly`) — that extension is now
+    `infConv` both require `add` to work on `QuaPar` (not just `QuaPol`) — that extension is now
     implemented (`addQuaPar.m`, see Implementation status) — **not** the `RatPol` extension of
     `add`, which nothing in the `conj`/`infConv`/`moreau`/`lasryLions`/`proxAverage` pipeline
     currently calls for (see Implementation status's "Next planned").

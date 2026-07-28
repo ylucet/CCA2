@@ -1,13 +1,13 @@
 classdef RatPolTest < matlab.unittest.TestCase
     % Tests for RatPol (rational quadratic-over-linear functions on a polyhedral subdivision).
-    % Covers: equivalence to QuaPoly when the denominator is 1, full-domain and bounded
+    % Covers: equivalence to QuaPol when the denominator is 1, full-domain and bounded
     % rational evaluation, the NaN behaviour where the denominator vanishes, the evalRational
     % helper, and the (not-yet-implemented) operator guards.
 
     methods (Test)
-        function denominatorOneMatchesQuaPoly(testCase)
-            % den = [0 0 1] everywhere => plain polynomial => same values as QuaPoly.
-            pPoly = QuaPoly.oneNorm();      % |x| + |y|
+        function denominatorOneMatchesQuaPol(testCase)
+            % den = [0 0 1] everywhere => plain polynomial => same values as QuaPol.
+            pPoly = QuaPol.oneNorm();      % |x| + |y|
             pRat  = RatPol.oneNorm();       % same data; default denominators = 1
             [X,Y] = meshgrid(linspace(-1.7,1.7,21), linspace(-1.3,1.3,17));
             P = [X(:)+0.011, Y(:)+0.006];   % offset to avoid exact edges

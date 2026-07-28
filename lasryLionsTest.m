@@ -8,9 +8,9 @@ classdef lasryLionsTest < matlab.unittest.TestCase
             % f(x)=0.5*a*|x|^2 (default engine, nargin<4): chain moreau's own closed-form
             % coefficient recursion c -> c/(1+c*t) through lambda, negate, mu, negate again.
             a = 2; lambda = 0.3; mu = 0.4;
-            f = QuaPoly([a 0 a 0 0 0]);
+            f = QuaPol([a 0 a 0 0 0]);
             h = lasryLions(f, lambda, mu);
-            testCase.verifyClass(h, 'QuaPoly');
+            testCase.verifyClass(h, 'QuaPol');
 
             step = @(c,t) c/(1+c*t);
             c1 = step(a, lambda);        % = e_lambda f's own coefficient
@@ -23,9 +23,9 @@ classdef lasryLionsTest < matlab.unittest.TestCase
             % convexity on f (inherited from moreau, see moreau.m), only that each nested moreau
             % call's own positive-definiteness condition holds for the chosen lambda,mu.
             a1 = 2; a2 = -1; lambda = 0.2; mu = 0.3;
-            f = QuaPoly([a1 0 a2 0 0 0]);
+            f = QuaPol([a1 0 a2 0 0 0]);
             h = lasryLions(f, lambda, mu, 'cplq');
-            testCase.verifyClass(h, 'QuaPoly');
+            testCase.verifyClass(h, 'QuaPol');
 
             step = @(c,t) c/(1+c*t);
             nested = @(a) -step(-step(a,lambda), mu);

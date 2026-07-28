@@ -7,7 +7,7 @@ _Last updated: 2026-07-27T00:00:00Z_
 **Previous session**: gave Case C's conjugate (`conjCPLQ.m`, general bounded multi-face/non-
 triangular domain) a composable return type. New class `QuaParCPLQ.m` wraps the raw
 `functionNDomain` array Case C used to return in the same operator surface (`conj`/`add`/
-`scalarMul`/`addQuadratic`/`addScaledEnergy`/`eval`) that `QuaPoly`/`QuaPar` already expose, so
+`scalarMul`/`addQuadratic`/`addScaledEnergy`/`eval`) that `QuaPol`/`QuaPar` already expose, so
 `infConv.m`/`moreau.m`/`proxAverage.m`/`QuaPar.biconj` compose with it with **zero changes** to any
 of those four files (MATLAB dispatches on the operand's actual class). `toQuaPar.m` passes a
 `QuaParCPLQ` through unchanged rather than erroring. Verified: `conjCPLQTest`/`infConvTest`/
@@ -22,7 +22,7 @@ Cases A/B (single quadratic pieces / single triangles) are **already** closed-fo
 (`conjPieceCPLQ`/`convEnvCPLQ`) — the real Phase 2 bottleneck is entirely in Case C, and
 specifically in **`maxQuaPar.m`'s own stated TODO**: it refuses any input QuaPar with a curved
 (parabolic) edge, which is exactly why Case C falls back to the slow full-domain symbolic pipeline
-(`quaPolyToPlq -> triangulate -> maximum`) instead of per-triangle closed-form conjugate + a
+(`quaPolToPlq -> triangulate -> maximum`) instead of per-triangle closed-form conjugate + a
 numeric `maxQuaPar` combine.
 
 Built and validated the core new primitive that TODO needs: **`clipArcByHalfPlane.m`** — clip a
@@ -75,7 +75,7 @@ harder to stress-test on short notice. Right-sized as its own next session/step 
    intersection) — larger, do only after step 1 is fully validated.
 3. Once `maxQuaPar` handles curved edges, revisit `conjCPLQ.m`'s Case C: it could then dispatch to
    a per-triangle `conjPieceCPLQ` + numeric `maxQuaPar` combine instead of the symbolic
-   `quaPolyToPlq`/`triangulate`/`maximum` pipeline, which is the actual Phase 2 performance win.
+   `quaPolToPlq`/`triangulate`/`maximum` pipeline, which is the actual Phase 2 performance win.
 4. Give Case C a proper `QuaPar`-like return type: **done** last session (`QuaParCPLQ.m`) — see
    above; the remaining piece is a true GEOMETRIC `QuaPar` reconstruction (V/E/Ec/F/P) if/when a
    caller needs the structured (not just composable-but-symbolic) representation — separate,

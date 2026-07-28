@@ -3,20 +3,20 @@ classdef QuaPar < RatPar & Qua
    % It is the type of the Fenchel conjugate f* of a PLQ function (see DESIGN.md and
    %   [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34;
    %   [COAP] Karmarkar & Lucet, Comput. Optim. Appl. 94 (2026) 747-780).
-   % In the design hierarchy QuaPar is a generalization of QuaPoly:
-   %   RatPar (rational cubic/linear on parabolic) > RatPol, QuaPar > QuaPoly.
+   % In the design hierarchy QuaPar is a generalization of QuaPol:
+   %   RatPar (rational cubic/linear on parabolic) > RatPol, QuaPar > QuaPol.
    %
-   % QuaPar extends QuaPoly's vertex/edge/face representation by allowing each edge to be a
+   % QuaPar extends QuaPol's vertex/edge/face representation by allowing each edge to be a
    % PARABOLIC ARC instead of a straight segment. An edge j carries an optional conic
    %   Ec(j,:) = [a b c d e f] describing the curve {a x^2 + b xy + c y^2 + d x + e y + f = 0},
    % which must be a parabola: NOT all zero and b^2 - 4ac = 0 (a line is the degenerate case
    % a=b=c=0). An all-zero row Ec(j,:) means edge j is the straight line through its endpoints
-   % (so a QuaPar with Ec all-zero behaves exactly like a QuaPoly -- a polyhedral subdivision is
+   % (so a QuaPar with Ec all-zero behaves exactly like a QuaPol -- a polyhedral subdivision is
    % a special case of a parabolic subdivision).
    %
    % Orientation invariant (REQUIRED for correct eval / auto-built P): each conic Ec(j,:) must be
    % oriented so that evalConic(Ec(j,:), .) > 0 on the LEFT of the directed edge
-   % V(E(j,1)) -> V(E(j,2)) -- exactly the convention QuaPoly.lineEquation gives for straight
+   % V(E(j,1)) -> V(E(j,2)) -- exactly the convention QuaPol.lineEquation gives for straight
    % edges. With this orientation, createP/orderEdges build P topologically (they only follow
    % shared vertices; the arc geometry is irrelevant to the ordering), and eval's test
    % evalConic(Ec).*sign(P{i}) <= 0 selects the correct side. The conjugate builder sets Ec's sign
@@ -27,7 +27,7 @@ classdef QuaPar < RatPar & Qua
    %     QuaPar(V,E,Ec,f,F) auto-builds P for parabolic faces (given the Ec orientation above);
    %     an explicit P (6-arg) is still accepted. isConvex/plotDomain remain LINEAR-only (the
    %     angle/convexity test uses chords, not arc tangents; plot works via eval on a grid).
-   %   * This class is currently standalone (clone of QuaPoly + conic edges); the QuaPoly<QuaPar
+   %   * This class is currently standalone (clone of QuaPol + conic edges); the QuaPol<QuaPar
    %     hierarchy unification is a planned follow-up.
    %
    % based on
@@ -44,7 +44,7 @@ classdef QuaPar < RatPar & Qua
    % The nine mesh properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
    % declares them verbatim as they used to appear here. QuaPar -- QUAdratic on a PARabolic
    % subdivision -- adds exactly one thing of its own, the per-edge conic `Ec` below (a QuaPar with
-   % Ec all-zero behaves exactly like a QuaPoly). See RatPar.m for the hierarchy.
+   % Ec all-zero behaves exactly like a QuaPol). See RatPar.m for the hierarchy.
    % QuaPar declares NO properties of its own. `Ec` -- its defining feature -- lives on RatPar
    % together with everything else, because a property defined in two superclasses is fatal and
    % unresolvable in MATLAB, which would make QuaPol < RatPol & QuaPar impossible. What makes this
@@ -96,7 +96,7 @@ classdef QuaPar < RatPar & Qua
             else
                 obj.P = Pprovided;
             end
-            %fix nf for degenerate cases (same as QuaPoly)
+            %fix nf for degenerate cases (same as QuaPol)
             if ismember([obj.nv,obj.ne],[1,0;2,1],'rows'), obj.nf=0; end %needle / segment / ray
             if max(obj.F,[],'all')==0, obj.nf=0; end %domain dimension < 2
             if obj.nf>0 && isempty(Pprovided) %structural checks only for auto-built P
@@ -170,7 +170,7 @@ classdef QuaPar < RatPar & Qua
             region = -ones(size(x,1),1);
             % Per-edge conic [a b c d e f] for the boundary a x^2+b xy+c y^2+d x+e y+f = 0.
             % Linear edges (zero Ec row) become [0 0 0 a b c] = the line through their endpoints,
-            % so this reduces exactly to QuaPoly's line-based point location.
+            % so this reduces exactly to QuaPol's line-based point location.
             EC = obj.edgeConics();
 
             % Locate each point: it lies in face i iff every bounding conic, oriented by the
@@ -332,8 +332,8 @@ classdef QuaPar < RatPar & Qua
                            %iteration's own processing (the far vertex of the last edge relative to the
                            %closing vertex `iFirst`) -- overwriting it to iNext (the closing vertex itself)
                            %would collapse that angle's v1 to a zero vector (found while implementing
-                           %QuaPoly's add(): the identical bug this fix was copied to also broke
-                           %QuaPoly.orderEdges's closing-angle isConvex check for bounded, non-ray faces).
+                           %QuaPol's add(): the identical bug this fix was copied to also broke
+                           %QuaPol.orderEdges's closing-angle isConvex check for bounded, non-ray faces).
                end
            end
            %for bounded polyhedral set, need to compute the angle between the first edge and the last edge

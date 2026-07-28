@@ -7,11 +7,11 @@ classdef proxAverageTest < matlab.unittest.TestCase
 
     methods (Test)
         function isotropicQuadraticsSatisfyMoreauEnvelopeCharacterization(testCase)
-            f = QuaPoly([2 0 2 0 0 0]);   % 0.5*2*|x|^2
-            g = QuaPoly([3 0 3 0 0 0]);   % 0.5*3*|x|^2
+            f = QuaPol([2 0 2 0 0 0]);   % 0.5*2*|x|^2
+            g = QuaPol([3 0 3 0 0 0]);   % 0.5*3*|x|^2
             lambda = 0.4; mu = 0.5;
             h = proxAverage(f, g, lambda, mu);
-            testCase.verifyClass(h, 'QuaPoly');
+            testCase.verifyClass(h, 'QuaPol');
 
             pts = [1 2; -3 0.5];
             lhs = moreau(h, mu).eval(pts);
@@ -21,11 +21,11 @@ classdef proxAverageTest < matlab.unittest.TestCase
 
         function anisotropicDiagonalQuadraticsSatisfyMoreauCharacterization(testCase)
             Af = diag([1 4]); Ag = diag([3 0.5]);
-            f = QuaPoly([Af(1,1) 0 Af(2,2) 0 0 0]);
-            g = QuaPoly([Ag(1,1) 0 Ag(2,2) 0 0 0]);
+            f = QuaPol([Af(1,1) 0 Af(2,2) 0 0 0]);
+            g = QuaPol([Ag(1,1) 0 Ag(2,2) 0 0 0]);
             lambda = 0.7; mu = 0.3;
             h = proxAverage(f, g, lambda, mu, 'cplq');
-            testCase.verifyClass(h, 'QuaPoly');
+            testCase.verifyClass(h, 'QuaPol');
 
             pts = [1 -1; 2 3];
             lhs = moreau(h, mu).eval(pts);

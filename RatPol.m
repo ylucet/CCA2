@@ -9,12 +9,12 @@ classdef RatPol < RatPar & Pol
    % conv f is piecewise linear / quadratic / rational (quadratic over linear) on a polyhedral
    % subdivision (the more general fractional form with a square root is proven not to occur).
    %
-   % In the design hierarchy (DESIGN.md): RatPar > RatPol, QuaPar > QuaPoly.
-   % RatPol generalizes QuaPoly's FUNCTION representation by adding a per-face linear
+   % In the design hierarchy (DESIGN.md): RatPar > RatPol, QuaPar > QuaPol.
+   % RatPol generalizes QuaPol's FUNCTION representation by adding a per-face linear
    % denominator den(:,3) = [g h k]; the DOMAIN stays polyhedral (linear edges), so domain
    % handling (createP/orderEdges/eval point location/plotDomain) is inherited unchanged.
    % A face with den = [0 0 1] is a plain polynomial, so a RatPol with all den = [0 0 1]
-   % behaves like a QuaPoly.
+   % behaves like a QuaPol.
    %
    % STATUS (first version): construction + eval implemented. The conjugate of a RatPol
    % (= f*, a QuaPar) requires the general conjugate pipeline and is not implemented yet;
@@ -50,7 +50,7 @@ classdef RatPol < RatPar & Pol
             % Signatures:
             %   RatPol(f)            full-domain polynomial (denominator 1)
             %   RatPol(f,den)        full-domain rational (den = 1x3 [g h k])
-            %   RatPol(V,E,f,F)      polyhedral, denominator 1 on every face (behaves like QuaPoly)
+            %   RatPol(V,E,f,F)      polyhedral, denominator 1 on every face (behaves like QuaPol)
             %   RatPol(V,E,f,F,den)  polyhedral rational (den = nf x 3 linear denominators)
             %   RatPol()             blank object, writes nothing (see below)
             % The no-argument path writes NOTHING -- see RatPar.m's CONSTRUCTOR PROTOCOL note. It
@@ -336,7 +336,7 @@ classdef RatPol < RatPar & Pol
                            %iteration's own processing (the far vertex of the last edge relative to the
                            %closing vertex `iFirst`) -- overwriting it to iNext (the closing vertex itself)
                            %would collapse that angle's v1 to a zero vector (same bug fixed identically in
-                           %QuaPar.m and QuaPoly.m -- see those files' HISTORY for the full diagnosis).
+                           %QuaPar.m and QuaPol.m -- see those files' HISTORY for the full diagnosis).
                end
            end
            %for bounded polyhedral set, need to compute the angle between the first edge and the last edge

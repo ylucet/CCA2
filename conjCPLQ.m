@@ -9,16 +9,16 @@ function g = conjCPLQ(obj, idx)
 %       Step 2  conjugate of each rational piece (Lagrange multipliers) -> quadratic on parabolic
 %       Step 3  maximum of the conjugates                -> f* (quadratic on parabolic)
 %
-% [input]  obj : QuaPoly, operable (degree<=2)
+% [input]  obj : QuaPol, operable (degree<=2)
 %          idx : (optional) variable index 1 or 2 for the PARTIAL conjugate (not yet implemented)
-% [output] g   : the conjugate. QuaPoly when it is itself quadratic-on-polyhedral (e.g. a
+% [output] g   : the conjugate. QuaPol when it is itself quadratic-on-polyhedral (e.g. a
 %                full-domain strictly convex quadratic); QuaPar for a single bounded-triangle
 %                piece (Case B); for a genuinely multi-face or non-triangular bounded domain
 %                (Case C, below), g is a QuaParCPLQ -- a thin wrapper around cPLQ's own
-%                `functionNDomain` array (NOT a QuaPoly/QuaPar: see QuaParCPLQ.m's own header for
+%                `functionNDomain` array (NOT a QuaPol/QuaPar: see QuaParCPLQ.m's own header for
 %                why) that provides the same operator surface (conj/add/scalarMul/addQuadratic/
 %                eval), so biconj/infConv/moreau/proxAverage compose with it exactly as they do
-%                with QuaPoly/QuaPar -- see QuaParCPLQ.m for the STATUS/limitations of that
+%                with QuaPol/QuaPar -- see QuaParCPLQ.m for the STATUS/limitations of that
 %                composition (in particular biconjugateF's known open mergeL/removeTangent exact-
 %                tie-point gap -- DESIGN.md II.5.1 -- is inherited by QuaParCPLQ.conj).
 %
@@ -35,7 +35,7 @@ function g = conjCPLQ(obj, idx)
 %     pointwise maximum) -- see conjSingleTriangle/conjMaxOfSubTriangles below.
 %   * IMPLEMENTED (Phase 1, this session -- see DESIGN.md II.5.1 / .claude/SESSION_HANDOFF.md):
 %     Step 3 for a bounded domain genuinely covered by more than one ORIGINAL piece (nf>1) or a
-%     single non-triangular face, via the integrated cPLQ symbolic pipeline (quaPolyToPlq.m ->
+%     single non-triangular face, via the integrated cPLQ symbolic pipeline (quaPolToPlq.m ->
 %     plq.triangulate -> plq.maximum), NOT the numeric conjPieceCPLQ/maxQuaPar path (which still
 %     cannot combine curved-edge QuaPars from independent triangles -- see maxQuaPar.m's own TODO).
 %     This is Case C below. g is a QuaParCPLQ (see the return-type note above and QuaParCPLQ.m):
@@ -58,7 +58,7 @@ function g = conjCPLQ(obj, idx)
     % ---- Case A: full-domain quadratic (no vertices, single face) -----------------------
     % f(x) = 1/2 x'Q x + L'x + kappa over all of R^2.
     if obj.nv == 0 && obj.nf == 1
-        [L, Q, C] = QuaPoly.matrixForm(obj.f);   %#ok<ASGLU> (C is empty for quadratics)
+        [L, Q, C] = QuaPol.matrixForm(obj.f);   %#ok<ASGLU> (C is empty for quadratics)
         kappa = obj.f(end);
         ev = eig(Q);
         if all(ev > sqrt(eps))
@@ -70,7 +70,7 @@ function g = conjCPLQ(obj, idx)
             % Store in the 6-coefficient quadratic format [x^2 xy y^2 x y const]:
             %   matrixForm reads Q=[c5 c6; c6 c7], L=[c8;c9], const=c10.
             f6 = [M(1,1), M(1,2), M(2,2), grad(1), grad(2), d];
-            g  = QuaPoly(f6);
+            g  = QuaPol(f6);
             return
         end
         % Not strictly convex: the conjugate is an indicator / parabolic object (a QuaPar),
@@ -90,10 +90,10 @@ function g = conjCPLQ(obj, idx)
     % [JOGO] Step 3 (max of conjugates) via the integrated cPLQ symbolic pipeline (Phase 1;
     % DESIGN.md II.5.1 / .claude/SESSION_HANDOFF.md) -- the case Case B's own numeric path
     % (conjPieceCPLQ + maxQuaPar) cannot do, since maxQuaPar refuses curved-edge QuaPar inputs
-    % from independent triangles. g is a QuaParCPLQ here, not a QuaPoly/QuaPar -- see this
+    % from independent triangles. g is a QuaParCPLQ here, not a QuaPol/QuaPar -- see this
     % function's own header and QuaParCPLQ.m for the return-type rationale.
     if obj.isDomBounded
-        p = quaPolyToPlq(obj);
+        p = quaPolToPlq(obj);
         p = p.triangulate;
         p = p.maximum;
         g = QuaParCPLQ(p.maxConjugate);

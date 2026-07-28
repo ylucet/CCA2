@@ -1,25 +1,25 @@
 classdef conjCPLQTest < matlab.unittest.TestCase
-    % Tests for the 'cplq' conjugate engine (conjCPLQ) and the QuaPoly operator interface.
+    % Tests for the 'cplq' conjugate engine (conjCPLQ) and the QuaPol operator interface.
     % Covers the currently implemented case (full-domain quadratics) plus the
     % validation/rejection behaviour. See DESIGN.md II.5.1.
 
     methods (Test)
         function energyIsSelfConjugate(testCase)
             % f = 1/2(x^2+y^2) is self-conjugate.
-            p = QuaPoly.energy();
+            p = QuaPol.energy();
             q = p.conj('cplq');
             testCase.verifyEqual(q.f, p.f, 'AbsTol', 1e-12);
         end
 
         function defaultEngineIsCPLQ(testCase)
             % conj() with no engine argument defaults to 'cplq'.
-            p = QuaPoly.energy();
+            p = QuaPol.energy();
             testCase.verifyEqual(p.conj().f, p.conj('cplq').f, 'AbsTol', 1e-12);
         end
 
         function biconjOfConvexQuadraticIsItself(testCase)
             % f** = f for a closed convex function.
-            p = QuaPoly.energy();
+            p = QuaPol.energy();
             b = p.biconj('cplq');
             testCase.verifyEqual(b.f, p.f, 'AbsTol', 1e-12);
         end
@@ -33,7 +33,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % The result is a gap with an unintuitive shape, worth a test so it stays visible:
             % the SYMBOLIC path (Case C, via QuaParCPLQ.conj into cPLQ's own machinery) supports
             % the biconjugate, while the faster NUMERIC single-triangle path (Case B) does not.
-            % Since conjugate AND biconjugate of a QuaPoly is this project's stated goal, closing
+            % Since conjugate AND biconjugate of a QuaPol is this project's stated goal, closing
             % this is a first-class task, not a corner case -- see SUPPORT_MATRIX.md section 3.
             % This test documents current behaviour; when the gap is closed, the Case-B
             % verifyError below should become a positive check.
@@ -41,19 +41,19 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
             % Case A -- full-domain strictly convex quadratic: conjugate is again a full-domain
             % quadratic, so the second conjugation is Case A too, and biconj closes the loop.
-            caseA = QuaPoly([1 0 1 0 0 0]);
-            testCase.verifyEqual(caseA.conj().kind(), 'QuaPoly');
-            testCase.verifyEqual(caseA.biconj().kind(), 'QuaPoly');
+            caseA = QuaPol([1 0 1 0 0 0]);
+            testCase.verifyEqual(caseA.conj().kind(), 'QuaPol');
+            testCase.verifyEqual(caseA.biconj().kind(), 'QuaPol');
 
             % Case B -- single bounded triangle: conj succeeds and gives a genuine mesh QuaPar,
             % but that QuaPar is full-domain, so the second conjugation has nowhere to go.
-            caseB = QuaPoly([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
+            caseB = QuaPol([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
             testCase.verifyEqual(caseB.conj().kind(), 'QuaPar');
             testCase.verifyError(@() caseB.biconj(), 'PLQ:conjCPLQ:notImplemented');
 
             % ...and it is the DOMAIN, not nonconvexity, that blocks it: a convex triangle piece
             % fails identically.
-            caseBconvex = QuaPoly([0 0; 1 0; 0 1], E3, [1 0 1 0 0 0], F3);
+            caseBconvex = QuaPol([0 0; 1 0; 0 1], E3, [1 0 1 0 0 0], F3);
             testCase.verifyError(@() caseBconvex.biconj(), 'PLQ:conjCPLQ:notImplemented');
         end
 
@@ -61,12 +61,12 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % f(x) = 1/2 x'Q x + L'x + k,  Q=[2 0;0 4], L=[1;-1], k=3.
             % f*(s) = 1/2 (s-L)' inv(Q) (s-L) - k.
             f6 = [2 0 4 1 -1 3];          % [x^2 xy y^2 x y const]
-            p  = QuaPoly(f6);
+            p  = QuaPol(f6);
             q  = p.conj('cplq');
             Q = [2 0; 0 4]; L = [1; -1]; k = 3;
             M = inv(Q); grad = -M*L; d = 0.5*(L'*M*L) - k;
             expf6 = [M(1,1) M(1,2) M(2,2) grad(1) grad(2) d];
-            expq  = QuaPoly(expf6);
+            expq  = QuaPol(expf6);
             % Compare both the coefficients and the values on sample dual points.
             testCase.verifyEqual(q.f, expq.f, 'AbsTol', 1e-12);
             S = [0 0; 1 1; -2 3; 0.5 -1; 4 -4];
@@ -78,7 +78,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % equals -k when s=L, since the minimizer of f is at x=-Q\L and f*(L)= -inf? -- instead
             % check the duality value at a chosen point against the direct sup over a fine grid.
             f6 = [2 0 4 1 -1 3];
-            p  = QuaPoly(f6);
+            p  = QuaPol(f6);
             q  = p.conj('cplq');
             s  = [3; 2];
             % direct: sup_x <s,x> - f(x), maximizer x* = Q\(s-L)
@@ -91,7 +91,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
         function indefiniteQuadraticNotImplemented(testCase)
             % f = xy is indefinite; its conjugate is not a full-domain quadratic (QuaPar, TODO).
-            p = QuaPoly([0 1 0 0 0 0]);
+            p = QuaPol([0 1 0 0 0 0]);
             testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
         end
 
@@ -99,7 +99,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % conjCPLQ dispatches a single bounded-triangle piece straight to conjPieceCPLQ (no
             % Step 1 needed for an affine piece). ell = -x over (0,0),(1,0),(0,1).
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            p = QuaPoly(V, E, [0 0 0 -1 0 0], F);
+            p = QuaPol(V, E, [0 0 0 -1 0 0], F);
             g = p.conj('cplq');
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 3);
@@ -116,7 +116,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             A = [2 1; 1 3]; b = [1; -2]; cc = 0.5;
             V = [0 0; 2 0; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             f6 = [A(1,1) A(1,2) A(2,2) b(1) b(2) cc];
-            p = QuaPoly(V, E, f6, F);
+            p = QuaPol(V, E, f6, F);
             g = p.conj('cplq');
             testCase.verifyEqual(g.f, conjPieceCPLQ(p).f, 'AbsTol', 1e-12);
             qf = @(x) 0.5*x'*A*x + b'*x + cc;
@@ -129,7 +129,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % must fall back to Step 1's affine envelope automatically. q = -(x^2+y^2) over
             % (0,0),(2,0),(0,2): f*(s) = max_i(<s,v_i> - q(v_i)).
             V = [0 0; 2 0; 0 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [-2 0 -2 0 0 0], F);
+            q = QuaPol(V, E, [-2 0 -2 0 0 0], F);
             g = q.conj('cplq');
             testCase.verifyClass(g, 'QuaPar');
             testCase.verifyEqual(g.nf, 3);
@@ -147,11 +147,11 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % Genuinely indefinite pieces with 0 or 1 convex edge are conjugated directly (no
             % envelope needed) -- exercise both through the orchestrator.
             V0 = [0 0; 1 0; 0 1]; E0 = [1 2 1; 2 3 1; 3 1 1]; F0 = [1 0; 1 0; 1 0];
-            g0 = QuaPoly(V0, E0, [0 1 0 0 0 0], F0).conj('cplq');
+            g0 = QuaPol(V0, E0, [0 1 0 0 0 0], F0).conj('cplq');
             testCase.verifyEqual(g0.nf, 3);   % zero convex edges -> 3-cone piecewise-linear
 
             V1 = [0 0; 2 0; 1 1]; E1 = [1 2 1; 2 3 1; 3 1 1]; F1 = [1 0; 1 0; 1 0];
-            g1 = QuaPoly(V1, E1, [0 1 0 0 0 0], F1).conj('cplq');
+            g1 = QuaPol(V1, E1, [0 1 0 0 0 0], F1).conj('cplq');
             testCase.verifyEqual(g1.nf, 6);   % one convex edge -> 6-face parabolic QuaPar
         end
 
@@ -160,7 +160,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % fall back to Step 1's rank-1-PSD envelope (COAP Appendix A.4) automatically, matching
             % what conjPieceCPLQTest/psdRank1QuadraticEndToEnd does by hand.
             V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);
             g = q.conj('cplq');
             env = convEnvCPLQ(q);
             testCase.verifyEqual(env.nf, 1);   % single-face envelope: no Step 3 needed here
@@ -191,7 +191,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % used elsewhere in this file's history -- see
             % maxQuaParTest.matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces).
             V = [0 0; 3 3; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);
             testCase.verifyEqual(convEnvCPLQ(q).nf, 4);   % confirms the (now recursive) split
             testCase.verifyError(@() q.conj('cplq'), 'conjPieceCPLQ:notImplemented');
         end
@@ -204,7 +204,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             E = [1 2 0;1 3 0;1 4 0;1 5 0];
             f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
             F = [1 2;2 3;3 4;4 1];
-            p = QuaPoly(V,E,f,F);
+            p = QuaPol(V,E,f,F);
             testCase.verifyEqual(p.nf, 4);
             testCase.verifyFalse(p.isDomBounded);
             testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
@@ -216,12 +216,12 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % exactly the case Case B's own numeric path (conjPieceCPLQ+maxQuaPar) cannot do
             % (maxQuaPar refuses curved-edge QuaPar inputs from independent triangles). Reuses
             % cplqAdapterTest's f=xy-over-a-diagonally-split-square example, but now going through
-            % the PUBLIC conj('cplq') entry point rather than calling quaPolyToPlq directly.
+            % the PUBLIC conj('cplq') entry point rather than calling quaPolToPlq directly.
             V = [0 0; 1 0; 1 1; 0 1];
             E = [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 1 2; 2 0; 2 0];
             f = [0 1 0 0 0 0; 0 1 0 0 0 0];   % xy on both faces
-            q = QuaPoly(V, E, f, F);
+            q = QuaPol(V, E, f, F);
             testCase.verifyEqual(q.nf, 2);
             testCase.verifyTrue(q.isDomBounded);
 
@@ -242,26 +242,26 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
         function cubicRejectedByOperators(testCase)
             % Cubic numerator is storable but rejected by operators (allowed for isConvex only).
-            p = QuaPoly([1 0 0 0 0 0 0 0 0 0]);   % x^3/6 term present -> degree 3
+            p = QuaPol([1 0 0 0 0 0 0 0 0 0]);   % x^3/6 term present -> degree 3
             testCase.verifyEqual(p.degree, 3);
             testCase.verifyError(@() p.conj('cplq'), 'PLQ:op:unsupportedType');
         end
 
         function unimplementedEnginesError(testCase)
-            p = QuaPoly.energy();
+            p = QuaPol.energy();
             testCase.verifyError(@() p.conj('pqp'),   'PLQ:conj:engine');
             testCase.verifyError(@() p.conj('graph'), 'PLQ:conj:engine');
         end
 
         function partialConjEngineRestriction(testCase)
-            p = QuaPoly.energy();
+            p = QuaPol.energy();
             testCase.verifyError(@() p.partialConj(1,'graph'), 'PLQ:partialConj:engine');
         end
 
         function plqvcAliasStillWorks(testCase)
-            % Backward compatibility: PLQVC is an alias of QuaPoly.
+            % Backward compatibility: PLQVC is an alias of QuaPol.
             p = PLQVC.energy();                 % inherited static factory
-            testCase.verifyTrue(isa(p, 'QuaPoly'));
+            testCase.verifyTrue(isa(p, 'QuaPol'));
             V = [0 0;-1 0; 0 1;1 0;0 -1];
             E = [1 2 0;1 3 0;1 4 0;1 5 0];
             f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];

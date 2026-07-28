@@ -13,16 +13,16 @@ issue unrelated to the conjugate pipeline).
 
 ## 0. Scope — read this first
 
-**CCA2's goal is `QuaPoly` conjugate and biconjugate.** It is *not* to cover every possible
+**CCA2's goal is `QuaPol` conjugate and biconjugate.** It is *not* to cover every possible
 `RatPol` or `QuaPar`.
 
-Everything downstream of a `QuaPoly` is a **special case**, and that special-ness is load-bearing:
+Everything downstream of a `QuaPol` is a **special case**, and that special-ness is load-bearing:
 
-- the convex envelope of any triangle coming from a `QuaPoly` is a very special case of `RatPol`;
+- the convex envelope of any triangle coming from a `QuaPol` is a very special case of `RatPol`;
 - the conjugate of those triangles is a very special case of `QuaPar` — e.g. a parabolic edge only
   ever occurs **surrounded by two parallel rays**.
 
-Consequently **hyperbolic edges never need to be stored**: they never arise from a `QuaPoly`
+Consequently **hyperbolic edges never need to be stored**: they never arise from a `QuaPol`
 conjugate/biconjugate, nor from any intermediate computation ([COAP]/[JOGO], Karmarkar & Lucet
 2026 — see `DESIGN.md`'s reference list).
 
@@ -36,8 +36,8 @@ Legend:
 | Mark | Meaning |
 |---|---|
 | **OK** | Implemented and covered by tests |
-| **GAP** | Genuinely not implemented; a caller can reach it with a legitimate `QuaPoly` |
-| **N/R** | Not reachable from a `QuaPoly` conjugate/biconjugate — out of scope by design, not a gap |
+| **GAP** | Genuinely not implemented; a caller can reach it with a legitimate `QuaPol` |
+| **N/R** | Not reachable from a `QuaPol` conjugate/biconjugate — out of scope by design, not a gap |
 | **INV** | Internal invariant; firing indicates a bug, not an unsupported input |
 
 ---
@@ -49,9 +49,9 @@ Legend:
 | Engine | Status | Guard |
 |---|---|---|
 | `'cplq'` (default) | **OK** — the only implemented engine | — |
-| `'pqp'` | **GAP** | `PLQ:conj:engine` — `QuaPoly.m:610`, `QuaPar.m:661` |
+| `'pqp'` | **GAP** | `PLQ:conj:engine` — `QuaPol.m:610`, `QuaPar.m:661` |
 | `'graph'` | **GAP** | same guard |
-| unknown name | **INV** (input validation) | `PLQ:conj:engine` — `QuaPoly.m:613`, `QuaPar.m:664` |
+| unknown name | **INV** (input validation) | `PLQ:conj:engine` — `QuaPol.m:613`, `QuaPar.m:664` |
 
 Two of the three engines named in the design are **not implemented at all**. This is the single
 largest functional gap.
@@ -60,13 +60,13 @@ largest functional gap.
 
 | Input | Status | Returns | Guard |
 |---|---|---|---|
-| Full-domain **strictly convex** quadratic (`nv==0, nf==1`) | **OK** | `QuaPoly` | — |
+| Full-domain **strictly convex** quadratic (`nv==0, nf==1`) | **OK** | `QuaPol` | — |
 | Full-domain **non-strictly-convex** quadratic | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:78` |
 | Single **bounded triangle** (`nf==1, nv==3, ne==3`) | **OK** | `QuaPar` | — |
 | General **bounded** domain (multi-face and/or non-triangular) | **OK** (symbolic; slow) | `QuaParCPLQ` | — |
 | **Unbounded** multi-face domain | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:103` |
 | Step 3 with a **non-triangular** envelope piece | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:161` |
-| Cubic (`PLC`) input | **N/R** — cubic is for `isConvex` only | — | `assertOperable`; `quaPolyToPlq:cubic` |
+| Cubic (`PLC`) input | **N/R** — cubic is for `isConvex` only | — | `assertOperable`; `quaPolToPlq:cubic` |
 
 ### 1.3 Per-piece conjugate (`conjPieceCPLQ.m`, Step 2)
 
@@ -98,7 +98,7 @@ Notes on the **N/R** rows — each is protected by an upstream invariant, not by
 | Engine | Status | Guard |
 |---|---|---|
 | `'cplq'` | **GAP** | `PLQ:conjCPLQ:partialNotImplemented` — `conjCPLQ.m:53` |
-| `'pqp'` | **GAP** | `PLQ:partialConj:engine` — `QuaPoly.m:628`, `QuaPar.m:679` |
+| `'pqp'` | **GAP** | `PLQ:partialConj:engine` — `QuaPol.m:628`, `QuaPar.m:679` |
 | `RatPol` input | **GAP** | `RatPol:partialConj:notImplemented` — `RatPol.m:659` |
 
 **`partialConj` is not implemented for any engine or any type.** The dispatch exists; every path
@@ -114,12 +114,12 @@ bounded-domain function is finite everywhere — an unbounded multi-face domain 
 
 | Input | `conj` | `biconj` | Why |
 |---|---|---|---|
-| **A** full-domain strictly convex quadratic | **OK** → `QuaPoly` | **OK** | conjugate is again a full-domain quadratic (Case A twice) |
+| **A** full-domain strictly convex quadratic | **OK** → `QuaPol` | **OK** | conjugate is again a full-domain quadratic (Case A twice) |
 | **B** single bounded triangle | **OK** → `QuaPar` | **GAP** | conjugate is a mesh `QuaPar` on an unbounded multi-face domain → `PLQ:conjCPLQ:notImplemented` (`conjCPLQ.m:103`) |
 | **C** general bounded multi-face domain | **OK** → `QuaParCPLQ` | **OK** | `QuaParCPLQ.conj` routes through cPLQ's own symbolic machinery, which handles it |
 
 Note the shape of this gap: the **symbolic** path supports the biconjugate while the faster
-**numeric** single-triangle path does not. Since conjugate *and biconjugate* of a `QuaPoly` is the
+**numeric** single-triangle path does not. Since conjugate *and biconjugate* of a `QuaPol` is the
 project's stated goal (§0), this is a first-class gap, not a corner case. Closing it means
 conjugating an unbounded multi-face `QuaPar` — either by extending `conjCPLQ`, or by routing Case B
 through the cPLQ path when a second conjugation is wanted.
@@ -127,7 +127,7 @@ Regression tests: `conjCPLQTest.biconjCoverageByInputCase`.
 
 | Operation | Status | Notes |
 |---|---|---|
-| `QuaPoly.biconj` | **partial** | see the table above |
+| `QuaPol.biconj` | **partial** | see the table above |
 | `QuaPar.biconj` | **partial** | same root cause — a full-domain `QuaPar` is not conjugable |
 | `RatPol.biconj` | **GAP** | `RatPol:biconj:notImplemented` — `RatPol.m:664` |
 | `RatPol.conj` | **GAP** | `RatPol:conj:notImplemented` — `RatPol.m:653` |
@@ -162,7 +162,7 @@ arrangement-validity violations. See `maxQuaPar.m`'s header VALIDATION block.
 
 ## 5. Arithmetic and derived operators
 
-| Operation | `QuaPoly` | `QuaPar` | `RatPol` |
+| Operation | `QuaPol` | `QuaPar` | `RatPol` |
 |---|---|---|---|
 | `add` / `sub` | **OK** | **OK** (partial, see below) | **GAP** — not implemented |
 | `scalarMul`, `negate` | **OK** | **OK** | **OK** |
@@ -174,8 +174,8 @@ arrangement-validity violations. See `maxQuaPar.m`'s header VALIDATION block.
 `addQuaPar` carries **11 distinct `addQuaPar:notImplemented` guards** (curved rays, >1 curved edge
 per face, degenerate conics, disconnected clip results, new unbounded curved rays, …). These are
 **GAP**s for arbitrary `QuaPar` input, but most are **N/R** for `QuaPar`s that arise from a
-`QuaPoly` conjugate. They have not been individually classified — doing so requires the same
-"can a QuaPoly conjugate reach this?" analysis applied per guard, and is listed as follow-up work.
+`QuaPol` conjugate. They have not been individually classified — doing so requires the same
+"can a QuaPol conjugate reach this?" analysis applied per guard, and is listed as follow-up work.
 
 Derived operators — all thin compositions, all **OK** within the limits of the `conj` they call:
 
@@ -192,10 +192,10 @@ Derived operators — all thin compositions, all **OK** within the limits of the
 
 | Item | Status |
 |---|---|
-| `QuaPoly`, `QuaPar`, `RatPol`, `QuaParCPLQ` | **OK** — each a standalone `classdef` |
+| `QuaPol`, `QuaPar`, `RatPol`, `QuaParCPLQ` | **OK** — each a standalone `classdef` |
 | Common `RatPar` parent (`DESIGN.md` II.3) | **GAP** — proposed, not built |
 
-The missing parent is what forces `conj`'s return type to vary by input shape (`QuaPoly` /
+The missing parent is what forces `conj`'s return type to vary by input shape (`QuaPol` /
 `QuaPar` / `QuaParCPLQ`). See `RETURN_TYPE.md`.
 
 ---
@@ -227,4 +227,4 @@ Ordered by how likely a downstream caller is to hit it:
 inherits from `RatPar` and `kind()` reports the concrete one. See `RETURN_TYPE.md` and `RatPar.m`.
 
 Items **not** on this list, deliberately: every **N/R** row above. They are unreachable from a
-`QuaPoly` conjugate/biconjugate and require no work.
+`QuaPol` conjugate/biconjugate and require no work.

@@ -1,6 +1,6 @@
 classdef cplqAdapterTest < matlab.unittest.TestCase
-% cplqAdapterTest  End-to-end tests for the Phase 1 cPLQ integration adapter (quaPolyToPlq.m /
-%   evalFunctionNDomain.m): CCA2 QuaPoly -> cPLQ plq -> triangulate/conjugate/maximum ->
+% cplqAdapterTest  End-to-end tests for the Phase 1 cPLQ integration adapter (quaPolToPlq.m /
+%   evalFunctionNDomain.m): CCA2 QuaPol -> cPLQ plq -> triangulate/conjugate/maximum ->
 %   evalFunctionNDomain, validated against numeric sup-sampling ground truth (this codebase's
 %   standard convention, e.g. conjPieceCPLQTest.m). See DESIGN.md II.5.1 and
 %   .claude/SESSION_HANDOFF.md.
@@ -12,10 +12,10 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
             % triangle, run through the cPLQ pipeline (.conjugate, no .maximum needed for one
             % piece), must agree with CCA2's own existing numeric conjPieceCPLQ implementation.
             V = [0 0; 2 0; 1 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            q = QuaPoly(V, E, [0 1 0 0 0 0], F);
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);
             g = conjPieceCPLQ(q);   % existing numeric implementation (ground truth-checked elsewhere)
 
-            p = quaPolyToPlq(q);
+            p = quaPolToPlq(q);
             testCase.verifyEqual(p.nPieces, 1);
             p = p.triangulate;
             p = p.conjugate;        % Step 1 (envelope) + Step 2 (conjugate) via cPLQ, symbolic
@@ -37,9 +37,9 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
             E = [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 1 2; 2 0; 2 0];
             f = [0 1 0 0 0 0; 0 1 0 0 0 0];   % xy on both faces
-            q = QuaPoly(V, E, f, F);
+            q = QuaPol(V, E, f, F);
 
-            p = quaPolyToPlq(q);
+            p = quaPolToPlq(q);
             testCase.verifyEqual(p.nPieces, 2);
             p = p.triangulate;
             p = p.maximum;           % Steps 1+2+3 via cPLQ: envelope, conjugate, max

@@ -1,7 +1,7 @@
 classdef QuaParCPLQ < RatPar & Qua
     % QuaParCPLQ  Wraps a cPLQ `functionNDomain` array (a list of (region, symbolicFunction)
     % pairs) so it can be composed by the same generic convex-analysis operators (conj/add/
-    % scalarMul/addQuadratic/addScaledEnergy/eval) that QuaPoly/QuaPar already support -- the
+    % scalarMul/addQuadratic/addScaledEnergy/eval) that QuaPol/QuaPar already support -- the
     % "QuaPar-like return type" conjCPLQ's Case C needs (DESIGN.md II.5.1,
     % .claude/SESSION_HANDOFF.md "Next steps"). infConv/moreau/proxAverage/QuaPar.biconj call
     % these operators by plain function name (conj(f,engine), add(f,g), scalarMul(f,c), ...), so
@@ -25,7 +25,7 @@ classdef QuaParCPLQ < RatPar & Qua
     % pairwise (same domain-intersection idiom as functionNDomain.times/mtimes) and sums their
     % values on each overlap cell -- correct whenever both operands' pieces jointly tile the SAME
     % region (true for two conjugates of compact-domain primal functions, where dom f*=R^2, the
-    % expected use case for infConv/proxAverage). Mixed QuaParCPLQ/QuaPoly/QuaPar composition
+    % expected use case for infConv/proxAverage). Mixed QuaParCPLQ/QuaPol/QuaPar composition
     % (e.g. infConv of a Case A/B function with a Case C one) is NOT supported -- add errors with
     % an unrecognized-class MATLAB error rather than silently doing the wrong thing.
 
@@ -40,7 +40,7 @@ classdef QuaParCPLQ < RatPar & Qua
         end
 
         function assertOperable(obj) %#ok<MANU>
-            % objective: interface parity with QuaPoly/QuaPar.assertOperable -- a QuaParCPLQ is
+            % objective: interface parity with QuaPol/QuaPar.assertOperable -- a QuaParCPLQ is
             % always the quadratic-on-parabolic result of a 'cplq' conjugate, never cubic, so
             % there is nothing to reject here.
         end

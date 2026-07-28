@@ -2,7 +2,7 @@ classdef (Abstract) RatPar < Rat & Par
    % RatPar: the common PARENT of every function type CCA2's operators return.
    %
    % PURPOSE -- one static return type. Before this class existed, `conj` returned a DIFFERENT
-   % class depending on the shape of its input (QuaPoly for a full-domain strictly convex
+   % class depending on the shape of its input (QuaPol for a full-domain strictly convex
    % quadratic, QuaPar for a single bounded triangle, QuaParCPLQ for a general bounded domain), so
    % no caller could write `g = f.conj()` without dispatching on class first. Every one of those
    % is now a RatPar, so `conj`/`biconj`/`convEnv`/... are statically typed: they return a RatPar,
@@ -58,7 +58,7 @@ classdef (Abstract) RatPar < Rat & Par
    % auditing every operator, which all rely on copy-on-assign.
    %
    % SCOPE. Introducing RatPar does NOT mean implementing every possible RatPar. CCA2's goal is
-   % QuaPoly conjugate/biconjugate; the RatPols and QuaPars that actually arise from it are very
+   % QuaPol conjugate/biconjugate; the RatPols and QuaPars that actually arise from it are very
    % special cases (e.g. a parabolic edge only ever occurs surrounded by two parallel rays, and
    % hyperbolic edges never arise at all -- see [COAP]/[JOGO] and SUPPORT_MATRIX.md section 0).
    % RatPar exists here as a COMMON TYPE, not as a general rational-cubic-on-parabolic engine.
@@ -141,7 +141,7 @@ classdef (Abstract) RatPar < Rat & Par
    % MATLAB offers no virtual-inheritance escape (a child cannot redefine an inherited property:
    % MATLAB:class:RedefinedProperty), so the protocol above is the fix, not a workaround.
    %
-   % Consequence for callers: `QuaPoly()`, `QuaPar()`, `RatPol()` with no arguments now return a
+   % Consequence for callers: `QuaPol()`, `QuaPar()`, `RatPol()` with no arguments now return a
    % blank object instead of raising an error. That is also what MATLAB itself needs for
    % `ClassName.empty`, object arrays and `load`, so it is a gain rather than a concession.
    % ---------------------------------------------------------------------------------------
@@ -177,7 +177,7 @@ classdef (Abstract) RatPar < Rat & Par
        function k = kind(obj)
        % objective: which concrete type this RatPar actually is -- the "type flag" callers switch
        %            on after receiving a statically-typed RatPar from conj/biconj/convEnv/...
-       % [output] k : one of 'QuaPoly' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
+       % [output] k : one of 'QuaPol' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
        %
        % Derived from the object's real class rather than stored, so it can never disagree with
        % what the object IS -- see this class's header. Prefer kind() over class() in user code:
@@ -187,7 +187,7 @@ classdef (Abstract) RatPar < Rat & Par
        end
 
        function tf = isMeshed(obj)
-       % objective: whether this object carries an explicit V/E/F mesh (true for QuaPoly, RatPol
+       % objective: whether this object carries an explicit V/E/F mesh (true for QuaPol, RatPol
        %            and QuaPar) or is still held in cPLQ's symbolic form with the mesh not yet
        %            reconstructed (false for QuaParCPLQ, whose inherited mesh properties are empty
        %            precisely because reconstructing V/E/Ec/F/P from it is still open -- see
