@@ -1,4 +1,4 @@
-classdef RatPol < RatPar
+classdef RatPol < RatPar & Pol
    % RatPol: a value class for piecewise RATional functions on a POLYhedral subdivision.
    % Each face carries a function r(x,y) = numerator / denominator where the numerator is a
    % quadratic and the denominator is a (nonzero) linear function:
@@ -38,11 +38,11 @@ classdef RatPol < RatPar
    % subdivision -- adds exactly one thing of its own, the per-face denominator `den` below;
    % inherited `f` is this class's NUMERATOR, and the value on face k is
    % (f(k,:) in the cubic basis) / (den(k,:) as g*x+h*y+k0). See RatPar.m for the hierarchy.
-   properties
-        den (:,3){mustBeNumeric} % nf x 3 matrix of per-face linear DENOMINATORS: den(k,:)=[g h k0]
-            % gives the denominator g*x + h*y + k0 of the rational function on face k.
-            % den(k,:) = [0 0 1] (the default) means denominator 1, i.e. a plain polynomial face.
-   end
+   % RatPol declares NO properties of its own. `den` -- its defining feature -- lives on RatPar
+   % together with everything else, because a property defined in two superclasses is fatal and
+   % unresolvable in MATLAB, which would make QuaPol < RatPol & QuaPar impossible. What makes this
+   % class rational-on-POLYhedral is the `Pol` trait above: RatPar's set.Ec reads it and pins every
+   % edge conic to zero. See RatPar.m.
    
    % Class methods
    methods
@@ -108,6 +108,7 @@ classdef RatPol < RatPar
                 end
                 obj.den = denIn;
             end
+            obj = obj.setPinnedDefaults();   % Ec:=0 -- see RatPar.setPinnedDefaults
             obj.dom = obj.createDom;
        end % constructor
         

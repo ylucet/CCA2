@@ -66,17 +66,29 @@ code. Cross-check the actual repo file list before assuming an operator or engin
 
 **Implemented** (MATLAB, in the repo root):
 - Classes `QuaPoly` (leaf/input type, formerly `PLQVC`), `QuaPar` (conjugate `f*`), `RatPol`
-  (convex envelope `f**`), `QuaParCPLQ` (a conjugate still in cPLQ's symbolic form) — **now all
-  organized under the common `RatPar` parent** (II.3's hierarchy, built 2026-07-27). `RatPar` is
-  abstract and declares the nine shared mesh properties (`nv, ne, nf, V, E, f, F, P, dom`), which
-  previously appeared verbatim in each class; children add only what is their own (`RatPol.den`,
-  `QuaPar.Ec`, `QuaPoly` nothing). `kind()` returns the concrete type name, derived from
-  `class(obj)` rather than stored so it cannot drift; `isMeshed()` separates the symbolic
-  `QuaParCPLQ` form from the three meshed types. **The four types are SIBLINGS, not a chain**:
-  chaining `QuaPoly < RatPol` would make `isa(aQuaPoly,'RatPol')` true and break code that reads
-  `.den` after such a test (e.g. `conjPieceCPLQ`'s rational-piece guard). This gives every
-  operator a single static return type — see `RETURN_TYPE.md`, `RatPar.m` and `RatParTest.m`.
-  The refactor changed no test: 163/163 passed before adding `RatParTest`.
+  (convex envelope `f**`), `QuaParCPLQ` (a conjugate still in cPLQ's symbolic form) — **now
+  organized as II.3's `RatPar` hierarchy** (built 2026-07-27), giving every operator a single
+  static return type. The design is a **two-axis product lattice**, not a list: a piecewise
+  function is a choice of FUNCTION type (`Rat` rational ⊃ `Qua` polynomial, pinning the denominator
+  to 1) times SUBDIVISION type (`Par` parabolic ⊃ `Pol` polyhedral, pinning the edge conics to 0).
+  The axes are property-less abstract markers (`Rat.m`, `Qua.m`, `Par.m`, `Pol.m`) so either can be
+  queried alone — `isa(f,'Qua')`, `isa(f,'Pol')` — and the four named types are the grid's cells,
+  with inheritance following the grid's own partial order:
+  `RatPar < Rat & Par`, `RatPol < RatPar & Pol`, `QuaPar < RatPar & Qua`,
+  `QuaPoly < RatPol & QuaPar` (a genuine diamond — that is what a product lattice is);
+  `QuaParCPLQ < RatPar & Qua` carries the same maths as a `QuaPar` but no mesh, so it deliberately
+  does NOT inherit from `QuaPar` (`isMeshed()` is the intended test).
+  **All data lives on `RatPar` alone** — including `den` and `Ec` — because MATLAB makes a property
+  defined in two superclasses fatal AND unresolvable (`conflictingSuperClassProperty`;
+  `RedefinedProperty` in the child), which would otherwise make `QuaPoly` unconstructible. Each
+  type's pinned value is therefore enforced by `set.den`/`set.Ec` validators that read the object's
+  own traits: one definition site, whole lattice, and no type can lie about itself. `kind()`
+  returns the concrete type name derived from `class(obj)` rather than stored, so it cannot drift.
+  A **leaf-only constructor protocol** is required and documented in `RatPar.m`: MATLAB re-runs a
+  shared base constructor once per inheritance path, and the second run *clobbers* what the first
+  path wrote (verified by probe), so every constructor has a no-argument path that writes nothing.
+  Degree is deliberately **not** a type (no code dispatches on it) — see `RETURN_TYPE.md`.
+  See `RatPar.m`, `RatParTest.m`, `RETURN_TYPE.md`. The moves changed no existing test.
 - Conjugate engine **`'cplq'` only** (`conjCPLQ.m`, `conjPieceCPLQ.m`, `convEnvCPLQ.m`) —
   incremental; each file's own header STATUS block lists exactly which piece-classification
   cases are covered so far.

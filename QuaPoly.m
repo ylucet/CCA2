@@ -1,4 +1,4 @@
-classdef QuaPoly < RatPar
+classdef QuaPoly < RatPol & QuaPar
    % QuaPoly: a value class for piecewise QUAdratic functions on a POLYhedral subdivision.
    % This is the leaf (input) type of the CCA2 class hierarchy described in DESIGN.md:
    %   RatPar (rational cubic/linear on parabolic) > RatPol, QuaPar > QuaPoly.
@@ -72,6 +72,7 @@ classdef QuaPoly < RatPar
              else
                 error("Invalid input arguments in QuaPoly constructor; need 4 arguments but got %i", nargin);
             end        
+            obj = obj.setPinnedDefaults();   % den:=1, Ec:=0 -- see RatPar.setPinnedDefaults
             obj.dom = obj.createDom;
        end % constructor
         

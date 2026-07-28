@@ -44,29 +44,48 @@ general release. The largest gaps today: `partialConj` is unimplemented for ever
 
 ## Types
 
-All function types inherit from **`RatPar`** (RATional on a PARabolic subdivision), so every
-operator has a single static return type. `kind()` reports what an object actually is.
+A piecewise function is built from **two independent choices**: the *function* type and the
+*subdivision* type. Each is an axis with a general case and one specialization:
+
+| Axis | General | Specialization | Pinned by the specialization |
+|---|---|---|---|
+| Function | `Rat` — rational | `Qua` — polynomial | denominator ≡ 1 |
+| Subdivision | `Par` — parabolic | `Pol` — polyhedral | edge conics ≡ 0 |
+
+The four named types are the four cells of that grid, and inheritance is the grid's own partial
+order — a genuine diamond, because that is what a product lattice is:
 
 ```
-RatPar (abstract)                      — common parent; carries the V/E/f/F/P mesh
-  ├── QuaPoly      quadratic on polyhedral    — the input type
-  ├── RatPol       rational on polyhedral     — adds `den` (per-face linear denominator)
-  ├── QuaPar       quadratic on parabolic     — adds `Ec`  (per-edge conic)
-  └── QuaParCPLQ   a QuaPar still in symbolic form (mesh not reconstructed)
+             RatPar        rational on parabolic     (abstract; nothing produces one yet)
+             /    \
+        RatPol    QuaPar   rational on polyhedral / quadratic on parabolic
+             \    /
+             QuaPoly       quadratic on polyhedral  — the input type
+
+        QuaParCPLQ         same maths as QuaPar, still in symbolic form (no mesh)
 ```
 
 ```matlab
 g = f.conj();          % always a RatPar
-switch g.kind()        % 'QuaPoly' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
-    ...
-end
+g.kind()               % 'QuaPoly' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
 g.isMeshed()           % false only for the symbolic QuaParCPLQ form
+
+isa(g, 'Qua')          % ask about ONE axis: is the function a polynomial?
+isa(g, 'Pol')          % ...is the subdivision polyhedral?
 ```
 
-The four types are **siblings**, not a chain: `QuaPoly` is mathematically a special case of
-`RatPol`, but subclassing it would make `isa(aQuaPoly,'RatPol')` true and break code that reads
-`.den` after such a test. `kind()` is derived from the real class, never stored, so it cannot drift.
-See `RETURN_TYPE.md`.
+The axis markers are what let you query one axis without enumerating combinations, and they keep
+working when a type is added. All data lives on `RatPar` alone — MATLAB makes a property defined in
+two superclasses fatal *and* unresolvable, so `QuaPoly < RatPol & QuaPar` requires it. Each type's
+pinned values are enforced instead by validators that read the object's own traits, so no type can
+be made to lie about itself. `kind()` is derived from the real class, never stored, so it cannot
+drift. See `RETURN_TYPE.md` and `RatPar.m`.
+
+**Not modelled as a type: the numerator's degree.** `f` is stored in the 10-wide cubic basis, but
+nothing *dispatches* on degree — every consumer either rejects a cubic outright or ignores the
+distinction. A type should track what changes the algorithm, not what changes the data's shape, so
+degree stays a runtime check rather than becoming a `Cub` class (which would double the lattice for
+no dispatch benefit).
 
 ---
 
@@ -149,7 +168,9 @@ leave users wondering which to use.
 
 | File | Purpose |
 |---|---|
-| `RatPar.m` | abstract parent of all function types; `kind()`, `isMeshed()` |
+| `Rat.m`, `Qua.m` | function-type axis markers (rational ⊃ polynomial) |
+| `Par.m`, `Pol.m` | subdivision-type axis markers (parabolic ⊃ polyhedral) |
+| `RatPar.m` | abstract parent of all function types; holds all data; `kind()`, `isMeshed()` |
 | `QuaPoly.m` | quadratic on polyhedral — the input type |
 | `QuaPar.m` | quadratic on parabolic — the conjugate's type |
 | `RatPol.m` | rational on polyhedral — the convex envelope's type |

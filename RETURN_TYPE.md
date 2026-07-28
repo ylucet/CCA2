@@ -79,7 +79,45 @@ Same as C but derive "is this really a `QuaPoly`?" by inspecting the data (all d
 
 ---
 
-## Recommendation
+## Outcome (implemented 2026-07-27)
+
+**Option C**, refined during design review into a **two-axis product lattice**. A piecewise
+function is built from a function type (`Rat` ⊃ `Qua`) and a subdivision type (`Par` ⊃ `Pol`); the
+four named classes are the cells of that grid and inheritance is the grid's partial order:
+
+```
+      RatPar < Rat & Par            (abstract)
+      /    \
+ RatPol    QuaPar                   < RatPar & Pol   /   < RatPar & Qua
+      \    /
+      QuaPol                        < RatPol & QuaPar
+```
+
+Four MATLAB-specific facts settled the mechanics, each verified by probe before committing:
+
+| Probe | Result | Consequence |
+|---|---|---|
+| Diamond with disjoint properties | works, merged once | the lattice is expressible |
+| Same property defined in two superclasses | **fatal**, `conflictingSuperClassProperty` | — |
+| Child redefining it | **fatal**, `RedefinedProperty` | **unresolvable** — so pinning cannot be done by overriding |
+| Same *method* in two superclasses, child overrides | works | method-level conflicts *are* resolvable |
+| Property-less abstract markers under MI | works, `isa` true on both axes | traits are viable |
+| Base constructor in a diamond | **runs twice, and clobbers** | forced the leaf-only constructor protocol |
+
+So `den` and `Ec` live on `RatPar` alone, and each type's pinned value (`den ≡ 1` for a `Qua`,
+`Ec ≡ 0` for a `Pol`) is enforced by `set.` validators that read the object's own **traits** — one
+definition site covering the whole lattice, and no type can be made to lie about itself.
+
+`kind()` remains a method over `class(obj)` rather than a stored field, so it cannot drift.
+
+**Degree is deliberately not a type.** `Rat` is really *cubic numerator over linear denominator*, so
+one might add `Cub` between `Rat` and `Qua` — but nothing in the toolbox dispatches on degree (every
+consumer either rejects cubics or ignores the distinction; only `isConvex` accepts them). A type
+should track what changes the *algorithm*, not what changes the data's shape. Promoting degree would
+make the lattice a 2×2×2 product — eight combinations — for no dispatch benefit. Revisit only if an
+operator ever *produces* cubics rather than merely tolerating them.
+
+### Original recommendation, for the record
 
 **Option C**, matching your reading: everything returns a `RatPar` carrying a type flag indicating
 whether it is in fact a `RatPol`, `QuaPoly`, or `QuaPar`.

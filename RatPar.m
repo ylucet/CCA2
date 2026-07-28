@@ -1,4 +1,4 @@
-classdef (Abstract) RatPar
+classdef (Abstract) RatPar < Rat & Par
    % RatPar: the common PARENT of every function type CCA2's operators return.
    %
    % PURPOSE -- one static return type. Before this class existed, `conj` returned a DIFFERENT
@@ -8,21 +8,42 @@ classdef (Abstract) RatPar
    % is now a RatPar, so `conj`/`biconj`/`convEnv`/... are statically typed: they return a RatPar,
    % and `kind(g)` says what it actually is. See RETURN_TYPE.md.
    %
-   % WHY THIS PARENT, AND WHY THESE CHILDREN. The name follows DESIGN.md II.3: RatPar = RATional
-   % (quadratic/linear) on a PARabolic subdivision, the most general type in the family. The
-   % specializations are:
-   %      RatPar (rational on parabolic)                <- this class, abstract
-   %        |-- RatPol   rational on POLYhedral         (adds `den`: per-face linear denominator)
-   %        |-- QuaPar   QUAdratic on PARabolic         (adds `Ec` : per-edge conic)
-   %        |-- QuaPoly  QUAdratic on POLYhedral        (adds neither)
-   %        |-- QuaParCPLQ  a QuaPar still in cPLQ's own symbolic form (mesh not reconstructed)
+   % TWO AXES, NOT ONE LIST. A piecewise function is built from two independent choices: the
+   % FUNCTION type (rational, or its polynomial specialization) and the SUBDIVISION type (parabolic,
+   % or its polyhedral specialization). Those axes are modelled as property-less abstract markers --
+   % Rat with Qua < Rat, and Par with Pol < Par -- so either axis can be queried on its own:
    %
-   % NOTE that QuaPoly is mathematically a special case of RatPol (denominator identically 1), and
-   % RatPol/QuaPar are both special cases of RatPar -- but the MATLAB hierarchy deliberately makes
-   % all four SIBLINGS under RatPar rather than chaining QuaPoly < RatPol. Chaining would make
-   % `isa(aQuaPoly,'RatPol')` true, and code that (correctly) reads `p.den` after such a test would
-   % then fail on a QuaPoly, which has no denominator to read -- e.g. conjPieceCPLQ's rational-piece
-   % guard. Siblings keep every existing `isa` test meaning exactly what it meant before.
+   %       isa(f,'Qua')   the denominator is pinned to 1
+   %       isa(f,'Pol')   every edge conic is pinned to 0
+   %
+   % The four named types are the four cells of that 2x2 grid, and the inheritance is the grid's own
+   % partial order -- a genuine diamond, because that is what a product lattice IS:
+   %
+   %                 RatPar  (rational on parabolic)     < Rat & Par     <- this class
+   %                 /    \
+   %      (rational on    (quadratic on
+   %       polyhedral)     parabolic)
+   %          RatPol        QuaPar                       < RatPar & Pol / RatPar & Qua
+   %                 \    /
+   %                 QuaPol  (quadratic on polyhedral)   < RatPol & QuaPar
+   %
+   %       QuaParCPLQ  a QuaPar still in cPLQ's own symbolic form         < RatPar & Qua
+   %
+   % QuaPol IS-A RatPol (a polynomial is a rational with unit denominator) and IS-A QuaPar (a
+   % polyhedral subdivision is a parabolic one with no curvature), so both edges of the diamond are
+   % mathematically honest and `isa` reports the full lattice.
+   %
+   % DATA LIVES HERE, ONCE. `den` and `Ec` are declared in this class alone -- NOT overridden in the
+   % children -- because MATLAB makes a property defined in two superclasses fatal AND unresolvable
+   % (MATLAB:class:conflictingSuperClassProperty; a child cannot redefine it either:
+   % MATLAB:class:RedefinedProperty). Had RatPol declared `den` and QuaPar declared its own pinned
+   % `den`, QuaPol could not exist. Instead each type's pinned values are enforced by the
+   % `set.den`/`set.Ec` validators below, which read the object's own TRAITS -- so one definition
+   % site serves the whole lattice and no type can be made to lie about itself.
+   %
+   % QuaParCPLQ deliberately does NOT inherit from QuaPar: it carries the same mathematical type
+   % (marked Qua, and Par via this class) but not the mesh, so making `isa(x,'QuaPar')` true for it
+   % would invite callers to read V/E/F that it does not have. `isMeshed()` is the intended test.
    %
    % NO STORED TYPE FLAG, BY DESIGN. `kind()` is a METHOD returning the object's actual class name,
    % not a property set at construction: a stored flag can drift out of sync with the real class
@@ -43,10 +64,9 @@ classdef (Abstract) RatPar
    % RatPar exists here as a COMMON TYPE, not as a general rational-cubic-on-parabolic engine.
 
    properties
-        % The mesh every child shares, declared here ONCE. These nine were previously repeated
-        % verbatim (identical names, sizes and validators) in QuaPoly.m, RatPol.m and QuaPar.m;
-        % they are reproduced unchanged, so behaviour is identical. Children add only what is
-        % genuinely their own: RatPol adds `den`, QuaPar adds `Ec`, QuaPoly adds nothing.
+        % Everything the lattice shares, declared here ONCE -- the nine mesh properties AND the two
+        % axis-varying ones (`den`, `Ec`). No child declares any property of its own; see the
+        % "DATA LIVES HERE, ONCE" note above for why that is forced rather than merely tidy.
         nv {mustBeInteger,mustBeNonnegative}%number of vertices
         ne {mustBeInteger,mustBeNonnegative}%number of edges
         nf {mustBeInteger,mustBeNonnegative}%number of faces
@@ -86,6 +106,19 @@ classdef (Abstract) RatPar
             %   P: if nonempty, the domain has dimension two; in that case P stores the indexes of the face
             %       representing the domain with the INVERSE convention as P above to obtain a unique representation.
             %   isConvex: boolean. true if the domain is convex
+
+        % ---- the two AXIS-VARYING properties -------------------------------------------------
+        % Each is general on its own axis and pinned to a trivial value on the specialization; the
+        % pinning is enforced by the set validators below, keyed on the object's own traits.
+        den (:,3){mustBeNumeric} % nf x 3 per-face linear DENOMINATORS: den(k,:)=[g h k0] gives the
+            % denominator g*x + h*y + k0 of the rational function on face k, so the value on face k
+            % is (f(k,:) in the cubic basis) / den(k,:). PINNED to [0 0 1] (i.e. 1) on every face
+            % when the object is a Qua -- a polynomial is exactly a rational with unit denominator.
+        Ec (:,6){mustBeNumeric} % ne x 6 per-edge conic: Ec(j,:)=[a b c d e f] for the curve
+            % a x^2 + b xy + c y^2 + d x + e y + f = 0, which must be a PARABOLA (b^2-4ac=0).
+            % An all-zero row means edge j is the straight line through its endpoints. PINNED to
+            % all-zero when the object is a Pol -- a polyhedral subdivision is exactly a parabolic
+            % one with no curvature.
    end
 
    % ---------------------------------------------------------------------------------------
@@ -114,6 +147,33 @@ classdef (Abstract) RatPar
    % ---------------------------------------------------------------------------------------
 
    methods
+       function obj = set.den(obj, val)
+       % Enforce the Qua axis from the single place `den` is defined: a Qua IS a Rat whose
+       % denominator is 1, so a QuaPar/QuaPol/QuaParCPLQ must never carry a non-trivial one.
+       % Reading the trait (rather than the class name) is what lets one validator serve the whole
+       % lattice, including types added later.
+            if ~isempty(val) && isa(obj,'Qua')
+                trivial = repmat([0 0 1], size(val,1), 1);
+                if any(val ~= trivial, 'all')
+                    error('RatPar:denMustBeTrivial', ...
+                        ['a %s is quadratic (isa Qua), so its denominator is identically 1: ' ...
+                         'den must be [0 0 1] on every face.'], class(obj));
+                end
+            end
+            obj.den = val;
+       end
+
+       function obj = set.Ec(obj, val)
+       % Enforce the Pol axis from the single place `Ec` is defined: a Pol IS a Par with no
+       % curvature, so a RatPol/QuaPol must never carry a nonzero conic. See set.den.
+            if ~isempty(val) && isa(obj,'Pol') && any(val ~= 0, 'all')
+                error('RatPar:EcMustBeZero', ...
+                    ['a %s is polyhedral (isa Pol), so every edge is straight: ' ...
+                     'Ec must be all zero.'], class(obj));
+            end
+            obj.Ec = val;
+       end
+
        function k = kind(obj)
        % objective: which concrete type this RatPar actually is -- the "type flag" callers switch
        %            on after receiving a statically-typed RatPar from conj/biconj/convEnv/...
@@ -134,6 +194,23 @@ classdef (Abstract) RatPar
        %            QuaParCPLQ.m and DESIGN.md II.5.1).
        % [output] tf : logical
             tf = ~isempty(obj.f);
+       end
+   end
+
+   methods (Access = protected)
+       function obj = setPinnedDefaults(obj)
+       % Fill in whichever axis-varying property this type pins, so that EVERY constructed object
+       % is fully formed with respect to the lattice. A QuaPol really is a RatPol with unit
+       % denominators and a QuaPar with zero conics, so it should carry them: code that legitimately
+       % reads `p.den` after an isa(p,'RatPol') test (e.g. conjPieceCPLQ's rational-piece guard)
+       % must not trip over an empty matrix just because the object happens to be the pinned
+       % specialization.
+       %
+       % Called by the LEAF constructor only, after it has written the mesh -- see this file's
+       % CONSTRUCTOR PROTOCOL note. Leaves whatever is already set untouched, so a RatPol keeps its
+       % genuine denominators and a QuaPar keeps its genuine conics.
+            if isempty(obj.den), obj.den = repmat([0 0 1], size(obj.f,1), 1); end
+            if isempty(obj.Ec),  obj.Ec  = zeros(size(obj.E,1), 6); end
        end
    end
 end

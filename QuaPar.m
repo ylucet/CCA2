@@ -1,4 +1,4 @@
-classdef QuaPar < RatPar
+classdef QuaPar < RatPar & Qua
    % QuaPar: a value class for piecewise QUAdratic functions on a PARabolic subdivision.
    % It is the type of the Fenchel conjugate f* of a PLQ function (see DESIGN.md and
    %   [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34;
@@ -45,12 +45,11 @@ classdef QuaPar < RatPar
    % declares them verbatim as they used to appear here. QuaPar -- QUAdratic on a PARabolic
    % subdivision -- adds exactly one thing of its own, the per-edge conic `Ec` below (a QuaPar with
    % Ec all-zero behaves exactly like a QuaPoly). See RatPar.m for the hierarchy.
-   properties
-        Ec (:,6){mustBeNumeric} % ne x 6 matrix of conic coefficients per edge: Ec(j,:)=[a b c d e f]
-            % for the curve a x^2 + b xy + c y^2 + d x + e y + f = 0, a PARABOLA (b^2-4ac=0).
-            % An all-zero row means edge j is the straight line through its endpoints (linear edge).
-            % Defaults to zeros(ne,6) (all linear) when omitted, in which case QuaPar == QuaPoly.
-   end
+   % QuaPar declares NO properties of its own. `Ec` -- its defining feature -- lives on RatPar
+   % together with everything else, because a property defined in two superclasses is fatal and
+   % unresolvable in MATLAB, which would make QuaPol < RatPol & QuaPar impossible. What makes this
+   % class QUAdratic-on-parabolic is the `Qua` trait above: RatPar's set.den reads it and pins the
+   % denominator to 1 on every face. See RatPar.m.
    
    % Class methods
    methods
@@ -70,6 +69,7 @@ classdef QuaPar < RatPar
                 fc = varargin{1}; [n1,n2] = size(fc);
                 obj.f = [zeros(n1,10-n2), fc];
                 obj.nv=0; obj.ne=0; obj.nf=1; obj.V=[]; obj.E=[]; obj.Ec=[]; obj.F=[];
+                obj = obj.setPinnedDefaults();   % den:=1 -- see RatPar.setPinnedDefaults
                 obj.dom = obj.createDom; return;
             end
             switch nargin
@@ -110,6 +110,7 @@ classdef QuaPar < RatPar
                     error('max index in P must be equal to size(F,1)');
                 end
             end
+            obj = obj.setPinnedDefaults();   % den:=1 -- see RatPar.setPinnedDefaults
             obj.dom = obj.createDom;
        end % constructor
         
