@@ -27,7 +27,11 @@ classdef QuaPoly < RatPar
    
    % Class methods
    methods
-       function obj = QuaPoly(varargin) % constructor    
+       function obj = QuaPoly(varargin) % constructor
+            % No-argument path writes NOTHING -- see RatPar.m's CONSTRUCTOR PROTOCOL note. This is
+            % what lets a subclass built by multiple inheritance re-run this constructor on its
+            % second inheritance path without clobbering state the first path already wrote.
+            if nargin == 0, return; end
             ind=3; if nargin==1, ind=1; end%handle Property f in both cases: quadratic and cubic
             [n1,n2] = size(varargin{ind});
             obj.f = [zeros(n1,10-n2), varargin{ind}];%pad with zeros for noncubic functions

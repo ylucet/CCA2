@@ -88,6 +88,31 @@ classdef (Abstract) RatPar
             %   isConvex: boolean. true if the domain is convex
    end
 
+   % ---------------------------------------------------------------------------------------
+   % CONSTRUCTOR PROTOCOL -- leaf-only initialization. READ BEFORE EDITING ANY CONSTRUCTOR.
+   %
+   % Rule: every constructor in this hierarchy must have a NO-ARGUMENT path that writes NOTHING
+   % and returns immediately, and all state-writing must happen in the LEAF constructor after its
+   % superclass constructors have run.
+   %
+   % Why: with multiple inheritance MATLAB re-runs a shared base constructor ONCE PER INHERITANCE
+   % PATH. For the planned lattice (QuaPol < RatPol & QuaPar, both < RatPar) constructing a QuaPol
+   % invokes RatPar's constructor TWICE:
+   %       RatPar -> RatPol -> RatPar -> QuaPar -> QuaPol
+   % That is not merely wasteful: the SECOND base invocation OVERWRITES whatever the first
+   % inheritance path already wrote. Verified directly -- with a mid class writing a field after
+   % its own super-call, the constructed leaf ended up with the BASE's value, silently discarding
+   % the mid class's:
+   %       RatPol alone : f = set-by-RatPol
+   %       QuaPol       : f = set-by-RatPar        <- clobbered
+   % MATLAB offers no virtual-inheritance escape (a child cannot redefine an inherited property:
+   % MATLAB:class:RedefinedProperty), so the protocol above is the fix, not a workaround.
+   %
+   % Consequence for callers: `QuaPoly()`, `QuaPar()`, `RatPol()` with no arguments now return a
+   % blank object instead of raising an error. That is also what MATLAB itself needs for
+   % `ClassName.empty`, object arrays and `load`, so it is a gain rather than a concession.
+   % ---------------------------------------------------------------------------------------
+
    methods
        function k = kind(obj)
        % objective: which concrete type this RatPar actually is -- the "type flag" callers switch

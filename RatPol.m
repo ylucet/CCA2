@@ -52,6 +52,11 @@ classdef RatPol < RatPar
             %   RatPol(f,den)        full-domain rational (den = 1x3 [g h k])
             %   RatPol(V,E,f,F)      polyhedral, denominator 1 on every face (behaves like QuaPoly)
             %   RatPol(V,E,f,F,den)  polyhedral rational (den = nf x 3 linear denominators)
+            %   RatPol()             blank object, writes nothing (see below)
+            % The no-argument path writes NOTHING -- see RatPar.m's CONSTRUCTOR PROTOCOL note. It
+            % is what lets a subclass built by multiple inheritance re-run this constructor on its
+            % second inheritance path without clobbering state the first path already wrote.
+            if nargin == 0, return; end
             denIn = [];
             switch nargin
                 case 1, fc = varargin{1};

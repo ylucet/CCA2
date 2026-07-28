@@ -60,6 +60,11 @@ classdef QuaPar < RatPar
             %   QuaPar(V,E,f,F)        polyhedral (all linear edges); Ec defaults to zeros
             %   QuaPar(V,E,Ec,f,F)     parabolic edges; adjacency P built automatically (linear-style)
             %   QuaPar(V,E,Ec,f,F,P)   parabolic edges with explicit adjacency P (use for curved faces)
+            %   QuaPar()               blank object, writes nothing (see below)
+            % The no-argument path writes NOTHING -- see RatPar.m's CONSTRUCTOR PROTOCOL note. It
+            % is what lets a subclass built by multiple inheritance re-run this constructor on its
+            % second inheritance path without clobbering state the first path already wrote.
+            if nargin == 0, return; end
             Pprovided = [];
             if nargin == 1 % full-domain quadratic entered as f
                 fc = varargin{1}; [n1,n2] = size(fc);
