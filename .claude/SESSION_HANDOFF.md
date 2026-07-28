@@ -4,102 +4,83 @@ _Last updated: 2026-07-28T00:00:00Z_
 
 ## What happened this session
 
-Four distinct pieces of work, in order:
+Four pieces of work, in order:
 
-1. **Wired `clipArcByHalfPlane` into `maxQuaPar`** — it now accepts **one** curved (parabolic-edge)
-   input, closing its long-standing TODO. Operands are swapped so the curved one is always `g1`
-   (so only arc-vs-half-plane clipping is ever needed); the polyhedral clip path is left
-   byte-identical and the curved case goes through a new `clipPolyHalfPlaneCurved`. Also enforced
-   the arrangement invariant for arcs and added an independent output validity check.
-2. **Status audit → `SUPPORT_MATRIX.md` and `RETURN_TYPE.md`**, generated from the actual error
-   guards rather than from `DESIGN.md`, classifying every guard OK / GAP / not-reachable / internal.
-3. **Built the `RatPar` type lattice** (three commits: constructors → hierarchy → rename), giving
-   every operator a single static return type.
-4. **Removed all third-party copyrighted PDFs from git history** (`git filter-repo`), then
-   force-pushed.
+1. **Fixed `biconj`** — the former blocker 1. It was literally `conj∘conj`, and `f*` of a
+   bounded-domain function lives on an unbounded multi-face domain `conjCPLQ` rejects, so it
+   failed for every single bounded triangle. New `biconjCPLQ.m` takes **Step 1's convex envelope**
+   instead for that case: `f** = conv(q + I_T)` when `T` is compact. Validated against a
+   pipeline-free ground truth (≤ 8.9e-16 on 7 triangles covering every Step 1 branch).
+2. **Regenerated `SUPPORT_MATRIX.md`** from the actual guards; refreshed every `file:line`
+   citation (most had drifted 20–30 lines into unrelated code) and reclassified the
+   rational-piece guard from N/R to GAP.
+3. **Fixed Step 2 for a rational envelope face** by routing Step 1's envelope through cPLQ's
+   symbolic Step 2/3 (`ratPolToPlq.m`). A 2-face envelope split now conjugates end to end.
+4. **Corrected two of my own wrong diagnoses** after user pushback — see below. This is the part
+   worth reading before touching this area again.
 
 ## Where things stand
 
-- Branch: `main` @ `4caf619` — "Ignore the two publisher PDFs stripped from history"
-- Pushed: yes (force-pushed after the history rewrite; upstream tracking restored)
-- Tests: **251 passed / 1 failed** across 21 suites. The single failure,
-  `testRegion/testCreation`, is a longstanding toolbox-compatibility issue unrelated to the
-  conjugate pipeline — it predates all of this session's work.
+- Branch: `main` @ `7b190d0` — "docs: correct the rational-face diagnosis; retire the
+  3-convex-edge framing"
+- Pushed: yes
+- Tests: **262 passed / 1 failed** across 22 suites. CCA2's own 17 suites are **187 / 0**; the
+  single failure is `testRegion/testCreation`, longstanding and unrelated.
 
-### The type lattice (new)
+### Two corrections — do not reintroduce these
 
-Two axes — function type (`Rat` ⊃ `Qua`, pinning `den ≡ 1`) × subdivision type (`Par` ⊃ `Pol`,
-pinning `Ec ≡ 0`) — as property-less abstract markers, so either axis can be queried alone
-(`isa(f,'Qua')`, `isa(f,'Pol')`). The four named types are the grid's cells:
+- **There is no "3-convex-edge case" to implement**, in CCA2 or in cPLQ. [COAP] Appendix A.5's
+  split reduces such a triangle to 2-convex-edge sub-triangles and Step 1 already applies it, so
+  every face reaching Step 2 has come through it. cPLQ having no `nCE==3` branch is a fact about
+  cPLQ's *Step 1*, which CCA2 does not use. Describe these cases by the **envelope's face count**,
+  not the input's edge count.
+- **It did not need exact arithmetic.** At the vertex where a face's denominator vanishes the
+  numerator vanishes too, with `∇N ∥ ∇den` (residual 0 to 1.3e-16), and the coefficients are good
+  to ~1e-16 — the `0/0` is cleanly **removable**. The fix was to *resolve* it by a limit.
+  `subsF` already flagged it (`NaN`) and `region.funcVertices` already had a NaN-then-limit idiom,
+  but `symbolicFunction.limit` takes **iterated univariate** limits, which return `NaN` again for
+  a bivariate `0/0`. New `symbolicFunction.limitDirectional` restricts to a line — one univariate
+  limit — and requires several directions to agree (that agreement is the existence check).
 
-```
-     RatPar < Rat & Par        (abstract; nothing produces one yet)
-     /    \
-RatPol    QuaPar               < RatPar & Pol  /  < RatPar & Qua
-     \    /
-     QuaPol                    < RatPol & QuaPar      (renamed from QuaPoly)
+### Which half of cPLQ is reusable
 
-QuaParCPLQ < RatPar & Qua      same maths as QuaPar, no mesh; use isMeshed()
-```
-
-Three MATLAB constraints shaped this and are **load-bearing — do not "simplify" them away**:
-
-- A property defined in two superclasses is **fatal and unresolvable** in the child
-  (`conflictingSuperClassProperty` / `RedefinedProperty`). So `den` and `Ec` live on `RatPar`
-  **alone**, and each type's pinned value is enforced by `set.` validators reading the object's
-  traits. Declaring `den` on `RatPol` would make `QuaPol` unconstructible.
-- A shared base constructor **runs once per inheritance path and clobbers** the earlier path's
-  writes. Hence the **leaf-only constructor protocol** documented in `RatPar.m`: every constructor
-  has a no-arg path that writes nothing.
-- Method conflicts, unlike properties, **are** resolvable by a child override. All 39 methods
-  defined in both `RatPol` and `QuaPar` are already overridden by `QuaPol`.
-
-Degree is deliberately **not** a type (nothing dispatches on it) — see `RETURN_TYPE.md`.
-
-### Repository hygiene (new)
-
-`reference/` (13 papers) and `doc/s10589-…` + `doc/s10898-…` (the published [COAP]/[JOGO] versions
-of record) were stripped from **all** git history and are now gitignored; local copies remain on
-disk. Repo went 20 MB → 2.2 MB. Verified from a fresh clone: zero copyrighted PDFs on either
-branch. `cplq-engine` was force-pushed too — its old tip still held 12 of them.
-
-Backups kept outside the repo, safe to delete once you're satisfied:
-`../CCA2-backup-54d3049.bundle` (full pre-rewrite history) and `../CCA2-reference-backup/`.
+Its **Step 2/3**, on **CCA2's** Step 1 output. Running cPLQ end to end gives a wrong answer: its
+own 2-convex-edge envelope is the single Appendix A.4 formula, which CCA2 established is not
+always tight, and the resulting conjugate leaves the paper's own flagged dual point
+`s=(-0.008727,-0.999962)` covered by no region at all (evaluates `NaN`).
 
 ## Next steps
 
-1. **Ask GitHub Support to garbage-collect the repo.** Force-pushing made the old PDF blobs
-   unreferenced, but GitHub can keep them reachable by direct SHA until GC. This is the only
-   remaining exposure before going public.
-2. **Fix `biconj` for a single bounded triangle** — now blocker #1 for 0.1, and half the project's
-   stated goal. `biconj` is `conj∘conj`, and the conjugate of a bounded-domain function is finite
-   everywhere (an unbounded multi-face domain), which `conjCPLQ` rejects (`conjCPLQ.m:103`).
-   Coverage is pinned by `conjCPLQTest.biconjCoverageByInputCase`: Case A works, **Case B fails**,
-   Case C works via the symbolic path. Note the shape — the *symbolic* path supports the
-   biconjugate while the faster *numeric* one does not. Fixing the unbounded multi-face case closes
-   both this and `SUPPORT_MATRIX.md` §1.2.
-3. **Refresh `SUPPORT_MATRIX.md`** — it still lists the return type as the top blocker (now
-   resolved) and predates the `QuaPoly`→`QuaPol` rename.
-4. **`maxQuaPar`: split a cell that already carries an arc** — 30 of 115 sampled valid splits hit
-   this guard. Shares a root cause with two-curved-inputs: a piece has only one `Ec` slot, so
-   **multi-arc pieces** is the natural next unit of work.
-5. Then 0.1 tagging (user asked to be consulted first — **do not tag without being asked**).
-6. Longstanding, unaffected: `partialConj` (unimplemented for every engine); `'pqp'`/`'graph'`
-   engines; `RatPol.conj`/`biconj`/`add`; the `mergeL`/`removeTangent` exact-tie-point bug;
-   `QuaPar.eval` returning `Inf`/wrong exactly *at* a result vertex (~1.4% — pre-existing on the
-   polyhedral path too); exact `[LOCATELLI]` citation.
+1. **Step 3 is the frontier.** A 4-face envelope split now gets through Step 2 and fails ~91 s in
+   at `plq.maximum:185` → `plq.maximumConjugate` → `functionNDomain.maximumP` → `region.maximum`,
+   with `symbolic:kernel:DivisionByZero` inside `symbolicFunction.subsF`'s `simplifyFraction` (a
+   point that is a pole of one candidate). Reproduce with `f=xy` over `conv{(0,0),(1,1),(3,2)}`.
+   Expect the same peel-the-onion pattern: four latent bugs were already flushed out this session,
+   each previously unreachable because the `0/0` threw first. **User was asked whether to continue
+   into `region.maximum` and ended the session instead — ask before resuming this.**
+2. **Ask GitHub Support to garbage-collect the repo.** Unchanged, still the only remaining
+   exposure before going public (force-pushed PDF blobs stay reachable by SHA until GC).
+3. `partialConj` is unimplemented for every engine and type (`SUPPORT_MATRIX.md` §2).
+4. Unbounded multi-face `conj` (`conjCPLQ.m:103`) — the remaining reason `conj` is not closed
+   under itself. `biconj` no longer depends on it.
+5. `maxQuaPar`: split a cell that already carries an arc (~26% of sampled splits); multi-arc
+   pieces is the natural unit.
+6. A **native numeric** rational branch in `conjPieceCPLQ` would buy **speed, not coverage** —
+   ~100 s → milliseconds. The cPLQ fallback is correct but symbolic.
+7. Then 0.1 tagging — **do not tag without being asked**.
+8. Longstanding: `'pqp'`/`'graph'` engines; `RatPol.conj`/`biconj`/`add`; the
+   `mergeL`/`removeTangent` exact-tie-point bug; `QuaPar.eval` wrong exactly *at* a result vertex
+   (~1.4%); `testRegion/testCreation`.
 
 ## Relevant files
 
-- `RatPar.m` — hierarchy rationale, the constructor protocol, `set.den`/`set.Ec` validators,
-  `kind()`, `isMeshed()`. **Read this before touching any constructor or class hierarchy.**
-- `Rat.m` / `Qua.m` / `Par.m` / `Pol.m` — axis markers; each documents what behaviour belongs on it
-  if the per-axis code is ever factored out of the concrete classes.
-- `RatParTest.m` — 12 tests pinning the lattice contract (full `isa` table asserted entry by entry).
-- `SUPPORT_MATRIX.md` — what works / what doesn't, generated from the error guards. §0 states the
-  scope rule that keeps being misread: never-arising `RatPol`/`QuaPar` cases (e.g. hyperbolic
-  edges) are **out of scope, not gaps**.
-- `RETURN_TYPE.md` — why `RatPar` exists; the MATLAB probe results table.
-- `maxQuaPar.m` — curved-edge support; header VALIDATION block has the sweep numbers.
-- `conjCPLQ.m` — Cases A/B/C; line 103 is the unbounded multi-face gap behind next step 2.
-- `.gitignore` — records *why* `reference/`, `cPLQ/` and the two publisher PDFs stay local.
+- `biconjCPLQ.m` — the biconjugate orchestrator; header has the derivation and validation numbers.
+- `ratPolToPlq.m` — RatPol → cPLQ `plq`, the rational-face counterpart of `quaPolToPlq.m`.
+- `conjCPLQ.m` — `conjEnvelopeViaCPLQ` (the Step 2 fallback) and its header on which half of cPLQ
+  is reusable; line 103 is still the unbounded multi-face gap.
+- `symbolicFunction.m` — `limitDirectional` vs `limit`; read both before touching either.
+- `region.m` — `vertexOfEdge`, `simplifyUnboundedRegion`, `plus`: the three repaired sites.
+- `plq_1p.m` — `conjugateFunction`'s `nCE==2` branch (the `a..f` seeding fix); note there is no
+  `nCE==3` branch anywhere and none is needed.
+- `SUPPORT_MATRIX.md` — §0's scope rule, §1.2's corrected rows, §8's blocker order.
+- `biconjCPLQTest.m` / `conjCPLQTest.m` — the pipeline-free ground truth and the case-by-case pins.
