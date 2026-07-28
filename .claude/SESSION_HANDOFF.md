@@ -1,105 +1,105 @@
 # Session Handoff
 
-_Last updated: 2026-07-27T00:00:00Z_
+_Last updated: 2026-07-28T00:00:00Z_
 
-## What happened this session (and the one just before it)
+## What happened this session
 
-**Previous session**: gave Case C's conjugate (`conjCPLQ.m`, general bounded multi-face/non-
-triangular domain) a composable return type. New class `QuaParCPLQ.m` wraps the raw
-`functionNDomain` array Case C used to return in the same operator surface (`conj`/`add`/
-`scalarMul`/`addQuadratic`/`addScaledEnergy`/`eval`) that `QuaPol`/`QuaPar` already expose, so
-`infConv.m`/`moreau.m`/`proxAverage.m`/`QuaPar.biconj` compose with it with **zero changes** to any
-of those four files (MATLAB dispatches on the operand's actual class). `toQuaPar.m` passes a
-`QuaParCPLQ` through unchanged rather than erroring. Verified: `conjCPLQTest`/`infConvTest`/
-`QuaParTest`/`cplqAdapterTest` all pass (33/33); Fenchel-Young inequality and exact scale/shift
-checks against `g.eval`; `biconj(q,'cplq')`/`moreau(q,1,'cplq')` run end to end; the conjugate-of-
-conjugate result matches `plq.biconjugateF` called directly, byte for byte (confirming the known
-`mergeL`/`removeTangent` exact-tie-point gap is inherited unchanged, not worsened). Committed and
-pushed (`28806ef`).
+Four distinct pieces of work, in order:
 
-**This session**: started Phase 2 (DESIGN.md II.5.1 "improve performance"). Scoping first:
-Cases A/B (single quadratic pieces / single triangles) are **already** closed-form numeric
-(`conjPieceCPLQ`/`convEnvCPLQ`) — the real Phase 2 bottleneck is entirely in Case C, and
-specifically in **`maxQuaPar.m`'s own stated TODO**: it refuses any input QuaPar with a curved
-(parabolic) edge, which is exactly why Case C falls back to the slow full-domain symbolic pipeline
-(`quaPolToPlq -> triangulate -> maximum`) instead of per-triangle closed-form conjugate + a
-numeric `maxQuaPar` combine.
-
-Built and validated the core new primitive that TODO needs: **`clipArcByHalfPlane.m`** — clip a
-parabola arc against a half-plane (the operation `maxQuaPar`'s own `clipByFace`/`clipPolyHalfPlane`
-loop would need to apply to a curved cell edge). Verified standalone via
-`clipArcByHalfPlaneTest.m` (7/7 pass): hand-derived axis-aligned cases (vertical/horizontal clips,
-fully-inside, fully-outside, cut-near-endpoint, cut-far-endpoint) plus an independently-constructed
-rotated+shifted parabola cross-check (conic coefficients re-derived via direct symbolic
-substitution, not reusing the primitive's own math, then checked that the clip result is the same
-rigid transform applied to the axis-aligned answer) and a rejects-non-parabola guard test.
-
-**Deliberately stopped there** (user's explicit choice, given 3 options) rather than wiring this
-into `maxQuaPar.m` itself this session: doing so safely means tracking a curved edge through
-`clipPolyHalfPlane`'s several interacting branches (bounded vs. unbounded cell, 1 vs. 2 crossings,
-a curve turning a piece bounded partway through a *chained sequence* of clips within one
-`clipByFace` call) and re-validating against `maxQuaParTest.m`'s own dense regression history —
-that file's HISTORY comments document several sessions' worth of subtle, non-crashing
-wrong-**answer** bugs in the polyhedral-only case alone (not just crashes), so rushing the
-curved-edge extension in the time left this session risked exactly that failure mode on code much
-harder to stress-test on short notice. Right-sized as its own next session/step instead.
+1. **Wired `clipArcByHalfPlane` into `maxQuaPar`** — it now accepts **one** curved (parabolic-edge)
+   input, closing its long-standing TODO. Operands are swapped so the curved one is always `g1`
+   (so only arc-vs-half-plane clipping is ever needed); the polyhedral clip path is left
+   byte-identical and the curved case goes through a new `clipPolyHalfPlaneCurved`. Also enforced
+   the arrangement invariant for arcs and added an independent output validity check.
+2. **Status audit → `SUPPORT_MATRIX.md` and `RETURN_TYPE.md`**, generated from the actual error
+   guards rather than from `DESIGN.md`, classifying every guard OK / GAP / not-reachable / internal.
+3. **Built the `RatPar` type lattice** (three commits: constructors → hierarchy → rename), giving
+   every operator a single static return type.
+4. **Removed all third-party copyrighted PDFs from git history** (`git filter-repo`), then
+   force-pushed.
 
 ## Where things stand
 
-- Branch: `main` @ `28806ef` — "Add QuaParCPLQ: give Case C conjugates a composable QuaPar-like
-  return type" (pushed). **This session's `clipArcByHalfPlane.m`/`clipArcByHalfPlaneTest.m` +
-  `maxQuaPar.m`/`DESIGN.md` doc updates are NOT YET COMMITTED** — do that first if continuing.
-- `conjCPLQTest`/`infConvTest`/`QuaParTest`/`cplqAdapterTest`: 33/33 pass (unaffected by this
-  session — `clipArcByHalfPlane.m` is a new, standalone, unwired file).
-  `clipArcByHalfPlaneTest`: 7/7 pass (new this session).
-- `testMaxMultiRegion` full suite: still 24/24 pass (Phase 1 unaffected).
-- `cPLQ/` (the original reference clone) remains intentionally untracked, per explicit user
-  instruction — do not `git add` it.
+- Branch: `main` @ `4caf619` — "Ignore the two publisher PDFs stripped from history"
+- Pushed: yes (force-pushed after the history rewrite; upstream tracking restored)
+- Tests: **251 passed / 1 failed** across 21 suites. The single failure,
+  `testRegion/testCreation`, is a longstanding toolbox-compatibility issue unrelated to the
+  conjugate pipeline — it predates all of this session's work.
+
+### The type lattice (new)
+
+Two axes — function type (`Rat` ⊃ `Qua`, pinning `den ≡ 1`) × subdivision type (`Par` ⊃ `Pol`,
+pinning `Ec ≡ 0`) — as property-less abstract markers, so either axis can be queried alone
+(`isa(f,'Qua')`, `isa(f,'Pol')`). The four named types are the grid's cells:
+
+```
+     RatPar < Rat & Par        (abstract; nothing produces one yet)
+     /    \
+RatPol    QuaPar               < RatPar & Pol  /  < RatPar & Qua
+     \    /
+     QuaPol                    < RatPol & QuaPar      (renamed from QuaPoly)
+
+QuaParCPLQ < RatPar & Qua      same maths as QuaPar, no mesh; use isMeshed()
+```
+
+Three MATLAB constraints shaped this and are **load-bearing — do not "simplify" them away**:
+
+- A property defined in two superclasses is **fatal and unresolvable** in the child
+  (`conflictingSuperClassProperty` / `RedefinedProperty`). So `den` and `Ec` live on `RatPar`
+  **alone**, and each type's pinned value is enforced by `set.` validators reading the object's
+  traits. Declaring `den` on `RatPol` would make `QuaPol` unconstructible.
+- A shared base constructor **runs once per inheritance path and clobbers** the earlier path's
+  writes. Hence the **leaf-only constructor protocol** documented in `RatPar.m`: every constructor
+  has a no-arg path that writes nothing.
+- Method conflicts, unlike properties, **are** resolvable by a child override. All 39 methods
+  defined in both `RatPol` and `QuaPar` are already overridden by `QuaPol`.
+
+Degree is deliberately **not** a type (nothing dispatches on it) — see `RETURN_TYPE.md`.
+
+### Repository hygiene (new)
+
+`reference/` (13 papers) and `doc/s10589-…` + `doc/s10898-…` (the published [COAP]/[JOGO] versions
+of record) were stripped from **all** git history and are now gitignored; local copies remain on
+disk. Repo went 20 MB → 2.2 MB. Verified from a fresh clone: zero copyrighted PDFs on either
+branch. `cplq-engine` was force-pushed too — its old tip still held 12 of them.
+
+Backups kept outside the repo, safe to delete once you're satisfied:
+`../CCA2-backup-54d3049.bundle` (full pre-rewrite history) and `../CCA2-reference-backup/`.
 
 ## Next steps
 
-1. **Wire `clipArcByHalfPlane.m` into `maxQuaPar.m`** for the single-curved-edge case (one of
-   `g1`/`g2` has curved edges, the other purely polyhedral — the narrower slice the user chose
-   over full curved-vs-curved support). Concretely: `clipByFace`'s per-half-plane loop needs a
-   branch that, when clipping a cell edge that carries a curve (`curveAfter`/`curveEc`, see
-   `maxQuaPar.m`'s own `boundedPiece`/`splitCell` for how those are set), calls
-   `clipArcByHalfPlane` instead of the current straight-edge crossing math, and correctly threads
-   the resulting single 'cut' replacement point back into the cell's vertex list (mind
-   `insertPassthroughVertices`'s existing pass-through-vertex logic — a curved edge may need the
-   analogous treatment). Validate against a NEW ground-truth case built the same way
-   `maxQuaParTest.buildG1G2ForTriangle` does, but starting from a triangle whose convex envelope
-   has exactly one convex edge (so Step 2 gives a curved-edge QuaPar via `conjBilinearXYoneCE`/
-   `conjIndefiniteQuadTriangle`), combined via `maxQuaPar` with an adjacent all-polyhedral piece,
-   checked against `supBilinearOverPoly`-style closed-form or dense numeric sup ground truth.
-2. Once single-curved-edge `maxQuaPar` is solid, extend to both inputs curved (conic-conic
-   intersection) — larger, do only after step 1 is fully validated.
-3. Once `maxQuaPar` handles curved edges, revisit `conjCPLQ.m`'s Case C: it could then dispatch to
-   a per-triangle `conjPieceCPLQ` + numeric `maxQuaPar` combine instead of the symbolic
-   `quaPolToPlq`/`triangulate`/`maximum` pipeline, which is the actual Phase 2 performance win.
-4. Give Case C a proper `QuaPar`-like return type: **done** last session (`QuaParCPLQ.m`) — see
-   above; the remaining piece is a true GEOMETRIC `QuaPar` reconstruction (V/E/Ec/F/P) if/when a
-   caller needs the structured (not just composable-but-symbolic) representation — separate,
-   larger, still-open task, not blocking anything else.
-5. Close the `mergeL`/`removeTangent` exact-tie-point gap in `functionNDomain`/`plq.biconjugateF`
-   (inherited by `QuaParCPLQ.conj`) — the one remaining known correctness bug in the Case-C
-   conjugate pipeline, confirmed still present via last session's byte-for-byte comparison.
-6. Run the remaining ~12 untested `testMaxMultiRegion` cases.
-7. Lower-priority, longstanding, unaffected: exact `[LOCATELLI]` citation in `DESIGN.md`; 2/741
-   residual `maxQuaPar:internal` crashes; `QuaPar.orderEdges`/`createP`'s near-degenerate-triangle
-   error; `partialConj` for `'cplq'`/`'pqp'`; `add` for `RatPol`/`RatPar`; conjugate engines
-   `'pqp'`/`'graph'`; the pre-existing `testRegion/testCreation` toolbox-compat failure.
+1. **Ask GitHub Support to garbage-collect the repo.** Force-pushing made the old PDF blobs
+   unreferenced, but GitHub can keep them reachable by direct SHA until GC. This is the only
+   remaining exposure before going public.
+2. **Fix `biconj` for a single bounded triangle** — now blocker #1 for 0.1, and half the project's
+   stated goal. `biconj` is `conj∘conj`, and the conjugate of a bounded-domain function is finite
+   everywhere (an unbounded multi-face domain), which `conjCPLQ` rejects (`conjCPLQ.m:103`).
+   Coverage is pinned by `conjCPLQTest.biconjCoverageByInputCase`: Case A works, **Case B fails**,
+   Case C works via the symbolic path. Note the shape — the *symbolic* path supports the
+   biconjugate while the faster *numeric* one does not. Fixing the unbounded multi-face case closes
+   both this and `SUPPORT_MATRIX.md` §1.2.
+3. **Refresh `SUPPORT_MATRIX.md`** — it still lists the return type as the top blocker (now
+   resolved) and predates the `QuaPoly`→`QuaPol` rename.
+4. **`maxQuaPar`: split a cell that already carries an arc** — 30 of 115 sampled valid splits hit
+   this guard. Shares a root cause with two-curved-inputs: a piece has only one `Ec` slot, so
+   **multi-arc pieces** is the natural next unit of work.
+5. Then 0.1 tagging (user asked to be consulted first — **do not tag without being asked**).
+6. Longstanding, unaffected: `partialConj` (unimplemented for every engine); `'pqp'`/`'graph'`
+   engines; `RatPol.conj`/`biconj`/`add`; the `mergeL`/`removeTangent` exact-tie-point bug;
+   `QuaPar.eval` returning `Inf`/wrong exactly *at* a result vertex (~1.4% — pre-existing on the
+   polyhedral path too); exact `[LOCATELLI]` citation.
 
 ## Relevant files
 
-- `clipArcByHalfPlane.m` / `clipArcByHalfPlaneTest.m` — this session's new, validated-but-unwired
-  primitive; start here for next steps item 1.
-- `maxQuaPar.m` — Step 3 combine; its own header TODO (just above the curved-edge note added this
-  session) is the exact place the wiring goes; `clipByFace`/`clipPolyHalfPlane`/`splitCell`/
-  `assemblePieces` are the functions that would need touching, in roughly that order.
-- `conjPieceCPLQ.m` — `conjBilinearXYoneCE`/`conjIndefiniteQuadTriangle` (1-convex-edge case) are
-  the source of curved-edge QuaPars to test against.
-- `maxQuaParTest.m` — existing regression suite (polyhedral-only so far); its `frozenG1G2`/
-  `buildG1G2ForTriangle` pattern is the template for a new curved-edge fixture.
-- `QuaParCPLQ.m` / `conjCPLQ.m` / `toQuaPar.m` — previous session's Case C return-type work (done,
-  committed).
-- `DESIGN.md` §II.5.1 / Phase 2 bullet — full scoping/status writeup for both sessions.
+- `RatPar.m` — hierarchy rationale, the constructor protocol, `set.den`/`set.Ec` validators,
+  `kind()`, `isMeshed()`. **Read this before touching any constructor or class hierarchy.**
+- `Rat.m` / `Qua.m` / `Par.m` / `Pol.m` — axis markers; each documents what behaviour belongs on it
+  if the per-axis code is ever factored out of the concrete classes.
+- `RatParTest.m` — 12 tests pinning the lattice contract (full `isa` table asserted entry by entry).
+- `SUPPORT_MATRIX.md` — what works / what doesn't, generated from the error guards. §0 states the
+  scope rule that keeps being misread: never-arising `RatPol`/`QuaPar` cases (e.g. hyperbolic
+  edges) are **out of scope, not gaps**.
+- `RETURN_TYPE.md` — why `RatPar` exists; the MATLAB probe results table.
+- `maxQuaPar.m` — curved-edge support; header VALIDATION block has the sweep numbers.
+- `conjCPLQ.m` — Cases A/B/C; line 103 is the unbounded multi-face gap behind next step 2.
+- `.gitignore` — records *why* `reference/`, `cPLQ/` and the two publisher PDFs stay local.
