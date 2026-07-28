@@ -18,7 +18,7 @@ function g = conjPieceCPLQ(p)
 %                mean formula is PROVABLY always rank-1 PSD (b^2-4ac=0 identically, any slopes),
 %                never strictly indefinite -- see conjPieceCPLQTest for the discriminant proof
 %                and NOTES below on why the "raw indefinite bilinear, 2 convex edges" case is a
-%                dead end for QuaPar (needs a genuine hyperbola, not a parabola).
+%                case is UNREACHABLE from a QuaPoly conjugate/biconjugate -- see NOTES.
 %              - pure BILINEAR f = x*y with ZERO convex edges -> three-cone piecewise-linear
 %                QuaPar (max of vertex linears, same construction as the affine case);
 %              - pure BILINEAR f = x*y with exactly ONE convex edge -> six-face PARABOLIC QuaPar
@@ -31,7 +31,7 @@ function g = conjPieceCPLQ(p)
 %                conjugate on the shifted triangle, undo the shift (linear correction to the
 %                VALUE only) and the rotation (a linear change of the DUAL variable, pushed
 %                through vertices/conics/orientation by pushforwardQuaParDual). Two convex edges
-%                remains the same hyperbola dead end as the pure bilinear case (see NOTES).
+%                is the same unreachable-by-design branch as the pure bilinear case (see NOTES).
 %              den = 1 (no rational denominator). p may be a QuaPoly, QuaPar, or RatPol.
 %              TODO: rational pieces (RatPol input with a genuine nonzero denominator) -- NOT
 %              reducible to the cases above (there is no known "original quadratic" to fall back
@@ -63,11 +63,25 @@ function g = conjPieceCPLQ(p)
 % triangle with TWO convex edges" (as opposed to the rank-1 PSD quadratic above) requires, in
 % general, comparing the two convex edges' own quadratic conjugate formulas against each other;
 % that comparison boundary is PROVABLY a genuine hyperbola whenever the two edges' slopes differ
-% (discriminant = (m1-m2)^2/(4 m1 m2) > 0), which QuaPar cannot represent (parabolic/linear edges
-% only). This case does not actually arise in the wired pipeline: Step 1 (convEnvCPLQ) always
-% convexifies a 2-convex-edge piece into the rank-1 PSD quadratic handled above before Step 2
-% ever sees it, so conjPieceCPLQ is never asked to conjugate the raw indefinite piece directly in
-% that case. See conjPieceCPLQTest/bilinearTwoConvexEdgesDocumentedLimitation.
+% (discriminant = (m1-m2)^2/(4 m1 m2) > 0), which QuaPar does not represent (parabolic/linear
+% edges only).
+%
+% READ THIS AS "UNREACHABLE BY DESIGN", NOT AS A TOOLBOX LIMITATION. (Corrected repeatedly; an
+% earlier wording of this note -- "a hyperbola dead end" -- kept being re-read as a gap in what
+% CCA2 can express, and reported as such.) CCA2's goal is QuaPoly conjugate/biconjugate; it is NOT
+% to cover every possible RatPol/QuaPar. Everything downstream of a QuaPoly is a SPECIAL case, and
+% the special-ness is load-bearing: the convex envelope of a QuaPoly triangle is a very special
+% RatPol, and the conjugate of those triangles is a very special QuaPar (e.g. a parabolic edge only
+% ever occurs surrounded by TWO PARALLEL RAYS). Hyperbolic edges therefore never need storing:
+% they NEVER arise from a QuaPoly conjugate/biconjugate, nor from any intermediate computation --
+% see [COAP]/[JOGO] (Karmarkar & Lucet 2026; DESIGN.md's reference list) and QuaPar.m's own
+% assertParabolicEdges.
+%
+% Concretely, the branch cannot be reached from the wired pipeline: Step 1 (convEnvCPLQ) always
+% convexifies a 2-convex-edge piece into the rank-1 PSD quadratic handled above before Step 2 ever
+% sees it, so conjPieceCPLQ is never asked to conjugate the raw indefinite piece directly in that
+% case. The error it raises is an assertion that this invariant holds, not a missing feature.
+% See conjPieceCPLQTest/bilinearTwoConvexEdgesIsUnreachableFromTheWiredPipeline.
 % [output] g : QuaPar = the conjugate, a quadratic on a polyhedral subdivision with seven faces:
 %              the central gradient image triangle T' = {A v_i + b}, three edge strips, and
 %              three vertex cones; the conjugate is finite everywhere (domain = R^2).
@@ -552,9 +566,9 @@ function g = conjIndefiniteQuadTriangle(V, A, b, c)
 %   5. Undoing the rotation: f*(s) = q*(M^-T s), a linear change of the DUAL variable, pushed
 %      through the whole QuaPar (vertices, face quadratics, conics, and left/right orientation if
 %      det(M)<0) by pushforwardQuaParDual.
-% Only 0 or 1 convex edge is supported (2 convex edges is the same genuine-hyperbola dead end as
+% Only 0 or 1 convex edge is supported (2 convex edges is the same unreachable-by-design branch as
 % the pure bilinear case -- see the file-header NOTES and
-% conjPieceCPLQTest/bilinearTwoConvexEdgesDocumentedLimitation -- unaffected by translation/
+% conjPieceCPLQTest/bilinearTwoConvexEdgesIsUnreachableFromTheWiredPipeline -- unaffected by translation/
 % rotation, since convexity of an edge depends only on its slope, and rotating back preserves the
 % conic degree). Setting A=[0 1;1 0], b=0, c=0 recovers the old pure-xy case exactly (Ltil=0, so
 % the shift is exactly zero and M reduces the rotation to whatever bilinearFrame([0 1;1 0]) gives).

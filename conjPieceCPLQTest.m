@@ -138,21 +138,32 @@ classdef conjPieceCPLQTest < matlab.unittest.TestCase
             end
         end
 
-        function bilinearTwoConvexEdgesDocumentedLimitation(testCase)
+        function bilinearTwoConvexEdgesIsUnreachableFromTheWiredPipeline(testCase)
             % xy over (0,0),(2,1),(1,2): two convex edges (m=1/2 and m=2, sharing vertex (0,0)).
-            % This is a DELIBERATE, DOCUMENTED non-implementation, not a TODO: the conjugate's
-            % dual-space arrangement needs a boundary between the two edges' own quadratic
-            % conjugate formulas (COAP B.2 applied to each edge separately), and that boundary is
-            % a genuine HYPERBOLA whenever the two slopes differ -- verified both numerically
-            % (0/2e6 mismatches across two test triangles when the true 2D sup was compared
-            % against max(vertex linears, gated per-edge quadratics)) and symbolically: the
-            % quadratic parts of the two edges' formulas share b=1/2 always, so their difference's
-            % discriminant is -4*(1/(4m1)-1/(4m2))*(m1/4-m2/4) = (m1-m2)^2/(4*m1*m2) > 0 whenever
-            % m1~=m2. QuaPar only supports parabolic/linear (degenerate) conics per edge, so this
-            % case cannot be represented as constructed. It also does not arise from the wired
-            % pipeline: Step 1 (convEnvCPLQ) always convexifies a 2-convex-edge piece into a
-            % rank-1 PSD quadratic (see conjPieceCPLQTest/psdRank1QuadraticEndToEnd) before Step 2
-            % ever sees it, so this raw-indefinite-input case is never actually hit.
+            %
+            % This pins an UNREACHABLE-BY-DESIGN branch, NOT a toolbox limitation. (Renamed from
+            % bilinearTwoConvexEdgesDocumentedLimitation: the old name, and the "QuaPar cannot
+            % represent this" framing, kept being re-read as a gap in what CCA2 can express and
+            % reported as such.) CCA2's goal is QuaPoly conjugate/biconjugate -- NOT covering every
+            % possible RatPol/QuaPar. Everything downstream of a QuaPoly is a SPECIAL case: the
+            % convex envelope of a QuaPoly triangle is a very special RatPol, and the conjugate of
+            % those triangles is a very special QuaPar (e.g. a parabolic edge only ever occurs
+            % surrounded by two parallel rays). Hyperbolic edges therefore never need storing --
+            % they NEVER arise from a QuaPoly conjugate/biconjugate or any intermediate step; see
+            % [COAP]/[JOGO] and QuaPar.assertParabolicEdges.
+            %
+            % Feeding conjPieceCPLQ a RAW indefinite 2-convex-edge piece (as this test does, on
+            % purpose) bypasses Step 1 and so leaves the special-case structure behind: the
+            % arrangement would then need a boundary between the two edges' own quadratic conjugate
+            % formulas (COAP B.2 applied per edge), which is a genuine hyperbola whenever the
+            % slopes differ -- verified numerically (0/2e6 mismatches across two triangles) and
+            % symbolically (the two formulas share b=1/2, so the difference's discriminant is
+            % (m1-m2)^2/(4*m1*m2) > 0 for m1~=m2).
+            %
+            % The wired pipeline never does that: Step 1 (convEnvCPLQ) always convexifies a
+            % 2-convex-edge piece into a rank-1 PSD quadratic (see psdRank1QuadraticEndToEnd)
+            % before Step 2 sees it. So the error below is an ASSERTION that this invariant holds,
+            % not a missing feature -- there is nothing here to implement.
             V = [0 0; 2 1; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPoly(V, E, [0 1 0 0 0 0], F);
             testCase.verifyError(@() conjPieceCPLQ(q), 'conjPieceCPLQ:notImplemented');
