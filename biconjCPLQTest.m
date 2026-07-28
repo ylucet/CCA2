@@ -58,17 +58,22 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
         end
 
         function succeedsWhereTheConjugateItselfFails(testCase)
-            % The 2- and 3-convex-edge triangles: Step 1's envelope has a RATIONAL face, which
-            % Step 2 rejects (conjPieceCPLQ.m:107, reached through conjCPLQ's conjMaxOfSubTriangles),
-            % so f* is not computable -- yet f** is, since it IS Step 1's output. This is why
-            % biconjCPLQ is not a thin wrapper around conj-of-conj.
-            for V = {[2 1; 0 0; 1 0], [0 0; 1 1; 3 2]}
-                p = biconjCPLQTest.triangle(V{1}, [0 1 0 0 0 0]);   % f = xy
-                testCase.verifyError(@() p.conj(), 'conjPieceCPLQ:notImplemented');
-                b = p.biconj();
-                testCase.verifyEqual(b.kind(), 'RatPol');
-                testCase.verifyGreaterThan(b.nf, 1);                % genuinely split envelope
-            end
+            % A triangle whose Step 1 envelope splits into 4 faces: Step 2 completes on them,
+            % but cPLQ's Step 3 (the cross-piece maximum) does not yet, so f* is not computable
+            % (PLQ:conjCPLQ:cplqFailed -- see
+            % conjCPLQTest.indefiniteTriangleThreeConvexEdgesUsesStep3 for the full diagnosis).
+            % f** is computable anyway, because it IS Step 1's output and never has to cross into
+            % the symbolic layer. This is why biconjCPLQ is not a thin wrapper around conj-of-conj.
+            %
+            % UPDATE (2026-07-28): the 2-convex-edge triangle conv{(2,1),(0,0),(1,0)} used to be
+            % in this list too. Its conjugate now works, via Step 2's fallback to cPLQ's symbolic
+            % Step 2/3, so it no longer belongs here -- see
+            % conjCPLQTest.indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2.
+            p = biconjCPLQTest.triangle([0 0; 1 1; 3 2], [0 1 0 0 0 0]);   % f = xy
+            testCase.verifyError(@() p.conj(), 'PLQ:conjCPLQ:cplqFailed');
+            b = p.biconj();
+            testCase.verifyEqual(b.kind(), 'RatPol');
+            testCase.verifyGreaterThan(b.nf, 1);                % genuinely split envelope
         end
 
         function isAConvexUnderestimatorTouchingAtTheVertices(testCase)

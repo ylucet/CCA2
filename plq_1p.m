@@ -555,6 +555,16 @@ classdef plq_1p
                  obj.conjugates = [obj.conjugates,functionNDomain([conjf],conjd)];
                 end
                 %pause
+              % HISTORY: a..f are read off the envelope polynomial by MATCHING monomials, so a
+              % monomial that is ABSENT left its coefficient undefined and `grad` below then
+              % errored with "Unrecognized function or variable 'd'". That is not exotic: the
+              % envelope of a triangle with no linear part -- e.g. CCA2's Step 1 output for the
+              % 3-convex-edge triangle conv{(0,0),(1,1),(3,2)}, whose first face is a pure
+              % quadratic form alpha*xy + beta*x^2 + gamma*y^2 -- has no x, y or constant term at
+              % all. An absent monomial has coefficient zero, which is exactly what the loop below
+              % means to leave in place, so seed all six here.
+              a = 0; b = 0; c = 0; d = 0; e = 0; f = 0; %#ok<NASGU> (c,f used only by the
+              % commented-out diagnostics below; seeded anyway so the set stays consistent)
               for j = 1:size(terms,2)
                   if isAlways (terms(j) == x^2)
                       a = coef(j);

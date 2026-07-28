@@ -106,11 +106,21 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
             % and the true envelope must equal the affine chord -- here 0 -- along it).
             %
             % Tightness is checked via each sub-triangle's OWN conjugate (Step 2, conjPieceCPLQ)
-            % rather than the full q.conj('cplq') pipeline: this split's internal seam is a genuine
-            % kink (unlike splitThreeConvex's C1-smooth seam for the 3-convex-edge case), which
-            % Step 3 (maxQuaPar) does not yet support combining -- see DESIGN.md / session handoff
-            % for that separate, newly-found gap. max(g1,g2) at a dual point s is exactly f*(s)
-            % whenever the underlying 2-piece split is the TRUE envelope, regardless of Step 3.
+            % rather than the full q.conj('cplq') pipeline, because Step 3 (maxQuaPar) cannot
+            % combine these two pieces: one of them is RATIONAL, and Step 2 has no rational branch.
+            % max(g1,g2) at a dual point s is exactly f*(s) whenever the underlying 2-piece split
+            % is the TRUE envelope, regardless of Step 3, which is what this test needs.
+            %
+            % CORRECTED 2026-07-28: this comment used to justify the detour by calling the split's
+            % internal seam "a genuine kink (unlike splitThreeConvex's C1-smooth seam)". That is
+            % wrong -- the seam here is C1 too. It is the line x + sqrt(2) y = 1, from (1,0) to
+            % (2-sqrt2)*(1,1/2), and on it both pieces take the value and the gradient
+            %     grad = (3-2*sqrt2, 2*sqrt2-2),
+            % checked in closed form (using (3+2*sqrt2)(3-2*sqrt2)=1) as well as numerically. The
+            % two pieces are 2y^2/(2y-x+1) and (3-2*sqrt2)[(x+sqrt2 y)^2 - x + 2y]; what actually
+            % differs across the seam is the HESSIAN -- the second is a quadratic with a constant
+            % Hessian, the first is rational with a varying one -- so the join is C1 but not C2.
+            % The detour is still right, for the rational-branch reason given above.
             V = [2 1; 0 0; 1 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPol(V, E, [0 1 0 0 0 0], F);
             r = convEnvCPLQ(q);

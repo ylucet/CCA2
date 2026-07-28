@@ -203,10 +203,58 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % mode (same "pin the loud failure instead of the old silent success" pattern already
             % used elsewhere in this file's history -- see
             % maxQuaParTest.matchHalfEdgesRejectsSameSideRayPairingAndDropsSubsumedPieces).
+            % UPDATE (2026-07-28): Step 2 now falls back to cPLQ's own symbolic Step 2/3 for a
+            % rational envelope face (conjCPLQ's conjEnvelopeViaCPLQ). That fixes the
+            % 2-convex-edge split outright -- see
+            % indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2 below -- and for THIS triangle it
+            % gets Step 2 to complete as well. The remaining failure is in Step 3, cPLQ's
+            % cross-piece maximum (plq.maximum:185 -> maximumConjugate -> functionNDomain.maximumP
+            % -> region.maximum), not in the conjugate of any piece.
+            %
+            % Nothing here needs a "3 convex edges" case: [COAP] Appendix A.5's split reduces such
+            % a triangle to 2-convex-edge sub-triangles, and Step 1 already does it -- that is why
+            % the envelope below has 4 faces. The edge count is how the input is DESCRIBED; it is
+            % not what fails.
+            %
+            % An earlier version of this comment blamed the numeric/symbolic boundary and called
+            % for exact arithmetic in Step 1. That was wrong and is worth recording: the envelope
+            % coefficients are accurate to ~1e-16, and at the vertex where the denominator
+            % vanishes the numerator vanishes too with grad N parallel to grad den (residual 0 to
+            % 1.3e-16), so the 0/0 is cleanly REMOVABLE. What was missing was resolving it by a
+            % limit -- see symbolicFunction.limitDirectional.
             V = [0 0; 3 3; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPol(V, E, [0 1 0 0 0 0], F);
             testCase.verifyEqual(convEnvCPLQ(q).nf, 4);   % confirms the (now recursive) split
-            testCase.verifyError(@() q.conj('cplq'), 'conjPieceCPLQ:notImplemented');
+            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
+        end
+
+        function indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2(testCase)
+            % The 2-convex-edge tightness split (convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight)
+            % leaves Step 1 with a RATIONAL face, which CCA2's own Step 2 cannot conjugate. It now
+            % falls back to cPLQ's symbolic Step 2/3 on that envelope, so conj closes end to end.
+            %
+            % Note WHICH half of cPLQ is reused: its Step 2/3, on CCA2's Step 1 output. Running
+            % cPLQ end to end on this triangle instead gives the WRONG answer, because cPLQ's own
+            % envelope for a 2-convex-edge triangle is the single, untight Appendix A.4 formula --
+            % it leaves sBad below covered by no region at all. CCA2's Step 1 is ahead of cPLQ's
+            % here, so the working combination is CCA2 Step 1 + cPLQ Step 2/3.
+            V = [2 1; 0 0; 1 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPol(V, E, [0 1 0 0 0 0], F);           % f = xy
+            testCase.verifyEqual(convEnvCPLQ(q).nf, 2);   % the tightness split
+            g = q.conj('cplq');
+            testCase.verifyEqual(g.kind(), 'QuaParCPLQ');
+
+            sBad = [-0.008727 -0.999962];                 % the paper's own flagged dual point
+            S = [sBad; 1.90 2.50; -1 -1; 0.5 0.5; 3 -2; -3 2; 2 2];
+            for i = 1:size(S,1)
+                s = S(i,:);
+                expected = convEnvCPLQTest.supBilinearOverPoly(s, V);
+                got = g.eval(s);
+                testCase.verifyTrue(isfinite(got), ...
+                    sprintf('no region covers s=(%.6f,%.6f)', s(1), s(2)));
+                testCase.verifyEqual(got, expected, 'AbsTol', 1e-9, ...
+                    sprintf('s=(%.6f,%.6f)', s(1), s(2)));
+            end
         end
 
         function multiFaceUnboundedDomainStillNotImplemented(testCase)

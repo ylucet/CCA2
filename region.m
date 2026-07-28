@@ -94,7 +94,14 @@ classdef region
          end
 
          function f = plus(obj1,obj2)
-            l = []; 
+            % plus is region INTERSECTION (it unions the inequality lists), so an empty operand
+            % gives an empty result. Without this guard `obj1.ineqs` on a region.empty() array
+            % returns a 0-element comma-separated list and the indexing below errors instead.
+            if isempty(obj1) || isempty(obj2)
+                f = region.empty();
+                return
+            end
+            l = [];
             for i = 1:size(obj1.ineqs,2)
               l = [l,obj1.ineqs(i).f];
             end
@@ -1706,13 +1713,25 @@ classdef region
             end
 
             % get Ineqs going through a vertex
+            point = zeros(nP,0);   % nP rows up front: a vertex with NO active constraint would
+                                   % otherwise leave `point` short and the ip-loop below would
+                                   % index a row that does not exist (MATLAB:badsubscript).
             for i = 1:size(obj.ineqs,2)
                 for j = 1:nP
-                    if isAlways(obj.ineqs(i).subsF(obj.vars,[px(j),py(j)]).f == 0)
+                    % subsF returns NaN for a 0/0 substitution -- both numerator and denominator
+                    % vanishing AT this vertex, which is a REMOVABLE singularity, not a missing
+                    % value. Resolve it by the directional limit, exactly as vertexOfEdge does;
+                    % isAlways(NaN == 0) is false, so without this the constraint is silently
+                    % dropped and the vertex ends up with no active constraint at all.
+                    fij = obj.ineqs(i).subsF(obj.vars,[px(j),py(j)]);
+                    if isnan(fij.f)
+                        fij = obj.ineqs(i).limitDirectional(obj.vars,[px(j),py(j)]);
+                    end
+                    if ~isnan(fij.f) && isAlways(fij.f == 0)
                     nPoint(j)=nPoint(j)+1;
                     point(j,nPoint(j)) = i;
                     end
-                    
+
                 end
             end
             if all(nPoint == 0)
@@ -2690,8 +2709,24 @@ classdef region
               %disp('vertex of edge')
               %obj.nv
               %obj.ineqs(ind)
+               % HISTORY: subsF signals a 0/0 substitution by returning NaN (see its den==0
+               % branch), and isZero -> getDen -> numden(NaN) then errors out of MuPAD with
+               % "Invalid return value 'undefined'". That is not an edge case here: a rational
+               % constraint whose numerator and denominator both vanish AT one of the region's own
+               % vertices is the normal shape of these envelope/conjugate pieces -- the
+               % singularity is removable, and the value is the limit. funcVertices already uses
+               % exactly this NaN-then-limit idiom; this site simply did not.
                for i = 1:obj.nv
                  f1 = obj.ineqs(ind).subsF (obj.vars,[obj.vx(i),obj.vy(i)]);
+                 if isnan(f1.f)
+                     % 0/0 at this vertex. subsF flags that with NaN; the value is the LIMIT.
+                     % limitDirectional, not limit: the latter iterates univariate limits and
+                     % returns NaN again for a bivariate 0/0 (see symbolicFunction.limit).
+                     f1 = obj.ineqs(ind).limitDirectional (obj.vars,[obj.vx(i),obj.vy(i)]);
+                 end
+                 if isnan(f1.f)
+                     continue   % genuinely no limit: the vertex is not on this edge
+                 end
                  if f1.isZero
                      nv = nv + 1;
                      vx(nv) = obj.vx(i);

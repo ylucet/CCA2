@@ -128,11 +128,71 @@ function g = conjSingleTriangle(obj)
         end
     end
     env = convEnvCPLQ(obj);
-    if env.nf == 1
-        g = conjPieceCPLQ(env);
+    try
+        if env.nf == 1
+            g = conjPieceCPLQ(env);
+        else
+            g = conjMaxOfSubTriangles(env);
+        end
         return
+    catch ME
+        if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented')
+            rethrow(ME);
+        end
+        % The only way to get here is Step 1 having produced a RATIONAL face: Step 2 has no
+        % rational branch (conjPieceCPLQ.m:107). cPLQ's Step 2 does -- fall back to it.
     end
-    g = conjMaxOfSubTriangles(env);
+    g = conjEnvelopeViaCPLQ(env);
+end
+
+% ================================================================================================
+function g = conjEnvelopeViaCPLQ(env)
+% Conjugate Step 1's envelope through cPLQ's OWN symbolic Step 2/3 instead of the numeric
+% conjPieceCPLQ + maxQuaPar pair, for the envelopes the numeric path cannot take: those with a
+% genuinely rational face, which Step 1 emits whenever it has to split an indefinite triangle
+% (2- or 3-convex-edge). Returns a QuaParCPLQ, exactly as Case C does -- the same wrapper, for the
+% same reason (the V/E/Ec/F/P mesh is not reconstructed from cPLQ's symbolic regions; see
+% QuaParCPLQ.m).
+%
+% This is "start from cPLQ" applied where it belongs. Note carefully WHICH half is reused: cPLQ's
+% Step 2/3, not its Step 1. Running cPLQ end to end on the ORIGINAL triangle does not work, and
+% that is a statement about cPLQ's Step 1 only:
+%   * for a 2-convex-edge triangle cPLQ's own envelope is the single Appendix A.4 formula, which
+%     CCA2 established is not always tight (convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight);
+%     its conjugate is correspondingly wrong, and on conv{(2,1),(0,0),(1,0)} it leaves the paper's
+%     own flagged dual point s=(-0.008727,-0.999962) covered by NO region at all (evaluates NaN);
+%   * cPLQ's Step 1 has no nCE==3 branch (neither convexEnvelope1 nor conjugateFunction), so fed
+%     a 3-convex-edge triangle directly it silently returns an EMPTY envelope.
+% Neither is a reason to teach anything a 3-convex-edge case: [COAP] Appendix A.5's split turns
+% such a triangle into 2-convex-edge sub-triangles, and CCA2's Step 1 already does that. By the
+% time cPLQ's Step 2 is called here, every face it sees has come through that split. So the
+% working combination is CCA2 Step 1 + cPLQ Step 2/3, which is what this does.
+%
+% VALIDATION (2026-07-28): on conv{(2,1),(0,0),(1,0)} with f=xy -- the 2-convex-edge split, whose
+% envelope has a rational face -- the result matches sup_{x in T} <s,x> - f(x) to <= 8.9e-16 at
+% all 10 sampled dual points, including the flagged point above where cPLQ's own end-to-end path
+% returns NaN. See conjCPLQTest.indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2.
+    p = ratPolToPlq(env);
+    try
+        p = p.maximum;
+    catch ME
+        where = '';
+        if ~isempty(ME.stack)
+            where = sprintf(' at %s:%d', ME.stack(1).name, ME.stack(1).line);
+        end
+        error('PLQ:conjCPLQ:cplqFailed', ...
+            ['Step 2 fell back to cPLQ for a rational envelope face, and cPLQ''s symbolic ' ...
+             'pipeline failed%s (%s: %s). Step 2 itself (the per-piece conjugate) is known to ' ...
+             'complete on these envelopes; what is not yet reliable is Step 3, cPLQ''s ' ...
+             'cross-piece maximum (plq.maximumConjugate -> functionNDomain.maximumP -> ' ...
+             'region.maximum). See SUPPORT_MATRIX.md section 1.2.'], ...
+            where, ME.identifier, ME.message);
+    end
+    if isempty(p.maxConjugate)
+        error('PLQ:conjCPLQ:cplqFailed', ...
+            'cPLQ''s Step 2/3 returned an empty conjugate for Step 1''s envelope.');
+    end
+    g = QuaParCPLQ(p.maxConjugate);
 end
 
 % ================================================================================================

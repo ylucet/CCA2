@@ -353,6 +353,58 @@ classdef symbolicFunction
              f = symbolicFunction(f0);
          end
 
+         function f = limitDirectional (obj, vars, pt)
+         % objective: limit of this (rational) expression AT pt, taken along straight lines into
+         %   pt -- the bivariate 0/0 that `limit` above cannot resolve.
+         %
+         % WHY THIS EXISTS: `limit` takes ITERATED univariate limits (in var 1, then var 2). For a
+         % genuine bivariate 0/0 that is the wrong tool -- the inner limit is itself indeterminate
+         % or infinite, and the iteration returns NaN. Restricting to a line pt + t*u turns the
+         % same question into ONE univariate limit, which a rational function always answers.
+         %
+         % These 0/0s are not pathological, they are the normal shape of the envelope/conjugate
+         % pieces: the numerator and denominator both vanish at a vertex, the singularity is
+         % REMOVABLE, and the value there is this limit. A removable singularity gives the same
+         % answer along every direction, so several are tried and required to agree -- that
+         % agreement IS the check that the limit exists. Disagreement (or no finite value at all)
+         % returns NaN, exactly as before, so a genuinely directional singularity is still
+         % reported rather than silently given one arbitrary branch's value.
+         %
+         % Bivariate only (that is all `region` ever uses); anything else defers to `limit`.
+             if size(vars,2) ~= 2
+                 f = obj.limit(vars, pt);
+                 return
+             end
+             t = sym('tLimitDirectional');
+             % Generic directions: a removable singularity is direction-independent, so these only
+             % have to avoid being tangent to the zero set all at once.
+             dirs = [1 0; 0 1; 1 1; 3 -2; -1 2];
+             vals = sym([]);
+             for k = 1:size(dirs,1)
+                 e = subs(obj.f, vars, [pt(1) + t*dirs(k,1), pt(2) + t*dirs(k,2)]);
+                 try
+                     v = limit(e, t, 0);
+                 catch
+                     continue
+                 end
+                 if has(v, t) || isnan(v) || isinf(v)
+                     continue
+                 end
+                 vals(end+1) = v; %#ok<AGROW>
+             end
+             if isempty(vals)
+                 f = symbolicFunction(sym(nan));
+                 return
+             end
+             for k = 2:numel(vals)
+                 if ~isAlways(vals(k) == vals(1), 'Unknown', 'false')
+                     f = symbolicFunction(sym(nan));   % direction-dependent: no limit
+                     return
+                 end
+             end
+             f = symbolicFunction(simplifyFraction(vals(1)));
+         end
+
          function g = gradient(obj, vars)
            
            for i = 1:size(vars,2)
