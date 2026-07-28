@@ -17,3 +17,11 @@ reference/
 *.asv
 *.m~
 slprj/
+
+# Published (version-of-record) PDFs of the project's own papers, kept LOCAL only. Same reason as
+# reference/ above: redistributing a publisher's typeset version is generally not permitted by the
+# publishing agreement, and CCA2 is intended to become public. The papers are cited in full in
+# README.md and DESIGN.md ([COAP] and [JOGO]), which is what a public reader needs. The project's
+# OWN documents and figures in doc/ (3-edge.tex/.pdf, fig_*.pdf, *.svg) remain tracked.
+doc/s10589-026-00781-5.pdf
+doc/s10898-025-01503-7.pdf
