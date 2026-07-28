@@ -1,43 +1,178 @@
 # CCA2
-Computational Convex Analysis (CCA) numerical library for bivariate functions
-Copyright (C) 2008-2021, Yves Lucet
 
-This toolbox implements functions for convex operations on bivariate 
-piecewise-linear cubic functions.
+**Computational Convex Analysis for bivariate piecewise linear-quadratic (PLQ) functions.**
 
-Here are the main files provided by the package. 
-Filename | Description
--- | --
-README.txt   | The present file
-PLQVC.m      | The main class implementing convexity detection algorithm, plotting, data structure...
-PLQVCTest.m  | Unit tests
+CCA2 computes Fenchel conjugates, convex envelopes and the operators derived from them for
+bivariate PLQ functions — **including nonconvex ones** — in exact/closed form rather than on a
+grid. No LLT or other grid-based algorithms are used.
 
-## Unit Tests: in PLQVCTest.m
+Copyright (C) 2008–2026, Yves Lucet. Licensed under **GPL-3** (see `LICENSE`); contributors listed
+in `copyright.txt`.
 
-```MATLAB
->> runtests('PLQVCTest')
-Running PLQVCTest
-.......... .......... .......... .......... ......
-Done PLQVCTest
-__________
+---
 
+## Scope
 
-ans = 
+**CCA2's goal is the conjugate and biconjugate of a `QuaPoly`.** That is the design target, and it
+is what determines which cases are implemented.
 
-  1×46 TestResult array with properties:
+Everything downstream of a `QuaPoly` is a *special case*, and the special-ness is load-bearing:
+the convex envelope of a `QuaPoly` triangle is a very special `RatPol`, and the conjugate of those
+triangles is a very special `QuaPar` (for instance, a parabolic edge only ever occurs surrounded by
+two parallel rays). **Hyperbolic edges therefore never arise** and are not representable — not as a
+limitation, but because no `QuaPoly` conjugate/biconjugate or intermediate computation can produce
+one.
 
-    Name
-    Passed
-    Failed
-    Incomplete
-    Duration
-    Details
+This matters when reading the source: several `notImplemented` guards protect *unreachable*
+branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classifies every guard as
+**OK** / **GAP** / **not reachable** / **internal invariant**, generated from the code itself.
 
-Totals:
-   46 Passed, 0 Failed, 0 Incomplete.
-   2.9043 seconds testing time.
-```   
+---
 
-## Credits:
+## Status
 
-See copyright.txt for the list of contributors to this library.
+**Alpha — not yet released.** The API is still changing; there is no tagged version.
+
+Test suite: **238 passed / 1 failed** across 20 suites (the single failure, `testRegion/testCreation`,
+is a longstanding toolbox-compatibility issue unrelated to the conjugate pipeline).
+
+Before depending on CCA2, read `SUPPORT_MATRIX.md` §8 — the summary of what actually blocks a
+general release. The largest gaps today: `partialConj` is unimplemented for every engine; the
+`'pqp'` and `'graph'` conjugate engines do not exist; unbounded multi-face domains error.
+
+---
+
+## Types
+
+All function types inherit from **`RatPar`** (RATional on a PARabolic subdivision), so every
+operator has a single static return type. `kind()` reports what an object actually is.
+
+```
+RatPar (abstract)                      — common parent; carries the V/E/f/F/P mesh
+  ├── QuaPoly      quadratic on polyhedral    — the input type
+  ├── RatPol       rational on polyhedral     — adds `den` (per-face linear denominator)
+  ├── QuaPar       quadratic on parabolic     — adds `Ec`  (per-edge conic)
+  └── QuaParCPLQ   a QuaPar still in symbolic form (mesh not reconstructed)
+```
+
+```matlab
+g = f.conj();          % always a RatPar
+switch g.kind()        % 'QuaPoly' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
+    ...
+end
+g.isMeshed()           % false only for the symbolic QuaParCPLQ form
+```
+
+The four types are **siblings**, not a chain: `QuaPoly` is mathematically a special case of
+`RatPol`, but subclassing it would make `isa(aQuaPoly,'RatPol')` true and break code that reads
+`.den` after such a test. `kind()` is derived from the real class, never stored, so it cannot drift.
+See `RETURN_TYPE.md`.
+
+---
+
+## Quick start
+
+```matlab
+addpath('/path/to/CCA2');
+
+% f(x,y) = x*y over the triangle (0,0),(1,0),(0,1) — nonconvex on that domain
+V = [0 0; 1 0; 0 1];
+E = [1 2 1; 2 3 1; 3 1 1];      % [from to isSegment]
+F = [1 0; 1 0; 1 0];            % [leftFace rightFace], 0 = +infinity
+f = QuaPoly(V, E, [0 1 0 0 0 0], F);   % coeffs [x^2 xy y^2 x y 1]
+
+g = f.conj();                   % Fenchel conjugate  -> RatPar (kind 'QuaPar')
+g.eval([0.3 0.7])               % ans = 0.7
+
+% full-domain strictly convex quadratic
+q = QuaPoly([1 0 1 0 0 0]);     % (x^2 + y^2)/2
+q.conj().kind()                 % 'QuaPoly'
+q.biconj().kind()               % 'QuaPoly' -- back to itself
+```
+
+**`biconj` does not yet work for every input.** It is `conj∘conj`, so it needs the *conjugate* to
+be conjugable too, and the conjugate of a bounded-domain function is finite everywhere — an
+unbounded multi-face domain, which `conjCPLQ` does not handle. Current coverage:
+
+| Input | `conj` | `biconj` |
+|---|---|---|
+| Full-domain strictly convex quadratic | ✅ `QuaPoly` | ✅ |
+| **Single bounded triangle** | ✅ `QuaPar` | ❌ `PLQ:conjCPLQ:notImplemented` |
+| General bounded multi-face domain | ✅ `QuaParCPLQ` | ✅ (symbolic) |
+
+Note the shape of this: the **symbolic** path supports the biconjugate, while the faster **numeric**
+single-triangle path does not. Closing it needs conjugation of an unbounded multi-face `QuaPar`.
+
+---
+
+## Operators
+
+| Operator | Meaning | Notes |
+|---|---|---|
+| `conj(f, engine)` | Fenchel conjugate `f*` | `engine='cplq'` (default) is the **only** one implemented |
+| `biconj(f)` | `f** = conj(conj(f))` | closed convex envelope |
+| `convEnv(f)` | convex envelope | via `biconj`, or `convEnvCPLQ` directly |
+| `add`, `sub` | pointwise `f±g` | `QuaPoly` and `QuaPar`; **not** `RatPol` |
+| `scalarMul`, `negate` | `c·f`, `−f` | all types |
+| `addQuadratic(f,A,b,c)` | `f + (½xᵀAx+bᵀx+c)` | all types |
+| `infConv(f,g)` | inf-convolution | **convex `f,g` only** |
+| `moreau(f,mu)` | Moreau envelope | a **single** conjugate (expand-the-square); valid for nonconvex `f` |
+| `lasryLions(f,lam,mu)` | double envelope | as `moreau` |
+| `proxAverage(f,g,lam,mu)` | proximal average | **convex `f,g` only** |
+| `eval`, `isConvex`, `plot` | evaluation / tests / display | `isConvex` is untested |
+| `partialConj` | conjugate in one variable | **not implemented** (any engine, any type) |
+
+---
+
+## Algorithms and references
+
+The `'cplq'` engine implements the linear-time algorithms of:
+
+- **[COAP]** Karmarkar & Lucet, *Computing the convex envelope of bivariate PLQ functions in
+  linear time*, Comput. Optim. Appl. **94** (2026) 747–780.
+- **[JOGO]** Karmarkar & Lucet, *A linear-time algorithm to compute the conjugate of nonconvex
+  bivariate PLQ functions*, J. Glob. Optim. **94** (2026) 3–34.
+
+Both handle **nonconvex** PLQ. `DESIGN.md` lists the full lineage of predecessor work (convex-only
+methods: parametric-QP, graph-matrix, and Kumar's convex-envelope front-end) and maps each to the
+engine it would supply.
+
+**On the original `cPLQ` package.** CCA2 contains a substantially rewritten version of the symbolic
+per-piece machinery (`plq.m`, `region.m`, `functionNDomain.m`, `symbolicFunction.m`, and
+companions). The original `cPLQ` package is **deliberately not bundled**: it is GPL-3 too, so there
+is no licensing obstacle — the reason is that CCA2's rewrite supersedes it, and shipping both would
+leave users wondering which to use.
+
+---
+
+## Repository map
+
+| File | Purpose |
+|---|---|
+| `RatPar.m` | abstract parent of all function types; `kind()`, `isMeshed()` |
+| `QuaPoly.m` | quadratic on polyhedral — the input type |
+| `QuaPar.m` | quadratic on parabolic — the conjugate's type |
+| `RatPol.m` | rational on polyhedral — the convex envelope's type |
+| `QuaParCPLQ.m` | conjugate still in symbolic form |
+| `conjCPLQ.m` | conjugate entry point (Cases A/B/C) |
+| `convEnvCPLQ.m` | Step 1 — convex envelope per piece |
+| `conjPieceCPLQ.m` | Step 2 — conjugate of one envelope piece |
+| `maxQuaPar.m` | Step 3 — pointwise max of two full-domain conjugates |
+| `clipArcByHalfPlane.m`, `parabolaArcFrame.m` | parabola-arc geometry primitives |
+| `addQuaPoly.m`, `addQuaPar.m` | pointwise addition |
+| `infConv.m`, `moreau.m`, `lasryLions.m`, `proxAverage.m` | derived operators |
+| `SUPPORT_MATRIX.md` | what works, what does not, generated from the error guards |
+| `RETURN_TYPE.md` | why `RatPar` exists |
+| `DESIGN.md` | full design proposal and implementation history |
+
+---
+
+## Tests
+
+```matlab
+runtests('RatParTest')        % the type hierarchy contract
+runtests('conjCPLQTest')      % the conjugate pipeline end to end
+runtests('maxQuaParTest')     % Step 3, including curved edges
+```
+
+Run everything with `runtests` over the `*Test.m` / `test*.m` files in the repository root.

@@ -1,0 +1,12 @@
+# The original cPLQ package, kept locally as a reference clone only.
+#
+# CCA2 contains a substantially REWRITTEN version of that symbolic per-piece machinery (plq.m,
+# region.m, functionNDomain.m, symbolicFunction.m and companions, in this repository's root), so
+# the original is deliberately NOT bundled. Licensing is not the reason -- cPLQ is GPL-3, same as
+# CCA2. The reason is that shipping both would leave users wondering which version to use.
+cPLQ/
+
+# MATLAB / editor cruft
+*.asv
+*.m~
+slprj/

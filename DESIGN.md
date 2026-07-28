@@ -66,8 +66,17 @@ code. Cross-check the actual repo file list before assuming an operator or engin
 
 **Implemented** (MATLAB, in the repo root):
 - Classes `QuaPoly` (leaf/input type, formerly `PLQVC`), `QuaPar` (conjugate `f*`), `RatPol`
-  (convex envelope `f**`) — each its own `classdef`, **not yet organized under a common `RatPar`
-  parent** (II.3's class hierarchy is proposed, not built).
+  (convex envelope `f**`), `QuaParCPLQ` (a conjugate still in cPLQ's symbolic form) — **now all
+  organized under the common `RatPar` parent** (II.3's hierarchy, built 2026-07-27). `RatPar` is
+  abstract and declares the nine shared mesh properties (`nv, ne, nf, V, E, f, F, P, dom`), which
+  previously appeared verbatim in each class; children add only what is their own (`RatPol.den`,
+  `QuaPar.Ec`, `QuaPoly` nothing). `kind()` returns the concrete type name, derived from
+  `class(obj)` rather than stored so it cannot drift; `isMeshed()` separates the symbolic
+  `QuaParCPLQ` form from the three meshed types. **The four types are SIBLINGS, not a chain**:
+  chaining `QuaPoly < RatPol` would make `isa(aQuaPoly,'RatPol')` true and break code that reads
+  `.den` after such a test (e.g. `conjPieceCPLQ`'s rational-piece guard). This gives every
+  operator a single static return type — see `RETURN_TYPE.md`, `RatPar.m` and `RatParTest.m`.
+  The refactor changed no test: 163/163 passed before adding `RatParTest`.
 - Conjugate engine **`'cplq'` only** (`conjCPLQ.m`, `conjPieceCPLQ.m`, `convEnvCPLQ.m`) —
   incremental; each file's own header STATUS block lists exactly which piece-classification
   cases are covered so far.

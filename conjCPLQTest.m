@@ -24,6 +24,39 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(b.f, p.f, 'AbsTol', 1e-12);
         end
 
+        function biconjCoverageByInputCase(testCase)
+            % Pins exactly which inputs biconj currently handles, INCLUDING the one it does not.
+            % biconj is conj-of-conj, so it needs the CONJUGATE to be conjugable too -- and the
+            % conjugate of a bounded-domain function is finite everywhere, i.e. lives on an
+            % UNBOUNDED multi-face domain, which conjCPLQ rejects (Case C requires isDomBounded).
+            %
+            % The result is a gap with an unintuitive shape, worth a test so it stays visible:
+            % the SYMBOLIC path (Case C, via QuaParCPLQ.conj into cPLQ's own machinery) supports
+            % the biconjugate, while the faster NUMERIC single-triangle path (Case B) does not.
+            % Since conjugate AND biconjugate of a QuaPoly is this project's stated goal, closing
+            % this is a first-class task, not a corner case -- see SUPPORT_MATRIX.md section 3.
+            % This test documents current behaviour; when the gap is closed, the Case-B
+            % verifyError below should become a positive check.
+            E3 = [1 2 1; 2 3 1; 3 1 1]; F3 = [1 0; 1 0; 1 0];
+
+            % Case A -- full-domain strictly convex quadratic: conjugate is again a full-domain
+            % quadratic, so the second conjugation is Case A too, and biconj closes the loop.
+            caseA = QuaPoly([1 0 1 0 0 0]);
+            testCase.verifyEqual(caseA.conj().kind(), 'QuaPoly');
+            testCase.verifyEqual(caseA.biconj().kind(), 'QuaPoly');
+
+            % Case B -- single bounded triangle: conj succeeds and gives a genuine mesh QuaPar,
+            % but that QuaPar is full-domain, so the second conjugation has nowhere to go.
+            caseB = QuaPoly([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
+            testCase.verifyEqual(caseB.conj().kind(), 'QuaPar');
+            testCase.verifyError(@() caseB.biconj(), 'PLQ:conjCPLQ:notImplemented');
+
+            % ...and it is the DOMAIN, not nonconvexity, that blocks it: a convex triangle piece
+            % fails identically.
+            caseBconvex = QuaPoly([0 0; 1 0; 0 1], E3, [1 0 1 0 0 0], F3);
+            testCase.verifyError(@() caseBconvex.biconj(), 'PLQ:conjCPLQ:notImplemented');
+        end
+
         function generalPositiveDefiniteQuadratic(testCase)
             % f(x) = 1/2 x'Q x + L'x + k,  Q=[2 0;0 4], L=[1;-1], k=3.
             % f*(s) = 1/2 (s-L)' inv(Q) (s-L) - k.

@@ -1,4 +1,4 @@
-classdef QuaParCPLQ
+classdef QuaParCPLQ < RatPar
     % QuaParCPLQ  Wraps a cPLQ `functionNDomain` array (a list of (region, symbolicFunction)
     % pairs) so it can be composed by the same generic convex-analysis operators (conj/add/
     % scalarMul/addQuadratic/addScaledEnergy/eval) that QuaPoly/QuaPar already support -- the

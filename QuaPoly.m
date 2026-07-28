@@ -1,4 +1,4 @@
-classdef QuaPoly
+classdef QuaPoly < RatPar
    % QuaPoly: a value class for piecewise QUAdratic functions on a POLYhedral subdivision.
    % This is the leaf (input) type of the CCA2 class hierarchy described in DESIGN.md:
    %   RatPar (rational cubic/linear on parabolic) > RatPol, QuaPar > QuaPoly.
@@ -19,46 +19,11 @@ classdef QuaPoly
    % of quadratic functions. The class is an extension of piecewise linear-quadratic functions to bivariate CUBIC 
    % polynomials with CONNECTED domain forming a polyhedral partition. Disconnected domains are not supported.
    
-   properties
-        nv {mustBeInteger,mustBeNonnegative}%number of vertices
-        ne {mustBeInteger,mustBeNonnegative}%number of edges
-        nf {mustBeInteger,mustBeNonnegative}%number of faces
-        V (:,2){mustBeNumeric} % nv x 2 matrix storing unique vertices
-        E (:,3){mustBeInteger,mustBeNonnegative} % ne x 3 matrix storing edge indices where Edge j is [V(E(j,1)), V(E(j,2))] 
-            %and E(j,3) = 1 for a segment and 0 for a ray.
-        f (:,10){mustBeNumeric} % nf x 10 matrix storing the coefficients of the cubic
-            %f(k,:)=c means at the point (x,y) in the face k  the function value 
-            % is C*([x^3; x^2 y; x y^2; y^3; x^2; x y; y^2; x; y; 1] .* [1/6; 1/2; 1/2; 1/6; 1/2; 1; 1/2; 1; 1; 1]
-            % the coefficients vector [1/6; 1/2; 1/2; 1/6; 1/2; 1; 1/2; 1; 1; 1] is required to easily manipulate
-            % Hessians; it is the same reason we work with 0.5 x^2 instead of x^2, i.e. so that diff(0.5 x^2,1) = 1
-        F (:,2){mustBeInteger,mustBeNonnegative} % ne x 2 matrix storing indicating function indices. F(j)=[k1, k2] means
-            %the quadratic on the left (resp. right) of edge j has coefficients f(k1) (resp. f(k2)).
-            %an index value of 0 indicates the function has value +infinity on that side
-        % Special cases: functions with domain dimension less than 2
-            %the needle function is stored as V = [0 0];E = [];f = [1 2 3];F = [];%V has 1 row, f has 1 row (and should
-            %       be a constant but any cubic is accepted
-            %the edge chain function
-            %
-        P %{cell} %cell array of size nf representing an adjacency list. Each
-            %element P{i} is an array of indices k with 1<= abs(k) <= ne(i) 
-            %where ne(i) is the number of edges in face i. 
-            %If k>0, then the face lies on the right of the edge; otherwise k<0. 
-            %The edge indices are ordered to obtain a unique
-            %representation. If the face is bounded, the smallest index
-            %is on the left, then go clockwise. If the face is
-            %unbounded, the first index is the unbounded edge with the
-            %smallest index, then go clockwise (the last index is the
-            %remaining unbounded edge).
-        dom {struct}% struct that stores the domain information (set on which the function is finite); PLC assumes the domain is CONNECTED
-            %   dim: nonnegative integer storing the dimension of the domain
-            %       dim=0 means the domain is a single vertex (only row in V); PLC is a needle function
-            %       dim=1 has 3 cases: segment (2 vertexes, 1 edge), ray (2 vertexes, 1 edge), and boundary of a slice
-            %       (3 vertexes, 2 edges). COULD ALSO BE A CHAIN OF EDGES OR ANY GRAPH WITH FUNCTION ONLY DEFINED
-            %       ON EDGES; NOT TESTED SINCE THE CLASS FOCUSES MOSTLY ON CONVEX FUNCTIONS
-            %   P: if nonempty, the domain has dimension two; in that case P stores the indexes of the face 
-            %       representing the domain with the INVERSE convention as P above to obtain a unique representation.
-            %   isConvex: boolean. true if the domain is convex
-   end
+   % All nine mesh properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
+   % declares them verbatim as they used to appear here; QuaPoly -- quadratic on a polyhedral
+   % subdivision -- is the specialization that adds nothing of its own (no per-face denominator
+   % like RatPol's `den`, no per-edge conic like QuaPar's `Ec`). See RatPar.m for the hierarchy
+   % and for why the four types are siblings rather than a chain.
    
    % Class methods
    methods

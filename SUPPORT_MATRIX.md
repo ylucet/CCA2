@@ -108,10 +108,27 @@ errors.
 
 ## 3. Biconjugate and convex envelope
 
+`biconj` is `conj∘conj`, so it needs the **conjugate** to be conjugable too. The conjugate of a
+bounded-domain function is finite everywhere — an unbounded multi-face domain — which §1.2 shows
+`conjCPLQ` rejects. Measured coverage, by the input's `conjCPLQ` case:
+
+| Input | `conj` | `biconj` | Why |
+|---|---|---|---|
+| **A** full-domain strictly convex quadratic | **OK** → `QuaPoly` | **OK** | conjugate is again a full-domain quadratic (Case A twice) |
+| **B** single bounded triangle | **OK** → `QuaPar` | **GAP** | conjugate is a mesh `QuaPar` on an unbounded multi-face domain → `PLQ:conjCPLQ:notImplemented` (`conjCPLQ.m:103`) |
+| **C** general bounded multi-face domain | **OK** → `QuaParCPLQ` | **OK** | `QuaParCPLQ.conj` routes through cPLQ's own symbolic machinery, which handles it |
+
+Note the shape of this gap: the **symbolic** path supports the biconjugate while the faster
+**numeric** single-triangle path does not. Since conjugate *and biconjugate* of a `QuaPoly` is the
+project's stated goal (§0), this is a first-class gap, not a corner case. Closing it means
+conjugating an unbounded multi-face `QuaPar` — either by extending `conjCPLQ`, or by routing Case B
+through the cPLQ path when a second conjugation is wanted.
+Regression tests: `conjCPLQTest.biconjCoverageByInputCase`.
+
 | Operation | Status | Notes |
 |---|---|---|
-| `QuaPoly.biconj` | **OK** where both `conj` steps are supported | `conj∘conj`; inherits §1.2's shape limits |
-| `QuaPar.biconj` | **OK** | — |
+| `QuaPoly.biconj` | **partial** | see the table above |
+| `QuaPar.biconj` | **partial** | same root cause — a full-domain `QuaPar` is not conjugable |
 | `RatPol.biconj` | **GAP** | `RatPol:biconj:notImplemented` — `RatPol.m:664` |
 | `RatPol.conj` | **GAP** | `RatPol:conj:notImplemented` — `RatPol.m:653` |
 | `convEnvCPLQ`, nonconvex quadratic over a **bounded triangle** | **OK** | 0/1/2/3-convex-edge splits all implemented |
@@ -197,13 +214,17 @@ The missing parent is what forces `conj`'s return type to vary by input shape (`
 
 Ordered by how likely a downstream caller is to hit it:
 
-1. **`conj`'s return type varies** (`QuaPoly` / `QuaPar` / `QuaParCPLQ`) — see `RETURN_TYPE.md`.
+1. **`biconj` fails for a single bounded triangle** (§3) — half the project's stated goal, broken
+   on the numeric path. Root cause is the same as item 3 below.
 2. **`partialConj` is entirely unimplemented** (§2).
-3. **`'pqp'` and `'graph'` engines missing** (§1.1).
-4. **Unbounded multi-face domains error** (§1.2) — not an exotic input.
+3. **Unbounded multi-face domains error** (§1.2) — not an exotic input, and the cause of item 1.
+4. **`'pqp'` and `'graph'` engines missing** (§1.1).
 5. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 6. **Two known wrong-answer defects** (§7).
 7. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
+
+**Resolved 2026-07-27:** `conj`'s return type no longer varies by input shape — every type now
+inherits from `RatPar` and `kind()` reports the concrete one. See `RETURN_TYPE.md` and `RatPar.m`.
 
 Items **not** on this list, deliberately: every **N/R** row above. They are unreachable from a
 `QuaPoly` conjugate/biconjugate and require no work.
