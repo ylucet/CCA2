@@ -962,6 +962,41 @@ the plan:
    confirming the known `mergeL`/`removeTangent` exact-tie-point gap (next paragraph) is inherited
    unchanged, not worsened, by the new wrapper. Full regression: `conjCPLQTest`/`infConvTest`/
    `QuaParTest`/`cplqAdapterTest` all still pass (33/33) after this change.
+   **Step 2 falls back to cPLQ for a RATIONAL envelope face (2026-07-28)**: since Step 1 became
+   recursive it emits genuinely rational faces when it splits an indefinite triangle, and CCA2's
+   numeric Step 2 (`conjPieceCPLQ`) has no rational branch -- so `conj` of an ordinary
+   2-convex-edge triangle errored. `conjCPLQ`'s `conjSingleTriangle` now catches that one guard
+   and routes Step 1's envelope through cPLQ's own symbolic Step 2/3 (`ratPolToPlq.m` ->
+   `plq.maximum`), returning a `QuaParCPLQ` exactly as Case C does. Verified exact (<= 8.9e-16 vs
+   `sup_x <s,x> - f(x)`) at 10 dual points on `f=xy` over `conv{(2,1),(0,0),(1,0)}`.
+   Two things this surfaced, both worth recording because "cPLQ already does this" is the natural
+   assumption and it is only half true:
+   (a) it is cPLQ's **Step 2/3** that is reusable, not its Step 1. Run end to end on the same
+   triangle, cPLQ uses its own single Appendix A.4 envelope, which CCA2 established is not always
+   tight -- and the resulting conjugate leaves the paper's own flagged dual point
+   `s=(-0.008727,-0.999962)` covered by NO region (evaluates `NaN`). cPLQ's Step 1 also has no
+   `nCE==3` branch, so fed a 3-convex-edge triangle directly it silently returns an empty
+   envelope. Neither is a reason to implement a 3-convex-edge case anywhere: [COAP] Appendix A.5's
+   split reduces such a triangle to 2-convex-edge sub-triangles and CCA2's Step 1 already applies
+   it, so every face reaching Step 2 has come through it.
+   (b) four latent bugs in the vendored symbolic layer, all previously unreachable because the
+   `0/0` below errored first: `plq_1p.m`'s `nCE==2` branch reads `a..f` off the envelope by
+   matching monomials, so an envelope with no linear term left `d` unassigned; `region.plus`
+   indexed into an empty region array; and `region.vertexOfEdge` /
+   `region.simplifyUnboundedRegion` both substituted into a removable `0/0` instead of taking its
+   limit.
+   (c) the `0/0` itself, which was the real blocker and was **misdiagnosed at first** as needing
+   exact arithmetic in Step 1. It does not. At the vertex where a face's denominator vanishes the
+   numerator vanishes too, with `grad N` parallel to `grad den` (residual 0 to 1.3e-16): the
+   singularity is REMOVABLE and the coefficients are accurate to ~1e-16. `subsF` already flagged
+   the `0/0` by returning `NaN`, and `region.funcVertices` already used a NaN-then-limit idiom --
+   but `symbolicFunction.limit` takes ITERATED UNIVARIATE limits, which return `NaN` again for a
+   bivariate `0/0`. New `symbolicFunction.limitDirectional` restricts to a line through the point
+   (one univariate limit, always answerable for a rational function) and requires several
+   directions to agree, which is itself the existence check.
+   **Not** closed by this: a 4-face envelope split. Step 2 now completes on all its faces; the
+   remaining failure is in Step 3, cPLQ's cross-piece maximum (`plq.maximumConjugate` ->
+   `functionNDomain.maximumP` -> `region.maximum`).
    **Still open for Phase 1**: `getNormalConeVertexQ` is fixed (see biconjugate bullet above) --
    the remaining known bug is the `mergeL`/`removeTangent` exact-tie-point gap, which
    `QuaParCPLQ.conj` now inherits when composing (see above); a true geometric `QuaPar`

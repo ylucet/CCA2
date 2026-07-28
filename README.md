@@ -33,12 +33,14 @@ branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classif
 
 **Alpha — not yet released.** The API is still changing; there is no tagged version.
 
-Test suite: **238 passed / 1 failed** across 20 suites (the single failure, `testRegion/testCreation`,
-is a longstanding toolbox-compatibility issue unrelated to the conjugate pipeline).
+Test suite: **262 passed / 1 failed** across 22 suites — the 17 CCA2 suites (`*Test.m`) are 187 / 0,
+and the single failure is `testRegion/testCreation` in the vendored cPLQ suites, a longstanding
+toolbox-compatibility issue unrelated to the conjugate pipeline.
 
 Before depending on CCA2, read `SUPPORT_MATRIX.md` §8 — the summary of what actually blocks a
 general release. The largest gaps today: `partialConj` is unimplemented for every engine; the
-`'pqp'` and `'graph'` conjugate engines do not exist; unbounded multi-face domains error.
+`'pqp'` and `'graph'` conjugate engines do not exist; unbounded multi-face domains error; and
+`conj` of a triangle whose envelope splits into 4 faces stops in cPLQ's Step 3.
 
 ---
 
@@ -123,12 +125,18 @@ coverage:
 | Input | `conj` | `biconj` | `biconj` route |
 |---|---|---|---|
 | Full-domain strictly convex quadratic | ✅ `QuaPol` | ✅ `QuaPol` | `conj∘conj` |
-| **Single bounded triangle** | ✅ `QuaPar` | ✅ `RatPol` | convex envelope (`convEnvCPLQ`) |
+| **Single bounded triangle**, 1-face envelope | ✅ `QuaPar` (fast) | ✅ `RatPol` | convex envelope (`convEnvCPLQ`) |
+| **Single bounded triangle**, 2-face envelope split | ✅ `QuaParCPLQ` (slow) | ✅ `RatPol` | convex envelope |
+| **Single bounded triangle**, 4-face envelope split | ❌ (cPLQ Step 3) | ✅ `RatPol` | convex envelope |
 | General bounded multi-face domain | ✅ `QuaParCPLQ` | ✅ `QuaParCPLQ` | `conj∘conj` (symbolic) |
 | Unbounded domain | ❌ | ❌ | — |
 
-The envelope route also succeeds on triangles whose *conjugate* the pipeline cannot yet compute
-(when Step 1's envelope contains a rational face). See `biconjCPLQ.m` and `SUPPORT_MATRIX.md` §3.
+The envelope route also succeeds on the triangles whose *conjugate* the pipeline cannot yet
+compute. When Step 1 has to split an indefinite triangle it emits a **rational** face, which
+CCA2's own Step 2 cannot conjugate; `conj` then falls back to cPLQ's symbolic Step 2/3. That
+closes the 2-face split end to end. For a 4-face split Step 2 completes but cPLQ's Step 3
+(cross-piece maximum) does not yet. See `biconjCPLQ.m`, `ratPolToPlq.m`, and `SUPPORT_MATRIX.md`
+§1.2 and §3.
 
 ---
 

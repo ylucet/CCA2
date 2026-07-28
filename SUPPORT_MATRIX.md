@@ -5,11 +5,11 @@
 corresponds to a specific `error(...)` call, cited by file and identifier, so this file can be
 re-derived and re-checked mechanically.
 
-Last regenerated: 2026-07-28, against a full run of the 17 CCA2 suites (`*Test.m`):
-**186 passed / 0 failed**, up from 176 (the 10 new ones are `biconjCPLQTest`, see §3). The 5
-vendored cPLQ suites (`test*.m`) are untouched by this regeneration and were not re-run; their
-one longstanding failure, `testRegion/testCreation`, is a toolbox-compatibility issue unrelated
-to the conjugate pipeline.
+Last regenerated: 2026-07-28, against a full census of **262 passed / 1 failed** across 22 suites.
+Broken out: the 17 CCA2 suites (`*Test.m`) are **187 / 0**, up from 176 — the 11 new tests are
+`biconjCPLQTest` (§3) and `conjCPLQTest.indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2` (§1.2).
+The 5 vendored cPLQ suites (`test*.m`) are 75 / 1; the single failure, `testRegion/testCreation`,
+is a longstanding toolbox-compatibility issue unrelated to the conjugate pipeline.
 
 ---
 
@@ -64,21 +64,63 @@ largest functional gap.
 |---|---|---|---|
 | Full-domain **strictly convex** quadratic (`nv==0, nf==1`) | **OK** | `QuaPol` | — |
 | Full-domain **non-strictly-convex** quadratic | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:78` |
-| Single **bounded triangle** (`nf==1, nv==3, ne==3`) | **OK** *unless* Step 1's envelope has a rational face (next row) | `QuaPar` | — |
-| …that same triangle when Step 1 splits it into a **rational** sub-piece | **GAP** | — | `conjPieceCPLQ:notImplemented` — `conjPieceCPLQ.m:107`, reached from `conjCPLQ.m:149` |
+| Single **bounded triangle**, Step 1 envelope has **one** face | **OK** (numeric; fast) | `QuaPar` | — |
+| …envelope split with a **rational** face, 2-face split | **OK** (falls back to cPLQ's Step 2/3; slow, ~100 s) | `QuaParCPLQ` | — |
+| …envelope split with a **rational** face, 4-face split | **GAP** — cPLQ's **Step 3** (cross-piece max), see below | — | `PLQ:conjCPLQ:cplqFailed` — `conjCPLQ.m`'s `conjEnvelopeViaCPLQ` |
 | General **bounded** domain (multi-face and/or non-triangular) | **OK** (symbolic; slow) | `QuaParCPLQ` | — |
 | **Unbounded** multi-face domain | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:103` |
 | Step 3 with a **non-triangular** envelope piece | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:161` |
 | Cubic (`PLC`) input | **N/R** — cubic is for `isConvex` only | — | `assertOperable`; `quaPolToPlq:cubic` |
 
-The rational-sub-piece row is the one correction this regeneration makes to a previously-claimed
-**OK**. Since Step 1 became recursive (`convEnvCPLQ`'s `solveTriangleBF`/`splitTwoConvexEdges`,
-2026-07-17/18), the envelope of an indefinite triangle can contain genuinely rational faces, and
-`conjMaxOfSubTriangles` then hands one to Step 2, which rejects it. Reproduced on `f=xy` over
-`(2,1),(0,0),(1,0)` (2 convex edges, 2-face envelope) and over `(0,0),(1,1),(3,2)` (3 convex
-edges, 4-face envelope); already pinned by `conjCPLQTest.indefiniteTriangleThreeConvexEdgesUsesStep3`
-and by `biconjCPLQTest.succeedsWhereTheConjugateItselfFails`. Note that `biconj` is **not** affected
-— see §3.
+Those three rows replace a single previously-claimed **OK**. Since Step 1 became recursive
+(`convEnvCPLQ`'s `solveTriangleBF`/`splitTwoConvexEdges`, 2026-07-17/18), the envelope of an
+indefinite triangle can contain genuinely rational faces, and `conjMaxOfSubTriangles` hands one to
+Step 2, which has no rational branch (§1.3).
+
+**Step 2 now falls back to cPLQ's own symbolic Step 2/3 for exactly those envelopes**
+(`conjCPLQ.m`'s `conjEnvelopeViaCPLQ`, via the new `ratPolToPlq.m` adapter), which closes the
+2-convex-edge case: on `f=xy` over `(2,1),(0,0),(1,0)` the result matches `sup_x ⟨s,x⟩ − f(x)` to
+≤ 8.9e-16 at all 10 sampled dual points. Pinned by
+`conjCPLQTest.indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2`.
+
+Note **which half** of cPLQ is reused — its Step 2/3, on *CCA2's* Step 1 output. Running cPLQ end
+to end instead does not work, and it is worth recording why, because "cPLQ already does this" is
+the natural assumption:
+
+- for a **2-convex-edge** triangle cPLQ's own envelope is the single Appendix A.4 formula, which
+  CCA2 established is not always tight (`convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight`). Its
+  conjugate inherits that: on the triangle above it leaves the paper's own flagged dual point
+  `s=(-0.008727,-0.999962)` covered by **no region at all** (evaluates `NaN`).
+- for a **3-convex-edge** triangle cPLQ has **no branch whatsoever** — neither `convexEnvelope1`
+  nor `conjugateFunction` in `plq_1p.m` has an `nCE==3` case — so it silently returns an empty
+  envelope and an empty conjugate.
+
+CCA2's Step 1 is ahead of cPLQ's on both counts (the tightness split, and [COAP] Appendix A.5's
+3-convex-edge split, are CCA2's own), so the working combination is CCA2 Step 1 + cPLQ Step 2/3.
+
+There is **no 3-convex-edge case to implement**, in CCA2 or in cPLQ. [COAP] Appendix A.5's split
+reduces such a triangle to 2-convex-edge sub-triangles and Step 1 already applies it, so every
+face reaching Step 2 has come through it. The edge count describes the *input*; it is not what
+fails.
+
+What still fails is the **4-face** split, and the failure is now in **Step 3** — cPLQ's
+cross-piece maximum (`plq.maximumConjugate` → `functionNDomain.maximumP` → `region.maximum`).
+Step 2 completes on all four faces. Getting there took resolving a chain of removable `0/0`s (see
+the note below) plus two robustness guards in `region.m`.
+
+**Correction (2026-07-28).** An earlier edition of this section blamed the numeric/symbolic
+boundary and called for exact arithmetic in Step 1. That was **wrong**, and the measurement that
+refutes it is worth keeping: at the vertex where a face's denominator vanishes, the numerator
+vanishes too, with ∇N parallel to ∇den — residual 0 to 1.3e-16 — so the `0/0` is cleanly
+**removable** and the envelope coefficients are accurate to ~1e-16. Nothing needed to be made
+exact. What was missing was *resolving* the `0/0` by a limit instead of substituting into it.
+`symbolicFunction.subsF` already flagged it (returning `NaN`) and `region.funcVertices` already
+used a `NaN`-then-limit idiom, but `symbolicFunction.limit` takes **iterated univariate** limits,
+which return `NaN` again for a bivariate `0/0`. The new `symbolicFunction.limitDirectional`
+restricts to a line through the point — one univariate limit, which a rational function always
+answers — and requires several directions to agree, which is itself the check that the limit
+exists. Pinned by `conjCPLQTest.indefiniteTriangleThreeConvexEdgesUsesStep3`. `biconj` is
+unaffected throughout — see §3.
 
 ### 1.3 Per-piece conjugate (`conjPieceCPLQ.m`, Step 2)
 
@@ -106,8 +148,10 @@ Notes on these rows:
   the raw piece. When it does not (concave, or ≥2 convex edges), `conjSingleTriangle` falls back
   to Step 1 — and since Step 1 became recursive, that envelope can carry rational faces, which
   `conjMaxOfSubTriangles` then feeds straight into Step 2. A legitimate single-triangle `QuaPol`
-  reaches this guard, so it is a gap, not an unreachable assertion. This is the root cause of the
-  new §1.2 row.
+  reaches this guard, so it is a gap in `conjPieceCPLQ`, not an unreachable assertion.
+  **It is no longer a gap in the pipeline**: `conjCPLQ` catches it and routes the whole envelope
+  through cPLQ's Step 2/3 instead (§1.2). Implementing a native numeric rational branch here would
+  buy speed — ~100 s drops to milliseconds — not new coverage.
 
 ---
 
@@ -250,8 +294,9 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
-2. **`conj` of a single triangle whose Step 1 envelope has a rational face** (§1.2, §1.3) — an
-   ordinary indefinite triangle, no exotic input needed. `biconj` of the same input works.
+2. **`conj` of a triangle whose Step 1 envelope splits into 4 faces** (§1.2) — cPLQ's Step 3
+   (cross-piece maximum) is not yet reliable on them. Step 2 completes; the 2-face split works end
+   to end; `biconj` works for both.
 3. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
    itself.
 4. **`'pqp'` and `'graph'` engines missing** (§1.1).
@@ -262,7 +307,12 @@ Ordered by how likely a downstream caller is to hit it:
 
 **Resolved 2026-07-28:** `biconj` works for every bounded domain, including the single bounded
 triangle that used to be blocker 1 — via Step 1's convex envelope rather than a second
-conjugation. See §3 and `biconjCPLQ.m`.
+conjugation. See §3 and `biconjCPLQ.m`. Also `conj` of a 2-convex-edge split triangle, by falling
+back to cPLQ's Step 2/3 (§1.2, `ratPolToPlq.m`). That work also fixed four latent bugs in the
+vendored symbolic layer, all previously unreachable because the `0/0` errored first:
+`plq_1p.m`'s `nCE==2` branch left the coefficient `d` unassigned when the envelope had no linear
+term; `region.vertexOfEdge` and `region.simplifyUnboundedRegion` substituted into a removable
+`0/0` instead of taking its limit; and `region.plus` indexed into an empty region array.
 
 **Resolved 2026-07-27:** `conj`'s return type no longer varies by input shape — every type now
 inherits from `RatPar` and `kind()` reports the concrete one. See `RETURN_TYPE.md` and `RatPar.m`.
