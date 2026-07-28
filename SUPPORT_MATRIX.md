@@ -5,9 +5,11 @@
 corresponds to a specific `error(...)` call, cited by file and identifier, so this file can be
 re-derived and re-checked mechanically.
 
-Last regenerated: 2026-07-27, against a full test census of **238 passed / 1 failed** across 20
-suites (the single failure is `testRegion/testCreation`, a longstanding toolbox-compatibility
-issue unrelated to the conjugate pipeline).
+Last regenerated: 2026-07-28, against a full run of the 17 CCA2 suites (`*Test.m`):
+**186 passed / 0 failed**, up from 176 (the 10 new ones are `biconjCPLQTest`, see §3). The 5
+vendored cPLQ suites (`test*.m`) are untouched by this regeneration and were not re-run; their
+one longstanding failure, `testRegion/testCreation`, is a toolbox-compatibility issue unrelated
+to the conjugate pipeline.
 
 ---
 
@@ -49,9 +51,9 @@ Legend:
 | Engine | Status | Guard |
 |---|---|---|
 | `'cplq'` (default) | **OK** — the only implemented engine | — |
-| `'pqp'` | **GAP** | `PLQ:conj:engine` — `QuaPol.m:610`, `QuaPar.m:661` |
+| `'pqp'` | **GAP** | `PLQ:conj:engine` — `QuaPol.m:589`, `QuaPar.m:633` |
 | `'graph'` | **GAP** | same guard |
-| unknown name | **INV** (input validation) | `PLQ:conj:engine` — `QuaPol.m:613`, `QuaPar.m:664` |
+| unknown name | **INV** (input validation) | `PLQ:conj:engine` — `QuaPol.m:592`, `QuaPar.m:636` |
 
 Two of the three engines named in the design are **not implemented at all**. This is the single
 largest functional gap.
@@ -62,11 +64,21 @@ largest functional gap.
 |---|---|---|---|
 | Full-domain **strictly convex** quadratic (`nv==0, nf==1`) | **OK** | `QuaPol` | — |
 | Full-domain **non-strictly-convex** quadratic | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:78` |
-| Single **bounded triangle** (`nf==1, nv==3, ne==3`) | **OK** | `QuaPar` | — |
+| Single **bounded triangle** (`nf==1, nv==3, ne==3`) | **OK** *unless* Step 1's envelope has a rational face (next row) | `QuaPar` | — |
+| …that same triangle when Step 1 splits it into a **rational** sub-piece | **GAP** | — | `conjPieceCPLQ:notImplemented` — `conjPieceCPLQ.m:107`, reached from `conjCPLQ.m:149` |
 | General **bounded** domain (multi-face and/or non-triangular) | **OK** (symbolic; slow) | `QuaParCPLQ` | — |
 | **Unbounded** multi-face domain | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:103` |
 | Step 3 with a **non-triangular** envelope piece | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:161` |
 | Cubic (`PLC`) input | **N/R** — cubic is for `isConvex` only | — | `assertOperable`; `quaPolToPlq:cubic` |
+
+The rational-sub-piece row is the one correction this regeneration makes to a previously-claimed
+**OK**. Since Step 1 became recursive (`convEnvCPLQ`'s `solveTriangleBF`/`splitTwoConvexEdges`,
+2026-07-17/18), the envelope of an indefinite triangle can contain genuinely rational faces, and
+`conjMaxOfSubTriangles` then hands one to Step 2, which rejects it. Reproduced on `f=xy` over
+`(2,1),(0,0),(1,0)` (2 convex edges, 2-face envelope) and over `(0,0),(1,1),(3,2)` (3 convex
+edges, 4-face envelope); already pinned by `conjCPLQTest.indefiniteTriangleThreeConvexEdgesUsesStep3`
+and by `biconjCPLQTest.succeedsWhereTheConjugateItselfFails`. Note that `biconj` is **not** affected
+— see §3.
 
 ### 1.3 Per-piece conjugate (`conjPieceCPLQ.m`, Step 2)
 
@@ -78,18 +90,24 @@ largest functional gap.
 | Indefinite quadratic, **0 or 1** convex edge (any frame/shift) | **OK** | — |
 | Indefinite quadratic, **2** convex edges | **N/R** | `conjPieceCPLQ:notImplemented` — `conjPieceCPLQ.m:586` |
 | Concave (negative semidefinite) | **N/R** — call `convEnvCPLQ` first | `conjPieceCPLQ.m:128` |
-| Genuinely **rational** piece (nonzero `RatPol` denominator) | **N/R** | `conjPieceCPLQ.m:107` |
+| Genuinely **rational** piece (nonzero `RatPol` denominator) | **GAP** (was listed N/R — see below) | `conjPieceCPLQ.m:107` |
 | Non-triangle / unbounded piece | **N/R** — Step 1 only emits bounded triangles | `conjPieceCPLQ.m:103` |
 | Cubic numerator | **N/R** | `conjPieceCPLQ.m:112` |
 
-Notes on the **N/R** rows — each is protected by an upstream invariant, not by luck:
+Notes on these rows:
 
-- **2 convex edges**: Step 1 (`convEnvCPLQ`) always convexifies such a piece into a rank-1 PSD
-  quadratic before Step 2 sees it. Reaching this branch requires hand-feeding a raw indefinite
-  piece, bypassing Step 1. See `conjPieceCPLQTest.bilinearTwoConvexEdgesIsUnreachableFromTheWiredPipeline`.
-- **Rational piece**: `conjCPLQ`'s `conjSingleTriangle` conjugates the *original* quadratic piece
-  directly, never a materialized rational envelope — so a genuinely rational piece is never handed
-  to Step 2 by the wired pipeline.
+- **2 convex edges** (**N/R**): Step 1 (`convEnvCPLQ`) always convexifies such a piece into a
+  rank-1 PSD quadratic before Step 2 sees it. Reaching this branch requires hand-feeding a raw
+  indefinite piece, bypassing Step 1. See
+  `conjPieceCPLQTest.bilinearTwoConvexEdgesIsUnreachableFromTheWiredPipeline`.
+- **Rational piece** (**GAP**, reclassified 2026-07-28): the previous edition claimed
+  `conjSingleTriangle` conjugates the *original* quadratic piece directly and so never
+  materializes a rational envelope. That reasoning covers only the branch where Step 2 accepts
+  the raw piece. When it does not (concave, or ≥2 convex edges), `conjSingleTriangle` falls back
+  to Step 1 — and since Step 1 became recursive, that envelope can carry rational faces, which
+  `conjMaxOfSubTriangles` then feeds straight into Step 2. A legitimate single-triangle `QuaPol`
+  reaches this guard, so it is a gap, not an unreachable assertion. This is the root cause of the
+  new §1.2 row.
 
 ---
 
@@ -98,8 +116,8 @@ Notes on the **N/R** rows — each is protected by an upstream invariant, not by
 | Engine | Status | Guard |
 |---|---|---|
 | `'cplq'` | **GAP** | `PLQ:conjCPLQ:partialNotImplemented` — `conjCPLQ.m:53` |
-| `'pqp'` | **GAP** | `PLQ:partialConj:engine` — `QuaPol.m:628`, `QuaPar.m:679` |
-| `RatPol` input | **GAP** | `RatPol:partialConj:notImplemented` — `RatPol.m:659` |
+| `'pqp'` | **GAP** | `PLQ:partialConj:engine` — `QuaPol.m:607`, `QuaPar.m:651` |
+| `RatPol` input | **GAP** | `RatPol:partialConj:notImplemented` — `RatPol.m:631` |
 
 **`partialConj` is not implemented for any engine or any type.** The dispatch exists; every path
 errors.
@@ -108,29 +126,41 @@ errors.
 
 ## 3. Biconjugate and convex envelope
 
-`biconj` is `conj∘conj`, so it needs the **conjugate** to be conjugable too. The conjugate of a
-bounded-domain function is finite everywhere — an unbounded multi-face domain — which §1.2 shows
-`conjCPLQ` rejects. Measured coverage, by the input's `conjCPLQ` case:
+`biconj` dispatches by input shape in `biconjCPLQ.m`, exactly as `conjCPLQ` does. Cases A and C
+are the literal `conj∘conj`; **Case B is not**, and that is what closed this section's former
+blocker. For a compact domain `T` and `q` continuous on it, `f = q + I_T` gives
 
-| Input | `conj` | `biconj` | Why |
+    f** = cl conv f = conv f = conv(q + I_T)
+
+which is precisely what **Step 1** (`convEnvCPLQ`) computes. So the biconjugate of a bounded
+triangle is available in closed form with no second conjugation, and therefore without needing the
+unbounded multi-face conjugate of §1.2 — which stays open, and is still the right long-term fix
+for `conj` itself.
+
+| Input | `conj` | `biconj` | Route |
 |---|---|---|---|
-| **A** full-domain strictly convex quadratic | **OK** → `QuaPol` | **OK** | conjugate is again a full-domain quadratic (Case A twice) |
-| **B** single bounded triangle | **OK** → `QuaPar` | **GAP** | conjugate is a mesh `QuaPar` on an unbounded multi-face domain → `PLQ:conjCPLQ:notImplemented` (`conjCPLQ.m:103`) |
-| **C** general bounded multi-face domain | **OK** → `QuaParCPLQ` | **OK** | `QuaParCPLQ.conj` routes through cPLQ's own symbolic machinery, which handles it |
+| **A** full-domain strictly convex quadratic | **OK** → `QuaPol` | **OK** → `QuaPol` | `conj∘conj` (conjugate is again a full-domain quadratic, so Case A twice) |
+| **B** single bounded triangle | **OK** → `QuaPar` (except §1.2's rational-sub-piece row) | **OK** → `RatPol` | Step 1's convex envelope, `convEnvCPLQ` |
+| **C** general bounded multi-face domain | **OK** → `QuaParCPLQ` | **OK** → `QuaParCPLQ` | `conj∘conj`; `QuaParCPLQ.conj` routes through cPLQ's own symbolic machinery |
+| **unbounded** domain | **GAP** | **GAP** | falls through to `conj∘conj`, which errors at `conjCPLQ.m:103` |
 
-Note the shape of this gap: the **symbolic** path supports the biconjugate while the faster
-**numeric** single-triangle path does not. Since conjugate *and biconjugate* of a `QuaPol` is the
-project's stated goal (§0), this is a first-class gap, not a corner case. Closing it means
-conjugating an unbounded multi-face `QuaPar` — either by extending `conjCPLQ`, or by routing Case B
-through the cPLQ path when a second conjugation is wanted.
-Regression tests: `conjCPLQTest.biconjCoverageByInputCase`.
+Case B's route is **strictly stronger** than `conj∘conj` would have been, not merely equal: it
+succeeds on the very triangles whose *conjugate* Step 2 cannot compute (§1.2's rational-sub-piece
+row) — Step 1 produces the envelope regardless, so `f**` is available even where `f*` is not.
+
+Correctness is checked against a ground truth that uses **none** of the conjugate pipeline:
+`f*(s)` by exact maximization of `⟨s,x⟩ − q(x)` over the triangle, then `f**(x) = sup_s ⟨s,x⟩ −
+f*(s)` numerically. Agreement ≤ 8.9e-16 at interior points of 7 triangles covering every Step 1
+branch (affine, convex, concave, indefinite with 0/1, 2 and 3 convex edges — i.e. 1-, 2- and
+4-face envelopes). Regression tests: `biconjCPLQTest` (10 tests) and
+`conjCPLQTest.biconjCoverageByInputCase`.
 
 | Operation | Status | Notes |
 |---|---|---|
-| `QuaPol.biconj` | **partial** | see the table above |
-| `QuaPar.biconj` | **partial** | same root cause — a full-domain `QuaPar` is not conjugable |
-| `RatPol.biconj` | **GAP** | `RatPol:biconj:notImplemented` — `RatPol.m:664` |
-| `RatPol.conj` | **GAP** | `RatPol:conj:notImplemented` — `RatPol.m:653` |
+| `QuaPol.biconj` | **OK** for every bounded domain | see the table above; unbounded domains still error |
+| `QuaPar.biconj` | **OK** for a polyhedral bounded triangle | a triangle with a genuinely **parabolic** side is not a `convEnvCPLQ` input, so it falls through to `conj∘conj` and still errors |
+| `RatPol.biconj` | **GAP** | `RatPol:biconj:notImplemented` — `RatPol.m:636` |
+| `RatPol.conj` | **GAP** | `RatPol:conj:notImplemented` — `RatPol.m:625` |
 | `convEnvCPLQ`, nonconvex quadratic over a **bounded triangle** | **OK** | 0/1/2/3-convex-edge splits all implemented |
 | `convEnvCPLQ`, nonconvex quadratic over a non-triangle/unbounded domain | **GAP** | `convEnvCPLQ:notImplemented` — `convEnvCPLQ.m:65` |
 | `convEnvCPLQ`, multi-piece with an **unbounded** face | **GAP** | `convEnvCPLQ:notImplemented` — `convEnvCPLQ.m:457` |
@@ -169,7 +199,7 @@ arrangement-validity violations. See `maxQuaPar.m`'s header VALIDATION block.
 | `addQuadratic` | **OK** | **OK** | **OK** |
 | `eval` | **OK** | **OK** (see §7) | **OK** |
 | `isConvex` | untested (`%TO BE TESTED` in source) | untested | untested |
-| `plotDomain` | **OK** | linear edges only — `QuaPar:plotDomain:curved` (`QuaPar.m:570`) | **OK** |
+| `plotDomain` | **OK** | linear edges only — `QuaPar:plotDomain:curved` (`QuaPar.m:542`) | **OK** |
 
 `addQuaPar` carries **11 distinct `addQuaPar:notImplemented` guards** (curved rays, >1 curved edge
 per face, degenerate conics, disconnected clip results, new unbounded curved rays, …). These are
@@ -192,11 +222,16 @@ Derived operators — all thin compositions, all **OK** within the limits of the
 
 | Item | Status |
 |---|---|
-| `QuaPol`, `QuaPar`, `RatPol`, `QuaParCPLQ` | **OK** — each a standalone `classdef` |
-| Common `RatPar` parent (`DESIGN.md` II.3) | **GAP** — proposed, not built |
+| `QuaPol`, `QuaPar`, `RatPol`, `QuaParCPLQ` | **OK** |
+| Common `RatPar` parent (`DESIGN.md` II.3) | **OK** — built 2026-07-27 |
+| Axis markers `Rat`/`Qua` × `Par`/`Pol` | **OK** — property-less abstract traits, so either axis can be queried alone |
+| `RatPar` itself as a *result* type (rational-on-parabolic) | **N/R** — abstract; no operator produces one |
 
-The missing parent is what forces `conj`'s return type to vary by input shape (`QuaPol` /
-`QuaPar` / `QuaParCPLQ`). See `RETURN_TYPE.md`.
+Every type now inherits from `RatPar`, so `conj`/`biconj`/`convEnv` are statically typed: they
+return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'` / `'QuaPar'` /
+`'QuaParCPLQ'`). Use `isMeshed()` to tell a `V/E/Ec/F/P` mesh from the still-symbolic
+`QuaParCPLQ`. See `RETURN_TYPE.md` and `RatPar.m`; the contract is pinned entry by entry in
+`RatParTest`.
 
 ---
 
@@ -214,14 +249,20 @@ The missing parent is what forces `conj`'s return type to vary by input shape (`
 
 Ordered by how likely a downstream caller is to hit it:
 
-1. **`biconj` fails for a single bounded triangle** (§3) — half the project's stated goal, broken
-   on the numeric path. Root cause is the same as item 3 below.
-2. **`partialConj` is entirely unimplemented** (§2).
-3. **Unbounded multi-face domains error** (§1.2) — not an exotic input, and the cause of item 1.
+1. **`partialConj` is entirely unimplemented** (§2).
+2. **`conj` of a single triangle whose Step 1 envelope has a rational face** (§1.2, §1.3) — an
+   ordinary indefinite triangle, no exotic input needed. `biconj` of the same input works.
+3. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
+   itself.
 4. **`'pqp'` and `'graph'` engines missing** (§1.1).
 5. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 6. **Two known wrong-answer defects** (§7).
-7. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
+7. **`maxQuaPar` cannot split a cell that already carries an arc** (§4) — ~26% of sampled splits.
+8. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
+
+**Resolved 2026-07-28:** `biconj` works for every bounded domain, including the single bounded
+triangle that used to be blocker 1 — via Step 1's convex envelope rather than a second
+conjugation. See §3 and `biconjCPLQ.m`.
 
 **Resolved 2026-07-27:** `conj`'s return type no longer varies by input shape — every type now
 inherits from `RatPar` and `kind()` reports the concrete one. See `RETURN_TYPE.md` and `RatPar.m`.

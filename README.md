@@ -114,18 +114,21 @@ q.conj().kind()                 % 'QuaPol'
 q.biconj().kind()               % 'QuaPol' -- back to itself
 ```
 
-**`biconj` does not yet work for every input.** It is `conj∘conj`, so it needs the *conjugate* to
-be conjugable too, and the conjugate of a bounded-domain function is finite everywhere — an
-unbounded multi-face domain, which `conjCPLQ` does not handle. Current coverage:
+**`biconj` works for every bounded domain**; an unbounded one still errors. It is *not* always the
+literal `conj∘conj`: for a single bounded triangle the conjugate is finite everywhere — an
+unbounded multi-face domain `conjCPLQ` does not handle — but `f** = conv(q + I_T)` for a compact
+`T`, which is exactly Step 1's convex envelope, so no second conjugation is needed. Current
+coverage:
 
-| Input | `conj` | `biconj` |
-|---|---|---|
-| Full-domain strictly convex quadratic | ✅ `QuaPol` | ✅ |
-| **Single bounded triangle** | ✅ `QuaPar` | ❌ `PLQ:conjCPLQ:notImplemented` |
-| General bounded multi-face domain | ✅ `QuaParCPLQ` | ✅ (symbolic) |
+| Input | `conj` | `biconj` | `biconj` route |
+|---|---|---|---|
+| Full-domain strictly convex quadratic | ✅ `QuaPol` | ✅ `QuaPol` | `conj∘conj` |
+| **Single bounded triangle** | ✅ `QuaPar` | ✅ `RatPol` | convex envelope (`convEnvCPLQ`) |
+| General bounded multi-face domain | ✅ `QuaParCPLQ` | ✅ `QuaParCPLQ` | `conj∘conj` (symbolic) |
+| Unbounded domain | ❌ | ❌ | — |
 
-Note the shape of this: the **symbolic** path supports the biconjugate, while the faster **numeric**
-single-triangle path does not. Closing it needs conjugation of an unbounded multi-face `QuaPar`.
+The envelope route also succeeds on triangles whose *conjugate* the pipeline cannot yet compute
+(when Step 1's envelope contains a rational face). See `biconjCPLQ.m` and `SUPPORT_MATRIX.md` §3.
 
 ---
 
@@ -134,7 +137,7 @@ single-triangle path does not. Closing it needs conjugation of an unbounded mult
 | Operator | Meaning | Notes |
 |---|---|---|
 | `conj(f, engine)` | Fenchel conjugate `f*` | `engine='cplq'` (default) is the **only** one implemented |
-| `biconj(f)` | `f** = conj(conj(f))` | closed convex envelope |
+| `biconj(f)` | `f**`, the closed convex envelope | `conj∘conj`, except a bounded triangle, which goes straight to the envelope — see above |
 | `convEnv(f)` | convex envelope | via `biconj`, or `convEnvCPLQ` directly |
 | `add`, `sub` | pointwise `f±g` | `QuaPol` and `QuaPar`; **not** `RatPol` |
 | `scalarMul`, `negate` | `c·f`, `−f` | all types |

@@ -1074,6 +1074,15 @@ the plan:
    Kumar's per-piece method [KUMAR-20], `codeOld/deepak`, extended by Karmarkar's [COAP] Step 4
    assembly — **not** parametric-QP) is kept as a faster alternative and an independent
    cross-check.
+
+   **AS BUILT (2026-07-28, `biconjCPLQ.m`):** `biconj` is `conj∘conj` for a full-domain quadratic
+   and for a general bounded domain, but a **single bounded triangle takes the direct envelope
+   path** instead — the "faster alternative" of the previous sentence, here promoted to the primary
+   route. It has to be: `f*` of a bounded-domain function is finite everywhere, an unbounded
+   multi-face domain `conjCPLQ` does not conjugate, so the second conjugation has nowhere to go.
+   Nothing is lost by not going through it, because `f** = cl conv f = conv(q + I_T)` for compact
+   `T`, which is exactly Step 1's output (`convEnvCPLQ`). Cross-checked against a pipeline-free
+   numeric `f**` — see `biconjCPLQ.m`'s VALIDATION note and `biconjCPLQTest`.
 5. **Everything else** (`add`, `lasryLions`, `partialConj`) is a short composition over `conj` +
    `add` + scalar ops. `infConv(f,g)=conj(conj(f)+conj(g))` is this same kind of composition but
    is only valid (returns the true inf-convolution) for `f,g` convex (II.6). `moreau` looks
