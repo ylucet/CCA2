@@ -612,8 +612,20 @@ classdef QuaPol < RatPol & QuaPar
        end
        function h = biconj(obj, engine)
        % objective: biconjugate f** = conj(conj(f)); equals the closed convex envelope of f
+       % [output] h: a RatPar -- QuaPol (Case A), RatPol (Case B) or QuaParCPLQ (Case C); call
+       %             kind() to learn which. See biconjCPLQ.m and RETURN_TYPE.md.
+       %
+       % The 'cplq' engine goes through biconjCPLQ rather than literally conjugating twice: for a
+       % single bounded triangle f* lives on an unbounded multi-face domain that conjCPLQ cannot
+       % conjugate, so the second conjugation has nowhere to go, while f** = conv(q + I_T) is
+       % Step 1's own closed-form output. biconjCPLQ.m has the derivation and the validation
+       % numbers. Other engines are unchanged (and still error inside conj).
             if nargin < 2, engine = 'cplq'; end
-            h = conj(conj(obj, engine), engine);
+            if strcmpi(engine, 'cplq')
+                h = biconjCPLQ(obj);
+            else
+                h = conj(conj(obj, engine), engine);
+            end
        end
        function h = scalarMul(obj, c)
        % objective: (c*f)(x) = c*f(x), scaling the function by a real constant c

@@ -656,8 +656,20 @@ classdef QuaPar < RatPar & Qua
        end
        function h = biconj(obj, engine)
        % objective: biconjugate f** = conj(conj(f)); equals the closed convex envelope of f
+       % [output] h: a RatPar -- RatPol for a POLYHEDRAL bounded triangle, otherwise whatever the
+       %             double conjugation yields; call kind() to learn which. See biconjCPLQ.m.
+       %
+       % Same routing as QuaPol.biconj: the 'cplq' engine goes through biconjCPLQ, which takes
+       % Step 1's closed-form convex envelope for a bounded triangle instead of conjugating twice
+       % (f* of a bounded-domain function is unbounded multi-face, which conjCPLQ rejects). A
+       % triangle with a genuinely PARABOLIC side is not a convEnvCPLQ input, so it falls through
+       % to the unchanged double conjugation -- and still errors there.
             if nargin < 2, engine = 'cplq'; end
-            h = conj(conj(obj, engine), engine);
+            if strcmpi(engine, 'cplq')
+                h = biconjCPLQ(obj);
+            else
+                h = conj(conj(obj, engine), engine);
+            end
        end
        function h = scalarMul(obj, c)
        % objective: (c*f)(x) = c*f(x), scaling the function by a real constant c

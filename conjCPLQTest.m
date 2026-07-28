@@ -25,18 +25,17 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         end
 
         function biconjCoverageByInputCase(testCase)
-            % Pins exactly which inputs biconj currently handles, INCLUDING the one it does not.
-            % biconj is conj-of-conj, so it needs the CONJUGATE to be conjugable too -- and the
-            % conjugate of a bounded-domain function is finite everywhere, i.e. lives on an
-            % UNBOUNDED multi-face domain, which conjCPLQ rejects (Case C requires isDomBounded).
+            % Pins which inputs biconj handles, and by which route, case by case.
             %
-            % The result is a gap with an unintuitive shape, worth a test so it stays visible:
-            % the SYMBOLIC path (Case C, via QuaParCPLQ.conj into cPLQ's own machinery) supports
-            % the biconjugate, while the faster NUMERIC single-triangle path (Case B) does not.
-            % Since conjugate AND biconjugate of a QuaPol is this project's stated goal, closing
-            % this is a first-class task, not a corner case -- see SUPPORT_MATRIX.md section 3.
-            % This test documents current behaviour; when the gap is closed, the Case-B
-            % verifyError below should become a positive check.
+            % HISTORY (closed 2026-07-28): Case B used to ERROR here. biconj was literally
+            % conj-of-conj, and the conjugate of a bounded-domain function is finite everywhere --
+            % an UNBOUNDED multi-face domain, which conjCPLQ still rejects (Case C requires
+            % isDomBounded), so the second conjugation had nowhere to go. biconj now routes
+            % through biconjCPLQ, which returns Step 1's convex envelope for a bounded triangle:
+            % conv(q + I_T) IS f** when T is compact, so no second conjugation is needed. The
+            % underlying conjCPLQ gap (unbounded multi-face conj) is untouched and still open --
+            % SUPPORT_MATRIX.md section 1.2. Correctness of the new route is checked against a
+            % pipeline-free ground truth in biconjCPLQTest.
             E3 = [1 2 1; 2 3 1; 3 1 1]; F3 = [1 0; 1 0; 1 0];
 
             % Case A -- full-domain strictly convex quadratic: conjugate is again a full-domain
@@ -45,16 +44,30 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(caseA.conj().kind(), 'QuaPol');
             testCase.verifyEqual(caseA.biconj().kind(), 'QuaPol');
 
-            % Case B -- single bounded triangle: conj succeeds and gives a genuine mesh QuaPar,
-            % but that QuaPar is full-domain, so the second conjugation has nowhere to go.
+            % Case B -- single bounded triangle: conj gives a genuine mesh QuaPar; biconj is the
+            % convex envelope, a RatPol on the same triangle. f = xy vanishes at all three
+            % vertices and is >= 0 on this triangle, so f** is identically zero on it.
             caseB = QuaPol([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
             testCase.verifyEqual(caseB.conj().kind(), 'QuaPar');
-            testCase.verifyError(@() caseB.biconj(), 'PLQ:conjCPLQ:notImplemented');
+            bB = caseB.biconj();
+            testCase.verifyEqual(bB.kind(), 'RatPol');
+            testCase.verifyEqual(bB.eval([0.2 0.2; 1/3 1/3]), [0; 0], 'AbsTol', 1e-12);
 
-            % ...and it is the DOMAIN, not nonconvexity, that blocks it: a convex triangle piece
-            % fails identically.
+            % ...and a convex triangle piece is its own biconjugate, on the same route.
             caseBconvex = QuaPol([0 0; 1 0; 0 1], E3, [1 0 1 0 0 0], F3);
-            testCase.verifyError(@() caseBconvex.biconj(), 'PLQ:conjCPLQ:notImplemented');
+            bBc = caseBconvex.biconj();
+            S = [0.2 0.2; 0.6 0.2; 1/3 1/3];
+            testCase.verifyEqual(bBc.kind(), 'RatPol');
+            testCase.verifyEqual(bBc.eval(S), caseBconvex.eval(S), 'AbsTol', 1e-12);
+
+            % Case C -- general bounded multi-face domain: still the literal double conjugation,
+            % through cPLQ's own symbolic machinery (QuaParCPLQ.conj).
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];
+            caseC = QuaPol(V, E, [1 0 1 0 0 0; 1 0 1 0 0 0], F);
+            testCase.verifyEqual(caseC.conj().kind(), 'QuaParCPLQ');
+            testCase.verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ');
         end
 
         function generalPositiveDefiniteQuadratic(testCase)
