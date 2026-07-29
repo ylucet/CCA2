@@ -164,10 +164,25 @@ vertex => bounds no edge => no edge number) but `conjugateOfPiecePoly:1002` uses
 PERMUTATION, `d.ineqs(edgeNo) = d.ineqs`, so a 0 only moves the crash one line down ('Array indices
 must be positive integers'). Both suites still failed. The comment at `getEdgeNosInf` records this.
 
-**The assumption to relax is that a region's constraints correspond 1:1 to its EDGES** — exactly
-what an irredundant constraint touching no vertex violates. Fix it at the call site: permute only
-the constraints that do carry an edge, and leave the others in place. That is the ONE thing between
-here and a commit.
+**ALSO TRIED AND REVERTED — read this before attempting a third time.** Emitting `edgeNo(i)=0` AND
+replacing the call site's scatter with a sort:
+
+    hasEdge = edgeNo > 0;  [~,ord] = sort(edgeNo(hasEdge));  iHas = find(hasEdge);
+    d.ineqs = [d.ineqs(iHas(ord)), d.ineqs(~hasEdge)];
+
+on the reasoning that sorting by `edgeNo` equals scattering through it whenever `edgeNo` is a
+permutation. **That reasoning is WRONG and it broke a THIRD test** (`testMaxMultiRegion/
+testFractional`, which had been passing): `edgeNo(i) = j + add` with `j` a VERTEX index and
+`add ∈ {0,1}` can exceed `numel(ineqs)`, so `d.ineqs(edgeNo) = d.ineqs` legitimately **GROWS** the
+array — and duplicate `edgeNo` values make it last-write-wins. A sort reproduces neither. Whatever
+replaces the scatter has to preserve both behaviours.
+
+So the real question is what `conjugateOfPiecePoly` actually wants that array to BE afterwards
+(it is indexed positionally downstream), which needs reading beyond the scatter line — that was
+not done. Do that first; do not guess again.
+
+Both attempts are reverted; `region.m` and `functionNDomain.m` are at the committed state, which
+has the 2-failure regression and the explanatory comment at `getEdgeNosInf`.
 
 ## THIS IS THE STATE AT SESSION END — READ BEFORE TOUCHING ANYTHING
 
