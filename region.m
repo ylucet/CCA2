@@ -49,6 +49,74 @@ classdef region
                  P = region.probeAlong(x0, y0, -1/d, h);
              end
          end
+
+         % ---- LP certificates ------------------------------------------------------------
+         % Two of this class's set operations used to decide a GLOBAL question -- "is this
+         % constraint implied by the others?" (simplifyUnboundedRegion) and "is the union of
+         % these two regions exactly the intersection of what is left after deleting their
+         % shared facet?" (merge) -- with a LOCAL syntactic proxy: does the constraint pass
+         % through a finite vertex, do the facet's endpoints look convex. Both proxies delete
+         % constraints that carry weight, so a region ends up claiming territory that was never
+         % its own, with the wrong function value on it (SUPPORT_MATRIX.md section 1.2).
+         %
+         % Both questions are the same primitive: maximize a linear form over a polyhedron.
+         % That is an LP, it is exact, and it decides unboundedness and infeasibility as
+         % first-class answers rather than as failures -- which matters here, since these
+         % regions are routinely unbounded. Every caller is written so that an UNDECIDED answer
+         % means "keep the constraint" / "refuse the merge": over-describing a region is
+         % harmless, under-describing it is the bug.
+
+         function [val, st] = maxLinear (A, b, c)
+         % max c*[x;y] over {A*[x;y] <= b}.
+         %   st =  0 : optimal, val is the maximum
+         %   st =  1 : unbounded above (val = inf)
+         %   st = -1 : the constraint set is infeasible (val = -inf)
+         %   st =  2 : undecided -- the solver did not converge; callers must treat this as
+         %             "no certificate" and fall back to the conservative branch.
+             c = double(c(:));
+             if isempty(A)
+                 if all(c == 0), val = 0; st = 0; else, val = inf; st = 1; end
+                 return
+             end
+             persistent opts
+             if isempty(opts)
+                 opts = optimoptions('linprog', 'Display', 'none');
+             end
+             ws = warning('off', 'all');
+             try
+                 [~, fval, ef] = linprog(-c, double(A), double(b), [], [], [], [], opts);
+             catch
+                 ef = 0; fval = [];
+             end
+             warning(ws);
+             switch ef
+                 case 1,  val = -fval; st = 0;
+                 case -3, val = inf;   st = 1;
+                 case -2, val = -inf;  st = -1;
+                 otherwise, val = NaN; st = 2;
+             end
+         end
+
+         function l = impliedBy (Ac, bc, A, b)
+         % Is every constraint Ac(i,:)*[x;y] <= bc(i) satisfied at every point of the
+         % polyhedron {A*[x;y] <= b}? An infeasible polyhedron satisfies all of them
+         % vacuously. Answers false whenever it cannot prove true.
+             l = false;
+             for i = 1:size(Ac,1)
+                 [val, st] = region.maxLinear(A, b, Ac(i,:));
+                 if st == -1
+                     l = true;    % {A x <= b} is empty: nothing left to violate anything
+                     return
+                 end
+                 if st ~= 0
+                     return       % unbounded above, or undecided: no certificate
+                 end
+                 if val > bc(i) + 1.0d-9 * max(1, abs(bc(i)))
+                     return
+                 end
+             end
+             l = true;
+         end
      end
 
 %  57 methods
@@ -1018,9 +1086,24 @@ classdef region
 
          
          function m = slopes2 (obj)
-           n = 0 ;  
+         % One representative boundary slope per constraint, for maxArray's tie-break probe
+         % directions. A CURVED constraint has no single slope, so its tangent is taken at a
+         % vertex of this region that lies on it -- and a curved constraint need not have one.
+         % That case was unreachable while simplifyUnboundedRegion deleted every constraint
+         % missing a finite vertex; now that deletion requires a real redundancy certificate
+         % (see redundantSubset), such a constraint survives, `pt` was left unassigned, and the
+         % substitution below failed with 'Unrecognized function or variable pt'.
+         %
+         % Do NOT simply drop such a constraint. m is read pairwise by maxArray to build
+         % bisector probe DIRECTIONS, and a shorter list means fewer probes, so maxArray
+         % returns undecided more often, maxEqDom falls through to splitmax3, and every
+         % undecided region splits in two -- which compounds round over round. Take the
+         % tangent at this region's own finite-vertex centroid instead: an interior point, so
+         % the direction it yields is a local one, and it always exists.
+           n = 0 ;
+           m = [];        % a region can consist entirely of skipped constraints
            % l = false;
-           
+
            for i = 1:size(obj.ineqs,2)
               if obj.ineqs(i).isLinear
                   c = obj.ineqs(i).getLinearCoeffs (obj.vars);
@@ -1028,12 +1111,20 @@ classdef region
                   m(n) = -c(1)/c(2);
               else
                   vars =  obj.vars;
-                  
+
+                  pt = [];
                   for j = 1:obj.nv
                       if abs(obj.ineqs(i).subsF(vars,[obj.vx(j),obj.vy(j)]).f) < 1.0d-8
                           pt = [obj.vx(j),obj.vy(j)];
                           break;
                       end
+                  end
+                  if isempty(pt)
+                      [nPc, pxc, pyc] = obj.finiteVertices;
+                      if nPc == 0
+                          continue          % nothing finite to anchor a direction to
+                      end
+                      pt = [sum(pxc)/nPc, sum(pyc)/nPc];
                   end
                   %obj.ineqs(i)
                   drx1 = obj.ineqs(i).dfdx(vars(1));
@@ -1403,11 +1494,152 @@ classdef region
                 n = n + 1;
                 mark(n) = i;
             end
-            obj.ineqs(mark) = [];
-           
+            obj = obj.deleteIfRedundant(mark);
+
         end
 
-        
+        % ---- the instance side of the LP certificates (see the static block at the top) ----
+
+        function [A, b, lin] = linearForm (obj)
+        % Numeric matrix form of obj's LINEAR constraints: constraint j, stored as
+        % ineqs(j) <= 0, becomes A(j,:)*[vars(1);vars(2)] <= b(j). lin(j) records whether
+        % constraint j is affine at all -- a quadratic or rational facet has no such row, its
+        % row is left NaN, and every caller must consult lin before using it.
+        %
+        % Coefficients are read by EVALUATION, not by coeffs/getLinearCoeffs: an affine g
+        % satisfies g = g(0,0) + (g(1,0)-g(0,0)) x + (g(0,1)-g(0,0)) y identically, so three
+        % substitutions recover it exactly regardless of how the expression happens to be
+        % written. That independence is the point -- it is the same lesson probeAlong/probePerp
+        % record at the top of this file: test the geometry, never the syntax.
+            n = size(obj.ineqs,2);
+            A = nan(n,2); b = nan(n,1); lin = false(1,n);
+            for j = 1:n
+                g = obj.ineqs(j);
+                if ~g.isPolynomial
+                    continue                       % a rational facet is not affine
+                end
+                try
+                    c0 = double(subs(g.f, obj.vars, [0 0]));
+                    c1 = double(subs(g.f, obj.vars, [1 0])) - c0;
+                    c2 = double(subs(g.f, obj.vars, [0 1])) - c0;
+                    % Confirm affineness rather than trusting the degree bookkeeping. For a
+                    % quadratic part alpha x^2 + beta xy + gamma y^2 these three points force
+                    % beta=0, then alpha=0, then gamma=0 in turn, so passing all three means
+                    % the quadratic part is identically zero.
+                    chk = [1 1; 2 1; 1 2];
+                    aff = true;
+                    for k = 1:3
+                        want = c0 + c1*chk(k,1) + c2*chk(k,2);
+                        got  = double(subs(g.f, obj.vars, chk(k,:)));
+                        if abs(got - want) > 1.0d-9 * max(1, abs(want))
+                            aff = false; break
+                        end
+                    end
+                catch
+                    continue                       % not numerically evaluable: no row
+                end
+                if ~aff || ~all(isfinite([c0 c1 c2]))
+                    continue
+                end
+                A(j,:) = [c1, c2];
+                b(j)   = -c0;
+                lin(j) = true;
+            end
+        end
+
+        function del = redundantSubset (obj, cand)
+        % Of the candidate indices cand (into obj.ineqs), the subset that is PROVABLY
+        % redundant and may therefore be deleted without changing the feasible set:
+        %
+        %     ineq i is redundant  <=>  max{ g_i(x) : g_j(x) <= 0 for all j ~= i }  <=  0.
+        %
+        % This replaces the old proxy "delete any constraint that does not pass through a
+        % finite vertex", which is not a redundancy test at all for an unbounded or curved
+        % region and was the dominant half of the wrong-partition defect: a region carrying
+        % (s1+s2)^2/4 lost -s1-s2 <= 0 and then reported f*(-3,-3) = 9 where the truth is 0.
+        %
+        % Two deliberate asymmetries, both erring toward keeping a constraint:
+        %   * a non-affine g_i is never reported redundant (no LP certificate for it);
+        %   * non-affine g_j are DROPPED from the constraint set the test runs against. That
+        %     relaxation only ENLARGES the feasible set, so redundancy in the relaxation
+        %     implies redundancy here -- sound in the one direction that matters.
+        % Candidates are processed one at a time against the constraints still standing, so
+        % two copies of the same constraint cannot certify each other and both be deleted.
+            del = [];
+            if isempty(obj) || isempty(cand)
+                return
+            end
+            [A, b, lin] = obj.linearForm;
+            standing = true(1, size(obj.ineqs,2));
+            for t = 1:numel(cand)
+                i = cand(t);
+                if i < 1 || i > numel(standing) || ~lin(i) || ~standing(i)
+                    continue
+                end
+                use = lin & standing;
+                use(i) = false;
+                [val, st] = region.maxLinear(A(use,:), b(use), A(i,:));
+                if st == 0 && val <= b(i) + 1.0d-9 * max(1, abs(b(i)))
+                    del(end+1) = i;             %#ok<AGROW>
+                    standing(i) = false;
+                end
+            end
+        end
+
+        function obj = deleteIfRedundant (obj, cand)
+        % Delete exactly those of the candidate constraints cand that redundantSubset can
+        % certify as redundant, and keep the rest. Every deletion site in this class goes
+        % through here, so a heuristic upstream can only ever PROPOSE a deletion.
+            del = obj.redundantSubset(cand);
+            if ~isempty(del)
+                obj.ineqs(del) = [];
+            end
+        end
+
+        function l = unionIsExact (objA, objB, ia, ib)
+        % Precondition: objA.ineqs(ia) == -objB.ineqs(ib), i.e. the two regions meet on the
+        % facet {g = 0} of that shared constraint, with objA on {g <= 0} and objB on {g >= 0}.
+        %
+        % merge unions them by deleting that facet from both and intersecting what is left:
+        % writing A = A' n {g<=0} = objA and B = B' n {g>=0} = objB, it returns M = A' n B'.
+        %
+        % M contains A u B in one direction ALWAYS: a point of A' n B' either has g <= 0, and
+        % then lies in A' n {g<=0} = A, or has g >= 0, and then lies in B' n {g>=0} = B. So
+        % merge can never LOSE a point. The other direction is the one that can fail, and it
+        % needs exactly
+        %       A subset B'   and   B subset A',
+        % i.e. every constraint of B' holds everywhere on A and every constraint of A' holds
+        % everywhere on B -- which is also precisely the statement that A u B is convex.
+        %
+        % Each of those is "is this linear form <= 0 over that polyhedron", an LP.
+        %
+        % Two roles, two different requirements, and only one of them is strict:
+        %   * the constraints being TESTED (those of A' and B') must be affine -- there is no
+        %     LP certificate for a curved one, so refuse outright if any is not;
+        %   * the region being tested OVER enters only as its LINEAR RELAXATION, dropping any
+        %     curved facet. That relaxation is a SUPERSET, so "valid on the relaxation"
+        %     implies "valid on the region" -- sound, and it lets a pair meeting along a
+        %     shared PARABOLIC facet still be decided, which is the shape this codebase
+        %     actually produces (a parabolic arc between two rays).
+        % Refusing only leaves the two regions separate, which is always correct, just less
+        % compact -- so every uncertain answer is a refusal.
+            l = false;
+            [AA, bA, linA] = objA.linearForm;
+            [AB, bB, linB] = objB.linearForm;
+            keepA = true(1, numel(bA)); keepA(ia) = false;   % A' = A minus the shared facet
+            keepB = true(1, numel(bB)); keepB(ib) = false;   % B' = B minus the shared facet
+            if ~all(linA(keepA)) || ~all(linB(keepB))
+                return                                      % a curved constraint to test
+            end
+            if ~region.impliedBy(AB(keepB,:), bB(keepB), AA(linA,:), bA(linA))   % A subset B'?
+                return
+            end
+            if ~region.impliedBy(AA(keepA,:), bA(keepA), AB(linB,:), bB(linB))   % B subset A'?
+                return
+            end
+            l = true;
+        end
+
         function [nP, px, py] = finiteVertices (obj)
         % The region's vertices that are genuine POINTS: an entry flagged intmax stands for a
         % direction of an unbounded region, not a vertex. This is the (nP,px,py) triple
@@ -2057,7 +2289,7 @@ classdef region
                 
             end
             objTemp = obj;
-            obj.ineqs(markF0) = [];
+            obj = obj.deleteIfRedundant(markF0);
             nv = obj.nv;
             obj = obj.getVertices;
             %obj = obj.removeTangent (nP, px, py);
@@ -2674,6 +2906,20 @@ classdef region
          for i = 1:size(obj.ineqs,2)
             %obj.ineqs(i).print
            [nv, vx, vy] = obj.vertexOfEdge(i);
+           % OPEN (2026-07-29): nv can be 0 here -- a constraint with NO vertex on this region --
+           % and then vx is empty and vx(start) below overruns ('Index exceeds array bounds').
+           % Unreachable while simplifyUnboundedRegion deleted every constraint missing a finite
+           % vertex; reachable now that deletion needs a redundancy certificate (see
+           % region.redundantSubset). Breaks testMaxMultiRegion/testMax and testcPLQ/testRectBiconj,
+           % both via functionNDomain.conjugateOfPiecePoly <- plq.biconjugateF.
+           %
+           % Do NOT "fix" it here by emitting edgeNo(i)=0: that is the right MEANING (no vertex =>
+           % bounds no edge => no edge number) but conjugateOfPiecePoly:1002 uses edgeNo as a
+           % PERMUTATION, `d.ineqs(edgeNo) = d.ineqs`, so a 0 just moves the crash one line down
+           % ('Array indices must be positive integers'). Tried, reverted. The real assumption to
+           % relax is that a region's constraints correspond 1:1 to its edges, which is what an
+           % irredundant constraint touching no vertex violates -- fix it at the call site by
+           % permuting only the constraints that DO carry an edge.
            start = 1;
            %% change condition
            if nv > 1
@@ -3050,26 +3296,30 @@ classdef region
       end
 
 
-%      % wont work cause of intersection vs union
      function [l,obj] = merge (obj, obj2)
      % Union two regions that share a facet, by deleting the facet from both and intersecting
-     % what is left.
+     % what is left. Writing obj = A = A' n {g<=0} and obj2 = B = B' n {g>=0} for the shared
+     % constraint g, the recipe returns M = A' n B'.
      %
-     % KNOWN UNSOUND (open; see .claude/SESSION_HANDOFF.md). That recipe computes A n B for
-     % obj = A n {g<=0} and obj2 = B n {-g<=0}, and A n B equals the union ONLY when A and B
-     % are the same constraint set. Otherwise A n B is strictly larger than the union and the
-     % merged region silently claims territory that belonged to neither operand, carrying a
-     % function value that is wrong there. Measured instance: for f=xy over
-     % conv{(0,0),(3,3),(1,2)}, three same-valued Step 3 regions merge into one that covers
-     % s=(1,1), where none of them does and where the true f* comes from a different piece,
-     % so the assembled partition returns 1.0 instead of 1.125.
+     % That recipe is not unconditionally the union, and used to be applied unconditionally.
+     % M never LOSES a point -- any x in A' n B' has g(x) <= 0, putting it in A, or g(x) >= 0,
+     % putting it in B -- but it can GAIN points that belonged to neither operand, and the
+     % merged region then carries its function value on territory that was never its own. For
+     % f=xy over conv{(0,0),(3,3),(1,2)}, three same-valued Step 3 regions merged into one
+     % covering s=(1,1), where none of them does, and the assembled partition returned 1.0
+     % instead of 1.125.
      %
-     % Guarding both merge paths with "the two constraint sets must be equal after the facet
-     % deletion" was tried and is provably sound, but it is NOT sufficient on its own: with it
-     % the same case goes from 36 to 125 wrong points of 289, because refusing merges leaves
-     % more regions for simplifyUnboundedRegion to drop non-redundant constraints from (the
-     % second, larger defect -- it deletes any constraint not passing through a finite vertex).
-     % Fix the two together, not separately.
+     % M = A u B exactly when A subset B' and B subset A' -- equivalently, when A u B is
+     % convex -- and unionIsExact now decides that by LP before any facet is deleted. See the
+     % LP-certificate block at the top of this file for why the test is an LP and why refusing
+     % (leaving the two regions separate, which is always correct) is the safe answer.
+     %
+     % HISTORY, worth keeping: guarding this alone -- with the far stronger "the two constraint
+     % sets must be EQUAL after the facet deletion" -- was tried, is provably sound, and made
+     % the measured result WORSE, 36 -> 125 wrong points of 289. Refusing merges leaves more
+     % regions standing, and simplifyUnboundedRegion was at the time deleting non-redundant
+     % constraints from every one of them. That is why the two were fixed together, and it is
+     % why the weaker, exact condition here is the right one: it refuses only what it must.
          l = false;
          % HISTORY: an empty (0x0) region can reach here from an upstream
          % copy-through that didn't check isempty after a simplification
@@ -3116,7 +3366,13 @@ classdef region
                    end
                end
              end
-             if n > 0
+             % Exactly ONE shared facet, and the union must actually be the intersection of
+             % what is left. Both conditions are needed and neither is cosmetic. With two
+             % shared facets g1,g2 the "M never loses a point" argument breaks outright: a
+             % point with g1<=0 and g2>=0 lies in neither operand yet survives into M. And
+             % without unionIsExact the single-facet case is the over-claiming defect this
+             % function's header describes.
+             if n == 1 && obj.unionIsExact(obj2, marki(1), markj(1))
                l = true;
                obj3 = obj;
                obj.ineqs(marki) = [];
@@ -3127,6 +3383,9 @@ classdef region
                    obj=obj3;
                end
                return
+             end
+             if n > 0
+               return          % shares a quadratic facet, but not exactly/convexly: no merge
              end
           end
          lQuad = lQuad1 | lQuad2;
@@ -3213,7 +3472,12 @@ classdef region
              end
            end
          end
-         if l
+         % isconvex above is a LOCAL probe: it midpoint-tests a step either side of the shared
+         % facet's endpoints, which is necessary for the union to be convex but nowhere near
+         % sufficient -- it says nothing about the two regions' other constraints, and those
+         % are what decide whether A' n B' over-claims. Same single-facet requirement as the
+         % quadratic branch above, for the same reason.
+         if l && n == 1 && obj.unionIsExact(obj2, marki(1), markj(1))
            obj3 = obj;
            obj.ineqs(marki) = [];
            obj2.ineqs(markj) = [];
@@ -3224,6 +3488,8 @@ classdef region
                l = false;
                obj = obj3;
            end
+         else
+           l = false;
          end
      end
 

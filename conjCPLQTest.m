@@ -240,10 +240,36 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % vanishes the numerator vanishes too with grad N parallel to grad den (residual 0 to
             % 1.3e-16), so the 0/0 is cleanly REMOVABLE. What was missing was resolving it by a
             % limit -- see symbolicFunction.limitDirectional.
+            % UPDATE (2026-07-29, later session): the assembly is FIXED and this case now closes
+            % end to end. region.simplifyUnboundedRegion deletes a constraint only when
+            % region.redundantSubset certifies it redundant by LP, and region.merge deletes a
+            % shared facet only when region.unionIsExact certifies A u B = A' n B' (equivalently,
+            % that the union is convex). Measured on the 17x17 dual grid this test's own gate
+            % samples: the assembled partition went from 57 of 289 points wrong to 0 -- every one
+            % of the fold's seven rounds is now exact, and the whole fold got FASTER (1645 s vs
+            % 1768 s), because a correct partition needs fewer regions than a damaged one.
+            % Unit-level coverage of the two certificates is in regionTest.m.
+            %
+            % This test therefore no longer pins a loud failure; it pins the answer. The gate
+            % (conjCPLQ's assertStep3MatchesPieces) stays -- it is a real invariant, and cheap
+            % next to the pipeline it follows.
             V = [0 0; 3 3; 1 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPol(V, E, [0 1 0 0 0 0], F);
             testCase.verifyEqual(convEnvCPLQ(q).nf, 4);   % confirms the (now recursive) split
-            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
+            g = q.conj('cplq');
+            testCase.verifyEqual(g.kind(), 'QuaParCPLQ');
+
+            % Ground truth is the closed-form sup over T, not anything the pipeline produced.
+            S = [1 1; -3 -3; -7 5.25; 0 0; 3 3; 2 -1; -1 2; 5 5];
+            for i = 1:size(S,1)
+                s = S(i,:);
+                expected = convEnvCPLQTest.supBilinearOverPoly(s, V);
+                got = g.eval(s);
+                testCase.verifyTrue(isfinite(got), ...
+                    sprintf('no region covers s=(%.6f,%.6f)', s(1), s(2)));
+                testCase.verifyEqual(got, expected, 'AbsTol', 1e-9, ...
+                    sprintf('s=(%.6f,%.6f)', s(1), s(2)));
+            end
         end
 
         function indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2(testCase)

@@ -203,16 +203,21 @@ function assertStep3MatchesPieces(p, env)
 % p.pieces(k).maxConjugate. Both are f*, since f* = (conv f)* = max_k (env_k + I_{face k})*, so
 % any disagreement is a bug -- and Step 3 is the half that has one.
 %
-% WHY THIS GATE EXISTS. Step 3 no longer crashes on a 4-face envelope (this session fixed four
-% separate blockers), but it does not yet assemble a correct partition: region.merge unions two
-% regions by deleting their shared facet and intersecting what remains, which over-approximates
-% the union whenever the two carry different other constraints, and simplifyUnboundedRegion
-% deletes any constraint not passing through a finite vertex. Both leave regions covering
-% territory that was never theirs, with the wrong function value on it. On f=xy over
-% conv{(0,0),(3,3),(1,2)} that is ~12% of a 17x17 dual grid. Returning those numbers silently
-% would be worse than the loud failure this path used to give, so we keep the loud failure --
-% now for the correct reason, and only when the result really is wrong. See
-% .claude/SESSION_HANDOFF.md and SUPPORT_MATRIX.md section 1.2.
+% WHY THIS GATE EXISTS. It was added while Step 3's assembly was known wrong: region.merge
+% unioned two regions by deleting their shared facet and intersecting what remained (an
+% over-approximation unless the union happens to be convex), and simplifyUnboundedRegion deleted
+% any constraint not passing through a finite vertex (not a redundancy test at all for an
+% unbounded or curved region). Both let a region claim territory that was never its own, carrying
+% the wrong value there -- 57 of 289 points of a 17x17 dual grid on f=xy over conv{(0,0),(3,3),
+% (1,2)}. Both are now FIXED, by LP certificates: region.redundantSubset decides redundancy
+% exactly, and region.unionIsExact decides union-exactness exactly (see region.m's own
+% LP-certificate header). That case now reports 0 of 289 wrong at every round of the fold.
+%
+% The gate STAYS anyway, and not out of caution: it is an independent cross-check of the whole
+% assembly against the same f* computed the other way, it is cheap next to the symbolic pipeline
+% it follows, and the failure it guards against is silent by nature -- a wrong partition returns
+% plausible numbers rather than erroring. See .claude/SESSION_HANDOFF.md and SUPPORT_MATRIX.md
+% section 1.2.
 %
 % Sampling, not proof: the grid below is a screen, not a certificate. It is sized from the
 % primal domain (the dual scale that matters is set by the gradients over it), and it is cheap
@@ -238,10 +243,13 @@ function assertStep3MatchesPieces(p, env)
                     ['cPLQ''s Step 3 disagrees with its own Step 2 at the dual point ' ...
                      's=(%.6f,%.6f): the assembled maximum gives %.6f but the pointwise max ' ...
                      'of the per-piece conjugates -- the same f*, computed the other way -- ' ...
-                     'gives %.6f. Step 1 and Step 2 are correct here; the assembled partition ' ...
-                     'is not (region.merge and region.simplifyUnboundedRegion both drop ' ...
-                     'constraints, so regions claim territory that was never theirs). See ' ...
-                     'SUPPORT_MATRIX.md section 1.2.'], s(1), s(2), got, ref);
+                     'gives %.6f. Since Step 1 and Step 2 agree with ground truth on the cases ' ...
+                     'this covers, suspect the ASSEMBLY: a region claiming territory that was ' ...
+                     'never its own. The two historical causes are fixed and certified by LP ' ...
+                     '(region.redundantSubset, region.unionIsExact), so start by checking ' ...
+                     'whether either certificate returned UNDECIDED and fell back to its ' ...
+                     'conservative branch. See SUPPORT_MATRIX.md section 1.2.'], ...
+                    s(1), s(2), got, ref);
             end
         end
     end

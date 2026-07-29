@@ -66,7 +66,7 @@ largest functional gap.
 | Full-domain **non-strictly-convex** quadratic | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:78` |
 | Single **bounded triangle**, Step 1 envelope has **one** face | **OK** (numeric; fast) | `QuaPar` | — |
 | …envelope split with a **rational** face, 2-face split | **OK** (falls back to cPLQ's Step 2/3; slow, ~100 s) | `QuaParCPLQ` | — |
-| …envelope split with a **rational** face, 4-face split | **GAP** — cPLQ's **Step 3** (cross-piece max), see below | — | `PLQ:conjCPLQ:cplqFailed` — `conjCPLQ.m`'s `conjEnvelopeViaCPLQ` |
+| …envelope split with a **rational** face, 4-face split | **OK** (2026-07-29; symbolic, ~27 min) | `QuaParCPLQ` | — |
 | General **bounded** domain (multi-face and/or non-triangular) | **OK** (symbolic; slow) | `QuaParCPLQ` | — |
 | **Unbounded** multi-face domain | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:103` |
 | Step 3 with a **non-triangular** envelope piece | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:161` |
@@ -103,13 +103,13 @@ reduces such a triangle to 2-convex-edge sub-triangles and Step 1 already applie
 face reaching Step 2 has come through it. The edge count describes the *input*; it is not what
 fails.
 
-What still fails is the **4-face** split, and the failure is now in **Step 3** — cPLQ's
-cross-piece maximum (`plq.maximumConjugate` → `functionNDomain.maximumP` → `region.maximum`).
-Step 2 completes on all four faces. Getting there took resolving a chain of removable `0/0`s (see
-the note below) plus two robustness guards in `region.m`.
+The **4-face** split took longest, and its last failure was in **Step 3** — cPLQ's cross-piece
+maximum (`plq.maximumConjugate` → `functionNDomain.maximumP` → `region.maximum`). It is now
+**closed** (see the two updates below); this is the history of how, kept because each stage
+records a wrong diagnosis worth not repeating.
 
-**Update (2026-07-29) — Step 3 now runs; only its ASSEMBLY is wrong.** Four further blockers were
-fixed and the 4-face pipeline completes end to end (~15 min). Steps 1 and 2 are **exact** on the
+**Update (2026-07-29) — Step 3 runs, but its ASSEMBLY was still wrong.** Four blockers were
+fixed and the 4-face pipeline completed end to end (~15 min). Steps 1 and 2 are **exact** on the
 reference case `f = xy` over `conv{(0,0),(3,3),(1,2)}`: the pointwise max of the four per-piece
 conjugates matches `sup_{x∈T} ⟨s,x⟩ − xy` at **all 289 points** of a 17×17 dual grid, and Step 1's
 envelope reproduces `f*` to grid resolution. The four fixes were
@@ -121,24 +121,45 @@ envelope reproduces `f*` to grid resolution. The four fixes were
 | `region.linear3pt` | translated an edge-local vertex index into a region index **in place**, so the next iteration indexed a 3-element array out of range |
 | `plq_1p.conjugateFunction`, `nCE==2` | the `grad` half-plane per edge was the hard-coded pattern `+,−,+` — a statement about one edge *ordering*. For any other ordering two edges got each other's half-plane, so `f*` came out as the **min** of the two edge candidates. Now derived from geometry: the rank-1 Hessian's kernel `k = [b,−2a]` gives `grad = ⟨s−L,k⟩`, so edge *j* owns `{grad ≥ 0}` exactly when its outward normal has `⟨k,n_j⟩ > 0`; an edge parallel to `k` is a level edge and contributes no region |
 
-The remaining error is **entirely in the assembly**, and has two named causes, both of which let a
-region claim territory that was never its own — carrying the wrong value there (~12% of that grid):
+**Update (2026-07-29, later session) — the ASSEMBLY is now fixed too; this row is OK.** The final
+assembled partition went from **57 of 289 wrong to 0 of 289**, exact at every one of the fold's
+seven rounds, and the whole fold got *faster* (1645 s vs 1768 s) because a correct partition
+carries fewer regions than a damaged one.
 
-1. **`region.merge` is unsound.** It unions `A ∩ {g≤0}` and `B ∩ {−g≤0}` by deleting the shared
-   facet and intersecting the rest, giving `A ∩ B`. That equals the union only when `A` and `B`
-   are the *same* constraint set. Measured: three same-valued Step 3 regions merge into one
-   covering `s=(1,1)`, where none of them does.
-2. **`region.simplifyUnboundedRegion` drops non-redundant constraints.** Its rule is "delete any
-   constraint not passing through a finite vertex", which is not a redundancy test for unbounded
-   or curved regions. Measured: a region keeping `(s₁+s₂)²/4` loses `−s₁−s₂ ≤ 0` and reports
-   `f*(−3,−3) = 9` where the true value is `0`.
+Both causes were the same question — "is this linear form ≤ 0 over that polyhedron" — which is an
+LP: exact, and it answers unboundedness and infeasibility as first-class results, which matters
+because these regions are routinely unbounded. New helpers `region.maxLinear`/`impliedBy`/
+`linearForm`/`redundantSubset`/`deleteIfRedundant`/`unionIsExact`; every uncertain answer is a
+refusal, since over-describing a region is harmless and under-describing it is the bug.
 
-Guarding (1) alone with a constraint-set-equality test is provably sound but makes things **worse**
-(36 → 125 wrong of 289), because refusing merges leaves more regions for (2) to damage. **Fix them
-together.** Until then `conjCPLQ`'s `assertStep3MatchesPieces` cross-checks the assembled maximum
-against the per-piece max — the same `f*` by a different route — over an 11×11 dual grid and raises
-`PLQ:conjCPLQ:cplqFailed` on disagreement, so this remains a loud failure rather than a silently
-wrong answer.
+1. **`region.merge` over-claimed.** With `A = A' ∩ {g≤0}`, `B = B' ∩ {g≥0}`, it returns
+   `M = A' ∩ B'`. `M` never *loses* a point (any `x ∈ A' ∩ B'` has `g≤0`, so is in `A`, or `g≥0`,
+   so is in `B`) but it can *gain* points belonging to neither. `M = A ∪ B` exactly when
+   `A ⊆ B'` and `B ⊆ A'` — equivalently, when `A ∪ B` is convex — and `unionIsExact` decides that
+   by LP before any facet is deleted. Two shared facets are refused outright, since a point with
+   `g₁≤0, g₂≥0` is in neither operand yet survives `M`.
+2. **`region.simplifyUnboundedRegion` dropped non-redundant constraints.** "Delete any constraint
+   not passing through a finite vertex" is not a redundancy test; `redundantSubset` uses the real
+   one, `max{gᵢ : gⱼ ≤ 0, j≠i} ≤ 0`. Both deletion sites now route through `deleteIfRedundant`, so
+   a heuristic can only ever *propose*.
+
+Guarding (1) alone with a constraint-set-equality test was provably sound and made things **worse**
+(36 → 125 wrong of 289), because refusing merges left more regions for (2) to damage — which is why
+they were fixed together, and why the *exact* condition above is the right one rather than that
+stronger proxy: it refuses only what it must.
+
+Fixing these exposed one further latent bug, the usual pattern here: **`region.slopes2`** takes a
+curved constraint's tangent at a region vertex lying on it, and a curved constraint need not have
+one — previously unreachable because such constraints were being deleted. Skipping the constraint
+"works" but costs `maxArray` its probe directions, so it returns undecided more often, `maxEqDom`
+falls through to `splitmax3`, and every undecided region splits, compounding round over round —
+`maximumP 3` went from 153 s to over 90 minutes. Taking the tangent at the region's finite-vertex
+centroid instead runs it in 192 s. **Do not "simplify" that fallback back to skipping.**
+
+`conjCPLQ`'s `assertStep3MatchesPieces` gate stays: it cross-checks the assembled maximum against
+the per-piece max — the same `f*` by a different route — and a wrong partition fails silently by
+nature, returning plausible numbers rather than erroring. Unit coverage of the two certificates is
+in the new `regionTest.m`.
 
 **Correction (2026-07-28).** An earlier edition of this section blamed the numeric/symbolic
 boundary and called for exact arithmetic in Step 1. That was **wrong**, and the measurement that
@@ -326,19 +347,18 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
-2. **`conj` of a triangle whose Step 1 envelope splits into 4 faces** (§1.2) — Steps 1 and 2 are
-   now exact on the reference case; cPLQ's Step 3 *assembly* is not. Two named causes,
-   `region.merge`'s unsound facet-deletion union and `region.simplifyUnboundedRegion`'s
-   not-a-redundancy-test constraint dropping, must be fixed together. Guarded by
-   `assertStep3MatchesPieces`, so it fails loudly rather than returning wrong numbers. The 2-face
-   split works end to end; `biconj` works for both.
-3. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
-   itself.
-4. **`'pqp'` and `'graph'` engines missing** (§1.1).
-5. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
-6. **Two known wrong-answer defects** (§7).
-7. **`maxQuaPar` cannot split a cell that already carries an arc** (§4) — ~26% of sampled splits.
-8. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
+2. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
+   itself. Note it breaks *earlier and more quietly* than `conjCPLQ.m:103`'s guard suggests:
+   `quaPolToPlq` feeds ray direction points to `domain()` as if they were vertices, so an
+   unbounded face silently becomes a degenerate polygon (the second-quadrant cone of the 4-cone
+   fan comes out as 2 vertices with `x ≤ 0` listed twice) rather than erroring. Behind that,
+   `plq_1p.triangulate` is a vertex fan and `convexEnvelope1`/`conjugateFunction` index
+   `vx(1..3)` directly, so cPLQ has no unbounded-piece case in Step 1 or Step 2 at all.
+3. **`'pqp'` and `'graph'` engines missing** (§1.1).
+4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
+5. **Two known wrong-answer defects** (§7).
+6. **`maxQuaPar` cannot split a cell that already carries an arc** (§4) — ~26% of sampled splits.
+7. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
 
 **Resolved 2026-07-28:** `biconj` works for every bounded domain, including the single bounded
 triangle that used to be blocker 1 — via Step 1's convex envelope rather than a second
