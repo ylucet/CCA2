@@ -211,6 +211,24 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % cross-piece maximum (plq.maximum:185 -> maximumConjugate -> functionNDomain.maximumP
             % -> region.maximum), not in the conjugate of any piece.
             %
+            % UPDATE (2026-07-29): Step 3 now RUNS to completion on this triangle -- four
+            % separate blockers were fixed (region.maxArray's degenerate probe directions,
+            % functionNDomain.mergeL's stale removeTangent vertices, region.linear3pt's
+            % self-overwriting index, and plq_1p.conjugateFunction's hard-coded nCE==2 grad
+            % half-planes). Step 1 and Step 2 are now EXACT here: the pointwise max of the four
+            % per-piece conjugates matches sup_{x in T} <s,x> - xy at all 289 points of a 17x17
+            % dual grid.
+            %
+            % What is still wrong is only the ASSEMBLY. region.merge unions two regions by
+            % deleting their shared facet and intersecting what remains -- an over-approximation
+            % unless the two carry identical other constraints -- and simplifyUnboundedRegion
+            % deletes any constraint not passing through a finite vertex. Both leave regions
+            % covering territory that was never theirs, with the wrong value on it (~12% of that
+            % grid). conjCPLQ's assertStep3MatchesPieces cross-checks the assembled maximum
+            % against the per-piece max and raises cplqFailed on disagreement, so this stays a
+            % LOUD failure rather than a silently wrong answer -- same convention as before, but
+            % now triggered by the real defect instead of by a crash.
+            %
             % Nothing here needs a "3 convex edges" case: [COAP] Appendix A.5's split reduces such
             % a triangle to 2-convex-edge sub-triangles, and Step 1 already does it -- that is why
             % the envelope below has 4 faces. The edge count is how the input is DESCRIBED; it is

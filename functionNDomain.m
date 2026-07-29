@@ -923,20 +923,7 @@ classdef functionNDomain
                % lSing pairs (see maximumP's own HISTORY comment).
                if ~isempty(r)
                % Removing inf from vertices - to be removed later
-               %%%%%%%%%%%%%%%
-            nP = 0;
-            for j = 1:r.nv
-              if abs(r.vx(j)) == intmax
-                continue
-              end
-              if abs(r.vy(j)) == intmax
-                continue
-              end
-              nP = nP+1;
-              px(nP) = r.vx(j);
-              py(nP) = r.vy(j);
-            end
-            %%%%%%%%%%%%%%%%%%%%%%
+               [nP, px, py] = r.finiteVertices;
              %  disp('b4 simp')
                r = r.simplifyUnboundedRegion;
              %  disp('aft simp')
@@ -966,6 +953,13 @@ classdef functionNDomain
                      end
                    end
                  end
+                % (nP,px,py) must come from THIS r, read before simplifyUnboundedRegion --
+                % they are removeTangent's candidate tangency points. This loop used to reuse
+                % whatever the FIRST accumulated region left in those variables above, which is
+                % a different region, and is undefined outright whenever that first region was
+                % empty and skipped ('Unrecognized function or variable nP' -- f=xy over
+                % conv{(0,0),(3,3),(1,2)}).
+                [nP, px, py] = r.finiteVertices;
                 r = r.simplifyUnboundedRegion;
                 marked(i) = true;
                 marked(ja(j)) = true;

@@ -192,7 +192,59 @@ function g = conjEnvelopeViaCPLQ(env)
         error('PLQ:conjCPLQ:cplqFailed', ...
             'cPLQ''s Step 2/3 returned an empty conjugate for Step 1''s envelope.');
     end
+    assertStep3MatchesPieces(p, env);
     g = QuaParCPLQ(p.maxConjugate);
+end
+
+% ================================================================================================
+function assertStep3MatchesPieces(p, env)
+% Cross-check cPLQ's Step 3 (the assembled cross-piece maximum, p.maxConjugate) against the
+% SAME quantity computed the other way: the pointwise max of the per-piece Step 2 conjugates,
+% p.pieces(k).maxConjugate. Both are f*, since f* = (conv f)* = max_k (env_k + I_{face k})*, so
+% any disagreement is a bug -- and Step 3 is the half that has one.
+%
+% WHY THIS GATE EXISTS. Step 3 no longer crashes on a 4-face envelope (this session fixed four
+% separate blockers), but it does not yet assemble a correct partition: region.merge unions two
+% regions by deleting their shared facet and intersecting what remains, which over-approximates
+% the union whenever the two carry different other constraints, and simplifyUnboundedRegion
+% deletes any constraint not passing through a finite vertex. Both leave regions covering
+% territory that was never theirs, with the wrong function value on it. On f=xy over
+% conv{(0,0),(3,3),(1,2)} that is ~12% of a 17x17 dual grid. Returning those numbers silently
+% would be worse than the loud failure this path used to give, so we keep the loud failure --
+% now for the correct reason, and only when the result really is wrong. See
+% .claude/SESSION_HANDOFF.md and SUPPORT_MATRIX.md section 1.2.
+%
+% Sampling, not proof: the grid below is a screen, not a certificate. It is sized from the
+% primal domain (the dual scale that matters is set by the gradients over it), and it is cheap
+% next to the symbolic pipeline it follows.
+    R = 2*max(abs(env.V), [], 'all') + 1;
+    t = linspace(-R, R, 11);
+    for i = 1:numel(t)
+        for j = 1:numel(t)
+            s = [t(i), t(j)];
+            got = evalFunctionNDomain(p.maxConjugate, s);
+            ref = -inf;
+            for k = 1:p.nPieces
+                v = evalFunctionNDomain(p.pieces(k).maxConjugate, s);
+                if isfinite(v)
+                    ref = max(ref, v);
+                end
+            end
+            if ~isfinite(ref)
+                continue        % no piece covers s: nothing to check against
+            end
+            if ~isfinite(got) || abs(got - ref) > 1e-7 * max(1, abs(ref))
+                error('PLQ:conjCPLQ:cplqFailed', ...
+                    ['cPLQ''s Step 3 disagrees with its own Step 2 at the dual point ' ...
+                     's=(%.6f,%.6f): the assembled maximum gives %.6f but the pointwise max ' ...
+                     'of the per-piece conjugates -- the same f*, computed the other way -- ' ...
+                     'gives %.6f. Step 1 and Step 2 are correct here; the assembled partition ' ...
+                     'is not (region.merge and region.simplifyUnboundedRegion both drop ' ...
+                     'constraints, so regions claim territory that was never theirs). See ' ...
+                     'SUPPORT_MATRIX.md section 1.2.'], s(1), s(2), got, ref);
+            end
+        end
+    end
 end
 
 % ================================================================================================

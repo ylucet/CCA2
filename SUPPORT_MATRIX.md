@@ -108,6 +108,38 @@ cross-piece maximum (`plq.maximumConjugate` → `functionNDomain.maximumP` → `
 Step 2 completes on all four faces. Getting there took resolving a chain of removable `0/0`s (see
 the note below) plus two robustness guards in `region.m`.
 
+**Update (2026-07-29) — Step 3 now runs; only its ASSEMBLY is wrong.** Four further blockers were
+fixed and the 4-face pipeline completes end to end (~15 min). Steps 1 and 2 are **exact** on the
+reference case `f = xy` over `conv{(0,0),(3,3),(1,2)}`: the pointwise max of the four per-piece
+conjugates matches `sup_{x∈T} ⟨s,x⟩ − xy` at **all 289 points** of a 17×17 dual grid, and Step 1's
+envelope reproduces `f*` to grid resolution. The four fixes were
+
+| Site | Defect |
+|---|---|
+| `region.maxArray` (`region.probeAlong`/`probePerp`) | tie-break probe directions came from constraint *slopes*; a symbolically-zero-but-not-syntactically-zero slope made `d == 0` false, so `-1/d` survived as an unevaluated expression and detonated later in `subsF`'s `simplifyFraction` as `symbolic:kernel:DivisionByZero` |
+| `functionNDomain.mergeL` | second accumulation loop passed the **first** region's vertices to `removeTangent`, and none at all (`Unrecognized function or variable 'nP'`) when that first region was empty |
+| `region.linear3pt` | translated an edge-local vertex index into a region index **in place**, so the next iteration indexed a 3-element array out of range |
+| `plq_1p.conjugateFunction`, `nCE==2` | the `grad` half-plane per edge was the hard-coded pattern `+,−,+` — a statement about one edge *ordering*. For any other ordering two edges got each other's half-plane, so `f*` came out as the **min** of the two edge candidates. Now derived from geometry: the rank-1 Hessian's kernel `k = [b,−2a]` gives `grad = ⟨s−L,k⟩`, so edge *j* owns `{grad ≥ 0}` exactly when its outward normal has `⟨k,n_j⟩ > 0`; an edge parallel to `k` is a level edge and contributes no region |
+
+The remaining error is **entirely in the assembly**, and has two named causes, both of which let a
+region claim territory that was never its own — carrying the wrong value there (~12% of that grid):
+
+1. **`region.merge` is unsound.** It unions `A ∩ {g≤0}` and `B ∩ {−g≤0}` by deleting the shared
+   facet and intersecting the rest, giving `A ∩ B`. That equals the union only when `A` and `B`
+   are the *same* constraint set. Measured: three same-valued Step 3 regions merge into one
+   covering `s=(1,1)`, where none of them does.
+2. **`region.simplifyUnboundedRegion` drops non-redundant constraints.** Its rule is "delete any
+   constraint not passing through a finite vertex", which is not a redundancy test for unbounded
+   or curved regions. Measured: a region keeping `(s₁+s₂)²/4` loses `−s₁−s₂ ≤ 0` and reports
+   `f*(−3,−3) = 9` where the true value is `0`.
+
+Guarding (1) alone with a constraint-set-equality test is provably sound but makes things **worse**
+(36 → 125 wrong of 289), because refusing merges leaves more regions for (2) to damage. **Fix them
+together.** Until then `conjCPLQ`'s `assertStep3MatchesPieces` cross-checks the assembled maximum
+against the per-piece max — the same `f*` by a different route — over an 11×11 dual grid and raises
+`PLQ:conjCPLQ:cplqFailed` on disagreement, so this remains a loud failure rather than a silently
+wrong answer.
+
 **Correction (2026-07-28).** An earlier edition of this section blamed the numeric/symbolic
 boundary and called for exact arithmetic in Step 1. That was **wrong**, and the measurement that
 refutes it is worth keeping: at the vertex where a face's denominator vanishes, the numerator
@@ -294,9 +326,12 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
-2. **`conj` of a triangle whose Step 1 envelope splits into 4 faces** (§1.2) — cPLQ's Step 3
-   (cross-piece maximum) is not yet reliable on them. Step 2 completes; the 2-face split works end
-   to end; `biconj` works for both.
+2. **`conj` of a triangle whose Step 1 envelope splits into 4 faces** (§1.2) — Steps 1 and 2 are
+   now exact on the reference case; cPLQ's Step 3 *assembly* is not. Two named causes,
+   `region.merge`'s unsound facet-deletion union and `region.simplifyUnboundedRegion`'s
+   not-a-redundancy-test constraint dropping, must be fixed together. Guarded by
+   `assertStep3MatchesPieces`, so it fails loudly rather than returning wrong numbers. The 2-face
+   split works end to end; `biconj` works for both.
 3. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
    itself.
 4. **`'pqp'` and `'graph'` engines missing** (§1.1).

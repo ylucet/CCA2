@@ -603,9 +603,12 @@ classdef plq_1p
               [c0,t0] = (coeffs(simplifyFraction(grad),[s1,s2]));
               %double(c0)
               %pause
-             subdE(1,3) = grad;
-             subdE(2,3) = -grad;
-             subdE(3,3) = grad;
+              % HISTORY: subdE(:,3) -- which half-plane of `grad` belongs to which edge --
+              % used to be the hard-coded pattern subdE(1,3)=grad, subdE(2,3)=-grad,
+              % subdE(3,3)=grad. That is a statement about one particular edge ORDERING, not
+              % about the geometry, so it silently handed edges the wrong half-plane for any
+              % other ordering. It is now derived per edge inside the loop below; see the
+              % comment there.
  %            for j = 1:obj.envelope(i).d.nv
  % %                 j
  %  %                obj.envelope(i).d.ineqs(j)
@@ -636,6 +639,30 @@ classdef plq_1p
   %                obj.envelope(i).d.ineqs(j)
                   
                   c0 = obj.envelope(i).d.ineqs(j).getLinearCoeffs ([x,y]);
+
+                  % Which half-plane of `grad` this edge owns, from the geometry rather than
+                  % from j. In this branch the envelope is a rank-1 PSD quadratic, so its
+                  % Hessian [2a b; b 2c] has kernel kdir = [b, -2a], and
+                  %   grad = <s - L, kdir>   (L = [d,e] the linear part),
+                  % i.e. the objective s'x - f(x) is AFFINE along kdir with slope grad. The sup
+                  % is therefore pushed along +kdir when grad > 0, so it can only land on an
+                  % edge whose OUTWARD normal nj = [c0(1),c0(2)] satisfies <kdir,nj> > 0; that
+                  % edge owns {grad >= 0}, i.e. the inequality -grad <= 0, and an edge with
+                  % <kdir,nj> < 0 owns {grad <= 0}.
+                  % An edge PARALLEL to kdir (<kdir,nj> = 0) is a level edge of f: the sup is
+                  % attained in its relative interior only on the measure-zero line {grad = 0},
+                  % where its two endpoints give the same value, so the (closed) vertex regions
+                  % already cover it and the edge contributes no region at all.
+                  kdir = double([b, -2*a]);
+                  nj   = double([c0(1), c0(2)]);
+                  tj   = kdir*nj';
+                  if abs(tj) <= 1.0d-10*max(1, norm(kdir)*norm(nj))
+                      continue
+                  elseif tj > 0
+                      subdE(j,3) = -grad;
+                  else
+                      subdE(j,3) = grad;
+                  end
 
                   m = -c0(1)/c0(2);   % put check for zero d
                   q = -c0(3)/c0(2);

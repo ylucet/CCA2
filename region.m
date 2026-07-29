@@ -8,7 +8,49 @@ classdef region
         vars;
     end
 
-    
+
+     methods (Static)
+         % ---- probe DIRECTIONS for maxArray's tie-breaking ------------------------------
+         % maxArray probes points a small step either side of a region vertex to break a tie
+         % between two candidate functions that agree at every vertex. It picks those steps
+         % from the region's constraint SLOPES, and a slope is a lossy encoding of a
+         % direction: a vertical direction has no slope, and the perpendicular of a
+         % horizontal one is vertical. Both degeneracies occur here (see maxArray), and a
+         % symbolic slope makes them invisible to a syntactic `d == 0` test -- the slope that
+         % broke f=xy over conv{(0,0),(3,3),(1,2)} was
+         %   2^(1/2)/4 + (4*2^(1/2) - 4)/(2*(4*2^(1/2) - 8)),
+         % which IS zero but is not the symbol 0, so `d == 0` was false, `-1/d` stayed an
+         % unevaluated symbolic expression, and it only blew up much later inside subsF's
+         % simplifyFraction as symbolic:kernel:DivisionByZero. These two helpers test the
+         % degeneracies numerically and emit points, not slopes.
+         %
+         % Deliberately NOT treated as degenerate: a slope of intmax, which slopes2 uses to
+         % flag a vertical constraint. Callers pass it straight through as a huge finite
+         % slope, which probes far out along an unbounded region's recession direction, and
+         % testMaxMultiRegion/testOpenconvex depends on those far probes being feasible.
+
+         function P = probeAlong (x0, y0, d, h)
+         % The two points a step h either side of (x0,y0) along the direction of slope d.
+             if ~isfinite(double(d))
+                 P = [x0, y0 + h; x0, y0 - h];        % vertical direction
+             else
+                 P = [x0 + h, y0 + d*h; x0 - h, y0 - d*h];
+             end
+         end
+
+         function P = probePerp (x0, y0, d, h)
+         % The same, along the perpendicular to the direction of slope d.
+             dd = double(d);
+             if abs(dd) < 1.0d-12
+                 P = [x0, y0 + h; x0, y0 - h];        % perpendicular to horizontal
+             elseif ~isfinite(dd)
+                 P = [x0 + h, y0; x0 - h, y0];        % perpendicular to vertical
+             else
+                 P = region.probeAlong(x0, y0, -1/d, h);
+             end
+         end
+     end
+
 %  57 methods
      methods
 
@@ -1061,10 +1103,22 @@ classdef region
                     return
                 end
               end
-              % use slope mid pt to get directions
+              % use slope mid pt to get directions. Every step below goes through
+              % region.probeAlong/probePerp, which turn a (possibly degenerate) slope into
+              % actual points -- see their header for why a slope alone is not enough.
               for i = 1:size(m,2)
-                
+
                 for j = i+1: size(m,2)
+                  % NOTE: `inf` here, not intmax. slopes2 flags a vertical constraint as
+                  % intmax, so a vertical constraint deliberately falls into the arithmetic
+                  % mean below and yields a huge-but-finite bisector slope -- which is what
+                  % the unbounded regions in testMaxMultiRegion/testOpenconvex rely on to
+                  % find a feasible probe point far out along the recession direction.
+                  % Treating intmax as infinite here (and taking the angle bisector instead)
+                  % leaves those probes 0.1 from the vertex, all infeasible, so maxArray
+                  % returns undecided and maxEqDom falls through to splitmax3, which then
+                  % builds a rational inequality that region.normalize1 cannot take
+                  % ('symbolic:coeffs:NotAPolynomial').
                   if (abs(m(i))~= inf) & (abs(m(j))~= inf)
                     d =  (m(i)+m(j) )/2;
                   else
@@ -1075,78 +1129,26 @@ classdef region
                         d = tan((pi/2 + atan(m(i)))/2);
                   end
                   end
-                  c = vy0(1) - d * vx0(1);
-                  px = vx0(1) + 0.1;
-                  py = d*px+c;
-                  [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
-                  px = vx0(1) - 0.1;
-                  py = d*px+c;
-                  
-                  [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
-                  
-                  %disp("perpen")
-                  
-                  if d == 0
-                      px = vx0(1); 
-                      py = vy0(1)+ 0.1;
-                  
-                      [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
-                      px = vx0(1); 
-                      py = vy0(1)- 0.1;
-                  
-                      [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
-                  
-                  else
-                      d = -1/d;
-                  
-                  c = vy0(1) - d * vx0(1);
-                  px = vx0(1) + 0.1;
-                  py = d*px+c;
-                  [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
-                  px = vx0(1) - 0.1;
-                  py = d*px+c;
-                  
-                  [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
+                  P = [region.probeAlong(vx0(1), vy0(1), d, 0.1); ...
+                       region.probePerp(vx0(1), vy0(1), d, 0.1)];
+                  for ip = 1:size(P,1)
+                      [l,fmax,index] = maxFromPt(obj, P(ip,:), [f1,f2]);
+                      if l
+                        return
+                      end
                   end
                 end
-              end 
+              end
               if size(m,2) == 1
-                  d = -1/m(1)
-                  c = vy0(1) - d * vx0(1);
-                  px = vx0(1) + 0.1;
-                  py = d*px+c;
-                  
-                  [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
+                  % Only one constraint, so the loop above found no pair: probe perpendicular
+                  % to that constraint.
+                  P = region.probePerp(vx0(1), vy0(1), m(1), 0.1);
+                  for ip = 1:size(P,1)
+                      [l,fmax,index] = maxFromPt(obj, P(ip,:), [f1,f2]);
+                      if l
+                        return
+                      end
                   end
-                  px = vx0(1) - 0.1;
-                  py = d*px+c;
-                  
-                  [l,fmax,index] = maxFromPt(obj, [px,py], [f1,f2]);
-                  if l 
-                    return
-                  end
-                  
-        
               end
              % disp("SINGLETON REGION")
              % obj.print
@@ -1406,6 +1408,31 @@ classdef region
         end
 
         
+        function [nP, px, py] = finiteVertices (obj)
+        % The region's vertices that are genuine POINTS: an entry flagged intmax stands for a
+        % direction of an unbounded region, not a vertex. This is the (nP,px,py) triple
+        % removeTangent wants -- it uses them as candidate tangency points, so they must be
+        % this region's own vertices, and must be read BEFORE simplifyUnboundedRegion drops
+        % any of them.
+            nP = 0;
+            px = sym.empty();
+            py = sym.empty();
+            if isempty(obj)
+                % An empty region still reaches here through mergeL's accumulation loops
+                % (region.merge's own empty-operand guard leaves the accumulator empty);
+                % obj.nv on a 0x0 region array is a comma-separated list with no values.
+                return
+            end
+            for j = 1:obj.nv
+                if abs(obj.vx(j)) == intmax || abs(obj.vy(j)) == intmax
+                    continue
+                end
+                nP = nP + 1;
+                px(nP) = obj.vx(j);
+                py(nP) = obj.vy(j);
+            end
+        end
+
         function obj = removeTangent (obj, nP, px, py)
             n = 0;
             mark = [];
@@ -2370,13 +2397,30 @@ classdef region
        end
        %obj.print
        %mark
+       % HISTORY: mark(1) comes out of the loop above as an index into vxi/vyi -- THIS EDGE's
+       % own vertex list, at most 3 long -- and is then translated into an index into
+       % obj.vx/obj.vy. That translation used to write its answer back into mark(1) while the
+       % loop was still reading vxi(mark(1)) as the search key, so the first match turned the
+       % key into an obj.vx index and the next iteration overran vxi ("Index exceeds the
+       % number of array elements. Index must not exceed 3." -- f=xy over
+       % conv{(0,0),(3,3),(1,2)}, reached from region.plus via functionNDomain.mtimes).
+       % Capture the point first, stop at the first match, and delete nothing if the middle
+       % collinear vertex is not one of this region's vertices after all (deleting an
+       % arbitrary vertex was the old fallthrough).
+       tx = vxi(mark(1));
+       ty = vyi(mark(1));
+       iv = 0;
        for i = 1:obj.nv
-           if (obj.vx(i) ==  vxi(mark(1))) & (obj.vy(i) ==  vyi(mark(1)))
-               mark(1) = i;
+           if (obj.vx(i) == tx) & (obj.vy(i) == ty) %#ok<AND2> (sym comparison, matches the
+               iv = i;                              % elementwise form used throughout region.m)
+               break
            end
        end
-       obj.vx(mark(1)) = [];
-       obj.vy(mark(1)) = [];
+       if iv == 0
+           return
+       end
+       obj.vx(iv) = [];
+       obj.vy(iv) = [];
        obj.nv = obj.nv-1;
      end 
 
@@ -3008,6 +3052,24 @@ classdef region
 
 %      % wont work cause of intersection vs union
      function [l,obj] = merge (obj, obj2)
+     % Union two regions that share a facet, by deleting the facet from both and intersecting
+     % what is left.
+     %
+     % KNOWN UNSOUND (open; see .claude/SESSION_HANDOFF.md). That recipe computes A n B for
+     % obj = A n {g<=0} and obj2 = B n {-g<=0}, and A n B equals the union ONLY when A and B
+     % are the same constraint set. Otherwise A n B is strictly larger than the union and the
+     % merged region silently claims territory that belonged to neither operand, carrying a
+     % function value that is wrong there. Measured instance: for f=xy over
+     % conv{(0,0),(3,3),(1,2)}, three same-valued Step 3 regions merge into one that covers
+     % s=(1,1), where none of them does and where the true f* comes from a different piece,
+     % so the assembled partition returns 1.0 instead of 1.125.
+     %
+     % Guarding both merge paths with "the two constraint sets must be equal after the facet
+     % deletion" was tried and is provably sound, but it is NOT sufficient on its own: with it
+     % the same case goes from 36 to 125 wrong points of 289, because refusing merges leaves
+     % more regions for simplifyUnboundedRegion to drop non-redundant constraints from (the
+     % second, larger defect -- it deletes any constraint not passing through a finite vertex).
+     % Fix the two together, not separately.
          l = false;
          % HISTORY: an empty (0x0) region can reach here from an upstream
          % copy-through that didn't check isempty after a simplification
@@ -3057,7 +3119,7 @@ classdef region
              if n > 0
                l = true;
                obj3 = obj;
-               obj.ineqs(marki) = []; 
+               obj.ineqs(marki) = [];
                obj2.ineqs(markj) = [];
                obj = obj+obj2;
                if isempty(obj)
@@ -3153,7 +3215,7 @@ classdef region
          end
          if l
            obj3 = obj;
-           obj.ineqs(marki) = []; 
+           obj.ineqs(marki) = [];
            obj2.ineqs(markj) = [];
            obj = obj+obj2;
            obj = obj.simplifyUnboundedRegion;
