@@ -164,7 +164,42 @@ vertex => bounds no edge => no edge number) but `conjugateOfPiecePoly:1002` uses
 PERMUTATION, `d.ineqs(edgeNo) = d.ineqs`, so a 0 only moves the crash one line down ('Array indices
 must be positive integers'). Both suites still failed. The comment at `getEdgeNosInf` records this.
 
-**ALSO TRIED AND REVERTED — read this before attempting a third time.** Emitting `edgeNo(i)=0` AND
+**UPDATE — one of the two is FIXED; `testMaxMultiRegion` is back to 24/0.** Three layers, each
+found by reading the actual contract rather than guessing at the data shape:
+
+1. `getEdgeNosInf` reports **0** for a constraint with no vertex on the region (it bounds no edge).
+2. `conjugateOfPiecePoly` **drops** those from its own local copy of `d` before the scatter. The
+   whole routine is edge-indexed — the `isQuad` chord rewrite, `getNormalConeVertex`,
+   `getSubdiffVertexT1/T2/T2Q` all address `d.ineqs` BY EDGE — so a vertexless facet has no
+   representation there at all. (Parking them above the real slots was tried first and is worse
+   than useless: the `isQuad` branch then builds a chord for such a constraint out of
+   `d0.vx(1),d0.vx(2)`, vertices unrelated to it.) Dropping gives that routine exactly the
+   information it had before `redundantSubset` started preserving these constraints.
+3. Empty-domain guards in **both** of its loops — `removeTangent` can return `region.empty`, and
+   `obj.nv` / `d0.ineqs` on a 0x0 region array is a comma-separated list with 0 values. The second
+   guard must still set `ia(i+1) = size(pc,2)+1` before `continue`, since `ia` is a running index
+   into `pc` with one entry per INPUT piece (`ia(i+1)==ia(i)` = "contributed nothing", the same
+   convention `maxEqDom` uses).
+
+**STILL OPEN: `testcPLQ/testRectBiconj`.** Fails in the same `conjugateOfPiecePoly` `isQuad`
+branch, at `if isAlways(nineq.subsF(vars,[mx,my])>0)` -> `symbolicFunction.gtd:754`, with
+'Conversion to logical from sym is not possible' (note `gtd` does a bare `if (obj1.f>obj2)`, so it
+cannot take an undecidable sym at all -- `isAlways` never gets a chance to help).
+
+What that means, and it is the useful part: dropping the vertexless constraints was NOT enough, so
+the difference between old and new constraint sets is **not only** those. `simplifyUnboundedRegion`'s
+second phase also deleted constraints that DO touch a vertex but fail its probe test, and
+`redundantSubset` keeps those too unless they are provably redundant. So regions arriving at this
+edge-indexed vendored model are richer in more than one way, and the chord it builds from
+`d0.vx(1),d0.vx(2)` stops being meaningful.
+
+The principled fix is an ADAPTER at `conjugateOfPiecePoly`'s entry: reduce `d` to the edge
+description this model requires, rather than teaching the model about richer regions. Note it
+already does shape normalization right there (`poly2order`/`poly2orderUnbounded`), so that is the
+natural place. Do NOT instead weaken `redundantSubset` — those constraints are load-bearing for the
+assembly (57 -> 0 wrong points).
+
+**EARLIER, TRIED AND REVERTED — read this before attempting again.** Emitting `edgeNo(i)=0` AND
 replacing the call site's scatter with a sort:
 
     hasEdge = edgeNo > 0;  [~,ord] = sort(edgeNo(hasEdge));  iHas = find(hasEdge);

@@ -990,6 +990,18 @@ classdef functionNDomain
                 d = obj(i).d;
                 
                 d = d.removeTangent(d.nv,d.vx,d.vy);
+                % removeTangent can delete every constraint and hand back region.empty. An empty
+                % region has no nv/ineqs to index -- obj.nv on a 0x0 region array is a
+                % comma-separated list with 0 values, which is exactly what removeInfV errored on
+                % ('a dot indexing expression produced ... 0 values') -- and a piece whose domain
+                % is empty contributes nothing to the conjugate anyway, so carry it through
+                % untouched. Same class of guard as region.plus/merge/finiteVertices and this
+                % file's own mergeL/maximumP; reachable here now that region.redundantSubset
+                % keeps constraints the old delete-anything-without-a-finite-vertex rule removed.
+                if isempty(d)
+                    obj(i).d = d;
+                    continue
+                end
                 d = d.removeInfV;
                 %d = d.poly2orderUnbounded;
                
@@ -999,6 +1011,43 @@ classdef functionNDomain
                     d = d.poly2orderUnbounded;
                 end
                 edgeNo = d.getEdgeNosInf(d.vars);
+                % This scatter re-indexes the constraints BY EDGE NUMBER, which is the contract
+                % the endNv loop further down relies on: for a bounded domain edge j is ineqs(j),
+                % for an unbounded one edge j is ineqs(j+1) (getEdgeNosInf's own `add`, which is
+                % why slot 1 is deliberately left empty there). Only slots 1..nv are ever read as
+                % edges, so the scatter growing d.ineqs past that is harmless by design.
+                %
+                % getEdgeNosInf reports 0 for a constraint with no vertex on d: it bounds no edge,
+                % so it has no slot. Such constraints survive now that region.redundantSubset
+                % decides deletions by a real redundancy test, and feeding a 0 to the scatter
+                % errors ('Array indices must be positive integers') -- it broke
+                % testMaxMultiRegion/testMax and testcPLQ/testRectBiconj. Park them ABOVE every
+                % real slot instead: each keeps its own position, so nothing can mistake one for
+                % an edge, and they stay present for the loops below that walk all of d.ineqs.
+                %
+                % Do NOT replace the scatter with a sort. Tried, and it broke a third,
+                % previously-passing test (testMaxMultiRegion/testFractional): edgeNo values can
+                % exceed numel(ineqs) (hence the deliberate growth above) and can repeat (hence
+                % last-write-wins), and sorting reproduces neither.
+                %
+                % getEdgeNosInf reports 0 for a constraint with NO vertex on d. It bounds no edge,
+                % and THIS ROUTINE IS EDGE-INDEXED THROUGHOUT -- the isQuad chord rewrite below,
+                % getNormalConeVertex, getSubdiffVertexT1/T2/T2Q all address d.ineqs by edge -- so
+                % there is no place for such a constraint here at all. Parking it above the real
+                % slots was tried and is worse than useless: the isQuad branch then derives a
+                % chord for it from d0.vx(1),d0.vx(2), vertices that have nothing to do with it,
+                % and the resulting comparison is not decidable ('Conversion to logical from sym
+                % is not possible' in symbolicFunction.gtd).
+                %
+                % Drop it from this function's LOCAL copy of d. That is exactly the information
+                % this routine had before region.redundantSubset started preserving these
+                % constraints, so the vendored biconjugate path is unchanged -- while the
+                % conjugate/assembly path, where they are load-bearing (SUPPORT_MATRIX.md
+                % section 1.2), keeps them. Representing a vertexless facet here would mean
+                % giving this model rays/lines it does not have, which is a separate change.
+                hasEdge = edgeNo > 0;
+                d.ineqs = d.ineqs(hasEdge);
+                edgeNo  = edgeNo(hasEdge);
                 d.ineqs(edgeNo) = d.ineqs;
 
                 obj(i).d = d;
@@ -1015,8 +1064,19 @@ classdef functionNDomain
                vars = f.getVars;
                d = obj(i).d;
                d0 = d;
+               % A piece whose domain came out empty (see the removeTangent guard in the first
+               % loop above) has nothing here to read: d0.ineqs on a 0x0 region array is a
+               % comma-separated list with 0 values, which is what the isQuad test below errored
+               % on. It contributes no conjugate piece -- but ia must stay a running index into
+               % pc with one entry per INPUT piece, so record that this one added none
+               % (ia(i+1)==ia(i), the same convention maxEqDom uses for a skipped entry) rather
+               % than leaving a hole for callers to trip over.
+               if isempty(d)
+                   ia(i+1) = size(pc,2)+1;
+                   continue
+               end
                if f.isQuad
-                   
+
                    for j = 1:size(d0.ineqs,2)
                        if (d0.ineqs(j).isQuad)
                            m0 = (d0.vy(1)-d0.vy(2))/(d0.vx(1)-d0.vx(2));

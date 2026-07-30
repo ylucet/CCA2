@@ -2906,20 +2906,19 @@ classdef region
          for i = 1:size(obj.ineqs,2)
             %obj.ineqs(i).print
            [nv, vx, vy] = obj.vertexOfEdge(i);
-           % OPEN (2026-07-29): nv can be 0 here -- a constraint with NO vertex on this region --
-           % and then vx is empty and vx(start) below overruns ('Index exceeds array bounds').
-           % Unreachable while simplifyUnboundedRegion deleted every constraint missing a finite
-           % vertex; reachable now that deletion needs a redundancy certificate (see
-           % region.redundantSubset). Breaks testMaxMultiRegion/testMax and testcPLQ/testRectBiconj,
-           % both via functionNDomain.conjugateOfPiecePoly <- plq.biconjugateF.
+           % nv == 0 -- a constraint with NO vertex on this region -- bounds no EDGE of it, so it
+           % has no edge number, and 0 reports that. Without this, vx is empty and vx(start)
+           % below overruns ('Index exceeds array bounds'). Unreachable while
+           % simplifyUnboundedRegion deleted every constraint missing a finite vertex; reachable
+           % now that deletion needs a redundancy certificate (see region.redundantSubset).
            %
-           % Do NOT "fix" it here by emitting edgeNo(i)=0: that is the right MEANING (no vertex =>
-           % bounds no edge => no edge number) but conjugateOfPiecePoly:1002 uses edgeNo as a
-           % PERMUTATION, `d.ineqs(edgeNo) = d.ineqs`, so a 0 just moves the crash one line down
-           % ('Array indices must be positive integers'). Tried, reverted. The real assumption to
-           % relax is that a region's constraints correspond 1:1 to its edges, which is what an
-           % irredundant constraint touching no vertex violates -- fix it at the call site by
-           % permuting only the constraints that DO carry an edge.
+           % Callers must handle the 0 rather than feed it to an index -- see
+           % functionNDomain.conjugateOfPiecePoly, which parks such constraints above every real
+           % edge slot.
+           if nv == 0
+               edgeNo(i) = 0;
+               continue
+           end
            start = 1;
            %% change condition
            if nv > 1
