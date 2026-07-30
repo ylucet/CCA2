@@ -35,8 +35,9 @@ points to grid resolution, one piece per point.
 
 ## Where things stand
 
-- Branch: `step3-assembly-lp-certificates` — 4 commits ahead of `main`
-- Pushed: the first 3 commits only. The `testRectBiconj` fix is committed locally, **not pushed**.
+- Branch: `step3-assembly-lp-certificates` @ `154f18b` — "Fix testRectBiconj: a one-vertex
+  constraint was evicting a real edge" (4 commits ahead of `main`)
+- Pushed: yes — `origin/step3-assembly-lp-certificates` is up to date.
 - Working tree: clean
 - **Suite: 271 pass / 1 fail** over 23 suites, against a 270/2 baseline. `testcPLQ` is 8/0. The
   single failure is `testRegion/testCreation` (longstanding, unrelated). Plus the NEW
