@@ -1017,37 +1017,68 @@ classdef functionNDomain
                 % why slot 1 is deliberately left empty there). Only slots 1..nv are ever read as
                 % edges, so the scatter growing d.ineqs past that is harmless by design.
                 %
-                % getEdgeNosInf reports 0 for a constraint with no vertex on d: it bounds no edge,
-                % so it has no slot. Such constraints survive now that region.redundantSubset
-                % decides deletions by a real redundancy test, and feeding a 0 to the scatter
-                % errors ('Array indices must be positive integers') -- it broke
-                % testMaxMultiRegion/testMax and testcPLQ/testRectBiconj. Park them ABOVE every
-                % real slot instead: each keeps its own position, so nothing can mistake one for
-                % an edge, and they stay present for the loops below that walk all of d.ineqs.
-                %
                 % Do NOT replace the scatter with a sort. Tried, and it broke a third,
                 % previously-passing test (testMaxMultiRegion/testFractional): edgeNo values can
                 % exceed numel(ineqs) (hence the deliberate growth above) and can repeat (hence
                 % last-write-wins), and sorting reproduces neither.
                 %
-                % getEdgeNosInf reports 0 for a constraint with NO vertex on d. It bounds no edge,
-                % and THIS ROUTINE IS EDGE-INDEXED THROUGHOUT -- the isQuad chord rewrite below,
-                % getNormalConeVertex, getSubdiffVertexT1/T2/T2Q all address d.ineqs by edge -- so
-                % there is no place for such a constraint here at all. Parking it above the real
-                % slots was tried and is worse than useless: the isQuad branch then derives a
-                % chord for it from d0.vx(1),d0.vx(2), vertices that have nothing to do with it,
-                % and the resulting comparison is not decidable ('Conversion to logical from sym
-                % is not possible' in symbolicFunction.gtd).
+                % ADAPTER, in two parts, for constraints that bound no edge of d. THIS ROUTINE IS
+                % EDGE-INDEXED THROUGHOUT -- this scatter, the isQuad chord rewrite below,
+                % getNormalConeVertex, getSubdiffVertexT1/T2/T2Q all address d.ineqs by edge --
+                % so a constraint that bounds no edge has no place here at all. Both parts drop
+                % from this function's LOCAL copy of d only: the conjugate/assembly path, where
+                % these constraints are load-bearing (SUPPORT_MATRIX.md section 1.2), keeps them.
+                % Do NOT push either back into region.redundantSubset -- the constraints it now
+                % preserves are what took the Step 3 assembly from 57 wrong grid points to 0.
                 %
-                % Drop it from this function's LOCAL copy of d. That is exactly the information
-                % this routine had before region.redundantSubset started preserving these
-                % constraints, so the vendored biconjugate path is unchanged -- while the
-                % conjugate/assembly path, where they are load-bearing (SUPPORT_MATRIX.md
-                % section 1.2), keeps them. Representing a vertexless facet here would mean
-                % giving this model rays/lines it does not have, which is a separate change.
+                % (1) NO vertex on d: getEdgeNosInf reports 0, and feeding a 0 to the scatter
+                % errors ('Array indices must be positive integers') -- it broke
+                % testMaxMultiRegion/testMax and testcPLQ/testRectBiconj. Parking such a
+                % constraint ABOVE the real slots was tried and is worse than useless: the isQuad
+                % branch then derives a chord for it from d0.vx(1),d0.vx(2), vertices that have
+                % nothing to do with it, and the comparison is undecidable.
+                %
+                % (2) EXACTLY ONE vertex, COLLIDING with a constraint that has two. Here
+                % getEdgeNosInf reports not 0 but that vertex's own index -- precisely the slot
+                % the real edge leaving that vertex claims -- and because the scatter is
+                % last-write-wins the intruder EVICTS a genuine edge, while the evicted
+                % constraint's original slot is left holding a stale copy of its old occupant.
+                % testcPLQ/testRectBiconj piece 23 arrived as the triangle
+                %     (9*s2)/5 - s1 + 5,   -s1 - 7*s2 - 4,   s1 + 2*s2 - 4
+                % plus a quadratic active only at the single vertex (139/44,-45/44). edgeNo came
+                % out [3 1 1 2] -- the quadratic and -s1-7*s2-4 both claiming slot 1 -- and the
+                % scatter returned [quad, s1+2*s2-4, (9*s2)/5-s1+5, s1+2*s2-4]: -s1-7*s2-4 GONE,
+                % s1+2*s2-4 present twice. The isQuad branch then chorded d0.vx(1) to d0.vx(2),
+                % two vertices the quadratic does not join, so solve() returned a COMPLEX
+                % conjugate pair for the third point and symbolicFunction.gtd -- a bare
+                % `if (obj1.f>obj2)` -- cannot take an undecidable sym ('Conversion to logical
+                % from sym is not possible').
+                %
+                % The test is the COLLISION, not the vertex count on its own, and that is not a
+                % detail: a RAY edge of an unbounded region is also active at exactly one finite
+                % vertex and is load-bearing, but getEdgeNosInf reserves slot 1 for it (its `add`)
+                % so it never collides. Nor can boundedness be used to tell the two apart -- piece
+                % 24 of this same test is unbounded (recession direction (2,-1)) yet carries no
+                % vertex at infinity for removeInfV to find. Keying on the collision also bounds
+                % the blast radius: a piece whose edgeNo has no repeats is untouched.
+                nOn = zeros(size(edgeNo));
+                for k = 1:size(d.ineqs,2)
+                    nOn(k) = d.vertexOfEdge(k);
+                end
                 hasEdge = edgeNo > 0;
-                d.ineqs = d.ineqs(hasEdge);
-                edgeNo  = edgeNo(hasEdge);
+                keepE = hasEdge;
+                for k = 1:numel(edgeNo)
+                    if ~hasEdge(k)
+                        continue
+                    end
+                    % Strictly-better rival only, so no two constraints can evict each other and
+                    % a tie leaves the slot exactly as it is today.
+                    if any(hasEdge & edgeNo == edgeNo(k) & nOn > nOn(k))
+                        keepE(k) = false;
+                    end
+                end
+                d.ineqs = d.ineqs(keepE);
+                edgeNo  = edgeNo(keepE);
                 d.ineqs(edgeNo) = d.ineqs;
 
                 obj(i).d = d;

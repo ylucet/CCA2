@@ -11,42 +11,42 @@ exact at every one of the fold's seven rounds, and the whole fold got **faster**
 1768 s) because a correct partition carries fewer regions than a damaged one.
 
 That fix made three latent bugs reachable in code that had been shielded by the old
-delete-happy behaviour; two are fixed, one is still open (below).
+delete-happy behaviour. **All three are now fixed** — the last one, `testcPLQ/testRectBiconj`,
+this session.
+
+**`testcPLQ/testRectBiconj` is green.** The cause was NOT the extra constraints as such but a
+SILENT COLLISION in `conjugateOfPiecePoly`'s edge-number scatter. `getEdgeNosInf` returns 0 for a
+constraint with no vertex (already handled), but for one with EXACTLY ONE vertex it returns that
+vertex's own index — the slot the real edge leaving that vertex already claims. The scatter is
+last-write-wins, so the intruder EVICTED a genuine edge and left the evicted constraint's old
+slot holding a stale duplicate. Piece 23 arrived as the triangle
+`{(9s2)/5-s1+5, -s1-7s2-4, s1+2s2-4}` plus a quadratic touching only `(139/44,-45/44)`;
+`edgeNo` came out `[3 1 1 2]` and the scatter returned
+`[quad, s1+2s2-4, (9s2)/5-s1+5, s1+2s2-4]` — `-s1-7s2-4` gone, `s1+2s2-4` twice. The `isQuad`
+branch then chorded `d0.vx(1)`→`d0.vx(2)`, two vertices the quadratic does not join, `solve`
+returned a complex pair, and `gtd`'s bare `if (obj1.f>obj2)` could not take it.
+
+The adapter drops a colliding constraint that bounds no edge, from `conjugateOfPiecePoly`'s LOCAL
+copy only. Verified beyond "it stops erroring": the dropped quadratic is
+`-(s1+7s2)^2-148s1+196s2+684`, decreasing in `u=s1+7s2` over the triangle's `u`-range, hence
+maximal on the edge `u=-4` at `s2=-45/44`, where it is exactly 0 — **provably redundant**. A
+brute-force max over the ORIGINAL 4-constraint domain matches the symbolic conjugate at 8 sample
+points to grid resolution, one piece per point.
 
 ## Where things stand
 
-- Branch: `step3-assembly-lp-certificates` @ `cd985c2` — "Fix testMaxMultiRegion: teach
-  conjugateOfPiecePoly about vertexless facets" (3 commits ahead of `main`)
-- Pushed: yes — `origin/step3-assembly-lp-certificates` (tracking set). Not merged to `main`;
-  merge only once `testcPLQ/testRectBiconj` is green.
+- Branch: `step3-assembly-lp-certificates` — 4 commits ahead of `main`
+- Pushed: the first 3 commits only. The `testRectBiconj` fix is committed locally, **not pushed**.
 - Working tree: clean
-- **Suite: 270 pass / 2 fail** over 23 suites, against a 262/1 baseline. All 18 CCA2 suites are
-  green (`conjCPLQTest` 20/0, new `regionTest` 9/0). The 2 failures are
-  `testcPLQ/testRectBiconj` (NEW — see below) and `testRegion/testCreation` (longstanding,
-  unrelated).
+- **Suite: 271 pass / 1 fail** over 23 suites, against a 270/2 baseline. `testcPLQ` is 8/0. The
+  single failure is `testRegion/testCreation` (longstanding, unrelated). Plus the NEW
+  `functionNDomainTest` 2/0, created after that sweep's glob — 273/1 all told.
+- **`main` is now unblocked**: the merge gate ("merge only once `testcPLQ/testRectBiconj` is
+  green") is satisfied.
 
 ## Next steps
 
-1. **`testcPLQ/testRectBiconj` — the one open regression.** Fails in
-   `functionNDomain.conjugateOfPiecePoly`'s `isQuad` branch at
-   `if isAlways(nineq.subsF(vars,[mx,my])>0)` → `symbolicFunction.gtd:754`, "Conversion to
-   logical from sym is not possible". Note `gtd` does a bare `if (obj1.f>obj2)`, so it cannot
-   take an undecidable sym at all — `isAlways` never gets a chance to help.
-
-   **Diagnosis (established, not guessed):** dropping the vertexless constraints was NOT enough,
-   so the difference between the old and new constraint sets is *not only* those.
-   `simplifyUnboundedRegion`'s second phase also deleted constraints that DO touch a vertex but
-   fail its probe test, and `redundantSubset` keeps those unless provably redundant. Regions
-   arriving at this edge-indexed vendored model are therefore richer in more than one way, and
-   the chord it builds from `d0.vx(1),d0.vx(2)` stops being meaningful.
-
-   **Route:** an ADAPTER at `conjugateOfPiecePoly`'s entry that reduces `d` to the edge
-   description that model requires — it already does shape normalization right there
-   (`poly2order`/`poly2orderUnbounded`), so that is the natural place.
-   **Do NOT weaken `redundantSubset` instead** — its extra constraints are what took the
-   assembly from 57 wrong points to 0.
-
-2. **Unbounded multi-face `conj`** — scoped this session. Breaks EARLIER and more quietly than
+1. **Unbounded multi-face `conj`** — scoped this session. Breaks EARLIER and more quietly than
    `conjCPLQ.m:103`'s guard suggests: `quaPolToPlq` feeds ray DIRECTION POINTS to `domain()` as
    if they were vertices, so for the 4-cone fan `V=[0 0;-1 0;0 1;1 0;0 -1]`,
    `E=[1 2 0;1 3 0;1 4 0;1 5 0]` the second-quadrant cone comes out as a degenerate 2-vertex
@@ -58,7 +58,7 @@ delete-happy behaviour; two are fixed, one is still open (below).
    over a **wedge**. *Cheap first increment, worth doing alone:* make `quaPolToPlq` REJECT an
    unbounded face loudly instead of silently corrupting it.
 
-3. **`maxQuaPar`: split a cell that already carries an arc** (~26%, 30 of 115 sampled splits) —
+2. **`maxQuaPar`: split a cell that already carries an arc** (~26%, 30 of 115 sampled splits) —
    also scoped, and the cheap route does NOT work. On the guard-tripping fixture
    (`maxQuaParTest.maxQuaParRejectsSplittingACellThatAlreadyCarriesAnArc`), 15 of 18 candidate
    splitting curves are pure straight lines, BUT every curved cell comes from the one curved
@@ -69,10 +69,10 @@ delete-happy behaviour; two are fixed, one is still open (below).
    `pieces` struct's single `curveAfter`/`curveEc` slot and `facePoly`'s one-curved-edge
    assertion both forbid. Multi-arc pieces is the natural unit.
 
-4. `partialConj` unimplemented for every engine and type (`SUPPORT_MATRIX.md` §2).
-5. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
-6. Merge to `main` and then 0.1 tagging — **do not tag without being asked**.
-7. Longstanding: `'pqp'`/`'graph'` engines; `RatPol.conj`/`biconj`/`add`; the
+3. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
+4. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
+5. `partialConj` unimplemented for every engine and type (`SUPPORT_MATRIX.md` §2).
+6. Longstanding: `'pqp'`/`'graph'` engines; `RatPol.conj`/`biconj`/`add`; the
    `mergeL`/`removeTangent` exact-tie-point bug; `QuaPar.eval` wrong exactly *at* a result
    vertex (~1.4%); `testRegion/testCreation`.
 
@@ -94,6 +94,14 @@ delete-happy behaviour; two are fixed, one is still open (below).
   `isQuad` branch then builds a chord for such a constraint out of `d0.vx(1),d0.vx(2)`, vertices
   unrelated to it. Dropping them from `conjugateOfPiecePoly`'s local copy is correct: that
   routine is edge-indexed end to end.
+- **Deciding "bounds no edge" by the VERTEX COUNT alone, gated on the region being BOUNDED.**
+  Tried; it crashes `poly2orderUnbounded:312` on piece 24 of the same test. Two separate reasons,
+  either fatal: (a) a RAY edge of an unbounded region is also active at exactly one finite vertex
+  and is load-bearing — `getEdgeNosInf` keeps it precisely because slot 1 is reserved for it, so
+  it never collides; (b) there is no cheap boundedness test to gate on — piece 24 is genuinely
+  unbounded (recession direction `(2,-1)`) yet carries **no vertex at infinity** for `removeInfV`
+  to find, so `nv`-before vs `nv`-after says "bounded". Key the drop on the COLLISION instead: it
+  is the actual damage, and it leaves every piece whose `edgeNo` has no repeats untouched.
 - **Offering ALL constraints to `deleteIfRedundant`** (not just the heuristic's candidates).
   The candidate set already contains every constraint missing a finite vertex; widening it only
   adds constraints that ARE active at vertices, and deleting a redundant-but-active constraint
@@ -121,13 +129,18 @@ delete-happy behaviour; two are fixed, one is still open (below).
   `finiteVertices`; `slopes2`; `getEdgeNosInf`; `simplifyOpenRegion1`;
   `simplifyUnboundedRegion`; `merge` (header records the correctness argument and the 36 → 125
   history).
-- `functionNDomain.m` — `conjugateOfPiecePoly` (the open regression, and the two empty-domain
-  guards + the vertexless-facet drop).
-- `regionTest.m` — NEW, 9 tests covering `maxLinear`'s three answers, `linearForm`'s affine
-  flags, four redundancy cases, and three merge cases.
+- `functionNDomain.m` — `conjugateOfPiecePoly`: the two empty-domain guards, and the entry
+  ADAPTER just before the scatter (both parts — the vertexless drop and the collision drop — with
+  the piece-23 trace in the comment).
+- `regionTest.m` — 9 tests covering `maxLinear`'s three answers, `linearForm`'s affine flags,
+  four redundancy cases, and three merge cases.
+- `functionNDomainTest.m` — NEW, 2 tests. Reproduces `testcPLQ/testRectBiconj`'s piece 23
+  directly, so the collision defect is pinned in ~26 s instead of that test's ~22 min. Verified
+  to FAIL on pristine `HEAD~1` with the original error. It asserts the collision still exists as
+  a precondition — if `getEdgeNosInf` ever stops producing it, the test stops covering anything.
 - `conjCPLQ.m` — `assertStep3MatchesPieces` (the gate stays; it is a real invariant);
-  `conjCPLQ.m:103` for next-step 2.
-- `maxQuaPar.m` — `splitCell`'s `pieceIsCurved` guard for next-step 3.
+  `conjCPLQ.m:103` for next-step 1.
+- `maxQuaPar.m` — `splitCell`'s `pieceIsCurved` guard for next-step 2.
 - `SUPPORT_MATRIX.md` §1.2 (4-face row now OK), §8 (blocker list).
 
 ## Still true from before
