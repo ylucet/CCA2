@@ -17,8 +17,8 @@ delete-happy behaviour; two are fixed, one is still open (below).
 
 - Branch: `step3-assembly-lp-certificates` @ `cd985c2` — "Fix testMaxMultiRegion: teach
   conjugateOfPiecePoly about vertexless facets" (3 commits ahead of `main`)
-- Pushed: no upstream configured for this branch (`origin` exists:
-  `https://github.com/ylucet/CCA2.git`)
+- Pushed: yes — `origin/step3-assembly-lp-certificates` (tracking set). Not merged to `main`;
+  merge only once `testcPLQ/testRectBiconj` is green.
 - Working tree: clean
 - **Suite: 270 pass / 2 fail** over 23 suites, against a 262/1 baseline. All 18 CCA2 suites are
   green (`conjCPLQTest` 20/0, new `regionTest` 9/0). The 2 failures are
