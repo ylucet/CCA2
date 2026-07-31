@@ -348,16 +348,29 @@ Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
 2. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
-   itself. Note it breaks *earlier and more quietly* than `conjCPLQ.m:103`'s guard suggests:
-   `quaPolToPlq` feeds ray direction points to `domain()` as if they were vertices, so an
-   unbounded face silently becomes a degenerate polygon (the second-quadrant cone of the 4-cone
-   fan comes out as 2 vertices with `x ≤ 0` listed twice) rather than erroring. Behind that,
-   `plq_1p.triangulate` is a vertex fan and `convexEnvelope1`/`conjugateFunction` index
-   `vx(1..3)` directly, so cPLQ has no unbounded-piece case in Step 1 or Step 2 at all.
+   itself. Two independent defects (re-measured 2026-07-30; the earlier note here was right in
+   outline and wrong in both details).
+   **(a)** `quaPolToPlq` discards the ray: `faceVertexIndices` takes only `E(j,1)` and never reads
+   the ray flag `E(:,3)==0`, for which `E(j,2)` is a DIRECTION point. The 4-cone fan's
+   second-quadrant cone becomes `V=[(0,0);(0,0)]`, and `domain()` — the bounded constructor —
+   yields `NaN ≤ 0` twice (not `x ≤ 0` twice). Now rejected loudly:
+   `quaPolToPlq:unboundedFace`.
+   **(b)** the deeper one: `domain.domainEdge` *does* build the ray correctly (source vertex plus
+   an `intmax` direction vertex per ray), and `functionNDomain`/`region` consume it correctly —
+   but `plq_1p` reads those markers as the number 2147483647. On the second quadrant with
+   `f=(x²+y²)/2`, `triangulate`-then-`maximum` **errors** in `conjugateFunction`→`getEdgeNos`,
+   while skipping `triangulate` **runs and returns garbage**, emitting `intmax²`
+   (`4611686014132420609`) as a coefficient — max error 1.15e18. So cPLQ has no unbounded-piece
+   case in Step 1 or Step 2, and the `isDomBounded` gate must be removed **last**.
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 5. **Two known wrong-answer defects** (§7).
 6. **`maxQuaPar` cannot split a cell that already carries an arc** (§4) — ~26% of sampled splits.
+   Re-scoped 2026-07-30: this needs no conic-conic solver (every curved edge is a parabola —
+   `QuaPar.assertParabolic`; the ellipse/hyperbola row in §4 is **N/R**), and no multi-arc
+   representation. One arc per face is the correct invariant; the fix is to SUBDIVIDE with a
+   straight chord so each half keeps one arc. `maxQuaPar.m`'s own "conic-conic" TODOs
+   (lines 145/150/194) overstate it.
 7. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
 
 **Resolved 2026-07-28:** `biconj` works for every bounded domain, including the single bounded

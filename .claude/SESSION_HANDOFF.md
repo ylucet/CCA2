@@ -47,28 +47,60 @@ points to grid resolution, one piece per point.
 
 ## Next steps
 
-1. **Unbounded multi-face `conj`** — scoped this session. Breaks EARLIER and more quietly than
-   `conjCPLQ.m:103`'s guard suggests: `quaPolToPlq` feeds ray DIRECTION POINTS to `domain()` as
-   if they were vertices, so for the 4-cone fan `V=[0 0;-1 0;0 1;1 0;0 -1]`,
-   `E=[1 2 0;1 3 0;1 4 0;1 5 0]` the second-quadrant cone comes out as a degenerate 2-vertex
-   "polygon" whose inequality list is `x <= 0` **twice** — silently wrong, not an error. Behind
-   that, `plq_1p.triangulate` is a pure vertex fan and `convexEnvelope1`/`conjugateFunction`
-   index `vx(1),vx(2),vx(3)` directly, so cPLQ has no unbounded-piece case at all.
-   Route: build face domains from half-planes via `domain.domainEdge` (it takes inequalities, so
-   it handles unbounded regions); the irreducible new work is then the conjugate of a quadratic
-   over a **wedge**. *Cheap first increment, worth doing alone:* make `quaPolToPlq` REJECT an
-   unbounded face loudly instead of silently corrupting it.
+1. **Unbounded multi-face `conj`** — re-scoped 2026-07-30, this time MEASURED rather than read.
+   Two independent defects, and the ORDER they are fixed in matters.
 
-2. **`maxQuaPar`: split a cell that already carries an arc** (~26%, 30 of 115 sampled splits) —
-   also scoped, and the cheap route does NOT work. On the guard-tripping fixture
-   (`maxQuaParTest.maxQuaParRejectsSplittingACellThatAlreadyCarriesAnArc`), 15 of 18 candidate
-   splitting curves are pure straight lines, BUT every curved cell comes from the one curved
-   face, and the three curves meeting it are exactly the non-line ones (one pair-of-lines, two
-   genuine parabolas). So the common case really does need conic-conic intersection.
-   Parametrizing the arc by `parabolaArcFrame`'s global monotone `u` gives a quartic in `u` —
-   tractable. The harder half is representation: each half can need TWO curved edges, which the
-   `pieces` struct's single `curveAfter`/`curveEc` slot and `facePoly`'s one-curved-edge
-   assertion both forbid. Multi-arc pieces is the natural unit.
+   **(a) `quaPolToPlq` throws the ray away.** `faceVertexIndices` takes one vertex per edge,
+   `E(j,1)`, and never consults QuaPol's ray flag `E(:,3)==0`, for which `E(j,1)` is the base
+   point and `E(j,2)` the DIRECTION point. The 4-cone fan `V=[0 0;-1 0;0 1;1 0;0 -1]`,
+   `E=[1 2 0;1 3 0;1 4 0;1 5 0]` gives `V=[(0,0);(0,0)]` for the second-quadrant cone, and
+   `domain()` — the BOUNDED constructor, which closes the vertex loop — turns that into
+   `NaN <= 0` **twice** (not `x <= 0` twice, as recorded before).
+   Route: one inequality per edge via `domain.domainEdge`, segments and rays alike being "the
+   line through `E(j,1)` and `E(j,2)`", orientation from `F(j,:)`. **Done this session:** the
+   loud rejection (`quaPolToPlq:unboundedFace`), so (a) can never be fixed without (b).
+
+   **(b) `plq_1p` reads region's infinity markers as ORDINARY NUMBERS.** This is the real work,
+   and it is NOT closed by (a). `domain.domainEdge` genuinely does build the ray encoding —
+   the second quadrant comes out as 2 inequalities with vertices `(0,0)`, `(0,intmax)`,
+   `(-intmax,0)`, `(-intmax,intmax)`, i.e. source vertex plus a direction vertex per ray — and
+   `functionNDomain`/`region` (Step 2/3) handle that correctly, as `testRectBiconj`'s own
+   unbounded dual pieces 25–27 show. `plq_1p` does not. Measured on that exact domain with
+   `f=(x^2+y^2)/2`, whose conjugate is `min(s1,0)^2/2 + max(s2,0)^2/2` (4 dual pieces):
+   - Case C's order (`triangulate` then `maximum`) **errors** — `plq_1p.conjugateFunction` →
+     `region.getEdgeNos` → `symbolicFunction.getLinearCoeffs`, "Index exceeds the number of
+     array elements".
+   - Skipping `triangulate` is WORSE: it **runs and returns garbage** — 8 pieces carrying
+     `2147483647*s_2` and the constant `4611686014132420609`, which is exactly `intmax^2`.
+     Max error **1.15e18**.
+
+   So the irreducible new work is a genuine unbounded-piece case in `plq_1p`: a fan emitting
+   **wedges** as well as triangles, plus an envelope/conjugate branch for a quadratic over a
+   wedge. `conjCPLQ.m`'s `isDomBounded` gate comes out **last**, not first.
+
+2. **`maxQuaPar`: split a cell that already carries an arc** (~26%, 30 of 115 sampled splits).
+   Re-scoped 2026-07-30 and it is SMALLER than previously recorded, on two counts.
+
+   **No conic-conic solver is needed.** Every curved edge in play is a parabola —
+   `QuaPar.assertParabolic` rejects anything with `b^2-4ac ~= 0` ("ellipses/hyperbolas do not
+   occur"), and `SUPPORT_MATRIX.md`'s irreducible-ellipse/hyperbola row is **N/R**. So the case
+   is parabola ∩ parabola. `b^2-4ac = 0` means each quadratic part is a perfect square
+   `(alpha*x+beta*y)^2`: with a shared axis direction `P1 - lambda*P2` cancels it outright and
+   leaves a LINE (one quadratic to solve); otherwise the pencil `det(M1-lambda*M2)=0` is a cubic
+   whose real root gives a line pair (two quadratics). Closed form either way — no quartic. Note
+   `maxQuaPar.m`'s own TODOs at lines 145/150/194 say "needs genuine conic-conic intersection"
+   and are themselves overstated; fix the comments too.
+
+   **One arc per face is the RIGHT invariant — keep it, and subdivide to maintain it.** Do NOT
+   add multi-arc pieces (an earlier version of this file proposed exactly that; it is wrong).
+   When a split would leave a half holding the inherited arc PLUS a new curved cut, add a
+   straight chord separating them: two faces, one arc each. Same at
+   `insertPassthroughVertices`, whose own comment says it raises only because "a piece carries
+   only ONE curve slot… it cannot represent the two sub-arcs" — after the split those sub-arcs
+   belong to two different faces, so one slot each is exactly enough. Both sites are
+   `notImplemented`, not `notPossible`. Only construction detail to watch: a face with a
+   parabolic side is non-convex there (`maxQuaPar.m:787`), so pick the chord between the two
+   arcs' adjacent endpoints, and use two chords if one ever leaves the face.
 
 3. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
 4. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
@@ -95,6 +127,13 @@ points to grid resolution, one piece per point.
   `isQuad` branch then builds a chord for such a constraint out of `d0.vx(1),d0.vx(2)`, vertices
   unrelated to it. Dropping them from `conjugateOfPiecePoly`'s local copy is correct: that
   routine is edge-indexed end to end.
+- **Concluding cPLQ handles unbounded PRIMAL domains because `region` does.** Half true, and the
+  half that is false is the expensive one. `domain.domainEdge` + `region` really do represent a
+  ray (source vertex + an `intmax` direction vertex), and Step 2/3 really do consume it. But
+  `plq_1p` reads those markers as the NUMBER 2147483647 — see next-step 1(b) for the measurement,
+  including a run that returns `intmax^2` as a coefficient instead of erroring. Do not relax
+  `conjCPLQ`'s `isDomBounded` gate, or `quaPolToPlq`'s new `unboundedFace` rejection, until
+  `plq_1p` has a wedge case. "It ran without erroring" is not evidence here.
 - **Deciding "bounds no edge" by the VERTEX COUNT alone, gated on the region being BOUNDED.**
   Tried; it crashes `poly2orderUnbounded:312` on piece 24 of the same test. Two separate reasons,
   either fatal: (a) a RAY edge of an unbounded region is also active at exactly one finite vertex
@@ -140,8 +179,15 @@ points to grid resolution, one piece per point.
   to FAIL on pristine `HEAD~1` with the original error. It asserts the collision still exists as
   a precondition — if `getEdgeNosInf` ever stops producing it, the test stops covering anything.
 - `conjCPLQ.m` — `assertStep3MatchesPieces` (the gate stays; it is a real invariant);
-  `conjCPLQ.m:103` for next-step 1.
-- `maxQuaPar.m` — `splitCell`'s `pieceIsCurved` guard for next-step 2.
+  `conjCPLQ.m:103`'s `isDomBounded` gate for next-step 1, which comes out LAST.
+- `quaPolToPlq.m` — header now records both halves of next-step 1 and the measurements behind
+  them; the new `quaPolToPlq:unboundedFace` rejection is at the top of the function body.
+- `plq_1p.m` — `triangulate` (finite vertex fan, picks its start by `max(vy)`/`min(vx)` and
+  rebuilds each triangle through the BOUNDED `domain(t,x,y)`), `convexEnvelope1` and
+  `conjugateFunction` (closed-form triangle formulas indexing `vx(1..3)`). This is where
+  next-step 1(b)'s wedge case has to go.
+- `maxQuaPar.m` — `splitCell`'s `pieceIsCurved` guard and `insertPassthroughVertices` for
+  next-step 2; also the overstated "conic-conic" TODOs at lines 145/150/194.
 - `SUPPORT_MATRIX.md` §1.2 (4-face row now OK), §8 (blocker list).
 
 ## Still true from before

@@ -16,7 +16,41 @@ function p = quaPolToPlq(obj)
 % already use), then wrapped as symbolicFunction(expr) over domain(V,x,y) (V = the face's own
 % vertices, in QuaPol.orderEdges' own clockwise order -- matching domain.m's own expectation,
 % see its "Fix order to clockwise" comment).
+%
+% BOUNDED ONLY, and the check below is deliberately here rather than left to conjCPLQ's own
+% isDomBounded gate, because BOTH failure modes on an unbounded face are SILENT.
+%
+%   (1) In this function. faceVertexIndices takes one vertex per edge, E(j,1), and never consults
+%       QuaPol's ray flag E(:,3)==0 -- for which E(j,1) is the base point and E(j,2) is the
+%       DIRECTION point, not a second corner. A face bounded by two rays off the same apex
+%       (e.g. the second-quadrant cone of the 4-cone fan V=[0 0;-1 0;0 1;1 0;0 -1],
+%       E=[1 2 0;1 3 0;1 4 0;1 5 0]) therefore yields V=[(0,0);(0,0)], and domain() -- the
+%       BOUNDED constructor, which closes the vertex loop -- turns that into `NaN <= 0` twice.
+%       The ray direction is simply thrown away. Building faces from half-planes via
+%       domain.domainEdge instead (it takes inequalities, and region then derives the
+%       ray/intmax vertices itself) is what this needs, one inequality per edge, segments and
+%       rays alike being "the line through E(j,1) and E(j,2)".
+%
+%   (2) Downstream, and worse. Fixing (1) alone is NOT enough and must not be done alone: cPLQ's
+%       plq_1p reads region's infinity markers as ORDINARY FINITE COORDINATES. Measured on the
+%       second quadrant built correctly via domainEdge, with f=(x^2+y^2)/2, whose conjugate is
+%       min(s1,0)^2/2 + max(s2,0)^2/2:
+%         - triangulate then maximum ERRORS (plq_1p.conjugateFunction -> region.getEdgeNos ->
+%           symbolicFunction.getLinearCoeffs, 'Index exceeds the number of array elements');
+%         - skipping triangulate RUNS and returns garbage -- pieces carrying 2147483647*s_2 and
+%           the constant 4611686014132420609, which is exactly intmax^2, i.e. intmax substituted
+%           into the closed-form triangle formulas. Max error 1.15e18.
+%       So plq_1p needs a genuine unbounded-piece case (a fan emitting WEDGES as well as
+%       triangles, plus an envelope/conjugate branch for a quadratic over a wedge) before any
+%       unbounded face may be let through. Erroring here keeps that ordering enforced even if
+%       conjCPLQ's gate is relaxed first.
     obj.assertOperable();
+    if ~obj.isDomBounded
+        error('quaPolToPlq:unboundedFace', ...
+            ['quaPolToPlq requires a bounded domain: this QuaPol has a ray edge (E(:,3)==0). ' ...
+             'Converting it would silently discard the ray direction, and cPLQ''s plq_1p has ' ...
+             'no unbounded-piece case behind that. See this file''s header.']);
+    end
     x = sym('x'); y = sym('y');
     pieces = plq_1p.empty();
     for k = 1:obj.nf
