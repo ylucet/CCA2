@@ -1547,6 +1547,119 @@ classdef region
             end
         end
 
+        function [tf, why] = quadUnboundedBelow (obj, Q, L)
+        % Is the quadratic q(x) = 1/2 x'Qx + L'x + c unbounded BELOW on this region?
+        %
+        % This is the gate Step 1 needs before it can take a convex envelope over an UNBOUNDED
+        % face: conv q is -inf exactly when q is unbounded below, and only otherwise is there a
+        % finite envelope to compute (the convex case of which is [GARDINER-11]/[GARDINER-13]).
+        % The constant term is irrelevant and is not taken.
+        %
+        % THE TEST. Along a ray x0 + t*d the quadratic is
+        %     q(x0) + t*(Q*x0 + L)'d + (t^2/2)*d'Q*d,
+        % so q is unbounded below on a region P with recession cone R exactly when either
+        %   (i)  some d in R has d'Q*d < 0 -- the quadratic itself decays along a direction the
+        %        region never leaves; or
+        %   (ii) some d in R has d'Q*d == 0 while the linear slope (Q*x+L)'d can be made
+        %        negative somewhere in P, which is an LP (region.maxLinear).
+        % Everything else is bounded below. Equivalently, and this is the usual statement:
+        % diagonalize Q and compare its NEGATIVE-eigenvalue directions against R -- if the cone
+        % {d : d'Q*d < 0} meets R, the value is -inf.
+        %
+        % WHY IT IS CLOSED FORM IN 2D, with no cone enumeration. Writing d = (cos t, sin t),
+        %     d'Q*d = (Q11+Q22)/2 + ((Q11-Q22)/2)*cos(2t) + Q12*sin(2t),
+        % a pure sinusoid in 2t; and each affine constraint a'x <= b contributes a'd <= 0 to R,
+        % i.e. a half-circle of admissible t. R is therefore an arc, so the minimum of d'Q*d
+        % over it is attained either at a constraint boundary (a'd == 0) or at the sinusoid's own
+        % critical angle when that lies inside R. Both are finite, explicit candidate sets, so no
+        % search and no cone-generator enumeration is needed. A bounded region contributes no
+        % admissible direction at all and is reported bounded below, as it must be.
+        %
+        % NON-AFFINE FACETS ARE REFUSED, not dropped. Dropping them would ENLARGE the region and
+        % so enlarge R, which is unsound in the one direction that matters here: it could report
+        % -inf for a direction the true region never actually recedes along. Step 1's faces are
+        % polyhedral, so this does not bite; anything else must be handled explicitly.
+            tf = false; why = 'bounded below';
+            if isempty(obj)
+                return
+            end
+            [A, b, lin] = obj.linearForm;
+            if ~all(lin)
+                error('region:quadUnboundedBelow:nonAffineFacet', ...
+                    ['quadUnboundedBelow needs every facet affine: a curved facet''s recession ' ...
+                     'behaviour is not a half-plane, and dropping it would enlarge the recession ' ...
+                     'cone and could wrongly certify -inf.']);
+            end
+            Q = double(Q); L = double(L(:));
+            scaleA = max(1, max(abs(A(:))));
+            tolA = 1e-9 * scaleA;
+
+            % Candidate directions: every constraint boundary, plus the sinusoid's own critical
+            % angles (4 of them mod 2*pi, from the two roots of tan(2t) = Q12/((Q11-Q22)/2)).
+            cand = [];
+            for j = 1:size(A,1)
+                a = A(j,:);
+                if norm(a) <= tolA, continue, end
+                p = [-a(2), a(1)] / norm(a);       % both senses along the boundary line a'd = 0
+                cand = [cand; p; -p]; %#ok<AGROW>
+            end
+            c2 = (Q(1,1) - Q(2,2))/2; s2 = Q(1,2);
+            if abs(c2) + abs(s2) > 0
+                t0 = 0.5 * atan2(s2, c2);
+                for k = 0:3
+                    tk = t0 + k*pi/2;
+                    cand = [cand; cos(tk), sin(tk)]; %#ok<AGROW>
+                end
+            elseif isempty(cand)
+                cand = [1 0; 0 1; -1 0; 0 -1];      % Q is a multiple of I: any direction will do
+            end
+            if isempty(cand)
+                return                              % no constraints and no curvature: q is affine
+            end
+
+            % Keep only the directions the region actually recedes along.
+            keep = true(size(cand,1),1);
+            for i = 1:size(cand,1)
+                if any(A * cand(i,:)' > tolA), keep(i) = false; end
+            end
+            cand = cand(keep,:);
+            if isempty(cand)
+                return                              % bounded region: nothing to recede along
+            end
+
+            vals = zeros(size(cand,1),1);
+            for i = 1:size(cand,1)
+                vals(i) = cand(i,:) * Q * cand(i,:)';
+            end
+            tolQ = 1e-9 * max(1, max(abs(Q(:))));
+            if min(vals) < -tolQ
+                tf = true;
+                why = 'a recession direction has d''Qd < 0';
+                return
+            end
+            % (ii) d'Qd == 0 along some recession direction: the ray is a straight line for q, so
+            % it is the LINEAR slope that decides, and that slope varies over the region.
+            for i = 1:size(cand,1)
+                if vals(i) > tolQ, continue, end
+                d = cand(i,:)';
+                % min over P of (Q*x + L)'d  =  -max over P of (-Q*d)'x  -  ... (constant L'd)
+                [mx, st] = region.maxLinear(A, b, (-Q*d)');
+                if st == 1
+                    tf = true; why = 'a d''Qd == 0 recession direction has unbounded negative slope';
+                    return
+                end
+                if st ~= 0
+                    error('region:quadUnboundedBelow:undecided', ...
+                        ['the LP deciding the linear slope along a d''''Qd == 0 recession ' ...
+                         'direction returned no certificate (status %d); refusing to guess.'], st);
+                end
+                if -mx + L'*d < -1e-9 * max(1, abs(L'*d))
+                    tf = true; why = 'a d''Qd == 0 recession direction has a negative slope';
+                    return
+                end
+            end
+        end
+
         function del = redundantSubset (obj, cand)
         % Of the candidate indices cand (into obj.ineqs), the subset that is PROVABLY
         % redundant and may therefore be deleted without changing the feasible set:

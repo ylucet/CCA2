@@ -141,5 +141,59 @@ classdef regionTest < matlab.unittest.TestCase
             [l, ~] = r1.merge(r2);
             testCase.verifyFalse(l);
         end
+
+        function quadUnboundedBelowDecidesTheEnvelopeGate(testCase)
+        % conv q over an UNBOUNDED face is -inf exactly when q is unbounded below on it, so this
+        % is the gate Step 1 has to pass before there is any finite envelope to compute. The test
+        % is "does the recession cone meet {d : d'Qd < 0}", with the d'Qd == 0 directions decided
+        % by the linear slope instead.
+            x = sym('x'); y = sym('y');
+            bounded = region([-x, -y, x+y-2], [x y]);      % triangle (0,0),(2,0),(0,2)
+            wedge   = region([x, -y], [x y]);              % {x<=0, y>=0}: recession cone itself
+            halfpl  = region([-y], [x y]);                 % {y>=0}
+
+            % A bounded region recedes along nothing, so no quadratic is unbounded below on it.
+            testCase.verifyFalse(bounded.quadUnboundedBelow([1 0; 0 -1], [0; 0]));
+            testCase.verifyFalse(bounded.quadUnboundedBelow(-eye(2), [3; -7]));
+
+            % On the wedge, x^2+y^2 grows along every recession direction ...
+            testCase.verifyFalse(wedge.quadUnboundedBelow(eye(2), [0; 0]));
+            % ... while x^2-y^2 decays along (0,1), which the wedge never leaves.
+            testCase.verifyTrue(wedge.quadUnboundedBelow(diag([1 -1]), [0; 0]));
+            testCase.verifyTrue(wedge.quadUnboundedBelow(diag([-1 1]), [0; 0]));
+
+            % f = x*y has Q = [0 1;1 0] and d'Qd = 2*d1*d2, negative throughout the wedge's own
+            % recession cone {d1<=0, d2>=0}. This is what makes "the envelope over an unbounded
+            % face can be -inf" concrete. (Here Q's negative-eigenvalue direction (-1,1) is itself
+            % a recession direction, so the eigenvector form of the test already catches it.)
+            testCase.verifyTrue(wedge.quadUnboundedBelow([0 1; 1 0], [0; 0]));
+
+            % But the eigenvector form is only SUFFICIENT, which is why the implementation
+            % minimizes d'Qd over the whole recession cone instead. Take a region whose recession
+            % cone is the single ray through (1,2):
+            %     0 <= 2x - y + 1,  2x - y <= 0,  x >= 0   =>   {d : d2 = 2*d1, d1 >= 0}
+            % With Q = diag(1,-1) neither eigenvector (1,0) nor (0,1) is a recession direction,
+            % yet d = (1,2)/sqrt(5) gives d'Qd = (1-4)/5 < 0, so the value IS -inf.
+            ray = region([2*x - y, -2*x + y - 1, -x], [x y]);
+            testCase.verifyTrue(ray.quadUnboundedBelow(diag([1 -1]), [0; 0]));
+            % ... and the same region is bounded below for a Q that grows along that ray.
+            testCase.verifyFalse(ray.quadUnboundedBelow(eye(2), [0; 0]));
+
+            % Q == 0: purely affine, so the LINEAR slope decides. On {y>=0} the recession cone
+            % contains (1,0) and (-1,0), so any nonzero x-component is unbounded below, while
+            % f = y is bounded below (slope 0 along those, +1 along (0,1)).
+            testCase.verifyTrue(halfpl.quadUnboundedBelow(zeros(2), [1; 0]));
+            testCase.verifyFalse(halfpl.quadUnboundedBelow(zeros(2), [0; 1]));
+        end
+
+        function quadUnboundedBelowRefusesACurvedFacet(testCase)
+        % Dropping a non-affine facet enlarges the region and so enlarges the recession cone,
+        % which is unsound in the one direction that matters: it could certify -inf for a
+        % direction the true region never recedes along. Refuse rather than approximate.
+            x = sym('x'); y = sym('y');
+            r = region([x^2 - y, y - 4], [x y]);           % x^2 <= y <= 4 : a parabolic facet
+            testCase.verifyError(@() r.quadUnboundedBelow(eye(2), [0; 0]), ...
+                'region:quadUnboundedBelow:nonAffineFacet');
+        end
     end
 end

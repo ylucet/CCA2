@@ -130,10 +130,33 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
    `convexEnvelope1`'s `nCE==0` branch builds the affine envelope as the interpolant through
    `vx(1),vx(2),vx(3)` — a formula with no meaning for an unbounded face — and `triangulate`
    picks its fan apex by comparing coordinates (`max(vy)`/`min(vx)`) and rebuilds each triangle
-   through the BOUNDED `domain(t,x,y)`. **The open question to answer first is mathematical: what
-   IS the convex envelope of a quadratic over an unbounded polygon?** (It can be `-inf`; e.g.
-   `x*y` over a wedge containing a direction where it decreases without bound.) Until that is
-   settled, do not start coding.
+   through the BOUNDED `domain(t,x,y)`.
+
+   **(e) The envelope question is ANSWERED (Yves, 2026-07-30), and its gate is IMPLEMENTED.**
+   - **Convex case** (`Q` PSD): the convex envelope of a quadratic over an unbounded polytope is
+     computed in **[GARDINER-13]** and **[GARDINER-11]** — both already in `DESIGN.md`'s
+     reference list with PDFs, and [GARDINER-13] is the convex-only bivariate conjugate that
+     CCA2's architecture already designates as engine `'pqp'`.
+   - **Nonconvex case**: eigendecompose `Q` and compare its NEGATIVE-eigenvalue directions with
+     the region's RECESSION CONE. If such a direction lies inside the recession cone the envelope
+     is `-inf`; otherwise it is finite. Equivalently: rotate the polytope so the quadratic is
+     diagonal, and simple logic gives the rest.
+   **Implemented: `region.quadUnboundedBelow(Q, L)`** (+ 2 tests in `regionTest`, suite 11/0).
+   It decides the gate exactly and in closed form, with no cone enumeration: writing
+   `d = (cos t, sin t)`, `d'Qd` is a pure sinusoid in `2t`, and each affine constraint contributes
+   a half-circle of admissible `t`, so the recession cone is an arc and the minimum of `d'Qd` over
+   it is attained at a constraint boundary or at the sinusoid's own critical angle. Two
+   refinements worth keeping:
+   - it minimizes over the whole cone `{d'Qd < 0}`, not only over eigenvectors, because the
+     eigenvector form is SUFFICIENT but not NECESSARY — for `Q = diag(1,-1)` on a region whose
+     recession cone is the single ray through `(1,2)`, neither eigenvector is a recession
+     direction yet `d'Qd = -3/5 < 0`, so the value is `-inf`. Pinned by a test.
+   - the `d'Qd == 0` directions are decided by the LINEAR slope instead, via `region.maxLinear`.
+   - non-affine facets are REFUSED, not dropped: dropping one enlarges the region and hence the
+     recession cone, which could wrongly certify `-inf`.
+
+   **What remains for (e):** the finite-envelope construction itself — rotate to the diagonal
+   frame and case-split — and then `triangulate` emitting wedges/half-strips.
    Decomposition subtlety for when `triangulate` is written: the pieces must be SUBSETS of the
    face whose union is the face (a superset inflates the sup), and fanning an unbounded convex
    polygon from one vertex yields half-strips (`conv{v1,vn} + cone(d)`), not only triangles and
