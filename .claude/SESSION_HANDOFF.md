@@ -90,12 +90,11 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
      `2147483647*s_2` and the constant `4611686014132420609`, which is exactly `intmax^2`.
      Max error **1.15e18**.
 
-   So the irreducible new work is a genuine unbounded-piece case in `plq_1p`: a fan emitting
-   **wedges** as well as triangles, plus an envelope/conjugate branch for a quadratic over a
-   wedge. `conjCPLQ.m`'s `isDomBounded` gate comes out **last**, not first.
+   So the irreducible new work is in `plq_1p` — see (d), which narrows it further to Step 1's
+   ENVELOPE. `conjCPLQ.m`'s `isDomBounded` gate comes out **last**, not first.
 
-   **(c) The wedge case is NOT new mathematics — scoped and numerically confirmed 2026-07-30.**
-   Two facts make it a bounded amount of work reusing what is already here:
+   **(c) Step 2 needs nothing new — confirmed numerically 2026-07-30.** Two facts, both of which
+   (d) then sharpens:
    - `sup` over a union is the `max` of the `sup`s, so the conjugate over an unbounded face
      decomposes over ANY cover of it — and `plq.maximum` already takes a max across pieces. So
      `triangulate` only has to emit triangles PLUS wedges; there is no "conjugate over a general
@@ -109,24 +108,42 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
      For an AFFINE `f = a.x + c` on a wedge `v + cone(d1,d2)` it collapses further, to one piece:
      `f*(s) = <s-a,v> - c` on `{s : <s-a,d1> <= 0, <s-a,d2> <= 0}`, `+inf` elsewhere — an affine
      function on a translated normal cone, which is the shape `conjugateFunction` already emits.
-   **(d) START HERE — the general machinery already gets the apex piece right.** Do NOT begin by
-   writing wedge formulas into `plq_1p`. `functionNDomain.conjugateOfPiecePoly` is the GENERAL
-   normal-cone implementation (`getNormalConeVertex` + `getSubdiffVertexT1/T2`), and
-   `plq_1p.conjugateFunction`'s closed-form `vx(1..3)` formulas are only a triangle shortcut over
-   it. Run directly on the wedge — `region([x,-y],[x,y])`, `f=(x^2+y^2)/2` — it succeeds in 2.2 s
-   and returns **exactly one piece, `0`**, valid precisely where the truth is 0 (the apex normal
-   cone `{s1>=0, s2<=0}`; checked at `(1,-1)` and `(6,-6)`, err 0). That is the correct T1 vertex
-   piece for the wedge's single finite vertex.
-   The three MISSING pieces are the two ray edges and the interior. The reason is local and
-   visible: the T2 edge loop is gated on `if obj(i).d.nv > 1`, and after `removeInfV` a wedge has
-   `nv == 1`, so the loop never runs. So the work is "give T2 a ray-edge case" inside
-   `functionNDomain`, not "write a wedge conjugate" inside `plq_1p`.
-   Only after that does `plq_1p` need attention: `triangulate` picks its fan apex by comparing
-   coordinates (`max(vy)`/`min(vx)`) and rebuilds each triangle through the BOUNDED
-   `domain(t,x,y)`. Note a decomposition subtlety for when you get there — the pieces must be
-   SUBSETS of the face whose union is the face (a superset would inflate the sup), and fanning an
-   unbounded convex polygon from one vertex yields half-strips (`conv{v1,vn} + cone(d)`), not
-   only triangles and cones.
+   **(d) The general conjugate machinery ALREADY does unbounded, for the case the pipeline
+   produces. START at `plq_1p`, not at `functionNDomain`.** Measured 2026-07-30; this supersedes
+   an earlier note in this file that said the gap was `conjugateOfPiecePoly`'s
+   `if obj(i).d.nv > 1` gate on the T2 edge loop. **That was wrong**, and the way it was wrong is
+   worth keeping:
+   - Run `conjugateOfPiecePoly` on a wedge with an **AFFINE** `f` — the shape Step 1's `nCE==0`
+     envelope always produces — and it is **exact**. `f = 2x-3y+1` on `{x<=0, y>=0}`: 1 piece
+     (`-1`), err **0.000e+00** at all 8 probes, correctly `+inf` off the apex normal cone. A
+     half-strip `{0<=x<=1, y>=0}` with `f = x-2y`: 2 pieces (`0`, `x-1`), err **0.000e+00** at all
+     8. Unboundedness is simply not the problem.
+   - The missing edge/interior pieces are a **pre-existing, bounded-domain** limitation, nothing
+     to do with rays: the same routine on a BOUNDED triangle with the strictly convex
+     `f=(x^2+y^2)/2` also returns only the 3 vertex pieces (`2*x-2`, `2*y-2`, `0`) and no edge or
+     interior piece, so every interior dual point is uncovered.
+   - And that limitation is by DESIGN, not an oversight: for an affine `f`, `grad f` is constant,
+     there are no edge/interior pieces to make, and the vertex normal cones tile exactly the
+     domain of `f*`. cPLQ always reduces to an affine (or rank-1-PSD, via the `nCE==1/2` special
+     formulas) envelope first, so it never needs them.
+   So the blocker is entirely `plq_1p`'s front end, and it is **Step 1, not Step 2**:
+   `convexEnvelope1`'s `nCE==0` branch builds the affine envelope as the interpolant through
+   `vx(1),vx(2),vx(3)` — a formula with no meaning for an unbounded face — and `triangulate`
+   picks its fan apex by comparing coordinates (`max(vy)`/`min(vx)`) and rebuilds each triangle
+   through the BOUNDED `domain(t,x,y)`. **The open question to answer first is mathematical: what
+   IS the convex envelope of a quadratic over an unbounded polygon?** (It can be `-inf`; e.g.
+   `x*y` over a wedge containing a direction where it decreases without bound.) Until that is
+   settled, do not start coding.
+   Decomposition subtlety for when `triangulate` is written: the pieces must be SUBSETS of the
+   face whose union is the face (a superset inflates the sup), and fanning an unbounded convex
+   polygon from one vertex yields half-strips (`conv{v1,vn} + cone(d)`), not only triangles and
+   cones. Both shapes are already fine for Step 2 — see the half-strip result above.
+
+   **Latent bug found while probing (not fixed, not on any path today):**
+   `functionNDomain.getInterior` reads `solve()`'s result struct by the literal field names
+   `s12.s_1`/`s12.s_2`, so it throws `Unrecognized field name "s_1"` for any region whose vars are
+   not named `s_1,s_2`. In-pipeline they always are (it runs on `maxConjugate`), which is why
+   nothing hits it. `fieldnames(s12)` would make it var-name agnostic.
 
 2. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
 3. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
