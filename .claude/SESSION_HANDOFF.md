@@ -1,6 +1,6 @@
 # Session Handoff
 
-_Last updated: 2026-07-30_
+_Last updated: 2026-07-31_
 
 ## What happened this session
 
@@ -46,20 +46,26 @@ half, and ONE ARC PER FACE is kept by subdividing that half with a straight chor
 fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-free under
 `arrangementViolations`.
 
+**Merged to `main`, and next-step 1's `-inf` gate is implemented.** The branch was
+fast-forwarded in (11 commits) once `testRectBiconj` went green. Then Yves answered the open
+envelope question, which unblocked the first real code on next-step 1:
+`region.quadUnboundedBelow(Q,L)` decides whether `conv q` over an unbounded face is `-inf` —
+see 1(e) below for the closed form and the three things it is deliberate about.
+
 ## Where things stand
 
-- Branch: **`main`** — `step3-assembly-lp-certificates` was fast-forwarded into it (11 commits,
-  from the LP-certificate assembly fix through the `maxQuaPar` arc work) and is no longer the
-  place to work. This repo's practice is to commit on `main`; the branch existed only because
-  that work was already in flight.
+- Branch: **`main`** @ `d82fe99` — "Add region.quadUnboundedBelow: the -inf gate for an
+  unbounded-face envelope". `step3-assembly-lp-certificates` was fast-forwarded in (11 commits)
+  and is no longer the place to work; this repo's practice is to commit on `main`.
 - Pushed: yes — `origin/main` is up to date.
 - Working tree: clean
+- **Not tagged.** 0.1 tagging is still deliberately not done — do not tag without being asked.
 - **Suite: 274 pass / 1 fail** over 24 suites (full sweep, after the `maxQuaPar` arc work),
   against a 270/2 baseline at the start of the session. `testcPLQ` is 8/0, `maxQuaParTest` 16/0,
   the new `functionNDomainTest` 2/0. The single failure is `testRegion/testCreation`
   (longstanding, unrelated — a toolbox-compatibility issue, not the conjugate pipeline).
-- **`main` is now unblocked**: the merge gate ("merge only once `testcPLQ/testRectBiconj` is
-  green") is satisfied.
+  `regionTest` has since gone 9/0 → **11/0** with `quadUnboundedBelow`'s two tests, so the
+  current figure is 276/1; the 274/1 number is the last FULL 24-suite sweep.
 
 ## Next steps
 
@@ -155,8 +161,16 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
    - non-affine facets are REFUSED, not dropped: dropping one enlarges the region and hence the
      recession cone, which could wrongly certify `-inf`.
 
-   **What remains for (e):** the finite-envelope construction itself — rotate to the diagonal
-   frame and case-split — and then `triangulate` emitting wedges/half-strips.
+   **What remains for (e), and it is THE next concrete action:** the finite-envelope construction
+   itself — rotate to the diagonal frame and case-split — and then `triangulate` emitting
+   wedges/half-strips. **Read `GARDINER-13-conjugate-PLQ.pdf` and `GARDINER-11-graph-matrix.pdf`
+   first** (both listed in `DESIGN.md`'s reference block); neither has been read yet, and the
+   convex branch should follow that algorithm rather than be reconstructed from scratch.
+   **Worth deciding before writing it:** [GARDINER-13] is the convex-only bivariate conjugate
+   that CCA2's architecture ALREADY designates as engine `'pqp'` (unimplemented, next-step 5). If
+   the convex branch is going to be Gardiner's algorithm anyway, this work may BE the start of
+   `'pqp'` rather than a separate branch inside `convexEnvelope1`. That is an architecture call
+   for Yves, not something to settle by just writing code.
    Decomposition subtlety for when `triangulate` is written: the pieces must be SUBSETS of the
    face whose union is the face (a superset inflates the sup), and fanning an unbounded convex
    polygon from one vertex yields half-strips (`conv{v1,vn} + cone(d)`), not only triangles and
@@ -169,7 +183,7 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
    nothing hits it. `fieldnames(s12)` would make it var-name agnostic.
 
 2. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
-3. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
+3. 0.1 tagging — **do not tag without being asked**. (The merge half of this item is DONE.)
 4. `partialConj` unimplemented for every engine and type (`SUPPORT_MATRIX.md` §2).
 5. Longstanding: `'pqp'`/`'graph'` engines; `RatPol.conj`/`biconj`/`add`; the
    `mergeL`/`removeTangent` exact-tie-point bug; `QuaPar.eval` wrong exactly *at* a result
@@ -232,19 +246,23 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
 
 - `region.m` — LP-certificate block at the top (after `probeAlong`/`probePerp`); instance
   helpers `linearForm`/`redundantSubset`/`deleteIfRedundant`/`unionIsExact` just before
-  `finiteVertices`; `slopes2`; `getEdgeNosInf`; `simplifyOpenRegion1`;
+  `finiteVertices`; **`quadUnboundedBelow`** (next-step 1(e)'s `-inf` gate) immediately before
+  `redundantSubset`; `slopes2`; `getEdgeNosInf`; `simplifyOpenRegion1`;
   `simplifyUnboundedRegion`; `merge` (header records the correctness argument and the 36 → 125
   history).
 - `functionNDomain.m` — `conjugateOfPiecePoly`: the two empty-domain guards, and the entry
   ADAPTER just before the scatter (both parts — the vertexless drop and the collision drop — with
-  the piece-23 trace in the comment). Its `if obj(i).d.nv > 1` gate on the T2 edge loop is where
-  next-step 1(d) begins.
+  the piece-23 trace in the comment). Do NOT go looking at its `if obj(i).d.nv > 1` T2 gate for
+  next-step 1 — an earlier version of this file sent a session there and it was a dead end; see
+  1(d). Its `getInterior` has the `s12.s_1` field-name bug noted in 1.
 - `maxQuaPar.m` — `splitCell` (now handles a curved cell), `splitTwoArcPiece` (the one-arc-per-face
   chord subdivision), `arcHasStrictCrossing` (the tangency-vs-crossing check).
 - `parabolaArcFrame.m` — `conicCoeffs`, the quartic restriction of a second conic to the parabola;
   `lineCoeffs`' companion.
-- `regionTest.m` — 9 tests covering `maxLinear`'s three answers, `linearForm`'s affine flags,
-  four redundancy cases, and three merge cases.
+- `regionTest.m` — 11 tests: `maxLinear`'s three answers, `linearForm`'s affine flags, four
+  redundancy cases, three merge cases, and the two new `quadUnboundedBelow` cases (the gate's
+  answers, incl. the ray case that shows why eigenvectors alone are not enough; and the
+  curved-facet refusal).
 - `functionNDomainTest.m` — NEW, 2 tests. Reproduces `testcPLQ/testRectBiconj`'s piece 23
   directly, so the collision defect is pinned in ~26 s instead of that test's ~22 min. Verified
   to FAIL on pristine `HEAD~1` with the original error. It asserts the collision still exists as
@@ -253,13 +271,12 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
   `conjCPLQ.m:103`'s `isDomBounded` gate for next-step 1, which comes out LAST.
 - `quaPolToPlq.m` — header now records both halves of next-step 1 and the measurements behind
   them; the new `quaPolToPlq:unboundedFace` rejection is at the top of the function body.
-- `plq_1p.m` — `triangulate` (finite vertex fan, picks its start by `max(vy)`/`min(vx)` and
-  rebuilds each triangle through the BOUNDED `domain(t,x,y)`), `convexEnvelope1` and
-  `conjugateFunction` (closed-form triangle formulas indexing `vx(1..3)`). This is where
-  next-step 1(b)'s wedge case has to go.
-- `maxQuaPar.m` — `splitCell`'s `pieceIsCurved` guard and `insertPassthroughVertices` for
-  next-step 2; also the overstated "conic-conic" TODOs at lines 145/150/194.
-- `SUPPORT_MATRIX.md` §1.2 (4-face row now OK), §8 (blocker list).
+- `plq_1p.m` — **where next-step 1 continues.** `convexEnvelope1`'s `nCE==0` branch (the affine
+  envelope as an interpolant through `vx(1),vx(2),vx(3)` — meaningless for an unbounded face) is
+  the actual blocker; `triangulate` (finite vertex fan, picks its start by `max(vy)`/`min(vx)`
+  and rebuilds each triangle through the BOUNDED `domain(t,x,y)`) is the second half.
+- `SUPPORT_MATRIX.md` §1.2 (4-face row now OK), §4 (`maxQuaPar` rows — the arc-split row is now
+  OK), §8 (blocker list; item 6 resolved, item 2 rewritten with both measured defects).
 
 ## Still true from before
 
