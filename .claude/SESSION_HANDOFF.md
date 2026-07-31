@@ -48,13 +48,14 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
 
 ## Where things stand
 
-- Branch: `step3-assembly-lp-certificates` @ `154f18b` — "Fix testRectBiconj: a one-vertex
-  constraint was evicting a real edge" (4 commits ahead of `main`)
+- Branch: `step3-assembly-lp-certificates` @ `c7b9eb8` — "Locate next-step 1's real gap: T2 has
+  no ray-edge case" (7 commits ahead of `main`)
 - Pushed: yes — `origin/step3-assembly-lp-certificates` is up to date.
 - Working tree: clean
-- **Suite: 271 pass / 1 fail** over 23 suites, against a 270/2 baseline. `testcPLQ` is 8/0. The
-  single failure is `testRegion/testCreation` (longstanding, unrelated). Plus the NEW
-  `functionNDomainTest` 2/0, created after that sweep's glob — 273/1 all told.
+- **Suite: 274 pass / 1 fail** over 24 suites (full sweep, after the `maxQuaPar` arc work),
+  against a 270/2 baseline at the start of the session. `testcPLQ` is 8/0, `maxQuaParTest` 16/0,
+  the new `functionNDomainTest` 2/0. The single failure is `testRegion/testCreation`
+  (longstanding, unrelated — a toolbox-compatibility issue, not the conjugate pipeline).
 - **`main` is now unblocked**: the merge gate ("merge only once `testcPLQ/testRectBiconj` is
   green") is satisfied.
 
