@@ -106,10 +106,24 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
      For an AFFINE `f = a.x + c` on a wedge `v + cone(d1,d2)` it collapses further, to one piece:
      `f*(s) = <s-a,v> - c` on `{s : <s-a,d1> <= 0, <s-a,d2> <= 0}`, `+inf` elsewhere — an affine
      function on a translated normal cone, which is the shape `conjugateFunction` already emits.
-   What is genuinely missing is plumbing, not theory: `triangulate` picks its fan apex by
-   comparing coordinates (`max(vy)`/`min(vx)`) and rebuilds each triangle through the BOUNDED
-   `domain(t,x,y)`, and `convexEnvelope1`/`conjugateFunction` index `vx(1),vx(2),vx(3)` into
-   closed-form triangle formulas. Those three are where the wedge branch goes.
+   **(d) START HERE — the general machinery already gets the apex piece right.** Do NOT begin by
+   writing wedge formulas into `plq_1p`. `functionNDomain.conjugateOfPiecePoly` is the GENERAL
+   normal-cone implementation (`getNormalConeVertex` + `getSubdiffVertexT1/T2`), and
+   `plq_1p.conjugateFunction`'s closed-form `vx(1..3)` formulas are only a triangle shortcut over
+   it. Run directly on the wedge — `region([x,-y],[x,y])`, `f=(x^2+y^2)/2` — it succeeds in 2.2 s
+   and returns **exactly one piece, `0`**, valid precisely where the truth is 0 (the apex normal
+   cone `{s1>=0, s2<=0}`; checked at `(1,-1)` and `(6,-6)`, err 0). That is the correct T1 vertex
+   piece for the wedge's single finite vertex.
+   The three MISSING pieces are the two ray edges and the interior. The reason is local and
+   visible: the T2 edge loop is gated on `if obj(i).d.nv > 1`, and after `removeInfV` a wedge has
+   `nv == 1`, so the loop never runs. So the work is "give T2 a ray-edge case" inside
+   `functionNDomain`, not "write a wedge conjugate" inside `plq_1p`.
+   Only after that does `plq_1p` need attention: `triangulate` picks its fan apex by comparing
+   coordinates (`max(vy)`/`min(vx)`) and rebuilds each triangle through the BOUNDED
+   `domain(t,x,y)`. Note a decomposition subtlety for when you get there — the pieces must be
+   SUBSETS of the face whose union is the face (a superset would inflate the sup), and fanning an
+   unbounded convex polygon from one vertex yields half-strips (`conv{v1,vn} + cone(d)`), not
+   only triangles and cones.
 
 2. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
 3. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
@@ -180,7 +194,12 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
   history).
 - `functionNDomain.m` — `conjugateOfPiecePoly`: the two empty-domain guards, and the entry
   ADAPTER just before the scatter (both parts — the vertexless drop and the collision drop — with
-  the piece-23 trace in the comment).
+  the piece-23 trace in the comment). Its `if obj(i).d.nv > 1` gate on the T2 edge loop is where
+  next-step 1(d) begins.
+- `maxQuaPar.m` — `splitCell` (now handles a curved cell), `splitTwoArcPiece` (the one-arc-per-face
+  chord subdivision), `arcHasStrictCrossing` (the tangency-vs-crossing check).
+- `parabolaArcFrame.m` — `conicCoeffs`, the quartic restriction of a second conic to the parabola;
+  `lineCoeffs`' companion.
 - `regionTest.m` — 9 tests covering `maxLinear`'s three answers, `linearForm`'s affine flags,
   four redundancy cases, and three merge cases.
 - `functionNDomainTest.m` — NEW, 2 tests. Reproduces `testcPLQ/testRectBiconj`'s piece 23
