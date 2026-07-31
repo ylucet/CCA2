@@ -48,9 +48,11 @@ fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-fre
 
 ## Where things stand
 
-- Branch: `step3-assembly-lp-certificates` @ `c7b9eb8` — "Locate next-step 1's real gap: T2 has
-  no ray-edge case" (7 commits ahead of `main`)
-- Pushed: yes — `origin/step3-assembly-lp-certificates` is up to date.
+- Branch: **`main`** — `step3-assembly-lp-certificates` was fast-forwarded into it (11 commits,
+  from the LP-certificate assembly fix through the `maxQuaPar` arc work) and is no longer the
+  place to work. This repo's practice is to commit on `main`; the branch existed only because
+  that work was already in flight.
+- Pushed: yes — `origin/main` is up to date.
 - Working tree: clean
 - **Suite: 274 pass / 1 fail** over 24 suites (full sweep, after the `maxQuaPar` arc work),
   against a 270/2 baseline at the start of the session. `testcPLQ` is 8/0, `maxQuaParTest` 16/0,
