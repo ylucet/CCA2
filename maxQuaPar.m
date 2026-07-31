@@ -142,15 +142,33 @@ function g = maxQuaPar(g1, g2)
 %     threaded through clipByFace by clipPolyHalfPlaneCurved (the polyhedral path,
 %     clipPolyHalfPlaneStraight, is left untouched -- see its own dense HISTORY below for why that
 %     matters).
-%   * TODO: BOTH inputs curved -- needs genuine conic-conic intersection; not implemented, errors
-%     clearly. Also not implemented, and likewise erroring clearly rather than guessing: a clip
-%     line that cuts one arc TWICE (the arc bulging across it between its own two endpoints -- the
-%     result is either disconnected or has two separate arcs, neither representable as one QuaPar
-%     face; see clipPolyHalfPlaneCurved), and splitting a cell that ALREADY carries an arc (see
-%     splitCell, which would need conic-conic intersection for the same reason). That last one is
-%     NOT rare: on a randomized sweep over convex quadrilaterals split by a diagonal (the
-%     configuration this file's scoping caveat requires), 30 of 115 such splits hit it, versus 85
-%     that assembled correctly. It is the natural next step after this one.
+%   * IMPLEMENTED (later session): splitting a cell that ALREADY carries an arc -- see splitCell.
+%     It needs NO general conic-conic solver, and the older wording here (and on the guards) that
+%     said it did was wrong. Every curved edge in play is a PARABOLA (QuaPar.assertParabolic
+%     rejects b^2-4ac~=0 outright; the irreducible ellipse/hyperbola case is unreachable, see the
+%     scoping caveat above), so restricting the splitting conic to the arc via
+%     parabolaArcFrame.conicCoeffs gives one univariate QUARTIC in the frame's global monotone
+%     parameter u, and roots() finishes it.
+%     ONE ARC PER FACE remains the invariant -- QuaPar stores one conic per edge -- and it is
+%     maintained by SUBDIVIDING with a straight chord (splitTwoArcPiece), never by giving a piece a
+%     second curve slot. Measured on the named fixture plus a 395-quadrilateral sweep: of 22
+%     curved-cell splits, the splitting curve crossed two STRAIGHT edges every time and left the
+%     existing arc either untouched (19) or tangent (3), never cut -- the C1 tangency structure
+%     this file already documents. Assembled results went 58 -> 76 of 395, every one of the 77
+%     (sweep + fixture) exact against the closed-form sup (worst 2.8e-14) and violation-free under
+%     maxQuaParTest.arrangementViolations.
+%   * TODO: BOTH inputs curved -- not implemented, errors clearly. Also not implemented, and
+%     likewise erroring clearly rather than guessing: a clip line that cuts one arc TWICE (the arc
+%     bulging across it between its own two endpoints -- the result is either disconnected or has
+%     two separate arcs, neither representable as one QuaPar face; see clipPolyHalfPlaneCurved);
+%     the splitting curve genuinely CROSSING a cell's arc (splitCell checks for this rather than
+%     assuming the tangency structure); and splitting an UNBOUNDED cell that carries an arc. None
+%     of the three was produced by the sweep.
+%     Residual, and NOT caused by the split-a-curved-cell work: 3 of 395 now reach assemblePieces
+%     and fail its half-edge matching ('no matching neighbour'). That is the pre-existing ambiguous
+%     vertex-cluster limitation documented at assemblePieces (~1/800 on the polyhedral stress
+%     test); those 3 errored before too, just earlier and under a different identifier. One of them
+%     fails with no subdivision performed at all, which is what rules the new code out as a cause.
 %
 %   VALIDATION of the curved case (randomized sweep, same generator as the counts above; ground
 %   truth = the closed-form sup of the bilinear objective over the quadrilateral):
@@ -189,9 +207,14 @@ function g = maxQuaPar(g1, g2)
 
     curved1 = hasCurvedEdge(g1); curved2 = hasCurvedEdge(g2);
     if curved1 && curved2
+        % NOT "because conic-conic intersection is hard" -- splitCell now does exactly that
+        % intersection, in closed form, via parabolaArcFrame.conicCoeffs. What is missing here is
+        % the clipping side: clipByFace only ever clips a g1 face against g2's HALF-PLANES, so two
+        % curved operands would need arc-vs-arc clipping, which clipPolyHalfPlaneCurved has no
+        % case for.
         error('maxQuaPar:notImplemented', ...
             ['maxQuaPar supports at most ONE curved (parabolic-edge) input; both g1 and g2 have a ' ...
-             'nonzero Ec row, which needs conic-conic intersection (not implemented).']);
+             'nonzero Ec row, which would need arc-vs-arc face clipping (not implemented).']);
     end
     if curved2
         tmp = g1; g1 = g2; g2 = tmp;   % max is symmetric; normalize the curved operand to be g1
@@ -215,9 +238,10 @@ function g = maxQuaPar(g1, g2)
                 pieces(end+1) = cell; %#ok<AGROW>
                 continue
             end
-            [cellA, cellB] = splitCell(cell, f1row, f2row);
-            if ~isempty(cellA), pieces(end+1) = cellA; end %#ok<AGROW>
-            if ~isempty(cellB), pieces(end+1) = cellB; end %#ok<AGROW>
+            newCells = splitCell(cell, f1row, f2row);
+            for z = 1:numel(newCells)
+                pieces(end+1) = newCells(z); %#ok<AGROW>
+            end
         end
     end
     pieces = dedupPieces(pieces);
@@ -1249,22 +1273,32 @@ end
 
 % ============================================================================================
 % ----- splitting a cell by the (degenerate) curve where f1row and f2row are equal ------------
-function [cellA, cellB] = splitCell(cell, f1row, f2row)
-% Split cell into cellA (f1row wins) and cellB (f2row wins) along {f1row=f2row}. See the file
-% header scoping caveat: this REQUIRES f1row-f2row to be a degenerate conic (full 3x3 discriminant
-% Delta==0), asserted here, and requires exactly 2 boundary crossings (asserted too) -- both are
-% theorems about this pipeline's own adjacent sub-pieces, not generic facts, so a violation errors
-% loudly.
+function newPieces = splitCell(cell, f1row, f2row)
+% Split cell along {f1row=f2row} and return the resulting pieces (1 or more), each tagged with the
+% row that wins on it and each carrying AT MOST ONE curved edge. See the file header scoping
+% caveat: this REQUIRES f1row-f2row to be a degenerate conic (full 3x3 discriminant Delta==0),
+% asserted here, and requires exactly 2 boundary crossings (asserted too) -- both are theorems
+% about this pipeline's own adjacent sub-pieces, not generic facts, so a violation errors loudly.
+%
+% A cell that ALREADY carries an arc is handled too (it used to error). One arc per face stays the
+% invariant; it is maintained by SUBDIVIDING, never by giving a piece a second curve slot -- see
+% splitTwoArcPiece. What makes that enough is measured, not assumed: over the named fixture plus a
+% 395-quadrilateral randomized sweep, every one of the 22 curved-cell splits had the splitting
+% curve cross exactly two STRAIGHT edges, and the existing arc was either untouched (19) or met
+% TANGENTIALLY (3) -- never crossed. That is the tangency structure this file already documents
+% (a conjugate is C1 where its pieces join, so the other operand's face boundaries are tangent to
+% the parabola), so the arc always survives whole, inside exactly one of the two halves, and that
+% half is the only one that ends up with two curves.
+    arcPos0 = 0; arcEc0 = [];
     if pieceIsCurved(cell)
-        % Splitting a cell that ALREADY has an arc would need the intersection of the splitting
-        % conic with that arc (conic-conic), and could leave one of the two halves bounded by two
-        % separate arcs -- which a piece, with its single Ec slot, cannot carry. Not implemented;
-        % errors rather than silently dropping the existing arc. (decideWinner samples the arc's
-        % own midpoint precisely so a curved cell whose winner IS decided never reaches here.)
-        error('maxQuaPar:notImplemented', ...
-            ['maxQuaPar:splitCell: this cell already carries a parabolic edge and its winner is ' ...
-             'undecided, so it would have to be split along a second curve (conic-conic ' ...
-             'intersection); not implemented.']);
+        if ~isempty(cell.dirIn)
+            error('maxQuaPar:notImplemented', ...
+                ['maxQuaPar:splitCell: splitting an UNBOUNDED cell that already carries an arc ' ...
+                 'is not implemented (never observed: every curved cell in the sweep was ' ...
+                 'bounded). The bounded case is handled.']);
+        end
+        arcPos0 = cell.curveAfter;
+        arcEc0  = cell.curveEc;
     end
     diffRow = f1row - f2row;
     a = diffRow(5)/2; b = diffRow(6); c = diffRow(7)/2;
@@ -1314,6 +1348,13 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     edges = cellEdgeList(cell);
     hits = struct('edge', {}, 't', {}, 'pt', {});
     for i = 1:numel(edges)
+        if i == arcPos0
+            % cellEdgeList reports this edge as the CHORD between the arc's endpoints, but the
+            % boundary here is the ARC. Crossings of it are found on the conic itself below;
+            % solving along the chord would both miss real ones and invent ones the boundary
+            % does not have.
+            continue
+        end
         [A,B,C] = quadAlongRay(diffRow, edges(i).apex, edges(i).dir);
         for r = solveQuad(A,B,C)
             if r >= -1e-6 && r <= edges(i).tMax + 1e-6
@@ -1335,6 +1376,25 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
         end
     end
     hits = dedupHits(hits);
+    if arcPos0 ~= 0
+        % The splitting curve restricted to the arc's own parabola is a quartic in the frame's
+        % global monotone parameter u (parabolaArcFrame.conicCoeffs) -- this is the whole of the
+        % "conic-conic intersection" this case was once thought to need, and no general conic
+        % solver is involved: every curved edge here is a parabola (QuaPar.assertParabolic), so
+        % one univariate quartic settles it.
+        %
+        % Only a genuine CROSSING would cut the arc in two and take the split beyond two pieces.
+        % A tangency does not: the arc stays whole, and the touch point needs no vertex because
+        % the winner does not change across it. Erroring on a real crossing keeps that assumption
+        % honest rather than assumed -- the sweep produced 3 tangencies and no crossing.
+        if arcHasStrictCrossing(cell, diffRow)
+            error('maxQuaPar:notImplemented', ...
+                ['maxQuaPar:splitCell: the splitting curve genuinely CROSSES this cell''s arc, ' ...
+                 'which would cut the arc into two sub-arcs lying in different halves. Not ' ...
+                 'implemented (never observed: the pipeline''s arcs meet neighbouring face ' ...
+                 'boundaries tangentially).']);
+        end
+    end
     if numel(hits) == 1
         % The cell only TOUCHES {diffRow=0} at a single point -- a tangency at the degenerate
         % conic's singular point, which happens to coincide with a cell vertex shared with other
@@ -1343,13 +1403,16 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
         % residual (floating-point noise around the true value 0); the cell does not actually
         % split into two regions. Resolve the winner from the centroid (always strictly interior
         % for a convex cell, hence never the touch point itself) and return the WHOLE cell intact.
-        cellA = cell; cellA.curveAfter = 0; cellA.curveEc = [];
+        cellA = cell;
+        if arcPos0 == 0
+            cellA.curveAfter = 0; cellA.curveEc = [];
+        end   % a curved cell keeps its own arc: the cell is returned INTACT, arc included
         if QuaPar.evalPoly(diffRow, mean(cell.V,1)) >= 0
             cellA.f = f1row;
         else
             cellA.f = f2row;
         end
-        cellB = [];
+        newPieces = cellA;
         return
     end
     if numel(hits) ~= 2
@@ -1395,6 +1458,25 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
         cellRestB = boundedPiece(X2, cell.V(restIdx,:), X1, edgeEc);
         cellA = assignSide(cellMidB, diffRow, f1row, f2row);
         cellB = assignSide(cellRestB, diffRow, f1row, f2row);
+        if arcPos0 == 0
+            newPieces = [cellA, cellB];
+            return
+        end
+        % The original arc survives whole (checked above) inside exactly ONE of the two halves,
+        % which therefore now carries two curves: its inherited arc and the splitting curve
+        % boundedPiece has just tagged as its closing edge. Restore the inherited arc -- which
+        % boundedPiece knows nothing about and would otherwise silently flatten to a chord -- and
+        % subdivide that half so the one-arc-per-face invariant still holds.
+        [aX0, aX1] = arcEndpointsOf(cell, arcPos0);
+        newPieces = [];
+        for half = [cellA, cellB]
+            p = findArcPosition(half, aX0, aX1);
+            if p == 0 || p == half.curveAfter
+                newPieces = [newPieces, half]; %#ok<AGROW>
+            else
+                newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
+            end
+        end
         return
     end
 
@@ -1423,6 +1505,148 @@ function [cellA, cellB] = splitCell(cell, f1row, f2row)
     % midpoint if a piece has no other vertex, e.g. a bounded middle with e2==e1+1).
     cellA = assignSide(cellMid, diffRow, f1row, f2row);
     cellB = assignSide(cellRest, diffRow, f1row, f2row);
+    newPieces = [cellA, cellB];
+end
+
+function [X0, X1] = arcEndpointsOf(piece, i)
+% Endpoints of the boundary edge piece.V(i) -> piece.V(i+1), wrapping for a bounded piece.
+% curveEndpoints does this for a piece's OWN curveAfter; splitCell needs it for the arc index it
+% saved before the piece was rebuilt.
+    nv = size(piece.V,1);
+    X0 = piece.V(i,:);
+    X1 = piece.V(mod(i,nv)+1,:);
+end
+
+function pos = findArcPosition(piece, X0, X1)
+% Index i with piece.V(i) -> piece.V(i+1) being the edge whose endpoints are X0,X1 (in either
+% order), or 0 if this piece does not have that edge. Used to locate the parent cell's arc in a
+% half that splitCell has just rebuilt, since boundedPiece reindexes the vertices.
+    pos = 0;
+    nv = size(piece.V,1);
+    if nv < 2, return, end
+    tol = 1e-6 * (1 + max(abs(piece.V(:))));
+    if isempty(piece.dirIn), last = nv; else, last = nv-1; end
+    for i = 1:last
+        A = piece.V(i,:); B = piece.V(mod(i,nv)+1,:);
+        if (norm(A-X0) < tol && norm(B-X1) < tol) || (norm(A-X1) < tol && norm(B-X0) < tol)
+            pos = i; return
+        end
+    end
+end
+
+function out = splitTwoArcPiece(piece, arcPos, arcEc)
+% Cut a bounded piece that carries TWO curved edges -- the inherited arc at edge arcPos (conic
+% arcEc) and the splitting curve at edge piece.curveAfter -- into two pieces with ONE each, using a
+% single straight chord. One arc per face is the invariant this file (and QuaPar's single Ec slot
+% per edge) is built on; it is maintained by subdividing, never by widening the representation.
+%
+% The chord runs between the two arcs' facing endpoints, so each half keeps one whole arc and the
+% chord closes it. Both diagonals that separate the arcs are tried, and the chord is ACCEPTED only
+% if its midpoint is genuinely inside the piece: a face bounded by a parabola is not convex on that
+% side, so a diagonal is not automatically interior. If neither works the piece is returned
+% unsplit, which is not silently wrong -- it still carries its splitting curve, and the assembly's
+% own arrangement check (maxQuaParTest.maxQuaParResultsAreValidArrangements) is what would catch a
+% dropped arc.
+    nv = size(piece.V,1);
+    c  = piece.curveAfter;
+    cands = [mod(arcPos, nv)+1, mod(c, nv)+1; ...      % arc end -> curve end
+             arcPos,            c          ];          % arc start -> curve start
+    for k = 1:size(cands,1)
+        a = cands(k,1); b = cands(k,2);
+        if a == b, continue, end
+        chainA = cycIdx(b, a, nv);        % walk b -> ... -> a, closed by the chord a -> b
+        chainB = cycIdx(a, b, nv);        % walk a -> ... -> b, closed by the chord b -> a
+        if numel(chainA) < 3 || numel(chainB) < 3, continue, end
+        mid = 0.5*(piece.V(a,:) + piece.V(b,:));
+        if ~insideStraightHull(piece, arcPos, arcEc, mid), continue, end
+        pA = subPiece(piece, chainA, arcPos, arcEc);
+        pB = subPiece(piece, chainB, arcPos, arcEc);
+        if isempty(pA) || isempty(pB), continue, end
+        out = [pA, pB];
+        return
+    end
+    out = piece;
+end
+
+function idx = cycIdx(from, to, nv)
+% The cyclic index walk from..to inclusive, wrapping through nv.
+    idx = from;
+    while idx(end) ~= to
+        idx(end+1) = mod(idx(end), nv) + 1; %#ok<AGROW>
+        if numel(idx) > nv, break, end
+    end
+end
+
+function tf = insideStraightHull(piece, arcPos, arcEc, pt)
+% Is pt inside the piece? Tested as: on the inner side of every STRAIGHT boundary edge, and on the
+% interior side of both conics. Both curved edges carry the sign convention assignSide/facePoly
+% establish (evalConic > 0 on the piece's own interior), so the conic tests are exact; the straight
+% edges use the CCW "interior is on the left" convention polyConstraints documents.
+    nv = size(piece.V,1);
+    tf = false;
+    for i = 1:nv
+        if i == arcPos || i == piece.curveAfter, continue, end
+        A = piece.V(i,:); B = piece.V(mod(i,nv)+1,:);
+        d = B - A;
+        if (d(1)*(pt(2)-A(2)) - d(2)*(pt(1)-A(1))) < -1e-9*(1+norm(d)), return, end
+    end
+    if QuaPar.evalConic(arcEc, pt) <= 0, return, end
+    if any(piece.curveEc ~= 0) && QuaPar.evalConic(piece.curveEc, pt) <= 0, return, end
+    tf = true;
+end
+
+function p = subPiece(piece, idx, arcPos, arcEc)
+% One side of the chord: the vertices piece.V(idx) in walk order, closed by the chord from the last
+% back to the first. Exactly one of the parent's two curved edges survives in it, and which one
+% decides the new curveAfter/curveEc.
+    p = [];
+    V = piece.V(idx,:);
+    nvOld = size(piece.V,1);
+    arcHere = [];  ecHere = [];
+    for t = 1:numel(idx)-1
+        e = idx(t);                                   % parent edge idx(t) -> idx(t+1)
+        if mod(e, nvOld)+1 ~= idx(t+1), continue, end % not a parent edge (should not happen)
+        if e == arcPos,            arcHere = t; ecHere = arcEc; end
+        if e == piece.curveAfter,  arcHere = t; ecHere = piece.curveEc; end
+    end
+    if isempty(arcHere), return, end
+    p.V = V;
+    p.dirIn = []; p.dirOut = []; p.dirInSign = []; p.dirOutSign = [];
+    p.curveAfter = arcHere;
+    p.curveEc = ecHere;
+    p.f = piece.f;
+    if pieceIsCurved(p) && QuaPar.evalConic(p.curveEc, insideArcSample(p)) < 0
+        p.curveEc = -p.curveEc;
+    end
+end
+
+function tf = arcHasStrictCrossing(cell, diffRow)
+% Does {diffRow=0} genuinely CROSS this cell's arc strictly between its endpoints (as opposed to
+% missing it, or touching it tangentially)? The splitting curve restricted to the arc's parabola is
+% a quartic in the frame's global monotone parameter u; for each root strictly inside the arc's
+% u-range, the sign of diffRow just before and just after decides crossing vs tangency.
+    fr = parabolaArcFrame(cell.curveEc, 'maxQuaPar');
+    [X0, X1] = curveEndpoints(cell);
+    u0 = fr.uOf(X0); u1 = fr.uOf(X1);
+    ulo = min(u0,u1); uhi = max(u0,u1); span = uhi - ulo;
+    % Same 1/2 weights on the x^2/y^2 slots that QuaPar.evalPoly applies and that splitCell's own
+    % edgeEc uses -- a QuaPar row is NOT a conic row.
+    q = fr.conicCoeffs([0.5*diffRow(5), diffRow(6), 0.5*diffRow(7), ...
+                        diffRow(8), diffRow(9), diffRow(10)]);
+    sc = max(abs(q));
+    tf = false;
+    if sc == 0, return, end
+    r = roots(q/sc);
+    r = real(r(abs(imag(r)) < 1e-7*(1+abs(real(r)))));
+    tolU = 1e-6*(1+span);
+    h = 1e-5*(1+span);
+    for z = 1:numel(r)
+        if r(z) <= ulo + tolU || r(z) >= uhi - tolU, continue, end
+        if sign(QuaPar.evalPoly(diffRow, fr.point(r(z)-h))) ~= ...
+           sign(QuaPar.evalPoly(diffRow, fr.point(r(z)+h)))
+            tf = true; return
+        end
+    end
 end
 
 function piece = boundedPiece(Xstart, Vmid, Xend, ecRow)

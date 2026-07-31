@@ -271,8 +271,10 @@ branch (affine, convex, concave, indefinite with 0/1, 2 and 3 convex edges — i
 |---|---|---|
 | Both inputs purely polyhedral | **OK** | — |
 | Exactly **one** input with parabolic edges | **OK** (added 2026-07-27) | — |
-| **Both** inputs curved | **GAP** — needs conic–conic intersection | `maxQuaPar:notImplemented` — `maxQuaPar.m:192` |
-| Splitting a cell that **already carries an arc** | **GAP** — ~26% of sampled valid splits | `maxQuaPar.m:1264` |
+| **Both** inputs curved | **GAP** — needs arc-vs-arc face clipping (NOT conic–conic intersection; see below) | `maxQuaPar:notImplemented` |
+| Splitting a cell that **already carries an arc** | **OK** (2026-07-30) | — |
+| Splitting curve genuinely **crosses** a cell's arc | **GAP** (defensive; 0 occurrences observed — the pipeline's arcs meet neighbours tangentially) | `maxQuaPar:notImplemented` |
+| Splitting an **unbounded** cell that carries an arc | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar:notImplemented` |
 | Clip line cutting one arc **twice** (arc bulging across) | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar.m:802` |
 | Face vertex inside the **open interior of an arc** (arc must be split) | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar.m:617` |
 | Curved **ray** edge | **N/R** — `QuaPar` has no unbounded curved edge | `maxQuaPar.m:400` |
@@ -365,12 +367,14 @@ Ordered by how likely a downstream caller is to hit it:
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 5. **Two known wrong-answer defects** (§7).
-6. **`maxQuaPar` cannot split a cell that already carries an arc** (§4) — ~26% of sampled splits.
-   Re-scoped 2026-07-30: this needs no conic-conic solver (every curved edge is a parabola —
-   `QuaPar.assertParabolic`; the ellipse/hyperbola row in §4 is **N/R**), and no multi-arc
-   representation. One arc per face is the correct invariant; the fix is to SUBDIVIDE with a
-   straight chord so each half keeps one arc. `maxQuaPar.m`'s own "conic-conic" TODOs
-   (lines 145/150/194) overstate it.
+6. ~~**`maxQuaPar` cannot split a cell that already carries an arc**~~ — **RESOLVED 2026-07-30**
+   (§4). It needed no conic-conic solver and no multi-arc representation, contrary to what this
+   file and `maxQuaPar.m`'s own TODOs used to say. Every curved edge is a parabola
+   (`QuaPar.assertParabolic`), so restricting the splitting conic to the arc via
+   `parabolaArcFrame.conicCoeffs` gives one univariate quartic; and the splitting curve never
+   CROSSES the arc here (measured: 19 untouched, 3 tangent, 0 crossed over 22 curved splits), so
+   ONE ARC PER FACE is preserved by subdividing with a straight chord. Assembled results went
+   58 → 76 of 395 sampled quadrilaterals, all exact to 2.8e-14 and arrangement-clean.
 7. Performance: general bounded domains route through the symbolic pipeline (Phase 2).
 
 **Resolved 2026-07-28:** `biconj` works for every bounded domain, including the single bounded

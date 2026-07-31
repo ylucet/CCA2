@@ -33,6 +33,19 @@ maximal on the edge `u=-4` at `s2=-45/44`, where it is exactly 0 — **provably 
 brute-force max over the ORIGINAL 4-constraint domain matches the symbolic conjugate at 8 sample
 points to grid resolution, one piece per point.
 
+**`maxQuaPar` can now split a cell that already carries an arc** (was next-step 2; ~26% of
+sampled splits). It needed no conic-conic solver and no multi-arc representation — both of which
+this file and `maxQuaPar.m`'s own TODOs previously claimed. Every curved edge is a parabola
+(`QuaPar.assertParabolic`), so restricting the splitting conic to the arc via the new
+`parabolaArcFrame.conicCoeffs` gives one univariate QUARTIC in the frame's global monotone `u`.
+And the splitting curve never CROSSES the arc in this pipeline: measured over the named fixture
+plus a 395-quadrilateral sweep, all 22 curved-cell splits left the arc untouched (19) or tangent
+(3) — the C1 tangency structure the file already documents — so the arc survives whole in one
+half, and ONE ARC PER FACE is kept by subdividing that half with a straight chord
+(`splitTwoArcPiece`). Assembled results went **58 → 76 of 395**, every one of the 77 (sweep +
+fixture) exact against the closed-form sup (worst **2.8e-14**) and violation-free under
+`arrangementViolations`.
+
 ## Where things stand
 
 - Branch: `step3-assembly-lp-certificates` @ `154f18b` — "Fix testRectBiconj: a one-vertex
@@ -78,34 +91,30 @@ points to grid resolution, one piece per point.
    **wedges** as well as triangles, plus an envelope/conjugate branch for a quadratic over a
    wedge. `conjCPLQ.m`'s `isDomBounded` gate comes out **last**, not first.
 
-2. **`maxQuaPar`: split a cell that already carries an arc** (~26%, 30 of 115 sampled splits).
-   Re-scoped 2026-07-30 and it is SMALLER than previously recorded, on two counts.
+   **(c) The wedge case is NOT new mathematics — scoped and numerically confirmed 2026-07-30.**
+   Two facts make it a bounded amount of work reusing what is already here:
+   - `sup` over a union is the `max` of the `sup`s, so the conjugate over an unbounded face
+     decomposes over ANY cover of it — and `plq.maximum` already takes a max across pieces. So
+     `triangulate` only has to emit triangles PLUS wedges; there is no "conjugate over a general
+     unbounded polygon" to write.
+   - The conjugate of a convex quadratic over a wedge is the **same T1/T2 active-set
+     decomposition cPLQ already builds for a triangle**, with one vertex instead of three and two
+     unbounded edges instead of three bounded ones: apex piece + 2 ray pieces + interior piece.
+     Confirmed against brute force on `f=(x^2+y^2)/2` over `{x<=0, y>=0}`, whose conjugate is
+     `min(s1,0)^2/2 + max(s2,0)^2/2` — exactly 4 pieces, matching to grid resolution (1.7e-5 on a
+     1200x1200 grid) at 9 sample points including all four cells and the origin.
+     For an AFFINE `f = a.x + c` on a wedge `v + cone(d1,d2)` it collapses further, to one piece:
+     `f*(s) = <s-a,v> - c` on `{s : <s-a,d1> <= 0, <s-a,d2> <= 0}`, `+inf` elsewhere — an affine
+     function on a translated normal cone, which is the shape `conjugateFunction` already emits.
+   What is genuinely missing is plumbing, not theory: `triangulate` picks its fan apex by
+   comparing coordinates (`max(vy)`/`min(vx)`) and rebuilds each triangle through the BOUNDED
+   `domain(t,x,y)`, and `convexEnvelope1`/`conjugateFunction` index `vx(1),vx(2),vx(3)` into
+   closed-form triangle formulas. Those three are where the wedge branch goes.
 
-   **No conic-conic solver is needed.** Every curved edge in play is a parabola —
-   `QuaPar.assertParabolic` rejects anything with `b^2-4ac ~= 0` ("ellipses/hyperbolas do not
-   occur"), and `SUPPORT_MATRIX.md`'s irreducible-ellipse/hyperbola row is **N/R**. So the case
-   is parabola ∩ parabola. `b^2-4ac = 0` means each quadratic part is a perfect square
-   `(alpha*x+beta*y)^2`: with a shared axis direction `P1 - lambda*P2` cancels it outright and
-   leaves a LINE (one quadratic to solve); otherwise the pencil `det(M1-lambda*M2)=0` is a cubic
-   whose real root gives a line pair (two quadratics). Closed form either way — no quartic. Note
-   `maxQuaPar.m`'s own TODOs at lines 145/150/194 say "needs genuine conic-conic intersection"
-   and are themselves overstated; fix the comments too.
-
-   **One arc per face is the RIGHT invariant — keep it, and subdivide to maintain it.** Do NOT
-   add multi-arc pieces (an earlier version of this file proposed exactly that; it is wrong).
-   When a split would leave a half holding the inherited arc PLUS a new curved cut, add a
-   straight chord separating them: two faces, one arc each. Same at
-   `insertPassthroughVertices`, whose own comment says it raises only because "a piece carries
-   only ONE curve slot… it cannot represent the two sub-arcs" — after the split those sub-arcs
-   belong to two different faces, so one slot each is exactly enough. Both sites are
-   `notImplemented`, not `notPossible`. Only construction detail to watch: a face with a
-   parabolic side is non-convex there (`maxQuaPar.m:787`), so pick the chord between the two
-   arcs' adjacent endpoints, and use two chords if one ever leaves the face.
-
-3. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
-4. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
-5. `partialConj` unimplemented for every engine and type (`SUPPORT_MATRIX.md` §2).
-6. Longstanding: `'pqp'`/`'graph'` engines; `RatPol.conj`/`biconj`/`add`; the
+2. A native numeric rational branch in `conjPieceCPLQ` would buy **speed, not coverage**.
+3. Merge to `main` (now unblocked) and then 0.1 tagging — **do not tag without being asked**.
+4. `partialConj` unimplemented for every engine and type (`SUPPORT_MATRIX.md` §2).
+5. Longstanding: `'pqp'`/`'graph'` engines; `RatPol.conj`/`biconj`/`add`; the
    `mergeL`/`removeTangent` exact-tie-point bug; `QuaPar.eval` wrong exactly *at* a result
    vertex (~1.4%); `testRegion/testCreation`.
 

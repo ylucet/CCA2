@@ -27,6 +27,14 @@ function fr = parabolaArcFrame(Ec, errId)
 %                  line-conic-intersection-then-reproject detour, and with no ambiguity about
 %                  which of the (up to 2) roots lies on a GIVEN arc: that is decided by u-range
 %                  membership instead.
+%            conicCoeffs(C) : [A4 A3 A2 A1 A0] with C evaluated at point(u) equal to
+%                  A4*u^4+...+A0 -- lineCoeffs' analogue for a second CONIC C=[a b c d e f]
+%                  (same 1x6 layout as Ec). point(u) is quadratic in u, so a conic in it is
+%                  quartic, and PARABOLA-vs-PARABOLA intersection reduces to roots() of this
+%                  single univariate polynomial. Same virtue as lineCoeffs: which roots lie on a
+%                  GIVEN arc is decided by u-range membership, with no reprojection step. Note
+%                  the second conic is NOT required to be a parabola -- any conic restricts to a
+%                  quartic here -- so this also serves a degenerate (line-pair) splitting curve.
     if nargin < 2, errId = 'parabolaArcFrame'; end
     Q = [Ec(1), Ec(2)/2; Ec(2)/2, Ec(3)];
     delta = Ec(2)^2 - 4*Ec(1)*Ec(3);
@@ -51,4 +59,11 @@ function fr = parabolaArcFrame(Ec, errId)
     fr.lineCoeffs = @(nrm,c) [ -(nrm*nullDir')*lam/dv, ...
                                 nrm*uDir' - (nrm*nullDir')*du/dv, ...
                                -(nrm*nullDir')*f0/dv - c ];
+    % point(u) coordinatewise as quadratics in u (highest power first), so a second conic
+    % restricts to their quartic combination. qu is v(u) = -(lam*u^2+du*u+f0)/dv.
+    qu = [-lam/dv, -du/dv, -f0/dv];
+    xu = uDir(1)*[0 1 0] + nullDir(1)*qu;
+    yu = uDir(2)*[0 1 0] + nullDir(2)*qu;
+    fr.conicCoeffs = @(C) C(1)*conv(xu,xu) + C(2)*conv(xu,yu) + C(3)*conv(yu,yu) ...
+                        + [0 0 C(4)*xu] + [0 0 C(5)*yu] + [0 0 0 0 C(6)];
 end

@@ -426,23 +426,66 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyError(@() maxQuaPar(g1, g1), 'maxQuaPar:notImplemented');
         end
 
-        function maxQuaParRejectsSplittingACellThatAlreadyCarriesAnArc(testCase)
-            % The other documented curved-case limit: a cell that already carries a parabolic edge
-            % AND whose winner is undecided would have to be split along a SECOND curve, needing
-            % conic-conic intersection and possibly leaving a piece bounded by two separate arcs --
-            % which a piece, with its single Ec slot, cannot carry. This is not rare (it accounted
-            % for ~30 of 115 sampled quadrilateral splits), so it must fail loudly rather than
-            % silently drop the existing arc.
+        function maxQuaParSplitsACellThatAlreadyCarriesAnArc(testCase)
+            % A cell that already carries a parabolic edge AND whose winner is undecided has to be
+            % split along a SECOND curve. This used to error; it now works, and this fixture is the
+            % one that used to trip the guard. It is not a rare configuration -- it accounted for
+            % ~30 of 115 sampled quadrilateral splits.
+            %
+            % Two things make it tractable, both measured rather than assumed (see splitCell):
+            % the splitting curve never CROSSES the existing arc in this pipeline (it misses it, or
+            % meets it tangentially, because a conjugate is C1 where its pieces join), so the arc
+            % survives whole inside one half; and ONE ARC PER FACE is preserved by subdividing that
+            % half with a straight chord, never by giving a piece a second curve slot.
             %
             % Guard placement note: decideWinner samples the ARC'S OWN MIDPOINT in addition to the
-            % cell's vertices, precisely so that a curved cell whose winner really is decided by a
-            % single row (the common case) never reaches this guard -- a curved cell's boundary
-            % bulges away from the chord between its arc endpoints, so the vertices alone can miss
-            % a sign change that happens along the arc.
+            % cell's vertices, so a curved cell whose winner really is decided by a single row (the
+            % common case) never needs splitting at all -- a curved cell's boundary bulges away from
+            % the chord between its arc endpoints, so the vertices alone can miss a sign change that
+            % happens along the arc.
             T1 = [5.0563561917953432 -2.6420118716252645; -1.7500476464784906 1.7560710933062524; -1.333215970360937 -1.6455512146039442];
             T2 = [5.0563561917953432 -2.6420118716252645; -1.333215970360937 -1.6455512146039442; 2.7678673998769212 -7.6405033597373295];
             [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
-            testCase.verifyError(@() maxQuaPar(g1, g2), 'maxQuaPar:notImplemented');
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+            testCase.verifyTrue(any(g.Ec(:) ~= 0), 'the result should retain a curved edge');
+
+            % Correct, not merely non-erroring: exact ground truth at every sample point.
+            S = maxQuaParTest.curvedSamplePoints(g);
+            testCase.verifyGreaterThan(size(S,1), 0);
+            for i = 1:size(S,1)
+                s = S(i,:);
+                truth = max(maxQuaParTest.supBilinearOverPoly(s, T1), ...
+                            maxQuaParTest.supBilinearOverPoly(s, T2));
+                testCase.verifyEqual(g.eval(s), truth, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                    sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+
+            % And structurally sound: the subdividing chord must pair up like any other edge.
+            [nBad, worst, msg] = maxQuaParTest.arrangementViolations(g);
+            testCase.verifyEqual(nBad, 0, sprintf('%d arrangement violations (worst %g): %s', ...
+                nBad, worst, msg));
+        end
+
+        function everySplitPieceCarriesAtMostOneArc(testCase)
+            % The invariant splitCell's subdivision exists to maintain, asserted on the RESULT
+            % rather than on the intermediate pieces: QuaPar stores one conic per EDGE, so a face
+            % carrying two curved edges is the representation error to guard against. Checked on
+            % the fixture that forced the subdivision to be written.
+            T1 = [5.0563561917953432 -2.6420118716252645; -1.7500476464784906 1.7560710933062524; -1.333215970360937 -1.6455512146039442];
+            T2 = [5.0563561917953432 -2.6420118716252645; -1.333215970360937 -1.6455512146039442; 2.7678673998769212 -7.6405033597373295];
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            g = maxQuaPar(g1, g2);
+            for k = 1:g.nf
+                nCurved = 0;
+                for j = 1:size(g.E,1)
+                    if any(g.F(j,:) == k) && any(g.Ec(j,:) ~= 0)
+                        nCurved = nCurved + 1;
+                    end
+                end
+                testCase.verifyLessThanOrEqual(nCurved, 1, ...
+                    sprintf('face %d has %d curved edges; the invariant is at most one', k, nCurved));
+            end
         end
 
         function maxQuaParResultsAreValidArrangements(testCase)
