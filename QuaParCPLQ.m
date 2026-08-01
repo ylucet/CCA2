@@ -65,6 +65,24 @@ classdef QuaParCPLQ < RatPar & Qua
             bc = obj.fnd.conjugateOfPiecePoly;
             bc = bc.mergeL;
             bc = bc.addEq;
+            % An EMPTY piece list is not a function -- it evaluates to NaN everywhere, i.e. it
+            % claims f* is +inf on all of R^2, which no conjugate of a proper function is. Refuse
+            % it rather than hand it back.
+            %
+            % This became reachable when conjCPLQ's isDomBounded gate came out: biconj is
+            % conj-of-conj, so a bounded triangle's f** now gets as far as this second
+            % conjugation, where it used to stop at the first. The first conjugation is right --
+            % for f = x*y on conv{(0,0),(1,0),(0,1)}, f* = max(0,s1,s2) and (f*)* comes out as
+            % the indicator of the simplex {s>=0, s1+s2<=1}, verified exact at 9 probes. It is
+            % conjugateOfPiecePoly that then returns nothing for that indicator, whose conjugate
+            % is its support function max(0,x,y) -- 3 affine vertex pieces. That is a Step 2 gap,
+            % unrelated to boundedness, and it is now visible instead of masked.
+            if isempty(bc)
+                error('QuaParCPLQ:conj:emptyResult', ...
+                    ['conjugateOfPiecePoly returned no pieces, which would represent f* as ' ...
+                     '+inf everywhere. Refusing: this is the Step 2 gap on an indicator-like ' ...
+                     'piece, not a valid conjugate.']);
+            end
             h = QuaParCPLQ(bc);
         end
 

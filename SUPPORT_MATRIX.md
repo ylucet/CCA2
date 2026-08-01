@@ -68,7 +68,8 @@ largest functional gap.
 | …envelope split with a **rational** face, 2-face split | **OK** (falls back to cPLQ's Step 2/3; slow, ~100 s) | `QuaParCPLQ` | — |
 | …envelope split with a **rational** face, 4-face split | **OK** (2026-07-29; symbolic, ~27 min) | `QuaParCPLQ` | — |
 | General **bounded** domain (multi-face and/or non-triangular) | **OK** (symbolic; slow) | `QuaParCPLQ` | — |
-| **Unbounded** multi-face domain | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:103` |
+| **Unbounded** multi-face domain, faces whose convex envelope is **affine** | **OK** (2026-07-31; symbolic) | `QuaParCPLQ` | — |
+| **Unbounded** multi-face domain, a face with a **curved convex** envelope | **GAP** | — | `plq_1p:conjugateFunction:unboundedNonAffine` |
 | Step 3 with a **non-triangular** envelope piece | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:161` |
 | Cubic (`PLC`) input | **N/R** — cubic is for `isConvex` only | — | `assertOperable`; `quaPolToPlq:cubic` |
 
@@ -341,6 +342,8 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 | `mergeL` / `removeTangent` exact-tie-point gap | Wrong result at exact symmetric tie points | vendored cPLQ `functionNDomain` / `plq.biconjugateF`; inherited by `QuaParCPLQ.conj` |
 | `QuaPar.eval` exactly **at a vertex** | ~1.4% of result vertices return `Inf` or a wrong value; correct to ~1e-15 at radius 1e-8 | `QuaPar.eval`'s exact, no-tolerance point location — affects the polyhedral path too, not just curved |
 | `testRegion/testCreation` | 1 failing test | toolbox-compatibility, unrelated to the conjugate pipeline |
+| ~~Step 1 ignored the face's function~~ - **FIXED 2026-08-01** | Step 1 now classifies by the SIGNS OF THE EIGENVALUES of `Q`, not by `nCE` (which tests edge slopes and so only classifies `x*y`). Convex/affine keep `q` as their own envelope; concave get the affine interpolant through the actual values of `q`; indefinite are moved by `xyFrame.m` into the frame where `q` **is** `x*y`, so cPLQ's own closed forms apply to the function they were written for. Case C values verified exact against brute force for `(x^2+y^2)/2`, `x*y`, `x^2-y^2`, `3xy+7x-2y+5` and `-(x^2+y^2)/2`, where `f*(0.3,0.4)` used to be `0.4` for a truth of `0.125` | `plq_1p.convexEnvelope1`, `xyFrame.m` |
+| Case C's **biconjugate** does not work | `caseC.biconj()` gives ZERO pieces on pristine `HEAD` - `f** = +inf` everywhere - for an `f` that is convex and hence its own biconjugate. The old test passed anyway: it asserted only `.kind()`, and `QuaParCPLQ(empty).kind()` is still `'QuaParCPLQ'`. It fails inside `conjugateOfPiecePoly` behind a CHAIN of latent bugs, each reachable only once the previous is fixed. Fixed so far: `region.getNormalConeVertexQ` indexed `py(1)` before its own `isempty(py)` guard (dead code); `region.splitmax3` left its output unassigned when `f1 < f2` at every vertex. Next down: `functionNDomain.getInterior` indexes `c2(2)` under a guard testing only `size(c1,2)`. Unrelated to the unbounded / general-quadratic work, which only makes the FIRST conjugation richer (11 pieces vs 9) and so carries the second far enough to reach these | `functionNDomain.conjugateOfPiecePoly` |
 
 ---
 
@@ -349,21 +352,34 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
-2. **Unbounded multi-face domains error** (§1.2) — the remaining reason `conj` is not closed under
-   itself. Two independent defects (re-measured 2026-07-30; the earlier note here was right in
-   outline and wrong in both details).
-   **(a)** `quaPolToPlq` discards the ray: `faceVertexIndices` takes only `E(j,1)` and never reads
-   the ray flag `E(:,3)==0`, for which `E(j,2)` is a DIRECTION point. The 4-cone fan's
-   second-quadrant cone becomes `V=[(0,0);(0,0)]`, and `domain()` — the bounded constructor —
-   yields `NaN ≤ 0` twice (not `x ≤ 0` twice). Now rejected loudly:
-   `quaPolToPlq:unboundedFace`.
-   **(b)** the deeper one: `domain.domainEdge` *does* build the ray correctly (source vertex plus
-   an `intmax` direction vertex per ray), and `functionNDomain`/`region` consume it correctly —
-   but `plq_1p` reads those markers as the number 2147483647. On the second quadrant with
-   `f=(x²+y²)/2`, `triangulate`-then-`maximum` **errors** in `conjugateFunction`→`getEdgeNos`,
-   while skipping `triangulate` **runs and returns garbage**, emitting `intmax²`
-   (`4611686014132420609`) as a coefficient — max error 1.15e18. So cPLQ has no unbounded-piece
-   case in Step 1 or Step 2, and the `isDomBounded` gate must be removed **last**.
+2. **Unbounded multi-face domains: Steps 1 and 2 are done; the blocker is Step 3's CROSS-PIECE
+   maximum.** Re-scoped 2026-08-01.
+   **(a) DONE.** `quaPolToPlq` builds ray-carrying faces from HALF-PLANES
+   (`faceDomainFromHalfPlanes`), orientation off `P{k}`'s own sign convention, so the ray
+   direction is no longer discarded.
+   **(b) DONE.** `plq_1p.triangulate` covers an unbounded face with triangles + half-strip +
+   wedge (`fanUnboundedFace`); `convexEnvelope1` gets its envelope from `convEnvUnbounded`;
+   `conjugateFunction` dispatches on the ENVELOPE, not on `nCE`.
+   **(c) DONE, by REPAIR rather than by the earlier workaround.** The dual regions were wrong
+   because `poly2orderUnbounded` — the routine that puts an unbounded region's vertices in
+   boundary cyclic order, which `getNormalConeVertex` requires — **threw** on a 2-constraint
+   wedge, and `getEdges` raised `MATLAB:unassignedOutputs` instead of returning an empty list
+   when no constraint is active at a point (true of the box-clip corner `(intmax,intmax)`). Both
+   are fixed in place, so every vertex-based consumer benefits, and the parallel half-plane
+   construction added as a stopgap has been deleted. The ray REPRESENTATION was never at fault.
+   **(d) DONE.** A CURVED convex envelope over an unbounded face is conjugated by
+   `conjConvexOverPiece.m` (KKT active set: vertex, edge and interior cells). The handoff's
+   headline case — `(x²+y²)/2` over `{x≤0,y≥0}` — returns `min(s1,0)²/2 + max(s2,0)²/2`, exact
+   at 10 probes. The same routine supplies the edge/interior cells cPLQ's `conjugateOfPiecePoly`
+   omits for a convex `q` on a bounded triangle.
+   **(e) THE BLOCKER.** cPLQ's Step 3, the CROSS-PIECE maximum (`plq.maximumConjugate` →
+   `functionNDomain.maximumP`), drops cells. On the 4-cone fan with convex faces each of the 4
+   faces produces a correct 4-cell conjugate and the per-piece maximum preserves all 4 — then the
+   assembled maximum keeps only 4 of the 16, losing face 1's `s₂²/2` cell on `{s1≤0, s2≥0}`, so
+   `f*(-0.5,2)` comes back `1.125` for a truth of `2`. This is now caught rather than returned:
+   `conjCPLQ`'s `assertStep3MatchesPieces` is applied to Case C (it previously guarded only one
+   other path), and raises `PLQ:conjCPLQ:cplqFailed`.
+
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 5. **Two known wrong-answer defects** (§7).

@@ -17,8 +17,12 @@ function p = quaPolToPlq(obj)
 % vertices, in QuaPol.orderEdges' own clockwise order -- matching domain.m's own expectation,
 % see its "Fix order to clockwise" comment).
 %
-% BOUNDED ONLY, and the check below is deliberately here rather than left to conjCPLQ's own
-% isDomBounded gate, because BOTH failure modes on an unbounded face are SILENT.
+% UNBOUNDED FACES are now converted, via faceDomainFromHalfPlanes below; what follows records
+% the two defects that used to make that impossible, both of them SILENT, and what each needed.
+% Defect (1) is fixed here. Defect (2) is fixed in plq_1p (fanUnboundedFace + convEnvUnbounded
+% for Step 1, and conjugateFunction's dispatch for Step 2) for the case where the convex
+% envelope over the unbounded face is AFFINE; a face whose envelope is a curved convex quadratic
+% still raises plq_1p:conjugateFunction:unboundedNonAffine rather than returning a number.
 %
 %   (1) In this function. faceVertexIndices takes one vertex per edge, E(j,1), and never consults
 %       QuaPol's ray flag E(:,3)==0 -- for which E(j,1) is the base point and E(j,2) is the
@@ -40,32 +44,88 @@ function p = quaPolToPlq(obj)
 %         - skipping triangulate RUNS and returns garbage -- pieces carrying 2147483647*s_2 and
 %           the constant 4611686014132420609, which is exactly intmax^2, i.e. intmax substituted
 %           into the closed-form triangle formulas. Max error 1.15e18.
-%       So plq_1p needs a genuine unbounded-piece case (a fan emitting WEDGES as well as
-%       triangles, plus an envelope/conjugate branch for a quadratic over a wedge) before any
-%       unbounded face may be let through. Erroring here keeps that ordering enforced even if
-%       conjCPLQ's gate is relaxed first.
+%       So plq_1p needed a genuine unbounded-piece case before any unbounded face could be let
+%       through: a fan emitting WEDGES and HALF-STRIPS as well as triangles (fanUnboundedFace),
+%       an envelope branch that works from the half-planes instead of the vertices
+%       (convEnvUnbounded), and a Step 2 dispatch keyed on the envelope rather than on nCE
+%       (which is itself computed from the intmax vertices, hence meaningless here).
     obj.assertOperable();
-    if ~obj.isDomBounded
-        error('quaPolToPlq:unboundedFace', ...
-            ['quaPolToPlq requires a bounded domain: this QuaPol has a ray edge (E(:,3)==0). ' ...
-             'Converting it would silently discard the ray direction, and cPLQ''s plq_1p has ' ...
-             'no unbounded-piece case behind that. See this file''s header.']);
+    % CURVED EDGES ARE REFUSED. Every edge below is turned into "the line through E(j,1) and
+    % E(j,2)", which is right for a segment and for a ray and WRONG for a parabolic edge -- the
+    % curvature is simply dropped, and the result is a differently-shaped face reported as if it
+    % were the real one. Ec all-zero is exactly "polyhedral" (see QuaPar.m's header: a QuaPar
+    % with Ec all-zero behaves exactly like a QuaPol).
+    %
+    % This guard is not new behaviour so much as a relocated one. It used to be provided
+    % accidentally by conjCPLQ's isDomBounded gate, since the QuaPars that reach here are
+    % conjugates and conjugate domains are unbounded. Removing that gate for the unbounded-QuaPol
+    % work exposed the real defect underneath: biconjCPLQTest's own QuaPar then ran the whole
+    % pipeline and returned a QuaParCPLQ covering NOTHING -- it evaluated to NaN at all 10 probed
+    % points. Boundedness was never the right thing to test for here; curvature is.
+    if ~isempty(obj.Ec) && any(obj.Ec(:) ~= 0)
+        error('quaPolToPlq:curvedEdge', ...
+            ['quaPolToPlq requires a polyhedral domain: this input has a curved (parabolic) ' ...
+             'edge, and every edge here is rebuilt as the straight line through its two ' ...
+             'endpoints, which would silently discard that curvature.']);
     end
     x = sym('x'); y = sym('y');
     pieces = plq_1p.empty();
     for k = 1:obj.nf
-        iVs = faceVertexIndices(obj, k);
-        V = obj.V(iVs, :);
         [L, Q, C] = QuaPol.matrixForm(obj.f(k,:));
         if ~isempty(C)
             error('quaPolToPlq:cubic', 'Face %d is cubic; quaPolToPlq requires degree<=2.', k);
         end
         expr = 0.5*(Q(1,1)*x^2 + 2*Q(1,2)*x*y + Q(2,2)*y^2) + L(1)*x + L(2)*y + obj.f(k,end);
-        d = domain(V, x, y);
+        if faceHasRay(obj, k)
+            d = faceDomainFromHalfPlanes(obj, k, x, y);
+        else
+            iVs = faceVertexIndices(obj, k);
+            d = domain(obj.V(iVs, :), x, y);
+        end
         f = symbolicFunction(expr);
         pieces(k) = plq_1p(d, f);
     end
     p = plq(pieces);
+end
+
+function l = faceHasRay(obj, k)
+    edges = find(any(obj.F == k, 2));
+    l = any(obj.E(edges,3) == 0);
+end
+
+function d = faceDomainFromHalfPlanes(obj, k, x, y)
+% Face k as an intersection of half-planes, one per boundary edge -- the representation an
+% UNBOUNDED face needs, and the fix for defect (1) in this file's header.
+%
+% The vertex-list route cannot express this face at all. faceVertexIndices takes one vertex per
+% edge, E(j,1), which for a RAY (E(j,3)==0) is its base point while E(j,2) is a DIRECTION point,
+% not a second corner. Two rays off a shared apex therefore both report the apex, and domain()
+% -- the bounded constructor, which closes the vertex loop -- turns that into a degenerate
+% NaN <= 0. Here every edge, segment and ray alike, is just "the line through E(j,1) and
+% E(j,2)", which is exactly right for both.
+%
+% ORIENTATION comes from P{k}'s own sign convention rather than from a centroid probe: orderEdges
+% stores -j when face k is on the LEFT of the directed edge E(j,1)->E(j,2) and +j when it is on
+% the right. So the left normal n = [-dy, dx] points INTO the face exactly when P{k}(i) < 0, and
+% the half-plane written the way region stores it (g <= 0) is -n.(p-base) in that case and
+% +n.(p-base) otherwise. Reading the sign off P also keeps this correct for an unbounded face,
+% where there is no bounded centroid to probe with.
+    face = obj.P{k};
+    g = sym.empty(1,0);
+    for i = 1:numel(face)
+        j = abs(face(i));
+        base = obj.V(obj.E(j,1), :);
+        other = obj.V(obj.E(j,2), :);
+        dvec = other - base;
+        n = [-dvec(2), dvec(1)];
+        gi = n(1)*(x - base(1)) + n(2)*(y - base(2));
+        if face(i) < 0
+            gi = -gi;                       % face on the left: the left normal points inward
+        end
+        g(end+1) = gi; %#ok<AGROW>
+    end
+    d = domain();
+    d = d.domainEdge(g, [x, y]);
 end
 
 function iVs = faceVertexIndices(obj, k)

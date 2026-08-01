@@ -92,17 +92,25 @@ function g = conjCPLQ(obj, idx)
     % (conjPieceCPLQ + maxQuaPar) cannot do, since maxQuaPar refuses curved-edge QuaPar inputs
     % from independent triangles. g is a QuaParCPLQ here, not a QuaPol/QuaPar -- see this
     % function's own header and QuaParCPLQ.m for the return-type rationale.
-    if obj.isDomBounded
-        p = quaPolToPlq(obj);
-        p = p.triangulate;
-        p = p.maximum;
-        g = QuaParCPLQ(p.maxConjugate);
-        return
-    end
-
-    error('PLQ:conjCPLQ:notImplemented', ...
-        ['General ''cplq'' conjugate over an unbounded multi-face domain is not implemented yet. ' ...
-         'See DESIGN.md II.5.1.']);
+    % UNBOUNDED domains take the same route. The isDomBounded gate that used to stand here was
+    % load-bearing while quaPolToPlq threw a face's ray direction away and plq_1p read region's
+    % intmax direction markers as ordinary coordinates; both are fixed (see quaPolToPlq's header
+    % and fanUnboundedFace/convEnvUnbounded). What is NOT yet done is the conjugate of a CURVED
+    % convex envelope over an unbounded face, and that raises
+    % plq_1p:conjugateFunction:unboundedNonAffine from inside this call rather than silently
+    % returning a number -- which is why the gate can come out here rather than being replaced
+    % by a narrower one that would have to duplicate the same test.
+    p = quaPolToPlq(obj);
+    p = p.triangulate;
+    p = p.maximum;
+    % Case C gets the same Step 3 cross-check conjEnvelopeViaCPLQ already applies. It was not
+    % wired here before, and that was a real hole: the per-piece conjugates can each be right
+    % while the cross-piece maximum drops cells, which returns plausible numbers rather than
+    % erroring. Measured on the 4-cone fan with convex faces -- each of the 4 faces produces a
+    % correct 4-cell conjugate, the assembled maximum keeps only 4 of the 16, and f*(-0.5,2)
+    % comes back 1.125 where the truth is 2.
+    assertStep3MatchesPieces(p, obj);
+    g = QuaParCPLQ(p.maxConjugate);
 end
 
 % ================================================================================================
@@ -228,12 +236,41 @@ function assertStep3MatchesPieces(p, env)
         for j = 1:numel(t)
             s = [t(i), t(j)];
             got = evalFunctionNDomain(p.maxConjugate, s);
+            % A piece that covers s with no region is +inf THERE, and max(anything, +inf) = +inf.
+            % This loop used to skip such a piece and take the max of the finite ones instead,
+            % which is only right when every piece's conjugate is finite everywhere -- true when
+            % every PRIMAL face is bounded, and false as soon as one is unbounded, where each
+            % piece's conjugate is +inf off a proper cone. Skipping then invents a finite ref and
+            % the gate fires on a correct answer: measured on f = max(0,x,y) as three wedges,
+            % whose conjugate really is the indicator of the simplex {s>=0, s1+s2<=1}, exact at
+            % 9 probes, yet reported as a Step 3 disagreement everywhere outside it.
+            % ...but "no region covers s" means +inf only for a piece whose PRIMAL face is
+            % unbounded. A bounded face has conjugate finite EVERYWHERE, so an uncovered point
+            % there is a coverage gap in Step 2's own output, not a genuine +inf, and demanding
+            % that the assembled maximum be +inf on it would fire the gate on cases that are
+            % right (conjCPLQTest's indefiniteTriangleThreeConvexEdgesUsesStep3 is one). The
+            % piece's own domain decides which reading applies.
+            refIsInf = false;
             ref = -inf;
             for k = 1:p.nPieces
                 v = evalFunctionNDomain(p.pieces(k).maxConjugate, s);
-                if isfinite(v)
+                if isnan(v)
+                    if pieceIsUnbounded(p.pieces(k))
+                        refIsInf = true;    % genuinely +inf here, so the max is
+                    end
+                elseif isfinite(v)
                     ref = max(ref, v);
                 end
+            end
+            if refIsInf
+                if isfinite(got)
+                    error('PLQ:conjCPLQ:cplqFailed', ...
+                        ['cPLQ''s Step 3 disagrees with its own Step 2 at s=(%.6f,%.6f): the ' ...
+                         'assembled maximum gives the finite value %.6f, but at least one piece ' ...
+                         'has f* = +inf there and the max of anything with +inf is +inf.'], ...
+                        s(1), s(2), got);
+                end
+                continue
             end
             if ~isfinite(ref)
                 continue        % no piece covers s: nothing to check against
@@ -296,5 +333,18 @@ function iVs = faceVertexIndices(obj, k)
     for i = 1:numel(face)
         j = face(i);
         if j > 0, iVs(i) = obj.E(j,1); else, iVs(i) = obj.E(-j,2); end
+    end
+end
+
+% ================================================================================================
+function tf = pieceIsUnbounded(pc)
+% Is this plq_1p piece's PRIMAL face unbounded? Decides whether an uncovered dual point means
+% f* = +inf (unbounded face) or a coverage gap (bounded face -- f* is finite everywhere there).
+    tf = false;
+    try
+        [~, kind] = pc.d.polygon.recessionRays;
+        tf = ~strcmp(kind, 'bounded');
+    catch
+        tf = false;     % non-affine facet: not a case this check can decide, so assume bounded
     end
 end

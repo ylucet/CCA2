@@ -67,7 +67,27 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             caseC = QuaPol(V, E, [1 0 1 0 0 0; 1 0 1 0 0 0], F);
             testCase.verifyEqual(caseC.conj().kind(), 'QuaParCPLQ');
-            testCase.verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ');
+
+            % Case C's BICONJUGATE does not work, and this assertion used to hide that. It read
+            % `verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ')`, which passes on an EMPTY piece
+            % list -- QuaParCPLQ(functionNDomain.empty()).kind() is still 'QuaParCPLQ'. Measured
+            % on pristine HEAD (2026-07-31): caseC.conj() gives 9 pieces, caseC.biconj() gives
+            % ZERO, i.e. f** = +inf everywhere, for an f that is convex and hence its own
+            % biconjugate.
+            %
+            % It fails in conjugateOfPiecePoly, behind a CHAIN of latent bugs each of which only
+            % becomes reachable once the one before it is fixed. Two are now fixed --
+            % region.getNormalConeVertexQ indexed py(1) before its own isempty(py) guard (dead
+            % code), and region.splitmax3 left its output unassigned when f1 < f2 at every vertex
+            % -- and the next one down is functionNDomain.getInterior, which indexes c2(2) under
+            % a guard that only tests size(c1,2). None of this is caused by the unbounded or
+            % general-quadratic work; the first conjugation is now RICHER (11 pieces rather than
+            % 9), which is what carries the second one far enough to reach these.
+            %
+            % Pinned as "errors" rather than by identifier, because the identifier moves as the
+            % chain is peeled. The invariant that matters is that it does not silently return a
+            % wrong f**. See SUPPORT_MATRIX.md section 7.
+            testCase.verifyError(@() caseC.biconj(), ?MException);
         end
 
         function generalPositiveDefiniteQuadratic(testCase)
@@ -301,18 +321,107 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             end
         end
 
-        function multiFaceUnboundedDomainStillNotImplemented(testCase)
-            % An UNBOUNDED multi-face domain (nf>1) still needs its own implementation (Case C
-            % only covers bounded domains). Reuses the known-good 4-face V/E/F geometry from
-            % plqvcAliasStillWorks below (a fan of 4 unbounded cones around the origin).
+        function caseCValuesAreCorrectForAGeneralQuadratic(testCase)
+        % THE TEST THAT WAS MISSING. Case C was only ever asserted by RESULT TYPE, never by a
+        % value, and it was returning the conjugate of co(x*y) whatever the face carried --
+        % measured on pristine HEAD, q=(x^2+y^2)/2 over the unit square gave f*(0.3,0.4) = 0.4
+        % where the truth is 0.125, f*(-0.5,0.2) = 0.2 for 0.02, f*(2,-1) = 2 for 1.5.
+        %
+        % Step 1 now classifies by the SIGNS OF THE EIGENVALUES of Q rather than by nCE (which
+        % tests edge slopes and so only classifies x*y): convex and affine keep q as their own
+        % envelope, concave get the affine interpolant through the actual values of q, and
+        % indefinite are moved into the frame where q IS x*y (xyFrame.m) so that cPLQ's own
+        % closed forms apply to the function they were written for.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];
+            S = [0.3 0.4; 1 1; -0.5 0.2; 2 -1; 0 0; -2 -2; 1.5 0.5];
+            % f6 = [x^2 xy y^2 x y const]; matrixForm reads Q = [c5 c6; c6 c7].
+            fs = { [1 0 1 0 0 0], ...      % (x^2+y^2)/2   convex
+                   [0 1 0 0 0 0], ...      % x*y           indefinite, cPLQ's own canonical case
+                   [2 0 -2 0 0 0], ...     % x^2 - y^2     indefinite, needs a frame change
+                   [0 3 0 7 -2 5], ...     % 3xy+7x-2y+5   indefinite with an affine part
+                   [-1 0 -1 0 0 0] };      % -(x^2+y^2)/2  concave
+            [gx, gy] = meshgrid(linspace(0,1,801));
+            G = [gx(:), gy(:)];
+            for k = 1:numel(fs)
+                f6 = fs{k};
+                g = QuaPol(V, E, [f6; f6], F).conj('cplq');
+                Q = [f6(1) f6(2); f6(2) f6(3)]; L = [f6(4); f6(5)]; c = f6(6);
+                qg = 0.5*sum((G*Q).*G,2) + G*L + c;
+                for t = 1:size(S,1)
+                    ref = max(G*S(t,:)' - qg);           % sup over the square, to grid resolution
+                    got = evalFunctionNDomain(g.fnd, S(t,:));
+                    testCase.verifyFalse(isnan(got), sprintf( ...
+                        'f = %s: s=(%g,%g) is covered by no dual region', ...
+                        mat2str(f6), S(t,1), S(t,2)));
+                    testCase.verifyEqual(got, ref, 'AbsTol', 1e-6, sprintf( ...
+                        'f = %s at s=(%g,%g)', mat2str(f6), S(t,1), S(t,2)));
+                end
+            end
+        end
+
+        function multiFaceUnboundedConvexFacesConjugateExactly(testCase)
+        % An UNBOUNDED multi-face domain whose faces carry CONVEX quadratics, end to end through
+        % the public entry. Each face's co q = q, so Step 1 does nothing and Step 2 conjugates a
+        % curved function via conjConvexOverPiece's active-set cells; Step 3 then assembles them.
+        % This used to be refused outright.
+        %
+        % Truth is available in closed form because each face is SEPARABLE on its own quadrant:
+        % sup over a half-line of s*t - a*t^2/2 is s^2/(2a) when s points into the half-line and
+        % 0 otherwise, and f* is the max over the four faces.
             V = [0 0;-1 0; 0 1;1 0;0 -1];
             E = [1 2 0;1 3 0;1 4 0;1 5 0];
             f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
             F = [1 2;2 3;3 4;4 1];
             p = QuaPol(V,E,f,F);
-            testCase.verifyEqual(p.nf, 4);
             testCase.verifyFalse(p.isDomBounded);
-            testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
+            g = p.conj('cplq');
+            % Which quadrant each face occupies is DERIVED from the face's own half-planes,
+            % not hardcoded: F fixes the face-to-cone assignment and getting it wrong by hand
+            % silently compares against the wrong closed form.
+            pp = quaPolToPlq(p);
+            ax = zeros(4,2); sg = zeros(4,2);
+            for k = 1:4
+                ax(k,:) = [f(k,1), f(k,3)];                  % Q = [c5 c6; c6 c7], c6 = 0 here
+                [A, ~, lin] = pp.pieces(k).d.polygon.linearForm;
+                A = A(lin,:);
+                for t = [1 -1]
+                    for u = [1 -1]
+                        if all(A*[t;u]*0.5 <= 1e-9), sg(k,:) = [t u]; end
+                    end
+                end
+            end
+            half = @(s,a,dir) (sign(s)==dir) * s^2/(2*a);
+            S = [0 0; 1 1; -1 -1; 2 0.5; -0.5 2; 3 -1; -2 3; 0.25 -0.75];
+            for t = 1:size(S,1)
+                best = -inf;
+                for k = 1:4
+                    best = max(best, half(S(t,1),ax(k,1),sg(k,1)) + half(S(t,2),ax(k,2),sg(k,2)));
+                end
+                got = evalFunctionNDomain(g.fnd, S(t,:));
+                testCase.verifyEqual(got, best, 'AbsTol', 1e-9, ...
+                    sprintf('at s=(%g,%g)', S(t,1), S(t,2)));
+            end
+        end
+
+        function step3DropsCellsOnSomeUnboundedAssemblies(testCase)
+        % THE REMAINING BLOCKER, pinned. The SAME 4-cone geometry as above, differing only in
+        % which quadratic sits on which cone, makes cPLQ's cross-piece maximum drop cells: each
+        % of the 4 faces produces a correct 4-cell conjugate and the per-piece maximum keeps all
+        % 4, then the assembled maximum keeps only 4 of the 16 -- losing face 1's s_2^2/2 cell on
+        % {s1<=0, s2>=0}, so f*(-0.5,2) comes back 1.125 for a truth of 2.
+        %
+        % So the defect is DATA-DEPENDENT, not universal, which is exactly why the cross-check
+        % matters: without it Step 3 returns plausible numbers on the cases it gets wrong.
+        % assertStep3MatchesPieces compares the assembled maximum against the pointwise max of
+        % the per-piece conjugates -- the same f*, computed the other way.
+            V = [0 0;-1 0; 0 1;1 0;0 -1];
+            E = [1 2 0;1 3 0;1 4 0;1 5 0];
+            f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
+            F = [3 2;2 1;1 4;4 3];
+            p = QuaPol(V,E,f,F);
+            testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
         end
 
         function multiFaceBoundedDomainViaCPLQIntegration(testCase)

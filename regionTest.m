@@ -195,5 +195,46 @@ classdef regionTest < matlab.unittest.TestCase
             testCase.verifyError(@() r.quadUnboundedBelow(eye(2), [0; 0]), ...
                 'region:quadUnboundedBelow:nonAffineFacet');
         end
+
+        function recessionRaysClassifiesTheConeAndReturnsItsExtremeRays(testCase)
+        % The directions must come from the INEQUALITIES. An unbounded region stores its
+        % directions as +/-intmax vertices, and Step 1 reads vertices as coordinates -- that is
+        % how an envelope ends up carrying 2147483647 and intmax^2 = 4611686014132420609.
+            x = sym('x'); y = sym('y');
+
+            % A pointed 2-dimensional cone: the second quadrant recedes along -x and +y.
+            [D, kind] = region([x, -y], [x y]).recessionRays;
+            testCase.verifyEqual(kind, 'wedge');
+            testCase.verifyEqual(size(D,1), 2);
+            testCase.verifyTrue(any(all(abs(D - [-1 0]) < 1e-12, 2)));
+            testCase.verifyTrue(any(all(abs(D - [ 0 1]) < 1e-12, 2)));
+
+            % A half-strip recedes along one ray only.
+            [D, kind] = region([y, -x-1, x-1], [x y]).recessionRays;   % y<=0, -1<=x<=1
+            testCase.verifyEqual(kind, 'ray');
+            testCase.verifyEqual(size(D,1), 1);
+            testCase.verifyLessThan(norm(D(1,:) - [0 -1]), 1e-12);
+
+            % A bounded region recedes along nothing at all.
+            [D, kind] = region([-x, -y, x+y-2], [x y]).recessionRays;
+            testCase.verifyEqual(kind, 'bounded');
+            testCase.verifyEmpty(D);
+
+            % A half-plane's recession cone contains a line, so there is no apex to fan from.
+            [~, kind] = region([-y], [x y]).recessionRays;
+            testCase.verifyEqual(kind, 'nonpointed');
+        end
+
+        function recessionRaysReturnsExACTdirectionsNotTrigRoundTrips(testCase)
+        % REGRESSION. The directions were once rebuilt as (cos t, sin t) from the candidate
+        % angle. That put 6.123e-17 where a 0 belonged, and since these directions go on to
+        % BUILD the sub-face half-planes in fanUnboundedFace, `x <= 0` came back as
+        % `x - 4967757600021511/81129638414606681695789005144064*y <= 0` -- a different, and no
+        % longer pointed, half-plane. A direction of a rational half-plane is rational; keep it.
+            x = sym('x'); y = sym('y');
+            D = region([x, -y], [x y]).recessionRays;
+            testCase.verifyEqual(D(abs(D) < 0.5), zeros(2,1), ...
+                'a zero component must be exactly zero, not 6e-17');
+        end
     end
 end

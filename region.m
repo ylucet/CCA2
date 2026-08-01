@@ -308,6 +308,26 @@ classdef region
            for i = 1:obj.nv
              edges = obj.getEdges(obj.vx(i),obj.vy(i));
 
+             % HISTORY: edges(1)/edges(2) were indexed unconditionally, which THREW
+             % ('Index exceeds the number of array elements') on the simplest unbounded region
+             % there is -- a 2-constraint wedge such as the first quadrant {-x<=0, -y<=0}.
+             % getEdges reports the constraints of obj.ineqs ACTIVE at a point, and the vertex
+             % list of an unbounded region also contains the box-clip vertices this file's own
+             % getVertices appends: the corners (+-intmax,+-intmax) and the per-vertex
+             % projections (vx(i),+-intmax), (+-intmax,vy(i)). Those lie on the IMPLICIT
+             % +-intmax box, which is not among obj.ineqs, so they have fewer than two active
+             % constraints -- (intmax,intmax) on the first quadrant has none at all.
+             %
+             % Such a vertex simply cannot be the "seam" this loop looks for (a vertex adjacent
+             % to a ray edge of obj.ineqs), so skipping it is not a workaround, it is the correct
+             % reading. Note the ANGLE SORT above has already put the whole list in boundary
+             % cyclic order, which is what getNormalConeVertex actually consumes -- it walks
+             % consecutive pairs j, j+1 and wraps at nv. This loop only chooses where the cycle
+             % STARTS, so failing to find a seam costs nothing.
+             if numel(edges) < 2
+                 continue
+             end
+
              [nv1, vx, vy] = obj.vertexOfEdge(edges(1));
              [nv2, vx, vy] = obj.vertexOfEdge(edges(2));
 
@@ -334,10 +354,12 @@ classdef region
                                          % elsewhere in this codebase (see maxQuaPar.m HISTORY).
            edges = obj.getEdges(obj.vx(iNext),obj.vy(iNext));
 
-           [nv1, vx, vy] = obj.vertexOfEdge(edges(1));
-           [nv2, vx, vy] = obj.vertexOfEdge(edges(2));
-           if nv1 == 1 | nv2 == 1
-             i = iNext;
+           if numel(edges) >= 2           % same box-clip guard as the search loop above
+               [nv1, vx, vy] = obj.vertexOfEdge(edges(1));
+               [nv2, vx, vy] = obj.vertexOfEdge(edges(2));
+               if nv1 == 1 | nv2 == 1
+                 i = iNext;
+               end
            end
 
            vx = obj.vx;
@@ -1370,12 +1392,27 @@ classdef region
                     return
                   else
                     r = [-ineq,ineq];
-                    return  
+                    return
                   end
               end
 
           end
-          
+
+          % HISTORY: falling off the end here left `r` UNASSIGNED, so the caller got
+          % MATLAB:unassignedOutputs ("Output argument r ... not assigned") from
+          % functionNDomain.maximumP rather than a split -- the same "output only ever assigned
+          % inside the loop" shape as region.getEdges had. The case is not degenerate: the loop
+          % exits without returning exactly when NO vertex has f1 >= f2, i.e. f2 is the maximum
+          % on the whole region and there is nothing to split.
+          %
+          % That still has a well-defined answer in this routine's own convention, which the
+          % caller relies on: ineqs(1) delimits where f(1) wins and ineqs(2) where f(2) does
+          % (maximumP assigns objL(i).f(1) to the first half and f(2) to the second). With
+          % f1 < f2 throughout, the first half must come out EMPTY and the second must be the
+          % whole region, which is exactly [-ineq, ineq] for ineq = f1 - f2: the first gives
+          % {f2 - f1 <= 0} = empty, the second {f1 - f2 <= 0} = everything. maximumP already
+          % drops an empty half (see its own isempty(d1) guard), so this needs nothing there.
+          r = [-ineq, ineq];
         end
 
         
@@ -1657,6 +1694,115 @@ classdef region
                     tf = true; why = 'a d''Qd == 0 recession direction has a negative slope';
                     return
                 end
+            end
+        end
+
+        function [D, kind] = recessionRays (obj)
+        % The EXTREME RAYS of this region's recession cone, as unit-length direction rows of D,
+        % read from the region's INEQUALITIES -- never from obj.vx/obj.vy.
+        %
+        % That last point is the whole reason this exists. An unbounded region stores its
+        % directions as vertices flagged +/-intmax (see finiteVertices, and getVertices' own
+        % "putting intmax for inf to avoid Nans" comment). Those markers are fine for the
+        % ordering and feasibility work region does with them, but they are NOT coordinates,
+        % and Step 1 reads coordinates: plq_1p's envelope formulas are built from vertex
+        % values, so a face carrying an intmax vertex produces an envelope with 2147483647 and
+        % intmax^2 = 4611686014132420609 in it (measured -- see plq_1p's own header). The
+        % recession directions have to come from the half-planes instead, and this returns them.
+        %
+        % kind reports the SHAPE of the cone R = {d : A*d <= 0}, since callers must branch on it:
+        %   'bounded'    R = {0}: the region is bounded, D is empty.
+        %   'ray'        R is a single ray (one extreme ray).
+        %   'wedge'      R is a pointed 2-dimensional cone (two extreme rays).
+        %   'nonpointed' R contains a line -- a half-plane, a full line, or all of R^2. D then
+        %                holds whatever boundary directions were found, but the region has no
+        %                apex to fan from and callers should refuse it rather than guess.
+        %
+        % WHY IT IS EXACT AND NEEDS NO CONE ENUMERATION. Writing d = (cos t, sin t), each
+        % constraint a'x <= b contributes a'd <= 0, i.e. the half-circle of angles t at least
+        % pi/2 away from a's own direction. R is the intersection of those half-circles, hence
+        % an ARC, and an arc's endpoints are boundary points of some contributing half-circle.
+        % So every extreme ray is one of the 2m angles phi_j +/- pi/2, and testing that finite
+        % candidate set against A is exhaustive. This is the same closed-form observation
+        % quadUnboundedBelow is built on, and the two are meant to be read together.
+        %
+        % Non-affine facets are REFUSED for quadUnboundedBelow's reason: dropping one enlarges
+        % the region, and so enlarges the recession cone, which is the unsafe direction here.
+            D = zeros(0,2); kind = 'bounded';
+            if isempty(obj)
+                return
+            end
+            [A, ~, lin] = obj.linearForm;
+            if ~all(lin)
+                error('region:recessionRays:nonAffineFacet', ...
+                    ['recessionRays needs every facet affine: a curved facet''s recession ' ...
+                     'behaviour is not a half-plane, and dropping it would enlarge the ' ...
+                     'recession cone.']);
+            end
+            tolA = 1e-9 * max(1, max(abs(A(:))));
+            rows = zeros(0,2);
+            for j = 1:size(A,1)
+                if norm(A(j,:)) > tolA
+                    rows(end+1,:) = A(j,:) / norm(A(j,:)); %#ok<AGROW>
+                end
+            end
+            if isempty(rows)
+                kind = 'nonpointed';           % no constraints at all: R is the whole plane
+                return
+            end
+            A = rows;
+
+            % Candidate extreme directions: the boundary of each constraint's half-circle. The
+            % VECTOR [-a2,a1] is kept alongside its angle and is what gets returned -- a
+            % direction of a rational half-plane is itself rational, and rebuilding it as
+            % (cos t, sin t) would not be. That is not cosmetic: the returned direction goes on
+            % to BUILD the sub-face inequalities in fanUnboundedFace, where a 6.1e-17 in place
+            % of a 0 turned `x <= 0` into `x - 4967757600021511/8.1e31*y <= 0` -- a genuinely
+            % different, and no longer pointed, half-plane.
+            candV = zeros(0,2); candTh = [];
+            for j = 1:size(A,1)
+                p = [-A(j,2), A(j,1)];
+                candV = [candV; p; -p];                                        %#ok<AGROW>
+                candTh = [candTh; atan2(p(2), p(1)); atan2(-p(2), -p(1))];     %#ok<AGROW>
+            end
+            tol  = 1e-9;
+            isFeas = @(th) all(A * [cos(th); sin(th)] <= tol);
+
+            keepF = arrayfun(isFeas, candTh);
+            if ~any(keepF)
+                kind = 'bounded';              % no admissible direction: nothing to recede along
+                return
+            end
+            candV = candV(keepF,:); candTh = candTh(keepF);
+
+            % A direction is an EXTREME ray when the arc stops there, i.e. at least one of its
+            % two immediate neighbours leaves R. delta is well below the spacing of the
+            % candidate set, which is what the classification actually has to resolve.
+            delta = 1e-7;
+            D = zeros(0,2);
+            for i = 1:numel(candTh)
+                th = candTh(i);
+                if isFeas(th + delta) && isFeas(th - delta)
+                    continue                   % interior of the arc, not an extreme ray
+                end
+                d = candV(i,:) / max(abs(candV(i,:)));   % rational, and O(1) in size
+                dup = false;
+                for k = 1:size(D,1)
+                    if norm(D(k,:) - d) < 1e-9, dup = true; break, end
+                end
+                if ~dup, D(end+1,:) = d; end %#ok<AGROW>
+            end
+
+            % R contains a line exactly when A has a nontrivial null space, so rank decides
+            % pointedness outright -- no need to test antipodal pairs.
+            if rank(A, tolA) < 2
+                kind = 'nonpointed';
+                return
+            end
+            switch size(D,1)
+                case 0,    kind = 'bounded';
+                case 1,    kind = 'ray';
+                otherwise, kind = 'wedge';
             end
         end
 
@@ -3138,6 +3284,16 @@ classdef region
       end
 
       function edges = getEdges(obj,vx,vy)
+          % HISTORY: `edges` was only ever assigned INSIDE the loop, so a point with no active
+          % constraint did not return an empty list -- it raised MATLAB:unassignedOutputs,
+          % "Output argument edges ... not assigned". That is not a hypothetical point: the
+          % vertex list of an unbounded region contains the box-clip vertices getVertices
+          % appends, and the corner (intmax,intmax) of the first quadrant {-x<=0,-y<=0} lies on
+          % the implicit +-intmax box rather than on either constraint, so nothing is active
+          % there. "No constraint is active at this point" is a perfectly good answer and callers
+          % can test numel(edges); erroring instead made poly2orderUnbounded unusable on the
+          % simplest unbounded region there is.
+          edges = [];
           n = 0;
           for i = 1:size(obj.ineqs,2)
               %obj.ineqs(i)
@@ -3847,9 +4003,16 @@ classdef region
                           px = obj.vx(j) + 0.1;
                           ey = subs(obj.ineqs(j).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
-                          py = py(1);
+                          % HISTORY: this read `py = py(1); if isempty(py) ... end`, indexing
+                          % BEFORE the emptiness guard, so an empty solve threw
+                          % "Index exceeds array bounds" and the guard below it was dead code.
+                          % The identical block a few lines above orders these correctly; this
+                          % copy did not. Reachable from functionNDomain.conjugateOfPiecePoly
+                          % once a Case C conjugate is rich enough to get this far.
                           if isempty(py)
-                          py = obj.vy(j);
+                              py = obj.vy(j);
+                          else
+                              py = py(1);
                           end
                       end
                     end
