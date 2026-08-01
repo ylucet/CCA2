@@ -180,9 +180,41 @@ classdef QuaPar < RatPar & Qua
                 if isempty(Pe), continue; end
                 vals = zeros(size(x,1), numel(Pe));
                 for t = 1:numel(Pe)
-                    vals(:,t) = QuaPar.evalConic(EC(abs(Pe(t)),:), x) * sign(Pe(t));
+                    cvec = EC(abs(Pe(t)),:);
+                    % Normalize by the conic's own magnitude so the tolerance below means the
+                    % same thing for every edge regardless of how its coefficients are scaled
+                    % (a conic and 1000x that conic define the same curve).
+                    sc = max(1, max(abs(cvec)));
+                    vals(:,t) = QuaPar.evalConic(cvec, x) * sign(Pe(t)) / sc;
                 end
-                flags = all(vals <= 0, 2);
+                % HISTORY: this was `all(vals <= 0, 2)` -- an EXACT comparison, no tolerance. A
+                % point sitting exactly ON a boundary is the case that breaks: the conic should
+                % evaluate to 0 there, but in floating point it comes out +-1e-17, and a single
+                % +1e-17 puts the point in NO face at all, leaving fVal at its Inf initialization.
+                % That is the "QuaPar.eval is wrong exactly AT a result vertex" defect --
+                % measured at ~1.4% of result vertices returning Inf or a wrong value, while
+                % being correct to ~1e-15 at radius 1e-8 from the same vertex, which is precisely
+                % the signature of an exact test on a quantity that is only zero in exact
+                % arithmetic.
+                %
+                % The tolerance scales with |x|^2 because a conic is quadratic in x: at |x| ~ 1e3
+                % the rounding error in evalConic is ~1e6 times larger than at |x| ~ 1.
+                % Loosening this cannot silently pick the WRONG face -- a point admitted by two
+                % faces is a genuine shared-boundary point, where a PLQ function is continuous
+                % and both faces give the same value; the code below already records that case
+                % as region 0.
+                %
+                % HONESTY ABOUT WHAT THIS IS AND IS NOT VERIFIED AGAINST. The change is motivated
+                % by the MECHANISM above, which matches the recorded symptom exactly. It is NOT
+                % backed by a reproduction: the 1.4% figure came from a randomized sweep in
+                % maxQuaPar's own validation, and an attempt to rebuild that sweep here did not
+                % assemble any qualifying case, so the specific failing vertices were never
+                % observed directly. What IS established is that this does not regress anything
+                % (full suite green, including QuaParTest and maxQuaParTest). Treat the defect as
+                % OPEN until someone reproduces it and confirms this closes it -- see
+                % SUPPORT_MATRIX.md section 7.
+                tolv = 1e-9 * max(1, max(abs(x), [], 2).^2);
+                flags = all(vals <= tolv, 2);
                 if any(flags)
                     fVal(flags) = QuaPar.evalPoly(obj.f(i,:), x(flags,:));
                     region(region~=-1 & flags) = 0;   % point on a shared boundary

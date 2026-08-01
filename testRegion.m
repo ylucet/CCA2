@@ -55,6 +55,26 @@ classdef testRegion < matlab.unittest.TestCase
         end
     end
 
+    methods (Static)
+        function verifyVerticesUpToRotation(testCase, r, wantX, wantY)
+        % Verify r's vertex list equals (wantX,wantY) up to a CYCLIC ROTATION -- see the note in
+        % testCreation for why rotation is the right equivalence and reversal is not.
+            gotX = double(r.vx); gotY = double(r.vy);
+            testCase.verifyEqual(numel(gotX), numel(wantX), 'vertex count');
+            n = numel(wantX);
+            ok = false;
+            for k = 0:n-1
+                idx = mod((0:n-1) + k, n) + 1;
+                if isequal(gotX(idx), wantX) && isequal(gotY(idx), wantY)
+                    ok = true; break
+                end
+            end
+            testCase.verifyTrue(ok, sprintf( ...
+                'vertices %s differ from %s by more than a cyclic rotation', ...
+                mat2str([gotX(:), gotY(:)]), mat2str([wantX(:), wantY(:)])));
+        end
+    end
+
     methods(Test)
         % Test methods
 
@@ -73,14 +93,25 @@ classdef testRegion < matlab.unittest.TestCase
           testCase.verifyEqual(isequal(testCase.r.ineqs(1).f,-x), true);
             testCase.verifyEqual(isequal(testCase.r.ineqs(2).f,-y), true);
             testCase.verifyEqual(isequal(testCase.r.ineqs(3).f,x+y-1), true);
-            testCase.verifyEqual(double(testCase.r.vx),[0,0,1]);
-            testCase.verifyEqual(double(testCase.r.vy),[0,1,0]);
+            % Vertices are compared UP TO CYCLIC ROTATION. A polygon's vertex list has no
+            % canonical starting point -- getVertices enumerates pairwise constraint
+            % intersections, so which vertex lands first depends on the order `solve` returns
+            % roots in, a Symbolic Math Toolbox implementation detail that does change between
+            % releases. On R2024b `s` came out (0,0),(0.5,0.5),(1,0) against a hardcoded
+            % (1,0),(0,0),(0.5,0.5): the SAME triangle, rotated by one. That is why this had
+            % stood as a longstanding "toolbox compatibility" failure -- it was the assertion
+            % over-specifying, not the geometry being wrong.
+            %
+            % Rotation only, NOT reversal: the cyclic ORDER carries the boundary orientation,
+            % which the pipeline genuinely depends on (region.getNormalConeVertex walks
+            % consecutive vertices and wraps), so a reversed list is a real defect and must
+            % still fail here.
+            testRegion.verifyVerticesUpToRotation(testCase, testCase.r, [0,0,1], [0,1,0]);
 
             testCase.verifyEqual(isequal(testCase.s.ineqs(1).f,-y), true);
             testCase.verifyEqual(isequal(testCase.s.ineqs(2).f,x+y-1), true);
             testCase.verifyEqual(isequal(testCase.s.ineqs(3).f,y-x), true);
-            testCase.verifyEqual(double(testCase.s.vx),[1,0,0.5]);
-            testCase.verifyEqual(double(testCase.s.vy),[0,0,0.5]);
+            testRegion.verifyVerticesUpToRotation(testCase, testCase.s, [1,0,0.5], [0,0,0.5]);
         end
 
         function testslopeAtVertex(testCase)

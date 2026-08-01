@@ -1,24 +1,48 @@
 # The `conj` return-type story
 
-## The problem
+## Status
 
-`conj` currently returns a **different class depending on the shape of its input**:
+**RESOLVED for the return TYPE (Option C, implemented 2026-07-27 — see Outcome below). A residual
+remains on the DATA, recorded at the end of this section.** What follows states the problem as it
+stood before that, because the reasoning is what justifies the lattice.
+
+### The problem, as it stood
+
+`conj` returned a **different class depending on the shape of its input**:
 
 | Input | `conj` returns | Where |
 |---|---|---|
 | Full-domain strictly convex quadratic | `QuaPol` | `conjCPLQ.m` Case A |
 | Single bounded triangle | `QuaPar` | Case B (`conjSingleTriangle`) |
-| General bounded domain | `QuaParCPLQ` | Case C (symbolic wrapper) |
+| General / unbounded domain | `QuaParCPLQ` | Case C (symbolic wrapper) |
 
-A caller cannot write `g = f.conj(); h = g.add(...)` without knowing which of three classes came
-back. Worse, `QuaParCPLQ` is not a peer of the other two — it is a thin wrapper around the
+A caller could not write `g = f.conj(); h = g.add(...)` without knowing which of three classes
+came back. Worse, `QuaParCPLQ` was not a peer of the other two — a thin wrapper around the
 vendored cPLQ `functionNDomain`, carrying a symbolic representation rather than a `V/E/Ec/f/F`
 mesh. It was given the *operator surface* of a `QuaPar` (`conj`/`add`/`scalarMul`/`addQuadratic`/
 `addScaledEnergy`/`eval`) precisely so that `infConv`/`moreau`/`proxAverage`/`QuaPar.biconj`
-compose with it unchanged — but that is duck typing, not a type guarantee.
+compose with it unchanged — but that was duck typing, not a type guarantee.
 
-This is the top item blocking a general release: it is the one gap a downstream project hits on
-its very first line of code.
+### Where it stands now
+
+Those three classes are all `RatPar`:
+
+```
+QuaPol     < RatPol & QuaPar        RatPol     < RatPar & Pol
+QuaPar     < RatPar & Qua           QuaParCPLQ < RatPar & Qua
+```
+
+so every `conj` result satisfies `isa(g,'RatPar')`, and `RatPar.kind()` discriminates. **The
+static return type is uniform; a caller needs no class dispatch.**
+
+**The residual is DATA, not type.** `QuaParCPLQ` is a `RatPar` but stores its pieces in `fnd` (a
+cPLQ `functionNDomain` array) and leaves the inherited `V/E/Ec/f/F` mesh empty — reconstructing
+that mesh from the exact symbolic regions is the separate task its own header describes. Two
+consequences a downstream caller can hit:
+  * reading `g.V` on a Case C result gives `[]`;
+  * `QuaParCPLQ.add` refuses a `QuaPol`/`QuaPar` operand, so `infConv` of a Case A/B result with a
+    Case C one **errors** rather than composing (it errors loudly; it does not do the wrong thing).
+That is the remaining item to settle before a tag promises cross-case composition.
 
 ---
 

@@ -179,6 +179,10 @@ function g = maxQuaPar(g1, g2)
 %     - Those 85 results were checked at every result VERTEX, every straight-edge MIDPOINT, and 60
 %       generic interior points each. Exact (to ~1e-14) at every edge midpoint (340/340) and every
 %       interior point (5100/5100).
+%     - CAVEAT ON EVERY NUMBER IN THIS BLOCK: the sweep that produced them was a throwaway
+%       script, not committed, and its seed was not recorded, so none of these figures can
+%       be re-derived. Re-running any of this means writing a NEW seeded, committed sweep --
+%       see SUPPORT_MATRIX.md section 0.1, which now requires that of any quoted measurement.
 %     - Exactly AT a result vertex, ~0.8% (9/1105) disagree -- QuaPar.eval's exact, no-tolerance
 %       point location can leave a corner unclaimed (+Inf) or claimed by an adjacent face. This is
 %       PRE-EXISTING, not introduced here: the same sweep restricted to purely POLYHEDRAL pairs

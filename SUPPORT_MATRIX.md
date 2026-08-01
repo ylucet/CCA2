@@ -13,6 +13,49 @@ is a longstanding toolbox-compatibility issue unrelated to the conjugate pipelin
 
 ---
 
+## 0.0 Downstream consumers — check before renaming anything
+
+**The SCIP feasibility spike (`AI/spike/SCIP`) calls into this toolbox** through the MATLAB
+Engine API for Python. Its glue is `SCIP/src/cca2ConvexEnvelope.m`, and it uses exactly one entry
+point: **`convEnvCPLQ`** (the convex ENVELOPE), consuming the resulting `RatPol`'s
+`V/E/F/f(:,5:10)/den` as plain arrays. It does **not** call `conj`, `biconj`, `partialConj`, or
+any `QuaPar` method — per-node cut math is pure Python after one bridge call.
+
+This matters twice over:
+
+1. **`QuaPol.m`'s 2026-07-27 rename note is wrong.** It says no compatibility shim was left for
+   `QuaPoly` "because CCA2 has no tagged release, so nothing external can depend on it". SCIP's
+   glue constructs `QuaPoly(Vin, Ein, fin, Fin)`, so the rename broke that bridge silently.
+   `QuaPoly.m` is now an alias, as `PLQVC.m` already was. **Do not remove it, and check this
+   section before renaming any other public name.**
+2. **The blocker list below is largely irrelevant to SCIP.** Every open item in section 8 lives
+   in the `conj`/`biconj` pipeline. The convex-envelope path SCIP actually uses is the mature one
+   — bounded faces, no `QuaPar.eval`, no cPLQ Step 3.
+
+---
+
+## 0.1 Reproducibility rule for quoted measurements
+
+**Every number quoted in this file, in `DESIGN.md`, or in a source header must be re-derivable.**
+If it came from a randomized sweep, the sweep must be COMMITTED and must set an explicit seed
+(`rng(<seed>)`), and the quote must name the script and the seed. A measurement whose generator
+was a throwaway script is an unreproducible claim, however carefully it was made.
+
+This rule exists because the toolbox already has several such claims and they have cost real time:
+
+| Quoted | Where | Status |
+|---|---|---|
+| `QuaPar.eval` wrong at ~1.4% of polyhedral result vertices (5/356), ~0.8% curved (9/1105) | `maxQuaPar.m` header, `DESIGN.md`, section 7 | **generator not kept, seed unknown — NOT reproducible.** An attempt on 2026-08-01 to rebuild the sweep assembled no qualifying case, so the fix for it could not be validated against the number it is meant to fix |
+| 115 sampled splits, 85 assembled, 340/340 edge midpoints, 5100/5100 interior points | `DESIGN.md`, `maxQuaPar.m` | same: generator not kept |
+| 58 → 76 of 395 quadrilaterals after the arc-split work | session handoff, section 4 | same: generator not kept |
+
+Note the committed test suite itself IS deterministic — there is no `rand`/`randn`/`randi`
+anywhere in it. The problem is entirely that the *validation* sweeps behind these figures were
+never made part of the repository. When a future sweep is run, commit it under a name like
+`sweepXxx.m`, seed it, and cite it here.
+
+---
+
 ## 0. Scope — read this first
 
 **CCA2's goal is `QuaPol` conjugate and biconjugate.** It is *not* to cover every possible
@@ -340,7 +383,7 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 | Defect | Impact | Where |
 |---|---|---|
 | `mergeL` / `removeTangent` exact-tie-point gap | Wrong result at exact symmetric tie points | vendored cPLQ `functionNDomain` / `plq.biconjugateF`; inherited by `QuaParCPLQ.conj` |
-| `QuaPar.eval` exactly **at a vertex** | ~1.4% of result vertices return `Inf` or a wrong value; correct to ~1e-15 at radius 1e-8 | `QuaPar.eval`'s exact, no-tolerance point location — affects the polyhedral path too, not just curved |
+| `QuaPar.eval` exactly **at a vertex** — **fix attempted 2026-08-01, NOT verified** | ~1.4% of result vertices return `Inf` or a wrong value; correct to ~1e-15 at radius 1e-8. Cause is `QuaPar.eval`'s exact, no-tolerance point location: `all(vals <= 0, 2)` on a conic that is only zero in exact arithmetic, so a `+1e-17` leaves the point in NO face. A relative tolerance is now applied. **Treat as OPEN**: the 1.4% came from a randomized sweep in `maxQuaPar`'s validation, an attempt to rebuild that sweep assembled no qualifying case, and the failing vertices were never observed directly — so the fix matches the mechanism but is unproven. It is confirmed not to regress (full suite green) | `QuaPar.eval` |
 | `testRegion/testCreation` | 1 failing test | toolbox-compatibility, unrelated to the conjugate pipeline |
 | ~~Step 1 ignored the face's function~~ - **FIXED 2026-08-01** | Step 1 now classifies by the SIGNS OF THE EIGENVALUES of `Q`, not by `nCE` (which tests edge slopes and so only classifies `x*y`). Convex/affine keep `q` as their own envelope; concave get the affine interpolant through the actual values of `q`; indefinite are moved by `xyFrame.m` into the frame where `q` **is** `x*y`, so cPLQ's own closed forms apply to the function they were written for. Case C values verified exact against brute force for `(x^2+y^2)/2`, `x*y`, `x^2-y^2`, `3xy+7x-2y+5` and `-(x^2+y^2)/2`, where `f*(0.3,0.4)` used to be `0.4` for a truth of `0.125` | `plq_1p.convexEnvelope1`, `xyFrame.m` |
 | Case C's **biconjugate** does not work | `caseC.biconj()` gives ZERO pieces on pristine `HEAD` - `f** = +inf` everywhere - for an `f` that is convex and hence its own biconjugate. The old test passed anyway: it asserted only `.kind()`, and `QuaParCPLQ(empty).kind()` is still `'QuaParCPLQ'`. It fails inside `conjugateOfPiecePoly` behind a CHAIN of latent bugs, each reachable only once the previous is fixed. Fixed so far: `region.getNormalConeVertexQ` indexed `py(1)` before its own `isempty(py)` guard (dead code); `region.splitmax3` left its output unassigned when `f1 < f2` at every vertex. Next down: `functionNDomain.getInterior` indexes `c2(2)` under a guard testing only `size(c1,2)`. Unrelated to the unbounded / general-quadratic work, which only makes the FIRST conjugation richer (11 pieces vs 9) and so carries the second far enough to reach these | `functionNDomain.conjugateOfPiecePoly` |
