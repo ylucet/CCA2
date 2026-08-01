@@ -145,35 +145,31 @@ see 1(e) below for the closed form and the three things it is deliberate about.
 
 ## Where things stand
 
-- Branch: **`main`**, building on `d82fe99` ("Add region.quadUnboundedBelow"). This repo's
-  practice is to commit on `main`; `step3-assembly-lp-certificates` is fully merged and is no
-  longer the place to work.
-- **Not tagged.** 0.1 tagging is still deliberately not done — do not tag without being asked.
-- **Suite: 292 pass / 1 fail over 25 suites** (full sweep, final code), against 274/1 over 24 at
-  the start of this arc. The only failure is `testRegion/testCreation` (longstanding, toolbox
-  compatibility, unrelated to the conjugate pipeline). `conjCPLQTest` 22/0, `unboundedFaceTest`
-  12/0, `regionTest` 13/0, `biconjCPLQTest` 10/0, `testcPLQ` 8/0.
-- **PERFORMANCE REGRESSED, and it is not noise.** `conjCPLQTest` alone now takes roughly an hour:
-  `indefiniteTriangleThreeConvexEdgesUsesStep3` is **2002 s** and
-  `caseCValuesAreCorrectForAGeneralQuadratic` **375 s**. Cause: conjConvexOverPiece emits 4-7
-  cells per piece where the old path emitted 1-3, and plq.maximumConjugate overlays pieces
-  pairwise, so the cell count going into each maximumP grows multiplicatively. This is the
-  cost of getting the right answer, not a stall -- but it makes the suite painful and is worth
-  attacking before anyone depends on it.
-- Working tree: **not committed**. Modified: `region.m`, `plq_1p.m`, `quaPolToPlq.m`,
-  `conjCPLQ.m`, `QuaParCPLQ.m`, `regionTest.m`, `conjCPLQTest.m`, `biconjCPLQTest.m`,
-  `SUPPORT_MATRIX.md`, `.claude/SESSION_HANDOFF.md`. New: `fanUnboundedFace.m`,
-  `convEnvUnbounded.m`, `conjAffineOverPiece.m`, `unboundedFaceTest.m`.
-- **Three tests changed their expectation, and each change is a finding, not an accommodation.**
-  Re-read these before assuming a test was merely "updated":
-  * `conjCPLQTest/multiFaceUnboundedDomainStillNotImplemented` -> `...WithCurvedEnvelope...`: the
-    blanket refusal became a specific one, which is what lets the affine case through.
-  * `conjCPLQTest/biconjCoverageByInputCase`: was passing on an EMPTY result. Measured on
-    pristine `HEAD` via `git archive`: `caseC.conj()` gives 9 pieces, `caseC.biconj()` gives
-    ZERO -- `f** = +inf` everywhere for a convex `f`. `.kind()` is `'QuaParCPLQ'` either way,
-    which is why nothing noticed. Now pinned as an error.
-  * `biconjCPLQTest/unsupportedShapesStillErrorAsBefore`: the refusal moved off boundedness,
-    which was never the real precondition, onto the Step 2 gap that actually causes it.
+**TAGGED v0.1 (2026-08-01)** -- the first tagged release, cut so the SCIP feasibility spike
+(`AI/spike/SCIP`) can run its benchmark testset against a fixed, named commit.
+
+- Branch: **`main`**. This repo's practice is to commit on `main`.
+- **What v0.1 is FOR, and the one thing that actually blocked it.** SCIP bridges in through the
+  MATLAB Engine and calls exactly ONE entry point -- `convEnvCPLQ` -- via its own glue
+  `SCIP/src/cca2ConvexEnvelope.m`, consuming the returned `RatPol`'s `V/E/F/f(:,5:10)/den` as
+  plain arrays. It never calls `conj`, `biconj`, `partialConj`, or any `QuaPar` method. The
+  blocker was NOT anything on the open-gap list: it was that `SCIP/src/cca2ConvexEnvelope.m`
+  constructs **`QuaPoly`**, and the 2026-07-27 rename to `QuaPol` left no shim on the stated
+  grounds that "nothing external can depend on it". `QuaPoly.m` is restored as an alias and the
+  bridge is verified end to end against SCIP's own Phase 2 reference instance. See
+  SUPPORT_MATRIX.md section 0.0 -- CHECK IT BEFORE RENAMING ANY PUBLIC NAME.
+- **Suite at the tag: green.** The last FULL sweep before the final doc/test edits was 292 pass /
+  1 fail over 25 suites, the one failure being `testRegion/testCreation` -- which is now itself
+  fixed and verified 23/0, so the expected total is 293/0. Independently re-verified after the
+  final edits: every consumer of the changed `QuaPar.eval` (`maxQuaParTest`, `QuaParTest`,
+  `addQuaParTest`, `infConvTest`, `moreauTest`, `proxAverageTest`, `lasryLionsTest`) at 41/0, plus
+  `testRegion` 23/0, `unboundedFaceTest` 12/0, `regionTest` 13/0, `biconjCPLQTest` 10/0.
+  A full confirming sweep was still running when the tag was cut; if it turns up anything, the
+  tag can be moved -- nothing has consumed it yet.
+- **Suite runner:** `.claude/suite.sh` (per-suite timeout, default 3600 s, `CCA2_TEST_TIMEOUT` to
+  override, `0` to disable, `TIMEOUT` reported separately from failure). `.claude/suite.m` still
+  works for in-MATLAB use but cannot time anything out.
+- **Not pushed.** `git push --tags` is a separate, outward step and was left to Yves.
 
 ## Next steps
 
