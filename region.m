@@ -10,33 +10,19 @@ classdef region
 
 
      methods (Static)
-         % ---- probe DIRECTIONS for maxArray's tie-breaking ------------------------------
-         % maxArray probes points a small step either side of a region vertex to break a tie
-         % between two candidate functions that agree at every vertex. It picks those steps
-         % from the region's constraint SLOPES, and a slope is a lossy encoding of a
-         % direction: a vertical direction has no slope, and the perpendicular of a
-         % horizontal one is vertical. Both degeneracies occur here (see maxArray), and a
-         % symbolic slope makes them invisible to a syntactic `d == 0` test -- the slope that
-         % broke f=xy over conv{(0,0),(3,3),(1,2)} was
+         % ---- vertex-index guard ---------------------------------------------------------
+         % HISTORY: this block also held probeAlong/probePerp, which turned a constraint SLOPE
+         % into actual probe points for maxArray's tie-breaking. maxArray no longer probes at
+         % all -- a sample cannot prove that one function dominates another, and taking it as
+         % proof produced two silent wrong answers (read maxArray's header) -- so both helpers,
+         % and maxFromPt/maxFromPts with them, have gone. The lesson they recorded is worth
+         % keeping even though the code is not: a slope is a LOSSY encoding of a direction (a
+         % vertical direction has no slope, the perpendicular of a horizontal one is vertical),
+         % and a symbolic slope hides its own degeneracy from a syntactic `d == 0` test -- the
+         % slope that broke f = x*y over conv{(0,0),(3,3),(1,2)} was
          %   2^(1/2)/4 + (4*2^(1/2) - 4)/(2*(4*2^(1/2) - 8)),
-         % which IS zero but is not the symbol 0, so `d == 0` was false, `-1/d` stayed an
-         % unevaluated symbolic expression, and it only blew up much later inside subsF's
-         % simplifyFraction as symbolic:kernel:DivisionByZero. These two helpers test the
-         % degeneracies numerically and emit points, not slopes.
-         %
-         % Deliberately NOT treated as degenerate: a slope of intmax, which slopes2 uses to
-         % flag a vertical constraint. Callers pass it straight through as a huge finite
-         % slope, which probes far out along an unbounded region's recession direction, and
-         % testMaxMultiRegion/testOpenconvex depends on those far probes being feasible.
-
-         function P = probeAlong (x0, y0, d, h)
-         % The two points a step h either side of (x0,y0) along the direction of slope d.
-             if ~isfinite(double(d))
-                 P = [x0, y0 + h; x0, y0 - h];        % vertical direction
-             else
-                 P = [x0 + h, y0 + d*h; x0 - h, y0 - d*h];
-             end
-         end
+         % which IS zero but is not the symbol 0, so `-1/d` stayed unevaluated and only blew up
+         % much later inside subsF's simplifyFraction. Test the geometry, never the syntax.
 
          function kk = probeVertexIndex (k, j, nv)
          % objective: the vertex index getNormalConeVertexQ's isZero fallback may safely index.
@@ -59,18 +45,6 @@ classdef region
              kk = k;
              if kk < 1 || kk > nv
                  kk = j;
-             end
-         end
-
-         function P = probePerp (x0, y0, d, h)
-         % The same, along the perpendicular to the direction of slope d.
-             dd = double(d);
-             if abs(dd) < 1.0d-12
-                 P = [x0, y0 + h; x0, y0 - h];        % perpendicular to horizontal
-             elseif ~isfinite(dd)
-                 P = [x0 + h, y0; x0 - h, y0];        % perpendicular to vertical
-             else
-                 P = region.probeAlong(x0, y0, -1/d, h);
              end
          end
 
@@ -1132,8 +1106,12 @@ classdef region
 
          
          function m = slopes2 (obj)
-         % One representative boundary slope per constraint, for maxArray's tie-break probe
-         % directions. A CURVED constraint has no single slope, so its tangent is taken at a
+         % One representative boundary slope per constraint. NOTE: its only caller was
+         % maxArray's tie-break probing, which no longer exists (see maxArray's header), so
+         % nothing in the toolbox calls this today. It is kept because the note below records a
+         % measured performance trap that any future caller needs to know about.
+         %
+         % A CURVED constraint has no single slope, so its tangent is taken at a
          % vertex of this region that lies on it -- and a curved constraint need not have one.
          % That case was unreachable while simplifyUnboundedRegion deleted every constraint
          % missing a finite vertex; now that deletion requires a real redundancy certificate
@@ -1202,99 +1180,108 @@ classdef region
          end
 
          % max over a region
-         function [l, fmax, index, lsing] = maxArray (obj, f1, f2) 
-          lsing = false;  
+         function [l, fmax, index, lsing] = maxArray (obj, f1, f2)
+        % objective: which of f1, f2 is the larger ON obj -- l true with fmax/index when one of
+        %   them dominates, l false when neither does (the caller then splits on f1 = f2).
+        %
+        % THE TIE CASE, AND WHY IT NO LONGER SAMPLES. When f1 and f2 agree at every vertex, the
+        % vertices say nothing about which is larger inside, and this routine used to fall back
+        % to PROBING: step 0.1 off a vertex along bisectors of the constraint slopes, and take
+        % the first feasible probe's verdict as the answer. A probe is evidence, never proof,
+        % and that shortcut returned wrong numbers on two independent inputs:
+        %
+        %   * f = x*y on [0,1]^2 as TWO triangles. The triangles' conjugates overlap in the lens
+        %     {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2}, whose only vertices (0,0) and (1,1) both
+        %     lie on s1 = s2. One probe put s2 on the whole lens, so f*(0.66,0.18) came out 0.18
+        %     for a truth of 0.66 -- wrong at 800 of 40000 grid points, and silent.
+        %   * The 4-cone fan of conjCPLQTest/step3DropsCellsOnSomeUnboundedAssemblies. On the
+        %     quadrant {s1<=0, s2>=0} the candidates are s2^2/2 and s1^2/2 + s2^2/4, whose
+        %     difference s2^2/4 - s1^2/2 changes sign inside; the cone's single vertex is the
+        %     origin, where both vanish, and the only feasible probe (-0.1, 0) reported the
+        %     wrong one, giving f*(-0.5,2) = 1.125 for a truth of 2.
+        %
+        % What replaces it is a SOUND test that is also cheaper: ask the symbolic engine whether
+        % f1 - f2 has one sign EVERYWHERE. That is sufficient, not necessary -- a difference
+        % that is sign-definite only on obj is reported as undecided -- and being undecided is
+        % safe, because splitting on f1 = f2 is always VALUE-correct: the two functions are
+        % equal on the split boundary, so even a half that survives as a degenerate sliver
+        % carries the right value, and maximumP/maxEqDom already drop a half that comes out
+        % empty. Splitting unnecessarily costs a cell; deciding wrongly costs a wrong answer.
+        %
+        % Refusing to guess also removed the whole probe apparatus -- slopes2, probeAlong,
+        % probePerp, maxFromPt -- and with it the slopes2 call this routine made on EVERY
+        % comparison, which was pure overhead outside the tie case.
+        %
+        % TWO LIMITS, both deliberate and both measured rather than assumed:
+        %
+        %   * The refusal applies only to a POLYNOMIAL pair. A region's constraints must be
+        %     polynomial, so splitting on a rational f1 = f2 cannot be represented at all -- see
+        %     the comment at that branch. Refusing there produced symbolic:coeffs:NotAPolynomial
+        %     out of region.normalize1 on the biconjugate path, where every operand is rational.
+        %   * The non-tie path below still concludes from vertex values alone, which is exact
+        %     only when obj is the convex hull of its vertices -- a curved-edge or unbounded
+        %     region is not. Same class of hole, not observed to fire wrongly, and closing it
+        %     would split far more aggressively.
+        %
+        % Both limits are the same trade: this routine now refuses to guess exactly where the
+        % refusal is actionable, and no further. An earlier, unrestricted version of this test
+        % broke conjCPLQTest/multiFaceUnboundedConvexFacesConjugateExactly, which is how the
+        % first limit came to be measured rather than guessed at.
+          lsing = false;
           fv1 = obj.funcVertices (f1);
           fv2 = obj.funcVertices (f2);
-          m = obj.slopes2();
           for i = 1:size(fv1,2)
               sv1(i) = fv1(i).f;
               sv2(i) = fv2(i).f;
           end
-          
+
           l = true;
           if all(abs(double(sv1 - sv2))< 1.0d-14)
-              if size(sv1) == 1
+              g = simplifyFraction(f1.f - f2.f);
+              % The variables MUST be re-declared REAL before asking. A bare sym('s_1') is
+              % COMPLEX to the symbolic engine, and over the complex numbers -s_1^2/2 <= 0 is
+              % simply not true -- so isAlways cannot decide the sign of any quadratic
+              % difference, which is precisely the case that matters here, and every comparison
+              % would fall through to an unnecessary split. (Observed: the 4-cone fan then
+              % produced the vacuous constraint -s_1^2 <= 0 as a split boundary and crashed
+              % downstream in removeTangent.) Substituting fresh real symbols asks the question
+              % that was actually meant without touching global assumptions.
+              gv = symvar(g);
+              if ~isempty(gv)
+                  rv = sym('maxArrayReal_%d', [1 numel(gv)], 'real');
+                  g = subs(g, gv, rv);
+              end
+              if isAlways(g >= 0, 'Unknown', 'false')
                   fmax = f1;
-                  index=1;
-              end
-              nx = 0;
-              for iv = 1:obj.nv
-                  if (abs(obj.vx(iv))==intmax|abs(obj.vy(iv))==intmax)
-                      continue
-                  end
-                  nx = nx + 1;
-                  vx0(nx) = obj.vx(iv);
-                  vy0(nx) = obj.vy(iv);
-              end
-              % COLLECT the probe points first and decide from ALL of them (maxFromPts), rather
-              % than returning on the first feasible one. Read maxFromPts' header for why: the
-              % vertices tie here by hypothesis, so a single sample cannot establish dominance,
-              % and taking it as proof is what made f* wrong on a curved overlap cell.
-              P = zeros(0,2);
-              if nx > 1
-                P = [P; mean(vx0), mean(vy0)];
-              end
-              % use slope mid pt to get directions. Every step below goes through
-              % region.probeAlong/probePerp, which turn a (possibly degenerate) slope into
-              % actual points -- see their header for why a slope alone is not enough.
-              for i = 1:size(m,2)
-
-                for j = i+1: size(m,2)
-                  % NOTE: `inf` here, not intmax. slopes2 flags a vertical constraint as
-                  % intmax, so a vertical constraint deliberately falls into the arithmetic
-                  % mean below and yields a huge-but-finite bisector slope -- which is what
-                  % the unbounded regions in testMaxMultiRegion/testOpenconvex rely on to
-                  % find a feasible probe point far out along the recession direction.
-                  % Treating intmax as infinite here (and taking the angle bisector instead)
-                  % leaves those probes 0.1 from the vertex, all infeasible, so maxArray
-                  % returns undecided and maxEqDom falls through to splitmax3, which then
-                  % builds a rational inequality that region.normalize1 cannot take
-                  % ('symbolic:coeffs:NotAPolynomial').
-                  if (abs(m(i))~= inf) & (abs(m(j))~= inf)
-                    d =  (m(i)+m(j) )/2;
-                  else
-                     % disp('infinity')
-                  if (abs(m(i))==inf)
-                        d = tan((pi/2 + atan(m(j)))/2);
-                    else
-                        d = tan((pi/2 + atan(m(i)))/2);
-                  end
-                  end
-                  for iv0 = 1:nx
-                      P = [P; region.probeAlong(vx0(iv0), vy0(iv0), d, 0.1); ...
-                              region.probePerp(vx0(iv0), vy0(iv0), d, 0.1)];
-                  end
-                end
-              end
-              if size(m,2) == 1
-                  % Only one constraint, so the loop above found no pair: probe perpendicular
-                  % to that constraint.
-                  for iv0 = 1:nx
-                      P = [P; region.probePerp(vx0(iv0), vy0(iv0), m(1), 0.1)];
-                  end
-              end
-              [l, fmax, index, seen] = maxFromPts(obj, P, [f1,f2]);
-              if l
+                  index = 1;
+                  return
+              elseif isAlways(g <= 0, 'Unknown', 'false')
+                  fmax = f2;
+                  index = 2;
                   return
               end
-              if seen == 3
-                  % Both signs of f1-f2 occur strictly inside obj, so NEITHER dominates. Say so
-                  % (l = false, lsing = false) and let the caller split on f1 = f2 -- both
-                  % maximumP and maxEqDom treat l = false exactly that way. Returning here
-                  % matters: falling through to the vertex comparison below would report f2 as
-                  % the max, because every vertex is a tie and `all(sv1 <= sv2)` is then true.
+              % REFUSE ONLY WHERE THE REFUSAL CAN BE ACTED ON. Saying "neither dominates" makes
+              % the caller split on f1 = f2, and a region's constraints must be POLYNOMIAL:
+              % splitmax3 hands f1 - f2 straight to region(), whose normalize1 raises
+              % symbolic:coeffs:NotAPolynomial on a rational one. Every second-pass conjugate is
+              % rational, so on the biconjugate path that error is the common case, not a corner
+              % -- which is why this branch checks first.
+              %
+              % KNOWN HOLE, deliberately left: for a RATIONAL pair whose sign this test cannot
+              % settle, the vertex comparison below still decides, and on an all-vertices-tied
+              % cell that means "f2 wins" for no better reason than the order of the operands.
+              % That is the same unsound shape the probing had, now confined to the one case
+              % where the sound answer cannot be represented. Closing it needs splitmax3 to clear
+              % denominators (sound only where both are provably nonzero on the cell) -- see
+              % biconjugateTest's failure-site comment.
+              if f1.isPolynomial && f2.isPolynomial
+                  l = false;
                   fmax = 0;
                   index = 0;
                   return
               end
-             % disp("SINGLETON REGION")
-             % obj.print
+          end
 
-              lsing = true;
-
-              end
-              
 
           if all(double(sv1) <= double(sv2))
               fmax = f2;
@@ -1310,96 +1297,6 @@ classdef region
          
         end
         
-        function [l, fmax, index, seen] = maxFromPts(obj, P, f)
-        % objective: decide which of f(1), f(2) is the larger ON obj from a SET of probe points,
-        %   requiring every decisive probe to agree.
-        %
-        % [input]  P : k-by-2 candidate probe points (infeasible ones are ignored)
-        % [output] l    : true only if some probe was decisive and ALL decisive probes agree
-        %          fmax : the winner when l is true, 0 otherwise
-        %          index: 1 or 2 matching fmax, 0 otherwise
-        %          seen : bitmask of the signs actually observed -- 0 nothing decisive,
-        %                 1 only f(1) bigger, 2 only f(2) bigger, 3 BOTH (neither dominates)
-        %
-        % WHY NOT "THE FIRST FEASIBLE PROBE WINS", which is what this replaces. maxArray reaches
-        % this point only when f(1) and f(2) tie at every vertex of obj -- i.e. exactly when the
-        % vertices carry no information about which is larger inside. Concluding global dominance
-        % from one interior sample is then unsound, and it was wrong in practice: for f = x*y on
-        % the unit square given as TWO triangles, the two triangles' conjugates overlap in the
-        % lens {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2}, whose two vertices (0,0) and (1,1) both sit
-        % on the line s1 = s2 -- so s1 and s2 tie at both vertices AND at the centroid (1/2,1/2),
-        % while s1 - s2 takes BOTH signs strictly inside. The first feasible probe picked one side
-        % and the whole lens came back carrying s2, giving f*(0.66,0.18) = 0.18 where the true
-        % value is 0.66, and downstream a biconjugate equal to the per-face envelope rather than
-        % the McCormick one. Pinned by biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope.
-        %
-        % Note the vertices are not trustworthy on their own either: an affine f(1)-f(2) attains
-        % its max over a region at a vertex only when the region is the convex hull of its
-        % vertices, which a CURVED-edge (or unbounded) region is not -- the lens above is bounded
-        % by two parabolas and s1-s2 is maximized on an arc, not at a vertex.
-        %
-        % Disagreement is reported rather than resolved: the caller splits on f(1) = f(2), and
-        % splitmax3/maximumP already drop a half that comes out empty, so being conservative here
-        % costs at most an extra piece and never a wrong value.
-            l = false; fmax = 0; index = 0; seen = 0;
-            for ip = 1:size(P,1)
-                s = P(ip,:);
-                if ~obj.ptFeasible(obj.vars, s)
-                    continue
-                end
-                dif = double(f(1).subsF(obj.vars,s).f - f(2).subsF(obj.vars,s).f);
-                if abs(dif) <= 1.0d-14
-                    continue
-                end
-                if dif > 0
-                    seen = bitor(seen, 1);
-                else
-                    seen = bitor(seen, 2);
-                end
-                if seen == 3
-                    return          % both signs already seen; nothing further can change that
-                end
-            end
-            if seen == 1
-                l = true; fmax = f(1); index = 1;
-            elseif seen == 2
-                l = true; fmax = f(2); index = 2;
-            end
-        end
-
-        function [l,fmax,index] = maxFromPt(obj, s, f)
-        % Single-point version, superseded by maxFromPts and no longer called from anywhere in
-        % the toolbox -- read that routine's header for why one point cannot decide dominance.
-        % Kept because it is the primitive maxFromPts is built from and is useful when probing
-        % interactively; its index/fmax pairing was INVERTED (fmax = f(2) reported index 1), the
-        % opposite of maxArray's own convention that index names which of f1,f2 is fmax, and
-        % maxEqDom reads that index to decide which piece a merged cell belongs to.
-          l = false;
-          fmax = f(1);
-          index=1;
-          if obj.ptFeasible(obj.vars,s)
-            fv01 = f(1).subsF(obj.vars,s).f;
-            fv02 = f(2).subsF(obj.vars,s).f;
-
-          else
-              return;
-          end
-          l = true;
-          if abs(double(fv01 - fv02))> 1.0d-14
-            if double(fv01) < double(fv02)
-              fmax = f(2);
-              index=2;
-            else
-              fmax = f(1);
-              index=1;
-            end
-            return
-          end
-          l = false;
-          fmax = f(1);
-          index=1;
-        end
-
         function [r] = splitmax2 (obj, f1, f2) 
           fv1 = obj.funcVertices (f1);
           fv2 = obj.funcVertices (f2);
@@ -1475,7 +1372,26 @@ classdef region
               %if (abs(double(fv1(i).f)) >= abs(double(fv2(i).f)))
                   %ineq.f
                   %subs(ineq.f,vars,[obj.vx(i),obj.vy(i)])
-                  if isAlways(subs(ineq.f,vars,[obj.vx(i),obj.vy(i)]) < 0)
+                  %
+                  % ineq = f1 - f2 is RATIONAL whenever the operands are (every second-pass
+                  % conjugate is), and its denominator can vanish at precisely this vertex --
+                  % `subs` then raises symbolic:kernel:DivisionByZero rather than returning a
+                  % value. That is not a reason to give up on the whole split: it says only that
+                  % THIS vertex cannot decide the sign, so move to the next one, and if none can,
+                  % fall through to the well-defined default below. The same singular-at-a-vertex
+                  % situation is handled by directional limits in vertexOfEdge and
+                  % simplifyUnboundedRegion; here there is nothing to take a limit OF, since the
+                  % vertex is only being used to orient an inequality.
+                  %
+                  % Reachable since maxArray stopped guessing: it now reports "neither dominates"
+                  % far more often, so splitmax3 runs on operand pairs it never used to see --
+                  % including rational ones sharing a pole with the cell's own vertex.
+                  try
+                      neg = isAlways(subs(ineq.f,vars,[obj.vx(i),obj.vy(i)]) < 0);
+                  catch
+                      continue
+                  end
+                  if neg
                     r = [ineq,-ineq];
                     return
                   else
@@ -1634,34 +1550,58 @@ classdef region
         % Coefficients are read by EVALUATION, not by coeffs/getLinearCoeffs: an affine g
         % satisfies g = g(0,0) + (g(1,0)-g(0,0)) x + (g(0,1)-g(0,0)) y identically, so three
         % substitutions recover it exactly regardless of how the expression happens to be
-        % written. That independence is the point -- it is the same lesson probeAlong/probePerp
-        % record at the top of this file: test the geometry, never the syntax.
+        % written. That independence is the point -- it is the same lesson the note at the top of
+        % this file records: test the geometry, never the syntax.
+        %
+        % PERFORMANCE: the six probe points are substituted into the WHOLE constraint vector at
+        % once, six round trips to the symbolic engine per region instead of six PER CONSTRAINT.
+        % `subs` is elementwise, so the numbers are identical; only the call count changes.
             n = size(obj.ineqs,2);
             A = nan(n,2); b = nan(n,1); lin = false(1,n);
+            if n == 0
+                return
+            end
+            pts = [0 0; 1 0; 0 1; 1 1; 2 1; 1 2];
+            G = [obj.ineqs.f];
+            V = nan(6, n);
+            for k = 1:6
+                try
+                    V(k,:) = double(subs(G, obj.vars, pts(k,:)));
+                catch
+                    % One unevaluable constraint must not cost the others their rows, so fall
+                    % back to per-constraint evaluation for this probe point only.
+                    for j = 1:n
+                        try
+                            V(k,j) = double(subs(obj.ineqs(j).f, obj.vars, pts(k,:)));
+                        catch
+                            V(k,j) = NaN;
+                        end
+                    end
+                end
+            end
             for j = 1:n
                 g = obj.ineqs(j);
                 if ~g.isPolynomial
                     continue                       % a rational facet is not affine
                 end
-                try
-                    c0 = double(subs(g.f, obj.vars, [0 0]));
-                    c1 = double(subs(g.f, obj.vars, [1 0])) - c0;
-                    c2 = double(subs(g.f, obj.vars, [0 1])) - c0;
-                    % Confirm affineness rather than trusting the degree bookkeeping. For a
-                    % quadratic part alpha x^2 + beta xy + gamma y^2 these three points force
-                    % beta=0, then alpha=0, then gamma=0 in turn, so passing all three means
-                    % the quadratic part is identically zero.
-                    chk = [1 1; 2 1; 1 2];
-                    aff = true;
-                    for k = 1:3
-                        want = c0 + c1*chk(k,1) + c2*chk(k,2);
-                        got  = double(subs(g.f, obj.vars, chk(k,:)));
-                        if abs(got - want) > 1.0d-9 * max(1, abs(want))
-                            aff = false; break
-                        end
-                    end
-                catch
+                c0 = V(1,j);
+                c1 = V(2,j) - c0;
+                c2 = V(3,j) - c0;
+                if any(isnan(V(:,j)))
                     continue                       % not numerically evaluable: no row
+                end
+                % Confirm affineness rather than trusting the degree bookkeeping. For a
+                % quadratic part alpha x^2 + beta xy + gamma y^2 these three points force
+                % beta=0, then alpha=0, then gamma=0 in turn, so passing all three means
+                % the quadratic part is identically zero.
+                chk = [1 1; 2 1; 1 2];
+                aff = true;
+                for k = 1:3
+                    want = c0 + c1*chk(k,1) + c2*chk(k,2);
+                    got  = V(3+k, j);
+                    if abs(got - want) > 1.0d-9 * max(1, abs(want))
+                        aff = false; break
+                    end
                 end
                 if ~aff || ~all(isfinite([c0 c1 c2]))
                     continue
@@ -2033,11 +1973,34 @@ classdef region
                 tangent = tangent.normalize1;
                 %disp('tan')
                 %tangent
-                % Get point in parabola
+                % Get point in parabola.
+                %
+                % s0 is the solution set of a QUADRATIC in vars(2), so it can be EMPTY (the
+                % parabola has no point at sx) or COMPLEX, and this used to take s0(1)
+                % unconditionally: empty threw "Index exceeds array bounds", and a complex root
+                % made the isAlways tests below undecidable, so `lin` and `tin` both came back
+                % false and the routine went on to mark constraints from a nonsense probe point.
+                % Same "root chosen before it is checked" shape as the py(1)-before-isempty
+                % inversions corrected three times over in getNormalConeVertexQ. There is no
+                % sensible answer from a point that does not exist: skip this vertex instead.
                 sx = px(j) + 0.1;
                 p = obj.ineqs(i).subsF([vars(1)],[sx]);
                 s0 = solve(p.f,vars(2));
-                sy = s0(1);
+                sy = [];
+                for r0 = 1:numel(s0)
+                    try
+                        ok0 = isreal(double(s0(r0)));
+                    catch
+                        ok0 = false;   % not numerically evaluable: not a usable probe point
+                    end
+                    if ok0
+                        sy = s0(r0);
+                        break
+                    end
+                end
+                if isempty(sy)
+                    continue
+                end
                 mx = (px(j) + sx)/2;
                 my = (py(j) + sy)/2;
                 lin = isAlways(obj.ineqs(i).subsF(vars,[mx,my]).f <= 0);
@@ -2270,6 +2233,62 @@ classdef region
 
         end
             
+        function tf = witnessAwayFrom (obj, px, py)
+        % objective: exhibit a feasible point of obj that is NOT one of the listed vertices, so
+        %   that "this region has collapsed to a point" can be REFUTED rather than assumed.
+        %
+        % [output] tf : true iff such a point was found. A false return means "no witness
+        %               found", NOT "empty" -- this routine can only ever veto a claim of
+        %               emptiness, never make one.
+        %
+        % WHY. simplifyUnboundedRegion decides a region has degenerated by stepping 0.1 off a
+        % vertex along bisectors of the CONSTRAINT SLOPES there and testing feasibility; if no
+        % such step is feasible it returns region.empty. A quadratic constraint whose gradient
+        % VANISHES at that vertex has no slope there, and the probe directions built from it are
+        % meaningless. That is not a corner case: cPLQ's Step 3 splits a cell on f1 = f2, and
+        % when f1 and f2 are quadratics agreeing at the cell's apex -- e.g. s2^2/2 against
+        % s1^2/2 + s2^2/4 on the quadrant {s1<=0, s2>=0} of conjCPLQTest's 4-cone fan -- the
+        % split conic is singular at exactly that apex. The half where s2^2/2 wins,
+        % {s1<=0, s2>=0, s1^2/2 - s2^2/4 <= 0}, is a genuine 2-D cone containing (-0.5,2),
+        % (-0.1,3), (-1,4)... and was being declared empty, which is how f*(-0.5,2) went missing.
+        %
+        % Soundness: a genuinely empty region has no feasible point at all, so no probe here can
+        % succeed and no true emptiness verdict can be overturned. The converse does not hold --
+        % failing to find a witness proves nothing -- which is why this only ever vetoes.
+            tf = false;
+            if isempty(obj) || isempty(obj.ineqs)
+                return
+            end
+            % px/py arrive as syms; the probe geometry is numeric, so pin them down here.
+            try
+                base = double([px(:), py(:)]);
+            catch
+                base = zeros(0,2);
+            end
+            if ~isempty(base)
+                base = base(all(isfinite(base),2) & all(abs(base) ~= intmax, 2), :);
+            end
+            if isempty(base)
+                base = [0 0];
+            end
+            ang = (0:11)' * (pi/6);
+            C = [cos(ang), sin(ang)];
+            for b = 1:size(base,1)
+                for r = [0.05 0.5 5 50]
+                    P = base(b,:) + r*C;
+                    for k = 1:size(P,1)
+                        if min(vecnorm(base - P(k,:), 2, 2)) < 1.0d-9
+                            continue        % that IS a listed vertex; it witnesses nothing
+                        end
+                        if obj.ptFeasible(obj.vars, P(k,:))
+                            tf = true;
+                            return
+                        end
+                    end
+                end
+            end
+        end
+
         function obj = simplifyUnboundedRegion (obj)
             
             if isempty(obj)
@@ -2406,14 +2425,13 @@ classdef region
 
 
                 
-               if ~lm 
-                   obj = region.empty()
-              
+               if ~lm && ~obj.witnessAwayFrom(px, py)
+                   obj = region.empty();
                end
-               
+
                return
-              
-            end   
+
+            end
 
 
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -2609,11 +2627,18 @@ classdef region
                 if size(markF,2) == size(obj.ineqs,2)
                 %disp("Singleton1")
                 %obj.print
-                
+                    % Every constraint's sector probes came back infeasible, which is taken to
+                    % mean the region has collapsed to the vertex. Those probe DIRECTIONS come
+                    % from constraint slopes, so they are meaningless for a constraint whose
+                    % gradient vanishes at the vertex -- refute the verdict with an actual
+                    % feasible point before acting on it. See witnessAwayFrom.
+                    if obj.witnessAwayFrom(px, py)
+                        return
+                    end
                     obj = region.empty;
                    % disp("Singleton")
                     return
-                    
+
                 end
             %end
             %obj.ineqs(markF) = [];
@@ -2630,10 +2655,13 @@ classdef region
             if size(markF0,2) == size(obj.ineqs,2)
                 %disp("Singleton0")
                 %obj.print
+                if obj.witnessAwayFrom(px, py)   % same veto as above
+                    return
+                end
                 obj = region.empty;
                 %disp("Singleton")
                 return
-                
+
             end
             objTemp = obj;
             obj = obj.deleteIfRedundant(markF0);
@@ -2746,16 +2774,37 @@ classdef region
         %function simplifyClosedRegion
         %end
          function l = ptFeasible(obj, vars, point)
+         % objective: true iff every point is feasible for every constraint (ineqs(i) <= 0).
+         %
+         % PERFORMANCE, and nothing else: this used to substitute and test ONE CONSTRAINT AT A
+         % TIME, so a region with n constraints cost 2n round trips to the symbolic engine per
+         % point. It is the single hottest routine in the conjugate -- profiling the two-face
+         % unit square's f* put it at 35 s of 148, with 4022 of the run's 10809 `subs` calls --
+         % and every one of those round trips is ~7 ms of interprocess overhead around a
+         % substitution that is itself trivial.
+         %
+         % `subs` and `isAlways` are both ELEMENTWISE on a sym array, so substituting into the
+         % whole constraint vector at once and testing it at once gives bit-identical results in
+         % 2 round trips instead of 2n. Nothing here is approximated: the arithmetic is still
+         % exact symbolic arithmetic on the same expressions, and `isAlways(v > 0)` on an array
+         % decides each entry exactly as it did one at a time (including returning false, with
+         % its usual warning, for an entry it cannot decide).
+         %
+         % The only behavioural difference is that the short-circuit is gone -- all constraints
+         % are now evaluated even when the first already fails. That is a strictly better trade
+         % here: n is small (a handful of constraints) and one batched round trip beats even a
+         % single unbatched one.
            l = true;
-           
-           for i = 1:size(obj.ineqs,2)
-               for j = 1:size(point,1)
-               if (isAlways(subs (obj.ineqs(i).f,vars,point(j,:))>0))
+           if isempty(obj.ineqs)
+               return
+           end
+           g = [obj.ineqs.f];
+           for j = 1:size(point,1)
+               if any(isAlways(subs(g, vars, point(j,:)) > 0))
                    l = false;
                    return
                end
-               end
-           end  
+           end
          end
 
          function l = ptFeasibleSubset(obj, vars, point, index)
@@ -3043,14 +3092,64 @@ classdef region
        t2 = sym('t2');
        varsTemp = [t1,t2];
 
-       for i = 1:size(obj.ineqs,2)  
-           f1 = obj.ineqs(i);
-           f1 = f1.subsF (obj.vars,varsTemp);
-           for j = i+1:size(obj.ineqs,2)  
-               f2 = obj.ineqs(j);
-               f2 = f2.subsF (obj.vars,varsTemp);
-               s = solve ([f1.f==0,f2.f==0],varsTemp);
-               
+       % PERFORMANCE: rename each constraint's variables to t1,t2 ONCE, not once per PAIR.
+       % subsF is ~19 ms (two substitutions, two simplifyFractions and an isAlways each), and
+       % the inner loop used to redo the j-th constraint's rename for every i < j -- n(n-1)/2
+       % renames where n suffice. Identical results: the rename does not depend on i.
+       nIn = size(obj.ineqs,2);
+       fT = symbolicFunction.empty();
+       for i = 1:nIn
+           fT(i) = obj.ineqs(i).subsF (obj.vars,varsTemp);
+       end
+       % PERFORMANCE, part 2: two AFFINE constraints meet in one point given by a determinant,
+       % and calling solve() to discover that costs ~30 ms of round trip per pair -- 322 of the
+       % 438 solve() calls in a two-face conjugate come from right here. The coefficients are
+       % read by EVALUATION at (0,0), (1,0), (0,1), exactly as region.linearForm does and for
+       % the same reason (an affine g satisfies g = g(0,0) + (g(1,0)-g(0,0))t1 + (g(0,1)-g(0,0))t2
+       % identically, however it happens to be written), and all three substitutions are batched
+       % across every constraint at once: 3 round trips for the whole region.
+       %
+       % Everything stays EXACT -- these are sym values, not doubles, and the closed form is the
+       % same rational arithmetic solve() would have done. The fast path is taken only for a pair
+       % that is affine/affine with a NONZERO determinant; a curved constraint, parallel lines or
+       % coincident lines all fall through to solve() and keep their existing behaviour, whatever
+       % it is, rather than having a new answer invented for them here.
+       affT = false(1,nIn); cf = sym(zeros(nIn,3));
+       if nIn > 0
+           GT = [fT.f];
+           try
+               e00 = subs(GT, varsTemp, [0 0]);
+               e10 = subs(GT, varsTemp, [1 0]);
+               e01 = subs(GT, varsTemp, [0 1]);
+               for i = 1:nIn
+                   % isLinear is degreeNum == 1 AND degreeDen == 0, so it already rules out a
+                   % rational facet; no separate isPolynomial round trip needed.
+                   if ~fT(i).isLinear
+                       continue
+                   end
+                   cf(i,:) = [e10(i)-e00(i), e01(i)-e00(i), e00(i)];
+                   affT(i) = true;
+               end
+           catch
+               affT(:) = false;      % anything unevaluable: every pair uses solve(), as before
+           end
+       end
+       for i = 1:nIn
+           f1 = fT(i);
+           for j = i+1:nIn
+               f2 = fT(j);
+               s = [];
+               if affT(i) && affT(j)
+                   dt = cf(i,1)*cf(j,2) - cf(j,1)*cf(i,2);
+                   if ~isAlways(dt == 0)
+                       s = struct('t1', (cf(i,2)*cf(j,3) - cf(j,2)*cf(i,3))/dt, ...
+                                  't2', (cf(j,1)*cf(i,3) - cf(i,1)*cf(j,3))/dt);
+                   end
+               end
+               if isempty(s)
+                   s = solve ([f1.f==0,f2.f==0],varsTemp);
+               end
+
                if isempty(s)
                    continue;
                elseif isempty(s.t1)

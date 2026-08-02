@@ -17,20 +17,21 @@ function [val, idx] = evalFunctionNDomain(fnd, s)
 %   ineqs(j) <= 0) with a small numeric tolerance, so points on a shared boundary between two
 %   adjacent regions are accepted by whichever is checked first (consistent, since both regions
 %   agree on the value there for a continuous piecewise function).
+%
+% PERFORMANCE: the membership test substitutes into the WHOLE constraint vector in one call.
+% `subs` is elementwise, so this is the same arithmetic on the same expressions, but a region
+% with n constraints costs one round trip to the symbolic engine instead of n -- and each round
+% trip is ~7 ms of interprocess overhead around a trivial substitution. This routine was 3039 of
+% the 7736 `subs` calls in a two-face f*, more than any other caller.
     tol = 1e-6;
     val = NaN; idx = 0;
     for i = 1:numel(fnd)
         r = fnd(i).d;
         if isempty(r) || isempty(r.ineqs), continue; end
         vars = r.vars;
-        inside = true;
-        for j = 1:numel(r.ineqs)
-            iv = double(subs(r.ineqs(j).f, vars, s));
-            if iv > tol
-                inside = false;
-                break;
-            end
-        end
+        % `~any(> tol)`, NOT `all(<= tol)`: a constraint that evaluates to NaN must leave the
+        % point INSIDE, exactly as the one-at-a-time loop did (NaN > tol is false).
+        inside = ~any(double(subs([r.ineqs.f], vars, s)) > tol);
         if inside
             val = double(subs(fnd(i).f.f, vars, s));
             idx = i;

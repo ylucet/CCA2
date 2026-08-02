@@ -213,8 +213,32 @@ classdef biconjugateTest < matlab.unittest.TestCase
             % domains, so one piece answering on a strip collapses everything: f** comes back as
             % two identical pieces carrying x^2/(x-y+1) on {x+y>=1, x<=1, y<=1}.
             %
-            % So the remaining work is the conjugate of a bounded piece with a parabolic edge
-            % (getNormalConeVertexQ / getSubdiffVertexT2Q), not the max and not the first pass.
+            % THE MECHANISM, traced rather than guessed (instrumented run, 2026-08-02). For the
+            % half-lens, conjugateOfPiecePoly's preprocessing leaves nv = 2 and FIVE stored
+            % constraints (the scatter duplicates s2 - s1 into slots 2 and 5 and parks the arc's
+            % conic in slot 4). The routine then decides how many EDGES the piece has from a
+            % COUNT -- `size(d.ineqs,2) == d.nv` -- which is false here, so it takes the
+            % "unbounded" convention: endNv = nv - 1 = 1, and edge j is read from ineqs(j+1).
+            % One edge cell is therefore built, from ineqs(2) = s2 - s1, the STRAIGHT edge --
+            % and slot 4, the parabolic arc, is never read as an edge at all. Two vertex cones
+            % plus that one straight edge is exactly the conjugate of the chord, which is what
+            % comes out. The piece is bounded with 2 vertices and 2 edges and needs 4 cells.
+            %
+            % So the fix is to derive the edge list from the GEOMETRY -- which constraints
+            % actually bound an edge, which region.vertexOfEdge already answers -- instead of
+            % from `size(d.ineqs,2) == d.nv`. That count test is standing in for "is this region
+            % unbounded", and a bounded region with a curved edge breaks the correspondence.
+            %
+            % A SECOND thing standing in the way, found 2026-08-02: on this path the cross-piece
+            % max is still GUESSING. region.maxArray now refuses to decide a tie it cannot prove,
+            % but only for a POLYNOMIAL pair -- a region's constraints must be polynomial, and
+            % splitmax3 hands f1 - f2 straight to region(), whose normalize1 raises
+            % symbolic:coeffs:NotAPolynomial on a rational one. Every second-pass conjugate is
+            % rational, so here the old vertex verdict stands: on an all-vertices-tied cell it
+            % picks f2 for no better reason than operand order. Teaching splitmax3 to clear
+            % denominators (sound only where both are provably nonzero on the cell) would let the
+            % refusal apply here too.
+            %
             % An alternative worth weighing first: pieces 1-4 of f* all carry s1 and their union
             % is the POLYHEDRAL cone {s1 >= 0, s1 >= s2, s2 <= 1} -- an exact merge across the
             % conic boundaries would remove every curved piece here and the second pass would

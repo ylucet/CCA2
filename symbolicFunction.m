@@ -607,9 +607,14 @@ classdef symbolicFunction
         end
 
         function f = subsF (obj,vars,vals)
-            
-            den = simplifyFraction(subs(obj.getDen, vars, vals));
-            num = simplifyFraction(subs(obj.getNum, vars, vals));
+            % PERFORMANCE: numerator and denominator are substituted and simplified TOGETHER.
+            % subs and simplifyFraction are both elementwise on a sym array, so the results are
+            % identical -- but each call is a round trip to the symbolic engine costing far more
+            % than the substitution itself, and subsF is called ~1150 times in a single
+            % two-face conjugate, making it that run's largest single source of them.
+            nd = simplifyFraction(subs([obj.getNum, obj.getDen], vars, vals));
+            num = nd(1);
+            den = nd(2);
 
             if (isAlways(den == 0))
                 if (num == 0)

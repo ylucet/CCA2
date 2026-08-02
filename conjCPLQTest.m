@@ -407,12 +407,28 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
         function step3DropsCellsOnSomeUnboundedAssemblies(testCase)
         % THE REMAINING BLOCKER, pinned. The SAME 4-cone geometry as above, differing only in
-        % which quadratic sits on which cone, makes cPLQ's cross-piece maximum drop cells: each
-        % of the 4 faces produces a correct 4-cell conjugate and the per-piece maximum keeps all
-        % 4, then the assembled maximum keeps only 4 of the 16 -- losing face 1's s_2^2/2 cell on
-        % {s1<=0, s2>=0}, so f*(-0.5,2) comes back 1.125 for a truth of 2.
+        % which quadratic sits on which cone, makes cPLQ's cross-piece maximum disagree with its
+        % own per-piece conjugates. Still true, but the FAILURE HAS MOVED (2026-08-02) and the
+        % name of this test is now half right -- read this before working on it.
         %
-        % So the defect is DATA-DEPENDENT, not universal, which is exactly why the cross-check
+        % WAS: the assembled maximum kept only 4 of the 16 cells, LOSING face 1's s_2^2/2 cell on
+        % {s1<=0, s2>=0}, so f*(-0.5,2) came back 1.125 for a truth of 2. Cause: splitting that
+        % quadrant on s2^2/2 = s1^2/2 + s2^2/4 produced the half {s1<=0, s2>=0, s1^2/2-s2^2/4<=0}
+        % -- a genuine 2-D cone containing (-0.5,2), (-0.1,3), (-1,4) -- and
+        % region.simplifyUnboundedRegion declared it EMPTY, because it decides that from probe
+        % directions built out of constraint SLOPES at a vertex and the split conic's gradient
+        % vanishes at exactly that vertex. Fixed by region.witnessAwayFrom, which refutes an
+        % emptiness verdict with an actual feasible point (sound: an empty region has none).
+        %
+        % IS: 8 cells assemble and f*(-0.5,2) is 2, correct, along with 7 other probes. What
+        % assertStep3MatchesPieces now catches is the OPPOSITE error at a different point --
+        % s = (-3,-2.4), where the assembly gives 5.130 and the per-piece max gives 4.500. The
+        % per-piece value is the right one (by hand: the four cone suprema are 0, 4.5, 3.69 and
+        % 2.88). 5.13 = s1^2/4 + s2^2/2 there, which is face 4's cell -- and face 4's cell should
+        % live on {s1>=0, s2<=0}, so a region is claiming territory across s1 = 0. That is an
+        % OVER-claim, not a drop; the next session should start from which region grew.
+        %
+        % The defect is DATA-DEPENDENT, not universal, which is exactly why the cross-check
         % matters: without it Step 3 returns plausible numbers on the cases it gets wrong.
         % assertStep3MatchesPieces compares the assembled maximum against the pointwise max of
         % the per-piece conjugates -- the same f*, computed the other way.

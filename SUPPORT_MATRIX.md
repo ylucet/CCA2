@@ -5,11 +5,26 @@
 corresponds to a specific `error(...)` call, cited by file and identifier, so this file can be
 re-derived and re-checked mechanically.
 
-Last regenerated: 2026-07-28, against a full census of **262 passed / 1 failed** across 22 suites.
-Broken out: the 17 CCA2 suites (`*Test.m`) are **187 / 0**, up from 176 — the 11 new tests are
-`biconjCPLQTest` (§3) and `conjCPLQTest.indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2` (§1.2).
-The 5 vendored cPLQ suites (`test*.m`) are 75 / 1; the single failure, `testRegion/testCreation`,
-is a longstanding toolbox-compatibility issue unrelated to the conjugate pipeline.
+Last regenerated: 2026-08-02, against a full census of **300 passed / 1 failed / 0 incomplete**
+across 26 suites (`CCA2_TEST_TIMEOUT=5400 bash .claude/suite.sh`, run against a snapshot of the
+tree so that concurrent editing could not contaminate it). The single failure is
+`biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, left failing deliberately: it
+pins the open defect in §7 and its comment carries the traced mechanism.
+
+`testRegion/testCreation`, recorded here since 2026-07-28 as a longstanding toolbox-compatibility
+failure, now passes — `testRegion` is 23 / 0.
+
+Comparison runs behind that census, all on snapshots of the same revisions:
+
+| tree | pass / fail / incomplete |
+|---|---|
+| `46fac7c` (mid-session) | 298 / 2 / 1 |
+| `46fac7c` + the substitution batching, nothing else | 298 / 2 / 1 — **byte-identical per suite**, which is the evidence that the batching changed no answers |
+| final | **300 / 1 / 0** |
+
+The two suites that differ between `46fac7c` and the final tree are `QuaParTest` (10 → 11, the new
+`evalLocatesAPointExactlyAtItsOwnVertex`) and `testMaxMultiRegion` (23/1/1 → 24/0/0, a regression
+`46fac7c` introduced and the commit after it repaired — see that commit's message).
 
 ---
 
@@ -385,7 +400,7 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 |---|---|---|
 | ~~Cross-piece maximum decided dominance from ONE probe point~~ — **FIXED 2026-08-02** | `region.maxArray` falls back to interior probes when the two candidate functions tie at every vertex of the cell, and it returned on the FIRST feasible probe — asserting global dominance from one sample. Wrong on any cell the tie line crosses. Concretely, for `f = x*y` on `[0,1]²` given as TWO triangles, the two conjugates overlap in the lens `{(s1+s2)² ≤ 4s1, (s1+s2)² ≤ 4s2}`, whose only vertices `(0,0)` and `(1,1)` both lie on `s1 = s2`; the lens came back carrying `s2` throughout, so `f*(0.66,0.18)` was `0.18` for a truth of `0.66` — **wrong at 800 of 40000 grid points, worst error 0.48**, and silent. The recorded check that had passed used 7 hand-picked dual points and missed it. Now `region.maxFromPts` requires every decisive probe to agree and reports disagreement, which makes the caller split on `f1 = f2`. Pinned by `biconjugateTest/twoFaceConjugateIsExactIncludingTheLensCell` | `region.maxArray` / `region.maxFromPts` |
 | ~~`getNormalConeVertexQ` indexed a vertex outside its own guard~~ — **FIXED 2026-08-02** | Both halves of the routine pair vertex `j` with a neighbour `k` (`j∓1`) and guard `k` falling off the ends — then the `isZero` fallback that follows re-probed from vertex `k` **unguarded**, raising `MATLAB:badsubscript` on `obj.vx(0)` / `obj.vx(nv+1)`. Same shape as the already-corrected `getEdges` / `splitmax3` / `poly2orderUnbounded` cases. `region.probeVertexIndex` now clamps to `j`. (The same block also had the `py = py(1)` before `isempty(py)` inversion, corrected twice before elsewhere in the same function) | `region.getNormalConeVertexQ` |
-| **Conjugate of a BOUNDED piece with a parabolic edge returns the conjugate of the chord** | The half-lens `{(s1+s2)² ≤ 4s1, (s1+s2)² ≤ 4s2, s2 ≤ s1}` carrying `s1` is bounded, so its conjugate is finite on all of `R²` and curved. `conjugateOfPiecePoly` returns 2 cells, and they are the conjugate of the straight SEGMENT joining its two vertices: `max(0, x+y-1)`, finite only on a strip. Against a brute-force sup over the lens that is `+inf` where the truth is `0` (at `(0,0)`, `(-1,0.5)`) and `0` where the truth is `0.5` (at `(2,-1)`). Because `f**` is a MAX, its domain is the INTERSECTION of the per-piece conjugate domains, so one piece answering on a strip collapses the whole biconjugate. **This is what remains of the two-face defect**; an exact `merge` across a conic edge would side-step it entirely, since the four pieces carrying `s1` union to a polyhedral cone. Pinned (failing) by `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope` | `functionNDomain.conjugateOfPiecePoly` / `region.getNormalConeVertexQ` / `getSubdiffVertexT2Q` |
+| **Conjugate of a BOUNDED piece with a parabolic edge returns the conjugate of the chord** — mechanism traced 2026-08-02 | The half-lens `{(s1+s2)² ≤ 4s1, (s1+s2)² ≤ 4s2, s2 ≤ s1}` carrying `s1` is bounded with 2 vertices and 2 edges (one arc, one segment), so its conjugate is finite on all of `R²` and curved, and needs 4 cells. `conjugateOfPiecePoly` returns 2, and they are the conjugate of the straight SEGMENT joining its two vertices: `max(0, x+y-1)`, finite only on a strip — `+inf` where the truth is `0` (at `(0,0)`, `(-1,0.5)`) and `0` where the truth is `0.5` (at `(2,-1)`). **CAUSE:** the routine decides how many edges a piece has from the COUNT `size(d.ineqs,2) == d.nv`, which is standing in for "is this region unbounded". An instrumented run gives `nv = 2` with FIVE stored constraints (the scatter duplicates `s2-s1` into slots 2 and 5 and parks the arc's conic in slot 4), so the count test says "unbounded", `endNv = nv-1 = 1`, edge `j` is read from `ineqs(j+1)` — one edge cell is built from the STRAIGHT edge and **slot 4, the arc, is never read as an edge at all**. The fix is to derive the edge list from the geometry (`region.vertexOfEdge`) rather than from that count. Because `f**` is a MAX its domain is the INTERSECTION of the per-piece conjugate domains, so one piece answering on a strip collapses the whole biconjugate. **This is what remains of the two-face defect.** Pinned (failing) by `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope` | `functionNDomain.conjugateOfPiecePoly` |
 | `mergeL` / `removeTangent` exact-tie-point gap — **NO LIVE REPRODUCER as of 2026-08-02; do not spend time on it without one** | The only concrete case ever recorded for this entry is `f = x*y` on the unit square as two triangles, whose exact symmetric tie point `s = (0.5,0.5)` used to be excluded from `cplqAdapterTest`. It is exact now, and so is everything around it: a scan of the assembled `f*` over a 25x25 grid on `[-3,3]^2` plus both symmetry axes gives **0 uncovered and 0 wrong** (tolerance 2e-3 against the numeric sup), on `46fac7c` as well as on the current tree — so this was already closed by the `maximumP` fall-through-to-`splitmax3` fix that `functionNDomain.maximumP`'s own HISTORY comment describes, and the entry simply outlived it. What remains is a LATENT defect of the same family, now fixed: `removeTangent` chose `s0(1)` as the second point on the parabola before checking that the root set was non-empty and real (empty threw, complex made both `isAlways` tests undecidable and let the routine mark constraints off a nonsense probe point). Re-open this row only with a case that actually returns a wrong number | vendored cPLQ `functionNDomain` / `plq.biconjugateF`; inherited by `QuaParCPLQ.conj` |
 | ~~`QuaPar.eval` exactly **at a vertex**~~ — **FIXED and VERIFIED 2026-08-02** | Cause was `QuaPar.eval`'s exact, no-tolerance point location: `all(vals <= 0, 2)` on a conic that is only zero in exact arithmetic, so a `+1e-17` left the point in NO face and `eval` returned its `Inf` initialization. A conic-magnitude-relative tolerance fixes it. NOW REPRODUCED AND MEASURED, which is what was missing: `sweepQuaParEvalAtVertices(20260802, 200)` finds **225 of 1205** subdivision vertices unlocatable under the exact test and **0** under the current one, with all 7230 probes on rings of radius 1e-8 around them correct — the exact signature recorded for the defect. Deterministically pinned by `QuaParTest/evalLocatesAPointExactlyAtItsOwnVertex`, whose mesh is case 2 of that sweep. Still open, separately: the CURVED half of the original claim (~0.8%) is not covered by this sweep | `QuaPar.eval` |
 | `testRegion/testCreation` | 1 failing test | toolbox-compatibility, unrelated to the conjugate pipeline |
@@ -419,13 +434,28 @@ Ordered by how likely a downstream caller is to hit it:
    headline case — `(x²+y²)/2` over `{x≤0,y≥0}` — returns `min(s1,0)²/2 + max(s2,0)²/2`, exact
    at 10 probes. The same routine supplies the edge/interior cells cPLQ's `conjugateOfPiecePoly`
    omits for a convex `q` on a bounded triangle.
-   **(e) THE BLOCKER.** cPLQ's Step 3, the CROSS-PIECE maximum (`plq.maximumConjugate` →
-   `functionNDomain.maximumP`), drops cells. On the 4-cone fan with convex faces each of the 4
-   faces produces a correct 4-cell conjugate and the per-piece maximum preserves all 4 — then the
-   assembled maximum keeps only 4 of the 16, losing face 1's `s₂²/2` cell on `{s1≤0, s2≥0}`, so
-   `f*(-0.5,2)` comes back `1.125` for a truth of `2`. This is now caught rather than returned:
-   `conjCPLQ`'s `assertStep3MatchesPieces` is applied to Case C (it previously guarded only one
-   other path), and raises `PLQ:conjCPLQ:cplqFailed`.
+   **(e) THE BLOCKER — HALVED 2026-08-02, still a blocker.** cPLQ's Step 3, the CROSS-PIECE
+   maximum (`plq.maximumConjugate` → `functionNDomain.maximumP`), disagrees with its own per-piece
+   conjugates on the 4-cone fan with convex faces.
+   * **The DROP is fixed.** The assembled maximum used to keep only 4 of the 16 cells, losing
+     face 1's `s₂²/2` cell on `{s1≤0, s2≥0}`, so `f*(-0.5,2)` came back `1.125` for a truth of
+     `2`. Cause: splitting that quadrant on `s2²/2 = s1²/2 + s2²/4` yields the half
+     `{s1≤0, s2≥0, s1²/2 − s2²/4 ≤ 0}` — a genuine 2-D cone containing `(-0.5,2)`, `(-0.1,3)`,
+     `(-1,4)` — and `region.simplifyUnboundedRegion` declared it EMPTY. It decides that from probe
+     directions built out of constraint SLOPES at a vertex, and the split conic's gradient
+     *vanishes* at exactly that vertex, so those directions are meaningless. `region.witnessAwayFrom`
+     now refutes an emptiness verdict by exhibiting a feasible point away from the vertices — sound,
+     because a genuinely empty region has none, so no true verdict can be overturned. 8 cells now
+     assemble and `f*(-0.5,2)` is `2`, with 7 other probes also exact.
+   * **An OVER-claim remains.** At `s = (-3,-2.4)` the assembly gives `5.130` where the per-piece
+     max gives `4.500` (the latter is right: the four cone suprema there are `0`, `4.5`, `3.69`,
+     `2.88`). `5.13 = s1²/4 + s2²/2`, which is face 4's cell — and face 4's cell belongs on
+     `{s1≥0, s2≤0}`, so some region has grown across `s1 = 0`. Opposite sign of error, different
+     point, unstarted.
+
+   Neither is ever returned: `conjCPLQ`'s `assertStep3MatchesPieces` is applied to Case C and
+   raises `PLQ:conjCPLQ:cplqFailed`. Pinned by
+   `conjCPLQTest/step3DropsCellsOnSomeUnboundedAssemblies`, whose comment carries both halves.
 
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
