@@ -138,17 +138,19 @@ function g = conjSingleTriangle(obj)
     env = convEnvCPLQ(obj);
     try
         if env.nf == 1
-            g = conjPieceCPLQ(env);
+            g = conjFaceOrOriginal(env, 1, obj);
         else
-            g = conjMaxOfSubTriangles(env);
+            g = conjMaxOfSubTriangles(env, obj);
         end
         return
     catch ME
-        if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented')
+        if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented') && ...
+           ~strncmp(ME.identifier, 'maxQuaPar:', 10)
             rethrow(ME);
         end
-        % The only way to get here is Step 1 having produced a RATIONAL face: Step 2 has no
-        % rational branch (conjPieceCPLQ.m:107). cPLQ's Step 2 does -- fall back to it.
+        % Step 2 could not take some face even via the original piece (conjPieceCPLQ), or Step 3
+        % could not assemble the faces it did produce (maxQuaPar). cPLQ's symbolic Step 2/3 can --
+        % fall back to it.
     end
     g = conjEnvelopeViaCPLQ(env);
 end
@@ -293,19 +295,62 @@ function assertStep3MatchesPieces(p, env)
 end
 
 % ================================================================================================
-function g = conjMaxOfSubTriangles(env)
+function g = conjMaxOfSubTriangles(env, obj)
 % Step 3: conjugate every triangle face of a multi-face convex-envelope RatPol (Step 1's output)
-% independently (Step 2, conjPieceCPLQ), then combine them via repeated pairwise maxQuaPar. Only
-% reached from conjSingleTriangle's 3-convex-edge case, where env is always the 2-sub-triangle
-% split of COAP Appendix A.5 -- each sub-triangle is provably 2-convex-edge (a rank-1 PSD
-% quadratic, no curved domain edges), so both conjPieceCPLQ (Step 2) and maxQuaPar's polyhedral-
-% domain requirement (Step 3) are satisfied exactly; see maxQuaParTest.m for the same construction
-% validated against ground truth.
-    g = toQuaPar(conjPieceCPLQ(extractTriangleFace(env, 1)));
+% independently (Step 2, conjFaceOrOriginal), then combine them via repeated pairwise maxQuaPar.
+% Reached from conjSingleTriangle whenever Step 1 split the triangle (2- or 3-convex-edge).
+%
+% `obj` is the ORIGINAL piece Step 1 was given -- needed because a split leaves RATIONAL faces
+% that Step 2 cannot conjugate directly; see conjFaceOrOriginal for why the original is an exact
+% substitute for them.
+    g = toQuaPar(conjFaceOrOriginal(env, 1, obj));
     for k = 2:env.nf
-        gk = toQuaPar(conjPieceCPLQ(extractTriangleFace(env, k)));
+        gk = toQuaPar(conjFaceOrOriginal(env, k, obj));
         g = maxQuaPar(g, gk);
     end
+end
+
+% ================================================================================================
+function g = conjFaceOrOriginal(env, k, obj)
+% Step 2 for ONE face of Step 1's envelope, conjugating the face itself when it can and the
+% ORIGINAL quadratic over that face's domain when it cannot.
+%
+% WHY THE ORIGINAL IS AN EXACT SUBSTITUTE, not an approximation. Step 1 splits the input triangle
+% T into sub-triangles T_k and puts on each the envelope of the ORIGINAL q over THAT sub-triangle:
+% R_k = conv(q + I_{T_k}) (convEnvCPLQ's solveTriangleBF classifies T_k's own edges, not T's).
+% Conjugation cannot see the difference between a function and its convex envelope, so
+%
+%       (R_k + I_{T_k})* = (conv(q + I_{T_k}))* = (q + I_{T_k})*
+%
+% exactly. Step 3 then maxes these, which is right for the same reason it is right at the top
+% level: the T_k cover T, so conv(q+I_T) = min_k (R_k + I_{T_k}) and the conjugate of a min is the
+% max of the conjugates.
+%
+% This matters because a split ALWAYS leaves at least one RATIONAL face (the 1-convex-edge
+% sub-triangle's envelope is [COAP] A.3's quadratic-over-linear), and Step 2 has no rational
+% branch -- that gap is what used to send the whole 2-/3-convex-edge case to cPLQ's symbolic
+% Step 2/3. It does not need a rational-conjugate formula at all: the rational face is a
+% RE-EXPRESSION of a piece whose conjugate Step 2 already computes in closed form (an indefinite
+% quadratic over a 1-convex-edge triangle, conjIndefiniteQuadTriangle).
+%
+% Measured on V = conv{(2,1),(0,0),(1,0)}, f = xy -- the 2-convex-edge tightness split, whose
+% face 2 is rational: the original-q route reproduces sup_{x in T_2} <s,x> - f(x) to 0 (exactly)
+% at 6 dual points, and the assembled Step 3 result matches ground truth over the WHOLE triangle
+% to 4.4e-16 at 8 dual points, including the paper's own flagged s = (-0.008727, -0.999962).
+% That case previously required the symbolic engine end to end.
+    face = extractTriangleFace(env, k);
+    try
+        g = conjPieceCPLQ(face);
+        return
+    catch ME
+        if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented')
+            rethrow(ME);
+        end
+    end
+    if ~isa(obj, 'QuaPol')
+        rethrow(ME);   % no original quadratic to fall back on (e.g. a direct RatPol conjugate)
+    end
+    g = conjPieceCPLQ(QuaPol(face.V, face.E, obj.f(1,5:10), face.F));
 end
 
 function p = extractTriangleFace(r, k)

@@ -292,21 +292,28 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             end
         end
 
-        function indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2(testCase)
+        function indefiniteTriangleTwoConvexEdgesSplitIsFullyNumeric(testCase)
             % The 2-convex-edge tightness split (convEnvCPLQTest.bilinearTwoConvexEdgesSplitIsTight)
-            % leaves Step 1 with a RATIONAL face, which CCA2's own Step 2 cannot conjugate. It now
-            % falls back to cPLQ's symbolic Step 2/3 on that envelope, so conj closes end to end.
+            % leaves Step 1 with a RATIONAL face, and Step 2 has no rational branch. This case
+            % therefore used to fall back to cPLQ's SYMBOLIC Step 2/3 and return a QuaParCPLQ.
             %
-            % Note WHICH half of cPLQ is reused: its Step 2/3, on CCA2's Step 1 output. Running
-            % cPLQ end to end on this triangle instead gives the WRONG answer, because cPLQ's own
-            % envelope for a 2-convex-edge triangle is the single, untight Appendix A.4 formula --
-            % it leaves sBad below covered by no region at all. CCA2's Step 1 is ahead of cPLQ's
-            % here, so the working combination is CCA2 Step 1 + cPLQ Step 2/3.
+            % It no longer does, and no rational-conjugate formula was needed to close it. Step 1
+            % puts on each sub-triangle T_k the envelope of the ORIGINAL q over THAT sub-triangle,
+            % so (R_k + I_{T_k})* = (conv(q + I_{T_k}))* = (q + I_{T_k})* exactly -- the rational
+            % face is a re-expression of a piece whose conjugate Step 2 already has in closed form
+            % (an indefinite quadratic over a 1-convex-edge triangle). conjCPLQ's
+            % conjFaceOrOriginal conjugates the original over that face's domain instead; see its
+            % header for the derivation and the measurement.
+            %
+            % What this test pins is therefore the RETURN TYPE as much as the values: a QuaPar
+            % means the whole triangle went through closed-form numerics with no call into the
+            % Symbolic Math Toolbox. If a future change sends it back to the symbolic fallback the
+            % values would still be right and only this line would notice.
             V = [2 1; 0 0; 1 0]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
             q = QuaPol(V, E, [0 1 0 0 0 0], F);           % f = xy
             testCase.verifyEqual(convEnvCPLQ(q).nf, 2);   % the tightness split
             g = q.conj('cplq');
-            testCase.verifyEqual(g.kind(), 'QuaParCPLQ');
+            testCase.verifyClass(g, 'QuaPar');
 
             sBad = [-0.008727 -0.999962];                 % the paper's own flagged dual point
             S = [sBad; 1.90 2.50; -1 -1; 0.5 0.5; 3 -2; -3 2; 2 2];
@@ -440,6 +447,38 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
         end
 
+        function step3UnboundedAssemblyMatchesTheTruth(testCase)
+        % The SAME 4-cone fan as step3DropsCellsOnSomeUnboundedAssemblies, pinned by VALUE instead
+        % of by the loud failure. That test asserts the gate fires; this one asserts what the gate
+        % is protecting -- and the two are meant to be resolved together: when the over-claim is
+        % fixed, this test passes and that one must be rewritten to expect a result.
+        %
+        % Ground truth needs no pipeline. Each face carries q = a*x^2 + b*y^2 on one quadrant, and
+        % for a cone C = {sigma1*x >= 0, sigma2*y >= 0} the sup separates:
+        %       (q + I_C)*(s) = [s1^2/(4a) if sigma1*s1 >= 0 else 0]
+        %                     + [s2^2/(4b) if sigma2*s2 >= 0 else 0],
+        % and f* is the max of the four. The face-to-quadrant assignment below is read off F's
+        % left/right convention: edge 3 runs along +x with face 1 on its left, so face 1 is the
+        % first quadrant, and so on around the fan.
+        %
+        % s = (-3,-2.4) is the point the gate currently catches: the four cone suprema there are
+        % 0, 4.5, 3.69 and 2.88, so f* = 4.5, while the assembly returns 5.130 = s1^2/4 + s2^2/2 --
+        % face 4's cell, which belongs on {s1>=0, s2<=0}. Some region has grown across s1 = 0.
+            V = [0 0;-1 0; 0 1;1 0;0 -1];
+            E = [1 2 0;1 3 0;1 4 0;1 5 0];
+            f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
+            F = [3 2;2 1;1 4;4 3];
+            p = QuaPol(V,E,f,F);
+            g = p.conj('cplq');
+            S = [-3 -2.4; -0.5 2; 1 1; -1 -1; 2 -0.5; 0 0; 3 3; -2 -3];
+            for t = 1:size(S,1)
+                s = S(t,:);
+                got = evalFunctionNDomain(g.fnd, s);
+                testCase.verifyEqual(got, conjCPLQTest.fourConeTruth(s), 'AbsTol', 1e-9, ...
+                    sprintf('at s=(%g,%g)', s(1), s(2)));
+            end
+        end
+
         function multiFaceBoundedDomainViaCPLQIntegration(testCase)
             % Case C (Phase 1 cPLQ integration, this session): a genuinely multi-triangle BOUNDED
             % nonconvex PLQ now conjugates end to end through the wired-in conjCPLQ dispatch --
@@ -503,6 +542,22 @@ classdef conjCPLQTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function v = fourConeTruth(s)
+        % f* of the 4-cone fan of step3UnboundedAssemblyMatchesTheTruth, in closed form. Each row
+        % is {quadrant signs, a, b} for q = a*x^2 + b*y^2 on that quadrant; see that test's header.
+            C = { [ 1  1], 0.5, 0.5     % face 1, first quadrant,  q = (x^2+y^2)/2
+                  [-1  1], 0.5, 1.0     % face 2, second,          q = x^2/2 + y^2
+                  [-1 -1], 1.0, 1.0     % face 3, third,           q = x^2 + y^2
+                  [ 1 -1], 1.0, 0.5 };  % face 4, fourth,          q = x^2 + y^2/2
+            v = -inf;
+            for k = 1:size(C,1)
+                sg = C{k,1}; a = C{k,2}; b = C{k,3};
+                t1 = 0; if sg(1)*s(1) >= 0, t1 = s(1)^2/(4*a); end
+                t2 = 0; if sg(2)*s(2) >= 0, t2 = s(2)^2/(4*b); end
+                v = max(v, t1 + t2);
+            end
+        end
+
         function h = supBilinearOverPoly(s, T)
             % Exact sup_{(x,y) in T} [s1 x + s2 y - x y] over a triangle T: the Hessian of the
             % objective is indefinite (eigenvalues +-1), so no interior point can be a local max,
