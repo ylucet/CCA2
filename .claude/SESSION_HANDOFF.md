@@ -67,6 +67,24 @@ h = f* on pieces P (P polyhedral, or with a single parabolic edge)
 
 ## Next steps
 
+0. **`biconj` does NOT work for a general polygon, and the reason is ORIENTATION.** Measured with
+   `checkBiconjDomainCoverage` (committed; re-run it, it prints the table). Triangles work for
+   convex/indefinite/concave/affine `f`; the unit box and an axis-aligned `[0,2]x[0,3]` box work;
+   all three unbounded families tried work. But:
+   - a **general convex quadrilateral** errors with `MATLAB:badsubscript`, because `triangulate`
+     gives it a piece with **`nCE = 3`** and cPLQ's Step 1 has NO `nCE == 3` branch --
+     `convexEnvelope` returns ZERO envelope pieces and `plq_1p.conjugateFunction`'s
+     `for i = 1:max(1, size(obj.envelope,2))` (a guard written for "triangles where the envelope
+     is not computed") then indexes `obj.envelope(1)`. `conjCPLQ.m`'s header already flagged the
+     missing branch; what is new is that an ordinary quadrilateral reaches it.
+   - a **parallelogram** gets `nCE = 1` pieces and rational envelopes, survives Step 1, and then
+     dies in the SECOND conjugation with `QuaParCPLQ:conj:emptyResult`.
+
+   `nCE` counts edges of positive finite SLOPE, so an axis-aligned box gives `nCE = 0` everywhere
+   and sails through while a sheared one does not. **Rotating a working domain breaks it.** This
+   is the biggest gap between what the toolbox does and what "biconjugate of a PLQ function"
+   promises, and it is upstream of everything in next-step 1.
+
 1. **The remaining half of the two-face defect: `conjugateOfPiecePoly` counts edges instead of
    looking at them.** This is the sharpest lead in the repository and the mechanism is TRACED, not
    guessed (instrumented run, notes in `biconjugateTest.m` at the failure site and

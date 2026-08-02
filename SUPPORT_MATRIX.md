@@ -409,6 +409,47 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 
 ---
 
+## 7.1 `biconj` domain coverage — measured, 2026-08-02
+
+Re-derive with `checkBiconjDomainCoverage`, committed beside this file. Ground truth owes nothing
+to the conjugate pipeline: for a bounded domain it is the lower convex hull of the sampled graph
+(`convhulln`), for the unbounded cases it is the identity `f** = f` on a convex `f`.
+
+| domain | `f` | result |
+|---|---|---|
+| triangle | convex `(x²+y²)/2` | **OK** |
+| triangle | indefinite `x·y` | **OK** |
+| triangle | concave `-(x²+y²)/2` | **OK** |
+| triangle | affine | **OK** |
+| box `[0,1]²`, ONE face | `x·y` (McCormick) | **OK**, exact, +inf outside |
+| box `[0,1]²`, ONE face | indicator `0` | **OK** |
+| axis-aligned box `[0,2]×[0,3]`, one face | `x·y` | **OK** |
+| unbounded, full domain | `(x²+y²)/2` | **OK** |
+| unbounded, 4 cones | `\|x\|+\|y\|` | **OK** |
+| unbounded, 3 wedges | `max(0,x,y)` | **OK** |
+| box, TWO faces sharing a diagonal | `x·y` | **WRONG** (§7, the open defect) |
+| parallelogram, one face | `x·y` | **ERROR** `QuaParCPLQ:conj:emptyResult` |
+| general convex quadrilateral, one face | `x·y` | **ERROR** `MATLAB:badsubscript` |
+
+**The failures are not about being non-triangular** — an axis-aligned box works. They track `nCE`,
+the number of edges of positive finite SLOPE, on the pieces `triangulate` produces:
+
+* axis-aligned box → both pieces `nCE = 0` → affine envelopes → everything downstream is easy;
+* parallelogram → `nCE = 1` on both pieces → rational envelopes → Step 1 fine, but the SECOND
+  conjugation comes back with no pieces;
+* general quadrilateral → one piece with **`nCE = 3`**, for which **cPLQ's Step 1 has no branch at
+  all**: `convexEnvelope` returns ZERO envelope pieces, and `plq_1p.conjugateFunction`'s
+  `for i = 1:max(1, size(obj.envelope,2))` — a guard written for "triangles where the convex
+  envelope is not computed" — then indexes `obj.envelope(1)`. `conjCPLQ.m`'s own header already
+  noted the missing `nCE==3` branch; this shows it is reachable from an ordinary convex
+  quadrilateral, not just a contrived input.
+
+So **the answer depends on the domain's ORIENTATION relative to the axes**, since `nCE` is defined
+by edge slopes. Rotating a working box breaks it. Worth knowing before trusting any result on a
+rotated domain, and worth fixing before this is described as working for general polygons.
+
+---
+
 ## 8. Summary — what actually blocks a general release
 
 Ordered by how likely a downstream caller is to hit it:
