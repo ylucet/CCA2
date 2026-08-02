@@ -49,6 +49,55 @@ This matters twice over:
 
 ---
 
+## 0.0.1 What a SCIP + QPLIB run would need from CCA2 — measured 2026-08-02
+
+QPLIB's viable family for this work (Sahinidis `QPLIB_1913/1922/1931/1940`) has **unit-BOX**
+variable domains, so per term SCIP needs the convex envelope of a quadratic **over an axis-aligned
+box**, and over a sub-box after each branching. That is `f**`, NOT `convEnvCPLQ`'s output —
+`convEnvCPLQ` is Step 1, a per-TRIANGLE intermediate, and the SCIP spike established on 2026-07-11
+that cuts built from it over a box domain are **invalid** (they cut off feasible points). That
+finding stands.
+
+What has changed since: `biconj` now computes the box envelope correctly. Measured with
+`biconj('cplq')` against the lower convex hull of the sampled graph:
+
+| term over an axis-aligned box | result | time |
+|---|---|---|
+| `x·y` on `[0,1]²` | **exact** (8.3e-17) | 59 s |
+| `3xy + 7x − 2y + 5` on `[0,1]²` | **exact** (0) | 46 s |
+| `x·y` on `[0.25,0.75]×[0,1]` (post-branching sub-box) | **exact** (1.1e-16) | 38 s |
+| `x·y` on `[−2,3]×[−1,4]` (general bounds) | **exact** (0) | 39 s |
+| `x² − y²` on `[0,1]²` | **ERROR** `MATLAB:badsubscript` | 67 s |
+| `(x²+y²)/2` on `[0,1]²` | **ERROR** `MATLAB:badsubscript` | 77 s |
+
+So the gaps, in the order they would bite:
+
+1. **No entry point.** `SCIP/src/cca2ConvexEnvelope.m` calls `convEnvCPLQ` only. Getting a box
+   envelope means calling `biconj`. Wiring, not mathematics.
+2. **`biconj` returns a `QuaParCPLQ`, which has NO MESH.** The bridge reads `V/E/F/f(:,5:10)/den`
+   off a `RatPol`; `QuaParCPLQ` leaves all of those empty and keeps its pieces symbolically in
+   `fnd` (the residual `RETURN_TYPE.md` records). A separator does not actually need the mesh — it
+   needs the envelope's VALUE and a SUBGRADIENT at the LP point to build one cut — so the cheap
+   fix is to expose value+subgradient off the symbolic pieces (`evalFunctionNDomain` already gives
+   the value and the owning piece; differentiate that piece), rather than reconstructing `V/E/Ec/f/F`.
+3. **A quadratic with DIAGONAL terms over a box fails**, in the SECOND conjugation
+   (`functionNDomain.conjugateOfPiecePoly`, the same routine as §7's open defect) — not the §7.1
+   Step 1 gap, which is a different failure. Pure bilinear terms are unaffected.
+4. **~40–60 s per term** is the practical blocker. Recomputing per node after branching is out of
+   reach, and even offline `QPLIB_1940`'s 288 objective off-diagonal terms is ~4 h (its constraints
+   carry ~27,586 more). Performance work, §8.7.
+
+**A caveat worth weighing before investing in this direction.** For a BILINEAR term over a BOX the
+convex envelope *is* McCormick, in closed form (Al-Khayyal–Falk) — which is exactly what CCA2
+returns, and `biconjugateTest/bilinearOverABoxGivesTheMcCormickEnvelope` pins it. So on QPLIB's
+box-domain bilinear terms CCA2 is a 40-second reimplementation of a formula SCIP already applies:
+correct, a good validation, and **no stronger as a cut**. CCA2 can only beat McCormick where the
+domain is not a box (a triangle cut out by constraints) or the piece is not bilinear — and those
+are precisely the two cases that fail today, §7.1 and row 3 above. Fixing them is what would make
+a QPLIB run scientifically interesting rather than merely green.
+
+---
+
 ## 0.2 Where the cPLQ code lives — `cPLQ/` is NEVER executed
 
 Verified 2026-08-02, because "are we running vendored cPLQ?" is a fair question and the answer is
