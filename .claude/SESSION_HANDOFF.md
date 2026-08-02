@@ -12,9 +12,11 @@ cause: `region.maxArray` decided which of two candidate functions dominates a ce
 interior point, and a probe is evidence, not proof. That is now replaced by a sound global sign
 test, which also fixed next-step 4's 4-cone case (it no longer returns a wrong number).
 
-**Performance: ~30% off the conjugate**, with the symbolic-engine round-trip count halved
-(10809 -> 5161 `subs` calls on the two-face `f*`), by batching substitutions that were being done
-one constraint at a time. No arithmetic changed.
+**Performance: the symbolic-engine round trips roughly halved** -- 10809 -> 5591 `subs` calls on
+the two-face `f*` -- by batching substitutions that were being done one constraint at a time. No
+arithmetic changed, and the evidence for that is stronger than a test count: the batching-only
+tree's suite results are BYTE-IDENTICAL to the baseline's, suite by suite. No wall-clock figure is
+quoted, deliberately; see next-step 3.
 
 **The two unreproducible measurement claims are now reproducible**, via two committed, seeded
 sweeps -- and one of them retired a defect: `QuaPar.eval`'s at-a-vertex fix is verified.
@@ -25,7 +27,8 @@ sweeps -- and one of them retired a defect: `QuaPar.eval`'s at-a-vertex fix is v
   - `46fac7c` maxArray's single-probe dominance + `getNormalConeVertexQ`'s out-of-range index
   - `375f59d` `sweepQuaParEvalAtVertices` (seeded) -- verifies the `QuaPar.eval` fix
   - `3badfb7` `sweepMaxQuaParCurvedSplit` (seeded) -- retires maxQuaPar's curved-split numbers
-  - (+ the performance and sound-max commit; see the suite note below)
+  - `f861db3` batched substitutions + the sound max + the Step 3 emptiness veto (the one that
+    repairs `46fac7c`, see below)
 - **Suite: COMPLETE and green.** `300 passed / 1 failed / 0 incomplete over 26 suites`, the one
   failure being `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, which fails by
   design (next-step 1). Compare `46fac7c` mid-session at 298/2/1. Run against a SNAPSHOT, not the
