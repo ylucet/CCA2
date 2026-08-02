@@ -67,23 +67,29 @@ h = f* on pieces P (P polyhedral, or with a single parabolic edge)
 
 ## Next steps
 
-0. **`biconj` does NOT work for a general polygon, and the reason is ORIENTATION.** Measured with
-   `checkBiconjDomainCoverage` (committed; re-run it, it prints the table). Triangles work for
-   convex/indefinite/concave/affine `f`; the unit box and an axis-aligned `[0,2]x[0,3]` box work;
-   all three unbounded families tried work. But:
-   - a **general convex quadrilateral** errors with `MATLAB:badsubscript`, because `triangulate`
-     gives it a piece with **`nCE = 3`** and cPLQ's Step 1 has NO `nCE == 3` branch --
-     `convexEnvelope` returns ZERO envelope pieces and `plq_1p.conjugateFunction`'s
-     `for i = 1:max(1, size(obj.envelope,2))` (a guard written for "triangles where the envelope
-     is not computed") then indexes `obj.envelope(1)`. `conjCPLQ.m`'s header already flagged the
-     missing branch; what is new is that an ordinary quadrilateral reaches it.
-   - a **parallelogram** gets `nCE = 1` pieces and rational envelopes, survives Step 1, and then
-     dies in the SECOND conjugation with `QuaParCPLQ:conj:emptyResult`.
+0. **WIRE CASE C's STEP 1 THROUGH `convEnvCPLQ`. CCA2 already has the branch it is missing.**
+   Measured with `checkBiconjDomainCoverage` (committed; re-run it, it prints the table).
+   Triangles work for convex/indefinite/concave/affine `f`; the unit box and an axis-aligned
+   `[0,2]x[0,3]` box work; all three unbounded families work. A **general convex quadrilateral**
+   errors with `MATLAB:badsubscript` in the **FIRST** conjugation, and a **parallelogram** errors
+   with `QuaParCPLQ:conj:emptyResult` in the **SECOND** -- two different defects.
 
-   `nCE` counts edges of positive finite SLOPE, so an axis-aligned box gives `nCE = 0` everywhere
-   and sails through while a sheared one does not. **Rotating a working domain breaks it.** This
-   is the biggest gap between what the toolbox does and what "biconjugate of a PLQ function"
-   promises, and it is upstream of everything in next-step 1.
+   The quadrilateral one is a WIRING gap, not a missing algorithm. There are two Step 1s here:
+   - `convEnvCPLQ.m`, CCA2's own, **has** the 3-convex-edge case (`splitThreeConvex` cuts the
+     triangle through the middle vertex into two 2-convex-edge sub-triangles, [COAP] A.5) -- the
+     re-triangulation a general polyhedral set needs. Case B and the SCIP bridge use it.
+   - `plq_1p.convexEnvelope1`, the vendored cPLQ one, branches on `nCE == 0,1,2` and then falls
+     off the end: at `nCE == 3` it sets no envelope and never sets `lCE`, so `envelope` stays
+     EMPTY, and `conjugateFunction`'s `for i = 1:max(1, size(envelope,2))` indexes `envelope(1)`.
+
+   Case C (`quaPolToPlq` -> `triangulate` -> `maximum`) drives Step 1 through the VENDORED one, so
+   the split CCA2 already implements is unreachable from `conj`/`biconj` on a multi-vertex domain.
+   Fix: route Case C's Step 1 through `convEnvCPLQ`, or apply `splitThreeConvex` to the pieces
+   before handing them to `plq_1p`. That is upstream of everything in next-step 1.
+
+   (`nCE` counts edges of positive finite SLOPE, which is why an axis-aligned box -- all pieces
+   `nCE = 0` -- sails through while a sheared one does not. The SYMPTOM is orientation-dependent;
+   the missing branch is not.)
 
 1. **The remaining half of the two-face defect: `conjugateOfPiecePoly` counts edges instead of
    looking at them.** This is the sharpest lead in the repository and the mechanism is TRACED, not

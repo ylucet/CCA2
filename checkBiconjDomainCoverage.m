@@ -10,14 +10,18 @@ function checkBiconjDomainCoverage()
 %   ERROR  general convex quadrilateral (one face)
 %   ERROR  parallelogram (one face)
 %
-% The failures are NOT about being non-triangular -- an axis-aligned box works. They track
-% nCE, the count of edges with positive finite SLOPE, on the pieces triangulate produces:
-% an axis-aligned box gives nCE = 0 pieces (affine envelopes, everything downstream easy),
-% a parallelogram gives nCE = 1 (rational envelopes), and a general quadrilateral gives a
-% piece with nCE = 3, for which cPLQ's Step 1 has NO branch at all -- convexEnvelope returns
-% ZERO envelope pieces and plq_1p.conjugateFunction's `for i = 1:max(1, size(envelope,2))`
-% then indexes envelope(1). So the answer depends on the domain's ORIENTATION relative to the
-% axes, which is worth knowing before trusting a result on a rotated domain.
+% READ WHICH CONJUGATION FAILS before concluding anything: the general quadrilateral fails in
+% the FIRST, the parallelogram and the two-face box in the SECOND. They are different defects.
+%
+% The quadrilateral one is a WIRING gap, not a missing algorithm. Two Step 1s exist here:
+% convEnvCPLQ.m (CCA2's own) HAS the 3-convex-edge case -- splitThreeConvex cuts the triangle
+% through the middle vertex into two 2-convex-edge sub-triangles, [COAP] A.5, which is the
+% re-triangulation a general polyhedral set needs -- while the vendored plq_1p.convexEnvelope1
+% branches on nCE == 0,1,2 and then falls off the end, leaving `envelope` EMPTY at nCE == 3.
+% conjCPLQ's Case C drives Step 1 through the VENDORED one, so CCA2's own split is unreachable
+% from conj/biconj on a multi-vertex domain. nCE counts edges of positive finite SLOPE, which is
+% why an axis-aligned box (all pieces nCE = 0) sails through and a sheared one does not -- the
+% symptom is orientation-dependent, the missing branch is not.
 %  One case per domain FAMILY, each checked against a
 % ground truth that owes nothing to the conjugate pipeline.
 %

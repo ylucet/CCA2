@@ -431,22 +431,36 @@ to the conjugate pipeline: for a bounded domain it is the lower convex hull of t
 | parallelogram, one face | `x·y` | **ERROR** `QuaParCPLQ:conj:emptyResult` |
 | general convex quadrilateral, one face | `x·y` | **ERROR** `MATLAB:badsubscript` |
 
-**The failures are not about being non-triangular** — an axis-aligned box works. They track `nCE`,
-the number of edges of positive finite SLOPE, on the pieces `triangulate` produces:
+**These are not failures of the ALGORITHM, and two of the three are not even the same defect.**
+Read the failing step before drawing a conclusion:
 
-* axis-aligned box → both pieces `nCE = 0` → affine envelopes → everything downstream is easy;
-* parallelogram → `nCE = 1` on both pieces → rational envelopes → Step 1 fine, but the SECOND
-  conjugation comes back with no pieces;
-* general quadrilateral → one piece with **`nCE = 3`**, for which **cPLQ's Step 1 has no branch at
-  all**: `convexEnvelope` returns ZERO envelope pieces, and `plq_1p.conjugateFunction`'s
-  `for i = 1:max(1, size(obj.envelope,2))` — a guard written for "triangles where the convex
-  envelope is not computed" — then indexes `obj.envelope(1)`. `conjCPLQ.m`'s own header already
-  noted the missing `nCE==3` branch; this shows it is reachable from an ordinary convex
-  quadrilateral, not just a contrived input.
+| case | which conjugation | cause |
+|---|---|---|
+| general quadrilateral | **FIRST** | Step 1 has no `nCE == 3` branch on the path taken |
+| parallelogram | **SECOND** | `QuaParCPLQ.conj` returns no pieces |
+| two-face box | **SECOND** | the §7 arc-not-conjugated defect |
 
-So **the answer depends on the domain's ORIENTATION relative to the axes**, since `nCE` is defined
-by edge slopes. Rotating a working box breaks it. Worth knowing before trusting any result on a
-rotated domain, and worth fixing before this is described as working for general polygons.
+The general-quadrilateral failure is a **WIRING gap, not a missing algorithm.** There are two
+Step 1 implementations in this repository:
+
+* **`convEnvCPLQ.m` — CCA2's own.** It *has* the 3-convex-edge case: `splitThreeConvex` cuts the
+  triangle (in the bilinear frame) through the middle vertex into two 2-convex-edge sub-triangles,
+  [COAP] Appendix A.5. This is the "retriangulate first" the method calls for, and it is exactly
+  what a general polyhedral set needs. `biconj`'s Case B and the SCIP bridge both use it.
+* **`plq_1p.convexEnvelope1` — the vendored cPLQ one.** It branches on `nCE == 0`, `1`, `2` and
+  then simply falls off the end: for `nCE == 3` it sets no envelope and never sets `lCE`, so
+  `obj.envelope` stays EMPTY. `plq_1p.conjugateFunction`'s `for i = 1:max(1, size(envelope,2))`
+  — a guard written for "triangles where the convex envelope is not computed" — then indexes
+  `envelope(1)` and raises `MATLAB:badsubscript`.
+
+Case C (`conjCPLQ.m`: `quaPolToPlq` → `triangulate` → `maximum`) drives Step 1 through the
+**vendored** one. So the split CCA2 already implements is simply not reachable from `conj`/`biconj`
+on a multi-vertex domain. Routing Case C's Step 1 through `convEnvCPLQ`, or applying
+`splitThreeConvex` to the pieces before handing them to `plq_1p`, is the fix.
+
+`nCE` counts edges of positive finite SLOPE, which is why an axis-aligned box (all pieces
+`nCE = 0`, affine envelopes) sails through while a sheared one does not — the *symptom* is
+orientation-dependent even though the missing branch is not.
 
 ---
 
