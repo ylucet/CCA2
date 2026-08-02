@@ -94,6 +94,62 @@ classdef QuaParTest < matlab.unittest.TestCase
             testCase.verifyEqual(q.eval(S), 0.5*(S(:,1).^2+S(:,2).^2), 'AbsTol', 1e-12);
         end
 
+        function evalLocatesAPointExactlyAtItsOwnVertex(testCase)
+        % THE "QuaPar.eval exactly AT a vertex" defect, reproduced deterministically.
+        %
+        % A vertex is a point where several edge conics ought to evaluate to exactly zero. In
+        % floating point they come out at +-1e-16 instead, and the point location eval used to
+        % do -- `all(vals <= 0, 2)`, an exact comparison with no tolerance -- then admitted the
+        % point to NO face at all, so eval returned its Inf initialization. The fix is a
+        % conic-magnitude-relative tolerance; this test pins it.
+        %
+        % The mesh below is not hand-made: it is case 2 of
+        % sweepQuaParEvalAtVertices(20260802, 200), the first subdivision that sweep produces
+        % with a vertex the exact test cannot locate. That sweep is committed alongside this
+        % test and reports 225 of 1205 vertices (18.7%) unlocatable under the exact test and 0
+        % under the current one, with every ring of radius 1e-8 around them evaluating
+        % correctly -- the signature of an exact test applied to a quantity that is only zero
+        % in exact arithmetic. See SUPPORT_MATRIX.md sections 0.1 and 7.
+        %
+        % ONE quadratic on all five faces, so the function is globally smooth and any face that
+        % claims the point gives the same value: what this asserts is purely point location.
+            V = [ 0.37841944881914641   1.7270572762519276
+                 -0.30045265946634558   1.023881684721043
+                 -1.0491536570933224   -0.89771602108316162
+                 -1.0550773423633844   -1.2557220832312725
+                 -0.75039498409826855  -1.6784901757118644
+                  1.1867556445418206   -0.99215711362818615
+                  1.8670090437313969    1.0619937756582127];
+            coef = [0.28440589539080674 -0.45957766659064853 -0.17312711301216793 ...
+                   -0.72098049529602004 -0.86330613273515178  1.3392036513028369];
+            n = size(V,1);
+            E = zeros(0,3); F = zeros(0,2);
+            for j = 1:n
+                j2 = mod(j,n) + 1;
+                if j == 1,      fk = 1;
+                elseif j == n,  fk = n - 2;
+                else,           fk = j - 1;
+                end
+                E(end+1,:) = [j j2 1]; %#ok<AGROW>
+                F(end+1,:) = [fk 0];   %#ok<AGROW>
+            end
+            for j = 3:n-1
+                E(end+1,:) = [1 j 1];   %#ok<AGROW>
+                F(end+1,:) = [j-1 j-2]; %#ok<AGROW>
+            end
+            q = QuaPar(V, E, repmat(coef, n-2, 1), F);
+
+            for iv = 1:q.nv
+                v = q.V(iv,:);
+                want = QuaPar.evalPoly(coef, v);
+                got = q.eval(v);
+                testCase.verifyTrue(isfinite(got), sprintf( ...
+                    'eval returned %g at its OWN vertex %d (%.17g,%.17g)', got, iv, v(1), v(2)));
+                testCase.verifyEqual(got, want, 'AbsTol', 1e-9, sprintf( ...
+                    'eval at vertex %d', iv));
+            end
+        end
+
         function scalarMulAndNegateScaleCoefficientsOnly(testCase)
             p = QuaPar.energy();   % 0.5*(x^2+y^2), full domain
             S = [1 2; -3 0.5];

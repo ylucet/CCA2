@@ -191,11 +191,17 @@ classdef QuaPar < RatPar & Qua
                 % point sitting exactly ON a boundary is the case that breaks: the conic should
                 % evaluate to 0 there, but in floating point it comes out +-1e-17, and a single
                 % +1e-17 puts the point in NO face at all, leaving fVal at its Inf initialization.
-                % That is the "QuaPar.eval is wrong exactly AT a result vertex" defect --
-                % measured at ~1.4% of result vertices returning Inf or a wrong value, while
-                % being correct to ~1e-15 at radius 1e-8 from the same vertex, which is precisely
-                % the signature of an exact test on a quantity that is only zero in exact
-                % arithmetic.
+                % That is the "QuaPar.eval is wrong exactly AT a result vertex" defect.
+                %
+                % REPRODUCED AND MEASURED (2026-08-02) by sweepQuaParEvalAtVertices, committed
+                % beside this file and seeded: over 200 random polyhedral subdivisions,
+                % 225 of their own 1205 vertices are located by NO face under the exact test and
+                % 0 under this one, while every ring of radius 1e-8 around those same vertices
+                % evaluates correctly -- precisely the signature of an exact test applied to a
+                % quantity that is only zero in exact arithmetic. It reports both tests in ONE
+                % run, so the effect of this line is a column difference, not a comparison
+                % between two versions of the source. QuaParTest/evalLocatesAPointExactlyAtItsOwn
+                % Vertex pins case 2 of that sweep deterministically.
                 %
                 % The tolerance scales with |x|^2 because a conic is quadratic in x: at |x| ~ 1e3
                 % the rounding error in evalConic is ~1e6 times larger than at |x| ~ 1.
@@ -204,15 +210,13 @@ classdef QuaPar < RatPar & Qua
                 % and both faces give the same value; the code below already records that case
                 % as region 0.
                 %
-                % HONESTY ABOUT WHAT THIS IS AND IS NOT VERIFIED AGAINST. The change is motivated
-                % by the MECHANISM above, which matches the recorded symptom exactly. It is NOT
-                % backed by a reproduction: the 1.4% figure came from a randomized sweep in
-                % maxQuaPar's own validation, and an attempt to rebuild that sweep here did not
-                % assemble any qualifying case, so the specific failing vertices were never
-                % observed directly. What IS established is that this does not regress anything
-                % (full suite green, including QuaParTest and maxQuaParTest). Treat the defect as
-                % OPEN until someone reproduces it and confirms this closes it -- see
-                % SUPPORT_MATRIX.md section 7.
+                % WHAT IS AND IS NOT COVERED. The polyhedral half is settled, above. The CURVED
+                % half of the original claim (~0.8% of curved result vertices) is not: the sweep
+                % deliberately generates polyhedral subdivisions only, because producing valid
+                % random parabolic ones is separate work and manufacturing them by running
+                % maxQuaPar is the route that failed before. The mechanism is shared and this
+                % line fixes both, but only the polyhedral rate has been measured.
+                % See SUPPORT_MATRIX.md sections 0.1 and 7.
                 tolv = 1e-9 * max(1, max(abs(x), [], 2).^2);
                 flags = all(vals <= tolv, 2);
                 if any(flags)
