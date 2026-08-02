@@ -62,9 +62,18 @@ classdef QuaParCPLQ < RatPar & Qua
                 error('QuaParCPLQ:conj:engine', ...
                     'QuaParCPLQ conjugate only supports the ''cplq'' engine (got ''%s'').', engine);
             end
-            bc = obj.fnd.conjugateOfPiecePoly;
-            bc = bc.mergeL;
-            bc = bc.addEq;
+            % Same shape as plq.biconjugateF: conjugate each piece, then take the MAX of
+            % those conjugates -- the last step of the algorithm. This used to be
+            % conjugateOfPiecePoly -> mergeL -> addEq, which performs no max at all, and addEq
+            % then grouped by equal function ACROSS pieces and intersected their regions, which
+            % collapses. The max is functionNDomain.maxOfList, shared with plq.maximumConjugate
+            % and plq.biconjugateF so there is exactly one implementation of it.
+            [bcAll, iaB] = obj.fnd.conjugateOfPiecePoly;
+            groups = cell(1, numel(iaB)-1);
+            for k = 1:numel(iaB)-1
+                groups{k} = bcAll(iaB(k):iaB(k+1)-1);
+            end
+            bc = functionNDomain.maxOfList(groups);
             % An EMPTY piece list is not a function -- it evaluates to NaN everywhere, i.e. it
             % claims f* is +inf on all of R^2, which no conjugate of a proper function is. Refuse
             % it rather than hand it back.

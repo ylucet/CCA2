@@ -401,6 +401,13 @@ classdef functionNDomain
          function objR3 = maximumP(objL, lmerge) %, f, r2)
              % disp("in maximumP")
              % objL.printL
+           % HISTORY: objR3 must start initialized. The `if n == 0 ... return` below assigns
+           % objR (a different variable) and returns, leaving the OUTPUT unassigned, so MATLAB
+           % raises "Output argument objR3 ... not assigned" instead of returning a well-defined
+           % empty result -- the same shape as region.getEdges' and region.splitmax3' own bugs.
+           % n == 0 simply means no piece survived, which is a legitimate answer, and it is
+           % reachable from the biconjugate's max (plq.biconjugateF -> maxOfList).
+           objR3 = functionNDomain.empty();
            n = 0;
            for i = 1:size(objL,2)
              %  i
@@ -988,7 +995,33 @@ classdef functionNDomain
 
             for i=1:size(obj,2)
                 d = obj(i).d;
-                
+
+                % (0) DROP PROVABLY REDUNDANT CONSTRAINTS FIRST, from this local copy.
+                % This routine is edge-indexed throughout (see the ADAPTER note below), and a
+                % redundant constraint bounds no edge -- so by the adapter's own principle it has
+                % no place here. Doing it up front, rather than only when the edge numbering
+                % happens to collide, is what the biconjugate needs: the pieces of f* are affine
+                % functions on cones, and such a cone routinely arrives with a redundant facet
+                % (on the unit box with f = x*y, f*'s piece {s2>=1, s1>=1, s1<=s2} has s2>=1
+                % implied). With it present the edge indexing mis-assigns and the conjugate comes
+                % out on {x>=1, x+y<=2} instead of the true {y<=1, x+y<=2}.
+                %
+                % LOCAL COPY ONLY. The assembly path keeps these constraints -- preserving them
+                % is what took Step 3 from 57 wrong grid points to 0 -- and nothing here is
+                % pushed back into region.redundantSubset's own policy. redundantSubset is used
+                % purely as an LP-certified test, and it never deletes every copy of a duplicated
+                % constraint (regionTest pins that).
+                delR = d.redundantSubset(1:size(d.ineqs,2));
+                if ~isempty(delR)
+                    keepR = true(1, size(d.ineqs,2));
+                    keepR(delR) = false;
+                    if any(keepR)
+                        d.ineqs = d.ineqs(keepR);
+                        d = d.getVertices;
+                    end
+                end
+
+
                 d = d.removeTangent(d.nv,d.vx,d.vy);
                 % removeTangent can delete every constraint and hand back region.empty. An empty
                 % region has no nv/ineqs to index -- obj.nv on a 0x0 region array is a
@@ -1077,6 +1110,37 @@ classdef functionNDomain
                         keepE(k) = false;
                     end
                 end
+                % (3) A TIE. The rule above drops only a STRICTLY worse rival, so two colliding
+                % constraints with the SAME vertex count both survive and the scatter -- being
+                % last-write-wins -- silently destroys one of them anyway. That is not a corner
+                % case: it is what breaks the BICONJUGATE. The pieces of f* are affine functions
+                % on cones, and such a cone routinely arrives carrying a redundant constraint.
+                % On the unit box with f = x*y, f*'s piece {s1<=s2, s2<=0, s1<=0} (in which
+                % s1<=0 is implied by the other two) gives edgeNo = [1 2 2], and the scatter
+                % turns [s1-s2, s2, s1] into [s1-s2, s1, s1]: s2 GONE, s1 twice. The conjugate
+                % of that piece then comes out on {x+y>=0, y<=0} instead of the true polar cone
+                % {x>=0, x+y>=0}, and the max over the pieces collapses to nothing.
+                %
+                % Resolve the tie by LP-CERTIFIED REDUNDANCY: among the colliding constraints,
+                % drop one that region.redundantSubset proves adds nothing to the feasible set.
+                % This uses redundantSubset as a TEST, on this function's own local copy of d --
+                % it does not change what redundantSubset preserves for the assembly path, which
+                % is what the note above forbids. At most one constraint is dropped per slot, so
+                % a slot can never be emptied, and a piece whose edgeNo has no repeats is still
+                % untouched.
+                still = find(keepE);
+                slots = edgeNo(still);
+                for sIdx = unique(slots(:))'
+                    grp = still(slots == sIdx);
+                    if numel(grp) < 2
+                        continue
+                    end
+                    del = d.redundantSubset(grp);
+                    if ~isempty(del)
+                        keepE(del(1)) = false;   % one only: dropping it may un-redundant the rest
+                    end
+                end
+
                 d.ineqs = d.ineqs(keepE);
                 edgeNo  = edgeNo(keepE);
                 d.ineqs(edgeNo) = d.ineqs;
@@ -1655,4 +1719,42 @@ classdef functionNDomain
     
    
      
+
+     methods (Static)
+         function objR = maxOfList(groups)
+         % THE pointwise maximum of several piecewise functions. `groups` is a cell array; each
+         % entry is a functionNDomain array whose cells are disjoint (one piecewise function).
+         % Returns their pointwise max as a single functionNDomain array.
+         %
+         % This is the max step of the [JOGO]/[COAP] algorithm, and it is used TWICE -- once to
+         % assemble f* from the per-triangle conjugates, and once to assemble f** from the
+         % per-piece conjugates of f*. It lives here, in one place, so the two callers
+         % (plq.maximumConjugate and plq.biconjugateF) cannot drift apart.
+         %
+         % The conjugate's max is the harder of the two: its operands can carry parabolic edges,
+         % so the result is a general quadratic-on-parabolic subdivision. The biconjugate's max
+         % only ever sees polyhedral operands and returns a polyhedral subdivision -- a strict
+         % special case. So the conjugate's implementation covers both, and there is nothing to
+         % specialize for the biconjugate.
+         %
+         % `*` here is functionNDomain.mtimes, which does NOT multiply: it intersects each pair
+         % of regions and stores BOTH functions on the common region, so that maximumP has two
+         % values to compare on one domain. That pairing is what makes the max computable.
+             objR = functionNDomain.empty();
+             if isempty(groups), return, end
+             first = true;
+             for j = 1:numel(groups)
+                 g = groups{j};
+                 if isempty(g), continue, end
+                 if first
+                     objR = g;
+                     first = false;
+                 else
+                     objR = objR * g;
+                     objR = objR.maximumP(true);
+                 end
+             end
+         end
+     end
+
 end

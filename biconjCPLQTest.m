@@ -131,24 +131,30 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(b.f, p.f, 'AbsTol', 1e-12);
         end
 
-        function unsupportedShapesStillErrorAsBefore(testCase)
-            % Anything that is not a bounded polyhedral triangle falls through to the unchanged
-            % conj-of-conj path. A conjugate QuaPar (full-domain, curved) is the canonical one:
-            % biconjCPLQ must not pretend to handle it.
+        function conjugateOfATriangleBiconjugatesBackToItself(testCase)
+            % HISTORY: this was `unsupportedShapesStillErrorAsBefore`, and it asserted that
+            % g.biconj() ERRORS for g = (x*y on a triangle)* -- first with
+            % PLQ:conjCPLQ:notImplemented (the isDomBounded gate), then with
+            % QuaParCPLQ:conj:emptyResult. Neither was a property of the input: the biconjugate
+            % simply did not work for ANY input, because the last step of the algorithm --
+            % "max of all those conjugates" -- was missing from the second pass, and
+            % conjugateOfPiecePoly mis-assigned regions for pieces whose domain carried a
+            % redundant constraint. Both are fixed, so the input is now supported and the test
+            % asserts the VALUE instead of an error.
             %
-            % The identifier changed 2026-07-31, and where the refusal now comes from is the
-            % point. It used to come from conjCPLQ's isDomBounded gate, which stopped this at the
-            % FIRST of biconj's two conjugations. That gate is gone, and the first conjugation is
-            % now correct: g = max(0,s1,s2) as three wedges, and g* is the indicator of the
-            % simplex {s>=0, s1+s2<=1}, exact at 9 probes. It is the SECOND conjugation that
-            % fails -- conjugateOfPiecePoly returns no pieces for that indicator, whose conjugate
-            % is its support function max(0,x,y). Unguarded, that surfaced as a QuaParCPLQ
-            % evaluating to NaN at all 10 probed points, i.e. f* = +inf everywhere. So the
-            % remaining limitation is a Step 2 gap on an indicator-like piece, and it has nothing
-            % to do with boundedness -- which is what this test used to attribute it to.
+            % g = (x*y on conv{(0,0),(1,0),(0,1)})* = max(0,s1,s2), which is convex, so
+            % g** = g. That also exercises the shape the second pass found hardest: an
+            % unbounded, multi-face, piecewise-affine conjugate.
             p = biconjCPLQTest.triangle([0 0; 1 0; 0 1], [0 1 0 0 0 0]);
-            g = p.conj();                                   % QuaPar, unbounded multi-face
-            testCase.verifyError(@() g.biconj(), 'QuaParCPLQ:conj:emptyResult');
+            g = p.conj();
+            testCase.verifyEqual(g.kind(), 'QuaPar');
+            h = g.biconj();
+            X = [0 0; 2 1; -1 3; -2 -3; 0.5 0.25; 1 1; -0.5 -0.5];
+            for i = 1:size(X,1)
+                v = evalFunctionNDomain(h.fnd, X(i,:));
+                testCase.verifyEqual(v, max([0, X(i,1), X(i,2)]), 'AbsTol', 1e-9, ...
+                    sprintf('g** must equal max(0,x,y) at (%g,%g)', X(i,1), X(i,2)));
+            end
         end
 
         function nonCplqEnginesStillError(testCase)

@@ -188,17 +188,14 @@ classdef plq
 
       
       function obj = maximumConjugate(obj)
-
-          for k = 1:size(obj.pieces(1).maxConjugate,2) 
-             obj.maxConjugate(k) = obj.pieces(1).maxConjugate(k);
+      % Step 3 of the conjugate: the max of the per-piece conjugates. The loop that used to be
+      % written out here now lives in functionNDomain.maxOfList, because biconjugateF needs the
+      % SAME max and must not carry a second copy of it.
+          groups = cell(1, obj.nPieces);
+          for j = 1:obj.nPieces
+              groups{j} = obj.pieces(j).maxConjugate;
           end
-          for j = 2:obj.nPieces
-              
-              obj.maxConjugate = obj.maxConjugate * obj.pieces(j).maxConjugate;
-              %obj.maxConjugate.printM2
-              obj.maxConjugate = obj.maxConjugate.maximumP(true);
-               
-          end
+          obj.maxConjugate = functionNDomain.maxOfList(groups);
       end
 
       function obj = biconjugateF(obj)
@@ -206,19 +203,26 @@ classdef plq
          %    obj.pieces(i).biconjugateP
          % end
         [bc,ia] = obj.maxConjugate.conjugateOfPiecePoly;
-        
-%         for i = 1:size(ia,2)-1
-%           bc(ia(i):ia(i+1)-1).printM;
-%           bc(ia(i):ia(i+1)-1).printL;
-% %          bc(ia(i):ia(i+1)-1).printLatex;
-%         end
-        %bc.printL
-       % return
-        bc = bc.mergeL;
-       % bc.printL;
-        
-        %return
-        obj.biconjugate = bc.addEq;
+
+        % HISTORY: this was `bc.mergeL` then `bc.addEq`, and it performed NO MAX -- so the last
+        % step of the algorithm ("max of all those conjugates to obtain f**") was simply absent.
+        % conjugateOfPiecePoly returns the conjugates of the pieces of f* CONCATENATED, with
+        % ia(k):ia(k+1)-1 delimiting piece k's own cells; cells within one block are disjoint,
+        % cells in different blocks overlap because they belong to different functions. addEq
+        % groups by equal function ACROSS blocks and adds their equations, which intersects
+        % regions belonging to different conjugates: on the unit box with f = x*y the four cells
+        % carrying x+y-1 come from four different blocks and their intersection degenerates to
+        % x = 1, so the group is dropped and the biconjugate comes back EMPTY. (It is worse in
+        % pristine cPLQ, where the same input errors outright in addEq.)
+        %
+        % The fix is to run the max the algorithm calls for, and to run the SAME max Step 3 uses
+        % -- functionNDomain.maxOfList, shared with maximumConjugate above. The blocks are
+        % exactly the groups it wants, which is what ia is for.
+        groups = cell(1, numel(ia)-1);
+        for k = 1:numel(ia)-1
+            groups{k} = bc(ia(k):ia(k+1)-1);
+        end
+        obj.biconjugate = functionNDomain.maxOfList(groups);
         obj.lBiconj = true;
         return
 % 
