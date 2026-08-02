@@ -183,6 +183,17 @@ function g = maxQuaPar(g1, g2)
 %       script, not committed, and its seed was not recorded, so none of these figures can
 %       be re-derived. Re-running any of this means writing a NEW seeded, committed sweep --
 %       see SUPPORT_MATRIX.md section 0.1, which now requires that of any quoted measurement.
+%     - THAT SWEEP NOW EXISTS: sweepMaxQuaParCurvedSplit.m, seeded and committed. Prefer its
+%       numbers to the ones above, which are kept only as a record of what was once claimed.
+%       sweepMaxQuaParCurvedSplit(20260802, 200) gives: 131 sampled splits, 30 assembled,
+%       112/112 straight-edge midpoints and 1800/1800 interior points exact, and 0 of 369
+%       result VERTICES disagreeing (the ~0.8% below no longer reproduces -- the QuaPar.eval
+%       tolerance appears to have closed the curved half as well as the polyhedral one).
+%       It also breaks the non-assembling cases out by error identifier, which the old count
+%       did not: 80 of the 131 never reach maxQuaPar at all, because Step 2 refuses the
+%       triangle with conjPieceCPLQ:notImplemented, and only 21 hit maxQuaPar's own guard. So
+%       "85 of 115 assembled" was measuring a pre-filtered population, and the dominant
+%       obstacle to this configuration is UPSTREAM of this file.
 %     - Exactly AT a result vertex, ~0.8% (9/1105) disagree -- QuaPar.eval's exact, no-tolerance
 %       point location can leave a corner unclaimed (+Inf) or claimed by an adjacent face. This is
 %       PRE-EXISTING, not introduced here: the same sweep restricted to purely POLYHEDRAL pairs

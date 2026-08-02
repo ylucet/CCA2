@@ -1053,6 +1053,28 @@ the plan:
    disagrees ~0.8% of the time, but that is **pre-existing** `QuaPar.eval` point location, not new:
    the same sweep on purely polyhedral pairs disagrees ~1.4% of the time at result vertices.
 
+   > **SUPERSEDED 2026-08-02 — do not quote the paragraph above.** The sweep that produced
+   > 115/85, 340/340, 5100/5100, the 0.8% and the 1.4% was a throwaway script: never committed,
+   > seed not recorded, so none of it can be re-derived, and `SUPPORT_MATRIX.md` §0.1 forbids
+   > quoting it onward. Two committed, seeded sweeps replace it:
+   >
+   > * `sweepMaxQuaParCurvedSplit(20260802, 200)` — the same configuration: **131 sampled splits,
+   >   30 assembled, 112/112 straight-edge midpoints and 1800/1800 interior points exact, and
+   >   0 of 369 result vertices disagreeing**. The at-a-vertex disagreement no longer reproduces
+   >   at all. The assembly rate is much lower than 85/115 because this sweep does not
+   >   pre-filter and reports *why* each case stopped: **80 of the 131 never reach `maxQuaPar`**,
+   >   Step 2 refusing the triangle with `conjPieceCPLQ:notImplemented`, and only 21 hit
+   >   `maxQuaPar`'s own guard — so the dominant obstacle here is upstream of `maxQuaPar`, which
+   >   the old aggregate concealed.
+   > * `sweepQuaParEvalAtVertices(20260802, 200)` — the polyhedral at-a-vertex rate, on a
+   >   deliberately different population (directly generated subdivisions, no `maxQuaPar`):
+   >   **225 of 1205** vertices unlocatable under the pre-fix exact test, **0** under the current
+   >   tolerant one. 18.7% is *not* a restatement of 1.4%.
+   >
+   > Still unreproducible, and flagged as such in §0.1: the **58 → 76 of 395** quadrilaterals,
+   > which is a before/after pair across a code change and would need the sweep run against both
+   > revisions of a population that no longer exists.
+
    **Arrangement validity.** Every subdivision must satisfy: any two edges (segment, ray, arc) meet
    in the empty set or in a proper face — otherwise a vertex is missing. This is now checked
    *independently* of `maxQuaPar`'s own bookkeeping, on the final `V/E/Ec` geometry alone, with arcs
