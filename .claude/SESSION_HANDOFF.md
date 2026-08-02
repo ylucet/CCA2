@@ -78,12 +78,15 @@ h = f* on pieces P (P polyhedral, or with a single parabolic edge)
    - `convEnvCPLQ.m`, CCA2's own, **has** the 3-convex-edge case (`splitThreeConvex` cuts the
      triangle through the middle vertex into two 2-convex-edge sub-triangles, [COAP] A.5) -- the
      re-triangulation a general polyhedral set needs. Case B and the SCIP bridge use it.
-   - `plq_1p.convexEnvelope1`, the vendored cPLQ one, branches on `nCE == 0,1,2` and then falls
+   - `plq_1p.convexEnvelope1`, the one merged in from cPLQ, branches on `nCE == 0,1,2` and falls
      off the end: at `nCE == 3` it sets no envelope and never sets `lCE`, so `envelope` stays
      EMPTY, and `conjugateFunction`'s `for i = 1:max(1, size(envelope,2))` indexes `envelope(1)`.
 
-   Case C (`quaPolToPlq` -> `triangulate` -> `maximum`) drives Step 1 through the VENDORED one, so
+   Case C (`quaPolToPlq` -> `triangulate` -> `maximum`) drives Step 1 through the merged-in one, so
    the split CCA2 already implements is unreachable from `conj`/`biconj` on a multi-vertex domain.
+   NOTE both files are CCA2's own, in the repository root -- see `SUPPORT_MATRIX.md` section 0.2.
+   Nothing in `cPLQ/` is ever executed, so this is a duplicated Step 1 inside CCA2, not a
+   dependency on an outside package, and converging the two is CCA2's call to make.
    Fix: route Case C's Step 1 through `convEnvCPLQ`, or apply `splitThreeConvex` to the pieces
    before handing them to `plq_1p`. That is upstream of everything in next-step 1.
 

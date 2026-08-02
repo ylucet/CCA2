@@ -16,7 +16,7 @@ function checkBiconjDomainCoverage()
 % The quadrilateral one is a WIRING gap, not a missing algorithm. Two Step 1s exist here:
 % convEnvCPLQ.m (CCA2's own) HAS the 3-convex-edge case -- splitThreeConvex cuts the triangle
 % through the middle vertex into two 2-convex-edge sub-triangles, [COAP] A.5, which is the
-% re-triangulation a general polyhedral set needs -- while the vendored plq_1p.convexEnvelope1
+% re-triangulation a general polyhedral set needs -- while plq_1p.convexEnvelope1, merged in
 % branches on nCE == 0,1,2 and then falls off the end, leaving `envelope` EMPTY at nCE == 3.
 % conjCPLQ's Case C drives Step 1 through the VENDORED one, so CCA2's own split is unreachable
 % from conj/biconj on a multi-vertex domain. nCE counts edges of positive finite SLOPE, which is
