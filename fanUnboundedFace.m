@@ -37,12 +37,14 @@ function ds = fanUnboundedFace(r, x, y)
 % Neither has interior, so neither contributes to a sup.
 
     [D, kind] = r.recessionRays;
+    if strcmp(kind, 'nonpointed')
+        ds = cutNonPointed(r, x, y);        % half-plane / slab / plane: cut it pointed first
+        return
+    end
     if ~ismember(kind, {'ray','wedge'})
         error('fanUnboundedFace:notPointed', ...
             ['fanUnboundedFace needs a pointed unbounded face; recessionRays reports ''%s''. ' ...
-             'A bounded face belongs on plq_1p.triangulate''s existing path, and a face whose ' ...
-             'recession cone contains a line (a half-plane or a slab) has no apex to fan from.'], ...
-            kind);
+             'A bounded face belongs on plq_1p.triangulate''s existing path.'], kind);
     end
 
     [nP, px, py] = r.finiteVertices;
@@ -96,6 +98,69 @@ function ds = fanUnboundedFace(r, x, y)
 end
 
 % ------------------------------------------------------------------------------------------
+function ds = cutNonPointed(r, x, y)
+% Cover a face whose recession cone contains a LINE by pieces whose recession cones are POINTED,
+% and fan each of those. Handles the two shapes the fan itself cannot start on -- a HALF-PLANE
+% (recession cone a half-plane) and a SLAB (recession cone a line) -- and, by recursing, the
+% whole plane.
+%
+% WHY A CUT IS THE WHOLE FIX, AND WHY IT NEEDS NO NEW ENVELOPE THEORY. The fan needs an apex, and
+% a non-pointed face has none: it recedes along BOTH +t and -t for some direction t, so no vertex
+% dominates. Cutting transversally to t removes exactly that. Write L for the lineality space of
+% the recession cone R = {d : A d <= 0}. R contains a line precisely when rank(A) < 2 (which is
+% what made recessionRays report 'nonpointed'), so every nonzero row of A is parallel to a single
+% normal a, and L is spanned by t = (-a2, a1). Cutting along {t'z = 0} gives
+%       P = (P n {t'z <= 0}) u (P n {t'z >= 0}),
+% and the half's recession cone is R n {t'd <= 0} (resp. >= 0), which no longer contains a line:
+% a line in it would need both d and -d, forcing t'd = 0, and in the plane the only such
+% directions are the ones the cut just made extreme. A half-plane therefore becomes two wedges and
+% a slab becomes two half-strips -- both shapes convEnvUnbounded already handles exactly.
+%
+% The cut is a COVER of the same kind fanUnboundedFace's own header justifies: a sup over a union
+% is the max of the sups, and each half is a SUBSET of the face, so nothing is over-claimed. The
+% two halves overlap on the cut line, which has no interior and so contributes no sup of its own.
+%
+% The cut POSITION is free -- the face recedes along both +t and -t, so every half is nonempty for
+% any offset -- and 0 is chosen because it keeps the new constraint's coefficients exactly those
+% of t. That matters for the same reason recessionRays returns rational directions rather than
+% (cos,sin): a 6.1e-17 where a 0 belongs turns `x <= 0` into a different, still non-pointed,
+% half-plane. t is likewise scaled by its own largest entry, never normalized to unit length.
+%
+% Recursion terminates in at most two levels in the plane: each cut strictly drops the dimension
+% of the lineality space, from 2 (no constraints at all) to 1 to 0.
+    [A, ~, lin] = r.linearForm;
+    if ~all(lin)
+        error('fanUnboundedFace:nonAffineFacet', ...
+            ['cutting a non-pointed face needs every facet affine: a curved facet''s recession ' ...
+             'behaviour is not a half-plane, so its lineality direction is not read off A.']);
+    end
+    tolA = 1e-9 * max(1, max(abs(A(:))));
+    a = [];
+    for j = 1:size(A,1)
+        if norm(A(j,:)) > tolA, a = A(j,:); break, end
+    end
+    if isempty(a)
+        t = [1 0];                      % no constraints: the whole plane, cut it anywhere
+    else
+        t = [-a(2), a(1)];              % perpendicular to the single constraint normal
+    end
+    t = t / max(abs(t));                % O(1) and exactly rational when a is; never unit-length
+
+    vars = r.vars;
+    g = t(1)*vars(1) + t(2)*vars(2);
+
+    % The halves are built with region.plus, which IS intersection (it unions the inequality
+    % lists and dedupes) -- not by pulling r.ineqs apart and rebuilding. Reading that property
+    % from outside the class does not give the constraint count linearForm sees internally, and
+    % a cut built from a miscounted list silently loses a facet: the slab's half came back
+    % 'bounded' from recessionRays, i.e. with the far constraint gone.
+    ds = {};
+    for sgn = [1 -1]
+        half = r + region(sgn*g, vars);
+        ds = [ds, fanUnboundedFace(half, x, y)]; %#ok<AGROW>
+    end
+end
+
 function V = dedupeRows(V)
     keep = true(size(V,1),1);
     for i = 2:size(V,1)

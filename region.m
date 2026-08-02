@@ -3245,6 +3245,81 @@ classdef region
           obj.vy(obj.nv) = -intmax;
           %disp("--")
        end
+
+       % A SLAB -- bounded in one direction, infinite in the other -- reaches here with NOTHING.
+       % Its constraints are parallel, so the pairwise phase above finds no intersection, and no
+       % CORNER of the +-intmax box satisfies the two bounds at once, so none of the four tests
+       % above fires either. nv stays 0, and the constructor reads that as "no vertices, hence
+       % infeasible" and returns region.empty. That is simply wrong: {0 <= y <= 1} is a perfectly
+       % good nonempty region, and it made every slab FACE unrepresentable -- measured, the
+       % symptom surfaced two layers away as fanUnboundedFace refusing a slab because
+       % recessionRays reports 'bounded' for an empty region.
+       %
+       % The box clip is the right idea; it was only ever applied at the box's CORNERS. Apply it
+       % along the box's EDGES too: intersect each affine constraint with x = +-intmax and
+       % y = +-intmax and keep the feasible hits. For the slab that yields (+-intmax, 0) and
+       % (+-intmax, 1), exactly the four markers the rest of region already expects for an
+       % unbounded shape.
+       %
+       % GUARDED BY nv == 0 deliberately, so that nothing which already produces a vertex can
+       % change: this only ever runs where the alternative is a wrong `empty`.
+       %
+       % And only for a certified 2-DIMENSIONAL region. nv == 0 also covers a genuinely infeasible
+       % set and a DEGENERATE one (a line or a point, e.g. {x <= 0, -x <= 0}), and both must keep
+       % coming out empty: a measure-zero cell contributes nothing to a sup, but if it survives
+       % into a max assembly it can carry a function on territory that is not its own -- the
+       % over-claim failure mode this file's LP certificates exist to prevent.
+       %
+       % A polyhedron is 2-dimensional exactly when no constraint is an IMPLICIT EQUALITY, i.e.
+       % when min a_i'z over the region is strictly below b_i for every i. That is the same LP
+       % primitive maxLinear already provides. Anything the LP cannot certify -- a curved facet,
+       % an infeasible set, a non-converged solve -- falls through to the previous behaviour
+       % (leave nv at 0, hence empty) rather than guessing.
+       if obj.nv == 0
+           [Alp, blp, linlp] = obj.linearForm;
+           full2D = ~isempty(Alp) && all(linlp);
+           if full2D
+               for i = 1:size(Alp,1)
+                   [v, st] = region.maxLinear(Alp, blp, -Alp(i,:));
+                   if st == 1
+                       continue                     % min a_i'z = -inf: not an implicit equality
+                   end
+                   if st ~= 0 || abs(-v - blp(i)) <= 1e-9*max(1, abs(blp(i)))
+                       full2D = false; break        % infeasible, undecided, or tight everywhere
+                   end
+               end
+           end
+       else
+           full2D = false;
+       end
+       if full2D
+           M = sym(intmax);
+           for i = 1:nIn
+               if ~affT(i)
+                   continue                 % a curved facet has no single box-edge crossing
+               end
+               a = cf(i,1); b = cf(i,2); c = cf(i,3);
+               cand = sym.empty(0,2);
+               if ~isAlways(b == 0)
+                   for sgn = [1 -1]
+                       cand(end+1,:) = [sgn*M, -(a*sgn*M + c)/b]; %#ok<AGROW>
+                   end
+               end
+               if ~isAlways(a == 0)
+                   for sgn = [1 -1]
+                       cand(end+1,:) = [-(b*sgn*M + c)/a, sgn*M]; %#ok<AGROW>
+                   end
+               end
+               for k = 1:size(cand,1)
+                   if obj.ptFeasible(obj.vars, cand(k,:))
+                       obj.nv = obj.nv + 1;
+                       obj.vx(obj.nv) = cand(k,1);
+                       obj.vy(obj.nv) = cand(k,2);
+                   end
+               end
+           end
+       end
+
        for i = 1:n
            if nargin == 2
                %intmax,obj.vy(i)
