@@ -1,45 +1,47 @@
 # Session Handoff
 
-_Last updated: 2026-08-02 (overnight session)_
+_Last updated: 2026-08-02 10:00 PDT_
 
 ## What happened this session
 
 **A silent wrong answer in the cross-piece maximum, found by disbelieving the previous
 diagnosis.** The handoff said the two-face defect lived in the second pass and that "both first
 conjugates are verified correct against brute force at 7 dual points". A grid audit says the FIRST
-conjugate was wrong at **800 of 40000 points, worst error 0.48**. The 7 points missed it. Root
-cause: `region.maxArray` decided which of two candidate functions dominates a cell by PROBING one
-interior point, and a probe is evidence, not proof. That is now replaced by a sound global sign
-test, which also fixed next-step 4's 4-cone case (it no longer returns a wrong number).
+conjugate was wrong at **800 of 40000 points, worst error 0.48**. Root cause: `region.maxArray`
+decided which of two candidate functions dominates a cell by PROBING interior points, and a probe
+is evidence, not proof. Replaced by a sound global sign test, which also repaired the 4-cone
+Step 3 cell drop.
 
 **Performance: the symbolic-engine round trips roughly halved** -- 10809 -> 5591 `subs` calls on
-the two-face `f*` -- by batching substitutions that were being done one constraint at a time. No
-arithmetic changed, and the evidence for that is stronger than a test count: the batching-only
-tree's suite results are BYTE-IDENTICAL to the baseline's, suite by suite. No wall-clock figure is
-quoted, deliberately; see next-step 3.
+the two-face `f*` -- by batching substitutions done one constraint at a time. Evidence it changed
+no answers: the batching-only tree's suite results are BYTE-IDENTICAL to the baseline's, suite by
+suite.
 
-**The two unreproducible measurement claims are now reproducible**, via two committed, seeded
-sweeps -- and one of them retired a defect: `QuaPar.eval`'s at-a-vertex fix is verified.
+**Both unreproducible measurement claims are now reproducible**, via two committed seeded sweeps;
+one of them verified the `QuaPar.eval` at-a-vertex fix, closing that defect.
+
+**Then, on request, two coverage questions answered with measurements** rather than opinion:
+`biconj`'s domain coverage (`checkBiconjDomainCoverage`) and what a SCIP + QPLIB run would need
+(`checkBoxEnvelopeForSCIP`). Both surfaced NEW, previously unrecorded gaps -- see next-steps 0
+and 0b, which are now the most decision-relevant items here.
 
 ## Where things stand
 
-- Branch: `main`. Commits this session, oldest first:
-  - `46fac7c` maxArray's single-probe dominance + `getNormalConeVertexQ`'s out-of-range index
-  - `375f59d` `sweepQuaParEvalAtVertices` (seeded) -- verifies the `QuaPar.eval` fix
-  - `3badfb7` `sweepMaxQuaParCurvedSplit` (seeded) -- retires maxQuaPar's curved-split numbers
-  - `f861db3` batched substitutions + the sound max + the Step 3 emptiness veto (the one that
-    repairs `46fac7c`, see below)
+- Branch: `main` @ `9720eff` -- "Measure what a SCIP + QPLIB run would need from CCA2"
+- Pushed: **yes**, all 9 commits (`9bbf99f..9720eff`) are on `origin/main`.
 - **Suite: COMPLETE and green.** `300 passed / 1 failed / 0 incomplete over 26 suites`, the one
   failure being `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, which fails by
-  design (next-step 1). Compare `46fac7c` mid-session at 298/2/1. Run against a SNAPSHOT, not the
-  working tree -- see the harness note.
-- Pushed: **pending** -- push before doing anything else.
-- **`46fac7c` on its own is BROKEN** and the commit after it repairs the damage: its
-  "all probes must agree" rule made `maxArray` answer "undecided" often enough to send
-  `maxEqDom` into `splitmax3` with a RATIONAL pair, which `region.normalize1` cannot represent.
-  Measured on `testMaxMultiRegion/testMax`: pre-session 1/0, `46fac7c` 0/1, final tree 1/0. If
-  you ever bisect through this session, expect that one commit to fail.
-- **Tag `v0.1` is PUSHED and public.** Moving it is not cheap; anything further should be `v0.1.1`.
+  design. Compare `46fac7c` mid-session at 298/2/1. Run against a SNAPSHOT -- see the harness note.
+- **`46fac7c` on its own is BROKEN** and `f861db3` repairs it: its "all probes must agree" rule
+  made `maxArray` answer "undecided" often enough to send `maxEqDom` into `splitmax3` with a
+  RATIONAL pair, which `region.normalize1` cannot represent. Measured on
+  `testMaxMultiRegion/testMax`: pre-session 1/0, `46fac7c` 0/1, final 1/0. Expect that one commit
+  to fail if you bisect through this session.
+- **Tag `v0.1` is PUSHED and public.** Anything further should be `v0.1.1`.
+- **Nothing in `cPLQ/` is ever executed** -- gitignored, never on the MATLAB path, `which('region')`
+  resolves to the repo root. The files that run are CCA2's own merged, heavily rewritten copies
+  (`region.m` 3789 -> 4741 lines). So a defect in `plq_1p`/`functionNDomain` is CCA2's to fix, not
+  an outside dependency's. `SUPPORT_MATRIX.md` section 0.2 records the whole check.
 
 ### THE ALGORITHM (unchanged; get this right)
 
@@ -55,15 +57,12 @@ h = f* on pieces P (P polyhedral, or with a single parabolic edge)
 
 - **Step 1's output is NOT the convex envelope of f over its domain.** It is a per-triangle
   intermediate. The envelope over a box/polygon is `f**`, i.e. two passes.
-- **The max is the same code in both passes** and must not be duplicated: `functionNDomain.maxOfList`,
-  called by `plq.maximumConjugate`, `plq.biconjugateF` and `QuaParCPLQ.conj`.
-- `ia` from `conjugateOfPiecePoly` is only the block delimiter.
+- **The max is the same code in both passes**: `functionNDomain.maxOfList`.
 - `region.plus` is INTERSECTION. `functionNDomain.mtimes` (`*`) does NOT multiply: it intersects
   each pair of regions and stores BOTH functions there so `maximumP` has two values to compare.
 - **`maxOfList` intersecting domains is CORRECT, not a bug.** `f**` is a MAX of extended-real
   functions, so its domain is the INTERSECTION of the per-piece conjugates' domains. One piece
-  whose conjugate comes out on too small a set collapses the whole result -- which is exactly what
-  the open defect below does.
+  whose conjugate comes out on too small a set collapses the whole result.
 
 ## Next steps
 
@@ -93,6 +92,25 @@ h = f* on pieces P (P polyhedral, or with a single parabolic edge)
    (`nCE` counts edges of positive finite SLOPE, which is why an axis-aligned box -- all pieces
    `nCE = 0` -- sails through while a sheared one does not. The SYMPTOM is orientation-dependent;
    the missing branch is not.)
+
+0b. **What a SCIP + QPLIB run needs -- measured, and it changes the priorities.** QPLIB's viable
+   family (Sahinidis `1913/1922/1931/1940`) has unit-BOX domains, so per term SCIP needs the
+   envelope over an axis-aligned box: that is `f**`, not `convEnvCPLQ`. The spike's 2026-07-11
+   finding that Step-1 cuts over a box are INVALID still stands. What changed is that `biconj`
+   now gets the box envelope right -- exact for `x*y`, `3xy+7x-2y+5`, a post-branching sub-box
+   and a wide box `[-2,3]x[-1,4]` (`checkBoxEnvelopeForSCIP`, 38-59 s each). Four gaps remain:
+   (1) the bridge has no `biconj` entry point; (2) `biconj` returns a `QuaParCPLQ` whose
+   `V/E/Ec/f/F` are EMPTY while the bridge reads exactly those -- a separator needs only VALUE +
+   SUBGRADIENT at the LP point, so expose those off the symbolic pieces rather than rebuilding the
+   mesh; (3) a quadratic with DIAGONAL terms over a box ERRORS, in the SECOND conjugation
+   (`conjugateOfPiecePoly`), a different defect from next-step 0's; (4) 40-60 s per term makes
+   per-node use impossible and even offline `QPLIB_1940`'s 288 objective terms ~4 h.
+
+   **Weigh this before investing:** for a BILINEAR term over a BOX the envelope IS McCormick in
+   closed form, which is what CCA2 returns. So on QPLIB's box terms CCA2 is a 40-second
+   reimplementation of a formula SCIP already applies -- correct, a good validation, NO stronger
+   as a cut. CCA2 only beats McCormick where the domain is not a box or the piece is not bilinear,
+   and those are exactly next-step 0 and gap (3). Full detail: `SUPPORT_MATRIX.md` section 0.0.1.
 
 1. **The remaining half of the two-face defect: `conjugateOfPiecePoly` counts edges instead of
    looking at them.** This is the sharpest lead in the repository and the mechanism is TRACED, not
@@ -203,11 +221,14 @@ h = f* on pieces P (P polyhedral, or with a single parabolic edge)
 
 ## SCIP (`AI/spike/SCIP`) -- read before renaming anything
 
-SCIP bridges in through the MATLAB Engine and calls **exactly one entry point, `convEnvCPLQ`**,
-via its own glue `SCIP/src/cca2ConvexEnvelope.m`, consuming the returned `RatPol`'s
-`V/E/F/f(:,5:10)/den` as plain arrays. It never calls `conj`, `biconj`, `partialConj`, or any
-`QuaPar` method -- so **none of the open items above is on its path**. `QuaPoly.m` is an alias its
-glue depends on; do not remove it. See `SUPPORT_MATRIX.md` section 0.0.
+SCIP bridges in through the MATLAB Engine and today calls **exactly one entry point,
+`convEnvCPLQ`**, via its own glue `SCIP/src/cca2ConvexEnvelope.m`, consuming the returned
+`RatPol`'s `V/E/F/f(:,5:10)/den` as plain arrays. `QuaPoly.m` is an alias its glue depends on; do
+not remove it. See `SUPPORT_MATRIX.md` section 0.0.
+
+**But that is no longer the whole story**, and the old note here ("none of the open items is on its
+path") is retired: a box-domain benchmark needs `biconj`, so next-step 0b's gaps ARE on SCIP's
+path. Section 0.0.1 has the measurements.
 
 ## Do NOT redo these -- tried, with reasons
 
@@ -280,7 +301,14 @@ glue depends on; do not remove it. See `SUPPORT_MATRIX.md` section 0.0.
 - `evalFunctionNDomain.m`, `symbolicFunction.m` (`subsF`) -- batched substitutions.
 - `biconjugateTest.m` -- 7 tests, one failing by design. **Read the failure-site comment before
   touching the parabolic branch**; it carries the traced mechanism.
-- `sweepQuaParEvalAtVertices.m`, `sweepMaxQuaParCurvedSplit.m` -- the two seeded sweeps. Neither
-  matches `*Test.m`/`test*.m`, so neither joins the suite; run them by hand.
-- `SUPPORT_MATRIX.md` -- section 0.0 downstream consumers, 0.1 the reproducibility rule (now with
-  two discharged rows), 7 known wrong-answer defects, 8 the blocker list.
+- `sweepQuaParEvalAtVertices.m`, `sweepMaxQuaParCurvedSplit.m` -- the two seeded sweeps.
+- `checkBiconjDomainCoverage.m` -- one case per domain family vs an independent ground truth
+  (lower convex hull of the sampled graph); prints the table behind next-step 0.
+- `checkBoxEnvelopeForSCIP.m` -- the box-envelope cases behind next-step 0b.
+  None of these four matches `*Test.m`/`test*.m`, so none joins the suite; run them by hand.
+- `plq_1p.m` -- `convexEnvelope1` (branches on `nCE == 0,1,2` and then falls off the end: the
+  next-step 0 gap) and `conjugateFunction` (whose `max(1, size(envelope,2))` then indexes nothing).
+- `convEnvCPLQ.m` -- CCA2's OTHER Step 1, the one that HAS `splitThreeConvex`.
+- `SUPPORT_MATRIX.md` -- 0.0 downstream consumers, **0.0.1 what SCIP+QPLIB needs**, 0.1 the
+  reproducibility rule (two discharged rows), **0.2 where the cPLQ code lives**, 7 known
+  wrong-answer defects, **7.1 biconj domain coverage**, 8 the blocker list.
