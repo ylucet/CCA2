@@ -134,6 +134,41 @@ classdef biconjugateTest < matlab.unittest.TestCase
             end
         end
 
+        function twoFaceConjugateIsExactIncludingTheLensCell(testCase)
+        % The FIRST conjugate of the two-face unit square, pinned point by point. This is the
+        % half of biconjugateOverATwoFaceSubdivisionIsTheEnvelope that now works, and it pins a
+        % SILENT WRONG ANSWER that stood for a long time behind a check that was too coarse to
+        % see it (7 hand-picked dual points, all of which happened to miss the bad cell).
+        %
+        % f = x*y on [0,1]^2 has f*(s) = max(0, s1, s2, s1+s2-1) -- polyhedral, no parabola.
+        % Assembled from the two triangles it arrives as ten pieces, three of which are bounded
+        % by the conics (s1+s2)^2 = 4*s1 and (s1+s2)^2 = 4*s2. The two triangles' conjugates
+        % overlap in the LENS {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2}, where one contributes s1
+        % and the other s2, so the lens has to be SPLIT on s1 = s2. It was not: the lens's only
+        % two vertices, (0,0) and (1,1), both lie ON s1 = s2, so s1 and s2 tie at every vertex
+        % AND at the centroid, and region.maxArray then decided dominance from the first feasible
+        % probe point it found -- one sample, on one side of a line the region straddles. The
+        % whole lens came back carrying s2, and f*(0.66,0.18) was 0.18 instead of 0.66.
+        %
+        % (0.66,0.18) below is that point; keep it. See region.maxFromPts for the fix.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];
+            p = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
+            g = p.conj('cplq');
+
+            S = [0.66 0.18; 0.18 0.66; 0.6 0.4; 0.4 0.6; 0.5 0.5; 0.9 0.9; ...
+                 0 0; 1 1; 1.5 1.5; 2 -0.3; -1 0.5; 0.2 0.9; -1 -1; 0.3 -0.4];
+            for i = 1:size(S,1)
+                want = max([0, S(i,1), S(i,2), S(i,1)+S(i,2)-1]);
+                got = biconjugateTest.evalAny(g, S(i,:));
+                testCase.verifyFalse(isnan(got), sprintf( ...
+                    'two-face f* uncovered at (%g,%g)', S(i,1), S(i,2)));
+                testCase.verifyEqual(got, want, 'AbsTol', 1e-9, sprintf( ...
+                    'two-face f* = max(0,s1,s2,s1+s2-1) at (%g,%g)', S(i,1), S(i,2)));
+            end
+        end
+
         % KNOWN FAILING, left in deliberately -- see the note below. Remove the tag when fixed.
         function biconjugateOverATwoFaceSubdivisionIsTheEnvelope(testCase)
         % A genuine multi-FACE subdivision (nf = 2), not one face that triangulate happens to
@@ -152,21 +187,44 @@ classdef biconjugateTest < matlab.unittest.TestCase
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             p = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
             % OPEN DEFECT this test pins. The SAME function on the SAME domain gives the right
-            % answer as ONE face (bilinearOverABoxGivesTheMcCormickEnvelope) and the wrong one
-            % as two. Both first conjugates are correct -- verified against a brute-force sup at
-            % 7 dual points, one-face f* (6 regions) and two-face f* (9 regions) agree exactly.
-            % The difference is that the two-face f* carries PARABOLIC pieces (e.g. the conic
-            % 2*s1*s2 - 4*s1 + s1^2 + s2^2 <= 0), and on those the second pass returns the
-            % PER-FACE envelope: at (0.5,0.5), (0.25,0.25), (0.1,0.1), (0.6,0.6) -- all on the
-            % shared diagonal y = x, where x*y is convex and a diagonal split relaxes nothing --
-            % it returns x*y itself instead of max(0,x+y-1).
-            % Blocks 1 and 4 of that f* differ ONLY in the sign of that conic (opposite sides of
-            % one parabola) yet produce IDENTICAL conjugate cells, so at least one is wrong.
-            % That is the parabolic branch (getNormalConeVertexQ / getSubdiffVertexT2Q / the
-            % isQuad chord rewrite), NOT the polyhedral one fixed alongside these tests.
+            % answer as ONE face (bilinearOverABoxGivesTheMcCormickEnvelope) and not as two.
+            %
+            % READ THIS BEFORE WORKING ON IT -- the diagnosis recorded here previously was
+            % WRONG, and following it costs hours. It said "both first conjugates are correct,
+            % verified against a brute-force sup at 7 dual points" and pointed at the second
+            % pass. The first conjugate was NOT correct: a grid audit found it wrong at 800 of
+            % 40000 points, worst error 0.48, all of it in one cell. The 7-point check missed it.
+            % That defect (region.maxArray deciding dominance from a single probe on a cell whose
+            % vertices all tie) is FIXED, and twoFaceConjugateIsExactIncludingTheLensCell above
+            % pins the result; a second, unrelated crash on the way (getNormalConeVertexQ
+            % indexing vertex k = nv+1 outside the guard that produced k) is fixed too.
+            %
+            % WHAT ACTUALLY REMAINS. f* is now exact and arrives as ten pieces, three of them
+            % bounded by the conics (s1+s2)^2 = 4*s1 and (s1+s2)^2 = 4*s2. Two of those are the
+            % half-lenses, e.g. {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2, s2 <= s1} carrying s1 --
+            % a BOUNDED region with a curved edge, so its conjugate is finite on all of R^2 and
+            % genuinely curved. conjugateOfPiecePoly returns 2 cells for it, and they are the
+            % conjugate of the straight SEGMENT conv{(0,0),(1,1)} joining its two vertices:
+            % max(0, x+y-1), finite only on a strip. Checked against a brute-force sup over the
+            % lens, that is +inf where the truth is 0 (e.g. at (0,0) and (-1,0.5)) and 0 where
+            % the truth is 0.5 (at (2,-1)). The curved edge is simply not being honoured.
+            %
+            % Because f** is a MAX, its domain is the INTERSECTION of the per-piece conjugates'
+            % domains, so one piece answering on a strip collapses everything: f** comes back as
+            % two identical pieces carrying x^2/(x-y+1) on {x+y>=1, x<=1, y<=1}.
+            %
+            % So the remaining work is the conjugate of a bounded piece with a parabolic edge
+            % (getNormalConeVertexQ / getSubdiffVertexT2Q), not the max and not the first pass.
+            % An alternative worth weighing first: pieces 1-4 of f* all carry s1 and their union
+            % is the POLYHEDRAL cone {s1 >= 0, s1 >= s2, s2 <= 1} -- an exact merge across the
+            % conic boundaries would remove every curved piece here and the second pass would
+            % have nothing curved left to do. That is region.merge/unionIsExact, which today
+            % cannot certify a union across a conic edge.
+            %
             % Replacing the isQuad chord's hardcoded vx(1),vx(2) endpoints with the vertices the
             % conic actually touches was tried and changed nothing here -- do not re-try it
-            % without new evidence.
+            % without new evidence. (Note the chord rewrite is not even reached on this input:
+            % it is guarded by f.isQuad, and these pieces' f is affine.)
             testCase.verifyEqual(p.nf, 2);
             testCase.verifyTrue(p.isDomBounded);
 

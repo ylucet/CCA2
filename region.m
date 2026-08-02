@@ -38,6 +38,30 @@ classdef region
              end
          end
 
+         function kk = probeVertexIndex (k, j, nv)
+         % objective: the vertex index getNormalConeVertexQ's isZero fallback may safely index.
+         %
+         % Both halves of getNormalConeVertexQ pair the current vertex j with a NEIGHBOUR k
+         % (j-1 for the first normal-cone half-plane, j+1 for the second). Each has an explicit
+         % guard for k falling off the ends -- `if k < 1` / `if k > obj.nv` -- which probes from
+         % vertex j instead. The isZero fallback that follows, however, re-probes from vertex k
+         % UNGUARDED, so it indexed obj.vx(0) or obj.vx(nv+1) whenever that fallback fired at an
+         % end vertex: the same "index used outside the guard that established it" shape already
+         % corrected in getEdges, splitmax3 and poly2orderUnbounded. It is not hypothetical --
+         % the second conjugation of the two-face unit square (f = x*y) hits it on the half-lens
+         % {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2, s2 <= s1}, nv = 2, with j = 2 and k = 3,
+         % raising MATLAB:badsubscript from inside functionNDomain.conjugateOfPiecePoly.
+         %
+         % Out of range, fall back to j -- the very vertex the enclosing guard already chose.
+         % The fallback still probes along a DIFFERENT constraint than the guard did (ineqs(j)
+         % rather than ineqs(j+1)), which is the point of running it at all: it needs a feasible
+         % point where eq does not vanish.
+             kk = k;
+             if kk < 1 || kk > nv
+                 kk = j;
+             end
+         end
+
          function P = probePerp (x0, y0, d, h)
          % The same, along the perpendicular to the direction of slope d.
              dd = double(d);
@@ -1203,18 +1227,13 @@ classdef region
                   vx0(nx) = obj.vx(iv);
                   vy0(nx) = obj.vy(iv);
               end
+              % COLLECT the probe points first and decide from ALL of them (maxFromPts), rather
+              % than returning on the first feasible one. Read maxFromPts' header for why: the
+              % vertices tie here by hypothesis, so a single sample cannot establish dominance,
+              % and taking it as proof is what made f* wrong on a curved overlap cell.
+              P = zeros(0,2);
               if nx > 1
-                sx = mean(vx0)
-                sy = mean(vy0)
-                [l,fmax,index] = maxFromPt(obj, [sx,sy], [f1,f2]);
-                l
-                simplifyFraction(fmax.f)
-                f1.subsF(obj.vars,[sx,sy])
-                f2.subsF(obj.vars,[sx,sy])
-
-                if l 
-                    return
-                end
+                P = [P; mean(vx0), mean(vy0)];
               end
               % use slope mid pt to get directions. Every step below goes through
               % region.probeAlong/probePerp, which turn a (possibly degenerate) slope into
@@ -1242,32 +1261,38 @@ classdef region
                         d = tan((pi/2 + atan(m(i)))/2);
                   end
                   end
-                  P = [region.probeAlong(vx0(1), vy0(1), d, 0.1); ...
-                       region.probePerp(vx0(1), vy0(1), d, 0.1)];
-                  for ip = 1:size(P,1)
-                      [l,fmax,index] = maxFromPt(obj, P(ip,:), [f1,f2]);
-                      if l
-                        return
-                      end
+                  for iv0 = 1:nx
+                      P = [P; region.probeAlong(vx0(iv0), vy0(iv0), d, 0.1); ...
+                              region.probePerp(vx0(iv0), vy0(iv0), d, 0.1)];
                   end
                 end
               end
               if size(m,2) == 1
                   % Only one constraint, so the loop above found no pair: probe perpendicular
                   % to that constraint.
-                  P = region.probePerp(vx0(1), vy0(1), m(1), 0.1);
-                  for ip = 1:size(P,1)
-                      [l,fmax,index] = maxFromPt(obj, P(ip,:), [f1,f2]);
-                      if l
-                        return
-                      end
+                  for iv0 = 1:nx
+                      P = [P; region.probePerp(vx0(iv0), vy0(iv0), m(1), 0.1)];
                   end
+              end
+              [l, fmax, index, seen] = maxFromPts(obj, P, [f1,f2]);
+              if l
+                  return
+              end
+              if seen == 3
+                  % Both signs of f1-f2 occur strictly inside obj, so NEITHER dominates. Say so
+                  % (l = false, lsing = false) and let the caller split on f1 = f2 -- both
+                  % maximumP and maxEqDom treat l = false exactly that way. Returning here
+                  % matters: falling through to the vertex comparison below would report f2 as
+                  % the max, because every vertex is a tie and `all(sv1 <= sv2)` is then true.
+                  fmax = 0;
+                  index = 0;
+                  return
               end
              % disp("SINGLETON REGION")
              % obj.print
-              
+
               lsing = true;
-              
+
               end
               
 
@@ -1285,14 +1310,77 @@ classdef region
          
         end
         
+        function [l, fmax, index, seen] = maxFromPts(obj, P, f)
+        % objective: decide which of f(1), f(2) is the larger ON obj from a SET of probe points,
+        %   requiring every decisive probe to agree.
+        %
+        % [input]  P : k-by-2 candidate probe points (infeasible ones are ignored)
+        % [output] l    : true only if some probe was decisive and ALL decisive probes agree
+        %          fmax : the winner when l is true, 0 otherwise
+        %          index: 1 or 2 matching fmax, 0 otherwise
+        %          seen : bitmask of the signs actually observed -- 0 nothing decisive,
+        %                 1 only f(1) bigger, 2 only f(2) bigger, 3 BOTH (neither dominates)
+        %
+        % WHY NOT "THE FIRST FEASIBLE PROBE WINS", which is what this replaces. maxArray reaches
+        % this point only when f(1) and f(2) tie at every vertex of obj -- i.e. exactly when the
+        % vertices carry no information about which is larger inside. Concluding global dominance
+        % from one interior sample is then unsound, and it was wrong in practice: for f = x*y on
+        % the unit square given as TWO triangles, the two triangles' conjugates overlap in the
+        % lens {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2}, whose two vertices (0,0) and (1,1) both sit
+        % on the line s1 = s2 -- so s1 and s2 tie at both vertices AND at the centroid (1/2,1/2),
+        % while s1 - s2 takes BOTH signs strictly inside. The first feasible probe picked one side
+        % and the whole lens came back carrying s2, giving f*(0.66,0.18) = 0.18 where the true
+        % value is 0.66, and downstream a biconjugate equal to the per-face envelope rather than
+        % the McCormick one. Pinned by biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope.
+        %
+        % Note the vertices are not trustworthy on their own either: an affine f(1)-f(2) attains
+        % its max over a region at a vertex only when the region is the convex hull of its
+        % vertices, which a CURVED-edge (or unbounded) region is not -- the lens above is bounded
+        % by two parabolas and s1-s2 is maximized on an arc, not at a vertex.
+        %
+        % Disagreement is reported rather than resolved: the caller splits on f(1) = f(2), and
+        % splitmax3/maximumP already drop a half that comes out empty, so being conservative here
+        % costs at most an extra piece and never a wrong value.
+            l = false; fmax = 0; index = 0; seen = 0;
+            for ip = 1:size(P,1)
+                s = P(ip,:);
+                if ~obj.ptFeasible(obj.vars, s)
+                    continue
+                end
+                dif = double(f(1).subsF(obj.vars,s).f - f(2).subsF(obj.vars,s).f);
+                if abs(dif) <= 1.0d-14
+                    continue
+                end
+                if dif > 0
+                    seen = bitor(seen, 1);
+                else
+                    seen = bitor(seen, 2);
+                end
+                if seen == 3
+                    return          % both signs already seen; nothing further can change that
+                end
+            end
+            if seen == 1
+                l = true; fmax = f(1); index = 1;
+            elseif seen == 2
+                l = true; fmax = f(2); index = 2;
+            end
+        end
+
         function [l,fmax,index] = maxFromPt(obj, s, f)
+        % Single-point version, superseded by maxFromPts and no longer called from anywhere in
+        % the toolbox -- read that routine's header for why one point cannot decide dominance.
+        % Kept because it is the primitive maxFromPts is built from and is useful when probing
+        % interactively; its index/fmax pairing was INVERTED (fmax = f(2) reported index 1), the
+        % opposite of maxArray's own convention that index names which of f1,f2 is fmax, and
+        % maxEqDom reads that index to decide which piece a merged cell belongs to.
           l = false;
           fmax = f(1);
           index=1;
           if obj.ptFeasible(obj.vars,s)
             fv01 = f(1).subsF(obj.vars,s).f;
             fv02 = f(2).subsF(obj.vars,s).f;
-            
+
           else
               return;
           end
@@ -1300,10 +1388,10 @@ classdef region
           if abs(double(fv01 - fv02))> 1.0d-14
             if double(fv01) < double(fv02)
               fmax = f(2);
-              index=1;
+              index=2;
             else
               fmax = f(1);
-              index=2;
+              index=1;
             end
             return
           end
@@ -3902,22 +3990,23 @@ classdef region
                   %obj.ptFeasible(obj.vars,[px,py])
                 end
                 if eq.subsF([s1,s2],[px,py]).isZero
-                    px = obj.vx(k) - 0.1;
-                      ey = subs(obj.ineqs(k).f,obj.vars(1),px);
+                    kk = region.probeVertexIndex(k, j, obj.nv);
+                    px = obj.vx(kk) - 0.1;
+                      ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % see the matching HISTORY comment above: reduce a possibly-multi-root py
-                      % (quadratic-in-y ineqs(k)) to a single candidate before use.
+                      % (quadratic-in-y ineqs(kk)) to a single candidate before use.
                       if isempty(py)
-                          py = obj.vy(k);
+                          py = obj.vy(kk);
                       else
                           py = py(1);
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
-                          px = obj.vx(k) + 0.1;
-                          ey = subs(obj.ineqs(k).f,obj.vars(1),px);
+                          px = obj.vx(kk) + 0.1;
+                          ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
                           if isempty(py)
-                            py = obj.vy(k);
+                            py = obj.vy(kk);
                           else
                             py = py(1);
                           end
@@ -4024,23 +4113,29 @@ classdef region
                 
                 %isAlways(subs(eq,[s1,s2],[px,py]) == 0)
                 if eq.subsF([s1,s2],[px,py]).isZero
-                    px = obj.vx(k) - 0.1;
-                      ey = subs(obj.ineqs(k).f,obj.vars(1),px);
+                    kk = region.probeVertexIndex(k, j, obj.nv);
+                    px = obj.vx(kk) - 0.1;
+                      ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % see the matching HISTORY comment above: reduce a possibly-multi-root py
-                      % (quadratic-in-y ineqs(k)) to a single candidate before use.
+                      % (quadratic-in-y ineqs(kk)) to a single candidate before use.
                       if isempty(py)
-                          py = obj.vy(k);
+                          py = obj.vy(kk);
                       else
                           py = py(1);
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
-                          px = obj.vx(k) + 0.1;
-                          ey = subs(obj.ineqs(k).f,obj.vars(1),px);
+                          px = obj.vx(kk) + 0.1;
+                          ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
-                          py = py(1);
+                          % HISTORY: this read `py = py(1); if isempty(py) ... end`, indexing
+                          % BEFORE the emptiness guard -- the same inversion already corrected
+                          % twice elsewhere in this function; the guard below it was dead code
+                          % and an empty solve threw "Index exceeds array bounds" instead.
                           if isempty(py)
-                            py = obj.vy(k);
+                            py = obj.vy(kk);
+                          else
+                            py = py(1);
                           end
                       end
                 end
