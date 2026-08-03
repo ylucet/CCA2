@@ -250,18 +250,21 @@ function g = maxQuaPar(g1, g2)
         polyK = facePoly(g1, k);
         for l = 1:g2.nf
             polyL = facePoly(g2, l);
-            cell = clipByFace(polyK, polyL);
-            if isempty(cell), continue; end
+            cells = clipByFace(polyK, polyL);   % a LIST: an arc-vs-arc clip can yield two cells
             f1row = g1.f(k,:); f2row = g2.f(l,:);
-            [decided, winRow] = decideWinner(cell, f1row, f2row);
-            if decided
-                cell.f = winRow;   % cell already carries its own curveAfter/curveEc (0/[] if none)
-                pieces(end+1) = cell; %#ok<AGROW>
-                continue
-            end
-            newCells = splitCell(cell, f1row, f2row);
-            for z = 1:numel(newCells)
-                pieces(end+1) = newCells(z); %#ok<AGROW>
+            for ci = 1:numel(cells)
+                cell = cells{ci};
+                if isempty(cell), continue; end
+                [decided, winRow] = decideWinner(cell, f1row, f2row);
+                if decided
+                    cell.f = winRow;   % cell carries its own curveAfter/curveEc (0/[] if none)
+                    pieces(end+1) = cell; %#ok<AGROW>
+                    continue
+                end
+                newCells = splitCell(cell, f1row, f2row);
+                for z = 1:numel(newCells)
+                    pieces(end+1) = newCells(z); %#ok<AGROW>
+                end
             end
         end
     end
@@ -548,56 +551,40 @@ end
 
 % ============================================================================================
 % ----- clipping one convex poly by every boundary constraint of another (face intersection) --
-function cell = clipByFace(polyK, polyL)
-% polyK intersected with the convex region bounded by polyL, by clipping polyK against every
-% boundary half-plane of polyL in turn (Sutherland-Hodgman style). Returns [] if the result is
-% empty or degenerates below a proper 2D cell.
-    % polyConstraints below turns polyL's boundary into HALF-PLANES, which a parabolic edge is
-    % not, so polyL must be purely polyhedral. When it is polyL that carries the arc and polyK
-    % that does not, SWAP THEM: face intersection is symmetric, so polyK n polyL is the same set
-    % either way, and the clipped cell that comes back is the same region. Only the two operands'
-    % f rows distinguish them, and those are passed separately by the caller and never touched
-    % here. This is what lets both operands of maxQuaPar be curved -- see its header.
+function cells = clipByFace(polyK, polyL)
+% polyK intersected with the convex region bounded by polyL. Returns a CELL ARRAY of clipped
+% cells -- usually one, but two when the survivor carries two arcs and must be subdivided, which
+% is the invariant QuaPar's one-Ec-per-edge representation forces. Empty when nothing survives.
+%
+% polyConstraints turns polyL's boundary into HALF-PLANES, which a parabolic edge is not, so the
+% arc is handled separately at the end:
+%   * if only ONE of the two faces carries an arc, SWAP so the curved one is polyK -- face
+%     intersection is symmetric, so polyK n polyL is the same set either way, and only the two
+%     operands' f rows distinguish them, which the caller passes separately and this never
+%     touches;
+%   * if BOTH carry one, polyL's arc becomes a CURVED cut applied after the straight ones by
+%     clipPolyByConic. Deferring it is deliberate: a cell the straight clips already empty needs
+%     no curved surgery, and the curved step gets the smallest cell available.
     if polyL.curveAfter ~= 0 && polyK.curveAfter == 0
         tmp = polyK; polyK = polyL; polyL = tmp;
     end
-    cell = polyK;
+    cutConic = []; cutX0 = []; cutX1 = [];
     if polyL.curveAfter ~= 0
-        % Both faces of this pair carry an arc: the cut is one parabola against another, and the
-        % surviving cell can be bounded by two separate arcs. Refused here, per PAIR, rather than
-        % for the whole operand.
-        %
-        % HOW TO CLOSE IT. Every curved edge in this pipeline is a PARABOLA -- never an ellipse or
-        % a hyperbola -- so the cut curve is always representable as one Ec arc: no closed curve
-        % to break into pieces, no second branch to choose between. That is what makes this a
-        % bounded job rather than general conic arrangement.
-        %
-        % The primitives already exist:
-        %   * crossings of the cut conic with a STRAIGHT edge or ray: conicAlongRay's quadratic
-        %     in t (addQuaPar.m has the same three lines), roots in the edge's own range.
-        %   * crossings with polyK's OWN arc: parabolaArcFrame(polyK.curveEc).conicCoeffs(EcL)
-        %     gives the quartic in u for the second conic restricted to the first parabola, so
-        %     arc-vs-arc reduces to roots() of ONE univariate polynomial, with the root on the
-        %     right arc selected by u-range membership -- no reprojection, exactly as
-        %     lineCoeffs already does for the straight case.
-        %   * a surviving cell that ends up with TWO arcs: splitTwoArcPiece, which already cuts
-        %     such a piece into two one-arc pieces by a chord and is what splitCell uses.
-        %
-        % What has to be written is the boundary surgery: the same four keep/cut branches as
-        % clipPolyHalfPlaneCurved, bounded and unbounded, but with a CURVED cut edge. Two things
-        % differ from the straight case and must be handled rather than assumed away: a conic can
-        % cross a single straight edge TWICE (a line cannot), so "exactly 2 crossings on 2
-        % distinct edges" is no longer automatic; and clipByFace must then return a LIST of cells
-        % rather than one, since the two-arc split produces two. The caller (maxQuaPar's own k,l
-        % loop) already iterates over splitCell's list and would take the same shape.
-        error('maxQuaPar:notImplemented', ...
-            ['clipByFace: both faces of this pair carry a parabolic edge, which needs ' ...
-             'conic-vs-conic clipping (not implemented).']);
+        cutConic = polyL.curveEc;
+        % polyL's boundary is the bounded ARC of that conic, not the whole conic. Its two
+        % endpoints are carried through so the cut can be restricted to the arc's own span --
+        % without that restriction the extended conic cuts the cell where polyL's boundary does
+        % not, which shows up as a single unpaired crossing.
+        nvL = size(polyL.V,1);
+        cutX0 = polyL.V(polyL.curveAfter,:);
+        cutX1 = polyL.V(mod(polyL.curveAfter, nvL)+1,:);
     end
+
+    cell = polyK;
     cons = polyConstraints(polyL);
     for i = 1:size(cons,1)
         cell = clipPolyHalfPlane(cell, cons(i,1:2), cons(i,3));
-        if isempty(cell), return; end
+        if isempty(cell), cells = {}; return; end
     end
     % Two consecutive real vertices of polyL (or polyK) can be exactly collinear with a third --
     % e.g. this pipeline's own faces sometimes have 3 real vertices on one straight line -- in
@@ -615,8 +602,12 @@ function cell = clipByFace(polyK, polyL)
     minV = 3;
     if pieceIsCurved(cell), minV = 2; end
     if size(cell.V,1) < 1 || (isempty(cell.dirIn) && size(cell.V,1) < minV)
-        cell = []; return
+        cells = {}; return
     end
+    if isempty(cutConic)
+        cells = {cell}; return
+    end
+    cells = clipPolyByConic(cell, cutConic, cutX0, cutX1);
 end
 
 function cell = insertPassthroughVertices(cell, pts)
@@ -782,6 +773,13 @@ function cons = polyConstraints(poly)
     last = nv - 1;
     if isempty(poly.dirIn), last = nv; end   % bounded: also include the closing edge (nv,1)
     for i = 1:last
+        if poly.curveAfter == i
+            % This edge is a parabolic ARC, not a segment. Emitting the half-plane of its CHORD
+            % would clip against the wrong boundary -- on the bulging side it cuts away part of
+            % the face, on the other it keeps territory that is not the face's. The arc is
+            % applied separately, as a curved cut, by clipByFace/clipPolyByConic.
+            continue
+        end
         jn = mod(i,nv) + 1;
         d = poly.V(jn,:) - poly.V(i,:);
         n = [d(2), -d(1)];
@@ -840,6 +838,308 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
     end
     poly2 = clipPolyHalfPlaneStraight(poly, nrm, c);
     if ~isempty(poly2), poly2.curveAfter = 0; poly2.curveEc = []; end
+end
+
+function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
+% Clip poly by the region { evalConic(Ecut,.) >= 0 } -- the CURVED-cut analogue of
+% clipPolyHalfPlane, and the missing half of arc-vs-arc face clipping. Returns a LIST of polys
+% (0, 1 or 2): two when the survivor would carry two arcs and has to be subdivided, which is the
+% invariant QuaPar's single Ec slot per edge forces.
+%
+% SIGN CONVENTION. The half-plane paths keep {nrm*x' - c <= 0}; here the kept side is
+% {evalConic >= 0}, which is facePoly's normalization (a face's curveEc is oriented > 0 on that
+% face's own interior). To reuse the same branch shapes the value is NEGATED into `st`, so
+% st <= 0 means "keep" exactly as it does there.
+%
+% CROSSINGS. Each boundary element restricts the cutting conic to a univariate polynomial:
+%   * a straight edge or a ray  -> conicAlongRay's quadratic in t (roots in the element's range);
+%   * poly's OWN parabolic edge -> clipArcByConic, which solves the quartic in the arc's frame.
+% A conic can cross ONE straight edge twice, unlike a line, so "2 crossings on 2 distinct edges"
+% is checked rather than assumed -- see the error below.
+    nv = size(poly.V,1);
+    unbounded = ~isempty(poly.dirIn);
+    if nv == 0, polys = {poly}; return, end
+
+    val = zeros(nv,1);
+    for i = 1:nv, val(i) = -QuaPar.evalConic(Ecut, poly.V(i,:)); end
+    sc  = max(1, max(abs(Ecut)) * max(1, max(abs(poly.V(:))))^2);
+    tol = 1e-9 * sc;
+
+    ci = poly.curveAfter;
+    hasArc = (ci ~= 0);
+
+    % ---- boundary elements, in walk order, with their crossings --------------------------
+    % Node/pair numbering identical to clipPolyHalfPlaneCurved's, so the branch shapes below can
+    % be read against it: for an unbounded cell node 1 is the dirIn marker, nodes 2..nv+1 are the
+    % vertices and node m is the dirOut marker, so pair p connects nodes p and p+1 -- pair 1 is
+    % the incoming ray, pairs 2..nv the straight edges V(p-1)->V(p), pair nv+1 the outgoing ray.
+    if unbounded
+        stIn  = signAtInfinity(Ecut, poly.V(1,:),    poly.dirIn);
+        stOut = signAtInfinity(Ecut, poly.V(end,:),  poly.dirOut);
+        st = [-stIn; sign2(val,tol); -stOut];
+        edges = [(2:nv)'-1, (2:nv)'];            % straight edges, as (fromVertex, toVertex)
+        edgePair = (2:nv)';                       % their pair indices
+        cePair = ci + 1;                          % the arc's own pair index
+    else
+        st = sign2(val,tol);
+        edges = [(1:nv)', mod((1:nv),nv)'+1];
+        edgePair = (1:nv)';
+        cePair = ci;
+    end
+
+    hits = zeros(0,3);                            % [pairIndex, x, y]
+    for pe = 1:size(edges,1)
+        i = edges(pe,1); j = edges(pe,2);
+        p = edgePair(pe);
+        if hasArc && p == cePair
+            [status, Xn] = clipArcByConic(poly.curveEc, poly.V(i,:), poly.V(j,:), Ecut);
+            switch status
+                case 'cut'
+                    Xc = Xn(1,:);
+                    if norm(Xc - poly.V(i,:)) < 1e-9, Xc = Xn(2,:); end
+                    hits(end+1,:) = [p, Xc]; %#ok<AGROW>
+                case 'twice'
+                    error('maxQuaPar:notImplemented', ...
+                        ['clipPolyByConic: the cutting conic crosses this cell''s own arc TWICE, ' ...
+                         'so the survivor is disconnected or bounded by two sub-arcs of the same ' ...
+                         'parabola; neither is one QuaPar face.']);
+            end
+            continue
+        end
+        d = poly.V(j,:) - poly.V(i,:);
+        ts = conicRootsAlong(Ecut, poly.V(i,:), d, 0, 1, tol);
+        for k = 1:numel(ts)
+            hits(end+1,:) = [p, poly.V(i,:) + ts(k)*d]; %#ok<AGROW>
+        end
+    end
+    if unbounded
+        tsIn = conicRootsAlong(Ecut, poly.V(1,:), poly.dirIn, 0, inf, tol);
+        for k = 1:numel(tsIn)
+            hits(end+1,:) = [1, poly.V(1,:) + tsIn(k)*poly.dirIn]; %#ok<AGROW>
+        end
+        tsOut = conicRootsAlong(Ecut, poly.V(end,:), poly.dirOut, 0, inf, tol);
+        for k = 1:numel(tsOut)
+            hits(end+1,:) = [nv+1, poly.V(end,:) + tsOut(k)*poly.dirOut]; %#ok<AGROW>
+        end
+        hits = sortrows(hits, 1);
+    end
+
+    % ---- restrict the cut to the CUTTING ARC's own span -----------------------------------
+    % Ecut is a whole conic, but polyL's boundary is only the bounded arc of it between cutX0 and
+    % cutX1. A crossing of the extended conic that lies outside that span is not a crossing of
+    % polyL's boundary at all -- polyL is bounded there by its straight edges, which have already
+    % been applied -- so keeping it would cut the cell along a curve that is not a boundary. It
+    % shows up as a single unpaired crossing, which no keep/cut branch can act on.
+    if ~isempty(cutX0)
+        frC = parabolaArcFrame(Ecut, 'maxQuaPar');
+        ua = frC.uOf(cutX0); ub = frC.uOf(cutX1);
+        ulo = min(ua,ub); uhi = max(ua,ub); uspan = uhi - ulo;
+        keep = false(size(hits,1),1);
+        for k = 1:size(hits,1)
+            uk = frC.uOf(hits(k,2:3));
+            keep(k) = (uk >= ulo - 1e-7*max(1,uspan)) && (uk <= uhi + 1e-7*max(1,uspan));
+        end
+        hits = hits(keep,:);
+    end
+
+    % ---- the cutting arc may END inside the cell ------------------------------------------
+    % polyL's arc is BOUNDED. If it enters polyK through one edge and terminates at one of its own
+    % endpoints, that endpoint is where polyL's boundary hands over from the arc to a straight
+    % edge -- and that straight edge's half-plane has already been applied, so the endpoint lies
+    % ON the clipped cell's boundary. It is then the second crossing, and without it the clip
+    % reports a single unpaired hit that no keep/cut branch can act on.
+    if ~isempty(cutX0) && size(hits,1) == 1
+        for X = {cutX0, cutX1}
+            pIdx = pairOnBoundary(poly, X{1}, edges, edgePair, unbounded, nv);
+            if pIdx > 0 && pIdx ~= hits(1,1)
+                hits(end+1,:) = [pIdx, X{1}]; %#ok<AGROW>
+                break
+            end
+        end
+        hits = sortrows(hits, 1);
+    end
+
+    % ---- no crossing: the whole cell is on one side --------------------------------------
+    if isempty(hits)
+        % No crossing WITHIN the arc's span. The cell therefore lies wholly on one side of
+        % polyL's curved boundary; decide it at an interior sample rather than from the vertex
+        % signs, which are signs of the EXTENDED conic and can disagree away from the arc.
+        smp = interiorSample(poly);
+        if isempty(smp), polys = {poly}; return, end
+        if QuaPar.evalConic(Ecut, smp) >= -tol, polys = {poly}; else, polys = {}; end
+        return
+    end
+
+    if unbounded
+        if size(hits,1) ~= 2 || hits(1,1) == hits(2,1)
+            error('maxQuaPar:notImplemented', ...
+                ['clipPolyByConic: expected 2 crossings on 2 distinct boundary elements of an ' ...
+                 'unbounded cell, found %d on %s.'], size(hits,1), mat2str(hits(:,1)'));
+        end
+        p1 = hits(1,1); p2 = hits(2,1);
+        Xa = hits(1,2:3); Xb = hits(2,2:3);
+        if st(1) <= tol
+            % Both ray ends are on the KEPT side: the cut removes a middle bulge, and both rays
+            % survive. Same surgery as the straight path's corresponding branch, except that the
+            % new Xa->Xb edge is an ARC of the cutting conic rather than a segment.
+            Vnew = [poly.V(1:p1-1,:); Xa; Xb; poly.V(p2:nv,:)];
+            cutEdge = p1;                          % the new edge follows the kept head
+            out = mkPoly(Vnew, cutEdge, orientConicInto(Ecut, [Xa; Xb; poly.V(:,:)]), ...
+                         poly.dirIn, poly.dirInSign, poly.dirOut, poly.dirOutSign);
+            qCurve = 0;
+            if hasArc
+                if cePair <= p1,      qCurve = cePair - 1;
+                elseif cePair >= p2,  qCurve = cePair - p2 + p1 + 1;
+                end
+                if qCurve < 1 || qCurve > size(Vnew,1)-1, qCurve = 0; end
+            end
+        else
+            % Both ray ends are on the REMOVED side: only the middle survives, and the result is
+            % BOUNDED -- closed by the arc from Xb back to Xa.
+            Vnew = [Xa; poly.V(p1:p2-1,:); Xb];
+            cutEdge = size(Vnew,1);
+            out = mkPoly(Vnew, cutEdge, orientConicInto(Ecut, Vnew), [], [], [], []);
+            qCurve = 0;
+            if hasArc && cePair >= p1 && cePair <= p2
+                qCurve = cePair - p1 + 1;
+                if qCurve > size(Vnew,1)-1, qCurve = 0; end
+            end
+        end
+        if size(out.V,1) < 2, polys = {}; return, end
+        if qCurve == 0, polys = {out}; return, end
+        polys = num2cell(splitTwoArcPiece(out, qCurve, poly.curveEc));
+        return
+    end
+    if size(hits,1) ~= 2 || hits(1,1) == hits(2,1)
+        error('maxQuaPar:notImplemented', ...
+            ['clipPolyByConic: expected 2 crossings on 2 distinct edges, found %d on edges %s. ' ...
+             'A conic can cut one straight edge twice, unlike a line, so this configuration is ' ...
+             'real and needs its own branch.'], size(hits,1), mat2str(hits(:,1)'));
+    end
+
+    % ---- bounded, two crossings: keep the chain that is inside ----------------------------
+    p1 = hits(1,1); p2 = hits(2,1);
+    Xa = hits(1,2:3); Xb = hits(2,2:3);
+    midIdx = mod((p1):(p2-1), nv) + 1;
+    if isempty(midIdx) || all(st(midIdx) <= tol)
+        Vnew = [Xa; poly.V(midIdx,:); Xb];
+        pStart = p1;
+    else
+        keepIdx = mod((p2):(p1-1+nv), nv) + 1;
+        Vnew = [Xb; poly.V(keepIdx,:); Xa];
+        pStart = p2;
+    end
+    qCurve = 0;
+    if hasArc
+        qCurve = mod(ci - pStart, nv) + 1;
+        if qCurve > numel(Vnew)-1, qCurve = 0; end   % the inherited arc did not survive
+    end
+    cutEdge = numel(Vnew);                            % the closing edge IS the new cut arc
+
+    out.V = Vnew;
+    out.dirIn = []; out.dirOut = []; out.dirInSign = []; out.dirOutSign = [];
+    out.curveAfter = cutEdge;
+    out.curveEc = orientConicInto(Ecut, Vnew);
+    out.f = [];
+    if size(out.V,1) < 2, polys = {}; return, end
+
+    if qCurve == 0
+        polys = {out};                                % one arc only: the new cut
+        return
+    end
+    % Two arcs -- the inherited one and the cut -- which one QuaPar face cannot hold. This is
+    % exactly what splitTwoArcPiece exists for, and is the same subdivide-never-widen rule
+    % splitCell already follows.
+    pieces = splitTwoArcPiece(out, qCurve, poly.curveEc);
+    polys = num2cell(pieces);
+end
+
+function p = pairOnBoundary(poly, X, edges, edgePair, unbounded, nv)
+% The pair index of the boundary element X lies on, or 0. Straight elements are tested by
+% collinearity plus range; rays by direction plus a nonnegative parameter. Used only to recognise
+% a cutting arc's own endpoint as a crossing, so an exact-ish tolerance is what is wanted.
+    p = 0;
+    tolG = 1e-7 * max(1, max(abs(poly.V(:))));
+    for pe = 1:size(edges,1)
+        A = poly.V(edges(pe,1),:); B = poly.V(edges(pe,2),:);
+        d = B - A; L = norm(d);
+        if L < 1e-12, continue, end
+        t = dot(X - A, d) / L^2;
+        if t < -1e-9 || t > 1 + 1e-9, continue, end
+        if norm(X - (A + t*d)) <= tolG, p = edgePair(pe); return, end
+    end
+    if unbounded
+        for which = [1 2]
+            if which == 1, base = poly.V(1,:);   dir = poly.dirIn;  pi0 = 1;
+            else,          base = poly.V(nv,:);  dir = poly.dirOut; pi0 = nv+1;
+            end
+            t = dot(X - base, dir);
+            if t < -1e-9, continue, end
+            if norm(X - (base + t*dir)) <= tolG, p = pi0; return, end
+        end
+    end
+end
+
+function p = mkPoly(V, curveAfter, curveEc, dirIn, dirInSign, dirOut, dirOutSign)
+% Assemble one clipPolyByConic result, running the same consecutive-duplicate removal with index
+% tracking that finishCurved uses so curveAfter keeps pointing at the same edge.
+    [V, curveAfter] = dedupConsecutiveTracked(V, curveAfter);
+    p.V = V;
+    p.dirIn = dirIn; p.dirOut = dirOut;
+    p.dirInSign = dirInSign; p.dirOutSign = dirOutSign;
+    p.curveAfter = curveAfter;
+    if curveAfter == 0, p.curveEc = []; else, p.curveEc = curveEc; end
+    p.f = [];        % filled by the caller once the winner is decided; splitTwoArcPiece and
+                     % subPiece both copy this field through, so it must exist by then
+end
+
+function s = signAtInfinity(Ecut, apex, dir)
+% Sign of the cutting conic far along apex + t*dir, from the leading nonzero coefficient of its
+% restriction -- the ray analogue of evaluating at a vertex.
+    [A,B,C] = conicAlongRayLocal(Ecut, apex, dir);
+    if abs(A) > 1e-12, s = sign(A); elseif abs(B) > 1e-12, s = sign(B); else, s = sign(C); end
+end
+
+function ts = conicRootsAlong(Ecut, base, dir, tlo, thi, tol)
+% Roots of t -> evalConic(Ecut, base + t*dir) strictly inside (tlo, thi), sign-change only.
+    [A,B,C] = conicAlongRayLocal(Ecut, base, dir);
+    ts = [];
+    if abs(A) <= 1e-14
+        if abs(B) > 1e-14, r = -C/B; else, return, end
+    else
+        disc = B^2 - 4*A*C;
+        if disc < 0, return, end
+        sq = sqrt(disc);
+        r = [(-B - sq)/(2*A), (-B + sq)/(2*A)];
+    end
+    for k = 1:numel(r)
+        t = r(k);
+        if t <= tlo + 1e-9 || t >= thi - 1e-9, continue, end
+        h = 1e-7 * max(1, abs(t));
+        v0 = polyval([A B C], t - h); v1 = polyval([A B C], t + h);
+        if sign2(v0,tol)*sign2(v1,tol) < 0, ts(end+1) = t; end %#ok<AGROW>
+    end
+    ts = sort(ts);
+end
+
+function [A,B,C] = conicAlongRayLocal(ecRow, apex, dir)
+% Coefficients of t -> evalConic(ecRow, apex + t*dir) = A t^2 + B t + C. Same three lines as
+% addQuaPar's own conicAlongRay, duplicated because that one is file-local there.
+    a=ecRow(1); b=ecRow(2); c=ecRow(3); d=ecRow(4); e=ecRow(5);
+    A = a*dir(1)^2 + b*dir(1)*dir(2) + c*dir(2)^2;
+    B = 2*a*apex(1)*dir(1) + b*(apex(1)*dir(2)+apex(2)*dir(1)) + 2*c*apex(2)*dir(2) ...
+        + d*dir(1) + e*dir(2);
+    C = QuaPar.evalConic(ecRow, apex);
+end
+
+function Ec = orientConicInto(Ec, V)
+% facePoly's convention: a face's stored curveEc must be > 0 on that face's OWN interior. The cut
+% keeps {evalConic(Ecut,.) >= 0}, so Ecut already has that sign -- but the check is cheap and the
+% convention is the one clipPolyHalfPlaneCurved and assignSide both rely on, so it is enforced
+% here rather than assumed.
+    if size(V,1) < 3, return, end
+    ctr = mean(V,1);
+    if QuaPar.evalConic(Ec, ctr) < 0, Ec = -Ec; end
 end
 
 function poly2 = clipPolyHalfPlaneCurved(poly, nrm, c)
