@@ -6,26 +6,31 @@ was launched. The repository had no TODO.md; the acceptance criterion is precise
 
 ## Next up
 
-- [ ] **Two cells disagree about where their SHARED ray starts.** Fully localised;
-      this is the last defect.
+- [ ] **Piece 5 (src `[2 2]`) emits a RAY where its boundary should terminate.**
+      Localised to the cell, the edge and the reason; this is the last defect.
 
-      * Orphan A: piece 5, src `[2 2]`, apex `(-2.03125, 2.03125)`, dir `(-1,1)`.
-      * Orphan B: piece 16, src `[6 2]`, apex `(-1.7578, 2.2578)`, dir `(-1,1)`.
-      * Same direction, and the ray separates cell `(2,2)` from cell `(6,2)`, so
-        these two ARE each other's intended partner — they simply disagree on the
-        apex by 0.355, far above `matchHalfEdges`' 1e-3 tolerance.
-      * Which is right: walking the line, the face-pair transition
-        `(1,1)/(5,1) -> (2,2)/(6,2)` happens at `(-2.03125, 2.03125)`. So **piece
-        5 is correct and piece 16 starts 0.355 too late** — cell `(6,2)` is
-        missing the stretch between the two apexes.
-      * Why they can differ: the two are built by DIFFERENT paths. `(2,2)` is
-        both-curved and goes through `clipPolyByConic`; `(6,2)` is swapped and
-        clipped by half-planes only (`cutConic` is empty once `polyL` is the
-        straight face), so its apex comes from `clipArcByHalfPlane` instead.
+      * Its unmatched ray: apex `(-2.03125, 2.03125)`, direction `(-1,1)`, lying
+        on the line `x+y=0`, which is g1's face-2/face-6 edge.
+      * CORRECTION to an earlier note here: piece 16's ray is NOT its partner.
+        That one lies on `x+y=0.5`, a parallel but different line, so the two were
+        never meant to match.
+      * Sampling across the apex, the local structure is three cells:
+        `(2,2) | (6,1) | (6,2)`, with g2's ARC separating the last two. So piece
+        5's neighbour along `x+y=0` is a `(6,1)` cell — and the `(6,1)` pieces
+        (13 and 14) are BOUNDED slivers of area 0.008 and 0.004.
+      * A bounded neighbour means the shared boundary is a finite SEGMENT, not a
+        ray. So piece 5 is over-extended: its boundary along `x+y=0` should stop
+        where g2's arc crosses that line a second time, and instead it runs to
+        infinity. `matchHalfEdges` pairs rays with rays and segments with
+        segments, so a ray facing a segment can never match — which is exactly
+        the reported symptom.
 
-      Next: find why the half-plane path stops cell `(6,2)` at the sliver corner
-      `(-1.7578, 2.2578)` rather than at the true crossing of g1's face-2/6 edge
-      with g2's arc.
+      Next: find why `clipPolyByConic` cuts cell `(2,2)` at the first crossing
+      with g2's arc but not at the second. Note the restriction of that conic to
+      this ray came out with `A = 1.7e-18` — numerically degenerate, so the
+      quadratic is treated as linear and yields ONE root. Check whether the true
+      second crossing is being lost there, or whether it lies on a different
+      boundary element of the cell.
 
 ## Done recently
 
