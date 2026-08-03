@@ -2219,7 +2219,44 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         out = [pA, pB];
         return
     end
+    % A TRIANGLE whose two arcs meet at a shared vertex has no vertex-to-vertex diagonal that
+    % separates them (its only diagonals ARE its three edges), so the loop above always falls through
+    % here. Cut instead from the shared vertex to the MIDPOINT of the opposite straight edge: each
+    % half is then a triangle carrying exactly one arc. The midpoint is a genuine vertex on a straight
+    % boundary edge, so insertGlobalPassthrough propagates it to the neighbour on the far side.
+    % Reachable once the SPLITTING curve is itself a parabola that crosses the inherited arc (the
+    % [0.5 0.5] arc-vs-arc fixture's src[6 1], where {g1f6=g2f1} is parabolic and cuts the g2 arc).
+    if nv == 3 && arcPos ~= c
+        S = intersect([arcPos, mod(arcPos,nv)+1], [c, mod(c,nv)+1]);   % the arcs' shared vertex
+        if numel(S) == 1
+            strEdge = 6 - arcPos - c;                                   % the one non-arc edge (1+2+3=6)
+            u = strEdge; w = mod(strEdge,nv)+1;
+            M = 0.5*(piece.V(u,:) + piece.V(w,:));
+            if insideStraightHull(piece, arcPos, arcEc, 0.5*(piece.V(S,:)+M))
+                pA = triHalf(piece, S, u, M, arcPos, arcEc);
+                pB = triHalf(piece, S, w, M, arcPos, arcEc);
+                if ~isempty(pA) && ~isempty(pB), out = [pA, pB]; return, end
+            end
+        end
+    end
     out = piece;
+end
+
+function p = triHalf(piece, S, X, M, arcPos, arcEc)
+% One half of a triangle cut from shared vertex S to M (a point on the edge opposite S): the sub-
+% triangle whose curved side is the parent edge joining S and X. That parent edge (A->B in the
+% parent's CCW walk) is the sub-triangle's edge 1; the other two sides (B->M along the straight edge,
+% M->A the new chord) are straight, so the result carries exactly one arc.
+    p = []; nv = size(piece.V,1);
+    if mod(S,nv)+1 == X, pe = S; elseif mod(X,nv)+1 == S, pe = X; else, return, end
+    if pe == arcPos, ec = arcEc; elseif pe == piece.curveAfter, ec = piece.curveEc; else, return, end
+    A = piece.V(pe,:); B = piece.V(mod(pe,nv)+1,:);          % the arc edge, in parent CCW order
+    p.V = [A; B; M];                                          % A->B (arc), B->M, M->A -- CCW (see split)
+    p.dirIn = []; p.dirOut = []; p.dirInSign = []; p.dirOutSign = [];
+    p.curveAfter = 1; p.curveEc = ec; p.f = piece.f;
+    if pieceIsCurved(p) && QuaPar.evalConic(p.curveEc, insideArcSample(p)) < 0
+        p.curveEc = -p.curveEc;
+    end
 end
 
 function idx = cycIdx(from, to, nv)
