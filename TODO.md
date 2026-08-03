@@ -4,6 +4,16 @@ _Seeded 2026-08-02 at the start of the overnight run, from the task given when i
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
 
+## Genericity of the arc-vs-arc fixes (measured 2026-08-03)
+
+`arcVsArcMatchesGroundTruthOverRandomShifts` sweeps seeded random shifts (not the 3 hand-picked
+ones). Over 60 shifts: **65% exact, 15% assemble-to-WRONG, 20% error.** So the fixes generalise
+well (not ad-hoc), but the 15% wrong is the TOP next task: it is the SAME pre-existing far-field
+over-extension as [0.5 0.5]'s residual 2/68 (a decided unbounded polyhedral cell reaching past its
+g1 face near a mesh vertex), which the arc-assembly fixes newly EXPOSE by letting those cases
+assemble instead of erroring. conj's verification catches it in production. Fixing that far-field
+coverage bug should turn most of the 15% wrong (and [0.5 0.5]'s 2/68) green.
+
 ## Status 2026-08-03 (Opus 4.8) -- 18/1, [0.5 0.5] now assembles
 
 Three arc-vs-arc pins were red; **TWO fully fixed**, the third now ASSEMBLES (was erroring) and is
