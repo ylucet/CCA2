@@ -2239,18 +2239,29 @@ function piece = boundedPiece(Xstart, Vmid, Xend, ecRow)
 end
 
 function piece = assignSide(piece, diffRow, f1row, f2row) %#ok<INUSD>
-% Tag which row (f1row or f2row) wins on this piece, using any vertex strictly interior to it
-% (not one of the two curve endpoints) if available, else the curve-chord midpoint. Also normalizes
-% the piece's own curve orientation to the convention facePoly establishes and
-% clipPolyHalfPlaneCurved relies on: evalConic(piece.curveEc,.) > 0 on the piece's OWN interior.
-% (splitCell builds edgeEc once from f1row-f2row, so it is positive where f1 wins -- i.e. correct
-% for one of the two pieces it splits into and inverted for the other.)
-    if size(piece.V,1) > 2
-        samplePt = piece.V(2,:);   % V(1)=one curve endpoint, V(end)=the other; V(2) is a real vertex
+% Tag which row (f1row or f2row) wins on this piece, from the sign of diffRow=f1-f2 at a point
+% strictly interior to it. Also normalizes the piece's own curve orientation to the convention
+% facePoly establishes and clipPolyHalfPlaneCurved relies on: evalConic(piece.curveEc,.) > 0 on the
+% piece's OWN interior. (splitCell builds edgeEc once from f1row-f2row, so it is positive where f1
+% wins -- correct for one of the two pieces it splits into and inverted for the other.)
+%
+% TWO of the piece's vertices are the splitting curve's crossing points, where diffRow is ~0 and its
+% sign is pure floating-point noise -- so the winner MUST be read at a vertex away from the curve.
+% The old code assumed those crossings were always V(1) and V(end) and sampled V(2). That holds for
+% boundedPiece (curve = closing edge) but NOT for splitCell's UNBOUNDED "rest" piece, whose curve is
+% edge 1 (curveAfter=1), making V(2) itself a crossing point: the winner was then decided by the
+% noise sign there, and both split halves could come out with the SAME winner (measured on the
+% [2 -0.5] arc-vs-arc fixture: cell src[4 3] gave two g2 pieces, so the g1 region was lost). Instead
+% sample the vertex FARTHEST from {diffRow=0} (max |diffRow|), which is always a genuine side point
+% wherever the crossings landed; fall back to the centroid only if every vertex sits on the curve.
+    vals = QuaPar.evalPoly(diffRow, piece.V);
+    [mx, idx] = max(abs(vals));
+    scale = max(1, norm(diffRow(5:10), Inf)) * max(1, norm(piece.V(:), Inf))^2;
+    if mx > 1e-8*scale
+        d = vals(idx);
     else
-        samplePt = mean(piece.V,1);
+        d = QuaPar.evalPoly(diffRow, mean(piece.V,1));
     end
-    d = QuaPar.evalPoly(diffRow, samplePt);
     if d >= 0, piece.f = f1row; else, piece.f = f2row; end
     if pieceIsCurved(piece) && QuaPar.evalConic(piece.curveEc, insideArcSample(piece)) < 0
         piece.curveEc = -piece.curveEc;
