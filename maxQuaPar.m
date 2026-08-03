@@ -971,6 +971,25 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
         p1 = hits(1,1); p2 = hits(2,1);
         Xa = hits(1,2:3); Xb = hits(2,2:3);
         if st(1) <= tol
+            % THIS IS WHERE THE ARRANGEMENT WAS BEING CORRUPTED. The branch is copied from the
+            % half-plane path, where "both ray ends inside with two crossings" means a middle
+            % bulge is cut off and ONE cell remains. That reasoning does NOT transfer to a conic
+            % cut, and the difference is exactly the one this file keeps re-learning: a half-plane
+            % is convex, so a convex cell minus it stays connected, but the kept side of a
+            % PARABOLA can be the CONCAVE one -- the face being convex (measured: all four curved
+            % faces here are) says nothing about {evalConic >= 0}, which extends far beyond the
+            % face. Removing a non-convex bite can SEPARATE the cell into two components, and
+            % building one cell from them is what produced a hole and an overlap in the piece
+            % arrangement, and hence the orphan ray three stages later.
+            %
+            % Refused loudly instead of silently emitting a corrupt cell. Closing it means
+            % returning BOTH components (clipByFace already returns a list, so the plumbing is
+            % there) -- what is missing is deciding, from the two crossings and the ray signs,
+            % whether the survivor is one component or two, and building each.
+            error('maxQuaPar:notImplemented', ...
+                ['clipPolyByConic: the curved cut removes a middle section of an UNBOUNDED cell ' ...
+                 'while both ray ends survive (crossings on pairs %d and %d). The survivor can ' ...
+                 'be TWO components, which one cell cannot represent.'], p1, p2);
             % Both ray ends are on the KEPT side: the cut removes a middle bulge, and both rays
             % survive. Same surgery as the straight path's corresponding branch, except that the
             % new Xa->Xb edge is an ARC of the cutting conic rather than a segment.
@@ -1034,6 +1053,15 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
     out.curveEc = Ecut;   % already > 0 on the kept side, which IS this cell's interior
     out.f = [];
     if size(out.V,1) < 2, polys = {}; return, end
+    % ORIENTATION GUARD. Everything downstream -- polyConstraints' "interior is on the left",
+    % assemblePieces' half-edge pairing, assignSide -- assumes a CCW boundary. The straight
+    % path's own HISTORY records a "bowtie" bug from getting exactly this wrong in the
+    % complement branch, and it was silent. Detected here rather than assumed.
+    if size(out.V,1) >= 3 && signedAreaOf(out.V) < 0
+        error('maxQuaPar:internal', ...
+            ['clipPolyByConic: emitted a CLOCKWISE bounded cell (signed area %.6g). Every ' ...
+             'consumer assumes CCW.'], signedAreaOf(out.V));
+    end
 
     if qCurve == 0
         polys = {out};                                % one arc only: the new cut
@@ -1070,6 +1098,12 @@ function p = pairOnBoundary(poly, X, edges, edgePair, unbounded, nv)
             if norm(X - (base + t*dir)) <= tolG, p = pi0; return, end
         end
     end
+end
+
+function a = signedAreaOf(V)
+    x = V(:,1); y = V(:,2); n = size(V,1); a = 0;
+    for i = 1:n, j = mod(i,n)+1; a = a + (x(i)*y(j) - x(j)*y(i)); end
+    a = a/2;
 end
 
 function p = mkPoly(V, curveAfter, curveEc, dirIn, dirInSign, dirOut, dirOutSign)
