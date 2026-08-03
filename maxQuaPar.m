@@ -2469,10 +2469,22 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
             % neighbour is present but its ray was not recognised), and the apex plus direction
             % is what distinguishes the two by inspection.
             apx = vertexAt(pieces, HE(h).piece, HE(h).aLoc);
+            % List the OTHER rays too. If one shares this apex the failure is in the MATCHING
+            % (the partner exists and was not recognised); if none does, it is a COVERAGE gap
+            % (the neighbouring cell was dropped or cut differently, so no partner exists).
+            others = '';
+            for h2 = 1:numel(HE)
+                if h2 == h || HE(h2).isSeg, continue, end
+                a2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
+                mark = ' ';
+                if norm(a2 - apx) < 1e-6, mark = '*'; end
+                others = [others, newline, sprintf('    %s piece %d ray apex (%.6f,%.6f) opp=%d', ...
+                                         mark, HE(h2).piece, a2(1), a2(2), opp(h2))]; %#ok<AGROW>
+            end
             error('maxQuaPar:internal', ...
                 ['assemblePieces: a boundary ray of piece %d has no matching neighbour (apex ' ...
-                 '(%.6f,%.6f)) -- inputs should be full-domain (finite everywhere), so every ' ...
-                 'edge must pair with exactly one other.'], HE(h).piece, apx(1), apx(2));
+                 '(%.6f,%.6f)). Other rays (* = same apex):%s'], ...
+                HE(h).piece, apx(1), apx(2), others);
         end
         gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
