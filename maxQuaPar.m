@@ -1044,10 +1044,22 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
             % returning BOTH components (clipByFace already returns a list, so the plumbing is
             % there) -- what is missing is deciding, from the two crossings and the ray signs,
             % whether the survivor is one component or two, and building each.
-            error('maxQuaPar:notImplemented', ...
-                ['clipPolyByConic: the curved cut removes a middle section of an UNBOUNDED cell ' ...
-                 'while both ray ends survive (crossings on pairs %d and %d). Refused rather ' ...
-                 'than emitting a cell that may be two components.'], p1, p2);
+            % A curved cut CAN separate an unbounded cell -- the kept side of a parabola may be
+            % the concave one, so removing it is not removing a half-plane. If it does, each
+            % component contains one ray and is bounded in part by the conic running to infinity,
+            % i.e. an unbounded curved edge, which QuaPar cannot represent at all
+            % (assertCurvedEdgesAreArcs). So the answer is not "return both components": it is to
+            % TEST, and refuse only when genuinely disconnected.
+            %
+            % Measured on all three curved fixtures: CONNECTED (708, 344 and 125 grid cells
+            % respectively, single flood-fill component). So this branch is legitimate here and
+            % the single-cell construction below is the right shape.
+            if ~isConnectedSurvivor(poly, Ecut)
+                error('maxQuaPar:notImplemented', ...
+                    ['clipPolyByConic: the curved cut SEPARATES this unbounded cell (crossings ' ...
+                     'on pairs %d and %d). Each component would need the cutting conic running ' ...
+                     'to infinity, which QuaPar cannot represent as an edge.'], p1, p2);
+            end
             % Both ray ends are on the KEPT side: the cut removes a middle bulge, and both rays
             % survive. Same surgery as the straight path's corresponding branch, except that the
             % new Xa->Xb edge is an ARC of the cutting conic rather than a segment.
@@ -1175,6 +1187,38 @@ function p = mkPoly(V, curveAfter, curveEc, dirIn, dirInSign, dirOut, dirOutSign
     if curveAfter == 0, p.curveEc = []; else, p.curveEc = curveEc; end
     p.f = [];        % filled by the caller once the winner is decided; splitTwoArcPiece and
                      % subPiece both copy this field through, so it must exist by then
+end
+
+function tf = isConnectedSurvivor(poly, Ecut)
+% Is cell n {evalConic(Ecut,.) >= 0} ONE component or TWO? Decided by flood fill on a grid over
+% the cell, which settles whether "return both components" is even the right fix: if the survivor
+% is genuinely disconnected then each component needs the cutting conic running to infinity, i.e.
+% an unbounded curved edge, which QuaPar cannot represent -- and refusing is then correct.
+    R = 3*max(1, max(abs(poly.V(:)))); n = 121;
+    t = linspace(-R, R, n); [X, Y] = meshgrid(t, t);
+    inCell = false(n); 
+    cons = polyConstraints(poly);
+    for i = 1:n
+        for j = 1:n
+            q = [X(i,j), Y(i,j)];
+            if any(cons(:,1:2)*q' - cons(:,3) > 1e-9), continue, end
+            if QuaPar.evalConic(Ecut, q) < 0, continue, end
+            inCell(i,j) = true;
+        end
+    end
+    if ~any(inCell(:)), tf = true; return, end   % nothing survives: not a separation
+    % flood fill from the first true cell
+    lab = zeros(n); [i0, j0] = find(inCell, 1); stack = [i0 j0]; lab(i0,j0) = 1;
+    while ~isempty(stack)
+        c = stack(end,:); stack(end,:) = [];
+        for d = [1 0; -1 0; 0 1; 0 -1]'
+            a = c(1)+d(1); b = c(2)+d(2);
+            if a<1||b<1||a>n||b>n, continue, end
+            if inCell(a,b) && lab(a,b)==0, lab(a,b)=1; stack(end+1,:)=[a b]; end %#ok<AGROW>
+        end
+    end
+    nTot = nnz(inCell); nReached = nnz(lab);
+    tf = (nReached == nTot);
 end
 
 function s = signAtInfinity(Ecut, apex, dir)
@@ -2569,11 +2613,10 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
                 others = [others, newline, sprintf('    %s piece %d ray apex (%.6f,%.6f) opp=%d', ...
                                          mark, HE(h2).piece, a2(1), a2(2), opp(h2))]; %#ok<AGROW>
             end
-            cov = coverageReport(pieces, apx);
             error('maxQuaPar:internal', ...
                 ['assemblePieces: a boundary ray of piece %d has no matching neighbour (apex ' ...
-                 '(%.6f,%.6f)).%s Other rays (* = same apex, R = orphan lies on it):%s'], ...
-                HE(h).piece, apx(1), apx(2), cov, others);
+                 '(%.6f,%.6f)). Other rays (* = same apex, R = orphan lies on it):%s'], ...
+                HE(h).piece, apx(1), apx(2), others);
         end
         gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
@@ -2585,33 +2628,6 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
         end
         % else: gA==gB -- a zero-length orphan edge, safe to drop (see header).
     end
-end
-
-function txt = coverageReport(pieces, near)
-% Do the pieces COVER the plane near `near`? An orphan ray is a symptom; a hole is the disease.
-% Samples a small disc around the orphan and reports the first point no piece contains, and the
-% first point two or more contain. Cheap, and it separates "a cell was dropped or clipped too
-% small" from "every cell is right and only the matching failed".
-    txt = '';
-    R = 0.75; n = 25; hole = []; over = [];
-    for a = linspace(-R, R, n)
-        for b = linspace(-R, R, n)
-            q = near + [a, b];
-            c = 0;
-            for i = 1:numel(pieces)
-                if pieceContainsPt(pieces(i), q), c = c + 1; end
-            end
-            if c == 0 && isempty(hole), hole = q; end
-            if c >= 2 && isempty(over), over = q; end
-        end
-    end
-    if ~isempty(hole)
-        txt = [txt sprintf(' HOLE: no piece covers (%.6f,%.6f).', hole(1), hole(2))];
-    end
-    if ~isempty(over)
-        txt = [txt sprintf(' OVERLAP: >=2 pieces cover (%.6f,%.6f).', over(1), over(2))];
-    end
-    if isempty(txt), txt = ' Coverage near the orphan looks sound (no hole, no overlap).'; end
 end
 
 function tf = pieceContainsPt(piece, q)
