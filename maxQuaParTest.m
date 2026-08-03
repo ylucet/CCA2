@@ -466,6 +466,34 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             maxQuaParTest.checkTwoCurved(testCase, [2.0 -0.5]);
         end
 
+        function arcVsArcMatchesGroundTruthOverRandomShifts(testCase)
+            % GENERICITY / not-ad-hoc check for the arc-vs-arc fixes. The three shifts pinned above
+            % ([0.5 0.5], [-1 0.75], [2 -0.5]) are hand-picked; this sweeps a SEEDED batch of random
+            % shifts of the same two-curved fixture so a fix cannot be tuned to a handful of
+            % arrangements. Each shift is classified against the pointwise-max ground truth as
+            % exact / silently-wrong / errored, and TWO properties are asserted:
+            %
+            %   (a) SAFETY (the one that matters): a shift that ASSEMBLES must be exact. maxQuaPar
+            %       returning a wrong value is far worse than erroring, so nWrong must be 0.
+            %   (b) GENERICITY: a healthy fraction must assemble exactly, proving the machinery works
+            %       well beyond the three pinned examples.
+            %
+            % STATUS 2026-08-03: (b) holds comfortably (~65% of random shifts are exact -- the fixes
+            % DO generalise), but (a) currently FAILS: ~15% assemble to a WRONG value. Traced to the
+            % SAME pre-existing far-field over-extension as [0.5 0.5]'s residual 2/68 (a DECIDED
+            % unbounded polyhedral cell reaching past its g1 face near a mesh vertex), which the arc
+            % assembly fixes newly EXPOSE by letting those cases assemble instead of erroring. This
+            % test pins that gap until the far-field coverage bug is fixed. (~20% still error -- loud,
+            % acceptable, other unimplemented configurations.)
+            [nOK, nWrong, nErr, worst, wrongShifts] = maxQuaParTest.sweepTwoCurvedShifts(20260803, 18);
+            nCurved = nOK + nWrong + nErr;
+            testCase.verifyGreaterThanOrEqual(nOK, ceil(0.4*nCurved), sprintf(...
+                'genericity: only %d of %d curved random shifts assembled exactly', nOK, nCurved));
+            testCase.verifyEqual(nWrong, 0, sprintf(...
+                ['%d of %d curved random shifts ASSEMBLED TO A WRONG VALUE (worst %.4g) -- a silent ' ...
+                 'wrong answer, worse than erroring. Shifts: %s'], nWrong, nCurved, worst, mat2str(wrongShifts,5)));
+        end
+
         function maxQuaParSplitsACellThatAlreadyCarriesAnArc(testCase)
             % A cell that already carries a parabolic edge AND whose winner is undecided has to be
             % split along a SECOND curve. This used to error; it now works, and this fixture is the
@@ -605,6 +633,36 @@ classdef maxQuaParTest < matlab.unittest.TestCase
                 s = S(i,:);
                 testCase.verifyEqual(g.eval(s), max(g1.eval(s), g2.eval(s)), ...
                     'RelTol', 1e-9, 'AbsTol', 1e-9, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
+        function [nOK, nWrong, nErr, worst, wrongShifts] = sweepTwoCurvedShifts(seed, N)
+            % Run maxQuaPar on N seeded random shifts of the two-curved fixture and classify each
+            % against the pointwise-max ground truth. Only shifts that keep BOTH operands curved are
+            % counted. Returns exact / silently-wrong / errored counts, the worst wrong-value
+            % magnitude, and the list of wrong shifts. See arcVsArcMatchesGroundTruthOverRandomShifts.
+            rng(seed);
+            T1 = maxQuaParTest.curvedFixtureTriangles();
+            nOK = 0; nWrong = 0; nErr = 0; worst = 0; wrongShifts = zeros(0,2);
+            for it = 1:N %#ok<*NASGU>
+                shift = (rand(1,2)-0.5)*8;                 % [-4,4]^2
+                T2 = T1 + shift;
+                [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+                if ~(any(g1.Ec(:)~=0) && any(g2.Ec(:)~=0)), continue; end
+                try
+                    g = maxQuaPar(g1, g2);
+                    S = [maxQuaParTest.curvedSamplePoints(g1); maxQuaParTest.curvedSamplePoints(g2)];
+                    bad = 0; w = 0;
+                    for i = 1:size(S,1)
+                        s = S(i,:); tr = max(g1.eval(s), g2.eval(s));
+                        e = abs(g.eval(s) - tr);
+                        if e > 1e-7*(1+abs(tr)), bad = bad+1; w = max(w,e); end
+                    end
+                    if bad == 0, nOK = nOK+1;
+                    else, nWrong = nWrong+1; worst = max(worst,w); wrongShifts(end+1,:) = shift; end %#ok<AGROW>
+                catch
+                    nErr = nErr+1;
+                end
             end
         end
 
