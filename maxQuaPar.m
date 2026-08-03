@@ -783,6 +783,18 @@ function pieces = insertGlobalPassthrough(pieces)
 % exactly this insertion (including the ray -> segment+ray subdivision and the arc-interior guard);
 % it only lacked the cross-pair point set, which this supplies.
     if numel(pieces) < 2, return; end
+    % Normalise first: a clip can leave a piece with two coincident consecutive vertices and a
+    % zero-length arc between them -- e.g. when the other operand's straight edge runs along the
+    % tangent at one of the arc's own endpoints, clipping the arc down to a single point (the
+    % [0.5 0.5] arc-vs-arc fixture's src[5 1]). dedupConsecutiveTracked drops the duplicate and, when
+    % it is the arc's edge that collapses, clears curveAfter -- exactly what finishCurved does for the
+    % clip paths that already route through it, applied here to every piece so a degenerate one never
+    % reaches assembly with a phantom edge no neighbour can match.
+    for i = 1:numel(pieces)
+        [V, ca] = dedupConsecutiveTracked(pieces(i).V, pieces(i).curveAfter, 1e-6);
+        pieces(i).V = V; pieces(i).curveAfter = ca;
+        if ca == 0, pieces(i).curveEc = []; end
+    end
     allV = [];
     for i = 1:numel(pieces), allV = [allV; pieces(i).V]; end %#ok<AGROW>
     for i = 1:numel(pieces)
@@ -1471,10 +1483,16 @@ function poly2 = finishCurved(Vnew, curveAfter, poly, dirIn, dirInSign, dirOut, 
     if curveAfter == 0, poly2.curveEc = []; else, poly2.curveEc = poly.curveEc; end
 end
 
-function [V, q] = dedupConsecutiveTracked(V, q)
+function [V, q] = dedupConsecutiveTracked(V, q, tol)
 % dedupConsecutive with index tracking: dropping row d (because it duplicates row d-1) shifts every
 % index above d down by one, and maps d itself onto d-1 -- both covered by subtracting the number
 % of dropped rows at or below q.
+%
+% tol defaults to sqrt(eps) -- the right threshold for the clip paths (finishCurved/mkPoly), whose
+% two coincident points come from ONE arithmetic path and agree to nearly machine precision. A
+% caller merging points produced by DIFFERENT paths (insertGlobalPassthrough's normalisation, where
+% an arc endpoint and a clip crossing computed separately can sit ~1e-7 apart -- the cross-arithmetic
+% noise floor documented in insertPassthroughVertices) passes a looser tol.
 %
 % DEGENERATE ARC: the arc's own two endpoint rows can themselves collapse together, so this cannot
 % just shift q blindly. That happens whenever the clip line is TANGENT to the parabola at one of
@@ -1486,7 +1504,7 @@ function [V, q] = dedupConsecutiveTracked(V, q)
 % neighbouring STRAIGHT edge, which then failed to pair with that edge's genuine straight neighbour
 % (maxQuaPar:internal, "no matching neighbour") -- found on the very first curved end-to-end
 % fixture, maxQuaParTest.maxQuaParCombinesOneCurvedInputWithAPolyhedralOne.
-    tol = sqrt(eps);
+    if nargin < 3, tol = sqrt(eps); end
     n = size(V,1);
     keep = true(n,1);
     for i = 2:n
@@ -1819,7 +1837,7 @@ function newPieces = splitCell(cell, f1row, f2row)
 % (a conjugate is C1 where its pieces join, so the other operand's face boundaries are tangent to
 % the parabola), so the arc always survives whole, inside exactly one of the two halves, and that
 % half is the only one that ends up with two curves.
-    arcPos0 = 0; arcEc0 = [];
+    arcPos0 = 0; arcEc0 = []; arcEdge0 = 0;
     if pieceIsCurved(cell)
         % An UNBOUNDED curved cell used to be refused here as "never observed: every curved cell
         % in the sweep was bounded". That was a property of the old input class, not of the
@@ -1828,8 +1846,18 @@ function newPieces = splitCell(cell, f1row, f2row)
         % so the split below works on it unchanged. The restoration of the inherited arc after
         % the split is what has to be added, and it is the same step the bounded branch already
         % performs -- see the end of the unbounded branch.
-        arcPos0 = cell.curveAfter;
+        arcPos0 = cell.curveAfter;         % arc as a VERTEX index (arcEndpointsOf's convention)
         arcEc0  = cell.curveEc;
+        % ...and as a cellEdgeList EDGE index, needed by the crossing loop's skip and the arc-hit
+        % below (both compare against `edges`/`hits.edge`, which are cellEdgeList indices). For a
+        % BOUNDED cell edge p is V(p)->V(p+1), so the two coincide; for an UNBOUNDED one cellEdgeList
+        % puts the dirIn ray at edge 1 and shifts every segment down by one, so the arc edge is
+        % curveAfter+1. Conflating the two skipped the dirIn RAY instead of the arc and processed the
+        % arc as its chord, which mis-split an unbounded arc-carrying cell and dropped one of its rays
+        % (the [0.5 0.5] arc-vs-arc fixture: an x+y=0 boundary ray of src[6 2] vanished, orphaning
+        % its src[2 2] neighbour three stages later).
+        arcEdge0 = arcPos0;
+        if ~isempty(cell.dirIn), arcEdge0 = arcPos0 + 1; end
     end
     diffRow = f1row - f2row;
     a = diffRow(5)/2; b = diffRow(6); c = diffRow(7)/2;
@@ -1879,7 +1907,7 @@ function newPieces = splitCell(cell, f1row, f2row)
     edges = cellEdgeList(cell);
     hits = struct('edge', {}, 't', {}, 'pt', {});
     for i = 1:numel(edges)
-        if i == arcPos0
+        if i == arcEdge0
             % cellEdgeList reports this edge as the CHORD between the arc's endpoints, but the
             % boundary here is the ARC. Crossings of it are found on the conic itself below;
             % solving along the chord would both miss real ones and invent ones the boundary
@@ -1924,12 +1952,57 @@ function newPieces = splitCell(cell, f1row, f2row)
             % in different halves. That used to be refused as "never observed" -- true only while a
             % cell could not carry the OTHER operand's arc, which arc-vs-arc clipping now makes
             % routine. It needs no new machinery: the crossing is simply a THIRD kind of boundary
-            % hit, on the arc's own edge (index arcPos0, which the loop above deliberately skips),
+            % hit, on the arc's own edge (index arcEdge0, which the loop above deliberately skips),
             % and the existing two-hit split then divides the arc along with everything else.
-            hits(end+1) = struct('edge', arcPos0, 't', 0, 'pt', XcArc); %#ok<AGROW>
+            hits(end+1) = struct('edge', arcEdge0, 't', 0, 'pt', XcArc); %#ok<AGROW>
             [~, ord] = sort([hits.edge]);      % the split below assumes e1 < e2
             hits = hits(ord);
         end
+    end
+    if numel(hits) == 1 && ~isempty(cell.dirIn) && arcEdge0 ~= 0 && hits(1).edge == arcEdge0
+        % The splitting curve CROSSES this unbounded cell's arc once and then leaves at INFINITY --
+        % it does not meet either ray or any straight edge, so only the one arc hit is finite. This
+        % is NOT the tangency handled below: the curve genuinely divides the cell into two unbounded
+        % halves, each keeping ONE of the original rays plus a SUB-ARC and a new straight edge that
+        % runs to infinity. Only reachable once a cell can inherit the other operand's arc AND be a
+        % strip (the [0.5 0.5] arc-vs-arc fixture's src[6 2]); handled here for the strip shape
+        % (2 vertices, the arc between the two ray apexes) and refused loudly for any other.
+        nv0 = size(cell.V,1);
+        if nv0 ~= 2 || arcPos0 ~= 1
+            error('maxQuaPar:notImplemented', ...
+                ['maxQuaPar:splitCell: an unbounded cell''s arc is crossed with the split curve ' ...
+                 'escaping to infinity, but the cell is not the supported 2-vertex arc strip ' ...
+                 '(nv=%d, arcPos0=%d).'], nv0, arcPos0);
+        end
+        Xc = hits(1).pt;
+        % Tangent to {diffRow=0} at Xc = perpendicular to grad(diffRow); orient it into the strip
+        % (the recession side, i.e. along the cell's own rays).
+        gg = [diffRow(5)*Xc(1) + diffRow(6)*Xc(2) + diffRow(8), ...
+              diffRow(6)*Xc(1) + diffRow(7)*Xc(2) + diffRow(9)];
+        d = [-gg(2), gg(1)];
+        if norm(d) < 1e-12
+            error('maxQuaPar:internal', 'splitCell: degenerate split direction at an arc crossing.');
+        end
+        d = d/norm(d);
+        if dot(d, cell.dirIn) < 0, d = -d; end
+        % The escaping edge must be STRAIGHT: a parabola to infinity would be an unbounded curved
+        % edge, which QuaPar cannot hold. diffRow along Xc + t*d is ~0 for a straight branch.
+        [Ad,Bd,~] = quadAlongRay(diffRow, Xc, d);
+        scd = max(1e-9, norm(diffRow(5:10), Inf)*max(1, norm(Xc))^2);
+        if abs(Ad) > 1e-7*scd || abs(Bd) > 1e-6*scd
+            error('maxQuaPar:notImplemented', ...
+                ['maxQuaPar:splitCell: the split curve crosses this unbounded cell''s arc and ' ...
+                 'escapes to infinity as a PARABOLA (unbounded curved edge, not representable).']);
+        end
+        Va = cell.V(1,:); Vb = cell.V(2,:);
+        pieceA = struct('V', [Va; Xc], 'dirIn', cell.dirIn, 'dirOut', d, ...
+            'dirInSign', cell.dirInSign, 'dirOutSign', 1, 'curveAfter', 1, 'curveEc', arcEc0, 'f', []);
+        pieceB = struct('V', [Xc; Vb], 'dirIn', d, 'dirOut', cell.dirOut, ...
+            'dirInSign', 1, 'dirOutSign', cell.dirOutSign, 'curveAfter', 1, 'curveEc', arcEc0, 'f', []);
+        pieceA = assignSide(pieceA, diffRow, f1row, f2row);
+        pieceB = assignSide(pieceB, diffRow, f1row, f2row);
+        newPieces = [pieceA, pieceB];
+        return
     end
     if numel(hits) == 1
         % The cell only TOUCHES {diffRow=0} at a single point -- a tangency at the degenerate
