@@ -42,9 +42,15 @@ tests stay green). Commits `96aad61` (T-junction) and `53fc9fd` (assignSide) on
   subdivision miss. FIX DIRECTION (not yet done -- delicate, high regression risk to the arc
   machinery): make the arc-vs-half-plane clip of g2f2 by g1f6 produce the same `x+y=0` boundary the
   arc-vs-arc clip of g2f2 by g1f2 does, i.e. reconcile `clipPolyHalfPlaneCurved` with
-  `clipPolyByConic` along a shared straight g1 edge. Decisive next check: confirm whether g1 face 6
-  genuinely borders `x+y=0` to infinity (facePoly(g1,6) has a ray there) -- if yes the f6 clip is
-  under-producing; if no, re-examine whether piece 5 should terminate after all.
+  `clipPolyByConic` along a shared straight g1 edge.
+  DECISIVE CHECK NOW DONE (confirms "f6 clip under-producing"): g1's mesh for [0.5 0.5] has
+  `E(6,:)=[2 7 0]` a RAY from V2=(-2,2) in dir (-0.707,0.707) lying on `x+y=0`, with `F(6,:)=[2 6]`
+  -- so it is exactly the g1 face-2/face-6 boundary and it runs to INFINITY. Therefore `src[6 2]`
+  (=g1f6 n g2f2) must have a matching `x+y=0` ray, and `clipByFace(facePoly(g1,6), facePoly(g2,2))`
+  -- which swaps to clip the curved g2f2 by g1f6's straight half-planes -- is dropping it. Start in
+  `clipPolyHalfPlaneCurved` / `clipByFace`'s swap path: the g2f2 boundary ray on `x+y=0` is being
+  lost when g2f2 (curved) is clipped by g1f6's `x+y=0` half-plane (edge 6). g1 face 6 is a cone at
+  (-2,2) between edge 6 (dir (-0.707,0.707), on x+y=0) and edge 7 (dir (0.707,0.707)).
 
   --- OBSOLETE (kept for history; superseded by the sharper diagnosis above) ---
   The old `decideWinner`/parabola-to-infinity write-up for [2 -0.5]. The T-junction
