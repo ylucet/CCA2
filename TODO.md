@@ -4,11 +4,12 @@ _Seeded 2026-08-02 at the start of the overnight run, from the task given when i
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
 
-## Status 2026-08-03 (Opus 4.8)
+## Status 2026-08-03 (Opus 4.8) -- 18/1
 
-Three arc-vs-arc pins were red; **now two**, and they are THREE DIFFERENT defects, not one.
-`maxQuaParTest` 16/3 -> **17/2**, no regression (random-quadrilateral sweep + all arrangement
-tests stay green). Committed `96aad61` on `overnight/2026-08-02`.
+Three arc-vs-arc pins were red; **TWO are now fixed**, they were THREE DIFFERENT defects.
+`maxQuaParTest` 16/3 -> **18/1**, no regression (random-quadrilateral sweep + all arrangement
+tests stay green). Commits `96aad61` (T-junction) and `53fc9fd` (assignSide) on
+`overnight/2026-08-02`.
 
 - **[-1 0.75] `twoCurvedThatMustAssembleAcrossRays` -- FIXED.** Was a cross-piece T-JUNCTION:
   a decided cone's ray ran to infinity while the neighbour side was split (segment+ray) at a
@@ -18,12 +19,35 @@ tests stay green). Committed `96aad61` on `overnight/2026-08-02`.
   ray, so `oppositeSides` decided on sign noise -- now falls back to the other ray's direction).
   Green and exact at all 68 ground-truth samples.
 
-- **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- STILL RED (errors).** This is the
-  ORIGINAL piece-5 arc-clip defect below, on the `clipPolyByConic` path, NOT a T-junction (the
-  post-passthrough scan finds nothing collinear with piece 5's ray). The analysis below stands.
+- **[2 -0.5] `twoCurvedAssembleAcrossRaysSecondFixture` -- FIXED (`53fc9fd`).** Was NOT decideWinner
+  (that correctly flags the cell undecided) -- it was `assignSide` reading the winner at `piece.V(2,:)`,
+  which for splitCell's UNBOUNDED "rest" piece (curveAfter=1) is a CROSSING point where diff~0 and its
+  sign is noise, so both halves could get the same winner. Now reads the vertex farthest from
+  `{diff=0}`. Exact at all 68 samples. (The long note below about decideWinner/parabola-to-infinity was
+  the WRONG lead -- the real cell here is a strip cut by a LINE at two finite boundary points.)
 
-- **[2 -0.5] `twoCurvedAssembleAcrossRaysSecondFixture` -- STILL RED, now a WRONG VALUE not an
-  error, ROOT-CAUSED to `decideWinner` and it is the HARD unbounded-cell class.** The T-junction
+- **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- STILL RED (errors). NEW, sharper
+  diagnosis; the old "piece 5 over-extended" note below is WRONG.** Piece 5 (`src[2 2]` =
+  g1f2 n g2f2, an **arc-vs-arc** clip via `clipPolyByConic`) emits an unmatched ray on `x+y=0`
+  (g1's face-2/face-6 edge) from apex `(-2.03125,2.03125)`, dir `(-1,1)`. The clip is CORRECT, not
+  over-extended: the sign data at that cell is `evalConic(Ecut)@V = [0, -0.046, -0.015]`, so the
+  vertex `(-2,2)` sits on the g2-face-1 (discard) side and the far ray is genuinely g2-face-2. What
+  is missing is the MIRROR piece across `x+y=0`: `src[6 2]` = g1f6 n g2f2. g1 face 6 does NOT carry
+  the arc (the arc edge borders g1 faces 2 and 1 only), so `src[6 2]` is clipped by the
+  **arc-vs-HALF-PLANE** path (`clipPolyHalfPlaneCurved`), a DIFFERENT code path -- and it does not
+  produce the matching `x+y=0` ray (its `src[6 2]` pieces 15/16 sit at `x+y=0.5` and `1.0`, and
+  piece 15 has a bounded vertex exactly at `(-2.03125,2.03125)` but no ray along `(-1,1)`). So piece
+  5's ray has no neighbour because the two clip paths DISAGREE along the shared g1 mesh edge.
+  Post-passthrough T-junction scan finds nothing collinear with the ray, confirming it is not a
+  subdivision miss. FIX DIRECTION (not yet done -- delicate, high regression risk to the arc
+  machinery): make the arc-vs-half-plane clip of g2f2 by g1f6 produce the same `x+y=0` boundary the
+  arc-vs-arc clip of g2f2 by g1f2 does, i.e. reconcile `clipPolyHalfPlaneCurved` with
+  `clipPolyByConic` along a shared straight g1 edge. Decisive next check: confirm whether g1 face 6
+  genuinely borders `x+y=0` to infinity (facePoly(g1,6) has a ray there) -- if yes the f6 clip is
+  under-producing; if no, re-examine whether piece 5 should terminate after all.
+
+  --- OBSOLETE (kept for history; superseded by the sharper diagnosis above) ---
+  The old `decideWinner`/parabola-to-infinity write-up for [2 -0.5]. The T-junction
   fix lets assembly COMPLETE, uncovering the real defect: `decideWinner` wrongly declares an
   UNBOUNDED cell "decided". Traced with a pre-assembly coverage probe: cell `src[4 3]` stores
   `winner=g2`, but at `s=(-5.4843,1.5866)` -- an interior point of that cell -- `g1=0 > g2=-8.648`,
@@ -46,7 +70,11 @@ tests stay green). Committed `96aad61` on `overnight/2026-08-02`.
   that enters and leaves at infinity. Same family as next-step 2 in the session handoff (the
   Step-3 unbounded over-claim); do not attempt a probe-based patch.
 
-## Next up (the [0.5 0.5] defect)
+## Next up (the [0.5 0.5] defect) -- SUPERSEDED, read the Status section above first
+
+The "over-extended, should terminate" framing below is REFUTED by the sign data (see Status):
+piece 5's ray is legitimately g2-face-2; the real bug is the missing g1f6 n g2f2 mirror from the
+arc-vs-half-plane clip path. Kept below only for its geometric measurements.
 
 - [ ] **Piece 5 (src `[2 2]`) emits a RAY where its boundary should terminate.**
       Localised to the cell, the edge and the reason; this is the last defect.
