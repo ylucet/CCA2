@@ -4,12 +4,26 @@ _Seeded 2026-08-02 at the start of the overnight run, from the task given when i
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
 
-## Status 2026-08-03 (Opus 4.8) -- 18/1
+## Status 2026-08-03 (Opus 4.8) -- 18/1, [0.5 0.5] now assembles
 
-Three arc-vs-arc pins were red; **TWO are now fixed**, they were THREE DIFFERENT defects.
-`maxQuaParTest` 16/3 -> **18/1**, no regression (random-quadrilateral sweep + all arrangement
-tests stay green). Commits `96aad61` (T-junction) and `53fc9fd` (assignSide) on
-`overnight/2026-08-02`.
+Three arc-vs-arc pins were red; **TWO fully fixed**, the third now ASSEMBLES (was erroring) and is
+red only by a 2/68 value error from a SEPARATE pre-existing far-field bug. `maxQuaParTest` 16/3 ->
+**18/1** throughout, no regression (random-quadrilateral sweep + all arrangement tests green).
+Commits on `overnight/2026-08-02`: `96aad61` (T-junction), `53fc9fd` (assignSide), `be1a31f`
+(arcEdge off-by-one + escape-to-infinity split + dedup normalisation), `3e1a6b2` (triangle
+two-arc split). The [0.5 0.5] fixture chained ~9 distinct arc-handling bugs; six are fixed.
+
+- **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- now ASSEMBLES, red by VALUE (2/68).**
+  Six bugs fixed to get here (see the four commits above); the remaining error is UNRELATED to the
+  arc machinery. The 2 wrong samples are `(-3.98109,0.61148)` and `(-5.09537,0.13508)` -- both far
+  out in the lower-left, both essentially ON g1's mesh vertex `V5=(-3.98249,0.610504)` and its
+  face-3/face-4 boundary ray (dir `(-0.857,-0.514)`). Piece `src[4 3]` (a DECIDED unbounded
+  polyhedral strip, untouched by any session change) over-extends a hair past g1's edge 4 there and
+  evaluates g1-face-4's quadratic (~0.47/1.23) where g1's real value via the neighbouring face is 0.
+  A PRE-EXISTING far-field coverage/precision issue at a g1 vertex, newly reachable now that assembly
+  completes; conj's own verification would catch such a result in production. NEXT: why
+  facePoly(g1,4)/clipByFace lets src[4 3] cross g1's edge 4 near V5. The long "arc-clip mirror"
+  analysis below is SUPERSEDED -- the mirror (src[6 2]) is now built correctly.
 
 - **[-1 0.75] `twoCurvedThatMustAssembleAcrossRays` -- FIXED.** Was a cross-piece T-JUNCTION:
   a decided cone's ray ran to infinity while the neighbour side was split (segment+ray) at a
