@@ -15,6 +15,38 @@ classdef convEnvCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(r.eval([0.25 0.25]), 0.0625, 'AbsTol', 1e-12);
         end
 
+        function affineOverTriangleIsItself(testCase)
+            % The AFFINE row of the enumeration, which had no Step-1 test of its own: an affine q
+            % is convex, so co(q + I_T) = q, and the envelope must come back as a single face with
+            % NO quadratic part -- distinguishing it from the concave row, which also produces an
+            % affine envelope but by interpolating vertex values rather than by keeping q.
+            V = [0 0; 2 0; 0 3]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPol(V, E, [0 0 0 3 -2 1], F);          % 3x - 2y + 1
+            r = convEnvCPLQ(q);
+            testCase.verifyClass(r, 'RatPol');
+            testCase.verifyEqual(r.nf, 1);
+            testCase.verifyEqual(r.f(1,5:7), [0 0 0], 'AbsTol', 1e-12);   % no quadratic part
+            S = [0.5 0.5; 1 0.5; 0.2 2];
+            testCase.verifyEqual(r.eval(S), q.eval(S), 'AbsTol', 1e-12);
+        end
+
+        function rank1PSDOverTriangleIsItself(testCase)
+            % The convex RANK-1 PSD row, likewise missing a Step-1 test. Rank-1 PSD is still
+            % convex, so the envelope is q -- the point of testing it separately from the PD case
+            % is that the Hessian is SINGULAR, which is the condition the classifier has to get
+            % right (eigenvalues >= 0 rather than > 0) and is exactly where the PD test says
+            % nothing. Built from a rotated eigenvector so the degeneracy is not axis-aligned.
+            u = [cos(0.7); sin(0.7)]; A = 1.3*(u*u');
+            testCase.verifyEqual(rank(A), 1);
+            V = [0 0; 2 0; 0 2]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            q = QuaPol(V, E, [A(1,1) A(1,2) A(2,2) 0.4 -0.6 0.2], F);
+            r = convEnvCPLQ(q);
+            testCase.verifyClass(r, 'RatPol');
+            testCase.verifyEqual(r.nf, 1);
+            S = [0.5 0.5; 1 0.25; 0.25 1];
+            testCase.verifyEqual(r.eval(S), q.eval(S), 'AbsTol', 1e-12);
+        end
+
         function convexQuadraticFullDomainIsItself(testCase)
             q = QuaPol.energy();                % 1/2(x^2+y^2) on all of R^2
             r = convEnvCPLQ(q);

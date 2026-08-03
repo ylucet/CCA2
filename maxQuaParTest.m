@@ -433,7 +433,7 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
         end
 
-        function maxOfTwoCurvedOperandsMatchesThePointwiseMax(testCase)
+        function twoCurvedWhereTheSplitCurveCrossesAnArc(testCase)
             % Two genuinely different CURVED operands -- the case that used to raise
             % maxQuaPar:notImplemented, because a cell edge can then be one parabola clipped by
             % another. Note what the ground truth is here: the pointwise max of the two operands'
@@ -445,23 +445,25 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             % Both triangles have exactly one convex (positive-slope) edge for x*y, so both Step-2
             % conjugates carry a parabolic arc; translation does not change edge slopes, which is
             % why shifting the fixture keeps it curved while moving the arc somewhere else.
-            [T1, ~] = maxQuaParTest.curvedFixtureTriangles();
-            shifts = [0.5 0.5; -1.0 0.75; 2.0 -0.5];
-            for k = 1:size(shifts,1)
-                T2 = T1 + shifts(k,:);
-                [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
-                testCase.verifyTrue(any(g1.Ec(:) ~= 0) && any(g2.Ec(:) ~= 0), ...
-                    sprintf('shift %d: both operands must be curved for this test to mean anything', k));
-                g = maxQuaPar(g1, g2);
-                testCase.verifyClass(g, 'QuaPar');
-                S = [maxQuaParTest.curvedSamplePoints(g1); maxQuaParTest.curvedSamplePoints(g2)];
-                for i = 1:size(S,1)
-                    s = S(i,:);
-                    testCase.verifyEqual(g.eval(s), max(g1.eval(s), g2.eval(s)), ...
-                        'RelTol', 1e-9, 'AbsTol', 1e-9, ...
-                        sprintf('shift %d: s=(%.4f,%.4f)', k, s(1), s(2)));
-                end
-            end
+            % SHIFT (0.5,0.5) -- measured to reach splitCell: the cell inherits an arc from the
+            % other operand AND its winner is undecided, so the splitting curve genuinely CROSSES
+            % that arc and must divide it between the two halves. splitCell's guard for this says
+            % "never observed", which was true only while a cell could not carry the other
+            % operand's arc; arc-vs-arc clipping is what makes it reachable.
+            maxQuaParTest.checkTwoCurved(testCase, [0.5 0.5]);
+        end
+
+        function twoCurvedThatMustAssembleAcrossRays(testCase)
+            % SHIFT (-1.0,0.75) -- clips and splits cleanly, then fails to ASSEMBLE: a boundary
+            % ray finds no matching neighbour. A separate subsystem from the clip and from
+            % splitCell, pinned separately so the two cannot be confused for one failure.
+            maxQuaParTest.checkTwoCurved(testCase, [-1.0 0.75]);
+        end
+
+        function twoCurvedAssembleAcrossRaysSecondFixture(testCase)
+            % SHIFT (2.0,-0.5) -- the same assembly failure on an independent fixture, so a fix
+            % cannot be tuned to one arrangement's vertex ordering.
+            maxQuaParTest.checkTwoCurved(testCase, [2.0 -0.5]);
         end
 
         function maxQuaParSplitsACellThatAlreadyCarriesAnArc(testCase)
@@ -585,6 +587,27 @@ classdef maxQuaParTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function checkTwoCurved(testCase, shift)
+        % max of two CURVED operands against the pointwise max of their own eval -- the definition
+        % of what maxQuaPar computes, and independent of how the result is assembled, so it cannot
+        % be satisfied by an assembly that merely agrees with a same-shaped reference.
+        % Translation does not change edge slopes, so shifting the fixture keeps both operands
+        % 1-convex-edge (hence curved) while moving where their arcs meet.
+            [T1, ~] = maxQuaParTest.curvedFixtureTriangles();
+            T2 = T1 + shift;
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            testCase.verifyTrue(any(g1.Ec(:) ~= 0) && any(g2.Ec(:) ~= 0), ...
+                'both operands must be curved for this test to mean anything');
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+            S = [maxQuaParTest.curvedSamplePoints(g1); maxQuaParTest.curvedSamplePoints(g2)];
+            for i = 1:size(S,1)
+                s = S(i,:);
+                testCase.verifyEqual(g.eval(s), max(g1.eval(s), g2.eval(s)), ...
+                    'RelTol', 1e-9, 'AbsTol', 1e-9, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
         function [T1, T2] = curvedFixtureTriangles()
             % Q = (0,0),(3,-5),(4,-4),(2,-1) split by the diagonal (0,0)-(4,-4). T1 has exactly one
             % convex (positive-slope) edge for x*y -> a curved conjugate; T2 has none -> polyhedral.
