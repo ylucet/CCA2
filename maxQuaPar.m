@@ -221,20 +221,26 @@ function g = maxQuaPar(g1, g2)
 %       clipArcByHalfPlaneTest's own direct 'cut' tests, not end to end.
 
     curved1 = hasCurvedEdge(g1); curved2 = hasCurvedEdge(g2);
-    if curved1 && curved2
+    if false %#ok<UNRCH> -- kept for the reasoning it records; see the note inside
         % NOT "because conic-conic intersection is hard" -- splitCell now does exactly that
         % intersection, in closed form, via parabolaArcFrame.conicCoeffs. What is missing here is
         % the clipping side: clipByFace only ever clips a g1 face against g2's HALF-PLANES, so two
         % curved operands would need arc-vs-arc clipping, which clipPolyHalfPlaneCurved has no
         % case for.
-        error('maxQuaPar:notImplemented', ...
-            ['maxQuaPar supports at most ONE curved (parabolic-edge) input; both g1 and g2 have a ' ...
-             'nonzero Ec row, which would need arc-vs-arc face clipping (not implemented).']);
+        %
+        % THAT REASONING WAS TOO COARSE, and the refusal is gone. It is a statement about a FACE
+        % PAIR, not about the operands. Face intersection is SYMMETRIC, so a pair in which only
+        % one of the two faces carries an arc can always be clipped in the direction that puts
+        % the curved face first -- clipByFace performs that swap itself. Only the pair in which
+        % BOTH faces are curved genuinely needs conic-vs-conic clipping, and that is now detected
+        % per pair, which is a far smaller claim than refusing the whole operand. A QuaPar
+        % conjugate carries its arcs on a minority of its faces, so most pairs never reach it.
     end
-    if curved2
-        tmp = g1; g1 = g2; g2 = tmp;   % max is symmetric; normalize the curved operand to be g1
+    if curved2 && ~curved1
+        tmp = g1; g1 = g2; g2 = tmp;   % max is symmetric; prefer the curved operand as g1
     end
     assertCurvedEdgesAreArcs(g1);
+    assertCurvedEdgesAreArcs(g2);
     assertFullDomain(g1, 'g1');
     assertFullDomain(g2, 'g2');
 
@@ -546,14 +552,47 @@ function cell = clipByFace(polyK, polyL)
 % polyK intersected with the convex region bounded by polyL, by clipping polyK against every
 % boundary half-plane of polyL in turn (Sutherland-Hodgman style). Returns [] if the result is
 % empty or degenerates below a proper 2D cell.
+    % polyConstraints below turns polyL's boundary into HALF-PLANES, which a parabolic edge is
+    % not, so polyL must be purely polyhedral. When it is polyL that carries the arc and polyK
+    % that does not, SWAP THEM: face intersection is symmetric, so polyK n polyL is the same set
+    % either way, and the clipped cell that comes back is the same region. Only the two operands'
+    % f rows distinguish them, and those are passed separately by the caller and never touched
+    % here. This is what lets both operands of maxQuaPar be curved -- see its header.
+    if polyL.curveAfter ~= 0 && polyK.curveAfter == 0
+        tmp = polyK; polyK = polyL; polyL = tmp;
+    end
     cell = polyK;
     if polyL.curveAfter ~= 0
-        % polyConstraints below turns polyL's boundary into HALF-PLANES, which a parabolic edge is
-        % not. maxQuaPar normalizes the curved operand to be g1 (see its header) precisely so that
-        % polyL -- always a g2 face -- is purely polyhedral; reaching here means that normalization
-        % was bypassed.
-        error('maxQuaPar:internal', ...
-            'clipByFace: polyL carries a curved edge, but only polyK (a g1 face) may be curved.');
+        % Both faces of this pair carry an arc: the cut is one parabola against another, and the
+        % surviving cell can be bounded by two separate arcs. Refused here, per PAIR, rather than
+        % for the whole operand.
+        %
+        % HOW TO CLOSE IT. Every curved edge in this pipeline is a PARABOLA -- never an ellipse or
+        % a hyperbola -- so the cut curve is always representable as one Ec arc: no closed curve
+        % to break into pieces, no second branch to choose between. That is what makes this a
+        % bounded job rather than general conic arrangement.
+        %
+        % The primitives already exist:
+        %   * crossings of the cut conic with a STRAIGHT edge or ray: conicAlongRay's quadratic
+        %     in t (addQuaPar.m has the same three lines), roots in the edge's own range.
+        %   * crossings with polyK's OWN arc: parabolaArcFrame(polyK.curveEc).conicCoeffs(EcL)
+        %     gives the quartic in u for the second conic restricted to the first parabola, so
+        %     arc-vs-arc reduces to roots() of ONE univariate polynomial, with the root on the
+        %     right arc selected by u-range membership -- no reprojection, exactly as
+        %     lineCoeffs already does for the straight case.
+        %   * a surviving cell that ends up with TWO arcs: splitTwoArcPiece, which already cuts
+        %     such a piece into two one-arc pieces by a chord and is what splitCell uses.
+        %
+        % What has to be written is the boundary surgery: the same four keep/cut branches as
+        % clipPolyHalfPlaneCurved, bounded and unbounded, but with a CURVED cut edge. Two things
+        % differ from the straight case and must be handled rather than assumed away: a conic can
+        % cross a single straight edge TWICE (a line cannot), so "exactly 2 crossings on 2
+        % distinct edges" is no longer automatic; and clipByFace must then return a LIST of cells
+        % rather than one, since the two-arc split produces two. The caller (maxQuaPar's own k,l
+        % loop) already iterates over splitCell's list and would take the same shape.
+        error('maxQuaPar:notImplemented', ...
+            ['clipByFace: both faces of this pair carry a parabolic edge, which needs ' ...
+             'conic-vs-conic clipping (not implemented).']);
     end
     cons = polyConstraints(polyL);
     for i = 1:size(cons,1)
