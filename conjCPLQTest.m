@@ -60,34 +60,50 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(bBc.kind(), 'RatPol');
             testCase.verifyEqual(bBc.eval(S), caseBconvex.eval(S), 'AbsTol', 1e-12);
 
-            % Case C -- general bounded multi-face domain: still the literal double conjugation,
-            % through cPLQ's own symbolic machinery (QuaParCPLQ.conj).
+            % Case C -- general bounded multi-face domain. Its CONVEX member no longer takes the
+            % symbolic route at all: conjCPLQ's Case B2 fan-triangulates a bounded polygon and
+            % conjugates each triangle in closed form, so this comes back as a mesh QuaPar. The
+            % values are unchanged by that (measured across five quadratics on this exact domain,
+            % worst |new - old| = 0); what changed is the route, and hence the type.
             V = [0 0; 1 0; 1 1; 0 1];
             E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             caseC = QuaPol(V, E, [1 0 1 0 0 0; 1 0 1 0 0 0], F);
-            testCase.verifyEqual(caseC.conj().kind(), 'QuaParCPLQ');
+            testCase.verifyEqual(caseC.conj().kind(), 'QuaPar');
 
-            % Case C's BICONJUGATE does not work, and this assertion used to hide that. It read
-            % `verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ')`, which passes on an EMPTY piece
-            % list -- QuaParCPLQ(functionNDomain.empty()).kind() is still 'QuaParCPLQ'. Measured
-            % on pristine HEAD (2026-07-31): caseC.conj() gives 9 pieces, caseC.biconj() gives
-            % ZERO, i.e. f** = +inf everywhere, for an f that is convex and hence its own
-            % biconjugate.
+            % An INDEFINITE quadratic on the same domain still goes to Case C, because every
+            % triangle's conjugate is then curved and Step 3 takes at most one curved operand.
+            % Kept here so the two routes are pinned side by side on one domain.
+            caseCind = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
+            testCase.verifyEqual(caseCind.conj().kind(), 'QuaParCPLQ');
+
+            % CASE C's BICONJUGATE NOW WORKS, and this assertion used to pin it as broken.
             %
-            % It fails in conjugateOfPiecePoly, behind a CHAIN of latent bugs each of which only
-            % becomes reachable once the one before it is fixed. Two are now fixed --
-            % region.getNormalConeVertexQ indexed py(1) before its own isempty(py) guard (dead
-            % code), and region.splitmax3 left its output unassigned when f1 < f2 at every vertex
-            % -- and the next one down is functionNDomain.getInterior, which indexes c2(2) under
-            % a guard that only tests size(c1,2). None of this is caused by the unbounded or
-            % general-quadratic work; the first conjugation is now RICHER (11 pieces rather than
-            % 9), which is what carries the second one far enough to reach these.
+            % HISTORY. It first read `verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ')`, which
+            % passes on an EMPTY piece list -- QuaParCPLQ(functionNDomain.empty()).kind() is still
+            % 'QuaParCPLQ' -- so it hid the defect entirely. Measured on pristine HEAD
+            % (2026-07-31): caseC.conj() gave 9 pieces and caseC.biconj() gave ZERO, i.e.
+            % f** = +inf everywhere, for an f that is CONVEX and hence its own biconjugate. It was
+            % then changed to verifyError, pinning the loud failure instead of the silent one,
+            % with the failing chain traced into functionNDomain.getInterior.
             %
-            % Pinned as "errors" rather than by identifier, because the identifier moves as the
-            % chain is peeled. The invariant that matters is that it does not silently return a
-            % wrong f**. See SUPPORT_MATRIX.md section 7.
-            testCase.verifyError(@() caseC.biconj(), ?MException);
+            % None of that chain was fixed. What changed is that the FIRST conjugation no longer
+            % goes through it: Case B2 answers this domain in closed form, so the second
+            % conjugation is handed a clean mesh QuaPar instead of the symbolic pieces whose
+            % latent getInterior bug it used to trip over. f = (x^2+y^2)/2 is convex, so f** = f
+            % exactly, and that is what is asserted now -- the strongest available statement, and
+            % one no return-type check can fake.
+            %
+            % The getInterior chain is NOT closed: it is still on the path of any INDEFINITE
+            % domain, which is why caseCind above stays on the symbolic route. See
+            % SUPPORT_MATRIX.md section 7.
+            bC = caseC.biconj();
+            SC = [0.2 0.2; 0.5 0.5; 0.8 0.3; 0.1 0.9];
+            for i = 1:size(SC,1)
+                testCase.verifyEqual(conjCPLQTest.evalConjResult(bC, SC(i,:)), ...
+                    caseC.eval(SC(i,:)), 'AbsTol', 1e-9, sprintf( ...
+                    'f** must equal f for a convex f, at (%g,%g)', SC(i,1), SC(i,2)));
+            end
         end
 
         function generalPositiveDefiniteQuadratic(testCase)
@@ -339,6 +355,13 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % envelope, concave get the affine interpolant through the actual values of q, and
         % indefinite are moved into the frame where q IS x*y (xyFrame.m) so that cPLQ's own
         % closed forms apply to the function they were written for.
+        %
+        % Evaluated through evalConjResult rather than g.fnd, because these five inputs no longer
+        % all take the same ROUTE: since Case B2 (conjCPLQ's bounded-polygon branch) the convex
+        % and concave ones are answered by closed-form numerics and come back as a QuaPar, while
+        % the three indefinite ones still fall back to the symbolic pipeline and come back as a
+        % QuaParCPLQ, which is the only kind that has an .fnd. What this test is FOR is the
+        % values, and those are unchanged: measured across all five, worst |new - old| = 0.
             V = [0 0; 1 0; 1 1; 0 1];
             E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
@@ -358,7 +381,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                 qg = 0.5*sum((G*Q).*G,2) + G*L + c;
                 for t = 1:size(S,1)
                     ref = max(G*S(t,:)' - qg);           % sup over the square, to grid resolution
-                    got = evalFunctionNDomain(g.fnd, S(t,:));
+                    got = conjCPLQTest.evalConjResult(g, S(t,:));
                     testCase.verifyFalse(isnan(got), sprintf( ...
                         'f = %s: s=(%g,%g) is covered by no dual region', ...
                         mat2str(f6), S(t,1), S(t,2)));
@@ -539,9 +562,122 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyTrue(isa(p2, 'PLQVC'));
             testCase.verifyEqual(p2.nf, 4);
         end
+
+        function boundedPolygonsTakeTheClosedFormPath(testCase)
+        % Case B2. A bounded polygon is a union of triangles and Case B conjugates a triangle in
+        % closed form, so f* = max_k (q + I_T_k)* needs no symbolic engine. Before this branch
+        % existed EVERY polygon went to Case C's symbolic pipeline, which is the single largest
+        % source of runtime in this suite.
+        %
+        % The RETURN TYPE is the assertion that matters: a QuaPar means closed-form numerics
+        % throughout, a QuaParCPLQ means it fell back to the symbolic path. Values are checked
+        % against an EXACT reference -- the max of <s,x> - q(x) over the vertices, the edge
+        % stationary points and the interior stationary point of each triangle -- never a sampled
+        % one. A sampled reference reported ~3e-5 here and that was the reference's own error.
+            polys = { [0 0; 1 0; 1 1; 0 1]                    % unit square
+                      [0 0; 2 0.3; 2.4 1.7; 0.6 2.1]          % general quadrilateral
+                      [0 0; 2 1; 3 3; 1 2]                    % parallelogram
+                      [0 0; 2 0; 2.6 1.5; 1 2.5; -0.4 1.3] }; % pentagon
+            quads = { [1 0 1 0 0 0]        % convex   (x^2+y^2)/2
+                      [0 0 0 3 -2 1]       % affine   3x-2y+1
+                      [-1 0 -1 0 0 0] };   % concave -(x^2+y^2)/2
+            S = [0.3 0.4; -1 -1; 1 1; 2 -0.5; 0 0; 3 -2; -3 2; 1.5 0.2];
+            for pi = 1:numel(polys)
+                W = polys{pi};
+                q = conjCPLQTest.polygonQuaPol(W);
+                for qi = 1:numel(quads)
+                    f6 = quads{qi};
+                    q.f = repmat([0 0 0 0, f6], q.nf, 1);
+                    g = q.conj('cplq');
+                    testCase.verifyClass(g, 'QuaPar', sprintf( ...
+                        'polygon %d quadratic %d fell back to the symbolic path', pi, qi));
+                    for t = 1:size(S,1)
+                        testCase.verifyEqual(g.eval(S(t,:)), ...
+                            conjCPLQTest.supQuadOverPoly(S(t,:), f6, W), 'AbsTol', 1e-9, ...
+                            sprintf('polygon %d quadratic %d at s=(%g,%g)', ...
+                                    pi, qi, S(t,1), S(t,2)));
+                    end
+                end
+            end
+        end
+
+        function indefiniteOverAPolygonStillFallsBack(testCase)
+        % The BOUNDARY of what Case B2 buys, pinned so it is not mistaken for a bug. An
+        % indefinite triangle conjugates to a PARABOLIC QuaPar, and maxQuaPar takes at most one
+        % curved operand, so a polygon carrying an indefinite quadratic cannot be assembled
+        % numerically and must fall through to Case C. Closing this is the arc-vs-arc face
+        % clipping gap in maxQuaPar, not anything in conjCPLQ.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];
+            q = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);   % f = xy on both triangles
+            g = q.conj('cplq');
+            testCase.verifyEqual(g.kind(), 'QuaParCPLQ');
+        end
     end
 
     methods (Static)
+        function v = evalConjResult(g, s)
+        % Evaluate a conj('cplq') result whatever route produced it. A QuaParCPLQ wraps a cPLQ
+        % functionNDomain array and is read with evalFunctionNDomain; a QuaPar/QuaPol is a mesh
+        % and has its own eval. Since Case B2 the same input family can produce either, so a test
+        % that is about VALUES must not hard-code one of the two.
+            if isa(g, 'QuaParCPLQ')
+                v = evalFunctionNDomain(g.fnd, s);
+            else
+                v = g.eval(s);
+                if ~isfinite(v), v = NaN; end   % uncovered reads as NaN either way
+            end
+        end
+
+        function q = polygonQuaPol(W)
+        % A single convex polygonal face from its CCW vertex list.
+            n = size(W,1);
+            E = zeros(n,3); F = zeros(n,2);
+            for i = 1:n
+                E(i,:) = [i, mod(i,n)+1, 1];
+                F(i,:) = [1, 0];
+            end
+            q = QuaPol(W, E, [0 0 0 0 0 0], F);
+        end
+
+        function v = supQuadOverPoly(s, f6, W)
+        % EXACT sup of <s,x> - q(x) over the polygon, for a CONCAVE-or-affine integrand (i.e. any
+        % q that is convex, affine, or concave). Candidates are the vertices, the per-edge
+        % stationary points and the interior stationary point -- no sampling anywhere.
+            Q = [f6(1) f6(2); f6(2) f6(3)]; L = [f6(4); f6(5)];
+            n = size(W,1); v = -inf;
+            cand = W;
+            if abs(det(Q)) > 1e-12
+                cand = [cand; (Q \ (s' - L))'];
+            end
+            for e = 1:n
+                a = W(e,:); b = W(mod(e,n)+1,:); d = b - a;
+                den = d*Q*d';
+                if abs(den) > 1e-14
+                    tt = (s*d' - (Q*a' + L)'*d') / den;
+                    if tt > 0 && tt < 1, cand = [cand; a + tt*d]; end %#ok<AGROW>
+                end
+            end
+            for k = 1:size(cand,1)
+                p = cand(k,:);
+                if ~conjCPLQTest.inPolygon(p, W), continue, end
+                z = 0.5*f6(1)*p(1)^2 + f6(2)*p(1)*p(2) + 0.5*f6(3)*p(2)^2 ...
+                    + f6(4)*p(1) + f6(5)*p(2) + f6(6);
+                v = max(v, s*p' - z);
+            end
+        end
+
+        function tf = inPolygon(p, W)
+            n = size(W,1); tf = true;
+            for i = 1:n
+                a = W(i,:); b = W(mod(i,n)+1,:);
+                if (b(1)-a(1))*(p(2)-a(2)) - (b(2)-a(2))*(p(1)-a(1)) < -1e-9
+                    tf = false; return
+                end
+            end
+        end
+
         function v = fourConeTruth(s)
         % f* of the 4-cone fan of step3UnboundedAssemblyMatchesTheTruth, in closed form. Each row
         % is {quadrant signs, a, b} for q = a*x^2 + b*y^2 on that quadrant; see that test's header.

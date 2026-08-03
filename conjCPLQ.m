@@ -86,6 +86,40 @@ function g = conjCPLQ(obj, idx)
         return
     end
 
+    % ---- Case B2: a BOUNDED polygon, taken through Case B's closed-form path -------------
+    % A bounded polygon is a union of triangles, and Case B conjugates a triangle in closed
+    % form, so f* = max_k (q + I_T_k)* needs no symbolic engine -- the very decomposition
+    % Case C's own `triangulate` step performs, only executed by the numeric machinery instead.
+    % Nothing was missing mathematically; the polygon was simply never offered to the code that
+    % can already do it, and every one went to Case C's symbolic pipeline.
+    %
+    % Attempted, not assumed. Step 3 (maxQuaPar) accepts at most ONE curved operand, and an
+    % INDEFINITE triangle conjugates to a parabolic QuaPar -- so two or more of those refuse and
+    % this falls through to Case C exactly as before. Convex, affine and concave triangles
+    % conjugate to POLYHEDRAL pieces, so any number of them combine. That is the real boundary
+    % of what this branch buys, and it is the arc-vs-arc clipping gap, not a gap here.
+    %
+    % Measured before wiring, on the four polygons of checkPolygonNumericPath: convex, affine
+    % and concave over a unit square, a general quadrilateral, a parallelogram and a pentagon
+    % all come back exact -- 4.4e-16 against an EXACT QP reference, not a sampled one. (A
+    % sampled reference reported ~3e-5 on the convex cases; refining it 160 -> 320 -> 640 drove
+    % that to 1e-6, which is how it was identified as the reference's error, not CCA2's.)
+    if obj.isDomBounded
+        try
+            g = conjBoundedPolygon(obj);
+            return
+        catch ME
+            if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented') && ...
+               ~strncmp(ME.identifier, 'maxQuaPar:', 10) && ...
+               ~strcmp(ME.identifier, 'PLQ:conjCPLQ:notImplemented') && ...
+               ~strcmp(ME.identifier, 'convEnvCPLQ:notImplemented')
+                rethrow(ME);
+            end
+            % Step 2 or Step 3 cannot take some triangle of this domain; Case C's symbolic
+            % pipeline can, so fall through to it rather than failing.
+        end
+    end
+
     % ---- Case C: general bounded domain (nf>1 and/or a non-triangular face) -------------
     % [JOGO] Step 3 (max of conjugates) via the integrated cPLQ symbolic pipeline (Phase 1;
     % DESIGN.md II.5.1 / .claude/SESSION_HANDOFF.md) -- the case Case B's own numeric path
@@ -153,6 +187,71 @@ function g = conjSingleTriangle(obj)
         % fall back to it.
     end
     g = conjEnvelopeViaCPLQ(env);
+end
+
+% ================================================================================================
+function g = conjBoundedPolygon(obj)
+% Case B2: fan-triangulate every face of a BOUNDED domain, conjugate each triangle through
+% Case B's own closed-form path, and combine with Step 3's numeric max.
+%
+% Sound for the same reason Case C's triangulate step is: the triangles COVER the domain, and a
+% sup over a union is the max of the sups, so f* = max_k (q_k + I_T_k)*. No envelope of the
+% polygon is needed or computed -- each triangle's conjugate is taken directly, which is also
+% why a fan (a cover, not a minimal triangulation) is enough.
+%
+% Any per-triangle result that is not a mesh QuaPar is refused rather than worked around: it
+% means that triangle itself fell back to cPLQ's symbolic Step 2/3, and mixing the two
+% representations inside Step 3 is exactly the confusion this branch exists to avoid. The caller
+% then routes the whole domain to Case C, which is what happened before this branch existed.
+    E3 = [1 2 1; 2 3 1; 3 1 1]; F3 = [1 0; 1 0; 1 0];
+    gs = {};
+    for i = 1:obj.nf
+        tris = faceTrianglesCCW(obj, i);
+        f6   = obj.f(i, 5:10);
+        for t = 1:numel(tris)
+            gt = conjSingleTriangle(QuaPol(tris{t}, E3, f6, F3));
+            if ~(isa(gt, 'QuaPar') || isa(gt, 'QuaPol') || isa(gt, 'RatPol'))
+                error('PLQ:conjCPLQ:notImplemented', ...
+                    ['triangle %d of face %d conjugated to a %s (its own Step 2 fell back to ' ...
+                     'the symbolic path), which Step 3''s numeric max cannot take.'], ...
+                    t, i, class(gt));
+            end
+            gs{end+1} = toQuaPar(gt); %#ok<AGROW>
+        end
+    end
+    if isempty(gs)
+        error('PLQ:conjCPLQ:notImplemented', 'no bounded face to conjugate.');
+    end
+    g = gs{1};
+    for k = 2:numel(gs)
+        g = maxQuaPar(g, gs{k});
+    end
+end
+
+function tris = faceTrianglesCCW(obj, i)
+% Vertices of bounded face i in boundary order -> CCW polygon -> fan triangulation. The face of a
+% QuaPol is convex, which is what makes a fan from one vertex valid. Same construction as
+% convEnvCPLQ's file-local extractFaceTrianglesCCW, duplicated here because it is file-local
+% there (as faceVertexIndices already is).
+    ej = find(any(obj.F == i, 2));
+    if any(obj.E(ej,3) == 0)
+        error('PLQ:conjCPLQ:notImplemented', ...
+            'the numeric polygon path needs bounded faces (face %d is unbounded).', i);
+    end
+    W = obj.V(faceVertexIndices(obj, i), :);
+    if signedArea(W) < 0, W = flipud(W); end
+    n = size(W,1);
+    if n < 3
+        error('PLQ:conjCPLQ:notImplemented', 'face %d has fewer than 3 vertices.', i);
+    end
+    tris = cell(1, n-2);
+    for t = 1:n-2, tris{t} = [W(1,:); W(t+1,:); W(t+2,:)]; end
+end
+
+function a = signedArea(W)
+    x = W(:,1); y = W(:,2); n = size(W,1); a = 0;
+    for i = 1:n, j = mod(i,n)+1; a = a + (x(i)*y(j) - x(j)*y(i)); end
+    a = a/2;
 end
 
 % ================================================================================================
