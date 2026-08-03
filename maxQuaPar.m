@@ -984,7 +984,7 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
             % new Xa->Xb edge is an ARC of the cutting conic rather than a segment.
             Vnew = [poly.V(1:p1-1,:); Xa; Xb; poly.V(p2:nv,:)];
             cutEdge = p1;                          % the new edge follows the kept head
-            out = mkPoly(Vnew, cutEdge, orientConicInto(Ecut, [Xa; Xb; poly.V(:,:)]), ...
+            out = mkPoly(Vnew, cutEdge, Ecut, ...
                          poly.dirIn, poly.dirInSign, poly.dirOut, poly.dirOutSign);
             qCurve = 0;
             if hasArc
@@ -998,7 +998,7 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
             % BOUNDED -- closed by the arc from Xb back to Xa.
             Vnew = [Xa; poly.V(p1:p2-1,:); Xb];
             cutEdge = size(Vnew,1);
-            out = mkPoly(Vnew, cutEdge, orientConicInto(Ecut, Vnew), [], [], [], []);
+            out = mkPoly(Vnew, cutEdge, Ecut, [], [], [], []);
             qCurve = 0;
             if hasArc && cePair >= p1 && cePair <= p2
                 qCurve = cePair - p1 + 1;
@@ -1039,7 +1039,7 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
     out.V = Vnew;
     out.dirIn = []; out.dirOut = []; out.dirInSign = []; out.dirOutSign = [];
     out.curveAfter = cutEdge;
-    out.curveEc = orientConicInto(Ecut, Vnew);
+    out.curveEc = Ecut;   % already > 0 on the kept side, which IS this cell's interior
     out.f = [];
     if size(out.V,1) < 2, polys = {}; return, end
 
@@ -1645,12 +1645,13 @@ function newPieces = splitCell(cell, f1row, f2row)
 % half is the only one that ends up with two curves.
     arcPos0 = 0; arcEc0 = [];
     if pieceIsCurved(cell)
-        if ~isempty(cell.dirIn)
-            error('maxQuaPar:notImplemented', ...
-                ['maxQuaPar:splitCell: splitting an UNBOUNDED cell that already carries an arc ' ...
-                 'is not implemented (never observed: every curved cell in the sweep was ' ...
-                 'bounded). The bounded case is handled.']);
-        end
+        % An UNBOUNDED curved cell used to be refused here as "never observed: every curved cell
+        % in the sweep was bounded". That was a property of the old input class, not of the
+        % geometry: with both operands curved, clipPolyByConic can leave an unbounded cell
+        % carrying an arc, and the arc is still a BOUNDED edge of it (assertCurvedEdgesAreArcs),
+        % so the split below works on it unchanged. The restoration of the inherited arc after
+        % the split is what has to be added, and it is the same step the bounded branch already
+        % performs -- see the end of the unbounded branch.
         arcPos0 = cell.curveAfter;
         arcEc0  = cell.curveEc;
     end
@@ -1875,7 +1876,41 @@ function newPieces = splitCell(cell, f1row, f2row)
     % midpoint if a piece has no other vertex, e.g. a bounded middle with e2==e1+1).
     cellA = assignSide(cellMid, diffRow, f1row, f2row);
     cellB = assignSide(cellRest, diffRow, f1row, f2row);
-    newPieces = [cellA, cellB];
+    if arcPos0 == 0
+        newPieces = [cellA, cellB];
+        return
+    end
+    % Restore the inherited arc, exactly as the bounded branch does: boundedPiece and the
+    % cellRest construction both know only about the SPLITTING curve, so a half that also
+    % contains the original arc would silently flatten it to a chord.
+    [aX0, aX1] = arcEndpointsOf(cell, arcPos0);
+    cand = {[aX0; aX1]};
+    if exist('XcArc','var') && ~isempty(XcArc)
+        cand = {[XcArc; aX0], [XcArc; aX1]};
+    end
+    newPieces = [];
+    for half = [cellA, cellB]
+        p = 0;
+        for cIdx = 1:numel(cand)
+            p = findArcPosition(half, cand{cIdx}(1,:), cand{cIdx}(2,:));
+            if p ~= 0, break, end
+        end
+        if p == 0 || p == half.curveAfter
+            newPieces = [newPieces, half]; %#ok<AGROW>
+            continue
+        end
+        if ~isempty(half.dirIn)
+            % Two curves on an UNBOUNDED half. splitTwoArcPiece separates two arcs with a CHORD
+            % between them, which presupposes a closed boundary cycle; there is no chord that
+            % closes an unbounded piece. Refused narrowly here rather than by the blanket guard
+            % that used to stand at the top of this function.
+            error('maxQuaPar:notImplemented', ...
+                ['maxQuaPar:splitCell: an UNBOUNDED half carries both the inherited arc and the ' ...
+                 'splitting curve; splitTwoArcPiece separates two arcs by a chord, which needs a ' ...
+                 'closed boundary.']);
+        end
+        newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
+    end
 end
 
 function [X0, X1] = arcEndpointsOf(piece, i)
@@ -2164,7 +2199,7 @@ function g = assemblePieces(pieces)
     HE = buildHalfEdgeList(n, allNV, allE, allEc);
     opp = matchHalfEdges(pieces, HE);
     [V, rootOf] = buildGlobalVertices(pieces, allNV, HE, opp);
-    checkOrphanHalfEdges(HE, opp, rootOf);
+    checkOrphanHalfEdges(HE, opp, rootOf, pieces);
     [V, E, Ec, F] = buildFinalEdgesAndFaces(pieces, HE, opp, V, rootOf);
 
     f = zeros(n,10);
@@ -2401,7 +2436,7 @@ function [V, rootOf] = buildGlobalVertices(pieces, allNV, HE, opp)
     end
 end
 
-function checkOrphanHalfEdges(HE, opp, rootOf)
+function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
 % Every half-edge matchHalfEdges left unpaired (opp==0) is normally a genuine topology bug (the
 % error below) -- EXCEPT one provably safe case: a genuinely AMBIGUOUS 3-way (or more) vertex
 % cluster, where several pieces meeting near one point each independently compute a slightly
@@ -2429,10 +2464,15 @@ function checkOrphanHalfEdges(HE, opp, rootOf)
     for h = 1:numel(HE)
         if opp(h) ~= 0, continue; end
         if ~HE(h).isSeg
+            % Report WHERE, not just which piece. An orphan ray is either a coverage gap (the
+            % neighbouring cell was dropped, so no ray can match) or a matching failure (the
+            % neighbour is present but its ray was not recognised), and the apex plus direction
+            % is what distinguishes the two by inspection.
+            apx = vertexAt(pieces, HE(h).piece, HE(h).aLoc);
             error('maxQuaPar:internal', ...
-                ['assemblePieces: a boundary ray of piece %d has no matching neighbour -- inputs ' ...
-                 'should be full-domain (finite everywhere), so every edge must pair with exactly ' ...
-                 'one other.'], HE(h).piece);
+                ['assemblePieces: a boundary ray of piece %d has no matching neighbour (apex ' ...
+                 '(%.6f,%.6f)) -- inputs should be full-domain (finite everywhere), so every ' ...
+                 'edge must pair with exactly one other.'], HE(h).piece, apx(1), apx(2));
         end
         gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
