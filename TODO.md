@@ -4,7 +4,36 @@ _Seeded 2026-08-02 at the start of the overnight run, from the task given when i
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
 
-## Next up
+## Status 2026-08-03 (Opus 4.8)
+
+Three arc-vs-arc pins were red; **now two**, and they are THREE DIFFERENT defects, not one.
+`maxQuaParTest` 16/3 -> **17/2**, no regression (random-quadrilateral sweep + all arrangement
+tests stay green). Committed `96aad61` on `overnight/2026-08-02`.
+
+- **[-1 0.75] `twoCurvedThatMustAssembleAcrossRays` -- FIXED.** Was a cross-piece T-JUNCTION:
+  a decided cone's ray ran to infinity while the neighbour side was split (segment+ray) at a
+  point P lying exactly on that ray (perp ~2e-15). `insertGlobalPassthrough` now re-inserts
+  every piece vertex that lands on another piece's ray/segment; a companion fix to
+  `raySideVector` (its old adjacent-vertex representative is COLLINEAR with a just-subdivided
+  ray, so `oppositeSides` decided on sign noise -- now falls back to the other ray's direction).
+  Green and exact at all 68 ground-truth samples.
+
+- **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- STILL RED (errors).** This is the
+  ORIGINAL piece-5 arc-clip defect below, on the `clipPolyByConic` path, NOT a T-junction (the
+  post-passthrough scan finds nothing collinear with piece 5's ray). The analysis below stands.
+
+- **[2 -0.5] `twoCurvedAssembleAcrossRaysSecondFixture` -- STILL RED, now a WRONG VALUE not an
+  error.** The T-junction fix lets assembly COMPLETE, which uncovers a coverage/winner defect:
+  `g` returns the wrong operand over a region -- 4/68 samples, e.g. `s=(-5.4843,1.5866)` gives
+  `-8.648` (=g2) where truth is `0` (=g1), and `s=(-1.1298,4.1007)` gives `0` (=g1) where truth
+  is `1.768` (=g2). Two regions with swapped winners. All accepted RAY matches are geometrically
+  correct adjacent-`src` pairs, and the passthrough only inserts collinear vertices (never touches
+  the winner row), so this is a SEPARATE coverage defect the completing assembly newly reaches --
+  likely a wrong FACE built in `buildFinalEdgesAndFaces`, or a cell whose winner/region is wrong.
+  Next: probe the 4 bad points against the pieces PRE-assembly (does the correct-winner piece
+  cover them there?) to localise assembly-vs-decideWinner.
+
+## Next up (the [0.5 0.5] defect)
 
 - [ ] **Piece 5 (src `[2 2]`) emits a RAY where its boundary should terminate.**
       Localised to the cell, the edge and the reason; this is the last defect.
