@@ -1234,24 +1234,41 @@ function s = signAtInfinity(Ecut, apex, dir)
     if abs(A) > 1e-12, s = sign(A); elseif abs(B) > 1e-12, s = sign(B); else, s = sign(C); end
 end
 
-function ts = conicRootsAlong(Ecut, base, dir, tlo, thi, tol)
-% Roots of t -> evalConic(Ecut, base + t*dir) strictly inside (tlo, thi), sign-change only.
+function ts = conicRootsAlong(Ecut, base, dir, tlo, thi, ~)
+% Roots of t -> evalConic(Ecut, base + t*dir) strictly inside (tlo, thi) at which the value
+% actually CHANGES SIGN -- a tangency touches without crossing and must not cut the boundary.
+%
+% Crossing is decided by MULTIPLICITY, not by probing. The old version evaluated the quadratic at
+% t +/- 1e-7 and compared each side against an absolute tolerance derived from the conic's own
+% coefficient scale. Those two are incommensurable: 1e-7 from a root the value is about
+% |slope| * 1e-7, which sits far BELOW that tolerance, so sign2 returned 0 on both sides, the
+% product was 0 rather than negative, and EVERY genuine crossing was discarded. Measured on the
+% first curved fixture: clipPolyByConic found 0 crossings on cells that demonstrably had one, kept
+% them whole, and left them extended past the true arrangement vertex to one of g1's own mesh
+% vertices -- which is what surfaced as an unmatched ray in assemblePieces three stages later.
+%
+% A quadratic changes sign exactly at a SIMPLE root, and touches without crossing at a double one,
+% so the discriminant settles it outright: disc > 0 gives two simple roots, disc == 0 one double
+% root (tangency, no crossing). The degenerate linear case B*t + C has one simple root whenever
+% B ~= 0. No probe, no tolerance on the VALUE -- only a relative test on the discriminant, which
+% is the quantity that is actually being asked about.
     [A,B,C] = conicAlongRayLocal(Ecut, base, dir);
     ts = [];
     if abs(A) <= 1e-14
-        if abs(B) > 1e-14, r = -C/B; else, return, end
+        if abs(B) <= 1e-14, return, end
+        r = -C/B;                          % simple root of a genuine linear function
     else
         disc = B^2 - 4*A*C;
-        if disc < 0, return, end
+        if disc <= 1e-12 * max([B^2, abs(4*A*C), 1])
+            return                          % no real root, or a double root: a tangency
+        end
         sq = sqrt(disc);
         r = [(-B - sq)/(2*A), (-B + sq)/(2*A)];
     end
     for k = 1:numel(r)
         t = r(k);
         if t <= tlo + 1e-9 || t >= thi - 1e-9, continue, end
-        h = 1e-7 * max(1, abs(t));
-        v0 = polyval([A B C], t - h); v1 = polyval([A B C], t + h);
-        if sign2(v0,tol)*sign2(v1,tol) < 0, ts(end+1) = t; end %#ok<AGROW>
+        ts(end+1) = t; %#ok<AGROW>
     end
     ts = sort(ts);
 end
@@ -2616,13 +2633,14 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
                 % ray covered to different extents, and the fix is to split this one there.
                 d2 = rayDirAt(pieces, HE(h2));
                 if ~isempty(d2) && onOpenRay(a2, d2, apx, 1e-6), mark = [mark 'R']; else, mark = [mark ' ']; end
-                others = [others, newline, sprintf('    %s piece %d ray apex (%.6f,%.6f) opp=%d', ...
-                                         mark, HE(h2).piece, a2(1), a2(2), opp(h2))]; %#ok<AGROW>
+                others = [others, newline, sprintf('    %s piece %d src %s apex (%.4f,%.4f) dir (%.3f,%.3f) opp=%d', ...
+                                         mark, HE(h2).piece, mat2str(pieces(HE(h2).piece).src), ...
+                                         a2(1), a2(2), d2(1), d2(2), opp(h2))]; %#ok<AGROW>
             end
             error('maxQuaPar:internal', ...
-                ['assemblePieces: a boundary ray of piece %d has no matching neighbour (apex ' ...
-                 '(%.6f,%.6f)). Other rays (* = same apex, R = orphan lies on it):%s'], ...
-                HE(h).piece, apx(1), apx(2), others);
+                ['assemblePieces: a boundary ray of piece %d src %s has no matching neighbour ' ...
+                 '(apex (%.6f,%.6f)). Other rays (* = same apex, R = orphan lies on it):%s'], ...
+                HE(h).piece, mat2str(pieces(HE(h).piece).src), apx(1), apx(2), others);
         end
         gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);

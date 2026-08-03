@@ -6,31 +6,26 @@ was launched. The repository had no TODO.md; the acceptance criterion is precise
 
 ## Next up
 
-- [ ] **`clipPolyByConic` misses a crossing and keeps the cell whole.** This is
-      the single remaining defect and it is now located exactly, not inferred
-      from the orphan ray three stages downstream:
+- [ ] **Two cells disagree about where their SHARED ray starts.** Fully localised;
+      this is the last defect.
 
-      * The orphan ray separates cell `(2,2)` from cell `(6,2)`; both exist.
-      * Walking across the ray, the true face-pair transition happens at
-        `(-2.03125, 2.03125)`, so piece 5's apex is CORRECT and its neighbour's
-        `(-2, 2)` is over-extended by 0.044.
-      * `(-2, 2)` is `g1.V(2)`, an ORIGINAL mesh vertex; `(-2.03125, 2.03125)` is
-        a vertex of NEITHER mesh — it is where a g1 edge crosses g2's ARC, i.e. a
-        genuine arrangement vertex that only the conic cut can produce.
-      * Traced: `clipPolyByConic` runs 4 times on this fixture. Twice it finds 2
-        crossings and cuts. **Twice it finds 0 crossings on an unbounded 2-vertex
-        cell and keeps it whole** — those are the cells that stay extended to
-        `g1.V(2)`.
+      * Orphan A: piece 5, src `[2 2]`, apex `(-2.03125, 2.03125)`, dir `(-1,1)`.
+      * Orphan B: piece 16, src `[6 2]`, apex `(-1.7578, 2.2578)`, dir `(-1,1)`.
+      * Same direction, and the ray separates cell `(2,2)` from cell `(6,2)`, so
+        these two ARE each other's intended partner — they simply disagree on the
+        apex by 0.355, far above `matchHalfEdges`' 1e-3 tolerance.
+      * Which is right: walking the line, the face-pair transition
+        `(1,1)/(5,1) -> (2,2)/(6,2)` happens at `(-2.03125, 2.03125)`. So **piece
+        5 is correct and piece 16 starts 0.355 too late** — cell `(6,2)` is
+        missing the stretch between the two apexes.
+      * Why they can differ: the two are built by DIFFERENT paths. `(2,2)` is
+        both-curved and goes through `clipPolyByConic`; `(6,2)` is swapped and
+        clipped by half-planes only (`cutConic` is empty once `polyL` is the
+        straight face), so its apex comes from `clipArcByHalfPlane` instead.
 
-      So the fix is in crossing DETECTION, not in the surgery: find why the
-      arc-vs-boundary crossing at t ≈ 0.044 along a ray is not detected. Prime
-      suspects, in order: the sign-change filter in `conicRootsAlong` rejecting
-      it, and the `hasArc && p == cePair` skip firing on the wrong pair.
-
-- [ ] Only after that: `assemblePieces`. The orphan ray should disappear once
-      both neighbours share the true apex — it is a symptom, not a second bug.
-- [ ] Once assembled: confirm the three arc-vs-arc tests against the pointwise
-      max, then the fast and normal buckets for regression.
+      Next: find why the half-plane path stops cell `(6,2)` at the sliver corner
+      `(-1.7578, 2.2578)` rather than at the true crossing of g1's face-2/6 edge
+      with g2's arc.
 
 ## Done recently
 
