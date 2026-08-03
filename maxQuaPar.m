@@ -1741,12 +1741,17 @@ function newPieces = splitCell(cell, f1row, f2row)
         % A tangency does not: the arc stays whole, and the touch point needs no vertex because
         % the winner does not change across it. Erroring on a real crossing keeps that assumption
         % honest rather than assumed -- the sweep produced 3 tangencies and no crossing.
-        if arcHasStrictCrossing(cell, diffRow)
-            error('maxQuaPar:notImplemented', ...
-                ['maxQuaPar:splitCell: the splitting curve genuinely CROSSES this cell''s arc, ' ...
-                 'which would cut the arc into two sub-arcs lying in different halves. Not ' ...
-                 'implemented (never observed: the pipeline''s arcs meet neighbouring face ' ...
-                 'boundaries tangentially).']);
+        [crosses, XcArc] = arcHasStrictCrossing(cell, diffRow);
+        if crosses
+            % The splitting curve CROSSES the arc, so the arc is cut into two sub-arcs that end up
+            % in different halves. That used to be refused as "never observed" -- true only while a
+            % cell could not carry the OTHER operand's arc, which arc-vs-arc clipping now makes
+            % routine. It needs no new machinery: the crossing is simply a THIRD kind of boundary
+            % hit, on the arc's own edge (index arcPos0, which the loop above deliberately skips),
+            % and the existing two-hit split then divides the arc along with everything else.
+            hits(end+1) = struct('edge', arcPos0, 't', 0, 'pt', XcArc); %#ok<AGROW>
+            [~, ord] = sort([hits.edge]);      % the split below assumes e1 < e2
+            hits = hits(ord);
         end
     end
     if numel(hits) == 1
@@ -1822,9 +1827,20 @@ function newPieces = splitCell(cell, f1row, f2row)
         % boundedPiece knows nothing about and would otherwise silently flatten to a chord -- and
         % subdivide that half so the one-arc-per-face invariant still holds.
         [aX0, aX1] = arcEndpointsOf(cell, arcPos0);
+        % When the arc was CROSSED, neither half holds the whole arc: each holds a SUB-arc running
+        % from the crossing point to one of the original endpoints. Both candidates are tried, so
+        % the same code covers the crossed and uncrossed cases.
+        cand = {[aX0; aX1]};
+        if exist('XcArc','var') && ~isempty(XcArc)
+            cand = {[XcArc; aX0], [XcArc; aX1]};
+        end
         newPieces = [];
         for half = [cellA, cellB]
-            p = findArcPosition(half, aX0, aX1);
+            p = 0;
+            for cIdx = 1:numel(cand)
+                p = findArcPosition(half, cand{cIdx}(1,:), cand{cIdx}(2,:));
+                if p ~= 0, break, end
+            end
             if p == 0 || p == half.curveAfter
                 newPieces = [newPieces, half]; %#ok<AGROW>
             else
@@ -1974,7 +1990,7 @@ function p = subPiece(piece, idx, arcPos, arcEc)
     end
 end
 
-function tf = arcHasStrictCrossing(cell, diffRow)
+function [tf, Xc] = arcHasStrictCrossing(cell, diffRow)
 % Does {diffRow=0} genuinely CROSS this cell's arc strictly between its endpoints (as opposed to
 % missing it, or touching it tangentially)? The splitting curve restricted to the arc's parabola is
 % a quartic in the frame's global monotone parameter u; for each root strictly inside the arc's
@@ -1988,7 +2004,7 @@ function tf = arcHasStrictCrossing(cell, diffRow)
     q = fr.conicCoeffs([0.5*diffRow(5), diffRow(6), 0.5*diffRow(7), ...
                         diffRow(8), diffRow(9), diffRow(10)]);
     sc = max(abs(q));
-    tf = false;
+    tf = false; Xc = [];
     if sc == 0, return, end
     r = roots(q/sc);
     r = real(r(abs(imag(r)) < 1e-7*(1+abs(real(r)))));
@@ -1998,7 +2014,7 @@ function tf = arcHasStrictCrossing(cell, diffRow)
         if r(z) <= ulo + tolU || r(z) >= uhi - tolU, continue, end
         if sign(QuaPar.evalPoly(diffRow, fr.point(r(z)-h))) ~= ...
            sign(QuaPar.evalPoly(diffRow, fr.point(r(z)+h)))
-            tf = true; return
+            tf = true; Xc = fr.point(r(z)); return
         end
     end
 end
