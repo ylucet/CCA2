@@ -245,7 +245,7 @@ function g = maxQuaPar(g1, g2)
     assertFullDomain(g2, 'g2');
 
     pieces = struct('V', {}, 'dirIn', {}, 'dirOut', {}, 'dirInSign', {}, 'dirOutSign', {}, ...
-        'curveAfter', {}, 'curveEc', {}, 'f', {});
+        'curveAfter', {}, 'curveEc', {}, 'f', {}, 'src', {});
     for k = 1:g1.nf
         polyK = facePoly(g1, k);
         for l = 1:g2.nf
@@ -258,23 +258,66 @@ function g = maxQuaPar(g1, g2)
                 [decided, winRow] = decideWinner(cell, f1row, f2row);
                 if decided
                     cell.f = winRow;   % cell carries its own curveAfter/curveEc (0/[] if none)
+                    cell.src = [k l]; %#ok<AGROW>
                     pieces(end+1) = cell; %#ok<AGROW>
                     continue
                 end
                 newCells = splitCell(cell, f1row, f2row);
                 for z = 1:numel(newCells)
-                    pieces(end+1) = newCells(z); %#ok<AGROW>
+                    nc = newCells(z); nc.src = [k l];
+                    pieces(end+1) = nc; %#ok<AGROW>
                 end
             end
         end
     end
     pieces = dedupPieces(pieces);
     pieces = dropSubsumedPieces(pieces);
+    partitionReport(pieces);
     g = assemblePieces(pieces);
 end
 
 % ============================================================================================
 % ----- collapsing duplicate cells produced by two different (k,l) pairs ----------------------
+function partitionReport(pieces)
+% Do the clipped cells PARTITION the plane? Reports the first sample covered by no piece and the
+% first covered by two, naming the (k,l) face pair each offending piece came from. A hole or an
+% overlap here is the disease; the orphan-ray error three stages later is only its symptom.
+    if isempty(pieces), return, end
+    allV = []; for i = 1:numel(pieces), allV = [allV; pieces(i).V]; end %#ok<AGROW>
+    R = 1.5*max(1, max(abs(allV(:)))); n = 31;
+    t = linspace(-R, R, n);
+    for a = t
+        for b = t
+            q = [a, b]; hit = []; undecided = false;
+            for i = 1:numel(pieces)
+                r = pieceContainsPt(pieces(i), q);
+                if isnan(r), undecided = true; break, end
+                if r, hit(end+1) = i; end %#ok<AGROW>
+            end
+            if undecided, continue, end   % a curved piece is nearby: this sample proves nothing
+            if isempty(hit)
+                fprintf('PARTITION HOLE at (%.4f,%.4f)%s', q(1), q(2), newline);
+                return
+            elseif numel(hit) >= 2
+                srcs = '';
+                for z = hit, srcs = [srcs sprintf(' piece%d(src %s)', z, mat2str(pieces(z).src))]; end %#ok<AGROW>
+                fprintf('PARTITION OVERLAP at (%.4f,%.4f):%s%s', q(1), q(2), srcs, newline);
+                for z = hit
+                    pz = pieces(z);
+                    fprintf('   piece%d src %s nV=%d curveAfter=%d unbounded=%d%s', ...
+                        z, mat2str(pz.src), size(pz.V,1), pz.curveAfter, ~isempty(pz.dirIn), newline);
+                    fprintf('     V = %s%s', mat2str(pz.V, 4), newline);
+                    if ~isempty(pz.dirIn)
+                        fprintf('     dirIn = %s dirOut = %s%s', mat2str(pz.dirIn,4), mat2str(pz.dirOut,4), newline);
+                    end
+                end
+                return
+            end
+        end
+    end
+    fprintf('PARTITION OK%s', newline);
+end
+
 function pieces = dedupPieces(pieces)
 % Two DIFFERENT (g1-face k, g2-face l) pairs can produce GEOMETRICALLY IDENTICAL cells: this is not
 % a rare fluke but a structurally expected occurrence when g1 and g2 are conjugates of two
@@ -953,12 +996,27 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
 
     % ---- no crossing: the whole cell is on one side --------------------------------------
     if isempty(hits)
-        % No crossing WITHIN the arc's span. The cell therefore lies wholly on one side of
-        % polyL's curved boundary; decide it at an interior sample rather than from the vertex
-        % signs, which are signs of the EXTENDED conic and can disagree away from the arc.
-        smp = interiorSample(poly);
-        if isempty(smp), polys = {poly}; return, end
-        if QuaPar.evalConic(Ecut, smp) >= -tol, polys = {poly}; else, polys = {}; end
+        % No crossing at all, so the cut conic does not meet this cell's boundary and the whole
+        % cell lies on ONE side of it. Decide from the BOUNDARY signs, not from an interior
+        % sample: interiorSample returns the centroid of the vertices, which for a cell bounded
+        % by an inward-bulging arc is not necessarily inside the cell at all -- the same
+        % non-convexity splitTwoArcPiece already warns about ("a face bounded by a parabola is
+        % not convex on that side, so a diagonal is not automatically interior"). Evaluating the
+        % keep/drop test at a point outside the cell is how this under-cut, leaving cells too
+        % large and putting an overlap in the arrangement.
+        %
+        % With no crossing the sign is constant along the boundary, so the first vertex that is
+        % not ON the conic decides it. Only if every vertex sits on the conic is a sample needed.
+        dec = 0;
+        for i = 1:nv
+            if abs(val(i)) > tol, dec = -sign(val(i)); break, end     % val = -evalConic
+        end
+        if dec == 0
+            smp = interiorSample(poly);
+            if isempty(smp), polys = {poly}; return, end
+            dec = sign(QuaPar.evalConic(Ecut, smp));
+        end
+        if dec >= 0, polys = {poly}; else, polys = {}; end
         return
     end
 
@@ -988,8 +1046,8 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
             % whether the survivor is one component or two, and building each.
             error('maxQuaPar:notImplemented', ...
                 ['clipPolyByConic: the curved cut removes a middle section of an UNBOUNDED cell ' ...
-                 'while both ray ends survive (crossings on pairs %d and %d). The survivor can ' ...
-                 'be TWO components, which one cell cannot represent.'], p1, p2);
+                 'while both ray ends survive (crossings on pairs %d and %d). Refused rather ' ...
+                 'than emitting a cell that may be two components.'], p1, p2);
             % Both ray ends are on the KEPT side: the cut removes a middle bulge, and both rays
             % survive. Same surgery as the straight path's corresponding branch, except that the
             % new Xa->Xb edge is an ARC of the cutting conic rather than a segment.
@@ -2558,12 +2616,23 @@ end
 
 function tf = pieceContainsPt(piece, q)
 % Is q inside this piece? Straight edges by the CCW interior-on-the-left convention that
-% polyConstraints documents, plus the arc's own conic sign when the piece carries one.
+% polyConstraints documents, plus the arc's own conic sign.
+%
+% ONLY SOUND FOR A PIECE WITH NO ARC, and it now refuses to answer otherwise. polyConstraints
+% deliberately omits a curved edge (its chord is not the boundary), so for a curved piece this
+% test sees only the REMAINING straight edges -- for a 3-vertex piece whose third edge is the
+% arc, that is two half-planes, i.e. an unbounded wedge, and the conic alone does not close it
+% when the kept side is the concave one. Measured: a piece whose three vertices all sit within
+% 0.3 of (-2,2.2) was reported as containing (-4.875,-0.325).
+%
+% That made every "hole"/"overlap" this file's partition report produced for curved arrangements
+% an artifact rather than evidence. Left in place for the polyhedral majority, where it is exact,
+% and honest about the rest.
     tf = false;
+    if pieceIsCurved(piece), tf = NaN; return, end
     try
         cons = polyConstraints(piece);
         if any(cons(:,1:2)*q' - cons(:,3) > 1e-9), return, end
-        if pieceIsCurved(piece) && QuaPar.evalConic(piece.curveEc, q) < -1e-9, return, end
         tf = true;
     catch
         tf = false;
