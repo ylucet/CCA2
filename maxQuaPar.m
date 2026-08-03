@@ -316,6 +316,12 @@ function partitionReport(pieces)
         end
     end
     fprintf('PARTITION OK%s', newline);
+    srcs = [];
+    for i = 1:numel(pieces), if ~isempty(pieces(i).src), srcs = [srcs; pieces(i).src]; end, end %#ok<AGROW>
+    srcs = unique(srcs, 'rows');
+    txt = '';
+    for i = 1:size(srcs,1), txt = [txt sprintf(' (%d,%d)', srcs(i,1), srcs(i,2))]; end %#ok<AGROW>
+    fprintf('SRCS PRODUCED:%s%s', txt, newline);
 end
 
 function pieces = dedupPieces(pieces)
