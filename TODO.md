@@ -23,15 +23,28 @@ tests stay green). Committed `96aad61` on `overnight/2026-08-02`.
   post-passthrough scan finds nothing collinear with piece 5's ray). The analysis below stands.
 
 - **[2 -0.5] `twoCurvedAssembleAcrossRaysSecondFixture` -- STILL RED, now a WRONG VALUE not an
-  error.** The T-junction fix lets assembly COMPLETE, which uncovers a coverage/winner defect:
-  `g` returns the wrong operand over a region -- 4/68 samples, e.g. `s=(-5.4843,1.5866)` gives
-  `-8.648` (=g2) where truth is `0` (=g1), and `s=(-1.1298,4.1007)` gives `0` (=g1) where truth
-  is `1.768` (=g2). Two regions with swapped winners. All accepted RAY matches are geometrically
-  correct adjacent-`src` pairs, and the passthrough only inserts collinear vertices (never touches
-  the winner row), so this is a SEPARATE coverage defect the completing assembly newly reaches --
-  likely a wrong FACE built in `buildFinalEdgesAndFaces`, or a cell whose winner/region is wrong.
-  Next: probe the 4 bad points against the pieces PRE-assembly (does the correct-winner piece
-  cover them there?) to localise assembly-vs-decideWinner.
+  error, ROOT-CAUSED to `decideWinner` and it is the HARD unbounded-cell class.** The T-junction
+  fix lets assembly COMPLETE, uncovering the real defect: `decideWinner` wrongly declares an
+  UNBOUNDED cell "decided". Traced with a pre-assembly coverage probe: cell `src[4 3]` stores
+  `winner=g2`, but at `s=(-5.4843,1.5866)` -- an interior point of that cell -- `g1=0 > g2=-8.648`,
+  so g1 wins there; symmetrically cell `src[6 5]` stores `winner=g1` while g2 wins at
+  `s=(-1.1298,4.1007)`. 4/68 samples, worst 8.648.
+  WHY `decideWinner` misses it: it proves domination by sampling finite vertices + the ARC midpoint
+  + the ASYMPTOTIC sign along the two bounding rays (t->inf). But `diff = f1-f2` is a PARABOLIC
+  quadratic (rank-1 Q -- splitCell already asserts this), so `{diff=0}` is a parabola whose two
+  branches run to infinity ALONG Q's null direction, which lies strictly BETWEEN the cell's two
+  bounding rays. That parabola bounds a region of the opposite winner entirely inside the cell,
+  touching neither the finite boundary nor either bounding ray -- so every point `decideWinner`
+  samples is on one side and it "decides" wrongly.
+  Tried and REVERTED (kept out of the commit): sampling `diff` at the 1-D stationary point of each
+  edge and each ray. Sound and strict, but it does NOT fix this -- the sign change is off the
+  1-skeleton entirely. Confirmed neutral on all three fixtures.
+  Note this cell is ALSO beyond `splitCell`: even if `decideWinner` returned undecided, `{diff=0}`
+  here makes ZERO finite boundary crossings (both parabola branches escape to infinity inside the
+  recession cone), and `splitCell` asserts exactly two. So a real fix needs BOTH a sound
+  sign-over-the-cone test in `decideWinner` AND a `splitCell` that can cut a cell along a parabola
+  that enters and leaves at infinity. Same family as next-step 2 in the session handoff (the
+  Step-3 unbounded over-claim); do not attempt a probe-based patch.
 
 ## Next up (the [0.5 0.5] defect)
 
