@@ -924,23 +924,15 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
         hits = sortrows(hits, 1);
     end
 
-    % ---- restrict the cut to the CUTTING ARC's own span -----------------------------------
-    % Ecut is a whole conic, but polyL's boundary is only the bounded arc of it between cutX0 and
-    % cutX1. A crossing of the extended conic that lies outside that span is not a crossing of
-    % polyL's boundary at all -- polyL is bounded there by its straight edges, which have already
-    % been applied -- so keeping it would cut the cell along a curve that is not a boundary. It
-    % shows up as a single unpaired crossing, which no keep/cut branch can act on.
-    if ~isempty(cutX0)
-        frC = parabolaArcFrame(Ecut, 'maxQuaPar');
-        ua = frC.uOf(cutX0); ub = frC.uOf(cutX1);
-        ulo = min(ua,ub); uhi = max(ua,ub); uspan = uhi - ulo;
-        keep = false(size(hits,1),1);
-        for k = 1:size(hits,1)
-            uk = frC.uOf(hits(k,2:3));
-            keep(k) = (uk >= ulo - 1e-7*max(1,uspan)) && (uk <= uhi + 1e-7*max(1,uspan));
-        end
-        hits = hits(keep,:);
-    end
+    % NOTE on why the cut is the WHOLE conic, not just the arc's span. polyL is a convex face
+    % bounded by straight edges plus one arc, so set-theoretically
+    %       polyL = (intersection of its straight half-planes) n {evalConic(Ecut,.) >= 0},
+    % and clipping polyK by all of those in turn gives exactly polyK n polyL. An earlier version
+    % restricted the cut to the span between the arc's own endpoints, reasoning that polyL is
+    % bounded elsewhere by its straight edges -- but those half-planes have ALREADY been applied,
+    % so the restriction only drops legitimate cuts. Measured: it left the pieces failing to
+    % partition the plane, with a HOLE at (-2.718750,2.781250) and an OVERLAP at
+    % (-2.781250,1.281250) on the first curved fixture.
 
     % ---- the cutting arc may END inside the cell ------------------------------------------
     % polyL's arc is BOUNDED. If it enters polyK through one edge and terminates at one of its own
@@ -2478,13 +2470,18 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
                 a2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
                 mark = ' ';
                 if norm(a2 - apx) < 1e-6, mark = '*'; end
+                % Does the ORPHAN's apex lie on THIS ray? If so the two are the same physical
+                % ray covered to different extents, and the fix is to split this one there.
+                d2 = rayDirAt(pieces, HE(h2));
+                if ~isempty(d2) && onOpenRay(a2, d2, apx, 1e-6), mark = [mark 'R']; else, mark = [mark ' ']; end
                 others = [others, newline, sprintf('    %s piece %d ray apex (%.6f,%.6f) opp=%d', ...
                                          mark, HE(h2).piece, a2(1), a2(2), opp(h2))]; %#ok<AGROW>
             end
+            cov = coverageReport(pieces, apx);
             error('maxQuaPar:internal', ...
                 ['assemblePieces: a boundary ray of piece %d has no matching neighbour (apex ' ...
-                 '(%.6f,%.6f)). Other rays (* = same apex):%s'], ...
-                HE(h).piece, apx(1), apx(2), others);
+                 '(%.6f,%.6f)).%s Other rays (* = same apex, R = orphan lies on it):%s'], ...
+                HE(h).piece, apx(1), apx(2), cov, others);
         end
         gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
@@ -2495,6 +2492,47 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
                  'one other.'], HE(h).piece);
         end
         % else: gA==gB -- a zero-length orphan edge, safe to drop (see header).
+    end
+end
+
+function txt = coverageReport(pieces, near)
+% Do the pieces COVER the plane near `near`? An orphan ray is a symptom; a hole is the disease.
+% Samples a small disc around the orphan and reports the first point no piece contains, and the
+% first point two or more contain. Cheap, and it separates "a cell was dropped or clipped too
+% small" from "every cell is right and only the matching failed".
+    txt = '';
+    R = 0.75; n = 25; hole = []; over = [];
+    for a = linspace(-R, R, n)
+        for b = linspace(-R, R, n)
+            q = near + [a, b];
+            c = 0;
+            for i = 1:numel(pieces)
+                if pieceContainsPt(pieces(i), q), c = c + 1; end
+            end
+            if c == 0 && isempty(hole), hole = q; end
+            if c >= 2 && isempty(over), over = q; end
+        end
+    end
+    if ~isempty(hole)
+        txt = [txt sprintf(' HOLE: no piece covers (%.6f,%.6f).', hole(1), hole(2))];
+    end
+    if ~isempty(over)
+        txt = [txt sprintf(' OVERLAP: >=2 pieces cover (%.6f,%.6f).', over(1), over(2))];
+    end
+    if isempty(txt), txt = ' Coverage near the orphan looks sound (no hole, no overlap).'; end
+end
+
+function tf = pieceContainsPt(piece, q)
+% Is q inside this piece? Straight edges by the CCW interior-on-the-left convention that
+% polyConstraints documents, plus the arc's own conic sign when the piece carries one.
+    tf = false;
+    try
+        cons = polyConstraints(piece);
+        if any(cons(:,1:2)*q' - cons(:,3) > 1e-9), return, end
+        if pieceIsCurved(piece) && QuaPar.evalConic(piece.curveEc, q) < -1e-9, return, end
+        tf = true;
+    catch
+        tf = false;
     end
 end
 
