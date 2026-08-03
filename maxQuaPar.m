@@ -272,6 +272,7 @@ function g = maxQuaPar(g1, g2)
     end
     pieces = dedupPieces(pieces);
     pieces = dropSubsumedPieces(pieces);
+    pieces = insertGlobalPassthrough(pieces);
     partitionReport(pieces);
     g = assemblePieces(pieces);
 end
@@ -762,6 +763,30 @@ function cell = insertPassthroughVertices(cell, pts)
                 end
             end
         end
+    end
+end
+
+function pieces = insertGlobalPassthrough(pieces)
+% Eliminate T-junctions BETWEEN pieces of different face pairs, the same way insertPassthroughVertices
+% eliminates them within one face pair -- but here the missing corner comes from a split introduced
+% on a NEIGHBOURING pair, which the per-pair pass could not see.
+%
+% WHY THIS IS NEEDED (traced, not guessed). Two adjacent pieces share a boundary ray -- the g2
+% face-k/face-(k+1) edge inside one g1 face. If the winner on one side is DECIDED, that side stays a
+% single unbroken ray to infinity; if the winner on the other side CHANGES along the ray, splitCell
+% cuts it at the crossing point P, so that side becomes a finite segment [apex,P] plus a residual ray
+% from P. matchHalfEdges pairs rays with rays and segments with segments, so the decided side's one
+% long ray can never match the split side's segment -- reported as "a boundary ray ... has no
+% matching neighbour". P is a real vertex of the split pieces and lies EXACTLY on the decided ray
+% (measured perp ~2e-15 on the arc-vs-arc fixtures), so re-inserting it as a vertex of the decided
+% piece restores the segment/segment + ray/ray pairing. insertPassthroughVertices already performs
+% exactly this insertion (including the ray -> segment+ray subdivision and the arc-interior guard);
+% it only lacked the cross-pair point set, which this supplies.
+    if numel(pieces) < 2, return; end
+    allV = [];
+    for i = 1:numel(pieces), allV = [allV; pieces(i).V]; end %#ok<AGROW>
+    for i = 1:numel(pieces)
+        pieces(i) = insertPassthroughVertices(pieces(i), allV);
     end
 end
 
@@ -2425,12 +2450,28 @@ function v = raySideVector(pieces, he)
 % used by oppositeSides to tell a genuine twin ray (shared by two ADJACENT pieces, one on each
 % side) from two DIFFERENT pieces that merely inherit the SAME physical ray from a shared
 % ancestor face (see oppositeSides' header) without actually bordering each other across it.
+%
+% The representative must not be COLLINEAR with the ray, or oppositeSides' cross product is ~0 and
+% the side is undecidable. That degeneracy is not hypothetical: insertGlobalPassthrough subdivides a
+% decided cone's ray at a neighbour's T-junction vertex, and the new apex's adjacent vertex is then
+% the OLD apex, which lies ON the ray by construction -- so the adjacent-vertex representative points
+% straight back along the ray. When that happens, fall back to the OTHER ray's direction, which
+% bounds the cone on its far side and is genuinely off the ray (the two rays of a subdivided cone are
+% not parallel; a strip, whose rays ARE parallel, never hits this branch because its adjacent vertex
+% is its own non-collinear corner). Before this, the match survived on the SIGN of a near-zero cross
+% product -- accidentally correct on some fixtures, wrong on others (an orphan ray at the far apex).
     piece = pieces(he.piece);
     nv = size(piece.V,1);
+    dray = rayDirAt(pieces, he);
+    v = [];
     if nv >= 2
         if he.aLoc == 1, other = piece.V(2,:); else, other = piece.V(nv-1,:); end
-        v = other - piece.V(he.aLoc,:);
-    else   % a pure 2-ray cone (nv==1): use the OTHER ray's direction as the representative side
+        cand = other - piece.V(he.aLoc,:);
+        if norm(cand) > 0 && abs(dray(1)*cand(2) - dray(2)*cand(1)) > 1e-9*norm(cand)
+            v = cand;   % genuinely off the ray: the ordinary case
+        end
+    end
+    if isempty(v)   % nv==1 cone, or a subdivided far ray whose adjacent vertex is collinear
         if he.rayOut, v = piece.dirIn; else, v = piece.dirOut; end
     end
 end
