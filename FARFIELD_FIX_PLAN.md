@@ -13,7 +13,30 @@ piece overlaps the true face out there, and eval's last-admitter-wins returns th
 The fix is UPSTREAM: a sub-piece that inherits an unbounded direction must keep the RAY edge that
 bounds it; it must not be closed off with a straight chord.
 
-## Reproducer (seeded, deterministic)
+## Methodology: PROVE, do not sample
+
+Numerical sampling (probing far points, rings, the seeded sweep) is EVIDENCE, never proof — one can
+sample forever and miss the one direction a face over-extends. It is the same "decide from probes"
+anti-pattern the handoff removed from `maxArray`. So detection, the invariant, and acceptance are all
+SYMBOLIC; sampling is only a cheap tripwire during development, never the acceptance test.
+
+- **Boundedness / over-extension is decidable EXACTLY via the recession cone.** A face is a region
+  `{ sign_i * evalConic(c_i, .) <= 0 }`. Direction `d` is recessive iff for every bounding edge the
+  LEADING term of `sign_i * evalConic(c_i, x0 + t d)` as `t->inf` is `<= 0`: for a line
+  `sign*(a dx + b dy) <= 0`; for a parabola `sign*Q(d) <= 0` on the quadratic form, tie-broken to the
+  linear term where `Q(d)=0`. A face with NO ray edge is valid iff its recession cone is `{0}`; a
+  face WITH rays is valid iff its recession cone equals exactly the cone those rays span. The
+  over-extension is then PROVED ("this arc-triangle has recession direction along the parabola axis
+  yet carries no ray"), not sampled. Build on `region`'s recession-direction machinery (rational
+  half-planes) and `isAlways`, not on a far-point probe.
+- **Correctness `g = max(g1,g2)` is proved REGION BY REGION.** Overlay the three subdivisions into
+  common cells (finite). On each cell `C` the overlay's switching curve `{g1=g2}` fixes which operand
+  dominates, so `g = max(g1,g2)` on `C` reduces to a POLYNOMIAL IDENTITY `q_g ≡ q_{g_i}` on `C`
+  (exact: `isAlways` / coefficient equality), plus an exact proof the cells PARTITION the plane (no
+  gap, no overlap) via region algebra. Finitely many proved identities cover ALL points at once —
+  unlike any ring of samples.
+
+## Reproducer (seeded numerical tripwire ONLY — not the proof)
 
 - `runtests('maxQuaParTest/arcVsArcMatchesGroundTruthOverRandomShifts')` — seed 20260803, N=18,
   samples near the arcs AND a radius-25 ring. Currently **9/18 assemble to a wrong value, worst ~58**.
@@ -22,35 +45,38 @@ bounds it; it must not be closed off with a straight chord.
   `g.eval(x)` to `max(g1.eval(x),g2.eval(x))` on rings of radius 8 and 30. Confirmed wrong on the
   three "pinned" shifts too: [-1 0.75] 2/60 @ R=30, [2 -0.5] 11/60 @ R=30, ~0 @ R=8.
 
-## Phase 0 — Localise which subdivision path drops the rays (measure, don't guess)
+## Phase 0 — Localise which subdivision path drops the rays (PROVE, don't probe)
 
-For each wrong shift from the seeded sweep, on the ASSEMBLED result:
-1. Find the over-extending face: probe far points; the face that admits one AND disagrees in value
-   with another admitter there is the culprit (the prototype in this session's git history —
-   `assertNoOverExtendedFace`, reverted — does exactly this using QuaPar's own EC + P signs; lift it
-   back as a DIAGNOSTIC, not a hard error).
-2. Map that face back to its PIECE (g face i ↔ piece i, since `g.f(p,:)=pieces(p).f`) and its `src`
-   `(k,l)` and `curveAfter`.
-3. Tag which producer emitted it: `clipByFace` (arc-vs-half-plane or the straight path),
-   `clipPolyByConic` (arc-vs-arc), or `splitCell` (which branch: bounded, unbounded-escape-to-inf,
-   `splitTwoArcPiece`, or the `triHalf` two-arc-triangle fallback added this session).
-Output: a table {shift → culprit piece src, curveAfter, producer}. Expect a small number of
-producers. On [0.5 0.5] the culprit was a `triHalf` piece (src[6 1]); the pinned shifts use OTHER
-producers, so this MUST be done across several shifts, not just [0.5 0.5].
+For each wrong shift (the seeded sweep only tells us WHICH shifts are wrong quickly; the localisation
+itself is symbolic), on the pieces feeding `assemblePieces`:
+1. Compute each piece's recession cone `R` in closed form (see Methodology). The culprit is a piece
+   with NO ray edge but `R != {0}` (over-extended), or a piece WITH rays whose `R` is strictly
+   larger than the cone its rays span (dropped a ray). This is a PROOF the piece is malformed, not a
+   far-point probe.
+2. Independently, that malformed piece's recession cone `R` should equal the recession cone of its
+   TRUE region = `recc(facePoly(g1,k)) ∩ recc(facePoly(g2,l))` intersected with the split half it
+   belongs to. Comparing the piece's `R` to this EXPECTED cone (both symbolic) names exactly which
+   ray was dropped.
+3. Tag the producer that built it: `clipByFace` (arc-vs-half-plane or straight path),
+   `clipPolyByConic` (arc-vs-arc), or `splitCell` (bounded / escape-to-infinity / `splitTwoArcPiece`
+   / the `triHalf` two-arc-triangle fallback added this session).
+Output: {shift -> culprit src, curveAfter, producer, dropped ray direction}. Expect a small number
+of producers. On [0.5 0.5] the culprit was a `triHalf` piece (src[6 1]); the pinned shifts use OTHER
+producers, so do this across several wrong shifts, not just [0.5 0.5].
 
-## Phase 1 — State and check the invariant
+## Phase 1 — State and PROVE the invariant (recession cone, not probing)
 
-INVARIANT (the thing every producer must preserve): a piece is a valid QuaPar face iff its
-constraint region {arc side} ∩ {straight half-planes} ∩ {ray half-planes} is COMPACT, or it is
-legitimately unbounded via ray edges. Equivalently: a piece bounded partly by an arc must lie on
-the arc's CLOSED (convex) side, OR carry the ray(s) that bound the open side.
+INVARIANT every producer must preserve: a piece's recession cone equals the recession cone of its
+TRUE region (the intersection of the two operand faces' recession cones, cut by any split). In
+particular a piece with no ray edge must have recession cone `{0}` (compact), and a piece with rays
+must have recession cone equal to the span of exactly those rays.
 
-Add `pieceIsValidFace(piece)` (reliable version = probe far points using the SAME orientation the
-QuaPar constructor will give it; the raw-piece sign convention got this wrong this session — build
-the tiny QuaPar for the single piece and reuse `assertNoOverExtendedFace`'s logic, or normalise
-signs exactly as `buildFinalEdgesAndFaces` does). Assert it on every piece right before
-`assemblePieces`. This turns silent-wrong into a LOUD, localised failure and is the regression gate
-for the rest of the plan.
+Add `assertPieceReccConeCorrect(piece, reccExpected)`: compute the piece's recession cone from its
+own edges (leading-term test above) and prove — with `isAlways`, not sampling — that it equals
+`reccExpected`. Assert it on every piece right before `assemblePieces`. This turns a silent wrong
+answer into a LOUD, localised, SOUND failure (it cannot miss a bad direction the way a far-point
+probe can) and is the regression gate for Phase 2. Do NOT resurrect the reverted far-point
+`assertNoOverExtendedFace` as anything but a throwaway smoke-test — it is unsound.
 
 ## Phase 2 — Fix ray propagation, producer by producer
 
@@ -93,14 +119,22 @@ The only genuinely-unsupported inputs remain the ones already out of scope and p
 here (hyperbolic edges, ellipses) — those keep their existing loud `notImplemented` errors, but they
 are NOT what the far-field defect is about.
 
-## Phase 4 — Lock it in with tests
+## Phase 4 — Acceptance is a PROOF, not a passing sample
 
-- Keep the seeded far-field sweep (already committed); target it to **0 wrong** (only exact or loud
-  error).
-- Add a radius-25/30 far ring to the THREE existing arc-vs-arc pins
-  (`twoCurved...`) so they can never again pass while being wrong far out.
-- Keep `pieceIsValidFace`/`assertNoOverExtendedFace` as a permanent assertion (gated so it is cheap)
-  so any future producer that drops a ray fails loudly at the source.
+The acceptance criterion is a SYMBOLIC theorem, checked exactly, that covers all points at once:
+- **Partition:** the faces of `g` cover the plane with no gap and no overlap — proved with region
+  algebra (pairwise face intersections have empty interior; union is the plane). The existing
+  `maxQuaParResultsAreValidArrangements` is the structural half; complete it to a set-algebra proof.
+- **Per-cell identity:** overlay `g`, `g1`, `g2`; on each common cell `C` (finite set), prove the
+  polynomial identity `q_g ≡ max(q_{g1}, q_{g2})` — which, since the switching curve fixes the
+  winner on `C`, is `q_g ≡ q_{g1}` (or `q_{g2}`), verified by `isAlways` / coefficient equality on
+  `C`. This proves `g = max(g1,g2)` EVERYWHERE, far field included.
+- Add such a `verifyMaxIsExactSymbolically(g1,g2,g)` helper and assert it on the three arc-vs-arc
+  pins (plus a couple of the previously-wrong seeded shifts pinned by their exact shift value).
+- Keep the recession-cone assertion (`assertPieceReccConeCorrect`) as a permanent, cheap gate so any
+  future producer that drops a ray fails loudly and SOUNDLY at the source.
+- The seeded numerical far-ring sweep stays only as a fast development tripwire; it is NOT the
+  acceptance test and must never be cited as proof of correctness.
 
 ## Decision point (raise before Phase 2)
 
@@ -111,8 +145,11 @@ a rework only if Phase 0 shows the ray-loss is spread across most producers.
 
 ## Do NOT repeat (tried this session, reverted — see git log around 0b5eee8)
 
-- Raw-piece compactness guards (`arcFaceIsBounded`): got the arc/half-plane sign convention wrong and
-  rejected valid faces. Any compactness check must use the ASSEMBLED QuaPar's own EC + P signs.
-- A hard post-assembly "no non-compact face" error: correct, but errors on ~every arc-vs-arc result
-  because the defect is pervasive — it is a diagnostic/gate, not a shippable guard, until Phase 2
-  lands.
+- Deciding compactness / correctness by NUMERICAL SAMPLING (far-point probes, rings, the seeded
+  sweep). Unsound — it can miss the one bad direction forever. Use the recession-cone / per-cell
+  identity PROOFS above. Sampling is a development tripwire only.
+- Raw-piece compactness guards (`arcFaceIsBounded`): got the arc/half-plane sign convention wrong AND
+  are sampling-based. Replace with the symbolic recession-cone test, not a "fixed" probe.
+- A hard post-assembly far-point check (`assertNoOverExtendedFace`): correct-ish but sampling-based
+  and errors on ~every arc-vs-arc result because the defect is pervasive. Superseded by the symbolic
+  recession-cone assertion.
