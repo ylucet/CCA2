@@ -478,19 +478,28 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             %   (b) GENERICITY: a healthy fraction must assemble exactly, proving the machinery works
             %       well beyond the three pinned examples.
             %
-            % STATUS 2026-08-03: (b) holds comfortably (~65% of random shifts are exact -- the fixes
-            % DO generalise), but (a) currently FAILS: ~15% assemble to a WRONG value. Traced to the
-            % SAME pre-existing far-field over-extension as [0.5 0.5]'s residual 2/68 (a DECIDED
-            % unbounded polyhedral cell reaching past its g1 face near a mesh vertex), which the arc
-            % assembly fixes newly EXPOSE by letting those cases assemble instead of erroring. This
-            % test pins that gap until the far-field coverage bug is fixed. (~20% still error -- loud,
-            % acceptable, other unimplemented configurations.)
+            % Ground truth is sampled BOTH near the arcs (curvedSamplePoints) AND on a far ring, so
+            % the classification reflects true correctness, not just correctness where the pinned
+            % tests happen to look -- see the STATUS note.
+            %
+            % STATUS 2026-08-04: (b) holds for ASSEMBLY -- most random shifts assemble (the six
+            % arc-assembly fixes this session generalise, not ad-hoc). (a) FAILS, and the failure is
+            % PERVASIVE, not a handful of edge cases: the arc-vs-arc result is correct NEAR the arcs
+            % but wrong in the FAR field, because an unbounded quadratic conjugate face is emitted as a
+            % BOUNDED arc-piece (arc + straight edges, no rays) that is not compact and overlaps the
+            % true face far away (QuaPar.eval's last-admitter-wins then returns the wrong value). This
+            % afflicts even [-1 0.75]/[2 -0.5], which pass above only because they sample near the
+            % arcs. See TODO.md "MAJOR FINDING 2026-08-04". The real fix is upstream (keep such faces'
+            % ray boundaries); this test pins the gap.
             [nOK, nWrong, nErr, worst, wrongShifts] = maxQuaParTest.sweepTwoCurvedShifts(20260803, 18);
             nCurved = nOK + nWrong + nErr;
-            testCase.verifyGreaterThanOrEqual(nOK, ceil(0.4*nCurved), sprintf(...
-                'genericity: only %d of %d curved random shifts assembled exactly', nOK, nCurved));
+            % (b) ASSEMBLY genericity: most curved shifts must at least assemble (not error).
+            testCase.verifyGreaterThanOrEqual(nOK + nWrong, ceil(0.4*nCurved), sprintf(...
+                'assembly genericity: only %d of %d curved random shifts assembled at all', nOK+nWrong, nCurved));
+            % (a) SAFETY: no shift may assemble to a WRONG value (near OR far). Currently fails --
+            % pins the pervasive far-field over-extension.
             testCase.verifyEqual(nWrong, 0, sprintf(...
-                ['%d of %d curved random shifts ASSEMBLED TO A WRONG VALUE (worst %.4g) -- a silent ' ...
+                ['%d of %d curved random shifts ASSEMBLE TO A WRONG VALUE (worst %.4g) -- a silent ' ...
                  'wrong answer, worse than erroring. Shifts: %s'], nWrong, nCurved, worst, mat2str(wrongShifts,5)));
         end
 
@@ -651,7 +660,10 @@ classdef maxQuaParTest < matlab.unittest.TestCase
                 if ~(any(g1.Ec(:)~=0) && any(g2.Ec(:)~=0)), continue; end
                 try
                     g = maxQuaPar(g1, g2);
-                    S = [maxQuaParTest.curvedSamplePoints(g1); maxQuaParTest.curvedSamplePoints(g2)];
+                    % Near the arcs AND on a far ring: the far ring is what exposes the non-compact
+                    % over-extended faces documented in TODO.md's "MAJOR FINDING 2026-08-04".
+                    far = 25 * [cos(linspace(0,2*pi,49))', sin(linspace(0,2*pi,49))'];
+                    S = [maxQuaParTest.curvedSamplePoints(g1); maxQuaParTest.curvedSamplePoints(g2); far];
                     bad = 0; w = 0;
                     for i = 1:size(S,1)
                         s = S(i,:); tr = max(g1.eval(s), g2.eval(s));

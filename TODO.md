@@ -4,6 +4,40 @@ _Seeded 2026-08-02 at the start of the overnight run, from the task given when i
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
 
+## MAJOR FINDING 2026-08-04: arc-vs-arc results are only LOCALLY correct (wrong far from the arcs)
+
+The random-shift sweep's "silent WRONG" is NOT a handful of edge cases -- it is PERVASIVE, and it
+afflicts even the two pins this session marked FIXED. Measured directly (g.eval vs pointwise-max on
+rings around the origin):
+  - `[-1 0.75]`: 0/60 wrong on a radius-8 ring, **2/60 wrong on radius 30** (worst 6.1).
+  - `[2 -0.5]`:  2/60 wrong on radius 8,     **11/60 wrong on radius 30** (worst 33.8).
+Their suite tests pass only because `curvedSamplePoints` samples NEAR the arcs. So `maxQuaPar` on two
+curved operands is correct locally and WRONG in the far field, generally.
+
+ROOT: a quadratic conjugate face is genuinely UNBOUNDED (e.g. g1 face 1 carries rays). The arc-vs-arc
+subdivision, though, emits the sub-pieces of such a face as BOUNDED arc-pieces (one parabola arc plus
+straight edges, no rays). A bounded piece left on the parabola's OPEN side is not a compact QuaPar
+face: `QuaPar.eval` (locate by "every bounding conic, sign-oriented, <= tol") then admits points
+arbitrarily far away into it, so it OVERLAPS the true face out there and, by eval's last-admitter-wins
+rule, returns the wrong value. Verified on `[0.5 0.5]`: assembled FACE 15 carries g1-face-1's quadratic
+over a tiny triangle near (-2,2) but admits (-3.98,0.61) two units away, overlapping the correct zero
+face (FACE 9).
+
+TRIED, reverted (all four break the suite or don't help):
+  - piece-level compactness guard on triHalf output -- WRONG sign convention, rejected valid faces.
+  - piece-level compactness guard on every bounded curved piece -- same, errored on all 3 fixtures.
+  - post-assembly "bounded face admits a far point" check (QuaPar's own EC + P signs) -- CORRECT
+    detection, but errors on `[-1 0.75]`/`[2 -0.5]` too, because they ARE non-compact far out.
+  - post-assembly "two faces disagree at a far point" check -- also errors on all three, since the
+    disagreement is real (they are wrong far out). Confirms the issue is systematic, not per-fixture.
+A safety backstop that refuses non-compact results is thus correct but would turn every arc-vs-arc
+result RED -- so the real fix must be UPSTREAM: give an unbounded quadratic face's arc sub-pieces their
+RAY boundaries (so they stay unbounded and compact-as-faces) instead of closing them with straight
+edges. That is a rework of the arc-vs-arc clip/split, not a guard.
+
+NB: this reframes the whole session. The six arc bugs fixed are real and make the results correct
+NEAR the arcs; but "18/2, two pins fixed" means "fixed where the tests sample", not "fixed".
+
 ## Genericity of the arc-vs-arc fixes (measured 2026-08-03)
 
 `arcVsArcMatchesGroundTruthOverRandomShifts` sweeps seeded random shifts (not the 3 hand-picked
