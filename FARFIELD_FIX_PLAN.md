@@ -74,14 +74,24 @@ Likely fixes, in rough order of suspicion:
 For each, the concrete question is: "does this construction ever produce a bounded arc-piece from a
 parent that had rays in the arc's open direction?" If yes, carry the ray.
 
-## Phase 3 — The genuinely-unrepresentable escape hatch
+## Phase 3 — There is NO unrepresentable case; a "needs unbounded curved edge" signal is a BUG
 
-Some intersections may need an UNBOUNDED curved edge (a parabola running to infinity as a face
-boundary), which QuaPar cannot represent (`assertCurvedEdgesAreArcs`). Where Phase 2 cannot produce
-a compact-or-ray-bounded piece, ERROR LOUDLY (`maxQuaPar:notImplemented`) rather than emit a wrong
-face. `conj`'s verification then turns it into a clean failure. Distinguish this from Phase 2 bugs
-by whether the recession direction is bounded by a straight edge (fixable) or only by the conic
-itself (unrepresentable).
+CORRECTION (2026-08-04): do NOT add an "unrepresentable escape hatch" here — that is the general-case
+trap. It is ESTABLISHED (`proveStageA–D`: 1140 dual boundaries classified, zero exceptions) that the
+conjugate/biconjugate of a nonconvex QuaPol is representable as a QuaPar: every dual boundary is a
+line, a line pair, or a PARABOLA, and QuaPar holds unbounded faces via RAYS and parabolic edges as
+BOUNDED arcs. So the true `f*`/`f**` never contains an unbounded parabolic edge. Any place the code
+appears to need one (an arc running to infinity as a face boundary; a piece that is neither compact
+nor ray-bounded) is my SUBDIVISION computing the wrong geometry, not a limitation of QuaPar.
+
+Consequence for the fix: the Phase-1 assertion and the `splitCell` "escape to infinity" guard are
+BUG DETECTORS, not permanent escape hatches. Their firing means "the ray/arc bounding is wrong,
+Phase 2 is incomplete" — the goal is that they NEVER fire on any conj/biconj input. Do not convert a
+firing into a supported-input error; treat it as a failing assertion to be driven to zero.
+
+The only genuinely-unsupported inputs remain the ones already out of scope and proven not to arise
+here (hyperbolic edges, ellipses) — those keep their existing loud `notImplemented` errors, but they
+are NOT what the far-field defect is about.
 
 ## Phase 4 — Lock it in with tests
 
