@@ -64,6 +64,27 @@ Output: {shift -> culprit src, curveAfter, producer, dropped ray direction}. Exp
 of producers. On [0.5 0.5] the culprit was a `triHalf` piece (src[6 1]); the pinned shifts use OTHER
 producers, so do this across several wrong shifts, not just [0.5 0.5].
 
+### Phase 0 RESULTS (2026-08-05, `pieceRecessionRays` over the 18 seeded shifts)
+
+Over-extending pieces are ALWAYS bounded arc-pieces, clustered by shape (counts = occurrences across
+the 18 shifts, aggregated over all src pairs):
+- `nv=3 curveAfter=2` — the largest bucket (src[2 1] 10x, src[1 2] 6x, src[2 3]/[3?] 5x, src[6 1] 5x,
+  src[1 4]/[4 1]/[2 5]/[5 2] 4x, ...).
+- `nv=3 curveAfter=3` — src[4 3] 9x, src[6 5] 9x, src[3 4] 5x, src[5 6] 5x, ...
+- `nv=4 curveAfter=4` — src[6 3] 7x, src[2 3]/[5 2]/[5 4] 4x, ...
+- a few `nv=3 curveAfter=1` / `nv=4 curveAfter=3` (rare).
+
+KEY READ: `curveAfter == nv` (the `nv=3/cA=3` and `nv=4/cA=4` buckets) means the SPLITTING CURVE is
+the piece's own closing arc edge -- i.e. `splitCell`'s `boundedPiece` with a PARABOLIC split curve
+(`isStraight==false`). The `cA=2` bucket is the inherited-arc placed on a middle edge. So the
+dominant producer is `splitCell` emitting a bounded arc-piece on the parabola's CONCAVE (open) side,
+whose `{evalConic>=0}` constraint region is not compact even though the intended sliver is bounded.
+This is a REPRESENTATION problem (concave-side parabola over-represents), spread across essentially
+every src pair and NOT specific to `triHalf` -- so Phase 2 is a `splitCell` rework, not a one-liner.
+Confirmed NOT a simple ray-drop: on [0.5 0.5] FACE 15's true region is bounded (FACE 9 owns the far
+point), yet its recession direction coincides with an operand ray only because its straight edges lie
+near that ray.
+
 ## Phase 1 — State and PROVE the invariant (recession cone, not probing)
 
 INVARIANT every producer must preserve: a piece's recession cone equals the recession cone of its
