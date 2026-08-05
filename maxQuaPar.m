@@ -273,6 +273,8 @@ function g = maxQuaPar(g1, g2)
     pieces = dedupPieces(pieces);
     pieces = dropSubsumedPieces(pieces);
     pieces = insertGlobalPassthrough(pieces);
+    global MAXQP_CAPTURE MAXQP_PIECES %#ok<GVMIS>
+    if ~isempty(MAXQP_CAPTURE) && MAXQP_CAPTURE, MAXQP_PIECES = pieces; end
     partitionReport(pieces);
     g = assemblePieces(pieces);
 end
