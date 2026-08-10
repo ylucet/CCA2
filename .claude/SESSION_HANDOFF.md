@@ -1,61 +1,59 @@
 # Session Handoff
 
-_Last updated: 2026-08-03 07:15 PDT_
+_Last updated: 2026-08-10_
 
 ## What happened this session
 
-**The triangle-case enumeration was proved and then used to drive the code.** `proveStageA–D.m`
-discharge symbolically that the case list is exhaustive, what envelope each case yields, and — the
-payoff — that **every dual boundary is a line, a line pair or a parabola, never an ellipse or
-hyperbola** (1140 boundaries classified, zero exceptions). The parabolic edge originates in exactly
-**one** case: indefinite with **one convex edge**.
-
-**Two closed-form wins on `main`.** Step 2 needs no rational-piece conjugate at all (conjugating the
-ORIGINAL quadratic over the sub-triangle is exact), and bounded polygons now take the closed-form
-path (Case B2), which also fixed Case C's biconjugate (`f** = +inf` → `f** = f`).
-
-**Arc-vs-arc is built but not finished.** `clipArcByConic` is done and validated standalone;
-clip and split now produce a **valid partition**. Three tests still fail, all in `assemblePieces`,
-and the cause is localised to one cell and one edge (below).
+Worked the arc-vs-arc `maxQuaPar` defect on branch `overnight/2026-08-02`. Fixed **two of the three**
+arc-vs-arc pins earlier in the run (T-junction passthrough + `raySideVector`; `assignSide` winner),
+then got the third (`twoCurvedWhereTheSplitCurveCrossesAnArc`, shift `[0.5 0.5]`) to **assemble**
+via six chained fixes. Then discovered — and this is the headline — that the arc-vs-arc result is
+only **locally correct**: it is right near the arcs but **WRONG in the far field**, pervasively (even
+the two "fixed" pins are wrong far out; they pass only because their samples sit near the arcs).
+Drafted a proof-based plan, and implemented its sound foundation.
 
 ## Where things stand
 
-- Branch: `overnight/2026-08-02` @ `7d145d2` — "Localise the last defect to one cell and one edge"
-- 8 commits ahead of `main`. **`main` is fully pushed** (18 commits went to `origin/main` this
-  session).
-- Pushed: **no** for this branch — it has never been pushed, so it has no tracking branch yet.
-  (`origin` exists; `git push -u origin overnight/2026-08-02` would create it.)
-- `maxQuaParTest` **16 pass / 3 fail** — the three arc-vs-arc pins. Elsewhere: two deliberate reds
-  in `unboundedFaceTest`, one by-design `biconjugateTest` failure. Nothing else red.
-- Suite buckets: `.claude/suite.sh --fast` (189 tests, **100 s**), `--normal` (266 s), `--slow`
-  (the symbolic suites, hours). Slow == symbolic, exactly.
+- Branch: `overnight/2026-08-02` @ `5e704ba` — "Phase 0: sound localisation of the over-extenders
+  (recession cone over 18 seeded shifts)"
+- Pushed: **no** — branch is ahead of `origin/overnight/2026-08-02` (~17 commits). NOT merged to
+  `main`. Do not merge or push without the user's explicit say-so.
+- `maxQuaParTest`: 18 pass / 2 fail. The 2 reds are `twoCurvedWhereTheSplitCurveCrossesAnArc`
+  ([0.5 0.5], assembles-but-wrong) and `arcVsArcMatchesGroundTruthOverRandomShifts` (the new seeded
+  far-field sweep, deliberately red — pins the defect).
+- **Methodology decided (do NOT regress to sampling):** detection/verification must be SYMBOLIC
+  proofs, not numerical probing. Sampling far points can miss the bad direction forever (the
+  `maxArray` "decide from probes" anti-pattern). See `FARFIELD_FIX_PLAN.md` "Methodology".
+- **No unrepresentable case exists.** conj/biconj of a nonconvex QuaPol is proven representable as a
+  QuaPar (`proveStageA-D`). Any "needs an unbounded curved edge" / non-compact-face signal is a
+  SUBDIVISION BUG, not a limitation. Do not add an "unrepresentable escape hatch".
 
 ## Next steps
 
-1. **THE ONE REMAINING DEFECT — read `TODO.md` first, it has the full evidence.**
-   Piece 5 (src `[2 2]`) emits a **ray** where its boundary should **terminate**. Sampling across
-   its apex `(-2.03125, 2.03125)` shows three cells locally — `(2,2) | (6,1) | (6,2)` — with g2's
-   arc separating the last two, so piece 5's neighbour is a **bounded** sliver (area 0.008). A
-   bounded neighbour means a finite SEGMENT, and `matchHalfEdges` pairs rays with rays and segments
-   with segments — so a ray facing a segment can never match. That is the reported symptom.
-   **Lead:** the restriction of g2's arc conic to that ray has `A = 1.7e-18`, numerically
-   degenerate, so `conicRootsAlong` takes its linear branch and returns ONE root. Check whether the
-   genuine second crossing is lost there, or sits on a different boundary element.
-2. **Do not re-try the retired hypotheses** listed at the bottom of `TODO.md` — six things already
-   refuted by measurement, including three claims of mine that had to be retracted. The sharpest:
-   a "zero intersection" reading from a 0.0625-spaced grid was a resolution artifact for cells of
-   area 0.008, and acting on it would have deleted legitimate cells.
-3. Decide whether to merge `overnight/2026-08-02` into `main` and push it.
-4. Older open items: the Step-3 over-claim on unbounded assemblies, and the curved-envelope
-   derivation for a nonconvex q over an unbounded piece. Both have red tests pinning them.
+- **Immediate open question (the user's last Socratic point, and it is right):** a bounded region of
+  a parabolic arc + 2 segments IS a valid compact QuaPar face — so the over-extension is a
+  **construction bug** (a dropped/incorrect bounding edge, or a flipped arc orientation), NOT a
+  representational impossibility. My earlier "arc-triangle is non-compact / Phase 2 is a rework"
+  framing was too pessimistic and was retracted.
+- **Next concrete action:** verify whether the offending piece's OWN cell (straight out of
+  `clipByFace`, BEFORE `splitCell`) is already non-compact. That pins the bug to `clipByFace` vs
+  `splitCell`. Use the capture hook `MAXQP_CAPTURE`/`MAXQP_PIECES` (in `maxQuaPar.m`) + the sound
+  primitive `pieceRecessionRays.m`. On `[0.5 0.5]`, the culprit cell is `g1f6 ∩ g2f1`: `g1f6` is a
+  cone at `(-2,2)` opening UP, but the piece admits `(-3.98,0.61)` (down-left, OUTSIDE that cone) —
+  so a bounding edge that should exclude the down-left region is missing.
+- Then Phase 2: restore the missing bounding edge / fix orientation in the culprit producer.
+  Phase 4 acceptance is SYMBOLIC (region-partition + per-cell polynomial identity `q_g ≡ max`), not
+  the seeded sweep (that is a dev tripwire only).
+- Reproducer is deterministic: `runtests('maxQuaParTest/arcVsArcMatchesGroundTruthOverRandomShifts')`,
+  seed `20260803`, N=18, near + radius-25 ring; ~9/18 assemble to a wrong value.
 
 ## Relevant files
 
-- `TODO.md` — the live defect analysis and the retired-hypotheses list. Start here.
-- `MORNING.md` — the overnight run's account.
-- `maxQuaPar.m` — `clipPolyByConic`, `conicRootsAlong` (just fixed), `clipByFace`, `splitCell`,
-  `assemblePieces`/`matchHalfEdges`, `partitionReport` (sound only for polyhedral pieces).
-- `clipArcByConic.m` + `clipArcByConicTest.m` — the arc-vs-arc primitive, 7 tests, one per
-  geometric configuration.
-- `proveStageA.m` … `proveStageD.m`, `sweepCaseEnumeration.m` — the enumeration and its proof.
-- `conjCPLQ.m` — `conjFaceOrOriginal`, `conjBoundedPolygon` (Case B2).
+- `FARFIELD_FIX_PLAN.md` — the phased, proof-based plan; Phase 0 RESULTS recorded there. Start here.
+- `pieceRecessionRays.m` — the sound recession-cone primitive (closed-form, exact `sym` sign tests).
+- `maxQuaPar.m` — `splitCell` (incl. the session's `triHalf` two-arc split + escape-to-infinity
+  branch), `assignSide`, `clipByFace`, `clipPolyByConic`, `insertGlobalPassthrough`; capture hook
+  near `assemblePieces`.
+- `maxQuaParTest.m` — `arcVsArcMatchesGroundTruthOverRandomShifts` + `sweepTwoCurvedShifts` (seeded,
+  far-ring), and the three `twoCurved...` pins.
+- `TODO.md` — "MAJOR FINDING 2026-08-04" (far-field pervasive) and the 17/2→18/2 arc-vs-arc history.
