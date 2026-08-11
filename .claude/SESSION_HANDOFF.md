@@ -16,8 +16,8 @@ Drafted a proof-based plan, and implemented its sound foundation.
 
 - Branch: `overnight/2026-08-02` @ `5e704ba` — "Phase 0: sound localisation of the over-extenders
   (recession cone over 18 seeded shifts)"
-- Pushed: **no** — branch is ahead of `origin/overnight/2026-08-02` (~17 commits). NOT merged to
-  `main`. Do not merge or push without the user's explicit say-so.
+- Pushed: **yes** — `origin/overnight/2026-08-02` is up to date (`faea15b..eb4dbbf`). NOT merged to
+  `main`. Do not merge without the user's explicit say-so.
 - `maxQuaParTest`: 18 pass / 2 fail. The 2 reds are `twoCurvedWhereTheSplitCurveCrossesAnArc`
   ([0.5 0.5], assembles-but-wrong) and `arcVsArcMatchesGroundTruthOverRandomShifts` (the new seeded
   far-field sweep, deliberately red — pins the defect).
