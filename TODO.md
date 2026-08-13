@@ -1,5 +1,57 @@
 # TODO
 
+## 2026-08-13 -- the far-field defect, worked steps 1-6 of the plan
+
+**Where it stands.** `maxQuaParTest` 21 pass / 5 fail. The seeded far-field sweep
+(`arcVsArcMatchesGroundTruthOverRandomShifts`) and the unit-square pin are GREEN, and on a
+397-quadrilateral seeded sweep the arc-vs-arc results wrong in the far field went **7 of 64 to 0
+of 64** (200 directions at radii 1, 5, 50, 500).
+
+**Three exact piece invariants** (`assertPiecesWellFormed`, global `MAXQP_ASSERT`, off by default;
+1 = containment + winner domination, 2 = also the symbolic recession cone): containment in the
+source cell (vertices, ray directions, straight edges against the source arc, and the piece's own
+arc against every source constraint), the carried operand actually dominating on the piece, and the
+encoded region receding exactly where the piece declares rays. Nothing sampled.
+
+**Two producers fixed.**
+1. `splitCell` read "one finite crossing" as a tangency and returned the cell intact. On an
+   UNBOUNDED cell the curve can enter there and leave through the recession cone, cutting it in
+   two; `splitUnboundedAtOneCrossing` decides the two cases from whether the branch direction
+   recedes the cell, and each half keeps one original ray plus the escaping branch.
+2. `clipPolyByConic` skipped a cut whose only crossings are AT the cell's corners -- the generic
+   arc-vs-arc case, since conjugates of triangles sharing a primal edge have arcs through the same
+   two dual points. Now decided from one representative point per boundary element; a two-arc
+   survivor is cut along `A -> M -> B` with M between the arcs and each half given the midpoint as
+   a third vertex (two-vertex lunes sharing a chord defeat assembly: the chord never becomes an
+   edge).
+
+**Two new tools.** `QuaPar.eval` validate mode (`QUAPAR_VALIDATE`) errors when two faces admit a
+point with DIFFERENT values; `verifyMaxIsExactSymbolically` proves `g = max(g1,g2)` over whole
+regions by closed-form minimisation over each face-pair intersection. The three arc-vs-arc fixtures
+verify with zero findings.
+
+### Still open, in the order they should be taken
+
+- [ ] **The unit square still has two overlapping faces** (new red
+      `unitSquareResultHasNoOverExtendedFace`). Values are exact at every sampled radius; the
+      overlap is real and only eval's ordering hides it. Both new tools name it: the loser is 0.5
+      larger on an arc edge at u = 0.7071. This is an ASSEMBLY-side defect -- the pieces satisfy
+      all three invariants.
+- [ ] **Step 4 of the plan, NOT done: bounded arc-pieces whose CONSTRAINT region is non-compact.**
+      Two remain on the quadrilateral fixture (src [1 2] and [1 6]). The shape is a piece whose arc
+      is CONCAVE towards it: two straight edges give a wedge and the parabola's outside does not
+      close it. ATTEMPTED AND REVERTED: cutting the piece with a line parallel to the arc's chord,
+      just past the arc's deepest point. Both halves came back still non-compact, and the straight
+      half wrongly kept the arc tag from `clipPolyHalfPlane`. Do not retry that shape without first
+      fixing what `clipPolyHalfPlane` does with `curveAfter` on the half that loses the arc.
+- [ ] `splitTwoArcLens` refuses when the cut `A -> M -> B` leaves the cell (the seeded far-field
+      fixture hits this). The two arcs there run between corners on OPPOSITE branches of their
+      parabolas, so the arc between them swings far out; a different subdivision is needed.
+- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- `MATLAB:badsubscript` in `splitTwoArcPiece`.
+- [ ] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- still 2 of 68 sample points wrong.
+- [ ] The verifier does not prove the faces COVER the plane; `partitionReport` only samples.
+
+
 _Seeded 2026-08-02 at the start of the overnight run, from the task given when it
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
