@@ -712,6 +712,46 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             end
         end
 
+        function arcVsArcResultsAreVerifiedOverWholeRegions(testCase)
+            % ACCEPTANCE BY MINIMISATION, NOT BY SAMPLING. verifyMaxIsExactSymbolically overlays
+            % the result with each operand and, for every face of the result against every operand
+            % face, minimises the difference over the whole intersection in closed form -- so a
+            % pass covers every point of every face at once, which no ring of samples does. See
+            % FARFIELD_FIX_PLAN.md Phase 4 for what it does and does not prove (it does not prove
+            % the faces COVER the plane; partitionReport only samples for that).
+            Tb = [0 0; 3 -5; 4 -4];
+            Q  = [0.5 -1.2; -0.2 -3.1; -2.5 0; -1.5 -1.7];
+            cases = { 'shift [-1 0.75]',   Tb,             Tb + [-1 0.75]
+                      'shift [2 -0.5]',    Tb,             Tb + [2 -0.5]
+                      'quad split (case177)', Q([1 2 3],:), Q([1 3 4],:) };
+            for c = 1:size(cases,1)
+                [g1, g2] = maxQuaParTest.buildCurvedG1G2(cases{c,2}, cases{c,3});
+                g = maxQuaPar(g1, g2);
+                [ok, report] = verifyMaxIsExactSymbolically(g1, g2, g);
+                msg = sprintf('%s: %d finding(s)', cases{c,1}, numel(report));
+                for r = 1:min(3, numel(report)), msg = [msg newline '   ' report{r}]; end %#ok<AGROW>
+                testCase.verifyTrue(ok, msg);
+            end
+        end
+
+        function unitSquareResultHasNoOverExtendedFace(testCase)
+            % RED, and it pins what the ring sweeps cannot see. f=xy over the unit square split by
+            % its diagonal now evaluates EXACTLY at every sampled radius from 1 to 200 -- and yet
+            % two of its faces still overlap with DIFFERENT values, so the answer is right only
+            % because eval's last-admitter-wins happens to pick the correct one. Both new tools
+            % report it: QuaPar.eval's validate mode (global QUAPAR_VALIDATE) raises
+            % QuaPar:eval:ambiguous at 194 of 900 ring points, and verifyMaxIsExactSymbolically
+            % names the face pair and the arc where the loser is 0.5 larger.
+            E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            g1 = conjPieceCPLQ(QuaPol([0 0; 1 0; 1 1], E, [0 1 0 0 0 0], F));
+            g2 = conjPieceCPLQ(QuaPol([0 0; 1 1; 0 1], E, [0 1 0 0 0 0], F));
+            g = maxQuaPar(g1, g2);
+            [ok, report] = verifyMaxIsExactSymbolically(g1, g2, g);
+            msg = sprintf('%d finding(s)', numel(report));
+            for r = 1:min(3, numel(report)), msg = [msg newline '   ' report{r}]; end %#ok<AGROW>
+            testCase.verifyTrue(ok, msg);
+        end
+
         function facePolyReportsACurvedFaceAsAnArcOrientedIntoTheFace(testCase)
             % Unit-level check of the two facts everything above rests on, verified WITHOUT going
             % through maxQuaPar: for the curved fixture's g1, exactly one boundary edge of the
