@@ -251,6 +251,17 @@ function g = maxQuaPar(g1, g2)
         for l = 1:g2.nf
             polyL = facePoly(g2, l);
             cells = clipByFace(polyK, polyL);   % a LIST: an arc-vs-arc clip can yield two cells
+            global MAXQP_DEBUG %#ok<GVMIS>
+            if ~isempty(MAXQP_DEBUG) && MAXQP_DEBUG
+                fprintf('clipByFace(%d,%d): polyK arc=%d polyL arc=%d -> %d cell(s)\n', ...
+                    k, l, polyK.curveAfter, polyL.curveAfter, numel(cells));
+                for z = 1:numel(cells)
+                    if isempty(cells{z}), continue, end
+                    fprintf('   cell %d: nv=%d curveAfter=%d ec=%s V=%s\n', z, ...
+                        size(cells{z}.V,1), cells{z}.curveAfter, mat2str(cells{z}.curveEc,4), ...
+                        mat2str(cells{z}.V,5));
+                end
+            end
             f1row = g1.f(k,:); f2row = g2.f(l,:);
             for ci = 1:numel(cells)
                 cell = cells{ci};
@@ -1549,9 +1560,27 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
     qCurve = 0;
     if hasArc
         qCurve = mod(ci - pStart, nv) + 1;
-        if qCurve > numel(Vnew)-1, qCurve = 0; end   % the inherited arc did not survive
+        % size(Vnew,1), NOT numel: Vnew is an n-by-2 vertex list, so numel is 2n and this guard --
+        % like the `cutEdge = numel(Vnew)` on the next line, which set the closing edge's index to
+        % TWICE its true value -- almost never fired. Both indices then pointed past the end of the
+        % piece, which is where splitTwoArcPiece's MATLAB:badsubscript came from.
+        if qCurve > size(Vnew,1)-1, qCurve = 0; end   % the inherited arc did not survive
     end
-    cutEdge = numel(Vnew);                            % the closing edge IS the new cut arc
+    cutEdge = size(Vnew,1);                           % the closing edge IS the new cut arc
+
+    % A crossing can land exactly ON a kept vertex, so Vnew can carry a duplicated consecutive
+    % row -- a ZERO-LENGTH edge. Left in, it shifts every later edge index by one, and the two
+    % curve labels below then name the wrong edges: measured on the seeded crash fixture, cell
+    % (2,1) came out with its cut arc tagged on the duplicate pair (0.91553,-0.078641) ->
+    % (0.91553,-0.078641), leaving the real arc edge (1.29786,0.27874) -> (0.91553,-0.078641)
+    % marked STRAIGHT. Its neighbour cell (2,2) called that same boundary curved, so no pairing
+    % existed and assembly failed three stages later. Deduplicate first, carrying BOTH labels.
+    [Vnew, qq] = dedupConsecutiveTracked(Vnew, [cutEdge, qCurve]);
+    cutEdge = qq(1); qCurve = qq(2);
+    if cutEdge == 0
+        % The cut arc collapsed to a point: what is left is the inherited arc, if anything.
+        cutEdge = qCurve; Ecut = poly.curveEc; qCurve = 0;
+    end
 
     out.V = Vnew;
     out.dirIn = []; out.dirOut = []; out.dirInSign = []; out.dirOutSign = [];
@@ -1992,10 +2021,13 @@ function poly2 = clipPolyHalfPlaneCurved(poly, nrm, c)
             Vnew = [Xb; poly.V(keepIdx,:); Xa];  % kept arc is the wrapped complement (see straight path)
             pStart = p2;
         end
-        % Output edge q (q=1..numel(Vnew)-1) is the surviving part of original edge
-        % mod(pStart+q-2,nv)+1; output edge numel(Vnew) is the brand-new straight cut edge.
+        % Output edge q (q=1..size(Vnew,1)-1) is the surviving part of original edge
+        % mod(pStart+q-2,nv)+1; output edge size(Vnew,1) is the brand-new straight cut edge.
+        % size(Vnew,1), NOT numel: Vnew is n-by-2, so numel is 2n and this guard almost never
+        % fired, letting the arc label point past the end of the piece (same slip as in
+        % clipPolyByConic's bounded branch).
         qCurve = mod(cE - pStart, nv) + 1;
-        if qCurve > numel(Vnew)-1, qCurve = 0; end
+        if qCurve > size(Vnew,1)-1, qCurve = 0; end
         poly2 = finishCurved(Vnew, qCurve, poly, [], [], [], [], true);
         return
     end
@@ -2095,13 +2127,19 @@ function [V, q] = dedupConsecutiveTracked(V, q, tol)
         if norm(V(i,:)-V(i-1,:)) < tol, keep(i) = false; end
     end
     if n > 1 && norm(V(1,:)-V(end,:)) < tol, keep(n) = false; end
-    if q > 0
-        qb = mod(q, n) + 1;                       % the arc runs row q -> row qb
-        if norm(V(q,:) - V(qb,:)) < tol
-            q = 0;                                % zero-length arc: it did not survive the clip
+    % q may be a VECTOR: a clip result can carry two curve labels at once (the inherited arc and
+    % the new cut), and both have to be remapped through the same deduplication.
+    for t = 1:numel(q)
+        qi = q(t);
+        if qi <= 0, continue, end
+        if qi > n, q(t) = 0; continue, end        % a stale label: it cannot name an edge here
+        qb = mod(qi, n) + 1;                      % the arc runs row qi -> row qb
+        if norm(V(qi,:) - V(qb,:)) < tol
+            q(t) = 0;                             % zero-length arc: it did not survive the clip
         else
-            q = q - sum(~keep(1:min(q,n)));
-            if q < 1, q = 0; end
+            qi = qi - sum(~keep(1:min(qi,n)));
+            if qi < 1, qi = 0; end
+            q(t) = qi;
         end
     end
     V = V(keep,:);
@@ -2697,6 +2735,16 @@ function newPieces = splitCell(cell, f1row, f2row)
             end
             if p == 0 || p == half.curveAfter
                 newPieces = [newPieces, half]; %#ok<AGROW>
+            elseif all(half.curveEc == 0)
+            % When the SPLITTING curve came out straight (edgeEc all zeros -- the common case,
+            % since {f1=f2} is usually a line here), this half does not carry two arcs at all: it
+            % carries the inherited one and a straight cut. Re-label it instead of sending it
+            % through the two-arc split, which had nothing to separate and, when its chord tests
+            % failed, returned the piece with the inherited arc silently FLATTENED to its chord --
+            % which left a straight boundary edge facing its neighbour's curved one, with no
+            % possible pairing (the second seeded crash fixture).
+                half.curveAfter = p; half.curveEc = arcEc0;
+                newPieces = [newPieces, half]; %#ok<AGROW>
             else
                 newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
             end
@@ -2749,6 +2797,18 @@ function newPieces = splitCell(cell, f1row, f2row)
             if p ~= 0, break, end
         end
         if p == 0 || p == half.curveAfter
+            newPieces = [newPieces, half]; %#ok<AGROW>
+            continue
+        end
+        if all(half.curveEc == 0)
+        % When the SPLITTING curve came out straight (edgeEc all zeros -- the common case,
+        % since {f1=f2} is usually a line here), this half does not carry two arcs at all: it
+        % carries the inherited one and a straight cut. Re-label it instead of sending it
+        % through the two-arc split, which had nothing to separate and, when its chord tests
+        % failed, returned the piece with the inherited arc silently FLATTENED to its chord --
+        % which left a straight boundary edge facing its neighbour's curved one, with no
+        % possible pairing (the second seeded crash fixture).
+            half.curveAfter = p; half.curveEc = arcEc0;
             newPieces = [newPieces, half]; %#ok<AGROW>
             continue
         end
