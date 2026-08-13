@@ -503,6 +503,125 @@ classdef maxQuaParTest < matlab.unittest.TestCase
                  'wrong answer, worse than erroring. Shifts: %s'], nWrong, nCurved, worst, mat2str(wrongShifts,5)));
         end
 
+        % ---------------------------------------------------------------------------------------
+        % ARC-vs-ARC FIXTURES FROM AN ORDINARY POLYGON SPLIT (added 2026-08-13)
+        %
+        % The four tests below all pin the SAME operation on the SAME kind of input, and all four
+        % are RED: f(x,y) = x*y -- indefinite, hence a genuinely nonconvex PLQ -- over a polygon
+        % handed to the pipeline as TWO triangles, each of which has a positive-slope edge, so
+        % BOTH Step-2 conjugates carry a parabolic arc and Step 3 must clip arc against arc.
+        %
+        % WHY THE GROUND TRUTH IS UNIMPEACHABLE HERE. sup over (T1 u T2) = max(sup over T1,
+        % sup over T2) whether or not the triangles overlap, so max(g1*,g2*) is the conjugate of
+        % x*y over the union no matter how the two triangles sit relative to each other. And
+        % supBilinearOverPoly computes each sup in CLOSED FORM (the objective's Hessian is
+        % indefinite, so no interior point is a local max and the sup is attained on the boundary,
+        % where it is a 1-D quadratic). Nothing in the reference touches the conjugate pipeline.
+        %
+        % Each fixture's vertices are written out literally. They were FOUND by a seeded search
+        % (rng(20260813), round(randn(4,2)*2,1), split by the diagonal A-C, both halves put CCW)
+        % but a case index into a random stream is not a reproducible fixture -- see
+        % SUPPORT_MATRIX.md section 0.1 -- so the search is not what the tests run.
+        %
+        % These are the arc-vs-arc defect reached WITHOUT the translated-triangle fixtures of
+        % checkTwoCurved: an ordinary quadrilateral split by a diagonal is enough. See TODO.md
+        % "MAJOR FINDING 2026-08-04" and FARFIELD_FIX_PLAN.md; the acceptance criterion for the
+        % fix is the symbolic Phase-4 check, not this ring sampling, which is a tripwire.
+        % ---------------------------------------------------------------------------------------
+
+        function unitSquareSplitByItsDiagonalIsExactNearTheArc(testCase)
+            % THE SMALLEST FAILING ARC-vs-ARC CASE: f = x*y on the UNIT SQUARE, given as the two
+            % triangles either side of the main diagonal. Both have exactly one convex
+            % (positive-slope) edge -- the diagonal itself -- so both conjugates carry an arc.
+            %
+            % This fixture needs no polygon reference at all: s1*x + s2*y - x*y is BILINEAR, so
+            % its max over a box is attained at a CORNER, giving the closed form
+            %     f*(s) = max(0, s1, s2, s1+s2-1)
+            % -- purely polyhedral. The two operands' arcs are real (each single triangle's
+            % conjugate is curved) but they must CANCEL in the max, which is exactly what the
+            % assembly gets wrong.
+            %
+            % STATUS 2026-08-13: WRONG at 17 of 1080 ring points, all of them at radius <= 1;
+            % radii 2 and beyond are exact, so on this fixture the defect is NEAR the arcs, not
+            % in the far field. Worst point recorded below: the result returns face "s1" where
+            % "s2" is the larger. Face 2 of the assembly is bounded by the arc conic
+            % (s1+s2)^2/4 - s1 = 0 and admits a point belonging to an s2 face -- an arc-bounded
+            % piece over-extending across its own parabola, the mechanism of the far-field
+            % finding showing up close in.
+            T1 = [0 0; 1 0; 1 1];
+            T2 = [0 0; 1 1; 0 1];
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            testCase.verifyTrue(any(g1.Ec(:) ~= 0) && any(g2.Ec(:) ~= 0), ...
+                'both operands must be curved for this test to mean anything');
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+
+            corners = @(s) max([0, s(1), s(2), s(1)+s(2)-1]);
+            % The recorded witness, asserted exactly so a coarser sweep cannot miss it.
+            s = [cosd(63) sind(63)];
+            testCase.verifyEqual(g.eval(s), corners(s), 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                sprintf('recorded witness s=(%.6f,%.6f): got %.8g, truth %.8g', ...
+                        s(1), s(2), g.eval(s), corners(s)));
+            % ...and the sweep, which must find nothing else.
+            maxQuaParTest.verifyExactOnRings(testCase, g, T1, T2);
+        end
+
+        function arcVsArcIsExactFarFromTheArcsOnASeededQuadSplit(testCase)
+            % THE FAR-FIELD FORM, on an ordinary quadrilateral split by a diagonal rather than on
+            % the translated-triangle fixture. Correct near the arcs and catastrophically wrong
+            % far out: at s = 100*(cos(-57deg), sin(-57deg)) the result gives 5.3e4 where the
+            % truth is 3.1e2 -- an over-extended face evaluating its own quadratic (which grows
+            % like |s|^2) in territory where the truth grows linearly. That signature, error
+            % growing with |s|, is the non-compact bounded arc-piece of TODO.md's MAJOR FINDING:
+            % the piece is closed off with straight edges instead of keeping its ray boundaries,
+            % so QuaPar.eval admits points arbitrarily far away.
+            %
+            % STATUS 2026-08-13: WRONG at 21 of 1080 ring points, worst 5.28e4.
+            T1 = [-0.7 -1.7; 1.9 -2.4; -0.1 -1.3];
+            T2 = [-0.7 -1.7; 1.9 -2.4; -0.6 1.5];
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            testCase.verifyTrue(any(g1.Ec(:) ~= 0) && any(g2.Ec(:) ~= 0), ...
+                'both operands must be curved for this test to mean anything');
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+
+            s = 100*[cosd(-57) sind(-57)];
+            truth = max(maxQuaParTest.supBilinearOverPoly(s, T1), ...
+                        maxQuaParTest.supBilinearOverPoly(s, T2));
+            testCase.verifyEqual(g.eval(s), truth, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                sprintf('recorded FAR-FIELD witness s=(%.6f,%.6f): got %.8g, truth %.8g', ...
+                        s(1), s(2), g.eval(s), truth));
+            maxQuaParTest.verifyExactOnRings(testCase, g, T1, T2);
+        end
+
+        function arcVsArcDoesNotCrashOnSeededQuadSplits(testCase)
+            % Two independent quadrilateral splits on which the arc-vs-arc clip CRASHES rather
+            % than returning anything: MATLAB:badsubscript, both at the same site --
+            %   splitTwoArcPiece -> clipPolyByConic -> clipByFace -> maxQuaPar
+            % ("Index in position 1 exceeds array bounds", bound 5 and 4 respectively). A raw
+            % badsubscript is never a designed refusal, so this is a bug however the far-field
+            % work turns out. Two fixtures, so a fix cannot be tuned to one vertex ordering; both
+            % are attempted before reporting, so the second is not hidden by the first.
+            fixtures = { ...
+                [1.5 0.6; -0.7 2.2; 0.8 0.2],   [1.5 0.6; -0.7 2.2; 0.9 0.1]; ...
+                [-1.2 -2.1; -1.2 2.2; -2.7 0.5], [-1.2 -2.1; 1.1 0.7; -1.2 2.2]};
+            maxQuaParTest.verifyEachSplitAssemblesExactly(testCase, fixtures);
+        end
+
+        function arcVsArcRefusesAnUnboundedTwoArcSplit(testCase)
+            % A quadrilateral split whose arc-vs-arc case maxQuaPar REFUSES outright:
+            %   maxQuaPar:notImplemented, "an UNBOUNDED half carries both the inherited arc and
+            %   the splitting curve; splitTwoArcPiece separates two arcs by a chord, which needs
+            %   a closed boundary" (splitCell).
+            % Unlike a badsubscript this is a deliberate guard -- but per FARFIELD_FIX_PLAN.md
+            % Phase 3 that guard is a BUG DETECTOR, not a supported-input error: the conjugate of
+            % a nonconvex QuaPol is provably representable as a QuaPar (proveStageA-D), so a
+            % legitimate input reaching this guard means the subdivision computed the wrong
+            % geometry. The goal is that it never fires; this test pins one input that makes it.
+            fixtures = {[-4 5.1; 1.1 0.6; 1.4 0.7], [-4 5.1; 1.1 0.6; 3.3 4.1]};
+            maxQuaParTest.verifyEachSplitAssemblesExactly(testCase, fixtures);
+        end
+
         function maxQuaParSplitsACellThatAlreadyCarriesAnArc(testCase)
             % A cell that already carries a parabolic edge AND whose winner is undecided has to be
             % split along a SECOND curve. This used to error; it now works, and this fixture is the
@@ -1012,6 +1131,66 @@ classdef maxQuaParTest < matlab.unittest.TestCase
                 s = testPts(i,:);
                 testCase.verifyEqual(g.eval(s), maxQuaParTest.supBilinearOverPoly(s, T), ...
                     'AbsTol', 1e-8, sprintf('s=(%.4f,%.4f)', s(1), s(2)));
+            end
+        end
+
+        function verifyExactOnRings(testCase, g, T1, T2)
+            % Sweep concentric rings from inside the arcs out to |s|=100 and require the assembled
+            % max to equal the closed-form sup of s1*x + s2*y - x*y over T1 u T2 at every point.
+            % Radii span three orders of magnitude ON PURPOSE: a fix that repairs only the
+            % neighbourhood of the arcs, or only the far field, must not pass. Reports the single
+            % worst point rather than one failure per point, so a broken assembly gives one
+            % readable message instead of hundreds.
+            %
+            % This is a development TRIPWIRE, not the acceptance criterion. Sampling can never
+            % prove a face is not over-extended in some direction it does not visit -- see
+            % FARFIELD_FIX_PLAN.md "Methodology"; acceptance is the symbolic Phase-4 check.
+            radii = [0.5 1 2 3 5 8 15 30 100];
+            th = linspace(0, 2*pi, 121); th(end) = [];
+            nBad = 0; worst = 0; ws = [0 0]; wGot = 0; wTrue = 0;
+            for R = radii
+                for k = 1:numel(th)
+                    s = R*[cos(th(k)) sin(th(k))];
+                    truth = max(maxQuaParTest.supBilinearOverPoly(s, T1), ...
+                                maxQuaParTest.supBilinearOverPoly(s, T2));
+                    got = g.eval(s);
+                    e = abs(got - truth);
+                    if ~(e <= 1e-9*(1 + abs(truth)))
+                        nBad = nBad + 1;
+                        if e > worst, worst = e; ws = s; wGot = got; wTrue = truth; end
+                    end
+                end
+            end
+            testCase.verifyEqual(nBad, 0, sprintf(...
+                ['%d of %d ring points wrong (radii %s), worst %.6g at s=(%.6f,%.6f): ' ...
+                 'got %.8g, truth %.8g'], nBad, numel(radii)*numel(th), mat2str(radii), ...
+                worst, ws(1), ws(2), wGot, wTrue));
+        end
+
+        function verifyEachSplitAssemblesExactly(testCase, fixtures)
+            % Run maxQuaPar on each {T1,T2} row of `fixtures` and require it to ASSEMBLE and be
+            % exact. Every row is attempted before anything is reported, so one row's error cannot
+            % hide the next row's. Used by the fixtures that currently crash or refuse.
+            E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+            for r = 1:size(fixtures,1)
+                T1 = fixtures{r,1}; T2 = fixtures{r,2};
+                g1 = conjPieceCPLQ(QuaPol(maxQuaParTest.toCCW(T1), E, [0 1 0 0 0 0], F));
+                g2 = conjPieceCPLQ(QuaPol(maxQuaParTest.toCCW(T2), E, [0 1 0 0 0 0], F));
+                testCase.verifyTrue(any(g1.Ec(:) ~= 0) && any(g2.Ec(:) ~= 0), sprintf(...
+                    'fixture %d: both operands must be curved for this test to mean anything', r));
+                g = [];
+                try
+                    g = maxQuaPar(g1, g2);
+                catch ME
+                    where = '';
+                    if ~isempty(ME.stack), where = sprintf(' at %s line %d', ME.stack(1).name, ME.stack(1).line); end
+                    testCase.verifyFail(sprintf('fixture %d: maxQuaPar raised %s%s -- %s', ...
+                        r, ME.identifier, where, ME.message));
+                end
+                if ~isempty(g)
+                    testCase.verifyClass(g, 'QuaPar');
+                    maxQuaParTest.verifyExactOnRings(testCase, g, T1, T2);
+                end
             end
         end
 

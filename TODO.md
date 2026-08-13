@@ -4,6 +4,32 @@ _Seeded 2026-08-02 at the start of the overnight run, from the task given when i
 was launched. The repository had no TODO.md; the acceptance criterion is precise
 (three named tests green), so the run works from this list._
 
+## 2026-08-13: four arc-vs-arc failures pinned from ORDINARY polygon splits (not the shift fixture)
+
+The arc-vs-arc defect does not need the translated-triangle fixture: `f = x*y` over a quadrilateral
+handed in as two triangles either side of a diagonal reaches it, with a closed-form reference that
+owes nothing to the pipeline (`supBilinearOverPoly` over each triangle; `sup` over a union is the
+max of the sups, so overlapping triangles are fine). All four are now RED tests in `maxQuaParTest`,
+vertices written out literally:
+
+- `unitSquareSplitByItsDiagonalIsExactNearTheArc` — the SMALLEST failing case: `x*y` on `[0,1]^2`
+  split by the main diagonal. Truth is closed form and POLYHEDRAL (`max(0,s1,s2,s1+s2-1)`, since the
+  objective is bilinear on a box), so the two operands' arcs must cancel in the max; they do not.
+  Wrong at 17 of 1080 ring points, ALL at radius <= 1 — worst 0.437 at `s=(0.45399,0.891007)`, where
+  it returns the `s1` face (bounded by the arc conic `(s1+s2)^2/4 - s1 = 0`) in `s2` territory.
+  So on this fixture the over-extension is NEAR the arcs, not in the far field.
+- `arcVsArcIsExactFarFromTheArcsOnASeededQuadSplit` — the FAR-FIELD form, worst 5.28e4 at
+  `s = 100*(cos(-57deg), sin(-57deg))`: got 53126, truth 309. Error growing like `|s|^2` is the
+  non-compact bounded arc-piece signature of the MAJOR FINDING below.
+- `arcVsArcDoesNotCrashOnSeededQuadSplits` — two fixtures, both `MATLAB:badsubscript` at the same
+  site, `splitTwoArcPiece` line 2216 (via `clipPolyByConic` -> `clipByFace`). A raw badsubscript is
+  never a designed refusal, so this is a bug independent of how the far-field work turns out.
+- `arcVsArcRefusesAnUnboundedTwoArcSplit` — `maxQuaPar:notImplemented` from `splitCell`: "an
+  UNBOUNDED half carries both the inherited arc and the splitting curve". Per FARFIELD_FIX_PLAN.md
+  Phase 3 that guard is a bug detector, not a supported-input error.
+
+`maxQuaParTest` is now 18 pass / 6 fail (the 2 pre-existing reds plus these 4), 40 s, still fast.
+
 ## MAJOR FINDING 2026-08-04: arc-vs-arc results are only LOCALLY correct (wrong far from the arcs)
 
 The random-shift sweep's "silent WRONG" is NOT a handful of edge cases -- it is PERVASIVE, and it
