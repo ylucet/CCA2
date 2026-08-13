@@ -2,7 +2,9 @@
 
 ## 2026-08-13 -- the far-field defect, worked steps 1-6 of the plan
 
-**Where it stands.** `maxQuaParTest` 21 pass / 5 fail. The seeded far-field sweep
+**Where it stands (updated 2026-08-13, end of the second pass).** `maxQuaParTest` **25 pass / 1 fail**; fast bucket 200 pass / 1 fail. The one red is `arcVsArcRefusesAnUnboundedTwoArcSplit` (first item below). `sweepMaxQuaParCurvedSplit(20260802,200)` went 30 -> 59 assembled of 142 sampled, with 0 of 1031 result vertices, 571 midpoints and 3540 interior points wrong. What the whole defect turned out to be is one sentence, and it is recorded in `SUPPORT_MATRIX.md` 4.1: **a curved edge is a bounded ARC and its conic is not**, so the point-location rule admits far-away points on a parabola's concave side; `QuaPar.chordCuts` derives the missing constraint. Original note follows.
+
+**Where it stood mid-session.** `maxQuaParTest` 21 pass / 5 fail. The seeded far-field sweep
 (`arcVsArcMatchesGroundTruthOverRandomShifts`) and the unit-square pin are GREEN, and on a
 397-quadrilateral seeded sweep the arc-vs-arc results wrong in the far field went **7 of 64 to 0
 of 64** (200 directions at radii 1, 5, 50, 500).
@@ -70,7 +72,12 @@ verify with zero findings.
       right starting point at all, or whether the cut must start on one of the arcs.
 
 
-- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- **both fixtures now ASSEMBLE** (three defects
+- [x] **FIXED** `arcVsArcDoesNotCrashOnSeededQuadSplits` -- the last piece was a REFLEX vertex left by the
+      bent two-arc cut: half-plane point location cannot represent a non-convex face, so the notch at the
+      bend belonged to neither half. `splitAtReflexVertex` splits such a half along a diagonal. NOTE the
+      retracted reasoning below -- equal areas and a bit-identical shared polyline do NOT imply two
+      halves tile, because area says nothing about which side of a BENT boundary a point falls on.
+      History follows. -- **both fixtures now ASSEMBLE** (three defects
       fixed: a duplicated consecutive vertex shifting the curve labels, `numel` where
       `size(...,1)` was meant in two index guards, and a STRAIGHT splitting curve being routed
       through the two-arc split, which flattened the inherited arc). Fixture 2 is exact on all
