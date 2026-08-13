@@ -305,7 +305,13 @@ classdef QuaPar < RatPar & Qua
                 % -grad points into it). The vertices are then used only to VETO an orientation
                 % they contradict.
                 cvArc = obj.Ec(j,:) * sign(Pe(t));
-                fr = parabolaArcFrame(obj.Ec(j,:), 'QuaPar:chordCuts');
+                % eval must never throw. A conic that is not a genuine parabola in its own frame
+                % (a degenerate one that slipped through as a curved edge) simply gets no chord.
+                try
+                    fr = parabolaArcFrame(obj.Ec(j,:), 'QuaPar:chordCuts');
+                catch
+                    continue
+                end
                 Marc = fr.point(0.5*(fr.uOf(A) + fr.uOf(B)));   % ON the arc, not on its chord
                 gA = [2*cvArc(1)*Marc(1) + cvArc(2)*Marc(2) + cvArc(4), ...
                       cvArc(2)*Marc(1) + 2*cvArc(3)*Marc(2) + cvArc(5)];

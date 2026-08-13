@@ -2802,14 +2802,20 @@ function newPieces = splitCell(cell, f1row, f2row)
             continue
         end
         if ~isempty(half.dirIn)
-            % Two curves on an UNBOUNDED half. splitTwoArcPiece separates two arcs with a CHORD
-            % between them, which presupposes a closed boundary cycle; there is no chord that
-            % closes an unbounded piece. Refused narrowly here rather than by the blanket guard
-            % that used to stand at the top of this function.
-            error('maxQuaPar:notImplemented', ...
-                ['maxQuaPar:splitCell: an UNBOUNDED half carries both the inherited arc and the ' ...
-                 'splitting curve; splitTwoArcPiece separates two arcs by a chord, which needs a ' ...
-                 'closed boundary.']);
+            % Two curves on an UNBOUNDED half. splitTwoArcPiece separates two arcs with a CHORD,
+            % which presupposes a closed boundary cycle -- there is no chord that closes an
+            % unbounded piece. What does close it is a RAY: cut from the boundary point between
+            % the two arcs along a direction the piece recedes in, and each half keeps one arc,
+            % one of the original rays, and the new one. This used to be refused outright.
+            two = splitUnboundedTwoArcPiece(half, p, arcEc0);
+            if isempty(two)
+                error('maxQuaPar:notImplemented', ...
+                    ['maxQuaPar:splitCell: an UNBOUNDED half carries both the inherited arc and ' ...
+                     'the splitting curve, and no recession direction from the vertex between ' ...
+                     'them stays inside the piece.']);
+            end
+            newPieces = [newPieces, two]; %#ok<AGROW>
+            continue
         end
         newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
     end
@@ -3008,6 +3014,81 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         end
     end
     out = piece;
+end
+
+function out = splitUnboundedTwoArcPiece(piece, arcPos, arcEc)
+% Separate the two arcs of an UNBOUNDED piece with a RAY, so each half carries one.
+%
+% The cut starts at the vertex BETWEEN the two arcs -- a genuine boundary point, so it really
+% divides the piece -- and runs to infinity along a direction the piece recedes in. Each half then
+% has one arc, one of the piece's original rays, and the new one. Returns [] when that cannot be
+% done, and the caller then refuses loudly, as it always did.
+%
+% THE CUT DIRECTION IS FREE, so several are tried. Each candidate must:
+%   * recede the piece's straight constraints (n*d <= 0 for every half-plane);
+%   * stay inside BOTH arcs for its whole infinite length (closed-form minimum of each conic
+%     along the ray -- checking only the half-planes let a ray leave through an arc);
+%   * and produce two halves that each admit a point just inside their OWN arc, by their own
+%     constraints. That last check is what catches a mis-oriented pair, which is otherwise a
+%     silent wrong answer rather than a refusal (measured: seeded shift [1.4979 3.6486], 0.3531).
+    out = [];
+    nv = size(piece.V,1);
+    c = piece.curveAfter;
+    if arcPos < 1 || c < 1 || arcPos > nv-1 || c > nv-1, return, end
+    i1 = min(arcPos, c); i2 = max(arcPos, c);
+    if i1 == i2, return, end
+    iX = i1 + 1;                            % arc i1 ends at vertex i1+1; cut there
+    if iX >= nv || iX < 2, return, end      % the cut needs a real chain on each side
+    ecA = arcEc; ecB = piece.curveEc;
+    if c < arcPos, ecA = piece.curveEc; ecB = arcEc; end     % whichever arc comes first
+    for ec = {ecA, ecB}
+        if isempty(ec{1}) || all(ec{1} == 0), return, end    % a two-arc split needs two real arcs
+        dsc = ec{1}(2)^2 - 4*ec{1}(1)*ec{1}(3);
+        if abs(dsc) > 1e-9*max(1, max(abs(ec{1})))^2, return, end   % not a parabola: refuse
+    end
+    X = piece.V(iX,:);
+    cons = polyConstraints(piece);
+    dIn = piece.dirIn/norm(piece.dirIn); dOut = piece.dirOut/norm(piece.dirOut);
+    cand = {};
+    for w = [0.5 0.25 0.75 0.1 0.9 0 1]
+        d = (1-w)*dIn + w*dOut;
+        if norm(d) > 1e-12, cand{end+1} = d/norm(d); end %#ok<AGROW>
+    end
+    for k = 1:numel(cand)
+        d = cand{k};
+        if any(cons(:,1:2)*d' > 1e-9*max(1, max(abs(cons(:,1:2)), [], 'all'))), continue, end
+        okRay = true;
+        for ec = {ecA, ecB}
+            v = minConicAlong(ec{1}, X, d, inf);
+            if v < -1e-7*max(1, max(abs(ec{1})))*max(1, norm(X))^2, okRay = false; break, end
+        end
+        if ~okRay, continue, end
+        A = struct('V', piece.V(1:iX,:), 'dirIn', piece.dirIn, 'dirOut', d, ...
+            'dirInSign', piece.dirInSign, 'dirOutSign', 1, 'curveAfter', i1, ...
+            'curveEc', ecA, 'f', piece.f);
+        B = struct('V', piece.V(iX:nv,:), 'dirIn', d, 'dirOut', piece.dirOut, ...
+            'dirInSign', 1, 'dirOutSign', piece.dirOutSign, 'curveAfter', i2 - iX + 1, ...
+            'curveEc', ecB, 'f', piece.f);
+        if A.curveAfter < 1 || A.curveAfter > size(A.V,1)-1, continue, end
+        if B.curveAfter < 1 || B.curveAfter > size(B.V,1)-1, continue, end
+        good = true;
+        for h = {A, B}
+            q = h{1};
+            try
+                pin = insideArcSample(q);
+            catch
+                good = false; break
+            end
+            cq = polyConstraints(q);
+            if ~isempty(cq) && any(cq(:,1:2)*pin' - cq(:,3) > 1e-7*(1 + max(abs(q.V(:)))))
+                good = false; break
+            end
+            if QuaPar.evalConic(q.curveEc, pin) < -1e-7*max(1, max(abs(q.curveEc)))
+                good = false; break
+            end
+        end
+        if good, out = [A, B]; return, end
+    end
 end
 
 function out = splitAtReflexVertex(p)
