@@ -270,6 +270,7 @@ function g = maxQuaPar(g1, g2)
             end
         end
     end
+    pieces = dropDegeneratePieces(pieces);
     pieces = dedupPieces(pieces);
     pieces = dropSubsumedPieces(pieces);
     pieces = insertGlobalPassthrough(pieces);
@@ -644,6 +645,25 @@ function partitionReport(pieces)
     txt = '';
     for i = 1:size(srcs,1), txt = [txt sprintf(' (%d,%d)', srcs(i,1), srcs(i,2))]; end %#ok<AGROW>
     fprintf('SRCS PRODUCED:%s%s', txt, newline);
+end
+
+function pieces = dropDegeneratePieces(pieces)
+% Remove pieces with empty interior. clipByFace applies this test to its own output (a bounded cell
+% needs 3 vertices, or 2 when one of its edges is an arc), but the later producers -- splitCell's
+% halves, the corner-cut survivors, splitTwoArcPiece's sub-pieces -- can each emit a collapsed one
+% when a crossing lands on a vertex. Such a piece contributes half-edges that duplicate a segment
+% and pair with nothing, which surfaces three stages later as "a boundary edge of piece N has no
+% matching neighbour".
+    keep = true(1, numel(pieces));
+    for i = 1:numel(pieces)
+        p = pieces(i);
+        if ~isempty(p.dirIn), continue, end                      % unbounded: never degenerate here
+        nv = size(p.V,1);
+        hasArc = ~isempty(p.curveAfter) && p.curveAfter ~= 0;
+        if nv < 2 || (nv < 3 && ~hasArc), keep(i) = false; continue, end
+        if ~hasArc && abs(signedAreaOf(p.V)) < 1e-12*(1 + max(abs(p.V(:))))^2, keep(i) = false; end
+    end
+    pieces = pieces(keep);
 end
 
 function pieces = dedupPieces(pieces)
@@ -2864,6 +2884,20 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
 % dropped arc.
     nv = size(piece.V,1);
     c  = piece.curveAfter;
+    % Both indices arrive from a caller that computed them against a vertex list it then REBUILT
+    % (crossings inserted, duplicates removed), so either can point past the end of the piece it
+    % arrives with -- MATLAB:badsubscript below, on two of the seeded quadrilateral splits. Rather
+    % than trust that arithmetic, re-locate each curve from its own geometry: it is the edge whose
+    % two endpoints both lie on the conic in question.
+    if ~isscalar(c) || c < 1 || c > nv
+        c = locateArcEdge(piece, piece.curveEc, 0);
+        if c == 0, out = piece; return, end
+        piece.curveAfter = c;
+    end
+    if ~isscalar(arcPos) || arcPos < 1 || arcPos > nv || ~arcEdgeMatches(piece, arcPos, arcEc)
+        arcPos = locateArcEdge(piece, arcEc, c);
+        if arcPos == 0, out = piece; return, end
+    end
     cands = [mod(arcPos, nv)+1, mod(c, nv)+1; ...      % arc end -> curve end
              arcPos,            c          ];          % arc start -> curve start
     for k = 1:size(cands,1)
@@ -2901,6 +2935,25 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         end
     end
     out = piece;
+end
+
+function tf = arcEdgeMatches(piece, i, ec)
+% Do both endpoints of the piece's edge i lie on the conic ec?
+    nv = size(piece.V,1);
+    A = piece.V(i,:); B = piece.V(mod(i,nv)+1,:);
+    sc = max(1, max(abs(ec))) * max(1, max(abs(piece.V(:))))^2;
+    tf = abs(QuaPar.evalConic(ec, A)) <= 1e-7*sc && abs(QuaPar.evalConic(ec, B)) <= 1e-7*sc;
+end
+
+function i = locateArcEdge(piece, ec, skip)
+% The piece's edge, other than `skip`, whose two endpoints lie on ec; 0 if there is none.
+    i = 0;
+    nv = size(piece.V,1);
+    last = nv; if ~isempty(piece.dirIn), last = nv-1; end
+    for k = 1:last
+        if k == skip, continue, end
+        if arcEdgeMatches(piece, k, ec), i = k; return, end
+    end
 end
 
 function p = triHalf(piece, S, X, M, arcPos, arcEc)
