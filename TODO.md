@@ -45,9 +45,22 @@ verify with zero findings.
 
 ### Still open, in the order they should be taken
 
-- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- **diagnosed, not fixed.** The orphan error now
-      reports geometry, and it says the same thing on both fixtures: a STRAIGHT boundary edge of
-      piece 4 faces an IDENTICAL CURVED edge of its neighbour, at distance 0.
+- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- **both fixtures now ASSEMBLE** (three defects
+      fixed: a duplicated consecutive vertex shifting the curve labels, `numel` where
+      `size(...,1)` was meant in two index guards, and a STRAIGHT splitting curve being routed
+      through the two-arc split, which flattened the inherited arc). Fixture 2 is exact on all
+      1080 ring points. Fixture 1 has **one** point left, and it is a COVERAGE HOLE, not a wrong
+      value: at `s = (0.998629534754574, -0.0523359562429444)` no face admits, and the three
+      nearest faces all carry the right quadratic and miss by 0.0019, 0.0052 and 0.0072 in
+      normalised conic units -- far above any tolerance. The point belongs to cell (2,1)
+      (`g1` face 2 n `g2` face 1); both pieces from that cell exist (pieces 3 and 4) and neither
+      covers it, so the TWO-ARC SPLIT of that cell leaves a gap. That split is the polyline
+      `a -> M -> b` with `M` the midpoint of the two arcs' midpoints. Next: compare the parent
+      cell's area against the sum of the two halves' -- if it is short, the halves' vertex chains
+      are dropping a parent vertex; if it matches, the straight polyline is cutting across a
+      curved parent boundary and the gap is the lens between them.
+      OLD NOTE, now fixed, kept for the trail: the orphan error reported a STRAIGHT boundary edge
+      of piece 4 facing an IDENTICAL CURVED edge of its neighbour, at distance 0.
         * fixture 1: piece 4 `src[2 1]` (1.297862,0.278742)->(0.915534,-0.078641) straight, versus
           piece 5 `src[2 2]` curved.
         * fixture 2: piece 4 `src[1 1]` (1.163109,-0.285096)->(-1.244161,-1.161034) straight,
