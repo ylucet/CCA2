@@ -1655,21 +1655,40 @@ function run = cyclicRun(sides, nv)
 end
 
 function out = splitTwoArcLens(A, B, ec1, ec2)
-% A bounded two-vertex cell bounded by two different arcs through the same corners A and B, cut by
-% the chord AB into two lunes (one arc plus the chord each). Refused loudly if the chord does not
-% actually lie inside the cell, which is the case where the two arcs bulge the same way.
-    M = 0.5*(A + B);
-    if QuaPar.evalConic(ec1, M) < 0 || QuaPar.evalConic(ec2, M) < 0
-        error('maxQuaPar:notImplemented', ...
-            ['clipPolyByConic: a two-arc lens whose chord is not interior (both arcs bulge the ' ...
-             'same way); subdividing it needs a cut other than the chord.']);
+% A bounded two-vertex cell bounded by two different arcs through the same corners A and B, cut
+% into two one-arc pieces by the polyline A -> M -> B.
+%
+% M is the midpoint of the two ARCS' midpoints, not of the chord AB. The chord works when the arcs
+% bulge to opposite sides of it, and fails when they bulge the same way -- the cell is then a
+% crescent (one arc inside the other) and the chord lies outside it altogether. The midpoint of the
+% two arc midpoints is between the arcs in BOTH configurations, and for the opposite-bulge case it
+% is on the chord anyway, so this is a strict generalization of the chord cut.
+    fr1 = parabolaArcFrame(ec1, 'maxQuaPar'); P1 = fr1.point(0.5*(fr1.uOf(A) + fr1.uOf(B)));
+    fr2 = parabolaArcFrame(ec2, 'maxQuaPar'); P2 = fr2.point(0.5*(fr2.uOf(A) + fr2.uOf(B)));
+    M = 0.5*(P1 + P2);
+    global MAXQP_DEBUG %#ok<GVMIS>
+    if ~isempty(MAXQP_DEBUG) && MAXQP_DEBUG
+        fprintf(['splitTwoArcLens: A=%s B=%s\n  P1=%s P2=%s M=%s\n  ec1=%s ec2=%s\n' ...
+                 '  ec1 at (M,P1,P2)= %.4g %.4g %.4g | ec2 at same = %.4g %.4g %.4g\n'], ...
+            mat2str(A,5), mat2str(B,5), mat2str(P1,5), mat2str(P2,5), mat2str(M,5), ...
+            mat2str(ec1,3), mat2str(ec2,3), ...
+            QuaPar.evalConic(ec1,M), QuaPar.evalConic(ec1,P1), QuaPar.evalConic(ec1,P2), ...
+            QuaPar.evalConic(ec2,M), QuaPar.evalConic(ec2,P1), QuaPar.evalConic(ec2,P2));
+    end
+    sc = 1e-9*(1 + max(abs([A, B])));
+    for X = {M, 0.5*(A+M), 0.5*(M+B)}
+        if QuaPar.evalConic(ec1, X{1}) < -sc || QuaPar.evalConic(ec2, X{1}) < -sc
+            error('maxQuaPar:notImplemented', ...
+                ['clipPolyByConic: the cut A->M->B for a two-arc cell leaves the cell at %s; ' ...
+                 'this shape needs a different subdivision.'], mat2str(X{1}, 6));
+        end
     end
     out = [lunePiece(A, B, M, ec1), lunePiece(A, B, M, ec2)];
 end
 
 function p = lunePiece(A, B, M, ec)
-% The region between the arc of `ec` through A,B and the chord AB, as a THREE-vertex piece: the arc
-% A->B, then B->M and M->A, where M is the chord's midpoint.
+% The region between the arc of `ec` through A,B and the cut polyline, as a THREE-vertex piece: the
+% arc A->B, then B->M and M->A (see splitTwoArcLens for what M is).
 %
 % WHY THE EXTRA VERTEX. A lune is naturally a two-vertex piece (arc plus chord), which clipByFace
 % explicitly allows -- but two lunes sharing that chord defeat assembly: their chord half-edges
@@ -1686,7 +1705,7 @@ function p = lunePiece(A, B, M, ec)
 % the chord's midpoint and the arc's).
     fr = parabolaArcFrame(ec, 'maxQuaPar');
     P = fr.point(0.5*(fr.uOf(A) + fr.uOf(B)));
-    Q = 0.5*(0.5*(A + B) + P);
+    Q = 0.5*(P + M);                                 % strictly between the arc and the cut
     if QuaPar.evalConic(ec, Q) < 0, ec = -ec; end    % conic > 0 on the piece's own interior
     sc = 1e-9*(1 + max(abs([A, B])));
     for order = 1:2
