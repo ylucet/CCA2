@@ -1241,10 +1241,42 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
 % the straight path.
     if pieceIsCurved(poly)
         poly2 = clipPolyHalfPlaneCurved(poly, nrm, c);
+        poly2 = fixArcTag(poly2);
         return
     end
     poly2 = clipPolyHalfPlaneStraight(poly, nrm, c);
     if ~isempty(poly2), poly2.curveAfter = 0; poly2.curveEc = []; end
+end
+
+function p = fixArcTag(p)
+% Make a clipped piece's curveAfter agree with its own geometry: the tagged edge's two endpoints
+% must lie ON the conic the piece carries.
+%
+% WHY. clipPolyHalfPlaneCurved maps the arc's edge index through each branch's vertex surgery in
+% closed form, and on the half that does NOT keep the arc that index has nothing to point at. When
+% it comes back nonzero anyway, the half carries a conic CONSTRAINT it has no edge for -- and since
+% the constraint of a parabola's outside is unbounded, that silently makes an ordinary bounded
+% polygon's constraint region non-compact, which is exactly the far-field failure mode. Found while
+% trying to repair such regions: the straight half of a cut came back tagged with edge 3.
+%
+% The tag is kept when it is already consistent (a lens's arc and its chord share both endpoints,
+% so more than one edge can qualify and the existing tag is then the right one to trust), moved
+% when exactly the geometry says so, and dropped when no edge lies on the conic.
+    if isempty(p) || isempty(p.curveAfter) || p.curveAfter == 0, return, end
+    nv = size(p.V,1);
+    sc = max(1, max(abs(p.curveEc))) * max(1, max(abs(p.V(:))))^2;
+    onC = abs(QuaPar.evalConic(p.curveEc, p.V)) <= 1e-7*sc;
+    last = nv; if ~isempty(p.dirIn), last = nv-1; end
+    cand = [];
+    for i = 1:last
+        j = mod(i,nv)+1;
+        if onC(i) && onC(j), cand(end+1) = i; end %#ok<AGROW>
+    end
+    if isempty(cand)
+        p.curveAfter = 0; p.curveEc = [];
+    elseif ~ismember(p.curveAfter, cand)
+        p.curveAfter = cand(1);
+    end
 end
 
 function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
