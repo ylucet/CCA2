@@ -54,11 +54,14 @@ verify with zero findings.
       nearest faces all carry the right quadratic and miss by 0.0019, 0.0052 and 0.0072 in
       normalised conic units -- far above any tolerance. The point belongs to cell (2,1)
       (`g1` face 2 n `g2` face 1); both pieces from that cell exist (pieces 3 and 4) and neither
-      covers it, so the TWO-ARC SPLIT of that cell leaves a gap. That split is the polyline
-      `a -> M -> b` with `M` the midpoint of the two arcs' midpoints. Next: compare the parent
-      cell's area against the sum of the two halves' -- if it is short, the halves' vertex chains
-      are dropping a parent vertex; if it matches, the straight polyline is cutting across a
-      curved parent boundary and the gap is the lens between them.
+      covers it. **MEASURED, and it exonerates the two-arc split:** the two pieces from cell (2,1)
+      share their cut polyline BIT-EXACTLY (both carry `M = 1.1254915141491897,
+      0.074667480226358884` and the same two endpoints, to all 17 digits), their orientations are
+      both CCW, and their polygon areas sum to the parent's exactly (0.03699 each way). So the
+      pieces tile. The slit therefore appears AFTER the split -- in assembly: the vertex merge, the
+      half-edge pairing, or the face edge-lists `orderEdges` builds. Next: take the assembled faces
+      that miss the point (they carry the right quadratic and miss by 0.0019, 0.0052 and 0.0072 in
+      normalised conic units) and compare each one's `P` list against the piece it came from.
       OLD NOTE, now fixed, kept for the trail: the orphan error reported a STRAIGHT boundary edge
       of piece 4 facing an IDENTICAL CURVED edge of its neighbour, at distance 0.
         * fixture 1: piece 4 `src[2 1]` (1.297862,0.278742)->(0.915534,-0.078641) straight, versus

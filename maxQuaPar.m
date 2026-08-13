@@ -251,17 +251,6 @@ function g = maxQuaPar(g1, g2)
         for l = 1:g2.nf
             polyL = facePoly(g2, l);
             cells = clipByFace(polyK, polyL);   % a LIST: an arc-vs-arc clip can yield two cells
-            global MAXQP_DEBUG %#ok<GVMIS>
-            if ~isempty(MAXQP_DEBUG) && MAXQP_DEBUG
-                fprintf('clipByFace(%d,%d): polyK arc=%d polyL arc=%d -> %d cell(s)\n', ...
-                    k, l, polyK.curveAfter, polyL.curveAfter, numel(cells));
-                for z = 1:numel(cells)
-                    if isempty(cells{z}), continue, end
-                    fprintf('   cell %d: nv=%d curveAfter=%d ec=%s V=%s\n', z, ...
-                        size(cells{z}.V,1), cells{z}.curveAfter, mat2str(cells{z}.curveEc,4), ...
-                        mat2str(cells{z}.V,5));
-                end
-            end
             f1row = g1.f(k,:); f2row = g2.f(l,:);
             for ci = 1:numel(cells)
                 cell = cells{ci};
