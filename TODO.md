@@ -30,25 +30,38 @@ point with DIFFERENT values; `verifyMaxIsExactSymbolically` proves `g = max(g1,g
 regions by closed-form minimisation over each face-pair intersection. The three arc-vs-arc fixtures
 verify with zero findings.
 
+### Fixed since (2026-08-13, second pass)
+
+- The **unit square now VERIFIES**: zero findings from `verifyMaxIsExactSymbolically`, zero
+  ambiguous points from eval's validate mode over 900 ring points. Two causes, both "an edge
+  identified by its endpoints alone", which an arc-vs-arc arrangement makes ambiguous because FOUR
+  arcs run between the same two dual points: `matchHalfEdges` now also requires two curved
+  half-edges to lie on the same conic, and `QuaPar.orderEdges` now looks the next boundary edge up
+  among the FACE's own edges instead of the whole edge list.
+- `fixArcTag`: a clipped half that does not keep the arc no longer carries the arc's CONSTRAINT.
+- `splitTwoArcPiece` re-locates both curve indices from geometry, so a stale index from a rebuilt
+  vertex list can no longer index off the end (the two seeded crash fixtures no longer crash).
+- `dropDegeneratePieces`: collapsed pieces (2 vertices, no arc, bounded) no longer reach assembly.
+
 ### Still open, in the order they should be taken
 
-- [ ] **The unit square still has two overlapping faces** (new red
-      `unitSquareResultHasNoOverExtendedFace`). Values are exact at every sampled radius; the
-      overlap is real and only eval's ordering hides it. Both new tools name it: the loser is 0.5
-      larger on an arc edge at u = 0.7071. This is an ASSEMBLY-side defect -- the pieces satisfy
-      all three invariants.
-- [ ] **Step 4 of the plan, NOT done: bounded arc-pieces whose CONSTRAINT region is non-compact.**
-      Two remain on the quadrilateral fixture (src [1 2] and [1 6]). The shape is a piece whose arc
-      is CONCAVE towards it: two straight edges give a wedge and the parabola's outside does not
-      close it. ATTEMPTED AND REVERTED: cutting the piece with a line parallel to the arc's chord,
-      just past the arc's deepest point. Both halves came back still non-compact, and the straight
-      half wrongly kept the arc tag from `clipPolyHalfPlane`. Do not retry that shape without first
-      fixing what `clipPolyHalfPlane` does with `curveAfter` on the half that loses the arc.
+- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- both fixtures now fail CLEANLY with "a boundary
+      edge of piece 4 has no matching neighbour" (src [2 1], nv=4, arc on edge 1) instead of
+      crashing. Trace that orphan next; it is the same half-edge machinery as the two fixes above.
 - [ ] `splitTwoArcLens` refuses when the cut `A -> M -> B` leaves the cell (the seeded far-field
-      fixture hits this). The two arcs there run between corners on OPPOSITE branches of their
-      parabolas, so the arc between them swings far out; a different subdivision is needed.
-- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- `MATLAB:badsubscript` in `splitTwoArcPiece`.
+      fixture). The two arcs there join corners on OPPOSITE branches of their parabolas, so the arc
+      between them swings far out and the polyline exits the cell; a different subdivision is needed.
 - [ ] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- still 2 of 68 sample points wrong.
+- [ ] **Step 4 of the plan: bounded arc-pieces whose CONSTRAINT region is non-compact** (2 on the
+      quadrilateral fixture, src [1 2] and [1 6]). ATTEMPTED TWICE AND REVERTED, and the second
+      attempt settles why no subdivision works: for a piece whose arc is CONCAVE towards it, the
+      constraint set is a wedge intersected with the OUTSIDE of a parabola. A cut parallel to the
+      chord leaves the arc-side sliver still receding along the two side edges' own direction,
+      which neither the cut nor the parabola blocks. The constraint that would close it is the
+      arc's own CHORD -- redundant for the region (the region lies entirely on one side of it) but
+      not one of its edges. So this is a REPRESENTATION decision, not a subdivision bug: either a
+      face may list a redundant bounding conic, or the chord becomes a real edge by splitting the
+      neighbour across it.
 - [ ] The verifier does not prove the faces COVER the plane; `partitionReport` only samples.
 
 
