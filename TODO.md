@@ -45,6 +45,31 @@ verify with zero findings.
 
 ### Still open, in the order they should be taken
 
+- [ ] `arcVsArcRefusesAnUnboundedTwoArcSplit` -- the last red, and an ATTEMPT WAS REVERTED, so read
+      this before trying again. An unbounded piece carrying two arcs cannot be separated by a
+      chord (no chord closes an unbounded piece), but it CAN be separated by a RAY from the vertex
+      between the two arcs, running to infinity along a direction the piece recedes in; each half
+      then keeps one arc, one original ray and the new one. That was implemented and it DOES make
+      the pinned fixture assemble. It was reverted because it makes one of the 18 seeded shifts
+      ([1.4979 3.6486]) assemble to a WRONG value, off by 0.3531 -- and a silent wrong answer is
+      worse than the refusal it replaces, which is what that test's own comment says.
+      What was tried, and did not separate the good case from the bad one:
+        * requiring the cut ray to recede every straight constraint;
+        * requiring it to stay inside BOTH arcs for its whole infinite length (closed-form minimum
+          of each conic along the ray) -- this one is necessary, a ray did leave through an arc;
+        * requiring each half to admit a point just inside its own arc, by its own constraints --
+          also necessary, it caught a genuinely mis-oriented pair;
+        * fixing the new ray's SIGN (polyConstraints reads a ray's outward normal as
+          sign*rot90ccw(dir), so an OUTGOING ray needs -1, not the +1 the neighbouring
+          escape-to-infinity branch uses -- that branch looks wrong for the same reason and is
+          worth checking on its own);
+        * requiring each half's recession cone to equal the cone its own rays span;
+        * scoping the whole thing to the half-strip shape (both rays parallel).
+      The bad shift survives all six. So the missing check is about WHERE the cut starts, not the
+      direction it takes: the next thing to test is whether the vertex between the two arcs is the
+      right starting point at all, or whether the cut must start on one of the arcs.
+
+
 - [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- **both fixtures now ASSEMBLE** (three defects
       fixed: a duplicated consecutive vertex shifting the curve labels, `numel` where
       `size(...,1)` was meant in two index guards, and a STRAIGHT splitting curve being routed
