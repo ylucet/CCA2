@@ -145,7 +145,7 @@ This rule exists because the toolbox already has several such claims and they ha
 |---|---|---|
 | ~~`QuaPar.eval` wrong at ~1.4% of polyhedral result vertices (5/356)~~ → **replaced 2026-08-02** by **225 of 1205 vertices (18.7%)** under the pre-fix exact test, **0** under the current tolerant one, 0 ring mismatches | `sweepQuaParEvalAtVertices.m`, seed **20260802**, 200 cases; pinned deterministically by `QuaParTest/evalLocatesAPointExactlyAtItsOwnVertex` | **REPRODUCIBLE.** The retired figure's population (maxQuaPar *result* vertices from unrecorded random operand pairs) cannot be reconstructed; the new sweep measures the SAME mechanism on a population that can be — the vertices of randomly generated polyhedral subdivisions, evaluated directly, with no maxQuaPar involved. Comparable in kind, not in value. Reports both the exact and the tolerant test in ONE run, so the fix is a column difference rather than a comparison between source versions |
 | ~~`QuaPar.eval` wrong at ~0.8% of CURVED result vertices (9/1105)~~ → **0 of 369 as of 2026-08-02** | `sweepMaxQuaParCurvedSplit.m`, seed **20260802**, 200 cases | **REPRODUCIBLE, and it no longer reproduces.** Every one of the 369 vertices of the 30 assembled curved results evaluates exactly. That is evidence — not proof, the population is regenerated and smaller — that the same `QuaPar.eval` tolerance which closed the polyhedral half closed this one too |
-| ~~115 sampled splits, 85 assembled, 340/340 edge midpoints, 5100/5100 interior points~~ → **131 sampled, 30 assembled, 112/112 straight-edge midpoints, 1800/1800 interior points, all exact** | `sweepMaxQuaParCurvedSplit.m`, seed **20260802**, 200 cases | **REPRODUCIBLE.** The assembly rate is far lower than the retired 85/115 because this sweep does not pre-filter: of the 131 splits, **80 never reach `maxQuaPar` at all** — Step 2 refuses the triangle with `conjPieceCPLQ:notImplemented` — and 21 more hit `maxQuaPar:notImplemented`. The retired figure evidently counted only splits that got past Step 2. Breaking the guards out by identifier is the point: "85 of 115 assembled" concealed that the dominant obstacle is upstream of `maxQuaPar` |
+| ~~115 sampled splits, 85 assembled, 340/340 edge midpoints, 5100/5100 interior points~~ → **131 sampled, 30 assembled, 112/112 straight-edge midpoints, 1800/1800 interior points, all exact** → **re-measured 2026-08-13 after the arc-vs-arc work: 142 sampled, 59 assembled, 0/1031 result vertices, 0/571 midpoints and 0/3540 interior points disagree** | `sweepMaxQuaParCurvedSplit.m`, seed **20260802**, 200 cases | **REPRODUCIBLE.** The assembly rate is far lower than the retired 85/115 because this sweep does not pre-filter: of the 131 splits, **80 never reach `maxQuaPar` at all** — Step 2 refuses the triangle with `conjPieceCPLQ:notImplemented` — and 21 more hit `maxQuaPar:notImplemented`. The retired figure evidently counted only splits that got past Step 2. Breaking the guards out by identifier is the point: "85 of 115 assembled" concealed that the dominant obstacle is upstream of `maxQuaPar` |
 | 58 → 76 of 395 quadrilaterals after the arc-split work | session handoff, section 4 | **still not reproducible** — generator not kept. It is a BEFORE/AFTER pair across a code change, so re-deriving it needs the sweep run against both revisions; `sweepMaxQuaParCurvedSplit` gives the "after" half on a new population but cannot recover the original 395 |
 
 Note the committed test suite itself IS deterministic — there is no `rand`/`randn`/`randi`
@@ -414,7 +414,7 @@ branch (affine, convex, concave, indefinite with 0/1, 2 and 3 convex edges — i
 |---|---|---|
 | Both inputs purely polyhedral | **OK** | — |
 | Exactly **one** input with parabolic edges | **OK** (added 2026-07-27) | — |
-| **Both** inputs curved | **GAP** — needs arc-vs-arc face clipping (NOT conic–conic intersection; see below) | `maxQuaPar:notImplemented` |
+| **Both** inputs curved | **OK** (2026-08-13) — arc-vs-arc clipping, the two-arc splits and the far-field defect are all done; see §4.1 | — |
 | Splitting a cell that **already carries an arc** | **OK** (2026-07-30) | — |
 | Splitting curve genuinely **crosses** a cell's arc | **GAP** (defensive; 0 occurrences observed — the pipeline's arcs meet neighbours tangentially) | `maxQuaPar:notImplemented` |
 | Splitting an **unbounded** cell that carries an arc | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar:notImplemented` |
@@ -424,6 +424,32 @@ branch (affine, convex, concave, indefinite with 0/1, 2 and 3 convex edges — i
 | Input not finite everywhere | **N/R** — Step 3 combines full-domain conjugates | `maxQuaPar:notFullDomain` — `maxQuaPar.m:409` |
 | Difference of the two candidate quadratics is an irreducible ellipse/hyperbola | **N/R** | `maxQuaPar:notDegenerate` — `maxQuaPar.m:1306` |
 | `maxQuaPar:internal` (8 sites) | **INV** | assembly-topology invariants |
+
+### 4.1 Arc-vs-arc, measured 2026-08-13
+
+Both operands curved used to be refused outright, then produced answers that were correct near the
+arcs and wrong far from them. What that turned out to be, in the end, is one sentence: **a curved
+edge is a bounded ARC and its conic is not**, so "every bounding conic, sign-oriented, ≤ 0" — the
+point-location rule — is exact on a parabola's convex side and admits points arbitrarily far away on
+its concave side. `QuaPar.chordCuts` derives the missing constraint (the arc's chord) per face.
+
+Four other defects were fixed along the way, each of which had produced a silently wrong answer:
+a single boundary crossing on an unbounded cell read as a tangency when the curve escapes through
+the recession cone; a conic cut skipped when its only crossings are at the cell's corners (the
+generic case, since conjugates of triangles sharing an edge have arcs through the same two dual
+points); half-edges and boundary walks identifying an edge by its endpoints alone, which four arcs
+between the same two points make ambiguous; and a cut polyline leaving one half REFLEX, which no
+half-plane test can represent.
+
+Measured now, on the two committed sweeps:
+
+| sweep | before | now |
+|---|---|---|
+| `sweepMaxQuaParCurvedSplit(20260802, 200)` | 131 sampled, 30 assembled | **142 sampled, 59 assembled, 0 of 1031 vertices / 571 midpoints / 3540 interior points wrong** |
+| 397 seeded quadrilateral splits, 200 directions at radii 1–500 | 7 of 64 arc-vs-arc results wrong in the far field | **0 of 64** |
+
+`maxQuaParTest` is 25 pass / 1 fail; the red is `arcVsArcRefusesAnUnboundedTwoArcSplit`, one input
+on which the unbounded two-arc ray split finds no usable cut direction and refuses.
 
 Accuracy of the curved path, measured on a randomized sweep of convex quadrilaterals split by a
 diagonal (115 splits, 85 assembled): exact to ~1e-14 at **all 340** straight-edge midpoints and
