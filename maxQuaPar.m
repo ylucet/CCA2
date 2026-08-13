@@ -3256,6 +3256,16 @@ function tf = oppositeSides(pieces, he, he2, d)
     tf = (c1 * c2) < 0;
 end
 
+function tf = sameConicCurve(c1, c2)
+% Do these two conic rows describe the SAME curve? A conic is scale-invariant and the two pieces
+% sharing an arc store it with opposite signs (each orients it into its own interior), so compare
+% after normalising, allowing either sign.
+    n1 = max(abs(c1)); n2 = max(abs(c2));
+    if n1 < 1e-14 || n2 < 1e-14, tf = false; return, end
+    a = c1/n1; b = c2/n2;
+    tf = norm(a - b, Inf) < 1e-6 || norm(a + b, Inf) < 1e-6;
+end
+
 function opp = matchHalfEdges(pieces, HE)
 % Pair every half-edge with its neighbour by direct geometry (see assemblePieces' HISTORY for why
 % this replaces coordinate-clustering-then-index-equality). tolPos matches two DIFFERENT pieces'
@@ -3293,6 +3303,15 @@ function opp = matchHalfEdges(pieces, HE)
             % split from) while being completely different boundaries, so endpoint coincidence
             % alone must not pair them: a curved half-edge only ever matches another curved one.
             if any(HE(h2).ec ~= 0) ~= any(HE(h).ec ~= 0), continue; end
+            % ...and two curved half-edges must lie on the SAME conic, not merely share their two
+            % endpoints. Four arcs can run between the same pair of dual points: the arc-vs-arc
+            % lens between two operands' arcs is bounded by BOTH of them, and each also bounds the
+            % strip on its far side. Endpoint coincidence alone then pairs them arbitrarily --
+            % measured on f=xy over the unit square, where it married the two STRIPS to each other
+            % across g1's arc and the two lunes to each other across g2's, leaving the lens
+            % disconnected from the rest of the arrangement (duplicate vertices at (0,0) and
+            % (1,1)) and two faces overlapping with different values.
+            if any(HE(h).ec ~= 0) && ~sameConicCurve(HE(h).ec, HE(h2).ec), continue; end
             if HE(h).isSeg
                 % Segment: each piece walks it in its own CCW order, necessarily reversed between
                 % two pieces sharing it -- so endpoints match SWAPPED.

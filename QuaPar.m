@@ -372,10 +372,24 @@ classdef QuaPar < RatPar & Qua
                    error("Unable to compute iNext");
                end
                    
-               jNext = find(ismember(obj.E(:,1:2),[i, iNext],'rows'));
+               % BUGFIX: this used to search the WHOLE edge list for a pair of vertices, which is
+               % ambiguous exactly where an arc-vs-arc arrangement puts two edges: the lens between
+               % two operands' arcs is bounded by BOTH of them, so two DIFFERENT edges join the same
+               % two vertices, and the global lookup could return the one that does not bound face
+               % k at all (or both, making jNext a vector). Measured on f=xy over the unit square:
+               % face 1's P came back listing an edge whose own F named faces 2 and 4, and
+               % QuaPar.eval then admitted points of the lens into a strip, 54 of 900 ring points
+               % carrying two different values. Restricting the search to face k's OWN edges, and
+               % to ones the walk has not consumed, removes the ambiguity: a face's boundary is a
+               % chain, so at each vertex exactly one unused incident edge continues it.
+               inFace = ismember(obj.E(edges,1:2), [i, iNext], 'rows') | ...
+                        ismember(obj.E(edges,1:2), [iNext, i], 'rows');
+               jNext = edges(inFace);
+               jNext = jNext(~ismember(jNext, abs(P(1:jj-1))));
                if isempty(jNext)
-                   jNext = find(ismember(obj.E(:,1:2),[iNext, i],'rows'));
+                   error("orderEdges: no unused edge of face %i joins vertices %i and %i", k, i, iNext);
                end
+               jNext = jNext(1);
                               
                %compute sign of angle between edges j and jNext; 1 means acute, -1 means obtuse, 0 means collinear
                %https://matlabgeeks.com/tips-tutorials/computational-geometry/check-convexity-of-polygon/
