@@ -45,9 +45,22 @@ verify with zero findings.
 
 ### Still open, in the order they should be taken
 
-- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- both fixtures now fail CLEANLY with "a boundary
-      edge of piece 4 has no matching neighbour" (src [2 1], nv=4, arc on edge 1) instead of
-      crashing. Trace that orphan next; it is the same half-edge machinery as the two fixes above.
+- [ ] `arcVsArcDoesNotCrashOnSeededQuadSplits` -- **diagnosed, not fixed.** The orphan error now
+      reports geometry, and it says the same thing on both fixtures: a STRAIGHT boundary edge of
+      piece 4 faces an IDENTICAL CURVED edge of its neighbour, at distance 0.
+        * fixture 1: piece 4 `src[2 1]` (1.297862,0.278742)->(0.915534,-0.078641) straight, versus
+          piece 5 `src[2 2]` curved.
+        * fixture 2: piece 4 `src[1 1]` (1.163109,-0.285096)->(-1.244161,-1.161034) straight,
+          versus piece 6 `src[1 2]` curved.
+      So a piece that must carry TWO arcs -- its own operand's, plus the other operand's arc along
+      the shared face boundary -- has one of them represented by its chord. matchHalfEdges then
+      correctly refuses to pair a straight half-edge with a curved one, and the arrangement fails.
+      Piece 4 has nv=4 with an arc already on edge 1, so the flattening happens where the SECOND
+      arc is introduced: `clipPolyByConic` (including its corner-cut branch) or
+      `clipPolyHalfPlaneCurved`, not in `splitTwoArcPiece` -- three fixes there (index re-location,
+      degenerate-piece filter, polyline cut when no chord is interior) each held and none changed
+      this symptom. Next: instrument where piece 4 acquires its arc, and check whether the cut
+      conic was applied as an EDGE or silently dropped to a chord.
 - [ ] `splitTwoArcLens` refuses when the cut `A -> M -> B` leaves the cell (the seeded far-field
       fixture). The two arcs there join corners on OPPOSITE branches of their parabolas, so the arc
       between them swings far out and the polyline exits the cell; a different subdivision is needed.

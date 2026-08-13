@@ -2907,9 +2907,24 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         chainB = cycIdx(a, b, nv);        % walk a -> ... -> b, closed by the chord b -> a
         if numel(chainA) < 3 || numel(chainB) < 3, continue, end
         mid = 0.5*(piece.V(a,:) + piece.V(b,:));
-        if ~insideStraightHull(piece, arcPos, arcEc, mid), continue, end
-        pA = subPiece(piece, chainA, arcPos, arcEc);
-        pB = subPiece(piece, chainB, arcPos, arcEc);
+        if insideStraightHull(piece, arcPos, arcEc, mid)
+            pA = subPiece(piece, chainA, arcPos, arcEc);
+            pB = subPiece(piece, chainB, arcPos, arcEc);
+        else
+            % The straight chord leaves the piece -- a face bounded by a parabola is not convex on
+            % that side, so a diagonal is not automatically interior. Bend the cut into the
+            % POLYLINE a -> M -> b, with M the midpoint of the two ARCS' own midpoints, which lies
+            % between them by construction. Without this the piece came back unsplit and one of its
+            % two arcs was then represented by its chord, which surfaced three stages later as a
+            % straight boundary edge facing an identical curved one and no possible pairing (both
+            % seeded crash fixtures).
+            M = twoArcInteriorPoint(piece, arcPos, arcEc);
+            if isempty(M), continue, end
+            if ~insideStraightHull(piece, arcPos, arcEc, 0.5*(piece.V(a,:) + M)) || ...
+               ~insideStraightHull(piece, arcPos, arcEc, 0.5*(M + piece.V(b,:))), continue, end
+            pA = subPiece(piece, chainA, arcPos, arcEc, M);
+            pB = subPiece(piece, chainB, arcPos, arcEc, M);
+        end
         if isempty(pA) || isempty(pB), continue, end
         out = [pA, pB];
         return
@@ -3000,12 +3015,14 @@ function tf = insideStraightHull(piece, arcPos, arcEc, pt)
     tf = true;
 end
 
-function p = subPiece(piece, idx, arcPos, arcEc)
-% One side of the chord: the vertices piece.V(idx) in walk order, closed by the chord from the last
-% back to the first. Exactly one of the parent's two curved edges survives in it, and which one
-% decides the new curveAfter/curveEc.
+function p = subPiece(piece, idx, arcPos, arcEc, extraPt)
+% One side of the cut: the vertices piece.V(idx) in walk order, closed back to the first. Exactly
+% one of the parent's two curved edges survives in it, and which one decides the new
+% curveAfter/curveEc. `extraPt`, when given, is appended as a last vertex, which bends the closing
+% chord into a two-segment polyline through it (see the caller).
     p = [];
     V = piece.V(idx,:);
+    if nargin >= 5 && ~isempty(extraPt), V = [V; extraPt]; end
     nvOld = size(piece.V,1);
     arcHere = [];  ecHere = [];
     for t = 1:numel(idx)-1
@@ -3023,6 +3040,30 @@ function p = subPiece(piece, idx, arcPos, arcEc)
     if pieceIsCurved(p) && QuaPar.evalConic(p.curveEc, insideArcSample(p)) < 0
         p.curveEc = -p.curveEc;
     end
+end
+
+function M = twoArcInteriorPoint(piece, arcPos, arcEc)
+% Midpoint of the two arcs' own midpoints -- a point between them, used to bend a cut that a
+% straight chord cannot make. [] if either arc's frame cannot be built.
+    M = [];
+    nv = size(piece.V,1);
+    try
+        P1 = arcMidpointOf(piece, arcPos, arcEc);
+        P2 = arcMidpointOf(piece, piece.curveAfter, piece.curveEc);
+    catch
+        return
+    end
+    if isempty(P1) || isempty(P2), return, end
+    M = 0.5*(P1 + P2);
+    if any(~isfinite(M)) || nv < 3, M = []; end
+end
+
+function P = arcMidpointOf(piece, i, ec)
+% Midpoint, in the parabola frame's own parameter, of the piece's edge i along the conic ec.
+    nv = size(piece.V,1);
+    A = piece.V(i,:); B = piece.V(mod(i,nv)+1,:);
+    fr = parabolaArcFrame(ec, 'maxQuaPar');
+    P = fr.point(0.5*(fr.uOf(A) + fr.uOf(B)));
 end
 
 function [tf, Xc] = arcHasStrictCrossing(cell, diffRow)
@@ -3540,10 +3581,33 @@ function checkOrphanHalfEdges(HE, opp, rootOf, pieces)
         gA = globalVertexIndex(rootOf, HE(h).piece, HE(h).aLoc);
         gB = globalVertexIndex(rootOf, HE(h).piece, HE(h).bLoc);
         if gA ~= gB
+            % Report WHERE and WHAT, as the ray branch above does: the endpoints, whether this
+            % half-edge is curved, and the closest half-edge on any OTHER piece with the reversed
+            % endpoints. That separates a coverage gap (no candidate at all) from a matching
+            % failure (a candidate sits exactly there and was rejected by one of the filters) --
+            % and it is what identified the two seeded crash fixtures as the latter: a STRAIGHT
+            % edge facing an identical CURVED one, i.e. a piece that should carry two arcs having
+            % had one of them silently flattened to its chord.
+            A = vertexAt(pieces, HE(h).piece, HE(h).aLoc);
+            B = vertexAt(pieces, HE(h).piece, HE(h).bLoc);
+            best = inf; bestTxt = 'none';
+            for h2 = 1:numel(HE)
+                if h2 == h || ~HE(h2).isSeg || HE(h2).piece == HE(h).piece, continue, end
+                A2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
+                B2 = vertexAt(pieces, HE(h2).piece, HE(h2).bLoc);
+                d = max(norm(A-B2), norm(B-A2));
+                if d < best
+                    best = d;
+                    bestTxt = sprintf(['piece %d src %s (%.6f,%.6f)->(%.6f,%.6f) curved=%d ' ...
+                        'dist %.3g'], HE(h2).piece, mat2str(pieces(HE(h2).piece).src), ...
+                        A2(1), A2(2), B2(1), B2(2), any(HE(h2).ec ~= 0), d);
+                end
+            end
             error('maxQuaPar:internal', ...
-                ['assemblePieces: a boundary edge of piece %d has no matching neighbour -- inputs ' ...
-                 'should be full-domain (finite everywhere), so every edge must pair with exactly ' ...
-                 'one other.'], HE(h).piece);
+                ['assemblePieces: a boundary edge of piece %d src %s has no matching neighbour: ' ...
+                 '(%.6f,%.6f)->(%.6f,%.6f), curved=%d. Closest candidate: %s'], ...
+                HE(h).piece, mat2str(pieces(HE(h).piece).src), A(1), A(2), B(1), B(2), ...
+                any(HE(h).ec ~= 0), bestTxt);
         end
         % else: gA==gB -- a zero-length orphan edge, safe to drop (see header).
     end
