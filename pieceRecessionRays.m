@@ -51,6 +51,30 @@ function rays = pieceRecessionRays(piece)
     if hasArc
         cc = sym(piece.curveEc);
         Q  = [cc(1), cc(2)/2; cc(2)/2, cc(3)];            % A(d) = d*Q*d'
+        % THE ARC'S CHORD IS A CONSTRAINT TOO, and leaving it out is what made a perfectly bounded
+        % arc-piece look non-compact. A curved edge is a bounded ARC; its conic is not, and on the
+        % parabola's concave side the kept side of the conic wraps around past the arc's own
+        % endpoints. The chord cuts that off. It is not an EDGE of the piece, so it is derived --
+        % and only when every other vertex of the piece lies on one side of it, which is exactly
+        % when the piece is contained in that half-plane and the constraint is redundant for it.
+        % QuaPar.chordCuts applies the same rule to an assembled face.
+        X0 = V(ca,:); X1 = V(mod(ca,nv)+1,:);
+        ch = X1 - X0;
+        side = sym([]);
+        for i = 1:nv
+            if i == ca || i == mod(ca,nv)+1, continue, end
+            side(end+1) = ch(1)*(V(i,2)-X0(2)) - ch(2)*(V(i,1)-X0(1)); %#ok<AGROW>
+        end
+        if unb
+            for d0 = {sym(piece.dirIn), sym(piece.dirOut)}
+                side(end+1) = ch(1)*d0{1}(2) - ch(2)*d0{1}(1); %#ok<AGROW>
+            end
+        end
+        if ~isempty(side)
+            if all(logical(side >= 0)),      E{end+1} = ch;    % interior on the left of X0->X1
+            elseif all(logical(side <= 0)),  E{end+1} = -ch;
+            end
+        end
     end
 
     % Candidate extreme directions: every straight edge direction (both signs) and the arc null dir.

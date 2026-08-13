@@ -189,6 +189,21 @@ classdef QuaPar < RatPar & Qua
                     sc = max(1, max(abs(cvec)));
                     vals(:,t) = QuaPar.evalConic(cvec, x) * sign(Pe(t)) / sc;
                 end
+                % A CURVED EDGE IS A BOUNDED ARC, AND ITS CONIC IS NOT. "Every bounding conic,
+                % sign-oriented, <= 0" is exact for a face on a parabola's CONVEX side, and too
+                % weak on the CONCAVE side: there the kept side of the conic is the parabola's
+                % outside, which wraps around past the arc's own endpoints, so the test admits
+                % points that lie nowhere near the face -- arbitrarily far away, which is what
+                % every over-extended face measured here turned out to be. What cuts those off is
+                % the arc's CHORD, and the chord is not one of the face's edges, so no arrangement
+                % can supply it; it has to be derived, which is what chordCuts does. It is applied
+                % only when the whole face demonstrably lies on one side of that chord (otherwise
+                % the extra constraint could cut the face itself), so this can never shrink a face
+                % below its true region -- it can only stop one from reaching where it never went.
+                cc = obj.chordCuts(i, EC);
+                for t = 1:size(cc,1)
+                    vals(:,end+1) = (x*cc(t,1:2)' - cc(t,3)) / max(1, norm(cc(t,1:2))); %#ok<AGROW>
+                end
                 % HISTORY: this was `all(vals <= 0, 2)` -- an EXACT comparison, no tolerance. A
                 % point sitting exactly ON a boundary is the case that breaks: the conic should
                 % evaluate to 0 there, but in floating point it comes out +-1e-17, and a single
@@ -254,6 +269,69 @@ classdef QuaPar < RatPar & Qua
                     fVal(flags) = newVal;
                     region(region~=-1 & flags) = 0;   % point on a shared boundary
                     region(region==-1 & flags) = i;
+                end
+            end
+       end
+       function cuts = chordCuts(obj, k, EC) %#ok<INUSD>
+        % objective: half-planes [n1 n2 c] (inside iff n*x' <= c) derived from the CHORDS of face
+        %            k's curved edges -- the constraints that make a face bounded by a concave arc
+        %            a bounded set. See eval's call site for why they are needed and why they are
+        %            not edges.
+        % [input]  k  : face index; EC: edgeConics (unused, kept so callers can pass it once)
+        % [output] cuts : m x 3, possibly empty
+        %
+        % SOUNDNESS. A chord is added ONLY when every other feature of the face -- its vertices and,
+        % for an unbounded face, its ray DIRECTIONS -- lies on one side of the chord's line. Then
+        % the face is contained in that half-plane and the constraint is redundant for the face
+        % while excluding the far region the conic alone would admit. When the face straddles the
+        % line (its boundary crosses it away from the arc), nothing is emitted and the old
+        % behaviour stands.
+            cuts = zeros(0,3);
+            if isempty(obj.Ec), return, end
+            Pe = obj.P{k};
+            for t = 1:numel(Pe)
+                j = abs(Pe(t));
+                if all(obj.Ec(j,:) == 0), continue, end          % straight edge: nothing to add
+                A = obj.V(obj.E(j,1),:); B = obj.V(obj.E(j,2),:);
+                d = B - A;
+                if norm(d) < 1e-12, continue, end
+                n = [d(2), -d(1)]; n = n/norm(n);
+                c = n*A';
+                % WHICH SIDE DOES THE FACE LIE ON? Not decidable from the other vertices alone: a
+                % LENS (arc plus chord) has both of its vertices ON the chord, so they say nothing,
+                % and guessing killed the lens outright -- two previously-green tests. Decide it
+                % from a point just INSIDE the face instead: step from the arc's midpoint along the
+                % inward normal of the sign-oriented conic (the face is where sign*conic <= 0, so
+                % -grad points into it). The vertices are then used only to VETO an orientation
+                % they contradict.
+                cvArc = obj.Ec(j,:) * sign(Pe(t));
+                fr = parabolaArcFrame(obj.Ec(j,:), 'QuaPar:chordCuts');
+                Marc = fr.point(0.5*(fr.uOf(A) + fr.uOf(B)));   % ON the arc, not on its chord
+                gA = [2*cvArc(1)*Marc(1) + cvArc(2)*Marc(2) + cvArc(4), ...
+                      cvArc(2)*Marc(1) + 2*cvArc(3)*Marc(2) + cvArc(5)];
+                if norm(gA) < 1e-12, continue, end
+                step = 1e-3*norm(d);
+                pIn = Marc - step*gA/norm(gA);
+                sIn = n*pIn' - c;
+                if abs(sIn) < 1e-12*(1+norm(d)), continue, end
+                if sIn > 0, n = -n; c = -c; end
+                % Now veto: every other vertex and ray direction must be on that side too.
+                vals = [];
+                for t2 = 1:numel(Pe)
+                    j2 = abs(Pe(t2));
+                    if j2 == j, continue, end
+                    P1 = obj.V(obj.E(j2,1),:); P2 = obj.V(obj.E(j2,2),:);
+                    if obj.E(j2,3) == 0
+                        vals(end+1) = n*P1' - c; %#ok<AGROW>
+                        dd = P2 - P1; dd = dd/max(norm(dd), eps);
+                        vals(end+1) = (n*dd')*1e6; %#ok<AGROW>   % a ray: its direction decides infinity
+                    else
+                        vals(end+1) = n*P1' - c; vals(end+1) = n*P2' - c; %#ok<AGROW>
+                    end
+                end
+                tolc = 1e-7*(1 + max(abs(obj.V(:))));
+                if isempty(vals) || all(vals <= tolc)
+                    cuts(end+1,:) = [n, c]; %#ok<AGROW>
                 end
             end
        end

@@ -112,6 +112,10 @@ function [vmin, where] = minOverBoundaryInside(hA, kA, hB, kB, diffRow)
             for m = 1:numel(Pb)
                 cons{m} = sign(Pb(m)) * fr.conicCoeffs(ECb(abs(Pb(m)),:));
             end
+            ccB = hB.chordCuts(kB, ECb);
+            for m = 1:size(ccB,1)
+                cons{end+1} = fr.conicCoeffs([0 0 0 ccB(m,1:2) -ccB(m,3)]); %#ok<AGROW>
+            end
             fpoly = fr.conicCoeffs(dc);
             iv = feasibleIntervals(cons, lo, hi);
             for z = 1:size(iv,1)
@@ -124,6 +128,10 @@ function [vmin, where] = minOverBoundaryInside(hA, kA, hB, kB, diffRow)
             cons = cell(1, numel(Pb));
             for m = 1:numel(Pb)
                 cons{m} = sign(Pb(m)) * conicOnLine(ECb(abs(Pb(m)),:), A0, d);
+            end
+            ccB = hB.chordCuts(kB, ECb);
+            for m = 1:size(ccB,1)
+                cons{end+1} = conicOnLine([0 0 0 ccB(m,1:2) -ccB(m,3)], A0, d); %#ok<AGROW>
             end
             [qa, qb, qc] = quadOnLine(diffRow, A0, d);
             iv = feasibleIntervals(cons, 0, tmax);
@@ -175,6 +183,10 @@ function tf = faceAdmits(h, k, s)
     for t = 1:numel(Pe)
         cv = EC(abs(Pe(t)),:); sc = max(1, max(abs(cv)));
         if QuaPar.evalConic(cv, s)*sign(Pe(t))/sc > 1e-9*max(1, norm(s)^2), tf = false; return, end
+    end
+    cc = h.chordCuts(k, EC);            % a curved edge is a bounded ARC; its conic is not
+    for t = 1:size(cc,1)
+        if (s*cc(t,1:2)' - cc(t,3))/max(1, norm(cc(t,1:2))) > 1e-9*max(1, norm(s)^2), tf = false; return, end
     end
 end
 
