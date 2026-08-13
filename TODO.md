@@ -80,7 +80,15 @@ verify with zero findings.
 - [ ] `splitTwoArcLens` refuses when the cut `A -> M -> B` leaves the cell (the seeded far-field
       fixture). The two arcs there join corners on OPPOSITE branches of their parabolas, so the arc
       between them swings far out and the polyline exits the cell; a different subdivision is needed.
-- [ ] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- still 2 of 68 sample points wrong.
+- [ ] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- 2 of 68 sample points wrong, and **it is the
+      same defect as the item below, not a separate one.** Measured in one pass (invariants +
+      verifier): at both bad points `QuaPar.eval` reports `region 0`, i.e. SEVERAL faces admit them
+      (`(-3.9811,0.6115)` gives 0.468 and `(-5.0954,0.1351)` gives 1.229, truth 0 at both); the
+      verifier names the offender -- face 13, carrying g1 face 2, beaten by g2 faces 5 and 6 by
+      +inf along one of its own rays; and `MAXQP_ASSERT=2` lists exactly four pieces with
+      non-compact constraint regions (`src[2 1]` and three `src[6 1]`), all of them BOUNDED
+      arc-pieces. So this fixture's residual error is the non-compact arc-piece problem, and the
+      representation decision below unblocks BOTH reds.
 - [ ] **Step 4 of the plan: bounded arc-pieces whose CONSTRAINT region is non-compact** (2 on the
       quadrilateral fixture, src [1 2] and [1 6]). ATTEMPTED TWICE AND REVERTED, and the second
       attempt settles why no subdivision works: for a piece whose arc is CONCAVE towards it, the
@@ -88,9 +96,17 @@ verify with zero findings.
       chord leaves the arc-side sliver still receding along the two side edges' own direction,
       which neither the cut nor the parabola blocks. The constraint that would close it is the
       arc's own CHORD -- redundant for the region (the region lies entirely on one side of it) but
-      not one of its edges. So this is a REPRESENTATION decision, not a subdivision bug: either a
-      face may list a redundant bounding conic, or the chord becomes a real edge by splitting the
-      neighbour across it.
+      not one of its edges. So this is a REPRESENTATION decision, not a subdivision bug, and there
+      are exactly two ways to take it:
+        (A) let a face list a REDUNDANT bounding conic in its `P` -- cheapest, but it breaks the
+            current reading of `P` as "the face's boundary edges", which `orderEdges`, the
+            arrangement checks and `plotDomain` all rely on;
+        (B) make the chord a REAL edge by splitting the neighbour across the arc into the lune
+            (between chord and arc) and the rest -- keeps every invariant as it stands, costs one
+            extra face per such arc, and needs the split to happen at assembly time, where the
+            neighbour across an arc is known from the matched half-edges.
+      Recommend (B): it changes no contract and the extra faces are the same subdivide-never-widen
+      move the file already makes for two-arc pieces. This unblocks two of the four reds.
 - [ ] The verifier does not prove the faces COVER the plane; `partitionReport` only samples.
 
 
