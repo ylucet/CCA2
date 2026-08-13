@@ -2973,6 +2973,15 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
                ~insideStraightHull(piece, arcPos, arcEc, 0.5*(M + piece.V(b,:))), continue, end
             pA = subPiece(piece, chainA, arcPos, arcEc, M);
             pB = subPiece(piece, chainB, arcPos, arcEc, M);
+            % A BENT cut leaves one half REFLEX at M, and every point-location test in this
+            % pipeline -- polyConstraints, QuaPar.eval, the piece invariants -- reads a face as an
+            % INTERSECTION OF HALF-PLANES, which is only right for a convex one. The notch at M
+            % then belongs to neither half: measured on the first seeded crash fixture, the point
+            % (0.998630,-0.052336) sits on one half's side of M->C and on the other's side of
+            % A->M, so no face admitted it and eval returned Inf. Split the reflex half along a
+            % diagonal from M, which restores convexity without moving any boundary.
+            pA = splitAtReflexVertex(pA);
+            pB = splitAtReflexVertex(pB);
         end
         if isempty(pA) || isempty(pB), continue, end
         out = [pA, pB];
@@ -2999,6 +3008,54 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         end
     end
     out = piece;
+end
+
+function out = splitAtReflexVertex(p)
+% Split a bounded piece at a REFLEX vertex along a diagonal from it, so that every piece handed on
+% is convex. Returns the piece unchanged when it is already convex, or when no diagonal works.
+% The arc is never cut: diagonals run vertex to vertex, so each edge stays whole and lands in one
+% half. See the caller for why a non-convex piece is unusable here.
+    out = p;
+    if isempty(p) || ~isempty(p.dirIn), return, end
+    V = p.V; nv = size(V,1);
+    if nv < 4, return, end
+    scv = 1e-12*(1 + max(abs(V(:))))^2;
+    r = 0;
+    for i = 1:nv
+        h = mod(i-2,nv)+1; j = mod(i,nv)+1;
+        d1 = V(i,:) - V(h,:); d2 = V(j,:) - V(i,:);
+        if d1(1)*d2(2) - d1(2)*d2(1) < -scv, r = i; break, end
+    end
+    if r == 0, return, end                                  % already convex
+    for step = 2:nv-2
+        q = mod(r+step-1, nv)+1;
+        chain1 = cycIdx(r, q, nv);                          % r -> ... -> q, closed by q->r
+        chain2 = cycIdx(q, r, nv);
+        if numel(chain1) < 3 || numel(chain2) < 3, continue, end
+        mid = 0.5*(V(r,:) + V(q,:));
+        if ~insideStraightHull(p, p.curveAfter, p.curveEc, mid), continue, end
+        s1 = subPieceOfSelf(p, chain1); s2 = subPieceOfSelf(p, chain2);
+        if isempty(s1) || isempty(s2), continue, end
+        out = [s1, s2]; return
+    end
+end
+
+function q = subPieceOfSelf(p, idx)
+% The sub-piece of p spanning the vertices p.V(idx) in walk order, closed by the diagonal from the
+% last back to the first. It keeps p's arc when that edge is one of the chain's own.
+    q = [];
+    nv = size(p.V,1);
+    arcHere = 0;
+    for t = 1:numel(idx)-1
+        if mod(idx(t), nv)+1 ~= idx(t+1), continue, end
+        if idx(t) == p.curveAfter, arcHere = t; end
+    end
+    q.V = p.V(idx,:);
+    q.dirIn = []; q.dirOut = []; q.dirInSign = []; q.dirOutSign = [];
+    q.curveAfter = arcHere;
+    if arcHere == 0, q.curveEc = []; else, q.curveEc = p.curveEc; end
+    q.f = p.f;
+    if size(q.V,1) < 3 && arcHere == 0, q = []; end
 end
 
 function tf = arcEdgeMatches(piece, i, ec)
