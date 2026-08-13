@@ -275,8 +275,314 @@ function g = maxQuaPar(g1, g2)
     pieces = insertGlobalPassthrough(pieces);
     global MAXQP_CAPTURE MAXQP_PIECES %#ok<GVMIS>
     if ~isempty(MAXQP_CAPTURE) && MAXQP_CAPTURE, MAXQP_PIECES = pieces; end
+    assertPiecesWellFormed(pieces, g1, g2);
     partitionReport(pieces);
     g = assemblePieces(pieces);
+end
+
+% ============================================================================================
+% ----- the two structural invariants every piece must satisfy before assembly ----------------
+function assertPiecesWellFormed(pieces, g1, g2)
+% Check, EXACTLY, the two properties whose violation is what a far-field wrong answer is made of.
+% Off unless the global MAXQP_ASSERT is set (1 = containment only, 2 = also the recession cone,
+% which is symbolic and costs seconds); tests turn it on, production runs pay nothing.
+%
+% WHY THESE TWO, AND WHY NOT A FAR-POINT PROBE. A piece is a REGION plus a quadratic, and
+% QuaPar.eval locates a point by "every bounding conic, sign-oriented, <= tol". So a wrong answer
+% far from the origin means the region a piece ENCODES is not the region it was meant to be -- and
+% that can happen in exactly two ways:
+%
+%   (1) CONTAINMENT. Piece src=[k l] was cut out of facePoly(g1,k) n facePoly(g2,l); its own
+%       quadratic is one of those two faces' quadratics, which is only the right answer INSIDE that
+%       intersection. A piece reaching past it evaluates a formula where that formula is not even
+%       its own operand's value. Tested on the piece's vertices (they must satisfy every half-plane
+%       of both source faces) AND on its ray directions (a ray leaving the source cell is precisely
+%       the far-field failure: correct near the apex, wrong far out).
+%   (2) RECESSION CONE. The directions in which the ENCODED region runs to infinity must be exactly
+%       the ones the piece declares as ray edges -- {0} for a piece with no rays, cone(dirIn,dirOut)
+%       for a piece with them. pieceRecessionRays decides this in closed form; a bounded piece whose
+%       constraint set is not compact (the classic "arc-piece left on the parabola's open side") is
+%       caught here and nowhere else.
+%
+% Sampling cannot replace either: a ring of probes can miss the one direction that over-extends,
+% forever. Both tests above are decisions on the constraint data itself. See FARFIELD_FIX_PLAN.md.
+    global MAXQP_ASSERT %#ok<GVMIS>
+    if isempty(MAXQP_ASSERT) || MAXQP_ASSERT < 1, return, end
+    msgs = {};
+    for i = 1:numel(pieces)
+        p = pieces(i);
+        if isempty(p.src), continue, end
+        m = containmentViolation(p, facePoly(g1, p.src(1)), 'g1', p.src(1));
+        if ~isempty(m), msgs{end+1} = sprintf('piece %d: %s', i, m); end %#ok<AGROW>
+        m = containmentViolation(p, facePoly(g2, p.src(2)), 'g2', p.src(2));
+        if ~isempty(m), msgs{end+1} = sprintf('piece %d: %s', i, m); end %#ok<AGROW>
+        m = winnerDominationViolation(p, g1.f(p.src(1),:), g2.f(p.src(2),:));
+        if ~isempty(m), msgs{end+1} = sprintf('piece %d [src %s]: %s', i, mat2str(p.src), m); end %#ok<AGROW>
+        if MAXQP_ASSERT >= 2
+            m = reccConeViolation(p);
+            if ~isempty(m)
+                if isempty(p.dirIn), kind = 'bounded'; else, kind = 'unbounded'; end
+                msgs{end+1} = sprintf('piece %d [src %s, nv=%d, curveAfter=%d, %s]: %s', i, ...
+                    mat2str(p.src), size(p.V,1), p.curveAfter, kind, m); %#ok<AGROW>
+            end
+        end
+    end
+    if isempty(msgs), return, end
+    txt = '';
+    for i = 1:min(numel(msgs), 8), txt = [txt newline '  ' msgs{i}]; end %#ok<AGROW>
+    if numel(msgs) > 8, txt = [txt sprintf('%s  ... and %d more', newline, numel(msgs)-8)]; end
+    error('maxQuaPar:pieceInvariant', ...
+        '%d piece invariant violation(s) before assembly:%s', numel(msgs), txt);
+end
+
+function m = containmentViolation(p, poly, name, k)
+% '' if piece p lies inside the source face `poly`, else a message naming the worst violation.
+% Vertices are tested against every half-plane AND against the face's arc; ray DIRECTIONS are
+% tested against the half-planes' homogeneous parts (n*d <= 0) and, for the arc, against the
+% leading term of the conic along that direction.
+    m = '';
+    cons = polyConstraints(poly);
+    sc = 1 + max([1; abs(p.V(:))]);
+    tolV = 1e-7 * sc;
+    worst = 0; what = '';
+    ds = raysOf(p);
+    for j = 1:size(cons,1)
+        n = cons(j,1:2); c = cons(j,3);
+        nn = max(1, norm(n));
+        for r = 1:size(p.V,1)
+            v = (n*p.V(r,:)' - c)/nn;
+            if v > tolV && v > worst, worst = v; what = sprintf('vertex %d = %s is %.3g outside %s face %d''s edge %d', r, mat2str(p.V(r,:),6), v, name, k, j); end
+        end
+        for z = 1:numel(ds)
+            d = ds{z};
+            v = (n*d')/nn;
+            if v > 1e-9 && v > worst
+                worst = v;
+                what = sprintf('ray direction %s leaves %s face %d across edge %d (n*d = %.3g)', mat2str(d,6), name, k, j, v);
+            end
+        end
+    end
+    if poly.curveAfter ~= 0
+        % The face's own arc: its interior is {evalConic(curveEc,.) >= 0} (facePoly normalises the
+        % sign). CHECKING THE VERTICES IS NOT ENOUGH, and that is the whole point of this block: on
+        % the CONCAVE side of a parabola the region is not convex, so a straight edge joining two
+        % points of it can bulge OUT and come back -- which is exactly how a cell ends up covering
+        % ground outside its own source face while every one of its corners looks legal. The conic
+        % restricted to a straight edge is a quadratic in the edge parameter, so its minimum over
+        % the edge is available in closed form; take that, not a sample.
+        cc = poly.curveEc; scc = max(1, max(abs(cc)));
+        segs = pieceStraightEdges(p);
+        for z = 1:numel(segs)
+            e = segs{z};
+            [v, t] = minConicAlong(cc, e.P, e.d, e.tmax);
+            v = -v/scc;
+            if v > tolV && v > worst
+                worst = v;
+                what = sprintf('%s leaves %s face %d''s ARC by %.3g (at t = %.4g of that edge)', ...
+                    e.name, name, k, v, t);
+            end
+        end
+    end
+    % The piece's OWN arc against the source face's constraints. Same reason as above, the other
+    % way round: the piece's parabolic edge is not a straight chord, so a face constraint can be
+    % satisfied at both of the arc's endpoints and violated in between (or beyond, when the arc
+    % bulges past a neighbouring face's boundary). Restricting a constraint to the arc's own
+    % parameter u makes this exact -- a line becomes a quadratic in u, a conic a quartic -- so the
+    % extremum over the arc is a root-finding problem, not a sampling problem.
+    if p.curveAfter ~= 0
+        fr = parabolaArcFrame(p.curveEc, 'maxQuaPar');
+        [X0, X1] = curveEndpoints(p);
+        u0 = fr.uOf(X0); u1 = fr.uOf(X1);
+        ulo = min(u0,u1); uhi = max(u0,u1);
+        for j = 1:size(cons,1)
+            n = cons(j,1:2); c = cons(j,3); nn = max(1, norm(n));
+            [~, mx, ~, uarg] = extremaOnInterval(fr.lineCoeffs(n, c), ulo, uhi);
+            v = mx/nn;
+            if v > tolV && v > worst
+                worst = v;
+                what = sprintf('its ARC leaves %s face %d''s edge %d by %.3g (at u = %.4g in [%.4g,%.4g])', ...
+                    name, k, j, v, uarg, ulo, uhi);
+            end
+        end
+        if poly.curveAfter ~= 0
+            cc = poly.curveEc; scc = max(1, max(abs(cc)));
+            [mn, ~, uarg] = extremaOnInterval(fr.conicCoeffs(cc), ulo, uhi);
+            v = -mn/scc;
+            if v > tolV && v > worst
+                worst = v;
+                what = sprintf('its ARC leaves %s face %d''s ARC by %.3g (at u = %.4g in [%.4g,%.4g])', ...
+                    name, k, v, uarg, ulo, uhi);
+            end
+        end
+    end
+    if worst > 0, m = what; end
+end
+
+function [mn, mx, uMn, uMx] = extremaOnInterval(coeffs, lo, hi)
+% Exact min and max of the polynomial `coeffs` (highest power first) over [lo,hi]: the candidates
+% are the two endpoints plus the real roots of its derivative inside the interval.
+    cand = [lo, hi];
+    d = polyder(coeffs);
+    if ~isempty(d) && any(d ~= 0)
+        r = roots(d);
+        r = real(r(abs(imag(r)) < 1e-9*(1+abs(r))));
+        cand = [cand, r(r > lo & r < hi)'];
+    end
+    vals = polyval(coeffs, cand);
+    [mn, i1] = min(vals); [mx, i2] = max(vals);
+    uMn = cand(i1); uMx = cand(i2);
+end
+
+function segs = pieceStraightEdges(p)
+% The piece's straight boundary edges as {P, d, tmax, name}: segments (tmax = 1) and, for an
+% unbounded piece, its two rays (tmax = inf). The one parabolic edge is skipped.
+    segs = {};
+    V = p.V; nv = size(V,1); unb = ~isempty(p.dirIn);
+    if unb
+        segs{end+1} = struct('P', V(1,:), 'd', p.dirIn, 'tmax', inf, ...
+            'name', sprintf('ray from %s along %s', mat2str(V(1,:),6), mat2str(p.dirIn,4)));
+        for i = 1:nv-1
+            if i == p.curveAfter, continue, end
+            segs{end+1} = struct('P', V(i,:), 'd', V(i+1,:)-V(i,:), 'tmax', 1, ...
+                'name', sprintf('edge %s->%s', mat2str(V(i,:),6), mat2str(V(i+1,:),6))); %#ok<AGROW>
+        end
+        segs{end+1} = struct('P', V(end,:), 'd', p.dirOut, 'tmax', inf, ...
+            'name', sprintf('ray from %s along %s', mat2str(V(end,:),6), mat2str(p.dirOut,4)));
+    else
+        for i = 1:nv
+            if i == p.curveAfter, continue, end
+            j = mod(i,nv)+1;
+            segs{end+1} = struct('P', V(i,:), 'd', V(j,:)-V(i,:), 'tmax', 1, ...
+                'name', sprintf('edge %s->%s', mat2str(V(i,:),6), mat2str(V(j,:),6))); %#ok<AGROW>
+        end
+    end
+end
+
+function [vmin, targ] = minConicAlong(cc, P, d, tmax)
+% Minimum of t -> evalConic(cc, P + t*d) over t in [0, tmax] (tmax may be inf), in closed form:
+% the restriction is A t^2 + B t + C, so the only candidates are the endpoints and, when A > 0,
+% the stationary point. Returns -inf when the restriction decreases without bound along a ray.
+    Q = [cc(1), cc(2)/2; cc(2)/2, cc(3)];
+    A = d*Q*d';
+    B = 2*P*Q*d' + cc(4)*d(1) + cc(5)*d(2);
+    C = QuaPar.evalConic(cc, P);
+    [vmin, targ] = minQuadOnSegment(A, B, C, tmax);
+end
+
+function m = winnerDominationViolation(p, f1row, f2row)
+% '' if the operand row the piece CARRIES really is the larger of the two everywhere on the piece.
+% This is the third way a far-field answer goes wrong, and neither of the other two invariants sees
+% it: the piece can sit exactly where it should and still store the loser's quadratic, because the
+% cell was declared "decided" on evidence that does not cover it, or because a split half was
+% labelled from one extreme vertex while it straddles {f1=f2}.
+%
+% The test minimises diff = carried - other over the piece's BOUNDARY in closed form: a quadratic
+% restricted to a segment or a ray is a quadratic in the parameter (so its minimum is an endpoint
+% or one stationary point, and -inf when a ray's leading term is negative), and restricted to the
+% parabolic edge it is a quartic in the arc's own parameter u (so its minimum is an endpoint or a
+% root of a cubic). No sampling anywhere.
+%
+% SOUND BUT NOT COMPLETE, deliberately: a diff with a positive definite Hessian could take its
+% minimum in the piece's INTERIOR, which the boundary alone would miss. That direction of error is
+% the safe one -- this never reports a violation that is not real -- and it is not the case in
+% play here, where diff is always a degenerate conic (see the file header's scoping caveat).
+    m = '';
+    if isempty(p.f), return, end
+    if isequal(p.f, f1row), other = f2row; nm = 'g1';
+    elseif isequal(p.f, f2row), other = f1row; nm = 'g2';
+    else, m = 'carries a quadratic that is neither source face''s'; return
+    end
+    diffRow = p.f - other;               % must be >= 0 everywhere on the piece
+    [v, where] = boundaryMinOf(diffRow, p);
+    sc = 1 + max(abs(QuaPar.evalPoly(p.f, p.V)));
+    if v < -1e-7*sc
+        m = sprintf('carries %s face %d''s quadratic, but the other operand is larger by %.4g %s', ...
+            nm, p.src(1 + (nm(2) == '2')), -v, where);
+    end
+end
+
+function [vmin, where] = boundaryMinOf(diffRow, p)
+% Minimum of the quadratic diffRow over the piece's boundary, in closed form. See caller.
+    vmin = inf; where = '';
+    for r = 1:size(p.V,1)
+        v = QuaPar.evalPoly(diffRow, p.V(r,:));
+        if v < vmin, vmin = v; where = sprintf('at vertex %s', mat2str(p.V(r,:),6)); end
+    end
+    segs = pieceStraightEdges(p);
+    for z = 1:numel(segs)
+        e = segs{z};
+        [A,B,C] = quadAlongRay(diffRow, e.P, e.d);
+        [v, t] = minQuadOnSegment(A, B, C, e.tmax);
+        if v < vmin, vmin = v; where = sprintf('along %s (t = %.4g)', e.name, t); end
+    end
+    if p.curveAfter ~= 0
+        fr = parabolaArcFrame(p.curveEc, 'maxQuaPar');
+        [X0, X1] = curveEndpoints(p);
+        u0 = fr.uOf(X0); u1 = fr.uOf(X1);
+        [v, ~, uarg] = extremaOnInterval(fr.conicCoeffs(diffRow(5:10)), min(u0,u1), max(u0,u1));
+        if v < vmin, vmin = v; where = sprintf('along its ARC (u = %.4g)', uarg); end
+    end
+end
+
+function [vmin, targ] = minQuadOnSegment(A, B, C, tmax)
+% Minimum of A t^2 + B t + C over t in [0, tmax] (tmax may be inf); -inf when unbounded below.
+    vmin = C; targ = 0;
+    if isinf(tmax)
+        if A < 0 || (abs(A) <= 1e-14*max(1,abs(B)) && B < 0), vmin = -inf; targ = inf; return, end
+    else
+        v1 = A*tmax^2 + B*tmax + C;
+        if v1 < vmin, vmin = v1; targ = tmax; end
+    end
+    if A > 0
+        ts = -B/(2*A);
+        if ts > 0 && ts < tmax
+            v = A*ts^2 + B*ts + C;
+            if v < vmin, vmin = v; targ = ts; end
+        end
+    end
+end
+
+function m = reccConeViolation(p)
+% '' if the region the piece ENCODES runs to infinity in exactly the directions it declares.
+% Compared as SETS of extreme rays: a half-strip legitimately declares dirIn == dirOut, and its
+% cone then has ONE extreme ray, not two.
+    m = '';
+    rays = pieceRecessionRays(p);
+    if isempty(p.dirIn)
+        if ~isempty(rays)
+            m = sprintf('bounded piece (no ray edges) but its constraint region is UNBOUNDED along %s', ...
+                mat2str(rays, 4));
+        end
+        return
+    end
+    want = uniqueDirs([p.dirIn/norm(p.dirIn); p.dirOut/norm(p.dirOut)]);
+    if ~sameDirSet(rays, want)
+        m = sprintf('declares rays %s but its constraint region recedes along %s', ...
+            mat2str(want, 4), mat2str(rays, 4));
+    end
+end
+
+function D = uniqueDirs(D0)
+    D = zeros(0,2);
+    for i = 1:size(D0,1)
+        if isempty(D) || min(vecnorm(D - D0(i,:), 2, 2)) > 1e-9, D(end+1,:) = D0(i,:); end %#ok<AGROW>
+    end
+end
+
+function tf = sameDirSet(A, B)
+    tf = true;
+    for i = 1:size(A,1)
+        if min(vecnorm(B - A(i,:), 2, 2)) > 1e-6, tf = false; return, end
+    end
+    for i = 1:size(B,1)
+        if min(vecnorm(A - B(i,:), 2, 2)) > 1e-6, tf = false; return, end
+    end
+end
+
+function ds = raysOf(p)
+% The piece's own unbounded directions as a cell array of 1x2 unit rows (empty when bounded).
+    ds = {};
+    if ~isempty(p.dirIn), ds = {p.dirIn/norm(p.dirIn), p.dirOut/norm(p.dirOut)}; end
 end
 
 % ============================================================================================
