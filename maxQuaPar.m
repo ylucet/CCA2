@@ -520,7 +520,10 @@ function [vmin, where] = boundaryMinOf(diffRow, p)
         fr = parabolaArcFrame(p.curveEc, 'maxQuaPar');
         [X0, X1] = curveEndpoints(p);
         u0 = fr.uOf(X0); u1 = fr.uOf(X1);
-        [v, ~, uarg] = extremaOnInterval(fr.conicCoeffs(diffRow(5:10)), min(u0,u1), max(u0,u1));
+        % A 10-wide f row is matrixForm's convention: entries 5 and 7 are TWICE the x^2 and y^2
+        % coefficients (see splitCell's own edgeEc construction), so it is not a conic row.
+        dc = [0.5*diffRow(5), diffRow(6), 0.5*diffRow(7), diffRow(8), diffRow(9), diffRow(10)];
+        [v, ~, uarg] = extremaOnInterval(fr.conicCoeffs(dc), min(u0,u1), max(u0,u1));
         if v < vmin, vmin = v; where = sprintf('along its ARC (u = %.4g)', uarg); end
     end
 end
@@ -1355,6 +1358,26 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
         hits = sortrows(hits, 1);
     end
 
+    % ---- the cut passes exactly through cell VERTICES --------------------------------------
+    % conicRootsAlong reports only roots STRICTLY inside an element -- deliberately, so a crossing
+    % at a corner is not counted twice, once from each side. The consequence is that a cut which
+    % enters and leaves through corners produces NO hits at all, and the "no crossing" branch below
+    % then keeps or drops the whole cell. That is not a rare alignment: two faces of two conjugates
+    % of triangles that SHARE an edge have arcs through the same two dual points, so the cut meets
+    % the cell exactly at its two corners every time. On f=xy over the unit square split by its
+    % diagonal it is the whole defect -- the cell g1f2 n g2f1 is the LENS between the two arcs, and
+    % skipping the cut returned the unbounded strip instead, wrong by 0.37 at |s|=1.
+    %
+    % With no interior crossing the conic's sign is constant on each boundary element, so one
+    % representative point per element decides it exactly, and the kept elements are a contiguous
+    % chain whose two ends are the corners the cut passes through.
+    if isempty(hits)
+        sides = elementSides(poly, Ecut, unbounded, nv, ci);
+        if any(sides > 0) && any(sides < 0)
+            polys = clipAtVertexCrossings(poly, Ecut, sides, unbounded, nv, ci);
+            return
+        end
+    end
     % ---- no crossing: the whole cell is on one side --------------------------------------
     if isempty(hits)
         % No crossing at all, so the cut conic does not meet this cell's boundary and the whole
@@ -1503,6 +1526,178 @@ function polys = clipPolyByConic(poly, Ecut, cutX0, cutX1)
     % splitCell already follows.
     pieces = splitTwoArcPiece(out, qCurve, poly.curveEc);
     polys = num2cell(pieces);
+end
+
+function sides = elementSides(poly, Ecut, unbounded, nv, ci)
+% Which side of the cutting conic each boundary ELEMENT of poly lies on: +1 kept, -1 dropped,
+% 0 lying on the conic. Only called when the conic has no crossing strictly inside any element, so
+% the sign is constant along each and one representative point per element decides it. The arc's
+% representative is its own midpoint in the parabola frame, never its chord's.
+    L = 1 + max(abs(poly.V(:)));
+    reps = {};
+    if unbounded
+        reps{1} = poly.V(1,:) + L*poly.dirIn;
+        for p = 2:nv, reps{p} = 0.5*(poly.V(p-1,:) + poly.V(p,:)); end
+        reps{nv+1} = poly.V(end,:) + L*poly.dirOut;
+        cePair = ci + 1;
+    else
+        for p = 1:nv, reps{p} = 0.5*(poly.V(p,:) + poly.V(mod(p,nv)+1,:)); end
+        cePair = ci;
+    end
+    if ci ~= 0
+        fr = parabolaArcFrame(poly.curveEc, 'maxQuaPar');
+        [X0, X1] = curveEndpoints(poly);
+        reps{cePair} = fr.point(0.5*(fr.uOf(X0) + fr.uOf(X1)));
+    end
+    sc = max(1, max(abs(Ecut))*L^2);
+    sides = zeros(1, numel(reps));
+    for p = 1:numel(reps)
+        sides(p) = sign2(QuaPar.evalConic(Ecut, reps{p}), 1e-9*sc);
+    end
+end
+
+function polys = clipAtVertexCrossings(poly, Ecut, sides, unbounded, nv, ci)
+% Survivor of a conic cut whose only crossings are AT poly's corners. The kept elements form one
+% contiguous chain and the cutting arc closes it. For an UNBOUNDED cell the element sequence is
+% cyclic too -- its two rays are joined through the point at infinity -- so there are two shapes:
+% the kept chain sits strictly between the rays (survivor bounded, closed by the cut arc), or it
+% contains both rays (survivor unbounded, the cut arc replacing the dropped middle). Keeping just
+% ONE ray would need the cut conic to run to infinity, which QuaPar cannot hold, and is refused.
+    m = numel(sides);
+    keep = find(sides > 0);
+    if isempty(keep), polys = {}; return, end
+    drop = find(sides < 0);
+    if unbounded
+        cePair = ci + 1;
+        if ~any(keep == 1) && ~any(keep == m)
+            if any(diff(keep) ~= 1)
+                error('maxQuaPar:notImplemented', ...
+                    ['clipPolyByConic: a curved cut through this cell''s corners keeps a ' ...
+                     'non-contiguous set of boundary elements (%s).'], mat2str(keep));
+            end
+            vIdx = (keep(1)-1):keep(end);       % element p (2..nv) is V(p-1)->V(p)
+            V = dedupConsecutive(poly.V(vIdx,:));
+            if size(V,1) < 2, polys = {}; return, end
+            qCurve = 0;
+            if ci ~= 0 && any(keep == cePair), qCurve = cePair - keep(1) + 1; end
+            out = struct('V', V, 'dirIn', [], 'dirOut', [], 'dirInSign', [], 'dirOutSign', [], ...
+                         'curveAfter', size(V,1), 'curveEc', Ecut, 'f', []);
+        elseif any(keep == 1) && any(keep == m)
+            % Wraps through infinity: both rays survive, the dropped middle is replaced by the cut
+            % arc. The dropped elements must be one contiguous block of the straight/arc elements.
+            if any(diff(drop) ~= 1) || drop(1) < 2 || drop(end) > nv
+                error('maxQuaPar:notImplemented', ...
+                    ['clipPolyByConic: a curved corner cut on an unbounded cell drops a ' ...
+                     'non-contiguous set of elements (%s).'], mat2str(drop));
+            end
+            head = poly.V(1:drop(1)-1,:);
+            tail = poly.V(drop(end):nv,:);
+            V = dedupConsecutive([head; tail]);
+            if size(V,1) < 2, polys = {}; return, end
+            if ci ~= 0 && ~any(drop == cePair)
+                error('maxQuaPar:notImplemented', ...
+                    ['clipPolyByConic: an unbounded survivor would carry BOTH its inherited arc ' ...
+                     'and the cut arc; splitTwoArcPiece needs a closed boundary to separate them.']);
+            end
+            out = struct('V', V, 'dirIn', poly.dirIn, 'dirOut', poly.dirOut, ...
+                         'dirInSign', poly.dirInSign, 'dirOutSign', poly.dirOutSign, ...
+                         'curveAfter', size(head,1), 'curveEc', Ecut, 'f', []);
+            polys = {out};
+            return
+        else
+            error('maxQuaPar:notImplemented', ...
+                ['clipPolyByConic: a curved cut through this cell''s corners leaves a survivor ' ...
+                 'that keeps exactly ONE ray, so the cutting conic would have to close it at ' ...
+                 'infinity -- an unbounded curved edge, which QuaPar cannot represent.']);
+        end
+    else
+        keep = cyclicRun(sides, nv);
+        if isempty(keep)
+            error('maxQuaPar:notImplemented', ...
+                'clipPolyByConic: a curved cut through a bounded cell''s corners keeps a non-contiguous chain.');
+        end
+        cePair = ci;
+        vIdx = [keep, mod(keep(end), nv) + 1];  % element p is V(p)->V(p+1)
+        V = dedupConsecutive(poly.V(vIdx,:));
+        if size(V,1) < 2, polys = {}; return, end
+        qCurve = 0;
+        if ci ~= 0 && any(keep == cePair), qCurve = find(keep == cePair, 1); end
+        out = struct('V', V, 'dirIn', [], 'dirOut', [], 'dirInSign', [], 'dirOutSign', [], ...
+                     'curveAfter', size(V,1), 'curveEc', Ecut, 'f', []);
+    end
+    if size(out.V,1) >= 3 && signedAreaOf(out.V) < 0
+        error('maxQuaPar:internal', ...
+            'clipPolyByConic: emitted a CLOCKWISE cell from a corner cut (signed area %.6g).', ...
+            signedAreaOf(out.V));
+    end
+    if qCurve == 0, polys = {out}; return, end
+    % The survivor carries BOTH the inherited arc and the cut: one QuaPar face cannot hold two, so
+    % subdivide (never widen the representation). A two-vertex lens has no diagonal to cut with --
+    % splitTwoArcPiece needs three vertices per half -- so it is split by the CHORD between its two
+    % corners into two lunes, each one arc plus that chord.
+    if size(out.V,1) == 2
+        polys = num2cell(splitTwoArcLens(out.V(1,:), out.V(2,:), poly.curveEc, Ecut));
+        return
+    end
+    polys = num2cell(splitTwoArcPiece(out, qCurve, poly.curveEc));
+end
+
+function run = cyclicRun(sides, nv)
+% The kept elements of a bounded cell as ONE cyclically contiguous run of indices, or [] if they
+% are not contiguous.
+    keep = find(sides > 0);
+    run = [];
+    if isempty(keep), return, end
+    for s = 1:nv
+        idx = mod((s-1):(s-2+numel(keep)), nv) + 1;
+        if isequal(sort(idx), sort(keep)), run = idx; return, end
+    end
+end
+
+function out = splitTwoArcLens(A, B, ec1, ec2)
+% A bounded two-vertex cell bounded by two different arcs through the same corners A and B, cut by
+% the chord AB into two lunes (one arc plus the chord each). Refused loudly if the chord does not
+% actually lie inside the cell, which is the case where the two arcs bulge the same way.
+    M = 0.5*(A + B);
+    if QuaPar.evalConic(ec1, M) < 0 || QuaPar.evalConic(ec2, M) < 0
+        error('maxQuaPar:notImplemented', ...
+            ['clipPolyByConic: a two-arc lens whose chord is not interior (both arcs bulge the ' ...
+             'same way); subdividing it needs a cut other than the chord.']);
+    end
+    out = [lunePiece(A, B, M, ec1), lunePiece(A, B, M, ec2)];
+end
+
+function p = lunePiece(A, B, M, ec)
+% The region between the arc of `ec` through A,B and the chord AB, as a THREE-vertex piece: the arc
+% A->B, then B->M and M->A, where M is the chord's midpoint.
+%
+% WHY THE EXTRA VERTEX. A lune is naturally a two-vertex piece (arc plus chord), which clipByFace
+% explicitly allows -- but two lunes sharing that chord defeat assembly: their chord half-edges
+% never became an edge of the result at all, leaving each lune's face bounded by its arc ALONE, so
+% QuaPar.eval admitted points far across the chord and returned the wrong operand there. Measured
+% on f=xy over the unit square: 15 of 60 points on the unit circle wrong, worst 1.41. Splitting the
+% shared chord at its midpoint gives both lunes an ordinary arc-plus-two-segments boundary, and the
+% two halves of the chord then pair up as ordinary half-edges.
+%
+% Orientation and conic sign are DERIVED, not assumed: A, B, M are collinear-degenerate as a
+% polygon (M is on AB), so signedAreaOf cannot decide the walk direction. The rule used is the
+% project's own -- polyConstraints says which half-plane each straight edge encodes, so the correct
+% vertex order is the one whose constraints admit an interior point of the lune (halfway between
+% the chord's midpoint and the arc's).
+    fr = parabolaArcFrame(ec, 'maxQuaPar');
+    P = fr.point(0.5*(fr.uOf(A) + fr.uOf(B)));
+    Q = 0.5*(0.5*(A + B) + P);
+    if QuaPar.evalConic(ec, Q) < 0, ec = -ec; end    % conic > 0 on the piece's own interior
+    sc = 1e-9*(1 + max(abs([A, B])));
+    for order = 1:2
+        if order == 2, tmp = A; A = B; B = tmp; end
+        p = struct('V', [A; B; M], 'dirIn', [], 'dirOut', [], 'dirInSign', [], 'dirOutSign', [], ...
+                   'curveAfter', 1, 'curveEc', ec, 'f', []);
+        cons = polyConstraints(p);
+        if isempty(cons) || all(cons(:,1:2)*Q' - cons(:,3) <= sc), return, end
+    end
+    error('maxQuaPar:internal', ...
+        'lunePiece: neither vertex order puts the lune''s own interior inside its own constraints.');
 end
 
 function p = pairOnBoundary(poly, X, edges, edgePair, unbounded, nv)
