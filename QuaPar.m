@@ -168,6 +168,8 @@ classdef QuaPar < RatPar & Qua
             end
             fVal = inf*ones(size(x,1),1);
             region = -ones(size(x,1),1);
+            global QUAPAR_VALIDATE %#ok<GVMIS>
+            validating = ~isempty(QUAPAR_VALIDATE) && QUAPAR_VALIDATE;
             % Per-edge conic [a b c d e f] for the boundary a x^2+b xy+c y^2+d x+e y+f = 0.
             % Linear edges (zero Ec row) become [0 0 0 a b c] = the line through their endpoints,
             % so this reduces exactly to QuaPol's line-based point location.
@@ -220,7 +222,36 @@ classdef QuaPar < RatPar & Qua
                 tolv = 1e-9 * max(1, max(abs(x), [], 2).^2);
                 flags = all(vals <= tolv, 2);
                 if any(flags)
-                    fVal(flags) = QuaPar.evalPoly(obj.f(i,:), x(flags,:));
+                    newVal = QuaPar.evalPoly(obj.f(i,:), x(flags,:));
+                    % VALIDATE MODE (global QUAPAR_VALIDATE, read once outside this loop). Two
+                    % faces admitting the same point is
+                    % normal -- it is what a shared boundary looks like -- and there the function is
+                    % continuous, so both give the SAME value. Two faces admitting it with
+                    % DIFFERENT values is not a boundary, it is an over-extended face, and this
+                    % loop's last-admitter-wins rule then silently returns whichever came last.
+                    % That is the shape every far-field wrong answer here has taken, so under the
+                    % flag it is raised instead of resolved. Off by default: eval is on the hot
+                    % path and a shared boundary must stay free.
+                    if validating
+                        prev = fVal(flags);
+                        seen = ~isinf(prev);
+                        if any(seen)
+                            d = abs(prev(seen) - newVal(seen));
+                            scv = 1 + max(abs(prev(seen)), abs(newVal(seen)));
+                            bad = find(d > 1e-7*scv, 1);
+                            if ~isempty(bad)
+                                idx = find(flags); idx = idx(seen); idx = idx(bad);
+                                error('QuaPar:eval:ambiguous', ...
+                                    ['QuaPar.eval: the point (%.6g,%.6g) is admitted by face %d ' ...
+                                     'with value %.10g and by an earlier face with value %.10g. ' ...
+                                     'Faces may share a boundary, but there they must agree; ' ...
+                                     'disagreement means one of them is over-extended.'], ...
+                                    x(idx,1), x(idx,2), i, ...
+                                    QuaPar.evalPoly(obj.f(i,:), x(idx,:)), fVal(idx));
+                            end
+                        end
+                    end
+                    fVal(flags) = newVal;
                     region(region~=-1 & flags) = 0;   % point on a shared boundary
                     region(region==-1 & flags) = i;
                 end
@@ -341,10 +372,24 @@ classdef QuaPar < RatPar & Qua
                    error("Unable to compute iNext");
                end
                    
-               jNext = find(ismember(obj.E(:,1:2),[i, iNext],'rows'));
+               % BUGFIX: this used to search the WHOLE edge list for a pair of vertices, which is
+               % ambiguous exactly where an arc-vs-arc arrangement puts two edges: the lens between
+               % two operands' arcs is bounded by BOTH of them, so two DIFFERENT edges join the same
+               % two vertices, and the global lookup could return the one that does not bound face
+               % k at all (or both, making jNext a vector). Measured on f=xy over the unit square:
+               % face 1's P came back listing an edge whose own F named faces 2 and 4, and
+               % QuaPar.eval then admitted points of the lens into a strip, 54 of 900 ring points
+               % carrying two different values. Restricting the search to face k's OWN edges, and
+               % to ones the walk has not consumed, removes the ambiguity: a face's boundary is a
+               % chain, so at each vertex exactly one unused incident edge continues it.
+               inFace = ismember(obj.E(edges,1:2), [i, iNext], 'rows') | ...
+                        ismember(obj.E(edges,1:2), [iNext, i], 'rows');
+               jNext = edges(inFace);
+               jNext = jNext(~ismember(jNext, abs(P(1:jj-1))));
                if isempty(jNext)
-                   jNext = find(ismember(obj.E(:,1:2),[iNext, i],'rows'));
+                   error("orderEdges: no unused edge of face %i joins vertices %i and %i", k, i, iNext);
                end
+               jNext = jNext(1);
                               
                %compute sign of angle between edges j and jNext; 1 means acute, -1 means obtuse, 0 means collinear
                %https://matlabgeeks.com/tips-tutorials/computational-geometry/check-convexity-of-polygon/
