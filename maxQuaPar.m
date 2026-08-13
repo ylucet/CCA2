@@ -466,7 +466,7 @@ function [vmin, targ] = minConicAlong(cc, P, d, tmax)
     A = d*Q*d';
     B = 2*P*Q*d' + cc(4)*d(1) + cc(5)*d(2);
     C = QuaPar.evalConic(cc, P);
-    [vmin, targ] = minQuadOnSegment(A, B, C, tmax);
+    [vmin, targ] = minQuadOnSegment(A, B, C, tmax, norm(cc, Inf)*max(1, norm(P))^2);
 end
 
 function m = winnerDominationViolation(p, f1row, f2row)
@@ -512,7 +512,8 @@ function [vmin, where] = boundaryMinOf(diffRow, p)
     for z = 1:numel(segs)
         e = segs{z};
         [A,B,C] = quadAlongRay(diffRow, e.P, e.d);
-        [v, t] = minQuadOnSegment(A, B, C, e.tmax);
+        sc = norm(diffRow(5:10), Inf) * max(1, norm(e.P))^2;
+        [v, t] = minQuadOnSegment(A, B, C, e.tmax, sc);
         if v < vmin, vmin = v; where = sprintf('along %s (t = %.4g)', e.name, t); end
     end
     if p.curveAfter ~= 0
@@ -524,16 +525,25 @@ function [vmin, where] = boundaryMinOf(diffRow, p)
     end
 end
 
-function [vmin, targ] = minQuadOnSegment(A, B, C, tmax)
+function [vmin, targ] = minQuadOnSegment(A, B, C, tmax, sc)
 % Minimum of A t^2 + B t + C over t in [0, tmax] (tmax may be inf); -inf when unbounded below.
+%
+% `sc` is the magnitude scale of the coefficients, and it is NOT optional in spirit: testing
+% A < 0 without one reads floating-point noise as a fact about infinity. A quadratic that is
+% exactly constant along a ray (the split curve's own direction, where diff vanishes identically)
+% comes out of numeric conjugates with A ~ -1e-17, and an untoleranced test then reports that the
+% other operand wins by +inf out there. That was a false alarm this very check raised against a
+% piece that had just been built correctly.
+    if nargin < 5, sc = max([abs(A), abs(B), abs(C), 1]); end
+    tolA = 1e-9*sc; tolB = 1e-9*sc;
     vmin = C; targ = 0;
     if isinf(tmax)
-        if A < 0 || (abs(A) <= 1e-14*max(1,abs(B)) && B < 0), vmin = -inf; targ = inf; return, end
+        if A < -tolA || (abs(A) <= tolA && B < -tolB), vmin = -inf; targ = inf; return, end
     else
         v1 = A*tmax^2 + B*tmax + C;
         if v1 < vmin, vmin = v1; targ = tmax; end
     end
-    if A > 0
+    if A > tolA
         ts = -B/(2*A);
         if ts > 0 && ts < tmax
             v = A*ts^2 + B*ts + C;
@@ -2312,6 +2322,26 @@ function newPieces = splitCell(cell, f1row, f2row)
         newPieces = [pieceA, pieceB];
         return
     end
+    if numel(hits) == 1 && ~isempty(cell.dirIn) && arcPos0 == 0
+        % ONE finite crossing on an UNBOUNDED cell is ambiguous, and reading it as a tangency (the
+        % branch below) is a WRONG-ANSWER bug, not a conservative one: the splitting curve can
+        % enter the boundary at that one point and leave through the RECESSION CONE, never meeting
+        % the boundary again. The cell is then genuinely cut in two, each half unbounded, and
+        % returning it intact hands the whole cell to one operand -- correct near the crossing and
+        % wrong far out, growing without bound. Measured on f=xy over the quadrilateral
+        % (0.5,-1.2),(-0.2,-3.1),(-2.5,0),(-1.5,-1.7): cell src[3 3] is cut by {diff=0} exactly
+        % through its own vertex (-8.458,-6.475) with the other end escaping to infinity, and the
+        % intact cell then reports 404.45 where the truth is 441.66 at |s|=200, 4050 vs 4440 at
+        % |s|=2000.
+        %
+        % The two cases are told apart EXACTLY, not by sampling: the curve's branch through the
+        % crossing has a direction (perpendicular to grad diff, which is the tangent of a straight
+        % branch), and the split is real iff that direction -- in one of its two senses -- recedes
+        % the cell, i.e. satisfies every one of the cell's own half-planes homogeneously. A genuine
+        % tangency has neither sense recessive and falls through below.
+        newPieces = splitUnboundedAtOneCrossing(cell, hits(1), diffRow, f1row, f2row);
+        if ~isempty(newPieces), return, end
+    end
     if numel(hits) == 1
         % The cell only TOUCHES {diffRow=0} at a single point -- a tangency at the degenerate
         % conic's singular point, which happens to coincide with a cell vertex shared with other
@@ -2468,6 +2498,83 @@ function newPieces = splitCell(cell, f1row, f2row)
         end
         newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
     end
+end
+
+function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2row)
+% Split an unbounded polyhedral cell whose splitting curve meets the boundary at ONE finite point
+% and escapes to infinity. Returns [] when that is not what is happening (a genuine tangency), so
+% the caller can fall through to its tangency branch. See the call site for why this case exists.
+%
+% Each half keeps ONE of the cell's original rays and gains the escaping branch as its other ray,
+% which is exactly the ray-propagation rule FARFIELD_FIX_PLAN.md states: a sub-piece that inherits
+% an unbounded direction must keep a RAY there, never be closed off.
+    newPieces = [];
+    X = hit.pt;
+    gg = [diffRow(5)*X(1) + diffRow(6)*X(2) + diffRow(8), ...
+          diffRow(6)*X(1) + diffRow(7)*X(2) + diffRow(9)];
+    if norm(gg) < 1e-12, return, end          % singular point of the conic: no single branch here
+    d0 = [-gg(2), gg(1)]; d0 = d0/norm(d0);   % tangent to {diffRow=0} at X
+
+    cons = polyConstraints(cell);
+    d = [];
+    for s = [1 -1]
+        w = s*d0;
+        if all(cons(:,1:2)*w' <= 1e-9*max(1, max(abs(cons(:,1:2)), [], 'all')))
+            % ...and it must not simply run along one of the cell's own rays, which would cut off
+            % nothing.
+            if norm(w - cell.dirIn) > 1e-7 && norm(w - cell.dirOut) > 1e-7, d = w; break, end
+        end
+    end
+    if isempty(d), return, end                % neither sense recedes the cell: a real tangency
+
+    % The escaping edge must be STRAIGHT: an unbounded parabolic edge is not representable.
+    [Ad, Bd, ~] = quadAlongRay(diffRow, X, d);
+    scd = max(1e-9, norm(diffRow(5:10), Inf)*max(1, norm(X))^2);
+    if abs(Ad) > 1e-7*scd || abs(Bd) > 1e-6*scd
+        error('maxQuaPar:notImplemented', ...
+            ['maxQuaPar:splitCell: the split curve meets an unbounded cell once and escapes to ' ...
+             'infinity as a PARABOLA (unbounded curved edge, not representable).']);
+    end
+
+    % Where the crossing sits in the boundary walk (cellEdgeList indexing for an unbounded cell:
+    % edge 1 is the incoming ray at V(1), edges 2..nv are the segments, edge nv+1 the outgoing ray).
+    nv = size(cell.V,1);
+    e = hit.edge;
+    if e == 1, a = 0; elseif e == nv+1, a = nv; else, a = e - 1; end
+    tol = 1e-9*(1 + max(abs(cell.V(:))));
+
+    Va = [cell.V(1:a,:); X];
+    Vb = [X; cell.V(a+1:nv,:)];
+    Va = dedupConsecutive(Va); Vb = dedupConsecutive(Vb);
+    if isempty(Va) || isempty(Vb), return, end
+    if size(Va,1) == 1 && norm(Va(1,:) - X) > tol, return, end
+
+    pieceA = struct('V', Va, 'dirIn', cell.dirIn, 'dirOut', d, ...
+        'dirInSign', cell.dirInSign, 'dirOutSign', 1, 'curveAfter', 0, 'curveEc', [], 'f', []);
+    pieceB = struct('V', Vb, 'dirIn', d, 'dirOut', cell.dirOut, ...
+        'dirInSign', 1, 'dirOutSign', cell.dirOutSign, 'curveAfter', 0, 'curveEc', [], 'f', []);
+    pieceA = assignSideFromCone(pieceA, diffRow, f1row, f2row);
+    pieceB = assignSideFromCone(pieceB, diffRow, f1row, f2row);
+    newPieces = [pieceA, pieceB];
+end
+
+function piece = assignSideFromCone(piece, diffRow, f1row, f2row)
+% Winner for a half produced by splitUnboundedAtOneCrossing. assignSide reads the vertex farthest
+% from {diffRow=0}, which is useless here: such a half can have EVERY vertex on the curve (the
+% wedge cut off at a cell corner has exactly one, the crossing point). Read it instead at a point
+% strictly inside the half's own recession cone, walked far enough out that the difference is
+% dominated by its leading behaviour -- the sum of two non-parallel cone directions points strictly
+% between them, so this point is interior for any wedge or strip.
+    w = piece.dirIn + piece.dirOut;
+    if norm(w) < 1e-12, w = piece.dirIn; end     % parallel rays (a strip): along them is interior
+    w = w/norm(w);
+    base = mean(piece.V, 1);
+    v = 0;
+    for L = [1, 10, 1e3, 1e6]*(1 + max(abs(piece.V(:))))
+        v = QuaPar.evalPoly(diffRow, base + L*w);
+        if abs(v) > 1e-9*(1+abs(L)), break, end
+    end
+    if v >= 0, piece.f = f1row; else, piece.f = f2row; end
 end
 
 function [X0, X1] = arcEndpointsOf(piece, i)
