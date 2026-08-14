@@ -120,12 +120,35 @@ function cons = faceConstraints(g, k, EC)
     cc = g.chordCuts(k, EC);
     for m = 1:size(cc,1)
         % chordCuts returns [n1 n2 c] with "inside" = {n*x' <= c}; as a conic that is
-        % [0 0 0 n1 n2 -c] <= 0, which is the same orientation the loop above uses.
-        ec = [0 0 0 cc(m,1:2) -cc(m,3)];
-        ec = ec / max(1, max(abs(ec)));
-        cons(end+1) = struct('ec', ec, 'edge', 0, ...
+        % [0 0 0 n1 n2 -c] <= 0, which is the same orientation the loop above uses. eval scales a
+        % chord by max(1, norm(n)) and n is already a unit normal, so it is left unscaled here --
+        % matching eval's normalisation exactly is what makes the tolerance below mean the same
+        % thing in both places.
+        cons(end+1) = struct('ec', [0 0 0 cc(m,1:2) -cc(m,3)], 'edge', 0, ...
             'what', sprintf('chord cut %d', m)); %#ok<AGROW>
     end
+end
+
+function pt = parPoint(par, s)
+% The plane point at parameter s of the parametrisation par.
+    if strcmp(par.kind, 'line'), pt = par.base + s*par.dir; else, pt = par.fr.point(s); end
+end
+
+function tol = evalTolAt(par, s)
+% EXACTLY QuaPar.eval's admission tolerance, at the point of the curve with parameter s.
+%
+% Getting this from the PARAMETER instead of from the point was the first version's mistake, and it
+% made the whole check useless rather than merely imprecise: on an arc the parameter enters the
+% restriction as a quartic, so a tolerance of 1e-7*scV^2 scaled by |s|^4 reached ~0.1 on an ordinary
+% fixture. Constraints violated by a tenth were then read as satisfied, whole intervals came out
+% "feasible" that are nothing of the kind, and the check reported four far-field over-extensions on
+% a result that is exact -- verified by probing: at every point in the ranges it named, two faces
+% admit and they AGREE, to 8 digits, with the ground truth.
+%
+% The rule this must match is eval's: every bounding conic is normalised by max(1, max|coef|), and a
+% point is admitted when each comes out <= 1e-9 * max(1, max|coordinate|)^2.
+    pt = parPoint(par, s);
+    tol = 1e-9 * max(1, max(abs(pt)))^2;
 end
 
 function [ok, msg] = edgeLiesInFace(g, k, j, cons, EC, scV)
@@ -157,12 +180,13 @@ function [ok, msg] = edgeLiesInFace(g, k, j, cons, EC, scV)
             continue
         end
         [mx, arg] = maxPolyOn(p, rng(1), rng(2));
-        if mx > tol
+        if isfinite(arg), tolHere = evalTolAt(par, arg); else, tolHere = tol; end
+        if mx > tolHere
             ok = false;
             msg = sprintf(['face %d: its own edge %d leaves the face''s constraint region -- %s ' ...
                 'reaches %+.4g (tol %.2g) at parameter %.6g along that edge. The edge is then not ' ...
                 'on this face''s boundary, and the region on the far side of it belongs to no ' ...
-                'face.'], k, j, cons(t).what, mx, tol, arg);
+                'face.'], k, j, cons(t).what, mx, tolHere, arg);
             return
         end
     end
@@ -196,10 +220,13 @@ function msgs = boundaryStaysOnEdges(g, k, t, cons, EC, scV)
         if isIdenticallyZero(P{m}, pscale), continue, end  % a duplicate curve constrains nothing
         rest{end+1} = P{m}; %#ok<AGROW>
     end
-    iv = feasibleIntervalsOnLine(rest, tol);
+    iv = feasibleIntervalsOnLine(rest, par);
 
     allowed = allowedRanges(g, k, cons(t).ec, par, EC);
-    finiteEnds = [iv(isfinite(iv)); allowed(isfinite(allowed))];
+    % (:) is load-bearing. Logical indexing of a ROW vector returns a row, so for a single-interval
+    % iv the concatenation below became a 2x2 matrix and max() then returned a ROW -- which made the
+    % tolerance non-scalar and turned coveredBy's && into MATLAB:nonLogicalConditional.
+    finiteEnds = [reshape(iv(isfinite(iv)), [], 1); reshape(allowed(isfinite(allowed)), [], 1)];
     scP = 1; if ~isempty(finiteEnds), scP = max(1, max(abs(finiteEnds))); end
     for z = 1:size(iv,1)
         a = iv(z,1); b = iv(z,2);
@@ -325,7 +352,7 @@ end
 
 % ---- exact interval algebra ---------------------------------------------------------------------
 
-function iv = feasibleIntervalsOnLine(rest, tol)
+function iv = feasibleIntervalsOnLine(rest, par)
 % Sub-intervals of the WHOLE real line on which every polynomial in `rest` is <= 0. Endpoints are
 % the polynomials' own real roots; between two consecutive roots of ALL of them each polynomial has
 % constant sign, so ONE evaluation per interval decides the whole interval exactly. That is the same
@@ -348,7 +375,7 @@ function iv = feasibleIntervalsOnLine(rest, tol)
     for z = 1:numel(nodes)-1
         a = nodes(z); b = nodes(z+1);
         s = probeInside(a, b);
-        if allNonPositive(rest, s, tol)
+        if allNonPositive(rest, s, evalTolAt(par, s))
             iv(end+1,:) = [a b]; %#ok<AGROW>
         end
     end
@@ -366,9 +393,12 @@ function s = probeInside(a, b)
 end
 
 function tf = allNonPositive(rest, s, tol)
+% One evaluation decides a WHOLE interval: between two consecutive roots of all the constraints,
+% each has constant sign. `tol` is eval's own admission tolerance at this point of the curve, so
+% "feasible here" means exactly what "admitted by the face" means in QuaPar.eval.
     tf = true;
     for m = 1:numel(rest)
-        if polyval(rest{m}, s) > tol*max(1, abs(s))^4, tf = false; return, end
+        if polyval(rest{m}, s) > tol, tf = false; return, end
     end
 end
 
