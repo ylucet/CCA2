@@ -717,18 +717,40 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             % the result with each operand and, for every face of the result against every operand
             % face, minimises the difference over the whole intersection in closed form -- so a
             % pass covers every point of every face at once, which no ring of samples does. See
-            % FARFIELD_FIX_PLAN.md Phase 4 for what it does and does not prove (it does not prove
-            % the faces COVER the plane; partitionReport only samples for that).
-            Tb = [0 0; 3 -5; 4 -4];
-            Q  = [0.5 -1.2; -0.2 -3.1; -2.5 0; -1.5 -1.7];
-            cases = { 'shift [-1 0.75]',   Tb,             Tb + [-1 0.75]
-                      'shift [2 -0.5]',    Tb,             Tb + [2 -0.5]
-                      'quad split (case177)', Q([1 2 3],:), Q([1 3 4],:) };
+            % FARFIELD_FIX_PLAN.md Phase 4 for what it does and does not prove. What it does NOT
+            % prove is that the faces COVER the plane: every check it makes quantifies over a face,
+            % so a region belonging to no face is invisible to all of them. That half is
+            % arcVsArcResultsCoverThePlane below.
+            cases = maxQuaParTest.symbolicAcceptanceCases();
             for c = 1:size(cases,1)
                 [g1, g2] = maxQuaParTest.buildCurvedG1G2(cases{c,2}, cases{c,3});
                 g = maxQuaPar(g1, g2);
                 [ok, report] = verifyMaxIsExactSymbolically(g1, g2, g);
                 msg = sprintf('%s: %d finding(s)', cases{c,1}, numel(report));
+                for r = 1:min(3, numel(report)), msg = [msg newline '   ' report{r}]; end %#ok<AGROW>
+                testCase.verifyTrue(ok, msg);
+            end
+        end
+
+        function arcVsArcResultsCoverThePlane(testCase)
+            % THE OTHER HALF OF ACCEPTANCE, and the last thing in Phase 4 that was still resting on
+            % sampling. verifyMaxIsExactSymbolically proves g = max(g1,g2) ON EVERY FACE; it cannot
+            % see a region belonging to NO face, and until this test the only evidence against a
+            % hole was maxQuaPar's partitionReport, which probes a grid. The hole fixed on
+            % 2026-08-13 was one point wide at that density and was found by accident.
+            %
+            % verifyFacesCoverThePlane decides coverage from the constraint data instead: every
+            % edge separates two faces, every edge lies inside both of them, no face's constraint
+            % region has boundary anywhere but on its own edges, and no face is squeezed onto a
+            % curve. Together those force the boundary of the union of the faces to be empty, so
+            % the union is the whole plane. See that file's header for the argument and
+            % SUPPORT_MATRIX.md 4.3 for the summary.
+            cases = maxQuaParTest.symbolicAcceptanceCases();
+            for c = 1:size(cases,1)
+                [g1, g2] = maxQuaParTest.buildCurvedG1G2(cases{c,2}, cases{c,3});
+                g = maxQuaPar(g1, g2);
+                [ok, report] = verifyFacesCoverThePlane(g);
+                msg = sprintf('%s: %d coverage finding(s)', cases{c,1}, numel(report));
                 for r = 1:min(3, numel(report)), msg = [msg newline '   ' report{r}]; end %#ok<AGROW>
                 testCase.verifyTrue(ok, msg);
             end
@@ -783,6 +805,17 @@ classdef maxQuaParTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function cases = symbolicAcceptanceCases()
+        % The arc-vs-arc fixtures both symbolic acceptance tests run on, in one place so the two
+        % halves of FARFIELD_FIX_PLAN.md Phase 4 -- "g is the max on every face" and "the faces
+        % leave no hole" -- can never drift apart onto different inputs.
+            Tb = [0 0; 3 -5; 4 -4];
+            Q  = [0.5 -1.2; -0.2 -3.1; -2.5 0; -1.5 -1.7];
+            cases = { 'shift [-1 0.75]',      Tb,           Tb + [-1 0.75]
+                      'shift [2 -0.5]',       Tb,           Tb + [2 -0.5]
+                      'quad split (case177)', Q([1 2 3],:), Q([1 3 4],:) };
+        end
+
         function checkTwoCurved(testCase, shift)
         % max of two CURVED operands against the pointwise max of their own eval -- the definition
         % of what maxQuaPar computes, and independent of how the result is assembled, so it cannot
