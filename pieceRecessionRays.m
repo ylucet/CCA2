@@ -26,7 +26,14 @@ function rays = pieceRecessionRays(piece)
     V   = sym(piece.V);
     nv  = size(V,1);
     unb = ~isempty(piece.dirIn);
+    % curveAfter ~= 0 does NOT mean "this edge is curved": boundedPiece tags every piece it builds
+    % with the closing edge's index, including the straight-splitting-curve case where curveEc is
+    % all zeros (maxQuaPar's pieceIsCurved says why the tag has to stay). Treating such an edge as
+    % an arc skips it in the edge-direction loops below AND replaces its half-plane with a conic
+    % that is identically zero, so the piece comes out with one fewer constraint than it has edges
+    % -- unbounded where it is not.
     ca  = piece.curveAfter;
+    if ca ~= 0 && (isempty(piece.curveEc) || all(piece.curveEc == 0)), ca = 0; end
 
     % CCW straight-edge direction vectors (the arc edge is excluded; it enters via Q below).
     E = {};
@@ -85,7 +92,22 @@ function rays = pieceRecessionRays(piece)
         Achord = ch*Q*ch.';
         chDir = sym([]);
         if logical(Achord > 0)
-            nulls = arcNullDirs(Q);
+            % THE AXIS DIRECTION MUST COME FROM AN EIGENVECTOR, NOT FROM THE DISCRIMINANT.
+            % arcNullDirs solves d*Q*d' = 0 exactly and returns NOTHING when b^2-4ac comes out
+            % negative -- which is what a floating-point parabola's Q does about half the time, since
+            % it is only semidefinite up to rounding (measured: -2.78e-17 on the first arc of the
+            % arcVsArcRefusesAnUnboundedTwoArcSplit fixture). The chord was then silently never
+            % emitted, the piece's constraint region stayed a slab open at BOTH ends, and
+            % reccConeViolation reported it receding in both senses. parabolaArcFrame has always
+            % taken the smallest-magnitude eigenvector instead, with a tolerance; do the same.
+            % Only the SIGN of sideArc is used below and its magnitude is bounded away from zero
+            % (|cross(ch,n0)| ~ 1.3 and |sStar| ~ 0.04 on that fixture), so deriving n0 numerically
+            % does not weaken the exact sign tests that follow.
+            Qd = double(Q);
+            [Vq0, Dq0] = eig(Qd);
+            [~, i00] = min(abs(diag(Dq0)));
+            n0d = Vq0(:,i00)';
+            nulls = {sym(n0d/norm(n0d))};
             for q0 = nulls
                 n0 = q0{1};
                 M  = (X0 + X1)/2;

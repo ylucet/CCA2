@@ -262,7 +262,7 @@ function g = maxQuaPar(g1, g2)
                     pieces(end+1) = cell; %#ok<AGROW>
                     continue
                 end
-                newCells = splitCell(cell, f1row, f2row);
+                newCells = splitCell(cell, f1row, f2row, polyK, polyL, k, l);
                 for z = 1:numel(newCells)
                     nc = newCells(z); nc.src = [k l];
                     pieces(end+1) = nc; %#ok<AGROW>
@@ -363,7 +363,7 @@ function m = containmentViolation(p, poly, name, k)
             end
         end
     end
-    if poly.curveAfter ~= 0
+    if pieceIsCurved(poly)
         % The face's own arc: its interior is {evalConic(curveEc,.) >= 0} (facePoly normalises the
         % sign). CHECKING THE VERTICES IS NOT ENOUGH, and that is the whole point of this block: on
         % the CONCAVE side of a parabola the region is not convex, so a straight edge joining two
@@ -390,7 +390,7 @@ function m = containmentViolation(p, poly, name, k)
     % bulges past a neighbouring face's boundary). Restricting a constraint to the arc's own
     % parameter u makes this exact -- a line becomes a quadratic in u, a conic a quartic -- so the
     % extremum over the arc is a root-finding problem, not a sampling problem.
-    if p.curveAfter ~= 0
+    if pieceIsCurved(p)
         fr = parabolaArcFrame(p.curveEc, 'maxQuaPar');
         [X0, X1] = curveEndpoints(p);
         u0 = fr.uOf(X0); u1 = fr.uOf(X1);
@@ -405,7 +405,7 @@ function m = containmentViolation(p, poly, name, k)
                     name, k, j, v, uarg, ulo, uhi);
             end
         end
-        if poly.curveAfter ~= 0
+        if pieceIsCurved(poly)
             cc = poly.curveEc; scc = max(1, max(abs(cc)));
             [mn, ~, uarg] = extremaOnInterval(fr.conicCoeffs(cc), ulo, uhi);
             v = -mn/scc;
@@ -439,11 +439,16 @@ function segs = pieceStraightEdges(p)
 % unbounded piece, its two rays (tmax = inf). The one parabolic edge is skipped.
     segs = {};
     V = p.V; nv = size(V,1); unb = ~isempty(p.dirIn);
+    % Only a GENUINELY curved edge is skipped. `curveAfter ~= 0` also marks the straight-splitting
+    % -curve case (pieceIsCurved's header), and skipping there dropped a real straight edge from
+    % every boundary minimisation built on this list -- which is how a piece could fail winner
+    % domination along an edge and have the invariant report nothing.
+    curved = pieceIsCurved(p);
     if unb
         segs{end+1} = struct('P', V(1,:), 'd', p.dirIn, 'tmax', inf, ...
             'name', sprintf('ray from %s along %s', mat2str(V(1,:),6), mat2str(p.dirIn,4)));
         for i = 1:nv-1
-            if i == p.curveAfter, continue, end
+            if curved && i == p.curveAfter, continue, end
             segs{end+1} = struct('P', V(i,:), 'd', V(i+1,:)-V(i,:), 'tmax', 1, ...
                 'name', sprintf('edge %s->%s', mat2str(V(i,:),6), mat2str(V(i+1,:),6))); %#ok<AGROW>
         end
@@ -451,7 +456,7 @@ function segs = pieceStraightEdges(p)
             'name', sprintf('ray from %s along %s', mat2str(V(end,:),6), mat2str(p.dirOut,4)));
     else
         for i = 1:nv
-            if i == p.curveAfter, continue, end
+            if curved && i == p.curveAfter, continue, end
             j = mod(i,nv)+1;
             segs{end+1} = struct('P', V(i,:), 'd', V(j,:)-V(i,:), 'tmax', 1, ...
                 'name', sprintf('edge %s->%s', mat2str(V(i,:),6), mat2str(V(j,:),6))); %#ok<AGROW>
@@ -517,7 +522,7 @@ function [vmin, where] = boundaryMinOf(diffRow, p)
         [v, t] = minQuadOnSegment(A, B, C, e.tmax, sc);
         if v < vmin, vmin = v; where = sprintf('along %s (t = %.4g)', e.name, t); end
     end
-    if p.curveAfter ~= 0
+    if pieceIsCurved(p)
         fr = parabolaArcFrame(p.curveEc, 'maxQuaPar');
         [X0, X1] = curveEndpoints(p);
         u0 = fr.uOf(X0); u1 = fr.uOf(X1);
@@ -1199,14 +1204,27 @@ function cons = polyConstraints(poly)
     cons = zeros(0,3);
     last = nv - 1;
     if isempty(poly.dirIn), last = nv; end   % bounded: also include the closing edge (nv,1)
+    curvedHere = pieceIsCurved(poly);
     for i = 1:last
-        if poly.curveAfter == i
+        if poly.curveAfter == i && curvedHere
             % This edge is a parabolic ARC, not a segment. Emitting the half-plane of its CHORD
             % would clip against the wrong boundary -- on the bulging side it cuts away part of
             % the face, on the other it keeps territory that is not the face's. The arc is
             % applied separately, as a curved cut, by clipByFace/clipPolyByConic.
             continue
         end
+        % ...but `curveAfter ~= i` alone is NOT the test, and reading it as one dropped a real
+        % constraint. pieceIsCurved's own header says why: boundedPiece tags EVERY piece it builds
+        % with curveAfter = "the closing edge", including the isStraight case where curveEc is all
+        % zeros, because samePieceGeometry and dropSubsumedPieces use that tag to opt splitCell's
+        % pieces out of dedup. So a piece can carry curveAfter ~= 0 with NO conic, and this loop
+        % then skipped a perfectly ordinary STRAIGHT edge and emitted no half-plane for it at all.
+        %
+        % MEASURED, on seeded shift [1.4979 3.6486] of the two-curved fixture: five of its 24 pieces
+        % carry curveAfter ~= 0 with curveEc all zeros, and one of them -- an unbounded 2-vertex
+        % piece, src [2 4] -- had its ONLY finite edge skipped. Its region was then just the two ray
+        % half-planes, so it admitted (-2.706981, 2.705986) two units outside itself and answered 0
+        % where the truth is 0.35310095. That is the 0.3531 this fixture has been failing by.
         jn = mod(i,nv) + 1;
         d = poly.V(jn,:) - poly.V(i,:);
         n = [d(2), -d(1)];
@@ -2460,7 +2478,7 @@ end
 
 % ============================================================================================
 % ----- splitting a cell by the (degenerate) curve where f1row and f2row are equal ------------
-function newPieces = splitCell(cell, f1row, f2row)
+function newPieces = splitCell(cell, f1row, f2row, polyK, polyL, kSrc, lSrc)
 % Split cell along {f1row=f2row} and return the resulting pieces (1 or more), each tagged with the
 % row that wins on it and each carrying AT MOST ONE curved edge. See the file header scoping
 % caveat: this REQUIRES f1row-f2row to be a degenerate conic (full 3x3 discriminant Delta==0),
@@ -2834,12 +2852,19 @@ function newPieces = splitCell(cell, f1row, f2row)
         if ~isempty(half.dirIn)
             % Two curves on an UNBOUNDED half. splitTwoArcPiece separates two arcs with a CHORD
             % between them, which presupposes a closed boundary cycle; there is no chord that
-            % closes an unbounded piece. Refused narrowly here rather than by the blanket guard
-            % that used to stand at the top of this function.
+            % closes an unbounded piece. What does close it is a RAY -- see
+            % splitUnboundedTwoArcPiece, which only returns a split it can PROVE well-formed and
+            % returns [] otherwise, leaving the refusal below exactly as it was.
+            two = splitUnboundedTwoArcPiece(half, p, arcEc0, f1row, f2row, ...
+                                            polyK, polyL, kSrc, lSrc);
+            if ~isempty(two)
+                newPieces = [newPieces, two]; %#ok<AGROW>
+                continue
+            end
             error('maxQuaPar:notImplemented', ...
                 ['maxQuaPar:splitCell: an UNBOUNDED half carries both the inherited arc and the ' ...
-                 'splitting curve; splitTwoArcPiece separates two arcs by a chord, which needs a ' ...
-                 'closed boundary.']);
+                 'splitting curve; no ray cut from the vertex between them produces two halves ' ...
+                 'whose recession cones and carried operands can be PROVED correct.']);
         end
         newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
     end
@@ -3043,6 +3068,147 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         end
     end
     out = piece;
+end
+
+function out = splitUnboundedTwoArcPiece(piece, arcPos, arcEc, f1row, f2row, polyK, polyL, kSrc, lSrc)
+% Separate the two arcs of an UNBOUNDED piece with a RAY, so each half carries one. Returns [] when
+% no candidate can be PROVED correct, and the caller then refuses exactly as it always did.
+%
+% The cut starts at the vertex between the two arcs -- a genuine boundary point, so it really
+% divides the piece -- and runs to infinity along a direction the piece recedes in. Each half then
+% has one arc, one of the piece's original rays, and the new one.
+%
+% ------------------------------------------------------------------------------------------------
+% WHY THIS IS GATED ON A PROOF AND NOT ON A LIST OF CHECKS
+%
+% This construction was written once before and REVERTED (DECISIONS.md, 2026-08-13). It makes the
+% pinned fixture assemble; it also made seeded shift [1.4979 3.6486] assemble to a value wrong by
+% 0.3531, and a silent wrong answer is worse than the refusal it replaces. SIX heuristics were
+% tried against that shift and none separated it from the good cases: that the ray recedes every
+% straight constraint; that it stays inside both arcs; that each half admits a point just inside
+% its own arc; the new ray's sign; that each half's recession cone equals the cone its rays span;
+% and scoping the whole thing to the half-strip shape.
+%
+% So the acceptance is not another heuristic. A half is used only when the two EXACT invariants
+% this file already owns both hold on it:
+%
+%   * reccConeViolation -- the region the half ENCODES runs to infinity in exactly the directions
+%     it declares. A wrong cut over-extends, and over-extension of a piece with rays is precisely
+%     a recession cone larger than the cone its rays span. Decided in closed form by
+%     pieceRecessionRays, symbolically, with no probe.
+%   * winnerDominationViolation -- the operand row the half CARRIES really is the larger of the
+%     two everywhere on the half. Both halves inherit the parent's winner, so a parent that was
+%     labelled from evidence not covering the whole cell shows up here and nowhere else. Minimised
+%     over the half's whole boundary in closed form.
+%
+% Between them those are two of the three ways a far-field answer goes wrong (the third,
+% containment in the source faces, is unaffected by a cut that stays inside the parent). The
+% measured 0.3531 error is one or the other, so it cannot survive this gate; and if a future input
+% finds a way for it to, the answer is another invariant, not another heuristic.
+%
+% NOTE the fifth heuristic in that list is the first invariant here. It did not separate the cases
+% when it was tried, and the reason is on record: pieceRecessionRays derived the arc's chord from
+% the piece's other VERTICES, which is unsound and which DECISIONS.md had already recorded as
+% unsound one level up, in QuaPar.chordCuts. That rule was corrected on 2026-08-14 to read the side
+% off the conic itself. Whether the correction is what makes the invariant decisive here is the
+% first thing to measure.
+    out = [];
+    nv = size(piece.V,1);
+    c  = piece.curveAfter;
+    if ~isscalar(arcPos) || ~isscalar(c), return, end
+    if arcPos < 1 || c < 1 || arcPos > nv-1 || c > nv-1, return, end
+    i1 = min(arcPos, c); i2 = max(arcPos, c);
+    if i1 == i2, return, end
+    iX = i1 + 1;                            % arc i1 ends at vertex i1+1; cut there
+    if iX >= nv || iX < 2, return, end      % the cut needs a real chain on each side
+    ecA = arcEc; ecB = piece.curveEc;
+    if c < arcPos, ecA = piece.curveEc; ecB = arcEc; end     % whichever arc comes first
+    for ec = {ecA, ecB}
+        if isempty(ec{1}) || all(ec{1} == 0), return, end    % a two-arc split needs two real arcs
+        dsc = ec{1}(2)^2 - 4*ec{1}(1)*ec{1}(3);
+        if abs(dsc) > 1e-9*max(1, max(abs(ec{1})))^2, return, end   % not a parabola: refuse
+    end
+
+    X = piece.V(iX,:);
+    cons = polyConstraints(piece);
+    dIn = piece.dirIn/norm(piece.dirIn); dOut = piece.dirOut/norm(piece.dirOut);
+    cand = {};
+    for w = [0.5 0.25 0.75 0.1 0.9 0 1]
+        d = (1-w)*dIn + w*dOut;
+        if norm(d) > 1e-12, cand{end+1} = d/norm(d); end %#ok<AGROW>
+    end
+    % ...and directions the ARCS themselves single out, which the sweep of the recession cone above
+    % has no reason to hit. Each half has to end up with an emittable chord for its own arc, and the
+    % chord is emittable only when every vertex AND ray direction of that half lies on one side of
+    % it -- so the new ray's direction is one of the things being tested, and a d parallel to a
+    % chord is the extreme case that just satisfies it. The parabolas' axis directions are added for
+    % the same reason: that is where a conic constraint stops being strict.
+    for ec = {ecA, ecB}
+        Qc = [ec{1}(1), ec{1}(2)/2; ec{1}(2)/2, ec{1}(3)];
+        [Vq, Dq] = eig(Qc);
+        [~, i0] = min(abs(diag(Dq)));
+        ax = Vq(:,i0)';
+        if norm(ax) > 1e-12, cand{end+1} = ax/norm(ax); cand{end+1} = -ax/norm(ax); end %#ok<AGROW>
+    end
+    for e = [i1, i2]
+        ch = piece.V(e+1,:) - piece.V(e,:);
+        if norm(ch) > 1e-12, cand{end+1} = ch/norm(ch); cand{end+1} = -ch/norm(ch); end %#ok<AGROW>
+    end
+    scC = max(1, max(abs(cons(:,1:2)), [], 'all'));
+    for k = 1:numel(cand)
+        d = cand{k};
+        % Cheap necessary conditions first, so the symbolic gate below runs on few candidates.
+        if any(cons(:,1:2)*d' > 1e-9*scC), continue, end
+        okRay = true;
+        for ec = {ecA, ecB}
+            v = minConicAlong(ec{1}, X, d, inf);
+            if v < -1e-7*max(1, max(abs(ec{1})))*max(1, norm(X))^2, okRay = false; break, end
+        end
+        if ~okRay, continue, end
+
+        A = struct('V', piece.V(1:iX,:), 'dirIn', piece.dirIn, 'dirOut', d, ...
+            'dirInSign', piece.dirInSign, 'dirOutSign', newRaySign('out'), 'curveAfter', i1, ...
+            'curveEc', ecA, 'f', piece.f);
+        B = struct('V', piece.V(iX:nv,:), 'dirIn', d, 'dirOut', piece.dirOut, ...
+            'dirInSign', newRaySign('in'), 'dirOutSign', piece.dirOutSign, 'curveAfter', i2 - iX + 1, ...
+            'curveEc', ecB, 'f', piece.f);
+        if A.curveAfter < 1 || A.curveAfter > size(A.V,1)-1, continue, end
+        if B.curveAfter < 1 || B.curveAfter > size(B.V,1)-1, continue, end
+        if halfIsProvedWellFormed(A, f1row, f2row, polyK, polyL, kSrc, lSrc) && ...
+           halfIsProvedWellFormed(B, f1row, f2row, polyK, polyL, kSrc, lSrc)
+            out = [A, B];
+            return
+        end
+    end
+end
+
+function tf = halfIsProvedWellFormed(h, f1row, f2row, polyK, polyL, kSrc, lSrc)
+% ALL THREE exact invariants, on one half of the ray cut. See splitUnboundedTwoArcPiece for why the
+% acceptance is these and not a heuristic.
+%
+% CONTAINMENT IS IN THE LIST, and leaving it out was measured to matter. The reasoning for omitting
+% it was that a cut staying inside the parent cannot break containment -- true, and beside the
+% point: the PARENT may already reach outside its own source faces, with the refusal this branch
+% replaces having masked it. That is exactly what seeded shift [1.4979 3.6486] does. Its symptom is
+% not the one the other two invariants are shaped for: only ONE face admits the bad point, so
+% nothing overlaps, and the operand that beats the carried row there is a DIFFERENT g2 face from
+% the cell's own source -- which is what "the piece left facePoly(g2,l)" looks like, and which the
+% winner test cannot see, because it compares against the other row OF THIS CELL.
+%
+% A failure to DECIDE counts as not proved: pieceRecessionRays works over sym, so on an
+% installation without the Symbolic Toolbox this returns false and the caller refuses -- which is
+% exactly what that installation did before this branch existed, so nothing regresses.
+    tf = false;
+    h.src = [kSrc lSrc];      % the violation messages name the source face
+    try
+        if ~isempty(containmentViolation(h, polyK, 'g1', kSrc)), return, end
+        if ~isempty(containmentViolation(h, polyL, 'g2', lSrc)), return, end
+        if ~isempty(reccConeViolation(h)), return, end
+        if ~isempty(winnerDominationViolation(h, f1row, f2row)), return, end
+    catch
+        return
+    end
+    tf = true;
 end
 
 function out = splitAtReflexVertex(p)
@@ -3269,9 +3435,54 @@ function piece = assignSide(piece, diffRow, f1row, f2row) %#ok<INUSD>
         d = QuaPar.evalPoly(diffRow, mean(piece.V,1));
     end
     if d >= 0, piece.f = f1row; else, piece.f = f2row; end
+    assertWinnerHoldsAtInfinity(piece, diffRow, d);
     if pieceIsCurved(piece) && QuaPar.evalConic(piece.curveEc, insideArcSample(piece)) < 0
         piece.curveEc = -piece.curveEc;
     end
+end
+
+function assertWinnerHoldsAtInfinity(piece, diffRow, dFinite)
+% A finite vertex decides the winner only if the piece does not STRADDLE {diffRow = 0}. On a
+% BOUNDED piece splitCell's two-crossing cut guarantees it does not. On an UNBOUNDED one it does
+% not: {diffRow = 0} is a degenerate conic, so it can be a PAIR of lines, and a half that lies
+% strictly on one side of the line splitCell cut along can still be crossed by the OTHER line --
+% which, if that line leaves through the recession cone, contributes no finite boundary crossing
+% for splitCell to find. The half then carries one winner while the other operand wins far out
+% along its own ray.
+%
+% MEASURED, seeded shift [1.4979 3.6486] of the two-curved fixture: piece src [2 4], an unbounded
+% 2-vertex piece, carries g1 face 2's quadratic while g2 face 4 beats it by +Inf along its own ray
+% from (-5.93403, 3.93403) in direction (-0.7071, 0.7071). It answered 0 at (-2.706981, 2.705986)
+% where the truth is 0.35310191 -- the 0.3531 that fixture had been failing by.
+%
+% This does not repair the subdivision, and deliberately so: the repair is a splitCell that can cut
+% a cell along a second line entering and leaving at infinity, which DECISIONS.md (2026-08-03)
+% records as needing real work and warns against patching with probes. What it does is refuse
+% instead of returning a silently wrong winner, which is the rule this file works by. The test is
+% EXACT -- asymptoticSign reads the leading coefficient of diffRow along the ray, no sampling -- so
+% it fires only on a genuine sign disagreement.
+    if isempty(piece.dirIn), return, end
+    want = 1; if dFinite < 0, want = -1; end
+    rays = {piece.V(1,:), piece.dirIn; piece.V(end,:), piece.dirOut};
+    for r = 1:size(rays,1)
+        s = asymptoticSign(diffRow, rays{r,1}, rays{r,2});
+        sc = 1e-9*(1 + max(abs(QuaPar.evalPoly(diffRow, piece.V))));
+        if abs(s) <= sc, continue, end               % no decisive behaviour along this ray
+        if sign(s) ~= want
+            error('maxQuaPar:notImplemented', ...
+                ['maxQuaPar:assignSide: an UNBOUNDED piece straddles {f1=f2}: its finite ' ...
+                 'vertices say %s wins, but the other operand wins along its own ray from %s in ' ...
+                 'direction %s. {f1=f2} is a degenerate conic, so it can be a PAIR of lines and ' ...
+                 'the second one can leave through the recession cone without crossing the ' ...
+                 'boundary anywhere finite -- which is why splitCell''s two-crossing cut did not ' ...
+                 'separate them.'], ternaryStr(want > 0, 'f1', 'f2'), ...
+                mat2str(rays{r,1}, 6), mat2str(rays{r,2}, 4));
+        end
+    end
+end
+
+function s = ternaryStr(c, a, b)
+    if c, s = a; else, s = b; end
 end
 
 function edges = cellEdgeList(cell)
