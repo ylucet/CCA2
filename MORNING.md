@@ -9,9 +9,9 @@ a bug past the usual three-strikes rule.
 ## Headline
 
 **`maxQuaParTest` is 28 pass / 0 fail, from a `main` baseline of 25 / 1.** All four items are done.
-The fast bucket is **202 / 0** (was 200 / 1) and the normal bucket **6 / 0**. The slow bucket was
-still running when this was written — **check it before merging**; nothing on this branch touches
-the symbolic path, but it is the one thing not re-measured.
+Every bucket re-measured: fast **203 / 0** (was 200 / 1), normal **6 / 0**, slow **111 / 4** —
+the slow bucket identical to its recorded baseline, its four failures being the four documented
+open items. **No regression anywhere.**
 
 The last red, `arcVsArcRefusesAnUnboundedTwoArcSplit`, had survived two previous attempts. Neither
 of them failed for the reason it was thought to:
@@ -71,17 +71,20 @@ needs `−1`, giving the two halves of a split the same outward normal across th
 
 ## What is broken
 
-**One open case, and it is a refusal rather than a wrong answer.** An unbounded piece can straddle
-`{f1 = f2}`: that curve is a degenerate conic, so it can be a **pair of parallel lines**, and a
-half lying strictly on one side of the line `splitCell` cut along can still be crossed by the
-other — which, if it leaves through the recession cone, contributes no finite boundary crossing for
-`splitCell` to find. `assignSide` now detects this exactly (the asymptotic sign along each ray) and
-errors instead of returning a silently wrong winner.
+**One open case, and it is an error rather than a wrong answer** — a piece that spans TWO sub-arcs
+of the same conic, which its single curve slot cannot hold, so the second is represented by its
+chord and assembly finds an unpairable half-edge. It was masked until now by the two-arc refusal
+upstream.
 
-Reproducer: seeded shift `[1.4979 3.6486]` of the two-curved fixture, piece `src [2 4]`. The repair
-is a `splitCell` that can cut a cell along a second line entering and leaving at infinity;
-`DECISIONS.md` (2026-08-03) describes the same shape for a parabola and warns against patching it
-with probes, so it was not attempted.
+It is fully diagnosed, and the diagnosis is the useful part, because the symptom misleads: the
+error names a straight edge facing an identical *curved* one at distance 8e-16, which reads like a
+clip dropping a conic. It is not — on seeded shift `[-2.6434 -1.8066]`, g1's arc is cut **twice**
+and one piece spans both sub-arcs. The neighbouring cell's halves are both correct, so
+`splitCell`'s crossed-arc restoration is not at fault. `TODO.md` has the captured piece list.
+
+I stopped there rather than writing the fix: it needs a subdivision that `splitTwoArcPiece` cannot
+supply as-is (it assumes the two arcs lie on different conics), and that is a design decision, not
+a patch.
 
 ## Needs a decision
 

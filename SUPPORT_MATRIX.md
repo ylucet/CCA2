@@ -9,9 +9,11 @@ re-derived and re-checked mechanically.
 arc-vs-arc rows and the far-field defect were stale, and §4's guard line numbers predated that work
 by ~1400 lines. All guards and line numbers re-derived from the source.
 
-Re-measured that day, on the buckets only (**not** the full census below, which stands at its own
-date): `maxQuaParTest` **28 pass / 0 fail** (was 25 / 1), fast bucket **202 / 0** (was 200 / 1),
-normal bucket **6 / 0**. Treat every count in this file as carrying its own date.
+Re-measured that day, every bucket: `maxQuaParTest` **28 / 0** (was 25 / 1), fast **203 / 0** (was
+200 / 1), normal **6 / 0**, slow **111 / 4** — the slow bucket identical to its recorded baseline,
+with all four failures being the documented open items of §7 and §8. No regression anywhere. The
+full 26-suite census below stands at its own date. Treat every count in this file as carrying its
+own date.
 
 Last regenerated: 2026-08-02, against a full census of **300 passed / 1 failed / 0 incomplete**
 across 26 suites (`CCA2_TEST_TIMEOUT=5400 bash .claude/suite.sh`, run against a snapshot of the
@@ -746,12 +748,17 @@ Ordered by how likely a downstream caller is to hit it:
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 5. **Two known wrong-answer defects** (§7).
-6. **`maxQuaPar`: an orphan boundary edge in `assemblePieces`** (`maxQuaPar:internal`). The only
-   `maxQuaPar` case left, and it is an ERROR, not a wrong answer. Reproducer: seeded shift
-   `[-2.6434 -1.8066]` of the two-curved fixture — piece 4, `src [1 6]`, has a straight boundary
-   edge `(-2,2)→(-2.744821,1.372827)` with no matching neighbour. It was previously masked by the
-   two-arc refusal upstream. The seeded sweep is otherwise **17 exact / 0 wrong / 1 errored of 18**
-   (it was 16 / 0 / 2).
+6. **`maxQuaPar`: a piece that spans TWO sub-arcs of the same conic** (`maxQuaPar:internal`, an
+   orphan half-edge). The only `maxQuaPar` case left, and it is an ERROR, not a wrong answer;
+   previously masked by the two-arc refusal upstream. The seeded sweep is otherwise
+   **17 exact / 0 wrong / 1 errored of 18** (it was 16 / 0 / 2).
+   Diagnosed, and the diagnosis matters because the symptom misleads: the error names a straight
+   edge facing an identical *curved* one at distance 8e-16, which reads like a clip dropping a
+   conic. It is not. On seeded shift `[-2.6434 -1.8066]`, g1's arc between faces 1 and 2 is cut
+   **twice**, and piece 4 `src [1 6]` spans both sub-arcs — so its single curve slot represents the
+   second by its chord, and `matchHalfEdges` correctly refuses to pair straight with curved. The
+   fix is to subdivide such a piece, not to widen the representation; `splitTwoArcPiece` cannot be
+   reused as-is because it assumes the two arcs lie on different conics. Full trace in `TODO.md`.
    ~~an unbounded half carrying two arcs~~ and ~~an unbounded piece straddling `{f1=f2}`~~ — both
    **RESOLVED 2026-08-14**, see §4.1.
 7. ~~**arc-vs-arc results are only locally correct (wrong far from the arcs)**~~ — **RESOLVED

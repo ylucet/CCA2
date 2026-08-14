@@ -55,20 +55,24 @@ Both earlier reverts were correct decisions on the evidence available. The evide
 ## Where things stand
 
 - Branch: `overnight/2026-08-13` (not merged, not pushed).
-- **`maxQuaParTest` 28 / 0. Fast bucket 203 / 0** (was 200 / 1). **Normal bucket 6 / 0.** The slow
-  bucket had not finished when this was written — check it before merging.
+- **`maxQuaParTest` 28 / 0. Fast bucket 203 / 0** (was 200 / 1). **Normal bucket 6 / 0. Slow
+  bucket 111 / 4** — identical to its recorded baseline, and all four failures are the documented
+  open items (`biconjugateOverATwoFaceSubdivisionIsTheEnvelope`,
+  `step3UnboundedAssemblyMatchesTheTruth`, and two in `unboundedFaceTest`). No regression anywhere.
 - `MAXQP_ASSERT=1` and `=2` now run clean on all four arc-vs-arc fixtures.
 
 ## Next steps
 
-1. **Finish the slow bucket and merge.** Nothing on this branch touches the symbolic path, but the
-   slow bucket is the only thing not yet re-measured.
-2. **The one open `maxQuaPar` case: an orphan boundary edge in `assemblePieces`**
-   (`maxQuaPar:internal`). An ERROR, not a wrong answer, and it was masked until now by the two-arc
-   refusal upstream. Reproducer: seeded shift `[-2.6434 -1.8066]` of the two-curved fixture —
-   piece 4, `src [1 6]`, straight edge `(-2,2)→(-2.744821,1.372827)`, no matching neighbour.
-   `checkOrphanHalfEdges` prints the closest candidates; `insertGlobalPassthrough` is what handles
-   the T-junction form of this.
+1. **Merge.** Every bucket has been re-measured and none regressed.
+2. **The one open `maxQuaPar` case: a piece that spans TWO sub-arcs of the same conic.** An ERROR
+   (`maxQuaPar:internal`, an orphan half-edge), not a wrong answer, masked until now by the two-arc
+   refusal upstream. **It is already diagnosed — read `TODO.md` before touching it.** The symptom
+   reads like a clip dropping a conic; it is not. Piece 4 `src [1 6]` on seeded shift
+   `[-2.6434 -1.8066]` has g1's arc cut TWICE and spans both sub-arcs, so its one curve slot
+   represents the second by its chord. The neighbouring cell's halves are both correct, so
+   `splitCell`'s crossed-arc restoration is not at fault. The fix is to SUBDIVIDE such a piece, not
+   to give pieces several curve slots — and `splitTwoArcPiece` cannot be reused as-is, because it
+   assumes the two arcs lie on different conics.
 3. **Turn `MAXQP_ASSERT=1` on in the test suite.** It is cheap, and this session is the argument:
    it was off *and* crashing, and three defects lived behind that for weeks.
 4. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`

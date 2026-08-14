@@ -54,15 +54,34 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Still open, in the order they should be taken
 
-- [ ] **An orphan boundary edge in `assemblePieces`** (`maxQuaPar:internal`). The only `maxQuaPar`
-      case left, and it is an ERROR, not a wrong answer. It was masked until 2026-08-14 by the
-      two-arc refusal upstream.
-      Reproducer: seeded shift `[-2.6434 -1.8066]` of the two-curved fixture -- piece 4, `src [1 6]`,
-      has a straight boundary edge `(-2,2)->(-2.744821,1.372827)` with no matching neighbour.
-      The seeded sweep is otherwise **17 exact / 0 wrong / 1 errored of 18** (was 16 / 0 / 2).
-      Note the shape: an orphan is usually a T-junction or a piece that stops short of its
-      neighbour. `insertGlobalPassthrough` handles the first; `checkOrphanHalfEdges` prints the
-      closest candidates, which is where to start.
+- [ ] **A piece that spans TWO sub-arcs of the same conic.** The only `maxQuaPar` case left, and it
+      is an ERROR (`maxQuaPar:internal`, an orphan half-edge), not a wrong answer. It was masked
+      until 2026-08-14 by the two-arc refusal upstream. The seeded sweep is otherwise
+      **17 exact / 0 wrong / 1 errored of 18** (was 16 / 0 / 2).
+      **DIAGNOSED -- do not re-derive it.** Reproducer: seeded shift `[-2.6434 -1.8066]` of the
+      two-curved fixture. The assembly error names a straight edge of piece 4 `src [1 6]` facing an
+      identical CURVED edge of piece 5 `src [2 6]` at distance 8e-16, which reads like a clip
+      dropping a conic. It is not. Measured, on the captured piece list:
+
+        piece 4 src [1 6] nv=5 curveAfter=5
+           V = (-2.960609,0.9606088) (-2.581582,0.581582) (-1.581582,1.581582) (-2,2)
+               (-2.744821,1.372827)
+
+      Its edge 5 is the arc `(-2.744821,1.372827)->(-2.960609,0.9606088)` and its edge 4 is
+      `(-2,2)->(-2.744821,1.372827)`. **Both lie on g1's parabola** -- the arc between g1 faces 1
+      and 2 was cut TWICE, at `(-2.744821,1.372827)` and at `(-2.960609,0.9606088)`, so this one
+      piece spans two consecutive sub-arcs of ONE conic. A piece has ONE curve slot, so the second
+      sub-arc is represented by its chord, and `matchHalfEdges` correctly refuses to pair a
+      straight half-edge with a curved one.
+      Note the halves of the neighbouring `src [2 6]` cell are BOTH correct (traced: each relabels
+      to `curveAfter=1` with a real conic), so `splitCell`'s crossed-arc restoration is not at
+      fault. This is the same limitation `insertPassthroughVertices` raises at `maxQuaPar.m:1077`,
+      reached by a path that does not go through that guard.
+      The fix is to SUBDIVIDE such a piece -- a chord between the two sub-arcs, the same
+      subdivide-never-widen move `splitTwoArcPiece` makes for two DIFFERENT conics -- rather than
+      to give a piece several curve slots. Design it before writing it: `splitTwoArcPiece` assumes
+      the two arcs are on different conics, and two sub-arcs of the SAME conic meeting at a shared
+      vertex is a different shape.
 
 - [ ] **`MAXQP_ASSERT` should be on in the test suite.** It is off by default and was CRASHING on
       three of the four arc-vs-arc fixtures until 2026-08-14, so the invariants that eventually
