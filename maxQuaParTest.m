@@ -15,6 +15,34 @@ classdef maxQuaParTest < matlab.unittest.TestCase
     % real straight lines -- fully representable by QuaPar, not a hyperbola. See the corrected
     % Proposition 1 in 3-edge.tex for the exact factorizations.
 
+    methods (TestMethodSetup)
+        function turnOnPieceInvariants(testCase)
+        % EVERY test in this class runs with maxQuaPar's piece invariants ON.
+        %
+        % WHY THIS IS NOT OPTIONAL BOOKKEEPING. assertPiecesWellFormed is exact, cheap at level 1,
+        % and checks the three properties whose violation IS a far-field wrong answer: the piece
+        % lies inside both source faces, the operand it carries really dominates on it, and (at
+        % level 2) its encoded region recedes exactly where it declares rays. It was written for
+        % that job in August 2026 -- and it was OFF by default, so it never ran here.
+        %
+        % Worse, it was CRASHING. Two call sites read `curveAfter ~= 0` as "this edge is curved"
+        % and handed parabolaArcFrame an all-zero conic, which raises degenerateAxis; that fired on
+        % three of the four arc-vs-arc fixtures, so on exactly the inputs that most needed the
+        % invariants they could not run at all. Three real defects sat behind that for weeks, and
+        % the moment the crash was fixed the invariants named all three. An invariant that errors
+        % is an invariant that is off, and nothing was noticing -- which is the argument for
+        % turning it on here rather than leaving it to be remembered.
+        %
+        % Level 1 only. Level 2 adds the symbolic recession-cone test, which costs seconds per
+        % call; it stays opt-in for the tools that want it (pieceRecessionRays, and
+        % splitUnboundedTwoArcPiece's own acceptance gate, which calls it directly).
+            global MAXQP_ASSERT %#ok<GVMIS>
+            prev = MAXQP_ASSERT;
+            MAXQP_ASSERT = 1;
+            testCase.addTeardown(@() maxQuaParTest.restoreAssert(prev));
+        end
+    end
+
     methods (Test)
         function stepTwoProducesSixFaceEnvelopeConjugatesForBothSubTriangles(testCase)
             [g1, g2] = maxQuaParTest.buildG1G2();
@@ -847,6 +875,13 @@ classdef maxQuaParTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function restoreAssert(prev)
+        % Put MAXQP_ASSERT back exactly as it was, so running this suite never leaves the
+        % assertions on for whatever runs next in the same MATLAB process.
+            global MAXQP_ASSERT %#ok<GVMIS>
+            MAXQP_ASSERT = prev;
+        end
+
         function cases = symbolicAcceptanceCases()
         % The arc-vs-arc fixtures both symbolic acceptance tests run on, in one place so the two
         % halves of FARFIELD_FIX_PLAN.md Phase 4 -- "g is the max on every face" and "the faces

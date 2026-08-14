@@ -83,10 +83,47 @@ the tooling that judged them was itself broken, in two ways, and silently.
       the two arcs are on different conics, and two sub-arcs of the SAME conic meeting at a shared
       vertex is a different shape.
 
-- [ ] **`MAXQP_ASSERT` should be on in the test suite.** It is off by default and was CRASHING on
-      three of the four arc-vs-arc fixtures until 2026-08-14, so the invariants that eventually
-      named three defects had never run on the inputs that needed them. Level 1 is cheap. An
-      invariant that errors is an invariant that is off, and nothing was noticing.
+- [x] **`MAXQP_ASSERT` is now ON in `maxQuaParTest`** (2026-08-15), at level 1, via a
+      `TestMethodSetup` that restores the previous value on teardown. 28 / 0 with it on. Level 2
+      stays opt-in -- it costs seconds per call, and the tools that want it call
+      `pieceRecessionRays` directly.
+
+### Bugs, in the order they should be taken (2026-08-15)
+
+- [ ] **BUG 1 -- conjugate of a bounded piece with a parabolic edge returns the conjugate of its
+      CHORD.** A wrong answer, not an error. `functionNDomain.conjugateOfPiecePoly` decides how many
+      edges a piece has from `size(d.ineqs,2) == d.nv` -- a constraint COUNT standing in for "is
+      this region unbounded". The half-lens `{(s1+s2)^2 <= 4s1, (s1+s2)^2 <= 4s2, s2 <= s1}` has
+      `nv = 2` with FIVE stored constraints (the scatter duplicates `s2-s1` and parks the arc's
+      conic in slot 4), so the count says "unbounded", `endNv = nv-1 = 1`, and the arc is never read
+      as an edge at all. The result is `max(0, x+y-1)`, finite only on a strip. Because `f**` is a
+      MAX, one piece answering on a strip collapses the whole biconjugate.
+      Fix: derive the edge list from the GEOMETRY (`region.vertexOfEdge`), not from the count.
+      Pinned by `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`.
+
+- [ ] **BUG 2 -- cPLQ Step 3 over-claims on the 4-cone fan.** A wrong answer, never returned
+      (`assertStep3MatchesPieces` catches it). At `s = (-3,-2.4)` the assembly gives `5.130` where
+      the per-piece max gives `4.500` (right: the four cone suprema there are `0`, `4.5`, `3.69`,
+      `2.88`). `5.13 = s1^2/4 + s2^2/2` is face 4's cell, and face 4's cell belongs on
+      `{s1>=0, s2<=0}` -- so some region has grown across `s1 = 0`. The companion DROP half of this
+      was fixed 2026-08-02 (`region.witnessAwayFrom`); this half is unstarted.
+      Pinned by `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`.
+
+- [ ] **BUGS 3 and 4 -- a curved convex envelope over an UNBOUNDED face.** A gap, refused loudly.
+      `convEnvUnbounded` handles only an AFFINE envelope, and both fixtures have envelopes that are
+      convex but provably not affine, so its refusal is right about its own formula and wrong as a
+      limit:
+        * `-x^2 + y^2` over the half-strip `{0<=x<=1, y>=0}`: separable, so
+          `co q = -x + y^2`, convex and not affine.
+        * `x*y` over the wedge `{0<=y<=x}`: at `h=(1,1)` the best affine minorant is worth 1 and
+          the apex tangent plane is worth 0, so `co q` is strictly above the tangent plane.
+      `conjConvexOverPiece.m` already CONJUGATES a curved envelope over an unbounded face, so the
+      missing half is Step 1 producing one. Pinned by
+      `unboundedFaceTest/nonconvexQuadraticWithACurvedEnvelopeOverAHalfStripIsExact` and
+      `unboundedFaceTest/curvedEnvelopeOverAWedgeIsExact`.
+
+- [ ] **BUG 5 -- a piece that spans TWO sub-arcs of the same conic.** See the fully-diagnosed entry
+      below; it is the only `maxQuaPar` case left and it is an ERROR, not a wrong answer.
 
 
 - [x] **FIXED** `arcVsArcDoesNotCrashOnSeededQuadSplits` -- the last piece was a REFLEX vertex left by the
@@ -129,15 +166,16 @@ the tooling that judged them was itself broken, in two ways, and silently.
 - [ ] `splitTwoArcLens` refuses when the cut `A -> M -> B` leaves the cell (the seeded far-field
       fixture). The two arcs there join corners on OPPOSITE branches of their parabolas, so the arc
       between them swings far out and the polyline exits the cell; a different subdivision is needed.
-- [ ] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- 2 of 68 sample points wrong, and **it is the
-      same defect as the item below, not a separate one.** Measured in one pass (invariants +
-      verifier): at both bad points `QuaPar.eval` reports `region 0`, i.e. SEVERAL faces admit them
-      (`(-3.9811,0.6115)` gives 0.468 and `(-5.0954,0.1351)` gives 1.229, truth 0 at both); the
-      verifier names the offender -- face 13, carrying g1 face 2, beaten by g2 faces 5 and 6 by
-      +inf along one of its own rays; and `MAXQP_ASSERT=2` lists exactly four pieces with
-      non-compact constraint regions (`src[2 1]` and three `src[6 1]`), all of them BOUNDED
-      arc-pieces. So this fixture's residual error is the non-compact arc-piece problem, and the
-      representation decision below unblocks BOTH reds.
+- [x] **FIXED** `twoCurvedWhereTheSplitCurveCrossesAnArc` -- the test passes, and `MAXQP_ASSERT=2`
+      is clean on that fixture. The four non-compact-arc-piece findings this entry recorded were
+      closed by `QuaPar.chordCuts` (2026-08-13) and the corrected chord derivation in
+      `pieceRecessionRays` (2026-08-14); the entry outlived them. Original text follows.
+      -- 2 of 68 sample points wrong, and it is the same defect as the item below, not a separate
+      one. At both bad points `QuaPar.eval` reported `region 0`, i.e. SEVERAL faces admitted them
+      (`(-3.9811,0.6115)` gave 0.468 and `(-5.0954,0.1351)` gave 1.229, truth 0 at both); the
+      verifier named face 13, carrying g1 face 2, beaten by g2 faces 5 and 6 by +inf along one of
+      its own rays; and `MAXQP_ASSERT=2` listed four pieces with non-compact constraint regions
+      (`src[2 1]` and three `src[6 1]`), all BOUNDED arc-pieces.
 - [x] **Step 4 of the plan: bounded arc-pieces whose CONSTRAINT region is non-compact** --
       **the REPRESENTATION question this item poses was answered on 2026-08-13, and the item as
       written is stale.** Neither (A) nor (B) below is what happened: option B was checked before
