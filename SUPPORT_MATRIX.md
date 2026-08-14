@@ -430,7 +430,8 @@ before that date predate the arc-vs-arc work and were off by ~1400 lines.
 | Splitting curve genuinely **crosses** a cell's arc | **OK** (2026-08-13) — the crossing is a third boundary hit, on the arc's own edge, and the existing two-hit split then divides the arc with everything else | — |
 | Splitting an **unbounded** cell that carries an arc | **OK** (2026-08-13) — the unbounded branch restores the inherited arc exactly as the bounded one does | — |
 | …and the resulting unbounded half carries **both** the inherited arc and the splitting curve | **OK** (2026-08-14) — a chord cannot close an unbounded piece, but a RAY from the vertex between the two arcs can, and the split is used only when each half passes all three exact invariants; otherwise it still refuses | `maxQuaPar:notImplemented` — `maxQuaPar.m:2864` (now unreached on every fixture) |
-| An **unbounded** piece straddles `{f1=f2}`: its vertices name one winner and the other operand wins along one of its rays | **GAP** — `{f1=f2}` is a degenerate conic, so it can be a **pair of lines**, and the second one can leave through the recession cone without crossing the boundary anywhere finite, so `splitCell`'s two-crossing cut never separates them. Detected exactly and **refused**, rather than returning a silently wrong winner; the subdivision that would handle it is not written | `maxQuaPar:notImplemented` — `maxQuaPar.m:3472` |
+| An **unbounded** piece whose vertices all lie ON `{f1=f2}` | **OK** (2026-08-14) — `splitCell`'s unbounded "rest" piece can have exactly the two crossing points as its vertices, and then neither they nor their centroid can decide the winner; it was coming out of floating-point noise. Read in the piece's **recession cone** instead, sharing `assignSideFromCone`'s probe | — |
+| An unbounded piece that genuinely **straddles** `{f1=f2}` | **INV**, backstop — the assigned winner must still hold at infinity along each of the piece's own rays, tested exactly via the leading coefficient. Fires on no current fixture; kept because a genuine straddle is otherwise silent | `maxQuaPar:notImplemented` — `maxQuaPar.m:3472` |
 | Split curve meets an unbounded cell once and escapes as a **parabola** | **GAP** (defensive) — an unbounded curved edge | `maxQuaPar.m:2650`, `maxQuaPar.m:2904` |
 | Clip line cutting one arc **twice** (arc bulging across) | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar.m:1970` |
 | Curved cut crossing a cell's own arc twice | **GAP** (defensive) | `maxQuaPar.m:1361` |
@@ -486,9 +487,17 @@ are the reason two earlier attempts at it failed:
    that list was blind to it; and `containmentViolation`/`boundaryMinOf` called `parabolaArcFrame`
    on an all-zero conic, which raises `degenerateAxis` — the crash that made `MAXQP_ASSERT`
    unusable on three of the four arc-vs-arc fixtures.
-3. With the invariants able to run, they named the last defect exactly, and it is a **new GAP**
-   rather than a fix: an unbounded piece can straddle `{f1=f2}` because that curve is a degenerate
-   conic and so can be a *pair* of lines. See the table above; it is refused, not answered wrongly.
+3. **A whole unbounded piece could have its winner decided by floating-point noise.**
+   `splitCell`'s unbounded "rest" piece can come out with exactly the two crossing points as its
+   vertices — both, by construction, ON `{f1=f2}` — so `assignSide` had nothing to read the winner
+   from, and its centroid fallback is on that line too. Read in the piece's **recession cone**
+   instead, sharing the probe `assignSideFromCone` has used since it was written for the same
+   problem in `splitUnboundedAtOneCrossing`.
+   Worth recording how this was nearly mis-diagnosed: the symptom (an unbounded piece carrying the
+   wrong operand, beaten by `+Inf` along its own ray) reads exactly like `{f1=f2}` being a *pair*
+   of parallel lines with the second escaping through the recession cone — a real subdivision gap.
+   Measuring the conic refuted it: `diffRow` there is `[0 … 0 −1.4979 −3.6486 5.4652]`, its entire
+   quadratic part zero, so `{f1=f2}` is a **single straight line** and nothing straddles it.
 4. The ray cut itself, now gated on all three exact invariants per half rather than on heuristics.
 
 The six heuristics that did **not** separate the good case from the bad, and which should not be
@@ -737,15 +746,14 @@ Ordered by how likely a downstream caller is to hit it:
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 5. **Two known wrong-answer defects** (§7).
-6. **`maxQuaPar`: an unbounded piece that straddles `{f1 = f2}`** (§4, §4.1). A *refusal*, not a
-   wrong answer, and the only `maxQuaPar` case left. `{f1=f2}` is a degenerate conic, so it can be
-   a **pair of lines**; a half lying strictly on one side of the line `splitCell` cut along can
-   still be crossed by the other one, and if that line leaves through the recession cone it
-   contributes no finite crossing for `splitCell` to find. Detected exactly (the asymptotic sign
-   along each ray) and refused. The repair is a `splitCell` that can cut along a second line
-   entering and leaving at infinity — `DECISIONS.md` (2026-08-03) describes it and warns against
-   patching it with probes.
-   ~~an unbounded half carrying two arcs~~ — **RESOLVED 2026-08-14**, see §4.1.
+6. **`maxQuaPar`: an orphan boundary edge in `assemblePieces`** (`maxQuaPar:internal`). The only
+   `maxQuaPar` case left, and it is an ERROR, not a wrong answer. Reproducer: seeded shift
+   `[-2.6434 -1.8066]` of the two-curved fixture — piece 4, `src [1 6]`, has a straight boundary
+   edge `(-2,2)→(-2.744821,1.372827)` with no matching neighbour. It was previously masked by the
+   two-arc refusal upstream. The seeded sweep is otherwise **17 exact / 0 wrong / 1 errored of 18**
+   (it was 16 / 0 / 2).
+   ~~an unbounded half carrying two arcs~~ and ~~an unbounded piece straddling `{f1=f2}`~~ — both
+   **RESOLVED 2026-08-14**, see §4.1.
 7. ~~**arc-vs-arc results are only locally correct (wrong far from the arcs)**~~ — **RESOLVED
    2026-08-13** (§4.1). This was the top blocker on this list from 2026-08-04. The cause was the
    point-location rule, not the subdivision: a curved edge is a bounded arc and its conic is not,

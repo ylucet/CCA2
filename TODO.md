@@ -54,16 +54,15 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Still open, in the order they should be taken
 
-- [ ] **An unbounded piece that straddles `{f1 = f2}`.** The only `maxQuaPar` case left, and it is
-      a REFUSAL, not a wrong answer. `{f1=f2}` is a degenerate conic, so it can be a PAIR of
-      parallel lines; a half lying strictly on one side of the line `splitCell` cut along can still
-      be crossed by the other one, and if that line leaves through the recession cone it
-      contributes no finite crossing for `splitCell` to find. `assignSide` now detects it exactly
-      (the asymptotic sign along each ray) and errors.
-      The repair is a `splitCell` that can cut a cell along a second line entering and leaving at
-      infinity. **Read `DECISIONS.md` 2026-08-03 first** -- it describes the same shape for a
-      parabola and warns against patching it with probes.
-      Reproducer: seeded shift `[1.4979 3.6486]` of the two-curved fixture, piece `src [2 4]`.
+- [ ] **An orphan boundary edge in `assemblePieces`** (`maxQuaPar:internal`). The only `maxQuaPar`
+      case left, and it is an ERROR, not a wrong answer. It was masked until 2026-08-14 by the
+      two-arc refusal upstream.
+      Reproducer: seeded shift `[-2.6434 -1.8066]` of the two-curved fixture -- piece 4, `src [1 6]`,
+      has a straight boundary edge `(-2,2)->(-2.744821,1.372827)` with no matching neighbour.
+      The seeded sweep is otherwise **17 exact / 0 wrong / 1 errored of 18** (was 16 / 0 / 2).
+      Note the shape: an orphan is usually a T-junction or a piece that stops short of its
+      neighbour. `insertGlobalPassthrough` handles the first; `checkOrphanHalfEdges` prints the
+      closest candidates, which is where to start.
 
 - [ ] **`MAXQP_ASSERT` should be on in the test suite.** It is off by default and was CRASHING on
       three of the four arc-vs-arc fixtures until 2026-08-14, so the invariants that eventually

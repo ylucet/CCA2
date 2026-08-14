@@ -2940,6 +2940,14 @@ function piece = assignSideFromCone(piece, diffRow, f1row, f2row)
 % strictly inside the half's own recession cone, walked far enough out that the difference is
 % dominated by its leading behaviour -- the sum of two non-parallel cone directions points strictly
 % between them, so this point is interior for any wedge or strip.
+    v = coneProbeValue(piece, diffRow);
+    if v >= 0, piece.f = f1row; else, piece.f = f2row; end
+end
+
+function v = coneProbeValue(piece, diffRow)
+% diffRow read at a point strictly inside the piece's own recession cone, walked far enough out that
+% the difference is dominated by its leading behaviour. The sum of two non-parallel cone directions
+% points strictly between them, so this point is interior for any wedge or strip.
     w = piece.dirIn + piece.dirOut;
     if norm(w) < 1e-12, w = piece.dirIn; end     % parallel rays (a strip): along them is interior
     w = w/norm(w);
@@ -2949,7 +2957,6 @@ function piece = assignSideFromCone(piece, diffRow, f1row, f2row)
         v = QuaPar.evalPoly(diffRow, base + L*w);
         if abs(v) > 1e-9*(1+abs(L)), break, end
     end
-    if v >= 0, piece.f = f1row; else, piece.f = f2row; end
 end
 
 function [X0, X1] = arcEndpointsOf(piece, i)
@@ -3431,6 +3438,23 @@ function piece = assignSide(piece, diffRow, f1row, f2row) %#ok<INUSD>
     scale = max(1, norm(diffRow(5:10), Inf)) * max(1, norm(piece.V(:), Inf))^2;
     if mx > 1e-8*scale
         d = vals(idx);
+    elseif ~isempty(piece.dirIn)
+        % EVERY vertex sits on {diffRow = 0}, so no vertex can decide the winner -- and neither can
+        % the centroid fallback below, because the centroid of points that are all on a line is on
+        % that line too. That is not a rare shape: splitCell's unbounded "rest" piece can come out
+        % with exactly the two crossing points as its vertices, and then the winner was being read
+        % off floating-point noise at a value of ~0.
+        %
+        % MEASURED, seeded shift [1.4979 3.6486]: piece src [2 4] is exactly this -- two vertices,
+        % both on the cut, and {f1=f2} there is AFFINE (its whole quadratic part is zero), so the
+        % noise sign at the centroid decided a whole unbounded piece. It came out f1, whose
+        % quadratic is 0, and answered 0 at (-2.706981, 2.705986) where the truth is 0.35310191.
+        %
+        % Read it in the RECESSION CONE instead, which is where an unbounded piece has room to be
+        % unambiguous. assignSideFromCone has done this since it was written for
+        % splitUnboundedAtOneCrossing, whose halves have the same problem for the same reason; this
+        % shares its probe rather than growing a second one.
+        d = coneProbeValue(piece, diffRow);
     else
         d = QuaPar.evalPoly(diffRow, mean(piece.V,1));
     end
@@ -3442,25 +3466,28 @@ function piece = assignSide(piece, diffRow, f1row, f2row) %#ok<INUSD>
 end
 
 function assertWinnerHoldsAtInfinity(piece, diffRow, dFinite)
-% A finite vertex decides the winner only if the piece does not STRADDLE {diffRow = 0}. On a
-% BOUNDED piece splitCell's two-crossing cut guarantees it does not. On an UNBOUNDED one it does
-% not: {diffRow = 0} is a degenerate conic, so it can be a PAIR of lines, and a half that lies
-% strictly on one side of the line splitCell cut along can still be crossed by the OTHER line --
-% which, if that line leaves through the recession cone, contributes no finite boundary crossing
-% for splitCell to find. The half then carries one winner while the other operand wins far out
-% along its own ray.
+% A BACKSTOP: the winner just assigned must still hold at infinity along each of the piece's own
+% rays. A piece that straddles {diffRow = 0} has no single winner, and on an UNBOUNDED piece the
+% straddle can be invisible to everything finite -- so if the two disagree, refuse rather than
+% return a silently wrong winner, which is the rule this file works by.
 %
-% MEASURED, seeded shift [1.4979 3.6486] of the two-curved fixture: piece src [2 4], an unbounded
-% 2-vertex piece, carries g1 face 2's quadratic while g2 face 4 beats it by +Inf along its own ray
-% from (-5.93403, 3.93403) in direction (-0.7071, 0.7071). It answered 0 at (-2.706981, 2.705986)
-% where the truth is 0.35310191 -- the 0.3531 that fixture had been failing by.
+% The test is EXACT: asymptoticSign reads the leading coefficient of diffRow along the ray, no
+% sampling, so it fires only on a genuine sign disagreement.
 %
-% This does not repair the subdivision, and deliberately so: the repair is a splitCell that can cut
-% a cell along a second line entering and leaving at infinity, which DECISIONS.md (2026-08-03)
-% records as needing real work and warns against patching with probes. What it does is refuse
-% instead of returning a silently wrong winner, which is the rule this file works by. The test is
-% EXACT -- asymptoticSign reads the leading coefficient of diffRow along the ray, no sampling -- so
-% it fires only on a genuine sign disagreement.
+% HISTORY, worth reading before deciding this guard is the fix for anything. It was added after
+% seeded shift [1.4979 3.6486] came out wrong by 0.3531, with piece src [2 4] carrying g1 face 2's
+% ZERO quadratic while g2 face 4 beat it by +Inf along its own ray. The diagnosis at the time was
+% that {f1=f2} must be a PAIR of parallel lines with the second one leaving through the recession
+% cone, which would be a real subdivision gap. MEASURING the conic refuted that outright: for that
+% cell diffRow is [0 0 0 0 0 0 0 -1.4979 -3.6486 5.4652] -- its entire quadratic part is zero, so
+% {f1=f2} is a SINGLE straight line and nothing straddles it. The real cause was that the piece's
+% only two vertices are the two crossing points, both ON that line, so assignSide had nothing to
+% read the winner from and fell back to a centroid that is on the line too: the winner came out of
+% floating-point noise. assignSide now reads such a piece in its recession cone, and that shift
+% assembles CORRECTLY rather than being refused here.
+%
+% So this guard currently fires on nothing, and that is the intended state. Keep it: it is cheap,
+% it is exact, and a genuine straddle is exactly the kind of defect that is otherwise silent.
     if isempty(piece.dirIn), return, end
     want = 1; if dFinite < 0, want = -1; end
     rays = {piece.V(1,:), piece.dirIn; piece.V(end,:), piece.dirOut};

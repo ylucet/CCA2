@@ -32,13 +32,21 @@ Both earlier reverts were correct decisions on the evidence available. The evide
    where the truth was `0.35310191`); `pieceStraightEdges` skipped it, blinding every boundary
    minimisation built on that list; and `containmentViolation`/`boundaryMinOf` called
    `parabolaArcFrame` on the zero conic — the `degenerateAxis` crash above.
-3. **A newly minted OUTGOING ray was given sign `+1`** where `polyConstraints`' convention needs
+3. **A whole unbounded piece could have its winner decided by floating-point noise.**
+   `splitCell`'s unbounded "rest" piece can come out with exactly the two crossing points as its
+   vertices — both, by construction, ON `{f1=f2}` — so `assignSide` had nothing to read from, and
+   its centroid fallback is on that line too. Now read in the piece's RECESSION CONE. The seeded
+   sweep went **16 exact / 0 wrong / 2 errored → 17 / 0 / 1** of 18.
+   This one was nearly mis-diagnosed as a subdivision gap (`{f1=f2}` a *pair* of parallel lines);
+   classifying the conic refuted it in one line — its whole quadratic part is zero. `DECISIONS.md`
+   records that, because the symptom is a convincing fit for the wrong story.
+4. **A newly minted OUTGOING ray was given sign `+1`** where `polyConstraints`' convention needs
    `−1`, giving the two halves of a split the same outward normal across their shared ray.
    `newRaySign` states the derivation once.
-4. **The two-arc ray split is restored**, gated on all three exact invariants per half
+5. **The two-arc ray split is restored**, gated on all three exact invariants per half
    (containment, recession cone, winner domination) rather than on heuristics; when nothing can be
    proved it returns `[]` and the caller refuses exactly as before.
-5. **`verifyFacesCoverThePlane`** — the covering proof. Four checks on the constraint data that
+6. **`verifyFacesCoverThePlane`** — the covering proof. Four checks on the constraint data that
    together force the boundary of the union of the faces to be empty. An independent review found
    three routes by which it could have passed *vacuously*; all three are closed, and
    `coverProofRejectsBrokenArrangements` breaks a certified result three ways and requires a
@@ -47,7 +55,7 @@ Both earlier reverts were correct decisions on the evidence available. The evide
 ## Where things stand
 
 - Branch: `overnight/2026-08-13` (not merged, not pushed).
-- **`maxQuaParTest` 28 / 0. Fast bucket 202 / 0** (was 200 / 1). **Normal bucket 6 / 0.** The slow
+- **`maxQuaParTest` 28 / 0. Fast bucket 203 / 0** (was 200 / 1). **Normal bucket 6 / 0.** The slow
   bucket had not finished when this was written — check it before merging.
 - `MAXQP_ASSERT=1` and `=2` now run clean on all four arc-vs-arc fixtures.
 
@@ -55,14 +63,12 @@ Both earlier reverts were correct decisions on the evidence available. The evide
 
 1. **Finish the slow bucket and merge.** Nothing on this branch touches the symbolic path, but the
    slow bucket is the only thing not yet re-measured.
-2. **The one open `maxQuaPar` case: an unbounded piece that straddles `{f1 = f2}`.** It is a
-   REFUSAL, not a wrong answer. `{f1=f2}` is a degenerate conic, so it can be a PAIR of parallel
-   lines; a half strictly on one side of the line `splitCell` cut along can still be crossed by the
-   other, and if that line leaves through the recession cone there is no finite crossing for
-   `splitCell` to find. `assignSide` detects it exactly and errors. The repair is a `splitCell`
-   that can cut along a second line entering and leaving at infinity — **read `DECISIONS.md`
-   2026-08-03 first**, it describes the same shape for a parabola and warns against probes.
-   Reproducer: seeded shift `[1.4979 3.6486]`, piece `src [2 4]`.
+2. **The one open `maxQuaPar` case: an orphan boundary edge in `assemblePieces`**
+   (`maxQuaPar:internal`). An ERROR, not a wrong answer, and it was masked until now by the two-arc
+   refusal upstream. Reproducer: seeded shift `[-2.6434 -1.8066]` of the two-curved fixture —
+   piece 4, `src [1 6]`, straight edge `(-2,2)→(-2.744821,1.372827)`, no matching neighbour.
+   `checkOrphanHalfEdges` prints the closest candidates; `insertGlobalPassthrough` is what handles
+   the T-junction form of this.
 3. **Turn `MAXQP_ASSERT=1` on in the test suite.** It is cheap, and this session is the argument:
    it was off *and* crashing, and three defects lived behind that for weeks.
 4. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`

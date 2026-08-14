@@ -52,22 +52,29 @@ Newest entries at the top.
   believe is right, suspect the gate. Both reverts were correct decisions on the evidence
   available, and the evidence was wrong because the tooling was broken in a way that was silent.
 
-## 2026-08-14 — An unbounded piece can straddle {f1=f2}, and it is REFUSED, not repaired
+## 2026-08-14 — "`{f1=f2}` must be a PAIR of parallel lines here" (diagnosis, refuted by measuring)
 
-- **What:** `{f1 = f2}` is a degenerate conic, so it can be a **pair of parallel lines**. A half
-  lying strictly on one side of the line `splitCell` cut along can still be crossed by the OTHER
-  line — and if that line leaves through the recession cone it contributes **no finite boundary
-  crossing** for `splitCell` to find, so the two-crossing cut never separates them. The half then
-  carries one winner while the other operand wins far out along its own ray.
-- **Measured:** seeded shift `[1.4979 3.6486]`, piece `src [2 4]` — carries g1 face 2's quadratic
-  while g2 face 4 beats it by `+Inf` along its own ray from `(-5.93403, 3.93403)` in direction
-  `(-0.7071, 0.7071)`. It answered `0` at `(-2.706981, 2.705986)` where the truth is `0.35310191`.
-- **Decision:** `assignSide` now checks the asymptotic sign along both rays — exact, via
-  `asymptoticSign`'s leading coefficient, no sampling — and **errors** rather than returning a
-  silently wrong winner. That is the rule this repository works by.
-- **Do NOT patch this with probes.** The repair is a `splitCell` that can cut a cell along a second
-  line entering and leaving at infinity, which the 2026-08-03 entry below already describes and
-  already warns about. The guard is a bug detector, not a supported-input error.
+- **Tried:** explaining the last wrong answer on seeded shift `[1.4979 3.6486]` — piece `src [2 4]`
+  carrying g1 face 2's ZERO quadratic while g2 face 4 beat it by `+Inf` along its own ray — as a
+  subdivision gap: `{f1=f2}` is a degenerate conic, so it can be a pair of parallel lines, and a
+  half strictly on one side of the line `splitCell` cut along could be crossed by the other, which
+  would leave through the recession cone and contribute no finite crossing to find. That story fits
+  every symptom, and a guard was written for it (`assertWinnerHoldsAtInfinity`).
+- **Why it failed:** the conic says otherwise. For that cell
+  `diffRow = [0 0 0 0 0 0 0 −1.4979 −3.6486 5.4652]` — **its entire quadratic part is zero**, so
+  `{f1=f2}` is a SINGLE straight line and nothing straddles it. `delta = 0`, `det3 = 0`,
+  `eig(Q) = [0 0]`.
+- **What it actually was:** the piece's only two vertices ARE the two crossing points, so both lie
+  ON that line; `assignSide` had nothing to read the winner from and fell back to a centroid which
+  is on the line too. The winner of a whole unbounded piece came out of floating-point noise.
+  `assignSide` now reads such a piece in its RECESSION CONE, sharing the probe
+  `assignSideFromCone` has used since it was written for the same problem in
+  `splitUnboundedAtOneCrossing`. That shift now assembles CORRECTLY: the seeded sweep is 17 exact /
+  0 wrong / 1 errored of 18, from 16 / 0 / 2.
+- **Before retrying:** the guard is kept as a cheap exact backstop and currently fires on nothing.
+  Do not read its existence as evidence that the pair-of-lines case occurs — no input has ever been
+  observed to produce it. **Classify the conic before theorising about its shape**; one line of
+  `eig(Q)` would have saved the detour.
 
 ## 2026-08-14 — Why check (5) may have failed to separate the two-arc ray split's cases
 
