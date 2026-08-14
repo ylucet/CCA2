@@ -135,10 +135,19 @@ function [ok, msg] = edgeLiesInFace(g, k, j, cons, EC, scV)
     [par, rng] = edgeParametrisation(g, j, EC);
     if isempty(par), return, end                 % a degenerate edge is reported elsewhere
     tol = 1e-7 * scV^2;
+    % Scale for "identically zero along this edge". An absolute threshold is wrong here: the edge
+    % conic's own restriction cancels only to within rounding, and on a mesh whose coordinates run
+    % to 1e3 that residual is ~1e-10, which an absolute test would read as a real constraint and
+    % then let fragment the intervals in (C).
+    P = cell(1, numel(cons)); pscale = 1;
+    for t = 1:numel(cons)
+        P{t} = restrictConic(par, cons(t).ec);
+        pscale = max(pscale, max(abs(P{t})));
+    end
     zeroEc = zeros(0,6);
     for t = 1:numel(cons)
-        p = restrictConic(par, cons(t).ec);
-        if isIdenticallyZero(p)
+        p = P{t};
+        if isIdenticallyZero(p, pscale)
             % This constraint IS the curve being walked. Several may be: a face that a passthrough
             % vertex left with two COLLINEAR edges has one such constraint per edge, and that is
             % harmless as long as they all keep the same side. Two with OPPOSITE orientation is the
@@ -176,12 +185,16 @@ function msgs = boundaryStaysOnEdges(g, k, t, cons, EC, scV)
     tol = 1e-7 * scV^2;
 
     % restrictions of the OTHER constraints to this curve
+    P = cell(1, numel(cons)); pscale = 1;
+    for m = 1:numel(cons)
+        P{m} = restrictConic(par, cons(m).ec);
+        pscale = max(pscale, max(abs(P{m})));
+    end
     rest = {};
     for m = 1:numel(cons)
         if m == t, continue, end
-        p = restrictConic(par, cons(m).ec);
-        if isIdenticallyZero(p), continue, end   % a duplicate of this same curve constrains nothing
-        rest{end+1} = p; %#ok<AGROW>
+        if isIdenticallyZero(P{m}, pscale), continue, end  % a duplicate curve constrains nothing
+        rest{end+1} = P{m}; %#ok<AGROW>
     end
     iv = feasibleIntervalsOnLine(rest, tol);
 
@@ -422,11 +435,14 @@ function [mx, arg] = maxPolyOn(p, lo, hi)
     arg = cand(i1);
 end
 
-function tf = isIdenticallyZero(p)
-% Does the polynomial vanish identically? Every coefficient below the noise floor -- this is the
-% test that recognises a constraint which IS the curve being walked (its own edge conic), whose
-% restriction is 0 everywhere rather than merely <= 0.
-    tf = isempty(stripLeadingZeros(p));
+function tf = isIdenticallyZero(p, sc)
+% Does the polynomial vanish identically? This is the test that recognises a constraint which IS
+% the curve being walked (its own edge conic), whose restriction is 0 everywhere rather than merely
+% <= 0. `sc` is the largest coefficient magnitude among ALL the constraints restricted to the same
+% curve, so the threshold is relative to the problem's own scale rather than absolute.
+    if nargin < 2 || ~isfinite(sc) || sc <= 0, sc = 1; end
+    if isempty(p), tf = true; return, end
+    tf = max(abs(p)) <= 1e-9*sc;
 end
 
 function q = stripLeadingZeros(p)
