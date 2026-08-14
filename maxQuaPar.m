@@ -2834,12 +2834,18 @@ function newPieces = splitCell(cell, f1row, f2row)
         if ~isempty(half.dirIn)
             % Two curves on an UNBOUNDED half. splitTwoArcPiece separates two arcs with a CHORD
             % between them, which presupposes a closed boundary cycle; there is no chord that
-            % closes an unbounded piece. Refused narrowly here rather than by the blanket guard
-            % that used to stand at the top of this function.
+            % closes an unbounded piece. What does close it is a RAY -- see
+            % splitUnboundedTwoArcPiece, which only returns a split it can PROVE well-formed and
+            % returns [] otherwise, leaving the refusal below exactly as it was.
+            two = splitUnboundedTwoArcPiece(half, p, arcEc0, f1row, f2row);
+            if ~isempty(two)
+                newPieces = [newPieces, two]; %#ok<AGROW>
+                continue
+            end
             error('maxQuaPar:notImplemented', ...
                 ['maxQuaPar:splitCell: an UNBOUNDED half carries both the inherited arc and the ' ...
-                 'splitting curve; splitTwoArcPiece separates two arcs by a chord, which needs a ' ...
-                 'closed boundary.']);
+                 'splitting curve; no ray cut from the vertex between them produces two halves ' ...
+                 'whose recession cones and carried operands can be PROVED correct.']);
         end
         newPieces = [newPieces, splitTwoArcPiece(half, p, arcEc0)]; %#ok<AGROW>
     end
@@ -3043,6 +3049,135 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         end
     end
     out = piece;
+end
+
+function out = splitUnboundedTwoArcPiece(piece, arcPos, arcEc, f1row, f2row)
+% Separate the two arcs of an UNBOUNDED piece with a RAY, so each half carries one. Returns [] when
+% no candidate can be PROVED correct, and the caller then refuses exactly as it always did.
+%
+% The cut starts at the vertex between the two arcs -- a genuine boundary point, so it really
+% divides the piece -- and runs to infinity along a direction the piece recedes in. Each half then
+% has one arc, one of the piece's original rays, and the new one.
+%
+% ------------------------------------------------------------------------------------------------
+% WHY THIS IS GATED ON A PROOF AND NOT ON A LIST OF CHECKS
+%
+% This construction was written once before and REVERTED (DECISIONS.md, 2026-08-13). It makes the
+% pinned fixture assemble; it also made seeded shift [1.4979 3.6486] assemble to a value wrong by
+% 0.3531, and a silent wrong answer is worse than the refusal it replaces. SIX heuristics were
+% tried against that shift and none separated it from the good cases: that the ray recedes every
+% straight constraint; that it stays inside both arcs; that each half admits a point just inside
+% its own arc; the new ray's sign; that each half's recession cone equals the cone its rays span;
+% and scoping the whole thing to the half-strip shape.
+%
+% So the acceptance is not another heuristic. A half is used only when the two EXACT invariants
+% this file already owns both hold on it:
+%
+%   * reccConeViolation -- the region the half ENCODES runs to infinity in exactly the directions
+%     it declares. A wrong cut over-extends, and over-extension of a piece with rays is precisely
+%     a recession cone larger than the cone its rays span. Decided in closed form by
+%     pieceRecessionRays, symbolically, with no probe.
+%   * winnerDominationViolation -- the operand row the half CARRIES really is the larger of the
+%     two everywhere on the half. Both halves inherit the parent's winner, so a parent that was
+%     labelled from evidence not covering the whole cell shows up here and nowhere else. Minimised
+%     over the half's whole boundary in closed form.
+%
+% Between them those are two of the three ways a far-field answer goes wrong (the third,
+% containment in the source faces, is unaffected by a cut that stays inside the parent). The
+% measured 0.3531 error is one or the other, so it cannot survive this gate; and if a future input
+% finds a way for it to, the answer is another invariant, not another heuristic.
+%
+% NOTE the fifth heuristic in that list is the first invariant here. It did not separate the cases
+% when it was tried, and the reason is on record: pieceRecessionRays derived the arc's chord from
+% the piece's other VERTICES, which is unsound and which DECISIONS.md had already recorded as
+% unsound one level up, in QuaPar.chordCuts. That rule was corrected on 2026-08-14 to read the side
+% off the conic itself. Whether the correction is what makes the invariant decisive here is the
+% first thing to measure.
+    out = [];
+    nv = size(piece.V,1);
+    c  = piece.curveAfter;
+    if ~isscalar(arcPos) || ~isscalar(c), return, end
+    if arcPos < 1 || c < 1 || arcPos > nv-1 || c > nv-1, return, end
+    i1 = min(arcPos, c); i2 = max(arcPos, c);
+    if i1 == i2, return, end
+    iX = i1 + 1;                            % arc i1 ends at vertex i1+1; cut there
+    if iX >= nv || iX < 2, return, end      % the cut needs a real chain on each side
+    ecA = arcEc; ecB = piece.curveEc;
+    if c < arcPos, ecA = piece.curveEc; ecB = arcEc; end     % whichever arc comes first
+    for ec = {ecA, ecB}
+        if isempty(ec{1}) || all(ec{1} == 0), return, end    % a two-arc split needs two real arcs
+        dsc = ec{1}(2)^2 - 4*ec{1}(1)*ec{1}(3);
+        if abs(dsc) > 1e-9*max(1, max(abs(ec{1})))^2, return, end   % not a parabola: refuse
+    end
+
+    X = piece.V(iX,:);
+    cons = polyConstraints(piece);
+    dIn = piece.dirIn/norm(piece.dirIn); dOut = piece.dirOut/norm(piece.dirOut);
+    cand = {};
+    for w = [0.5 0.25 0.75 0.1 0.9 0 1]
+        d = (1-w)*dIn + w*dOut;
+        if norm(d) > 1e-12, cand{end+1} = d/norm(d); end %#ok<AGROW>
+    end
+    % ...and directions the ARCS themselves single out, which the sweep of the recession cone above
+    % has no reason to hit. Each half has to end up with an emittable chord for its own arc, and the
+    % chord is emittable only when every vertex AND ray direction of that half lies on one side of
+    % it -- so the new ray's direction is one of the things being tested, and a d parallel to a
+    % chord is the extreme case that just satisfies it. The parabolas' axis directions are added for
+    % the same reason: that is where a conic constraint stops being strict.
+    for ec = {ecA, ecB}
+        Qc = [ec{1}(1), ec{1}(2)/2; ec{1}(2)/2, ec{1}(3)];
+        [Vq, Dq] = eig(Qc);
+        [~, i0] = min(abs(diag(Dq)));
+        ax = Vq(:,i0)';
+        if norm(ax) > 1e-12, cand{end+1} = ax/norm(ax); cand{end+1} = -ax/norm(ax); end %#ok<AGROW>
+    end
+    for e = [i1, i2]
+        ch = piece.V(e+1,:) - piece.V(e,:);
+        if norm(ch) > 1e-12, cand{end+1} = ch/norm(ch); cand{end+1} = -ch/norm(ch); end %#ok<AGROW>
+    end
+    scC = max(1, max(abs(cons(:,1:2)), [], 'all'));
+    for k = 1:numel(cand)
+        d = cand{k};
+        % Cheap necessary conditions first, so the symbolic gate below runs on few candidates.
+        if any(cons(:,1:2)*d' > 1e-9*scC), continue, end
+        okRay = true;
+        for ec = {ecA, ecB}
+            v = minConicAlong(ec{1}, X, d, inf);
+            if v < -1e-7*max(1, max(abs(ec{1})))*max(1, norm(X))^2, okRay = false; break, end
+        end
+        if ~okRay, continue, end
+
+        A = struct('V', piece.V(1:iX,:), 'dirIn', piece.dirIn, 'dirOut', d, ...
+            'dirInSign', piece.dirInSign, 'dirOutSign', newRaySign('out'), 'curveAfter', i1, ...
+            'curveEc', ecA, 'f', piece.f);
+        B = struct('V', piece.V(iX:nv,:), 'dirIn', d, 'dirOut', piece.dirOut, ...
+            'dirInSign', newRaySign('in'), 'dirOutSign', piece.dirOutSign, 'curveAfter', i2 - iX + 1, ...
+            'curveEc', ecB, 'f', piece.f);
+        if A.curveAfter < 1 || A.curveAfter > size(A.V,1)-1, continue, end
+        if B.curveAfter < 1 || B.curveAfter > size(B.V,1)-1, continue, end
+        if halfIsProvedWellFormed(A, f1row, f2row) && halfIsProvedWellFormed(B, f1row, f2row)
+            out = [A, B];
+            return
+        end
+    end
+end
+
+function tf = halfIsProvedWellFormed(h, f1row, f2row)
+% Both exact invariants, on one half of the ray cut. See splitUnboundedTwoArcPiece for why the
+% acceptance is these and not a heuristic.
+%
+% A failure to DECIDE counts as not proved: pieceRecessionRays works over sym, so on an
+% installation without the Symbolic Toolbox this returns false and the caller refuses -- which is
+% exactly what that installation did before this branch existed, so nothing regresses.
+    tf = false;
+    h.src = [0 0];        % winnerDominationViolation names the source face when it reports
+    try
+        if ~isempty(reccConeViolation(h)), return, end
+        if ~isempty(winnerDominationViolation(h, f1row, f2row)), return, end
+    catch
+        return
+    end
+    tf = true;
 end
 
 function out = splitAtReflexVertex(p)
