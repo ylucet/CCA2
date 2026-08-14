@@ -74,6 +74,26 @@ function [ok, report] = verifyFacesCoverThePlane(g)
             report{end+1} = sprintf(['edge %d borders only one face (F = [%d %d]); a result that ' ...
                 'is finite everywhere has no domain boundary, so the other side is a HOLE'], ...
                 j, g.F(j,1), g.F(j,2)); %#ok<AGROW>
+            continue
+        end
+        % ...and the two faces must sit on OPPOSITE sides of it. The argument in the header uses
+        % this at its last step ("R_k is {c <= 0} and R_m is {c' <= 0}, and two opposite closed
+        % half-sides of one curve cover a neighbourhood"), and without it the step is false: if
+        % both faces carry the same sign for edge j they both lie on one side, the other side
+        % belongs to no face, and A-D as stated would all still pass. That is exactly the historical
+        % same-side ray-pairing bug oppositeSides was written for, so it is checked rather than
+        % assumed. QuaPar's orientation invariant makes the expected pattern exact: evalConic > 0
+        % on the LEFT of the directed edge, i.e. on F(j,1), so F(j,1) carries -j and F(j,2) +j.
+        sL = pSignOf(g, g.F(j,1), j);
+        sR = pSignOf(g, g.F(j,2), j);
+        if sL == 0 || sR == 0
+            report{end+1} = sprintf(['edge %d is listed with faces [%d %d] but does not appear in ' ...
+                'face %d''s own boundary list'], j, g.F(j,1), g.F(j,2), ...
+                g.F(j, 1 + (sL ~= 0))); %#ok<AGROW>
+        elseif sL == sR
+            report{end+1} = sprintf(['edge %d is carried with the SAME sign (%+d) by both its ' ...
+                'faces %d and %d, so both lie on one side of it and the other side belongs to no ' ...
+                'face'], j, sL, g.F(j,1), g.F(j,2)); %#ok<AGROW>
         end
     end
 
@@ -129,6 +149,16 @@ function cons = faceConstraints(g, k, EC)
     end
 end
 
+function s = pSignOf(g, k, j)
+% The sign face k carries for edge j in its own boundary list, or 0 if it does not list it.
+    s = 0;
+    if k < 1 || k > numel(g.P), return, end
+    Pe = g.P{k};
+    hit = find(abs(Pe) == j, 1);
+    if isempty(hit), return, end
+    s = sign(Pe(hit));
+end
+
 function pt = parPoint(par, s)
 % The plane point at parameter s of the parametrisation par.
     if strcmp(par.kind, 'line'), pt = par.base + s*par.dir; else, pt = par.fr.point(s); end
@@ -156,29 +186,35 @@ function [ok, msg] = edgeLiesInFace(g, k, j, cons, EC, scV)
 % vanishes identically along it.
     ok = true; msg = '';
     [par, rng] = edgeParametrisation(g, j, EC);
-    if isempty(par), return, end                 % a degenerate edge is reported elsewhere
-    tol = 1e-7 * scV^2;
-    % Scale for "identically zero along this edge". An absolute threshold is wrong here: the edge
-    % conic's own restriction cancels only to within rounding, and on a mesh whose coordinates run
-    % to 1e3 that residual is ~1e-10, which an absolute test would read as a real constraint and
-    % then let fragment the intervals in (C).
-    P = cell(1, numel(cons)); pscale = 1;
-    for t = 1:numel(cons)
-        P{t} = restrictConic(par, cons(t).ec);
-        pscale = max(pscale, max(abs(P{t})));
+    if isempty(par)
+        % NOT a silent skip. Returning ok here would certify "no hole" for a face whose edge was
+        % never looked at -- the failure mode that makes a prover worse than no prover at all.
+        ok = false;
+        msg = sprintf(['face %d: edge %d could not be parametrised (zero length, or a conic ' ...
+            'parabolaArcFrame refuses), so checks (B) and (D) could not be decided for it. ' ...
+            'Coverage is UNPROVEN here, not proven.'], k, j);
+        return
     end
+    tol = 1e-7 * scV^2;
     zeroEc = zeros(0,6);
     for t = 1:numel(cons)
-        p = P{t};
-        if isIdenticallyZero(p, pscale)
-            % This constraint IS the curve being walked. Several may be: a face that a passthrough
-            % vertex left with two COLLINEAR edges has one such constraint per edge, and that is
-            % harmless as long as they all keep the same side. Two with OPPOSITE orientation is the
-            % collapse (D) exists to catch, so record the oriented conic and compare below rather
-            % than counting.
+        if sameCurve(cons(t).ec, EC(j,:))
+            % This constraint IS the curve being walked, decided by comparing the CONICS rather
+            % than by asking whether the restriction cancels to zero. A residual test needs a
+            % reference scale, and the only one available across the whole face is the largest
+            % restriction among all its constraints -- so one ill-conditioned sibling (a frame
+            % whose dv is near parabolaArcFrame's floor throws quartic coefficients up by orders
+            % of magnitude) would set the threshold for every other constraint and classify them
+            % all "identically zero", dropping them from the checks and passing the face
+            % vacuously. Comparing the curves is scale-free and cannot do that.
+            %
+            % Several constraints may lie on this curve: a face that a passthrough vertex left
+            % with two COLLINEAR edges has one per edge, and that is harmless as long as they all
+            % keep the same side. Two with OPPOSITE orientation is the collapse (D) catches.
             zeroEc(end+1,:) = cons(t).ec / max(abs(cons(t).ec)); %#ok<AGROW>
             continue
         end
+        p = restrictConic(par, cons(t).ec);
         [mx, arg] = maxPolyOn(p, rng(1), rng(2));
         if isfinite(arg), tolHere = evalTolAt(par, arg); else, tolHere = tol; end
         if mx > tolHere
@@ -205,20 +241,23 @@ function msgs = boundaryStaysOnEdges(g, k, t, cons, EC, scV)
 % (C) {cons(t) = 0} n R_k is contained in the face's own edges lying on that same curve.
     msgs = {};
     [par, ~] = curveParametrisation(cons(t).ec);
-    if isempty(par), return, end                 % not a curve this frame can hold; skip, loudly below
-    tol = 1e-7 * scV^2;
-
-    % restrictions of the OTHER constraints to this curve
-    P = cell(1, numel(cons)); pscale = 1;
-    for m = 1:numel(cons)
-        P{m} = restrictConic(par, cons(m).ec);
-        pscale = max(pscale, max(abs(P{m})));
+    if isempty(par)
+        % NOT a silent skip -- see edgeLiesInFace. A constraint whose curve this frame cannot hold
+        % is a constraint whose boundary was never examined, and reporting `ok` for the face would
+        % certify coverage that was not checked.
+        msgs{end+1} = sprintf(['face %d: %s could not be parametrised, so check (C) could not be ' ...
+            'decided for it. Coverage is UNPROVEN here, not proven.'], k, cons(t).what);
+        return
     end
+
+    % restrictions of the OTHER constraints to this curve. A constraint on the SAME curve
+    % constrains nothing along it; that is decided by comparing conics, not residuals (see
+    % edgeLiesInFace for why a residual test is unsafe here).
     rest = {};
     for m = 1:numel(cons)
         if m == t, continue, end
-        if isIdenticallyZero(P{m}, pscale), continue, end  % a duplicate curve constrains nothing
-        rest{end+1} = P{m}; %#ok<AGROW>
+        if sameCurve(cons(m).ec, cons(t).ec), continue, end
+        rest{end+1} = restrictConic(par, cons(m).ec); %#ok<AGROW>
     end
     iv = feasibleIntervalsOnLine(rest, par);
 
@@ -444,8 +483,14 @@ function [mx, arg] = maxPolyOn(p, lo, hi)
     if isempty(p), mx = 0; arg = 0; return, end
     deg = numel(p) - 1;
     if deg == 0, mx = p(1); arg = 0; return, end
-    if ~isfinite(hi) && p(1) > 0, mx = inf; arg = inf; return, end
-    if ~isfinite(lo) && p(1)*(-1)^deg > 0, mx = inf; arg = -inf; return, end
+    % The leading-coefficient tests are TOLERANCED. stripLeadingZeros only removes coefficients
+    % below 1e-12 of the polynomial's own max, so a constraint that is genuinely constant along a
+    % ray can keep a leading coefficient of a few times 1e-12 -- and an untoleranced `> 0` then
+    % reads that rounding noise as a fact about infinity and reports a spurious over-extension.
+    % maxQuaPar's minQuadOnSegment documents the same trap, which it once fell into.
+    lead = 1e-9 * max(abs(p));
+    if ~isfinite(hi) && p(1) > lead, mx = inf; arg = inf; return, end
+    if ~isfinite(lo) && p(1)*(-1)^deg > lead, mx = inf; arg = -inf; return, end
     cand = [];
     if isfinite(lo), cand(end+1) = lo; end
     if isfinite(hi), cand(end+1) = hi; end
@@ -465,15 +510,12 @@ function [mx, arg] = maxPolyOn(p, lo, hi)
     arg = cand(i1);
 end
 
-function tf = isIdenticallyZero(p, sc)
-% Does the polynomial vanish identically? This is the test that recognises a constraint which IS
-% the curve being walked (its own edge conic), whose restriction is 0 everywhere rather than merely
-% <= 0. `sc` is the largest coefficient magnitude among ALL the constraints restricted to the same
-% curve, so the threshold is relative to the problem's own scale rather than absolute.
-    if nargin < 2 || ~isfinite(sc) || sc <= 0, sc = 1; end
-    if isempty(p), tf = true; return, end
-    tf = max(abs(p)) <= 1e-9*sc;
-end
+% NOTE: an isIdenticallyZero(restriction) helper stood here and has been deleted. Recognising "this
+% constraint IS the curve being walked" from the RESIDUAL of its restriction needs a reference
+% scale, and the only one available across a face is the largest restriction among its own
+% constraints -- so a single ill-conditioned sibling sets the threshold for all of them and can
+% classify every other constraint as identically zero, dropping them from the checks and passing
+% the face vacuously. sameCurve compares the CONICS instead, which is scale-free.
 
 function q = stripLeadingZeros(p)
     if isempty(p), q = []; return, end
