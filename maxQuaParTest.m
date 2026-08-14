@@ -774,6 +774,48 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyTrue(ok, msg);
         end
 
+        function coverProofRejectsBrokenArrangements(testCase)
+            % A PROVER THAT CANNOT BE MADE TO FAIL IS NOT A PROVER. arcVsArcResultsCoverThePlane
+            % shows verifyFacesCoverThePlane accepting correct results; on its own that is equally
+            % consistent with a check that looks at nothing, which is a real risk here -- an
+            % independent review found three routes by which it could have returned "no hole"
+            % without examining a constraint (an unparametrisable edge, an unparametrisable curve,
+            % and a residual-based "this constraint is the curve I am walking" test whose scale one
+            % ill-conditioned sibling could inflate until every other constraint was discarded).
+            %
+            % So break a result it certifies, three different ways, and require a finding each
+            % time. Each corruption is the shape of a real defect this repository has had.
+            Q = [0.5 -1.2; -0.2 -3.1; -2.5 0; -1.5 -1.7];
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(Q([1 2 3],:), Q([1 3 4],:));
+            g = maxQuaPar(g1, g2);
+            testCase.verifyTrue(verifyFacesCoverThePlane(g), ...
+                'the unbroken result must certify, or the corruptions below prove nothing');
+
+            j = find(g.F(:,1) > 0 & g.F(:,2) > 0, 1);
+            testCase.verifyNotEmpty(j, 'need an interior edge to corrupt');
+
+            % (1) BOTH faces on one side of an edge -- the same-side ray-pairing bug oppositeSides
+            % was written for. Every other check still passes on it, which is why it is checked.
+            h = g; Pe = h.P{h.F(j,1)}; t = find(abs(Pe) == j, 1);
+            Pe(t) = -Pe(t); h.P{h.F(j,1)} = Pe;
+            testCase.verifyFalse(verifyFacesCoverThePlane(h), ...
+                'a same-sign edge leaves one side of it in no face at all, and must be reported');
+
+            % (2) An edge with only one face -- a domain boundary, which a result that is finite
+            % everywhere cannot have.
+            h = g; h.F(j,2) = 0;
+            testCase.verifyFalse(verifyFacesCoverThePlane(h), ...
+                'an edge bordering one face is a hole boundary, and must be reported');
+
+            % (3) A face whose edges no longer reach as far as its constraints do -- the shape of
+            % the far-field over-extension, made by shortening one edge and leaving the constraint
+            % set where it was.
+            h = g; vi = h.E(j,1);
+            h.V(vi,:) = h.V(vi,:) + 0.35*(h.V(h.E(j,2),:) - h.V(vi,:));
+            testCase.verifyFalse(verifyFacesCoverThePlane(h), ...
+                'a face whose boundary runs past its own edges must be reported');
+        end
+
         function facePolyReportsACurvedFaceAsAnArcOrientedIntoTheFace(testCase)
             % Unit-level check of the two facts everything above rests on, verified WITHOUT going
             % through maxQuaPar: for the curved fixture's g1, exactly one boundary edge of the
