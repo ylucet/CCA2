@@ -25,6 +25,52 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-14 — Why check (5) may have failed to separate the two-arc ray split's cases
+
+- **Tried (2026-08-13):** "each half's recession cone must equal the cone its own rays span" was
+  one of the six checks applied to the unbounded two-arc ray split, and it did not separate the
+  pinned fixture from the seeded shift that assembles to a wrong value. It was therefore recorded
+  below as exhausted, and the search was pointed at WHERE the cut starts instead.
+- **Why that conclusion may be premature:** the check is implemented by `pieceRecessionRays`, and
+  until 2026-08-14 that routine derived the arc's chord — the constraint that makes a concave-side
+  arc-piece compact at all — by asking which side the piece's other VERTICES fall on. That is the
+  same rule `DECISIONS.md` already records as unsound one level up, in `QuaPar.chordCuts`, where it
+  killed two green tests: a lens has both vertices ON the chord, so they say nothing. It also had
+  no gate on *when* a chord may be emitted, so a piece that genuinely straddles the chord line
+  could be handed one and be reported compact when it is not. Either way the check was answering a
+  question about a constraint set that was not the piece's.
+- **Corrected:** both questions are now settled by the conic itself. Along the chord `X0 + t·ch`
+  the conic restricts to `q(t) = A·t·(t−1)` with `A = ch·Q·ch'`, because both endpoints are on it.
+  `A ≤ 0` means the chord's interior is inside the kept side, the piece straddles the line and no
+  chord may be emitted (the lens, and every convex-side face). `A > 0` means the piece touches the
+  line only at the arc's endpoints and lies on the side the arc's own interior points are on,
+  reached along the parabola's axis from the chord midpoint. The vertex test survives as a veto.
+- **Status:** a hypothesis, not a result. The ray split was restored on the `overnight/2026-08-13`
+  branch with the recession-cone and winner-domination invariants as its acceptance gate, and
+  **none of it has been run** — the licence server was unreachable for that whole session. If
+  `[1.4979 3.6486]` is still wrong, revert again and strike this entry through.
+- **Evidence to produce:** `arcVsArcRefusesAnUnboundedTwoArcSplit`, and
+  `arcVsArcMatchesGroundTruthOverRandomShifts` (seed 20260803, N=18) with zero wrong shifts.
+
+## 2026-08-14 — A newly minted OUTGOING ray was given sign +1 (a live bug, not a dead end)
+
+- **Recorded here because the reasoning is easy to re-derive wrongly.** `polyConstraints` reads a
+  ray's outward normal as `sign · rot90ccw(direction)`, and both `dirIn` and `dirOut` store the
+  direction pointing from the apex OUT to infinity. A piece is walked CCW with its interior on the
+  LEFT, so the incoming ray is traversed along `−dirIn` and takes `+1`, and the outgoing ray is
+  traversed along `+dirOut` and takes `−1`.
+- **The bug:** both branches of `splitCell` that mint an escaping ray wrote `+1` for the OUTGOING
+  one. That flips the kept half-plane to the far side of the ray's line, so the piece's constraint
+  region is the reflection of its true region across that line — over-extended on one side, short
+  on the other, which is the shape every far-field wrong answer here has had.
+- **What NOT to do:** do not "fix" the INHERITED signs the same way. A sign is a property of the
+  `P{k}` entry the ray came from, not of its role, and a face whose whole boundary is two rays
+  sharing one apex can legitimately carry the same sign on both — that generalisation is itself a
+  recorded fix, with its own test.
+- **Evidence:** derived from `polyConstraints`' own HISTORY note; spotted independently while the
+  ray split was being reverted and recorded in that commit. `newRaySign` now states it once.
+  **Unverified** for the same reason as the entry above.
+
 ## 2026-08-13 — Making the arc's chord a REAL EDGE by splitting the neighbour (option B)
 
 - **Tried:** Nothing was built. It was proposed — and recommended — as the way to close a face

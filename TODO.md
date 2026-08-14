@@ -45,31 +45,48 @@ verify with zero findings.
   vertex list can no longer index off the end (the two seeded crash fixtures no longer crash).
 - `dropDegeneratePieces`: collapsed pieces (2 vertices, no arc, bounded) no longer reach assembly.
 
+### 2026-08-14 -- FOUR CHANGES LANDED ON `overnight/2026-08-13` THAT NOBODY HAS RUN
+
+The licence server was unreachable for that entire session (`ead.ubc.ca` does not resolve; the VPN
+was down), so `matlab -batch` failed on every attempt and **not one line of the four changes below
+has been executed.** Run them before believing any of it. Nothing else in this file was
+re-measured either.
+
+- [ ] **RUN THE SUITE.** `runtests('maxQuaParTest')` first, then the slow bucket. Expected before
+      the changes: fast 200/1, slow 111/4.
+- [ ] **Then, in this order, because each has its own acceptance:**
+      1. `newRaySign` -- an OUTGOING ray minted by `splitCell` was given `+1`, which reflects the
+         piece's constraint region across the ray's line. Check with `MAXQP_ASSERT=2`, whose
+         `reccConeViolation` is exactly the invariant a flipped ray breaks.
+      2. `pieceRecessionRays`' chord derivation, now read off the conic (`A = ch*Q*ch'` decides
+         whether a chord may be emitted at all, and the arc's own interior points decide the side)
+         instead of off the piece's other vertices. Check with `MAXQP_ASSERT=2` on the
+         quadrilateral fixture (pieces `src [1 2]`, `[1 6]`) and on
+         `twoCurvedWhereTheSplitCurveCrossesAnArc`, whose four non-compact findings are expected to
+         be false alarms from the old rule.
+      3. `splitUnboundedTwoArcPiece` restored, gated on `reccConeViolation` AND
+         `winnerDominationViolation` per half. Acceptance is
+         `arcVsArcRefusesAnUnboundedTwoArcSplit` green AND
+         `arcVsArcMatchesGroundTruthOverRandomShifts` (seed 20260803, N=18) with **zero** wrong
+         shifts. **If `[1.4979 3.6486]` is still wrong, revert it again** -- that is the rule this
+         repository works by, and it is why the first attempt was reverted.
+      4. `verifyFacesCoverThePlane` + `maxQuaParTest/arcVsArcResultsCoverThePlane`, brand new and
+         never executed; assume it fails on first run until proved otherwise.
+
 ### Still open, in the order they should be taken
 
-- [ ] `arcVsArcRefusesAnUnboundedTwoArcSplit` -- the last red, and an ATTEMPT WAS REVERTED, so read
-      this before trying again. An unbounded piece carrying two arcs cannot be separated by a
-      chord (no chord closes an unbounded piece), but it CAN be separated by a RAY from the vertex
-      between the two arcs, running to infinity along a direction the piece recedes in; each half
-      then keeps one arc, one original ray and the new one. That was implemented and it DOES make
-      the pinned fixture assemble. It was reverted because it makes one of the 18 seeded shifts
-      ([1.4979 3.6486]) assemble to a WRONG value, off by 0.3531 -- and a silent wrong answer is
-      worse than the refusal it replaces, which is what that test's own comment says.
-      What was tried, and did not separate the good case from the bad one:
-        * requiring the cut ray to recede every straight constraint;
-        * requiring it to stay inside BOTH arcs for its whole infinite length (closed-form minimum
-          of each conic along the ray) -- this one is necessary, a ray did leave through an arc;
-        * requiring each half to admit a point just inside its own arc, by its own constraints --
-          also necessary, it caught a genuinely mis-oriented pair;
-        * fixing the new ray's SIGN (polyConstraints reads a ray's outward normal as
-          sign*rot90ccw(dir), so an OUTGOING ray needs -1, not the +1 the neighbouring
-          escape-to-infinity branch uses -- that branch looks wrong for the same reason and is
-          worth checking on its own);
-        * requiring each half's recession cone to equal the cone its own rays span;
-        * scoping the whole thing to the half-strip shape (both rays parallel).
-      The bad shift survives all six. So the missing check is about WHERE the cut starts, not the
-      direction it takes: the next thing to test is whether the vertex between the two arcs is the
-      right starting point at all, or whether the cut must start on one of the arcs.
+- [ ] `arcVsArcRefusesAnUnboundedTwoArcSplit` -- **an attempt is on the branch, unrun.** The
+      construction is the same one that was reverted (a RAY from the vertex between the two arcs,
+      running to infinity along a direction the piece recedes in), and the six heuristics that
+      failed to separate the good case from the bad are in `DECISIONS.md` -- do not re-derive them.
+      What is different is the acceptance: the split is used only when both EXACT invariants hold
+      on each half (`reccConeViolation`, `winnerDominationViolation`), and otherwise the function
+      returns `[]` and the caller refuses exactly as before.
+      The fifth of those six heuristics IS the first invariant, and it did not separate the cases
+      when it was tried -- but `pieceRecessionRays` was deriving the arc's chord by the vertex rule
+      that `DECISIONS.md` records as unsound one level up, so the check was answering a question
+      about a constraint set that was not the piece's. Whether correcting that is what makes it
+      decisive is the measurement to take.
 
 
 - [x] **FIXED** `arcVsArcDoesNotCrashOnSeededQuadSplits` -- the last piece was a REFLEX vertex left by the
@@ -121,25 +138,31 @@ verify with zero findings.
       non-compact constraint regions (`src[2 1]` and three `src[6 1]`), all of them BOUNDED
       arc-pieces. So this fixture's residual error is the non-compact arc-piece problem, and the
       representation decision below unblocks BOTH reds.
-- [ ] **Step 4 of the plan: bounded arc-pieces whose CONSTRAINT region is non-compact** (2 on the
-      quadrilateral fixture, src [1 2] and [1 6]). ATTEMPTED TWICE AND REVERTED, and the second
-      attempt settles why no subdivision works: for a piece whose arc is CONCAVE towards it, the
-      constraint set is a wedge intersected with the OUTSIDE of a parabola. A cut parallel to the
+- [x] **Step 4 of the plan: bounded arc-pieces whose CONSTRAINT region is non-compact** --
+      **the REPRESENTATION question this item poses was answered on 2026-08-13, and the item as
+      written is stale.** Neither (A) nor (B) below is what happened: option B was checked before
+      implementing and refuted (the chord runs through the NEIGHBOUR's interior, so making it a
+      real edge splits the neighbour and leaves the offending face's own edge list unchanged -- see
+      `DECISIONS.md`). The answer is that the chord is **derived per face**, which is what
+      `QuaPar.chordCuts` does, and it resolved the whole far-field defect.
+      What was left of this item on 2026-08-14 was that `pieceRecessionRays` -- the piece-level
+      analogue, which decides the same question before assembly -- was still using the weaker rule:
+      it read the chord's side off the piece's other VERTICES and had no gate on when a chord may
+      be emitted at all. Corrected to read both off the conic. **Unrun**; the residual
+      `MAXQP_ASSERT=2` findings on `src [1 2]`, `[1 6]` and on
+      `twoCurvedWhereTheSplitCurveCrossesAnArc` are the measurement that closes this.
+      Original text follows, for the record: for a piece whose arc is CONCAVE towards it, the
+      constraint set is a wedge intersected with the OUTSIDE of a parabola; a cut parallel to the
       chord leaves the arc-side sliver still receding along the two side edges' own direction,
-      which neither the cut nor the parabola blocks. The constraint that would close it is the
-      arc's own CHORD -- redundant for the region (the region lies entirely on one side of it) but
-      not one of its edges. So this is a REPRESENTATION decision, not a subdivision bug, and there
-      are exactly two ways to take it:
-        (A) let a face list a REDUNDANT bounding conic in its `P` -- cheapest, but it breaks the
-            current reading of `P` as "the face's boundary edges", which `orderEdges`, the
-            arrangement checks and `plotDomain` all rely on;
-        (B) make the chord a REAL edge by splitting the neighbour across the arc into the lune
-            (between chord and arc) and the rest -- keeps every invariant as it stands, costs one
-            extra face per such arc, and needs the split to happen at assembly time, where the
-            neighbour across an arc is known from the matched half-edges.
-      Recommend (B): it changes no contract and the extra faces are the same subdivide-never-widen
-      move the file already makes for two-arc pieces. This unblocks two of the four reds.
-- [ ] The verifier does not prove the faces COVER the plane; `partitionReport` only samples.
+      which neither the cut nor the parabola blocks. The two options considered were (A) let a face
+      list a REDUNDANT bounding conic in its `P`, and (B) make the chord a REAL edge by splitting
+      the neighbour across the arc.
+- [x] The verifier does not prove the faces COVER the plane; `partitionReport` only samples.
+      **`verifyFacesCoverThePlane` (2026-08-14) does, in four checks on the constraint data:** every
+      edge separates two faces; every edge lies inside both of them; no face's constraint region
+      has boundary anywhere but on its own edges; no face is squeezed onto a curve. Together they
+      force the boundary of the union of the faces to be empty, so the union is the plane. The
+      argument is in the file's header, the summary in `SUPPORT_MATRIX.md` 4.3. **Unrun.**
 
 
 _Seeded 2026-08-02 at the start of the overnight run, from the task given when it
