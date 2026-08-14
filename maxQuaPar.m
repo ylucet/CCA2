@@ -1248,6 +1248,34 @@ function s = sign2(v, tol)
     s(v > tol) = 1; s(v < -tol) = -1;
 end
 
+function s = newRaySign(role)
+% dirInSign / dirOutSign for a ray this file MINTS, as opposed to one inherited from a QuaPar face.
+%
+% polyConstraints reads a ray's outward normal as sign * rot90ccw(direction), and both dirIn and
+% dirOut store the direction pointing from their apex OUT to infinity (facePoly). A piece is walked
+% CCW with its interior on the LEFT, so:
+%   * the INCOMING ray is traversed toward V(1), i.e. along -dirIn, and its outward normal is
+%     rot90cw(-dirIn) = +rot90ccw(dirIn)  ->  sign = +1;
+%   * the OUTGOING ray is traversed away from V(end), i.e. along +dirOut, and its outward normal is
+%     rot90cw(dirOut) = -rot90ccw(dirOut) ->  sign = -1.
+% Those are exactly the two values polyConstraints' own HISTORY note calls "the old fixed-role
+% formula", which it kept as the typical case while generalising to inherited signs. An inherited
+% sign must NOT be recomputed here -- it is a property of that P{k} entry, and a face whose whole
+% boundary is two rays sharing one apex can legitimately carry the same sign on both.
+%
+% HISTORY: the two branches that mint an escaping ray both wrote +1 for the OUTGOING one. That
+% flips the kept half-plane to the far side of the ray's line, so the piece's constraint region is
+% the reflection of its true region across that line -- over-extended on one side and short on the
+% other, which is the shape every far-field wrong answer here has had. Spotted independently while
+% the unbounded two-arc ray split was being reverted, and recorded in that commit as worth its own
+% check.
+    switch role
+        case 'in',  s = 1;
+        case 'out', s = -1;
+        otherwise,  error('maxQuaPar:internal', 'newRaySign: role must be ''in'' or ''out''.');
+    end
+end
+
 function poly2 = clipPolyHalfPlane(poly, nrm, c)
 % Clip poly by the half-plane {nrm*x'<=c}, dispatching on whether poly carries a parabolic edge.
 %
@@ -2607,9 +2635,11 @@ function newPieces = splitCell(cell, f1row, f2row)
         end
         Va = cell.V(1,:); Vb = cell.V(2,:);
         pieceA = struct('V', [Va; Xc], 'dirIn', cell.dirIn, 'dirOut', d, ...
-            'dirInSign', cell.dirInSign, 'dirOutSign', 1, 'curveAfter', 1, 'curveEc', arcEc0, 'f', []);
+            'dirInSign', cell.dirInSign, 'dirOutSign', newRaySign('out'), ...
+            'curveAfter', 1, 'curveEc', arcEc0, 'f', []);
         pieceB = struct('V', [Xc; Vb], 'dirIn', d, 'dirOut', cell.dirOut, ...
-            'dirInSign', 1, 'dirOutSign', cell.dirOutSign, 'curveAfter', 1, 'curveEc', arcEc0, 'f', []);
+            'dirInSign', newRaySign('in'), 'dirOutSign', cell.dirOutSign, ...
+            'curveAfter', 1, 'curveEc', arcEc0, 'f', []);
         pieceA = assignSide(pieceA, diffRow, f1row, f2row);
         pieceB = assignSide(pieceB, diffRow, f1row, f2row);
         newPieces = [pieceA, pieceB];
@@ -2864,10 +2894,15 @@ function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2ro
     if isempty(Va) || isempty(Vb), return, end
     if size(Va,1) == 1 && norm(Va(1,:) - X) > tol, return, end
 
+    % The INHERITED rays keep the sign they arrived with -- it is an intrinsic property of that P{k}
+    % entry, not of the role (polyConstraints' HISTORY). The NEW ray on each half is minted here, so
+    % its sign has to be derived; newRaySign does that once, for all three places that mint one.
     pieceA = struct('V', Va, 'dirIn', cell.dirIn, 'dirOut', d, ...
-        'dirInSign', cell.dirInSign, 'dirOutSign', 1, 'curveAfter', 0, 'curveEc', [], 'f', []);
+        'dirInSign', cell.dirInSign, 'dirOutSign', newRaySign('out'), ...
+        'curveAfter', 0, 'curveEc', [], 'f', []);
     pieceB = struct('V', Vb, 'dirIn', d, 'dirOut', cell.dirOut, ...
-        'dirInSign', 1, 'dirOutSign', cell.dirOutSign, 'curveAfter', 0, 'curveEc', [], 'f', []);
+        'dirInSign', newRaySign('in'), 'dirOutSign', cell.dirOutSign, ...
+        'curveAfter', 0, 'curveEc', [], 'f', []);
     pieceA = assignSideFromCone(pieceA, diffRow, f1row, f2row);
     pieceB = assignSideFromCone(pieceB, diffRow, f1row, f2row);
     newPieces = [pieceA, pieceB];
