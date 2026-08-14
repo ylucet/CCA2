@@ -58,21 +58,64 @@ function rays = pieceRecessionRays(piece)
         % and only when every other vertex of the piece lies on one side of it, which is exactly
         % when the piece is contained in that half-plane and the constraint is redundant for it.
         % QuaPar.chordCuts applies the same rule to an assembled face.
+        %
+        % WHICH SIDE, AND WHEN. Not decidable from the other vertices, which is what this routine
+        % used to do: a LENS (arc plus its chord as a real edge) has both of its vertices ON the
+        % chord and no others, so they say nothing at all and the side came out of whichever
+        % branch was written first. That is the same mistake QuaPar.chordCuts records in
+        % DECISIONS.md, where reading the side off the vertices killed two green tests.
+        %
+        % Decide it from the conic instead, which is exact and needs no interior point. Along the
+        % chord X0 + t*ch the conic restricts to a quadratic q(t) with q(0) = q(1) = 0, so
+        % q(t) = A*t*(t-1) with A = ch*Q*ch'. Two consequences, and they settle both questions:
+        %   * A <= 0 means q >= 0 on the open chord, i.e. the chord's interior is INSIDE the kept
+        %     side {evalConic >= 0}. The piece then straddles the chord line and no chord may be
+        %     emitted -- this is exactly the lens, and also every face on the parabola's CONVEX
+        %     side, where the conic is already the constraint that closes the region.
+        %   * A > 0 means the chord's interior is excluded, so the piece meets the chord line only
+        %     at X0 and X1 and lies on ONE side of it: the side the arc's own interior points are
+        %     on. Along the parabola's axis direction n (the null direction of Q, where the conic
+        %     is LINEAR) from the chord midpoint M, the arc is reached at s* = -conic(M)/(grad.n),
+        %     and its side of the chord is the sign of s*.cross(ch,n) -- no point construction and
+        %     no tolerance.
+        % The vertex test below is then kept only as a VETO, which is what makes the constraint
+        % provably redundant for the piece and so unable to shrink it.
         X0 = V(ca,:); X1 = V(mod(ca,nv)+1,:);
         ch = X1 - X0;
-        side = sym([]);
-        for i = 1:nv
-            if i == ca || i == mod(ca,nv)+1, continue, end
-            side(end+1) = ch(1)*(V(i,2)-X0(2)) - ch(2)*(V(i,1)-X0(1)); %#ok<AGROW>
-        end
-        if unb
-            for d0 = {sym(piece.dirIn), sym(piece.dirOut)}
-                side(end+1) = ch(1)*d0{1}(2) - ch(2)*d0{1}(1); %#ok<AGROW>
+        Achord = ch*Q*ch.';
+        chDir = sym([]);
+        if logical(Achord > 0)
+            nulls = arcNullDirs(Q);
+            for q0 = nulls
+                n0 = q0{1};
+                M  = (X0 + X1)/2;
+                gM = [2*cc(1)*M(1) + cc(2)*M(2) + cc(4), ...
+                      cc(2)*M(1) + 2*cc(3)*M(2) + cc(5)];
+                den = gM(1)*n0(1) + gM(2)*n0(2);
+                if logical(den == 0), continue, end
+                sStar   = -(cc(1)*M(1)^2 + cc(2)*M(1)*M(2) + cc(3)*M(2)^2 ...
+                            + cc(4)*M(1) + cc(5)*M(2) + cc(6)) / den;
+                sideArc = sStar * (ch(1)*n0(2) - ch(2)*n0(1));
+                if logical(sideArc > 0),     chDir = ch;  break
+                elseif logical(sideArc < 0), chDir = -ch; break
+                end
             end
         end
-        if ~isempty(side)
-            if all(logical(side >= 0)),      E{end+1} = ch;    % interior on the left of X0->X1
-            elseif all(logical(side <= 0)),  E{end+1} = -ch;
+        if ~isempty(chDir)
+            % VETO: every other vertex and ray direction must lie on that same side, so that the
+            % half-plane contains the whole piece and the constraint cannot shrink it.
+            side = sym([]);
+            for i = 1:nv
+                if i == ca || i == mod(ca,nv)+1, continue, end
+                side(end+1) = chDir(1)*(V(i,2)-X0(2)) - chDir(2)*(V(i,1)-X0(1)); %#ok<AGROW>
+            end
+            if unb
+                for d0 = {sym(piece.dirIn), sym(piece.dirOut)}
+                    side(end+1) = chDir(1)*d0{1}(2) - chDir(2)*d0{1}(1); %#ok<AGROW>
+                end
+            end
+            if isempty(side) || all(logical(side >= 0))
+                E{end+1} = chDir;                          % interior on the left of the chord
             end
         end
     end
