@@ -25,6 +25,62 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-13 — Making the arc's chord a REAL EDGE by splitting the neighbour (option B)
+
+- **Tried:** Nothing was built. It was proposed — and recommended — as the way to close a face
+  whose arc is concave towards it, resolving the open choice left by the entry below.
+- **Why it failed:** Geometry, checked before implementing. The chord runs through the **interior
+  of the neighbour** on the other side of the arc, so making it a real edge splits that neighbour
+  and leaves the offending face's own edge list unchanged. It cannot supply the missing constraint
+  to the face that needs it. No arrangement can: the chord is not on that face's boundary.
+- **Before retrying:** Do not. The chord must be **derived per face**, which is what
+  `QuaPar.chordCuts` now does — and it resolved the whole far-field defect. Two soundness rules
+  came out of building it, both learned by breaking tests: the side must be read from a point just
+  INSIDE the face (the arc's midpoint stepped along the inward normal), never from the face's other
+  vertices — a lens has both vertices ON the chord, so they say nothing and the wrong side is
+  chosen; and a chord is emitted only when every other vertex and ray direction agrees, i.e. when
+  it is redundant for the face, so it can never shrink a face below its true region.
+- **Evidence:** `QuaPar.chordCuts` + `SUPPORT_MATRIX.md` §4.1. The vertex-based side rule broke
+  `maxQuaParCurvedMatchesGroundTruthOnRandomQuadrilaterals` and
+  `maxQuaParSplitsACellThatAlreadyCarriesAnArc`; the interior-point rule turns both green.
+
+## 2026-08-13 — Splitting an UNBOUNDED two-arc piece with a ray (implemented, reverted)
+
+- **Tried:** An unbounded piece carrying two arcs cannot be separated by a chord (no chord closes
+  an unbounded piece), so: cut with a RAY from the vertex between the two arcs, along a direction
+  the piece recedes in. Each half then keeps one arc, one original ray and the new one. It works —
+  `arcVsArcRefusesAnUnboundedTwoArcSplit` assembles with it.
+- **Why it failed:** It makes seeded shift `[1.4979 3.6486]` assemble to a value wrong by 0.3531.
+  A silent wrong answer is worse than the refusal it replaces, which is what that test's own
+  comment says, so it was reverted.
+- **Before retrying, fix:** Six checks were tried and NONE separates the good case from the bad:
+  (1) the ray recedes every straight constraint; (2) it stays inside BOTH arcs for its whole
+  infinite length — necessary, a ray did leave through an arc; (3) each half admits a point just
+  inside its own arc — necessary, it caught a mis-oriented pair; (4) the new ray's SIGN (an
+  OUTGOING ray needs `-1` in `polyConstraints`' `sign*rot90ccw(dir)`, not the `+1` the
+  escape-to-infinity branch uses — that branch looks wrong the same way and deserves its own
+  check); (5) each half's recession cone equals the cone its rays span; (6) scoping to the
+  half-strip shape. Start past all six: the open question is WHERE the cut starts, not which
+  direction it takes — test whether the vertex between the arcs is the right starting point at
+  all, or whether the cut must start on one of the arcs.
+- **Evidence:** `maxQuaParTest/arcVsArcMatchesGroundTruthOverRandomShifts` (seed 20260803, N=18)
+  versus `arcVsArcRefusesAnUnboundedTwoArcSplit`; commit "Revert the unbounded two-arc ray split".
+
+## 2026-08-13 — "Equal areas and a shared polyline prove two halves tile" (refuted reasoning)
+
+- **Tried:** Concluding, from a measurement, that a two-arc split was NOT responsible for a
+  coverage hole: the two halves shared their cut polyline bit-exactly (17 digits), were both CCW,
+  and their polygon areas summed to the parent's exactly. That sent the next session's search into
+  assembly instead.
+- **Why it failed:** Both facts were true and the conclusion was wrong. Area says nothing about
+  which side of a **bent** boundary a point falls on. The halves did not tile: the cut polyline
+  left one of them REFLEX at the bend, and every point-location test here reads a face as an
+  intersection of half-planes, which is exact only for a CONVEX face.
+- **Before retrying:** To decide whether pieces tile, use the per-edge cross product at the
+  disputed point, not area. `splitAtReflexVertex` now splits such a half along a diagonal.
+- **Evidence:** `arcVsArcDoesNotCrashOnSeededQuadSplits`, fixture 1, the point
+  `(0.998629534754574, -0.0523359562429444)` — outside both halves, inside the parent.
+
 ## 2026-08-13 — Subdividing a bounded arc-piece whose constraint region is non-compact
 
 - **Tried:** Twice, on the two quadrilateral-fixture pieces `src [1 2]` and `[1 6]`.
