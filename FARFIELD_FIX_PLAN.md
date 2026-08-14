@@ -2,6 +2,42 @@
 
 _Drafted 2026-08-04. Companion to TODO.md "MAJOR FINDING 2026-08-04"._
 
+---
+
+## OUTCOME (2026-08-13/14) — read this before the plan
+
+**The defect is fixed, and the diagnosis below was wrong about where it lived.** Every phase of
+this plan assumed the fault was in the SUBDIVISION — that a producer was closing an unbounded
+sub-piece with a straight edge instead of carrying its ray, and that the repair was ray propagation
+producer by producer (Phase 2). It was not. The fault was in the **point-location rule**:
+
+> A curved edge is a bounded **ARC**, and its conic is not.
+
+So "every bounding conic, sign-oriented, ≤ 0" is exact on a parabola's convex side and admits
+points arbitrarily far away on its concave side. No amount of ray propagation could have fixed
+that, because the pieces were the right shape all along; what was missing was a constraint that is
+**not one of the face's edges** — the arc's own chord — which `QuaPar.chordCuts` now derives per
+face. `SUPPORT_MATRIX.md` §4.1 has the mechanism and the re-measured sweeps.
+
+Scorecard against the phases as written:
+
+| phase | what happened |
+|---|---|
+| **0** Localise the producer | Done (`pieceRecessionRays` over the 18 seeded shifts) and its results, recorded below, are still good data. Its **conclusion** — "the dominant producer is `splitCell`" — was the wrong inference from them: the shapes it clustered are what a concave-side arc-piece looks like, not what a broken producer emits. |
+| **1** Recession-cone invariant | **Built and kept**, as `assertPiecesWellFormed` / `pieceRecessionRays`, together with two invariants the plan did not ask for (containment in both source faces, winner domination). Off unless `MAXQP_ASSERT` is set. It did not find the defect, but it is the gate that keeps a future producer from dropping a ray. |
+| **2** Fix ray propagation producer by producer | **Not the fix.** Four of the five defects actually repaired were elsewhere: a single boundary crossing on an unbounded cell read as a tangency; a conic cut skipped when its only crossings are at the cell's corners; half-edges identified by endpoints alone, which four arcs between the same two points make ambiguous; a cut polyline leaving one half reflex. |
+| **3** No unrepresentable case; a refusal is a bug | **Held up.** Every guard that fired turned out to be a real defect, and each was driven to zero — except one, an unbounded half carrying two arcs, which is still open and still classified as a bug rather than as unsupported input. |
+| **4** Acceptance is a proof | **Done.** `verifyMaxIsExactSymbolically` proves `g = max(g1,g2)` face by face in closed form; `verifyFacesCoverThePlane` (2026-08-14) proves the faces leave no hole, which is the half the former cannot see and the last thing that was resting on `partitionReport`'s sampling. See `SUPPORT_MATRIX.md` §4.2 and §4.3. |
+
+**The methodology section below is the part of this document that earned its keep**, and it is the
+reason the fix is trustworthy rather than merely tested: sampling stayed a development tripwire and
+never became the acceptance criterion.
+
+The rest of the file is kept as written, unedited, because the difference between what it predicted
+and what the defect turned out to be is the useful record.
+
+---
+
 ## The bug in one paragraph
 
 `maxQuaPar(g1,g2)` for two curved operands is correct NEAR the arcs and WRONG in the far field.
@@ -152,6 +188,12 @@ The acceptance criterion is a SYMBOLIC theorem, checked exactly, that covers all
   `C`. This proves `g = max(g1,g2)` EVERYWHERE, far field included.
 - Add such a `verifyMaxIsExactSymbolically(g1,g2,g)` helper and assert it on the three arc-vs-arc
   pins (plus a couple of the previously-wrong seeded shifts pinned by their exact shift value).
+  **DONE 2026-08-13** — zero findings on all four arc-vs-arc fixtures. The PARTITION half above was
+  still resting on `partitionReport`'s sampling until `verifyFacesCoverThePlane` was written on
+  2026-08-14; it decides coverage from four closed-form checks on the constraint data (every edge
+  separates two faces; every edge lies inside both of them; no face's constraint region has
+  boundary off its own edges; no face is squeezed onto a curve), which together force the boundary
+  of the union to be empty. `SUPPORT_MATRIX.md` §4.3.
 - Keep the recession-cone assertion (`assertPieceReccConeCorrect`) as a permanent, cheap gate so any
   future producer that drops a ray fails loudly and SOUNDLY at the source.
 - The seeded numerical far-ring sweep stays only as a fast development tripwire; it is NOT the
