@@ -71,11 +71,19 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             caseC = QuaPol(V, E, [1 0 1 0 0 0; 1 0 1 0 0 0], F);
             testCase.verifyEqual(caseC.conj().kind(), 'QuaPar');
 
-            % An INDEFINITE quadratic on the same domain still goes to Case C, because every
-            % triangle's conjugate is then curved and Step 3 takes at most one curved operand.
-            % Kept here so the two routes are pinned side by side on one domain.
+            % An INDEFINITE quadratic on the same domain used to go to Case C, because every
+            % triangle's conjugate is then curved and Step 3 took at most one curved operand.
+            % Arc-vs-arc assembly (2026-08-13) lifted that limit, so this now completes on the
+            % numeric route and returns a MESHED QuaPar -- pinned here the other way round, with
+            % the values checked, since the route is the thing this test is about.
             caseCind = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
-            testCase.verifyEqual(caseCind.conj().kind(), 'QuaParCPLQ');
+            gInd = caseCind.conj();
+            testCase.verifyEqual(gInd.kind(), 'QuaPar');
+            for sPt = {[3 -1], [-2 3], [1 1], [4 4], [-3 -3], [0.5 0.5]}
+                sv = sPt{1};
+                testCase.verifyEqual(gInd.eval(sv), max([0, sv(1), sv(2), sv(1)+sv(2)-1]), ...
+                    'AbsTol', 1e-9, sprintf('indefinite Case C at (%g,%g)', sv(1), sv(2)));
+            end
 
             % CASE C's BICONJUGATE NOW WORKS, and this assertion used to pin it as broken.
             %
@@ -293,7 +301,10 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             q = QuaPol(V, E, [0 1 0 0 0 0], F);
             testCase.verifyEqual(convEnvCPLQ(q).nf, 4);   % confirms the (now recursive) split
             g = q.conj('cplq');
-            testCase.verifyEqual(g.kind(), 'QuaParCPLQ');
+            % ROUTE CHANGED 2026-08-13: the four-face envelope's conjugate now assembles
+            % numerically (arc-vs-arc), so this returns a meshed QuaPar instead of the symbolic
+            % QuaParCPLQ. The ground-truth checks below are unchanged and are what matters.
+            testCase.verifyEqual(g.kind(), 'QuaPar');
 
             % Ground truth is the closed-form sup over T, not anything the pipeline produced.
             S = [1 1; -3 -3; -7 5.25; 0 0; 3 3; 2 -1; -1 2; 5 5];
@@ -518,7 +529,8 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyTrue(q.isDomBounded);
 
             g = q.conj('cplq');
-            testCase.verifyClass(g, 'QuaParCPLQ');
+            % ROUTING CHANGED 2026-08-13: the numeric route now completes here, so the result is a MESHED QuaPar rather than the symbolic QuaParCPLQ this used to pin. That is the arc-vs-arc work of 2026-08-13: maxQuaPar assembles two curved operands, so conjCPLQ no longer has to fall back to cPLQ's Step 2/3. The VALUES are what this test is really for, and they are checked below (exact, error 0, against the closed-form sup).
+            testCase.verifyTrue(isa(g, 'RatPar'));
 
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt));
             Xg = uu(:); Yg = vv(:); xyg = Xg.*Yg;
@@ -612,7 +624,18 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             q = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);   % f = xy on both triangles
             g = q.conj('cplq');
-            testCase.verifyEqual(g.kind(), 'QuaParCPLQ');
+            % NO LONGER FALLS BACK. maxQuaPar took at most one curved operand when this was
+            % written, which is why an indefinite quadratic over a polygon had to go to Case C.
+            % Arc-vs-arc assembly (2026-08-13) removed that limit, so the numeric route completes
+            % and returns a meshed QuaPar. Kept as a pin on the ROUTE, now the other way round,
+            % with the values checked against the closed-form sup over the unit box.
+            testCase.verifyEqual(g.kind(), 'QuaPar');
+            S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 2 2; 0.5 0.5];
+            for i = 1:size(S,1)
+                s = S(i,:);
+                truth = max([0, s(1), s(2), s(1)+s(2)-1]);
+                testCase.verifyEqual(g.eval(s), truth, 'AbsTol', 1e-9, sprintf('s=%d', i));
+            end
         end
     end
 

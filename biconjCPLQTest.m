@@ -69,8 +69,22 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % in this list too. Its conjugate now works, via Step 2's fallback to cPLQ's symbolic
             % Step 2/3, so it no longer belongs here -- see
             % conjCPLQTest.indefiniteTriangleTwoConvexEdgesSplitViaCPLQStep2.
+            %
+            % UPDATE (2026-08-13): the conjugate of THIS triangle now works too. Its four-face
+            % envelope's per-piece conjugates are curved, and arc-vs-arc assembly took the
+            % numeric route all the way, so there is no longer a cplqFailed to expect. The point
+            % the test makes still stands and is checked below -- biconj does not go through
+            % conj-of-conj -- so what is pinned here now is that conj SUCCEEDS and agrees with
+            % the closed-form sup, which is a stronger statement than the old refusal.
             p = biconjCPLQTest.triangle([0 0; 1 1; 3 2], [0 1 0 0 0 0]);   % f = xy
-            testCase.verifyError(@() p.conj(), 'PLQ:conjCPLQ:cplqFailed');
+            gc = p.conj();
+            testCase.verifyTrue(isa(gc, 'RatPar'));
+            for sPt = {[1 1], [-3 -3], [2 -1], [0 0], [5 5]}
+                sv = sPt{1};
+                testCase.verifyEqual(conjCPLQTest.evalConjResult(gc, sv), ...
+                    convEnvCPLQTest.supBilinearOverPoly(sv, [0 0; 1 1; 3 2]), ...
+                    'AbsTol', 1e-6, sprintf('conj at (%g,%g)', sv(1), sv(2)));
+            end
             b = p.biconj();
             testCase.verifyEqual(b.kind(), 'RatPol');
             testCase.verifyGreaterThan(b.nf, 1);                % genuinely split envelope
