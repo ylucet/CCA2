@@ -6,10 +6,12 @@ corresponds to a specific `error(...)` call, cited by file and identifier, so th
 re-derived and re-checked mechanically.
 
 **Partially refreshed 2026-08-14** (§4 and its sub-sections, §7's header, §8's ordering): the
-arc-vs-arc rows and the far-field defect were stale, and §4's guard line numbers predated that
-work by ~1400 lines. That refresh re-derived the guards from the source but did **not** re-run the
-census below — the licence server was unreachable for the whole of that session, so no test numbers
-in this file were re-measured on 2026-08-14. Treat every count here as carrying its own date.
+arc-vs-arc rows and the far-field defect were stale, and §4's guard line numbers predated that work
+by ~1400 lines. All guards and line numbers re-derived from the source.
+
+Re-measured that day, on the buckets only (**not** the full census below, which stands at its own
+date): `maxQuaParTest` **28 pass / 0 fail** (was 25 / 1), fast bucket **202 / 0** (was 200 / 1),
+normal bucket **6 / 0**. Treat every count in this file as carrying its own date.
 
 Last regenerated: 2026-08-02, against a full census of **300 passed / 1 failed / 0 incomplete**
 across 26 suites (`CCA2_TEST_TIMEOUT=5400 bash .claude/suite.sh`, run against a snapshot of the
@@ -427,8 +429,9 @@ before that date predate the arc-vs-arc work and were off by ~1400 lines.
 | Splitting a cell that **already carries an arc** | **OK** (2026-07-30) | — |
 | Splitting curve genuinely **crosses** a cell's arc | **OK** (2026-08-13) — the crossing is a third boundary hit, on the arc's own edge, and the existing two-hit split then divides the arc with everything else | — |
 | Splitting an **unbounded** cell that carries an arc | **OK** (2026-08-13) — the unbounded branch restores the inherited arc exactly as the bounded one does | — |
-| …and the resulting unbounded half carries **both** the inherited arc and the splitting curve | **GAP** — the last open `maxQuaPar` case; a chord cannot close an unbounded piece, and the ray cut that does was implemented and reverted (see `DECISIONS.md`) | `maxQuaPar:notImplemented` — `maxQuaPar.m:2809` |
-| Split curve meets an unbounded cell once and escapes as a **parabola** | **GAP** (defensive) — an unbounded curved edge | `maxQuaPar.m:2604`, `maxQuaPar.m:2849` |
+| …and the resulting unbounded half carries **both** the inherited arc and the splitting curve | **OK** (2026-08-14) — a chord cannot close an unbounded piece, but a RAY from the vertex between the two arcs can, and the split is used only when each half passes all three exact invariants; otherwise it still refuses | `maxQuaPar:notImplemented` — `maxQuaPar.m:2864` (now unreached on every fixture) |
+| An **unbounded** piece straddles `{f1=f2}`: its vertices name one winner and the other operand wins along one of its rays | **GAP** — `{f1=f2}` is a degenerate conic, so it can be a **pair of lines**, and the second one can leave through the recession cone without crossing the boundary anywhere finite, so `splitCell`'s two-crossing cut never separates them. Detected exactly and **refused**, rather than returning a silently wrong winner; the subdivision that would handle it is not written | `maxQuaPar:notImplemented` — `maxQuaPar.m:3472` |
+| Split curve meets an unbounded cell once and escapes as a **parabola** | **GAP** (defensive) — an unbounded curved edge | `maxQuaPar.m:2650`, `maxQuaPar.m:2904` |
 | Clip line cutting one arc **twice** (arc bulging across) | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar.m:1970` |
 | Curved cut crossing a cell's own arc twice | **GAP** (defensive) | `maxQuaPar.m:1361` |
 | Curved cut that **separates** an unbounded cell | **N/R** — each component would need the cutting conic running to infinity | `maxQuaPar.m:1494` |
@@ -465,11 +468,31 @@ Measured now, on the two committed sweeps:
 | `sweepMaxQuaParCurvedSplit(20260802, 200)` | 131 sampled, 30 assembled | **142 sampled, 59 assembled, 0 of 1031 vertices / 571 midpoints / 3540 interior points wrong** |
 | 397 seeded quadrilateral splits, 200 directions at radii 1–500 | 7 of 64 arc-vs-arc results wrong in the far field | **0 of 64** |
 
-`maxQuaParTest` is 25 pass / 1 fail; the red is `arcVsArcRefusesAnUnboundedTwoArcSplit`, the one
-remaining case in the table above — an unbounded half carrying two arcs. A ray cut that makes that
-fixture assemble was written and then **reverted**, because it turns one of the 18 seeded shifts
-into a silently wrong answer; the six checks that failed to separate the good case from the bad
-are recorded in `DECISIONS.md`. So it refuses at the guard, not for want of a cut direction.
+**`maxQuaParTest` is 28 pass / 0 fail as of 2026-08-14** (it was 25 / 1). The red that closed was
+`arcVsArcRefusesAnUnboundedTwoArcSplit`, and closing it took four defects, of which the first two
+are the reason two earlier attempts at it failed:
+
+1. **`pieceRecessionRays` got the parabola's axis from an exact discriminant.** `arcNullDirs` solves
+   `d·Q·d' = 0` exactly and returns **nothing** when `b²−4ac` comes out negative — which is what a
+   floating-point parabola's `Q` does about half the time, being only semidefinite up to rounding
+   (measured `−2.78e-17`). The derived chord was then never emitted, the piece's constraint region
+   stayed a slab open at both ends, and `reccConeViolation` reported it receding in both senses.
+   `parabolaArcFrame` has always taken the smallest-magnitude eigenvector instead.
+2. **`curveAfter ≠ 0` does not mean "this edge is curved".** `boundedPiece` tags every piece with
+   the closing edge's index, including the straight-splitting-curve case where `curveEc` is all
+   zeros — `pieceIsCurved`'s header says so, and says why the tag must stay. Five call sites read
+   the tag as "is curved" anyway: `polyConstraints` emitted **no half-plane at all** for an
+   ordinary straight edge; `pieceStraightEdges` skipped it, so every boundary minimisation built on
+   that list was blind to it; and `containmentViolation`/`boundaryMinOf` called `parabolaArcFrame`
+   on an all-zero conic, which raises `degenerateAxis` — the crash that made `MAXQP_ASSERT`
+   unusable on three of the four arc-vs-arc fixtures.
+3. With the invariants able to run, they named the last defect exactly, and it is a **new GAP**
+   rather than a fix: an unbounded piece can straddle `{f1=f2}` because that curve is a degenerate
+   conic and so can be a *pair* of lines. See the table above; it is refused, not answered wrongly.
+4. The ray cut itself, now gated on all three exact invariants per half rather than on heuristics.
+
+The six heuristics that did **not** separate the good case from the bad, and which should not be
+re-derived, are in `DECISIONS.md`.
 
 Accuracy of the curved path, measured on a randomized sweep of convex quadrilaterals split by a
 diagonal (115 splits, 85 assembled): exact to ~1e-14 at **all 340** straight-edge midpoints and
@@ -517,6 +540,16 @@ stated as a property rather than as a symptom. Before `QuaPar.chordCuts`, a face
 concave side had `{arc conic = 0} ∩ R_k` running to infinity along both branches while its only
 edge on that curve was a bounded arc — which C reports by naming the curve and the parameter range,
 instead of waiting for a probe to land in the over-extended region.
+
+**The prover can be made to fail, and that is pinned.** A check that accepts every correct result
+is equally consistent with one that examines nothing, and that is not hypothetical here — an
+independent review found three routes by which this one could have returned "no hole" without
+looking at a constraint (an unparametrisable edge, an unparametrisable curve, and a residual-based
+"this constraint is the curve I am walking" test whose shared scale one ill-conditioned sibling
+could inflate until every other constraint was discarded). All three are closed, and
+`maxQuaParTest/coverProofRejectsBrokenArrangements` breaks a certified result three ways — a
+same-sign edge, an edge with one face, and a face whose edges no longer reach as far as its
+constraints — and requires a finding each time.
 
 The same floating-point caveat as §4.2 applies: the structure is exhaustive, the comparisons carry
 relative tolerances.
@@ -574,9 +607,16 @@ return a `RatPar`, and `kind()` reports the concrete one (`'QuaPol'` / `'RatPol'
 It was not a family of edge cases but one sentence — *a curved edge is a bounded ARC and its conic
 is not* — and `QuaPar.chordCuts` supplies the missing constraint per face. §4.1 has the mechanism
 and the re-measured sweeps; §4.2 lists the tools built to keep it closed, and §4.3 the covering
-proof that replaces the sampling that let it hide. The one `maxQuaPar` case still open is a
-**refusal**, not a wrong answer: an unbounded half carrying two arcs (§4, and `DECISIONS.md` for
-the ray cut that was written and reverted because it traded that refusal for a silent error).
+proof that replaces the sampling that let it hide.
+
+**Three more silent wrong answers were found and fixed on 2026-08-14**, all from one overloaded
+flag — `curveAfter ≠ 0` read as "this edge is curved", when `boundedPiece` also sets it for a
+STRAIGHT splitting curve (§4.1). `polyConstraints` emitted no half-plane at all for such an edge, so
+a piece could be admitted two units outside itself; `pieceStraightEdges` skipped it, so the piece
+invariants were blind along it; and two more sites called `parabolaArcFrame` on an all-zero conic,
+which is the `degenerateAxis` crash that had made `MAXQP_ASSERT` unusable on three of the four
+arc-vs-arc fixtures. The only `maxQuaPar` case still open is a **refusal**, not a wrong answer — an
+unbounded piece straddling `{f1=f2}` when that curve is a pair of lines (§4, §8.6).
 
 | Defect | Impact | Where |
 |---|---|---|
@@ -697,10 +737,15 @@ Ordered by how likely a downstream caller is to hit it:
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
 5. **Two known wrong-answer defects** (§7).
-6. **`maxQuaPar`: an unbounded half carrying two arcs** (§4, §4.1). A *refusal*, not a wrong
-   answer, and the only arc-vs-arc case left. It errors rather than assembling; everything else on
-   the curved path is done. See `DECISIONS.md` for the ray cut that closes the pinned fixture and
-   breaks a seeded shift, and the six checks that do not separate the two.
+6. **`maxQuaPar`: an unbounded piece that straddles `{f1 = f2}`** (§4, §4.1). A *refusal*, not a
+   wrong answer, and the only `maxQuaPar` case left. `{f1=f2}` is a degenerate conic, so it can be
+   a **pair of lines**; a half lying strictly on one side of the line `splitCell` cut along can
+   still be crossed by the other one, and if that line leaves through the recession cone it
+   contributes no finite crossing for `splitCell` to find. Detected exactly (the asymptotic sign
+   along each ray) and refused. The repair is a `splitCell` that can cut along a second line
+   entering and leaving at infinity — `DECISIONS.md` (2026-08-03) describes it and warns against
+   patching it with probes.
+   ~~an unbounded half carrying two arcs~~ — **RESOLVED 2026-08-14**, see §4.1.
 7. ~~**arc-vs-arc results are only locally correct (wrong far from the arcs)**~~ — **RESOLVED
    2026-08-13** (§4.1). This was the top blocker on this list from 2026-08-04. The cause was the
    point-location rule, not the subdivision: a curved edge is a bounded arc and its conic is not,

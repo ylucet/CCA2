@@ -25,6 +25,50 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-14 — RESOLVED: the two-arc ray split, and why two attempts at it failed
+
+- **Outcome:** `arcVsArcRefusesAnUnboundedTwoArcSplit` is GREEN and `maxQuaParTest` is 28 / 0 (from
+  25 / 1). The entries below about the ray split stand as history; the construction was right in
+  outline all along, and **neither reverted attempt failed for the reason it was thought to**.
+- **What actually blocked it, both times.** Two defects, neither in the split:
+    1. `pieceRecessionRays` took the parabola's axis from `arcNullDirs`, which solves `d·Q·d' = 0`
+       *exactly* and returns **nothing** when `b²−4ac` comes out negative — which is what a
+       floating-point parabola's `Q` does about half the time, being only semidefinite up to
+       rounding (measured `−2.78e-17` on the pinned fixture's first arc). The derived chord was
+       then silently never emitted, so the half's constraint region stayed a slab open at BOTH
+       ends and `reccConeViolation` refused it. This is why **check (5) of the six did not
+       separate the cases**: it was answering a question about a constraint set that was not the
+       piece's. `parabolaArcFrame` has always taken the smallest-magnitude eigenvector; do that.
+    2. `curveAfter ≠ 0` was read as "this edge is curved" in five places, when `boundedPiece` also
+       sets it for a STRAIGHT splitting curve (`curveEc` all zeros). Two of those places call
+       `parabolaArcFrame` on the zero conic and raise `degenerateAxis` — **so `MAXQP_ASSERT`
+       crashed on three of the four arc-vs-arc fixtures, and the invariants that would have named
+       all of this never ran on the inputs that needed them.** An invariant that errors is off.
+- **And the seeded shift `[1.4979 3.6486]`, blamed on the split twice:** the split's halves pass
+  all three exact invariants. The wrong 0.3531 came from a *different* piece, `src [2 4]`, whose
+  only finite edge `polyConstraints` had dropped (defect 2) — the refusal had merely been masking
+  it. It is now refused explicitly; see the next entry.
+- **Lesson worth keeping:** when a gate refuses a construction you have independent reason to
+  believe is right, suspect the gate. Both reverts were correct decisions on the evidence
+  available, and the evidence was wrong because the tooling was broken in a way that was silent.
+
+## 2026-08-14 — An unbounded piece can straddle {f1=f2}, and it is REFUSED, not repaired
+
+- **What:** `{f1 = f2}` is a degenerate conic, so it can be a **pair of parallel lines**. A half
+  lying strictly on one side of the line `splitCell` cut along can still be crossed by the OTHER
+  line — and if that line leaves through the recession cone it contributes **no finite boundary
+  crossing** for `splitCell` to find, so the two-crossing cut never separates them. The half then
+  carries one winner while the other operand wins far out along its own ray.
+- **Measured:** seeded shift `[1.4979 3.6486]`, piece `src [2 4]` — carries g1 face 2's quadratic
+  while g2 face 4 beats it by `+Inf` along its own ray from `(-5.93403, 3.93403)` in direction
+  `(-0.7071, 0.7071)`. It answered `0` at `(-2.706981, 2.705986)` where the truth is `0.35310191`.
+- **Decision:** `assignSide` now checks the asymptotic sign along both rays — exact, via
+  `asymptoticSign`'s leading coefficient, no sampling — and **errors** rather than returning a
+  silently wrong winner. That is the rule this repository works by.
+- **Do NOT patch this with probes.** The repair is a `splitCell` that can cut a cell along a second
+  line entering and leaving at infinity, which the 2026-08-03 entry below already describes and
+  already warns about. The guard is a bug detector, not a supported-input error.
+
 ## 2026-08-14 — Why check (5) may have failed to separate the two-arc ray split's cases
 
 - **Tried (2026-08-13):** "each half's recession cone must equal the cone its own rays span" was
@@ -45,12 +89,11 @@ Newest entries at the top.
   chord may be emitted (the lens, and every convex-side face). `A > 0` means the piece touches the
   line only at the arc's endpoints and lies on the side the arc's own interior points are on,
   reached along the parabola's axis from the chord midpoint. The vertex test survives as a veto.
-- **Status:** a hypothesis, not a result. The ray split was restored on the `overnight/2026-08-13`
-  branch with the recession-cone and winner-domination invariants as its acceptance gate, and
-  **none of it has been run** — the licence server was unreachable for that whole session. If
-  `[1.4979 3.6486]` is still wrong, revert again and strike this entry through.
-- **Evidence to produce:** `arcVsArcRefusesAnUnboundedTwoArcSplit`, and
-  `arcVsArcMatchesGroundTruthOverRandomShifts` (seed 20260803, N=18) with zero wrong shifts.
+- **Status: CONFIRMED, and it was the whole of it.** Correcting the axis derivation is exactly what
+  turned both halves of the pinned fixture's cut from "cannot be proved" into "proved". See the
+  RESOLVED entry at the top.
+- **Evidence:** `arcVsArcRefusesAnUnboundedTwoArcSplit` green; `maxQuaParTest` 28 / 0; fast bucket
+  202 / 0.
 
 ## 2026-08-14 — A newly minted OUTGOING ray was given sign +1 (a live bug, not a dead end)
 
@@ -69,7 +112,9 @@ Newest entries at the top.
   recorded fix, with its own test.
 - **Evidence:** derived from `polyConstraints`' own HISTORY note; spotted independently while the
   ray split was being reverted and recorded in that commit. `newRaySign` now states it once.
-  **Unverified** for the same reason as the entry above.
+  **Verified 2026-08-14**: no regression on any bucket, and an independent review confirmed the
+  derivation (the previous `+1` gave the two halves of a split the *same* outward normal across
+  their shared ray — overlap on one side, hole on the other).
 
 ## 2026-08-13 — Making the arc's chord a REAL EDGE by splitting the neighbour (option B)
 

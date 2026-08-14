@@ -45,48 +45,30 @@ verify with zero findings.
   vertex list can no longer index off the end (the two seeded crash fixtures no longer crash).
 - `dropDegeneratePieces`: collapsed pieces (2 vertices, no arc, bounded) no longer reach assembly.
 
-### 2026-08-14 -- FOUR CHANGES LANDED ON `overnight/2026-08-13` THAT NOBODY HAS RUN
+### 2026-08-14 -- `maxQuaParTest` IS GREEN: 28 pass / 0 fail (from 25 / 1)
 
-The licence server was unreachable for that entire session (`ead.ubc.ca` does not resolve; the VPN
-was down), so `matlab -batch` failed on every attempt and **not one line of the four changes below
-has been executed.** Run them before believing any of it. Nothing else in this file was
-re-measured either.
-
-- [ ] **RUN THE SUITE.** `runtests('maxQuaParTest')` first, then the slow bucket. Expected before
-      the changes: fast 200/1, slow 111/4.
-- [ ] **Then, in this order, because each has its own acceptance:**
-      1. `newRaySign` -- an OUTGOING ray minted by `splitCell` was given `+1`, which reflects the
-         piece's constraint region across the ray's line. Check with `MAXQP_ASSERT=2`, whose
-         `reccConeViolation` is exactly the invariant a flipped ray breaks.
-      2. `pieceRecessionRays`' chord derivation, now read off the conic (`A = ch*Q*ch'` decides
-         whether a chord may be emitted at all, and the arc's own interior points decide the side)
-         instead of off the piece's other vertices. Check with `MAXQP_ASSERT=2` on the
-         quadrilateral fixture (pieces `src [1 2]`, `[1 6]`) and on
-         `twoCurvedWhereTheSplitCurveCrossesAnArc`, whose four non-compact findings are expected to
-         be false alarms from the old rule.
-      3. `splitUnboundedTwoArcPiece` restored, gated on `reccConeViolation` AND
-         `winnerDominationViolation` per half. Acceptance is
-         `arcVsArcRefusesAnUnboundedTwoArcSplit` green AND
-         `arcVsArcMatchesGroundTruthOverRandomShifts` (seed 20260803, N=18) with **zero** wrong
-         shifts. **If `[1.4979 3.6486]` is still wrong, revert it again** -- that is the rule this
-         repository works by, and it is why the first attempt was reverted.
-      4. `verifyFacesCoverThePlane` + `maxQuaParTest/arcVsArcResultsCoverThePlane`, brand new and
-         never executed; assume it fails on first run until proved otherwise.
+Measured: fast bucket **202 / 0** (was 200 / 1), normal bucket **6 / 0**. Every arc-vs-arc red is
+closed. What it took is in `SUPPORT_MATRIX.md` 4.1 and `DECISIONS.md`; the short version is that
+**neither of the two earlier attempts at the last red failed for the reason it was thought to** --
+the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Still open, in the order they should be taken
 
-- [ ] `arcVsArcRefusesAnUnboundedTwoArcSplit` -- **an attempt is on the branch, unrun.** The
-      construction is the same one that was reverted (a RAY from the vertex between the two arcs,
-      running to infinity along a direction the piece recedes in), and the six heuristics that
-      failed to separate the good case from the bad are in `DECISIONS.md` -- do not re-derive them.
-      What is different is the acceptance: the split is used only when both EXACT invariants hold
-      on each half (`reccConeViolation`, `winnerDominationViolation`), and otherwise the function
-      returns `[]` and the caller refuses exactly as before.
-      The fifth of those six heuristics IS the first invariant, and it did not separate the cases
-      when it was tried -- but `pieceRecessionRays` was deriving the arc's chord by the vertex rule
-      that `DECISIONS.md` records as unsound one level up, so the check was answering a question
-      about a constraint set that was not the piece's. Whether correcting that is what makes it
-      decisive is the measurement to take.
+- [ ] **An unbounded piece that straddles `{f1 = f2}`.** The only `maxQuaPar` case left, and it is
+      a REFUSAL, not a wrong answer. `{f1=f2}` is a degenerate conic, so it can be a PAIR of
+      parallel lines; a half lying strictly on one side of the line `splitCell` cut along can still
+      be crossed by the other one, and if that line leaves through the recession cone it
+      contributes no finite crossing for `splitCell` to find. `assignSide` now detects it exactly
+      (the asymptotic sign along each ray) and errors.
+      The repair is a `splitCell` that can cut a cell along a second line entering and leaving at
+      infinity. **Read `DECISIONS.md` 2026-08-03 first** -- it describes the same shape for a
+      parabola and warns against patching it with probes.
+      Reproducer: seeded shift `[1.4979 3.6486]` of the two-curved fixture, piece `src [2 4]`.
+
+- [ ] **`MAXQP_ASSERT` should be on in the test suite.** It is off by default and was CRASHING on
+      three of the four arc-vs-arc fixtures until 2026-08-14, so the invariants that eventually
+      named three defects had never run on the inputs that needed them. Level 1 is cheap. An
+      invariant that errors is an invariant that is off, and nothing was noticing.
 
 
 - [x] **FIXED** `arcVsArcDoesNotCrashOnSeededQuadSplits` -- the last piece was a REFLEX vertex left by the
