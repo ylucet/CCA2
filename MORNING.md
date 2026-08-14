@@ -42,8 +42,12 @@ now been run**, and two of the blind changes turned out to be wrong and were fix
    the truth was `0.35310191`; `pieceStraightEdges` skipped it, blinding every boundary
    minimisation; and two sites called `parabolaArcFrame` on an all-zero conic, which is the crash
    above.
-3. With the invariants finally able to run, they named the last defect outright — and it is a new
-   **refusal**, not a fix. See "What is broken".
+3. With the invariants finally able to run, they named the last defect outright: a whole unbounded
+   piece could have its **winner decided by floating-point noise**, because `splitCell`'s unbounded
+   "rest" piece can have exactly the two crossing points as its vertices — both, by construction,
+   *on* `{f1=f2}` — so neither they nor their centroid can decide it. Now read in the piece's
+   recession cone. This is what took the seeded sweep from 16 exact / 0 wrong / 2 errored to
+   **17 / 0 / 1**.
 4. The ray split itself, restored and gated on all three exact invariants per half rather than on
    heuristics.
 
@@ -97,7 +101,14 @@ Nothing blocks. Two things worth your attention:
 
 ## Where I stopped
 
-All four items done and committed. The slow bucket is the only measurement outstanding.
+All four items done, committed, and every bucket re-measured — nothing is outstanding.
 `.claude/SESSION_HANDOFF.md` is rewritten for the next session; `TODO.md` and `DECISIONS.md` carry
-the open case and the lesson — *when a gate refuses a construction you have independent reason to
-believe is right, suspect the gate.*
+the one open case with its full trace, and the lesson — *when a gate refuses a construction you
+have independent reason to believe is right, suspect the gate.*
+
+One retraction worth flagging, since it is the kind of thing that gets copied forward: partway
+through I explained the winner defect as `{f1=f2}` being a **pair of parallel lines**, a real
+subdivision gap, and wrote a guard for it. Classifying the conic refuted that in one line — its
+whole quadratic part is zero, so it is a single straight line. The guard is kept as a cheap exact
+backstop and its header says plainly that it now fires on nothing, so nobody reads its existence as
+evidence that the case occurs. `DECISIONS.md` records the refutation.
