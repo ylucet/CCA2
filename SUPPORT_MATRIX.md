@@ -702,8 +702,9 @@ orientation-dependent even though the missing branch is not.
 Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
-2. **Unbounded multi-face domains: Steps 1 and 2 are done; the blocker is Step 3's CROSS-PIECE
-   maximum.** Re-scoped 2026-08-01.
+2. **Unbounded multi-face domains — Step 3 is DONE too (2026-08-15).** What remains is Step 1's
+   CURVED convex envelope over an unbounded face, item (f) below. Re-scoped 2026-08-01, and again
+   2026-08-15 when the Step 3 cross-piece maximum was closed.
    **(a) DONE.** `quaPolToPlq` builds ray-carrying faces from HALF-PLANES
    (`faceDomainFromHalfPlanes`), orientation off `P{k}`'s own sign convention, so the ray
    direction is no longer discarded.
@@ -722,28 +723,42 @@ Ordered by how likely a downstream caller is to hit it:
    headline case — `(x²+y²)/2` over `{x≤0,y≥0}` — returns `min(s1,0)²/2 + max(s2,0)²/2`, exact
    at 10 probes. The same routine supplies the edge/interior cells cPLQ's `conjugateOfPiecePoly`
    omits for a convex `q` on a bounded triangle.
-   **(e) THE BLOCKER — HALVED 2026-08-02, still a blocker.** cPLQ's Step 3, the CROSS-PIECE
-   maximum (`plq.maximumConjugate` → `functionNDomain.maximumP`), disagrees with its own per-piece
-   conjugates on the 4-cone fan with convex faces.
-   * **The DROP is fixed.** The assembled maximum used to keep only 4 of the 16 cells, losing
+   **(e) RESOLVED 2026-08-15.** cPLQ's Step 3, the CROSS-PIECE maximum
+   (`plq.maximumConjugate` → `functionNDomain.maximumP`), disagreed with its own per-piece
+   conjugates on the 4-cone fan with convex faces. It had two halves, and **both were the same
+   trap**: a routine concluding something from a direction built at a vertex where the split
+   conic's GRADIENT VANISHES — the apex of a cone, which is exactly where an unbounded fan's split
+   conics meet, and where no such direction exists.
+   * **The DROP, fixed 2026-08-02.** The assembled maximum kept only 4 of the 16 cells, losing
      face 1's `s₂²/2` cell on `{s1≤0, s2≥0}`, so `f*(-0.5,2)` came back `1.125` for a truth of
-     `2`. Cause: splitting that quadrant on `s2²/2 = s1²/2 + s2²/4` yields the half
-     `{s1≤0, s2≥0, s1²/2 − s2²/4 ≤ 0}` — a genuine 2-D cone containing `(-0.5,2)`, `(-0.1,3)`,
-     `(-1,4)` — and `region.simplifyUnboundedRegion` declared it EMPTY. It decides that from probe
-     directions built out of constraint SLOPES at a vertex, and the split conic's gradient
-     *vanishes* at exactly that vertex, so those directions are meaningless. `region.witnessAwayFrom`
-     now refutes an emptiness verdict by exhibiting a feasible point away from the vertices — sound,
-     because a genuinely empty region has none, so no true verdict can be overturned. 8 cells now
-     assemble and `f*(-0.5,2)` is `2`, with 7 other probes also exact.
-   * **An OVER-claim remains.** At `s = (-3,-2.4)` the assembly gives `5.130` where the per-piece
-     max gives `4.500` (the latter is right: the four cone suprema there are `0`, `4.5`, `3.69`,
-     `2.88`). `5.13 = s1²/4 + s2²/2`, which is face 4's cell — and face 4's cell belongs on
-     `{s1≥0, s2≤0}`, so some region has grown across `s1 = 0`. Opposite sign of error, different
-     point, unstarted.
+     `2`. `region.simplifyUnboundedRegion` declared a genuine 2-D cone EMPTY from probe directions
+     built out of constraint SLOPES at that vertex. Fixed by `region.witnessAwayFrom`, which
+     refutes an emptiness verdict by exhibiting a feasible point — sound, because a genuinely
+     empty region has none.
+   * **The OVER-CLAIM, fixed 2026-08-15.** At `s = (-3,-2.4)` the assembly gave `5.130` where the
+     per-piece max gives `4.500`. The cell carrying `s1²/4 + s2²/2` had lost its `−s1 ≤ 0`,
+     keeping only `{s2 ≤ 0, s2²/2 − s1² ≤ 0, s1² − 2s2² ≤ 0}` — two constraints **blind to the
+     sign of `s1`** — so the region was symmetric under `s1 → −s1` and claimed the mirror wedge.
+     `region.removeTangent` deleted it, after building a TANGENT LINE to a quadratic at its own
+     apex. Fixed by refusing to conclude anything from a vanishing gradient.
+     Cleared on the way, so they are not re-checked: `redundantSubset` certifies nothing redundant
+     there (correct), `simplifyUnboundedRegion` leaves the constraint alone, and Step 2 is right —
+     each piece's own conjugate has the correct quadrant constraints.
+   **`conjCPLQTest` is 25 / 0.** `step3DropsCellsOnSomeUnboundedAssemblies`, which pinned the gate
+   FIRING, is renamed `step3UnboundedAssemblyAgreesWithItsOwnPieces` and now pins what the gate
+   protects; its sibling `step3UnboundedAssemblyMatchesTheTruth` pins the closed-form values.
 
-   Neither is ever returned: `conjCPLQ`'s `assertStep3MatchesPieces` is applied to Case C and
-   raises `PLQ:conjCPLQ:cplqFailed`. Pinned by
-   `conjCPLQTest/step3UnboundedAssemblyAgreesWithItsOwnPieces`, whose comment carries both halves.
+   The `assertStep3MatchesPieces` gate STAYS: it is an independent cross-check of the whole
+   assembly against the same `f*` computed the other way, and the failure it guards against is
+   silent by nature. It simply no longer fires on this input.
+
+   **(f) THE REMAINING PIECE — a CURVED convex envelope over an unbounded face.** `convEnvUnbounded`
+   computes only the AFFINE envelope and raises `convexAlongRay` as soon as `d'Qd > 0` along a ray,
+   which is correct about its own formula and is a gap as a limit. Both envelopes are derived in
+   `TODO.md`: `co(x·y + I_K) = y²` on `K = {0 ≤ y ≤ x}` (with the one-line proof), and
+   `co(−x²+y²) = −x + y²` on the half-strip. `conjConvexOverPiece.m` already conjugates such an
+   envelope, so the missing half is Step 1 producing one. Pinned by the two `unboundedFaceTest`
+   reds.
 
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).

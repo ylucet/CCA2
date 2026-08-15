@@ -127,18 +127,39 @@ the tooling that judged them was itself broken, in two ways, and silently.
       that test is renamed `step3UnboundedAssemblyAgreesWithItsOwnPieces` and now pins what the
       gate protects.
 
-- [ ] **BUGS 3 and 4 -- a curved convex envelope over an UNBOUNDED face.** A gap, refused loudly.
-      `convEnvUnbounded` handles only an AFFINE envelope, and both fixtures have envelopes that are
-      convex but provably not affine, so its refusal is right about its own formula and wrong as a
-      limit:
-        * `-x^2 + y^2` over the half-strip `{0<=x<=1, y>=0}`: separable, so
-          `co q = -x + y^2`, convex and not affine.
-        * `x*y` over the wedge `{0<=y<=x}`: at `h=(1,1)` the best affine minorant is worth 1 and
-          the apex tangent plane is worth 0, so `co q` is strictly above the tangent plane.
+- [ ] **BUGS 3 and 4 -- a curved convex envelope over an UNBOUNDED face.** A GAP, refused loudly,
+      and a missing ALGORITHM rather than a defect: `convEnvUnbounded` computes only the AFFINE
+      envelope and raises `convexAlongRay` the moment `d'Qd > 0` for some ray direction. Both
+      fixtures have envelopes that are convex and provably not affine, so the refusal is right
+      about its own formula and wrong as a limit.
       `conjConvexOverPiece.m` already CONJUGATES a curved envelope over an unbounded face, so the
       missing half is Step 1 producing one. Pinned by
       `unboundedFaceTest/nonconvexQuadraticWithACurvedEnvelopeOverAHalfStripIsExact` and
       `unboundedFaceTest/curvedEnvelopeOverAWedgeIsExact`.
+
+      **BOTH ENVELOPES DERIVED 2026-08-15 -- start from these rather than from scratch.**
+
+      *Wedge*, `q = x*y` over `K = {0 <= y <= x}`: **`co(q + I_K) = y^2 + I_K`.**
+      Proof, and it is the whole thing: for `c >= 0` take the affine `l(z) = 2*c*z2 - c^2`, the
+      tangent to `y^2` at `y = c`. It minorises `q` on `K` because `z1 >= z2 >= 0` gives
+      `z1*z2 >= z2^2`, and `2*c*z2 - c^2 <= z2^2` is exactly `0 <= (z2 - c)^2`. The sup over `c` of
+      those minorants is `y^2`, which is convex, so it IS the envelope. Sanity check against the
+      test's own note: at `h = (1,1)` it gives 1, matching the best affine minorant it quotes,
+      where the apex tangent plane gives 0.
+
+      *Half-strip*, `q = -x^2 + y^2` over `{0 <= x <= 1, y >= 0}`: **`co q = -x + y^2`** (the test
+      states it). The domain is a product and `q` is separable, so
+      `co q = co_x(-x^2) + co_y(y^2)`; the first is the affine interpolant of `-x^2` on `[0,1]`,
+      namely `-x`, and the second is unchanged because `y^2` is already convex.
+
+      **The pattern both share**, and the shape a general rule should take: convexify along the
+      directions where `q` is CONCAVE (an affine interpolation), keep `q` along the directions
+      where it is CONVEX. In the wedge frame `z = alpha*d1 + beta*d2` with `d1'Q d1 = 0` and
+      `d2'Q d2 > 0`, `q` is linear in `alpha` with a slope that is nonnegative on the cone, and the
+      envelope drops the cross term. Write the derivation out and prove it the way
+      `convEnvUnbounded`'s own header proves the affine case -- parametrise the minorants,
+      minimise the gap at an arbitrary point, and check the minimiser is independent of that
+      point. Do NOT ship a formula that merely matches these two fixtures.
 
 - [x] **BUG 5 -- FIXED 2026-08-15.** `splitTwoArcPiece` found no cut when the two arcs are
       ADJACENT: its two candidate chords join the arcs' facing endpoints, which for adjacent arcs
