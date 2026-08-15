@@ -98,11 +98,19 @@ I would take that refactor next, from the hand-built lens probe rather than from
 
 ## Where I stopped
 
-All work is committed and pushed on `main`. `DECISIONS.md` carries the unsound approaches so they
-are not re-derived; `TODO.md` and `.claude/SESSION_HANDOFF.md` carry the next concrete step for
-each open item.
+All work is committed and pushed on `main`; the tree is clean. Bug 1 is marked **BLOCKED** in
+`TODO.md` after four distinct attempts, all recorded in `DECISIONS.md` — two of them unsound, one
+strictly worse — with a note at the head of the item not to start with a fifth variation on the
+same idea. `README.md`'s test census and gap list are refreshed (they still claimed 262 / 1 and
+attributed the failure to a test that has passed since July).
 
-The transferable lesson, now in the handoff: **build a unit-level reproducer before touching the
-symbolic layer.** The hand-built half-lens runs in seconds against a brute-force sup; the same
-defect through the pipeline takes 10–40 minutes per run. That is what made bug 1 tractable after
-two sessions of failed attempts on it.
+Two things worth carrying forward, both now in the handoff:
+
+**Build a unit-level reproducer before touching the symbolic layer.** The hand-built half-lens
+runs in seconds against a brute-force sup; the same defect through the pipeline takes 10–40
+minutes per run. That single change is what turned bug 1 from two sessions of failed attempts into
+three located defects.
+
+**Bisect the pipeline, do not read it.** Bug 2 was found by dumping the offending cell immediately
+before and after `mergeL` — present before, gone after — then feeding that exact region to each
+simplification in turn until one dropped the constraint. Three routines, one run, no guessing.
