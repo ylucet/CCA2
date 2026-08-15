@@ -1035,6 +1035,21 @@ classdef functionNDomain
                     obj(i).d = d;
                     continue
                 end
+                % IS THIS REGION BOUNDED? Decide it HERE, because removeInfV is about to delete
+                % the only evidence. getVertices marks an unbounded region by appending box-clip
+                % vertices at +-intmax; removeInfV strips them, after which every remaining vertex
+                % is finite and a bounded and an unbounded region are indistinguishable by their
+                % vertex lists. resolveLensEdges needs the answer, and getting it wrong is not
+                % harmless: it drops constraints that bound no EDGE, which on a genuinely
+                % unbounded region are load-bearing. Measured -- reading it after removeInfV made
+                % f** of x*y over the two-face square exact at (0.9,0.6) and (0.6,0.6) and +inf at
+                % (0.25,0.25) and (0.1,0.1), trading one hole in the domain for another.
+                wasBounded = true;
+                for vI = 1:d.nv
+                    if isAlways(abs(d.vx(vI)) == intmax) || isAlways(abs(d.vy(vI)) == intmax)
+                        wasBounded = false; break
+                    end
+                end
                 d = d.removeInfV;
                 %d = d.poly2orderUnbounded;
                
@@ -1158,7 +1173,7 @@ classdef functionNDomain
                 %
                 % So spread them instead of dropping one: both are edges, they simply need
                 % distinct numbers.
-                [edgeNo, keepE] = functionNDomain.spreadCollidingEdges(d, edgeNo, keepE, nOn);
+                [edgeNo, keepE] = functionNDomain.spreadCollidingEdges(d, edgeNo, keepE, nOn, wasBounded);
 
                 d.ineqs = d.ineqs(keepE);
                 edgeNo  = edgeNo(keepE);
@@ -1755,7 +1770,7 @@ classdef functionNDomain
      
 
      methods (Static)
-         function [edgeNo, keepE] = spreadCollidingEdges(d, edgeNo, keepE, nOn)
+         function [edgeNo, keepE] = spreadCollidingEdges(d, edgeNo, keepE, nOn, wasBounded) %#ok<INUSD>
          % Give two GENUINE edges that collided on one edge number distinct numbers, instead of
          % letting conjugateOfPiecePoly's scatter destroy one. See the call site for the shape and
          % the measurement.
@@ -1805,28 +1820,20 @@ classdef functionNDomain
                  end
              end
 
-             % (ii) The numbers the surviving edges need are the indices of the vertices they
-             % share, and on the pipeline's own lens those are held by constraints that bound NO
-             % edge of a bounded region -- one vertex is a touch, not an edge. Clear those out of
-             % the edge indexing so the real edges can have their slots. Deliberately NOT done
-             % when the region is unbounded, where a RAY edge is active at exactly one finite
-             % vertex and is load-bearing.
-             still = find(keepE(:))';
-             need = false;
-             for sIdx = unique(edgeNo(still))'
-                 g = still(edgeNo(still) == sIdx);
-                 if numel(g(nOn(g) >= 2)) >= 2, need = true; break, end
-             end
-             if need && functionNDomain.regionLooksBounded(d)
-                 for k = find(keepE(:))'
-                     if nOn(k) <= 1, keepE(k) = false; end
-                 end
-                 edges = find(keepE(:))';
-                 for t = 1:numel(edges)
-                     edgeNo(edges(t)) = t;
-                 end
-                 return
-             end
+             % (ii) NOT DONE: freeing a slot by dropping the constraint that holds it.
+             % On the pipeline's own lens the two numbers the real edges need are held by
+             % constraints with a single vertex on them -- and dropping those was tried and is
+             % UNSOUND. A constraint active at exactly one vertex of a convex region can still be
+             % essential: removing it enlarges the region, and an enlarged piece of f* has a
+             % SMALLER conjugate domain. Measured on f = x*y over the two-face square: with the
+             % drop, f** is exact at (0.25,0.25) and (0.1,0.1) and +inf at (0.9,0.6) and (0.6,0.6);
+             % without it, exactly the other way round. Both are 5 of 7, and only one of them is
+             % sound, so the drop is out.
+             % Deciding boundedness correctly does NOT rescue it -- the harmed piece is genuinely
+             % bounded too. What would rescue it is giving this routine an explicit EDGE LIST
+             % instead of a count with two conventions, which has to be done in step with
+             % getNormalConeEdgeQ/Q3 and getSubdiffVertexT2/T2Q, since `j` indexes all of them at
+             % once. That is the remaining work; see TODO.md.
 
              still = find(keepE(:))';
              for sIdx = unique(edgeNo(still))'
@@ -1870,22 +1877,6 @@ classdef functionNDomain
                  catch
                      return                      % undecidable: keep k
                  end
-             end
-         end
-
-         function tf = regionLooksBounded(d)
-         % Bounded enough for the purpose above: every vertex finite and away from region's own
-         % infinity markers. Errs towards UNBOUNDED, which is the side that changes nothing.
-             tf = false;
-             try
-                 for j = 1:d.nv
-                     xj = double(d.vx(j)); yj = double(d.vy(j));
-                     if ~isfinite(xj) || ~isfinite(yj), return, end
-                     if max(abs([xj yj])) >= 0.9*double(intmax), return, end
-                 end
-                 tf = d.nv >= 2;
-             catch
-                 tf = false;
              end
          end
 
