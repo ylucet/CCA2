@@ -63,7 +63,13 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Bugs, in the order they should be taken (2026-08-15)
 
-- [ ] **BUG 1 -- TWO defects, and the description this item used to carry was wrong about the
+- [ ] **BUG 1 -- BLOCKED on a refactor, after FOUR distinct attempts (all recorded in
+      `DECISIONS.md`).** Three real defects inside it were found and FIXED, taking `f**` from 0
+      to 5 of 7 probe points; what is left is not another fix but the edge-list refactor
+      mapped below. Do not attack it with a fifth variation on "free the slot" -- two of the
+      four attempts were unsound and one made things strictly worse.
+      Original framing follows.
+      **TWO defects, and the description this item used to carry was wrong about the
       cause.** Measured 2026-08-15; full write-up in `DECISIONS.md`.
       **(1a) The pinned test no longer fails the way it says.** Since `conj` began returning a
       MESHED QuaPar for a bounded multi-face domain, `biconj`'s second conjugation is handed a
