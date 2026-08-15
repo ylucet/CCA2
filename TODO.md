@@ -45,11 +45,12 @@ verify with zero findings.
   vertex list can no longer index off the end (the two seeded crash fixtures no longer crash).
 - `dropDegeneratePieces`: collapsed pieces (2 vertices, no arc, bounded) no longer reach assembly.
 
-### 2026-08-15 -- `maxQuaParTest` 29 / 0, fast bucket 204 / 0, `conjCPLQTest` 25 / 0
+### 2026-08-15 -- FOUR of the five bugs fixed; ONE red left in the whole repository
 
-`maxQuaPar` has NO open case: the seeded arc-vs-arc sweep is **18 exact / 0 wrong / 0 errored of
-18**, from 16 / 0 / 2 on 2026-08-13. Bugs 2 and 5 are fixed; bug 1 is 5 of 7 probe points, was 0 of
-7. Every arc-vs-arc red is closed. What it took is in `SUPPORT_MATRIX.md` 4.1 and `DECISIONS.md`; the short version is that
+`maxQuaParTest` 29 / 0, `conjCPLQTest` 25 / 0, `unboundedFaceTest` 18 / 0, fast bucket 204 / 0,
+slow bucket **114 / 1**. Bugs 2, 3, 4 and 5 are fixed; bug 1 is at 5 of 7 probe points, was 0 of 7,
+and is the only remaining red. `maxQuaPar` has NO open case -- the seeded arc-vs-arc sweep is
+**18 exact / 0 wrong / 0 errored of 18**, from 16 / 0 / 2 on 2026-08-13. What it took is in `SUPPORT_MATRIX.md` 4.1 and `DECISIONS.md`; the short version is that
 **neither of the two earlier attempts at the last red failed for the reason it was thought to** --
 the tooling that judged them was itself broken, in two ways, and silently.
 
@@ -127,39 +128,17 @@ the tooling that judged them was itself broken, in two ways, and silently.
       that test is renamed `step3UnboundedAssemblyAgreesWithItsOwnPieces` and now pins what the
       gate protects.
 
-- [ ] **BUGS 3 and 4 -- a curved convex envelope over an UNBOUNDED face.** A GAP, refused loudly,
-      and a missing ALGORITHM rather than a defect: `convEnvUnbounded` computes only the AFFINE
-      envelope and raises `convexAlongRay` the moment `d'Qd > 0` for some ray direction. Both
-      fixtures have envelopes that are convex and provably not affine, so the refusal is right
-      about its own formula and wrong as a limit.
-      `conjConvexOverPiece.m` already CONJUGATES a curved envelope over an unbounded face, so the
-      missing half is Step 1 producing one. Pinned by
-      `unboundedFaceTest/nonconvexQuadraticWithACurvedEnvelopeOverAHalfStripIsExact` and
-      `unboundedFaceTest/curvedEnvelopeOverAWedgeIsExact`.
-
-      **BOTH ENVELOPES DERIVED 2026-08-15 -- start from these rather than from scratch.**
-
-      *Wedge*, `q = x*y` over `K = {0 <= y <= x}`: **`co(q + I_K) = y^2 + I_K`.**
-      Proof, and it is the whole thing: for `c >= 0` take the affine `l(z) = 2*c*z2 - c^2`, the
-      tangent to `y^2` at `y = c`. It minorises `q` on `K` because `z1 >= z2 >= 0` gives
-      `z1*z2 >= z2^2`, and `2*c*z2 - c^2 <= z2^2` is exactly `0 <= (z2 - c)^2`. The sup over `c` of
-      those minorants is `y^2`, which is convex, so it IS the envelope. Sanity check against the
-      test's own note: at `h = (1,1)` it gives 1, matching the best affine minorant it quotes,
-      where the apex tangent plane gives 0.
-
-      *Half-strip*, `q = -x^2 + y^2` over `{0 <= x <= 1, y >= 0}`: **`co q = -x + y^2`** (the test
-      states it). The domain is a product and `q` is separable, so
-      `co q = co_x(-x^2) + co_y(y^2)`; the first is the affine interpolant of `-x^2` on `[0,1]`,
-      namely `-x`, and the second is unchanged because `y^2` is already convex.
-
-      **The pattern both share**, and the shape a general rule should take: convexify along the
-      directions where `q` is CONCAVE (an affine interpolation), keep `q` along the directions
-      where it is CONVEX. In the wedge frame `z = alpha*d1 + beta*d2` with `d1'Q d1 = 0` and
-      `d2'Q d2 > 0`, `q` is linear in `alpha` with a slope that is nonnegative on the cone, and the
-      envelope drops the cross term. Write the derivation out and prove it the way
-      `convEnvUnbounded`'s own header proves the affine case -- parametrise the minorants,
-      minimise the gap at an arbitrary point, and check the minimiser is independent of that
-      point. Do NOT ship a formula that merely matches these two fixtures.
+- [x] **BUGS 3 and 4 -- FIXED 2026-08-15.** `convEnvUnbounded` computed only the AFFINE envelope
+      and raised `convexAlongRay` as soon as `d'Qd > 0` along a ray. Two shapes are now derived and
+      implemented, each with its proof in the source:
+        * **WEDGE, one flat ray and one convex ray.** `co q` is `q` with its CROSS TERM deleted:
+          `q(v) + alpha*g1 + beta*g2 + beta^2*A22/2`. A negative `A12` means `d1 + t*d2` recedes
+          with negative curvature, so the envelope is `-inf` -- now reported rather than answered.
+        * **HALF-STRIP convex along the ray, base edge Q-ORTHOGONAL to it.** `q` separates, so
+          `co q = q(v1) + s*(q(v2)-q(v1)) + t*<grad q(v1),d> + t^2*(d'Q d)/2` -- the affine
+          interpolant along the concave base plus the convex part along the ray.
+      `w'Q d ~= 0` is deliberately not handled and is refused loudly.
+      **`unboundedFaceTest` 18 / 0**, from 16 / 2. Fast bucket 204 / 0.
 
 - [x] **BUG 5 -- FIXED 2026-08-15.** `splitTwoArcPiece` found no cut when the two arcs are
       ADJACENT: its two candidate chords join the arcs' facing endpoints, which for adjacent arcs

@@ -25,6 +25,28 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 — BUGS 3 and 4 FIXED: the curved envelope over an unbounded face
+
+Recorded because the DERIVATIONS are the reusable part, and because the shape of the argument is
+different from the affine cases already in `convEnvUnbounded`'s header.
+
+- **Wedge, one flat ray `d1` and one convex ray `d2`:** `co q` is `q` with its CROSS TERM deleted,
+  `q(v) + α·g1 + β·g2 + β²·A22/2`. The derivation is the file's own method — parametrise the affine
+  minorants by their gap parameters and minimise the gap at an arbitrary target — but with one
+  crucial difference: **the minimiser DEPENDS on the target point** (through `β0`), which is
+  exactly why this envelope is not affine and why the affine argument does not extend. `α → ∞`
+  forces `A12 ≥ 0`; a negative `A12` makes `d1 + t·d2` a recession direction of negative curvature,
+  so the envelope is `−inf`, and that is now reported rather than answered.
+- **Half-strip convex along the ray:** it separates **only when the base edge is Q-ORTHOGONAL to
+  the ray**. Then `co q = q(v1) + s·(q(v2) − q(v1)) + t·⟨∇q(v1), d⟩ + t²·(d'Q d)/2`. `w'Q d ≠ 0` is
+  refused loudly, with the value in the message — the two directions interact and the minimising
+  minorant moves with the target in both coordinates, so there is no separable answer.
+- **Checked against the fixtures, not fitted to them:** `co(x·y + I_K) = y²` on `{0 ≤ y ≤ x}` and
+  `co(−x²+y²) = −x + y²` on `{0 ≤ x ≤ 1, y ≥ 0}` are what the general formulas produce, and both
+  match what `unboundedFaceTest` derives by hand. `unboundedFaceTest` 18 / 0, from 16 / 2.
+- **What is still not covered:** a wedge with BOTH rays convex, and a half-strip whose base edge is
+  not Q-orthogonal to its ray. Both are refused, not approximated.
+
 ## 2026-08-15 — BUG 2 FIXED: a tangent built where the gradient vanishes
 
 **A vanishing gradient at a cone's apex is a recurring failure mode in `region.m`, and this is the

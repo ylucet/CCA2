@@ -702,9 +702,9 @@ orientation-dependent even though the missing branch is not.
 Ordered by how likely a downstream caller is to hit it:
 
 1. **`partialConj` is entirely unimplemented** (§2).
-2. **Unbounded multi-face domains — Step 3 is DONE too (2026-08-15).** What remains is Step 1's
-   CURVED convex envelope over an unbounded face, item (f) below. Re-scoped 2026-08-01, and again
-   2026-08-15 when the Step 3 cross-piece maximum was closed.
+2. ~~**Unbounded multi-face domains**~~ — **RESOLVED 2026-08-15.** Steps 1, 2 and 3 are all done.
+   This was blocker 2 from 2026-08-01; the last two pieces closed on the same day, and both are
+   below for the record.
    **(a) DONE.** `quaPolToPlq` builds ray-carrying faces from HALF-PLANES
    (`faceDomainFromHalfPlanes`), orientation off `P{k}`'s own sign convention, so the ray
    direction is no longer discarded.
@@ -752,13 +752,15 @@ Ordered by how likely a downstream caller is to hit it:
    assembly against the same `f*` computed the other way, and the failure it guards against is
    silent by nature. It simply no longer fires on this input.
 
-   **(f) THE REMAINING PIECE — a CURVED convex envelope over an unbounded face.** `convEnvUnbounded`
-   computes only the AFFINE envelope and raises `convexAlongRay` as soon as `d'Qd > 0` along a ray,
-   which is correct about its own formula and is a gap as a limit. Both envelopes are derived in
-   `TODO.md`: `co(x·y + I_K) = y²` on `K = {0 ≤ y ≤ x}` (with the one-line proof), and
-   `co(−x²+y²) = −x + y²` on the half-strip. `conjConvexOverPiece.m` already conjugates such an
-   envelope, so the missing half is Step 1 producing one. Pinned by the two `unboundedFaceTest`
-   reds.
+   **(f) DONE 2026-08-15 — the CURVED convex envelope over an unbounded face.** `convEnvUnbounded`
+   computed only the AFFINE envelope and raised `convexAlongRay` as soon as `d'Qd > 0` along a ray.
+   Two shapes are now derived and implemented, each with its proof in the source: a WEDGE with one
+   flat and one convex ray, whose envelope is `q` with its CROSS TERM deleted; and a HALF-STRIP
+   convex along the ray whose base edge is Q-ORTHOGONAL to it, where `q` separates and the envelope
+   is the affine interpolant along the concave base plus the convex part along the ray. A negative
+   cross term on the wedge means the envelope is `−inf`, now reported rather than answered; a
+   non-orthogonal half-strip is refused loudly. `conjConvexOverPiece.m` already conjugates such an
+   envelope. **`unboundedFaceTest` 18 / 0**, from 16 / 2.
 
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
