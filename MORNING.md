@@ -1,99 +1,84 @@
 # Morning report — 2026-08-15 overnight run
 
-Branch: **`main`** (not a dated branch — see below)
+Branch: **`main`** (merged, and pushed as the run went — you authorised pushing for this run)
 
-Task as given: housekeeping (merge the previous run's branch, turn the piece invariants on, retire
-the stale TODO entry, commit and **push**), then fix bugs 1–5 from the remaining-bugs list.
-Explicit instructions: parallel agents permitted, do not stop after three failures, do not wait for
-input.
+Task as given: housekeeping (merge the previous branch, turn the piece invariants on, retire the
+stale TODO entry, commit and push), then fix bugs 1–5. Later, explicitly: fix bug 5. Standing
+instructions: parallel agents permitted, do not stop after three failures, do not wait for input.
 
-## Two deliberate departures from this mode's defaults
+## Headline
 
-1. **Pushing.** The mode forbids it. You authorised it for this run explicitly, so `main` is being
-   pushed to `origin`.
-2. **No dated branch.** The mode isolates each run on `overnight/YYYY-MM-DD`. You asked for the
-   previous run to be merged and pushed, and the standing preference for this repo is to commit on
-   `main` rather than branch. So the work is on `main`, pushed as it goes — which is also what
-   makes each step reviewable independently.
+**Two bugs fixed, one localised, one re-scoped.** `maxQuaPar` now has **no open case**: the seeded
+arc-vs-arc sweep is **18 exact / 0 wrong / 0 errored of 18**, from 16 / 0 / 2 two sessions ago.
+`maxQuaParTest` 29 / 0; fast bucket 204 / 0.
 
 ## What changed
 
-- **Housekeeping — DONE and pushed** (`5f22486`). The previous run's 18 commits are fast-forwarded
-  into `main`. `MAXQP_ASSERT` is now `1` for every test in `maxQuaParTest`, via a `TestMethodSetup`
-  that restores the previous value on teardown, so the suite never leaves it on for whatever runs
-  next in the same process — **28 / 0 with it on**. `TODO.md`'s
-  `twoCurvedWhereTheSplitCurveCrossesAnArc` entry is retired (that test passes and `MAXQP_ASSERT=2`
-  is clean on its fixture), and the five open bugs are listed explicitly.
+- **Housekeeping — DONE and pushed** (`5f22486`). Previous branch merged into `main`.
+  `MAXQP_ASSERT = 1` is now on for every `maxQuaParTest` test, via a `TestMethodSetup` that
+  restores the previous value on teardown. The stale `twoCurvedWhereTheSplitCurveCrossesAnArc`
+  entry is retired.
+
+- **BUG 5 — FIXED** (`db4a188`). `splitTwoArcPiece` found no cut when a piece's two arcs are
+  ADJACENT: its two candidate chords join the arcs' facing endpoints, which for arcs sharing a
+  vertex ARE the arcs' own edges, so both chains came out too short and the piece was returned
+  unsplit with one arc flattened to its chord — surfacing three stages later as an orphan
+  boundary edge. Generalised the `nv == 3` shared-vertex fallback to `nv >= 4` with the ordinary
+  diagonal to a non-adjacent vertex. **Sweep 17 / 0 / 1 → 18 / 0 / 0.** Pinned by
+  `arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal`, which exists because the sweep test
+  asserts `nWrong == 0` and would have counted this input in `nErr`.
+
+- **BUG 1 — three defects fixed; `f**` exact at 5 of 7 probe points, was 0 of 7**
+  (`b105814`, `508b336`). In the order they had to be found:
+  1. `getEdgeNosInf` numbers an edge by one of its endpoint VERTICES, so a LENS — two edges
+     joining the SAME pair — gets one number for both and the last-write-wins scatter destroys
+     one. That, not the `size(ineqs,2) == nv` count the record blamed, is the "conjugate of the
+     chord".
+  2. `getNormalConeVertexQ` indexed its second constraint as `j+1` unwrapped, raising
+     `badsubscript` on any BOUNDED region — which is why its only caller sent every bounded region
+     to the POLYHEDRAL routine, whose cones come from the CHORD and are wrong for a curved edge.
+  3. `biconj` handed its second conjugation the curved MESH `conj` has returned since 2026-08-13;
+     `quaPolToPlq` refuses a curved domain, so it died before reaching any of the above. It now
+     asks `conjCPLQ` for the symbolic form on purpose.
+  Unit level: the half-lens conjugates to 3 cells exact against a brute-force sup at all 10 probe
+  points (2 identical wrong cells before).
+
+- **BUG 2 — LOCALISED** (`1f02101`), and two suspects cleared. Step 2 is right (each piece's own
+  conjugate has the correct quadrant constraints, and the per-piece max at `(-3,-2.4)` is the
+  truth). The assembled cell is `s1²/4 + s2²/2` on `{s2 ≤ 0, s2²/2 − s1² ≤ 0, s1² − 2s2² ≤ 0}`:
+  the sign constraint `−s1 ≤ 0` is gone and the quadratics that replaced it are **blind to the
+  sign of `s1`**, so the region is symmetric and claims the mirror wedge.
+  `region.redundantSubset` is exonerated — asked directly, it certifies nothing as redundant.
+
+- **BUGS 3–4 — re-scoped, not attempted.** They are a missing ALGORITHM, not a defect:
+  `convEnvUnbounded` computes only the AFFINE envelope over an unbounded face and refuses the
+  rest by design, and both fixtures have envelopes that are convex and not affine.
 
 ## What is broken
 
-The five bugs this run is for. Starting state, all pre-existing:
-
-| # | what | kind |
-|---|---|---|
-| 1 | `conjugateOfPiecePoly` returns the conjugate of a piece's CHORD | wrong answer |
-| 2 | cPLQ Step 3 over-claims on the 4-cone fan | wrong answer (guarded) |
-| 3–4 | curved convex envelope over an unbounded face | gap, refused |
-| 5 | a piece spanning two sub-arcs of the same conic | error |
-
-- **BUG 5 — FIXED (`db4a188`).** `splitTwoArcPiece` found no cut when the two arcs are ADJACENT:
-  its two candidate chords join the arcs' facing endpoints, which for arcs sharing a vertex ARE
-  the arcs' own edges, so both chains came out too short and the piece was returned unsplit with
-  one arc flattened to its chord. Generalised the `nv == 3` shared-vertex fallback to `nv >= 4`
-  with the ordinary diagonal to a non-adjacent vertex. **The seeded sweep goes 17 exact / 0 wrong /
-  1 errored → 18 / 0 / 0**; `maxQuaParTest` 29 / 0; fast bucket 204 / 0. Pinned by
-  `arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal`, which exists because the sweep test
-  asserts `nWrong == 0` and would have counted this input in `nErr`. **`maxQuaPar` now has no open
-  case.**
-- **BUG 1 — three defects found and fixed, 5 of 7 probe points now right (was 0 of 7); not
-  finished.** Uncommitted at the time of writing. In order:
-  1. `getEdgeNosInf` numbers an edge by an endpoint VERTEX, so a lens's two edges get one number
-     and the last-write-wins scatter destroys one. `spreadCollidingEdges` gives them distinct
-     numbers, scoped to fire only on that signature.
-  2. `getNormalConeVertexQ` — the routine that builds a vertex cone from the CONSTRAINT's own
-     tangent rather than from the chord — indexed its second constraint as `j+1` unwrapped, so it
-     raised `badsubscript` on any BOUNDED region and the only caller therefore sent every bounded
-     region to the polyhedral routine. Wrapped cyclically (a strict generalisation: for the
-     unbounded layout it is exactly `j+1`), and the dispatch now asks whether a constraint is
-     quadratic instead of comparing a constraint COUNT to the vertex count.
-  3. `biconj` for a bounded multi-face domain now takes its FIRST conjugate in symbolic form on
-     purpose (`conjCPLQ(..., 'symbolic')`). `conj` keeps returning the mesh the SCIP bridge wants;
-     but the second conjugation cannot take a curved mesh, and died at `quaPolToPlq:curvedEdge`.
-  **Measured at unit level:** the half-lens now conjugates to 3 cells that match a brute-force sup
-  at all 10 probe points (it produced 2 identical wrong cells before).
-  **What is left:** `f**` is exact on `{x+y ≤ 1}` and `+Inf` on `{x+y > 1}` — a hole in the
-  DOMAIN, not a wrong value. `f**`'s domain is the intersection of the per-piece conjugate
-  domains, so one piece of `f*` still conjugates onto too small a set.
-- **Bugs 2–4 — not started / re-scoped.**
-  Original assessment of all five: Two of the five descriptions on record turned out to be
-  **wrong about the cause**, and each cost an attempt before measurement refuted it. Every fix
-  attempted was reverted; the tree is exactly the housekeeping commit plus documentation.
-
-  | # | what the record said | what it actually is (measured) |
-  |---|---|---|
-  | 1 | an edge COUNT test misreads a bounded lens as unbounded | the lens's two edges join the SAME two vertices, so `getEdgeNosInf` gives them one number and the last-write-wins scatter destroys one. **And the pinned test no longer fails that way at all** — it now ERRORS at `quaPolToPlq:curvedEdge`, because `conj` returns a curved meshed QuaPar and the second conjugation cannot take one |
-  | 5 | a piece spans two sub-arcs of the **same** conic | the two arcs are on **different** conics, and the real cause is that they are **ADJACENT**: both of `splitTwoArcPiece`'s candidate chords are then the arcs' own edges, both chains come out too short, and the piece is returned unsplit |
-
-  Bug 1 also has a measured "necessary but not sufficient" result: fixing the edge numbering makes
-  the lens's slots correct and still yields 1 cell where 4 are needed, so the downstream cell
-  generation must be done first. Bugs 3–4 were sized and are a **missing algorithm** (the curved
-  convex envelope over an unbounded face), not a defect — `convEnvUnbounded` computes only the
-  affine case and refuses the rest by design. Bug 2 was not started.
+The four documented slow-bucket reds, unchanged in kind:
+`biconjugateOverATwoFaceSubdivisionIsTheEnvelope` (now 5 of 7 points right instead of 0),
+`step3UnboundedAssemblyMatchesTheTruth`, and two in `unboundedFaceTest`.
 
 ## Needs a decision
 
-1. **Bug 5 is one case away and is the one I would take next.** The fix is written out in
-   `TODO.md`: generalise `splitTwoArcPiece`'s `nv == 3` shared-vertex fallback to `nv >= 4` by
-   cutting from the shared vertex to a non-adjacent one. On the failing piece the diagonal
-   `V5 → V2` gives one arc to each half. I stopped before writing it rather than land a change to
-   the arc machinery without running the sweeps behind it.
-2. **Bugs 3–4 are a research task, not a bug fix**, and I would take them off the bug list. Each
-   needs its own derivation and proof of the kind `convEnvUnbounded`'s header already gives for the
-   affine case.
+1. **Bug 1's remainder is a refactor, and I stopped rather than force it.** The lens's two edges
+   need slots 1 and 2, held by constraints that bound no edge. Freeing them by DROPPING those was
+   tried and is **unsound** — a constraint active at one vertex of a convex region can still be
+   essential, and removing it enlarges the piece, which SHRINKS its conjugate domain. Measured:
+   with the drop, `f**` is exact at two points and `+inf` at two others; without it, exactly the
+   other way round. Both 5 of 7, one of them sound. The real fix is an explicit EDGE LIST spanning
+   `conjugateOfPiecePoly`, `getNormalConeEdgeQ`/`Q3` and `getSubdiffVertexT2`/`T2Q` together,
+   because the loop variable indexes all of them.
+2. **Bugs 3–4 belong off the bug list**, as research items.
 
 ## Where I stopped
 
-Housekeeping is done, committed and pushed. Everything after that is documentation: the two
-refuted diagnoses and the located cause of bug 5 are in `DECISIONS.md`, and `TODO.md` now carries
-the corrected descriptions and the concrete next step for each. **No source file changed after the
-housekeeping commit** — every fix attempt was measured, found wanting, and reverted.
+All work is committed and pushed on `main`. `DECISIONS.md` carries the unsound approaches so they
+are not re-derived; `TODO.md` and `.claude/SESSION_HANDOFF.md` carry the next concrete step for
+each open item.
+
+The transferable lesson, now in the handoff: **build a unit-level reproducer before touching the
+symbolic layer.** The hand-built half-lens runs in seconds against a brute-force sup; the same
+defect through the pipeline takes 10–40 minutes per run. That is what made bug 1 tractable after
+two sessions of failed attempts on it.

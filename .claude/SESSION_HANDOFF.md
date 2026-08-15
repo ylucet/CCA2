@@ -1,91 +1,79 @@
 # Session Handoff
 
-_Last updated: 2026-08-14_
-
-## What happened this session
-
-**`maxQuaParTest` is GREEN — 28 pass / 0 fail, from a baseline of 25 / 1.** The last arc-vs-arc
-red, `arcVsArcRefusesAnUnboundedTwoArcSplit`, is closed, and so is the covering half of
-`FARFIELD_FIX_PLAN.md` Phase 4.
-
-The headline is not the fix, it is why the fix took three attempts:
-
-> **The tooling that judged the two previous attempts was itself broken, in two ways, and
-> silently.** `MAXQP_ASSERT` was *crashing* (`degenerateAxis`) on three of the four arc-vs-arc
-> fixtures, so the invariants that eventually named three defects had never run on the inputs that
-> needed them. An invariant that errors is an invariant that is off, and nothing was noticing.
-
-Both earlier reverts were correct decisions on the evidence available. The evidence was wrong.
-
-## What was fixed
-
-1. **`pieceRecessionRays` took the parabola's axis from an exact discriminant.** `arcNullDirs`
-   solves `d·Q·d' = 0` exactly and returns **nothing** when `b²−4ac` comes out negative — which is
-   what a floating-point parabola's `Q` does about half the time, being only semidefinite up to
-   rounding (measured `−2.78e-17`). The derived chord was then never emitted, the piece's
-   constraint region stayed a slab open at both ends, and `reccConeViolation` refused it. This is
-   why check (5) of the six recorded heuristics never separated the good case from the bad.
-2. **`curveAfter ≠ 0` does not mean "this edge is curved"** — `boundedPiece` also sets it for a
-   STRAIGHT splitting curve, where `curveEc` is all zeros, and `pieceIsCurved` exists to say so.
-   Five sites read the tag as "is curved" anyway: `polyConstraints` emitted **no half-plane at all**
-   for an ordinary straight edge (a piece was admitted two units outside itself, answering `0`
-   where the truth was `0.35310191`); `pieceStraightEdges` skipped it, blinding every boundary
-   minimisation built on that list; and `containmentViolation`/`boundaryMinOf` called
-   `parabolaArcFrame` on the zero conic — the `degenerateAxis` crash above.
-3. **A whole unbounded piece could have its winner decided by floating-point noise.**
-   `splitCell`'s unbounded "rest" piece can come out with exactly the two crossing points as its
-   vertices — both, by construction, ON `{f1=f2}` — so `assignSide` had nothing to read from, and
-   its centroid fallback is on that line too. Now read in the piece's RECESSION CONE. The seeded
-   sweep went **16 exact / 0 wrong / 2 errored → 17 / 0 / 1** of 18.
-   This one was nearly mis-diagnosed as a subdivision gap (`{f1=f2}` a *pair* of parallel lines);
-   classifying the conic refuted it in one line — its whole quadratic part is zero. `DECISIONS.md`
-   records that, because the symptom is a convincing fit for the wrong story.
-4. **A newly minted OUTGOING ray was given sign `+1`** where `polyConstraints`' convention needs
-   `−1`, giving the two halves of a split the same outward normal across their shared ray.
-   `newRaySign` states the derivation once.
-5. **The two-arc ray split is restored**, gated on all three exact invariants per half
-   (containment, recession cone, winner domination) rather than on heuristics; when nothing can be
-   proved it returns `[]` and the caller refuses exactly as before.
-6. **`verifyFacesCoverThePlane`** — the covering proof. Four checks on the constraint data that
-   together force the boundary of the union of the faces to be empty. An independent review found
-   three routes by which it could have passed *vacuously*; all three are closed, and
-   `coverProofRejectsBrokenArrangements` breaks a certified result three ways and requires a
-   finding each time.
+_Last updated: 2026-08-15_
 
 ## Where things stand
 
-- Branch: `overnight/2026-08-13` (not merged, not pushed).
-- **`maxQuaParTest` 28 / 0. Fast bucket 203 / 0** (was 200 / 1). **Normal bucket 6 / 0. Slow
-  bucket 111 / 4** — identical to its recorded baseline, and all four failures are the documented
-  open items (`biconjugateOverATwoFaceSubdivisionIsTheEnvelope`,
-  `step3UnboundedAssemblyMatchesTheTruth`, and two in `unboundedFaceTest`). No regression anywhere.
-- `MAXQP_ASSERT=1` and `=2` now run clean on all four arc-vs-arc fixtures.
+- On **`main`**, pushed. (The `overnight/2026-08-13` branch was merged and is history.)
+- **`maxQuaParTest` 29 / 0. Fast bucket 204 / 0.** `MAXQP_ASSERT = 1` is now ON for every test in
+  `maxQuaParTest`, via a `TestMethodSetup` that restores the previous value on teardown.
+- **`maxQuaPar` has NO open case.** The seeded arc-vs-arc sweep (seed 20260803, N=18) is
+  **18 exact / 0 wrong / 0 errored**, from 16 / 0 / 2 two sessions ago.
+- Slow bucket: the four documented reds
+  (`biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, `step3UnboundedAssemblyMatchesTheTruth`,
+  two in `unboundedFaceTest`). `testMaxMultiRegion` 24 / 0, `testcPLQ` 8 / 0, `testRegion` 23 / 0
+  and `biconjCPLQTest` 10 / 0 were re-run against the current tree and are clean.
+
+## What happened this session
+
+**Bug 5 — FIXED.** `splitTwoArcPiece` found no cut when a piece's two arcs are ADJACENT: its two
+candidate chords join the arcs' facing endpoints, which for arcs sharing a vertex ARE the arcs' own
+edges, so both chains came out too short and the piece was returned unsplit with one arc flattened
+to its chord. Generalised the `nv == 3` shared-vertex fallback to `nv >= 4` with the ordinary
+diagonal to a non-adjacent vertex. Pinned by
+`arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal`.
+
+**Bug 1 — three defects fixed, one attempted fix rejected as unsound.** `f**` of `x·y` over the
+two-face square is now exact at 5 of 7 probe points; it was 0 of 7.
+
+1. `getEdgeNosInf` numbers an edge by one of its endpoint VERTICES, so a LENS — two edges joining
+   the same pair — gets one number for both, and the last-write-wins scatter destroys one.
+2. `getNormalConeVertexQ` indexed its second constraint as `j+1` unwrapped, raising
+   `badsubscript` on any BOUNDED region — which is why its only caller sent every bounded region
+   to the POLYHEDRAL routine, whose cones come from the chord and are wrong for a curved edge.
+3. `biconj` handed its second conjugation the curved MESH `conj` has returned since 2026-08-13;
+   `quaPolToPlq` refuses a curved domain. It now asks for the symbolic form on purpose.
+
+**Bug 2 — localised, not fixed.** Step 2 is right; the assembled Step 3 cell has lost its `−s1 ≤ 0`
+and the quadratics that replaced it are blind to the sign of `s1`.
 
 ## Next steps
 
-1. **Merge.** Every bucket has been re-measured and none regressed.
-2. **The one open `maxQuaPar` case: a piece that spans TWO sub-arcs of the same conic.** An ERROR
-   (`maxQuaPar:internal`, an orphan half-edge), not a wrong answer, masked until now by the two-arc
-   refusal upstream. **It is already diagnosed — read `TODO.md` before touching it.** The symptom
-   reads like a clip dropping a conic; it is not. Piece 4 `src [1 6]` on seeded shift
-   `[-2.6434 -1.8066]` has g1's arc cut TWICE and spans both sub-arcs, so its one curve slot
-   represents the second by its chord. The neighbouring cell's halves are both correct, so
-   `splitCell`'s crossed-arc restoration is not at fault. The fix is to SUBDIVIDE such a piece, not
-   to give pieces several curve slots — and `splitTwoArcPiece` cannot be reused as-is, because it
-   assumes the two arcs lie on different conics.
-3. **Turn `MAXQP_ASSERT=1` on in the test suite.** It is cheap, and this session is the argument:
-   it was off *and* crashing, and three defects lived behind that for weeks.
+1. **Bug 1's remainder is a REFACTOR, not a fix.** Give `conjugateOfPiecePoly` an explicit EDGE
+   LIST instead of a count with two conventions (`endNv = nv` or `nv−1`; edge `j` at `ineqs(j)` or
+   `ineqs(j+1)`). It cannot be done there alone — `j` indexes `getNormalConeEdgeQ`/`Q3`'s output
+   and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
+   **Do NOT free a slot by dropping the constraint holding it** — tried, unsound, see
+   `DECISIONS.md`.
+2. **Bug 2:** dump the cells carrying `s1²/4 + s2²/2` immediately before `functionNDomain.mergeL`.
+   Either `region.merge` is unioning two cells whose union is not convex (and `unionIsExact`
+   should refuse), or a mirror cell gets that quadratic wrongly earlier. `redundantSubset` is
+   already exonerated.
+3. **Bugs 3–4 are a missing ALGORITHM, not a defect**, and are worth taking off the bug list:
+   `convEnvUnbounded` computes only the AFFINE envelope over an unbounded face and refuses the
+   rest by design. Both fixtures have envelopes that are convex and not affine.
 4. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
-   → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box (`x²−y²`,
-   `(x²+y²)/2` on `[0,1]²` still error in the second conjugation) → performance (~40–60 s/term).
+   → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box → performance.
+
+## How to work on the symbolic layer, learned the hard way
+
+**Build a unit-level reproducer before touching anything.** The half-lens
+`{(s1+s2)² ≤ 4·s2, s2 ≤ s1}` carrying `s1`, constructed by hand as a `region` and conjugated
+against a brute-force sup over its own boundary, runs in SECONDS and needs no pipeline. Pipeline
+runs of the same defect take 10–40 minutes. That one change is what made bug 1 tractable after two
+sessions of failed attempts.
+
+**Sign-blind quadratic constraints are a recurring failure mode.** A region bounded by a conic that
+cannot tell its two branches apart claims territory on the wrong side. It caused the `maxQuaPar`
+defect fixed on 2026-08-14 and it is what bug 2 looks like now.
 
 ## Relevant files
 
-- `DECISIONS.md` — dead ends and refuted reasoning. The top entry has the lesson: when a gate
-  refuses a construction you have independent reason to believe is right, suspect the gate.
-- `TODO.md` — live action items.
-- `SUPPORT_MATRIX.md` §4.1 (what the arc-vs-arc work was), §4.2 (the verification tools), §4.3
-  (the covering proof).
-- `maxQuaPar.m` — `newRaySign`, `assertWinnerHoldsAtInfinity`, `splitUnboundedTwoArcPiece`,
-  `pieceIsCurved` (read its header before touching `curveAfter` anywhere).
-- `verifyFacesCoverThePlane.m`, `verifyMaxIsExactSymbolically.m`, `pieceRecessionRays.m`.
+- `DECISIONS.md` — dead ends and refuted reasoning. Read before attacking bug 1 or 2; several
+  natural-looking approaches are recorded there as unsound.
+- `TODO.md` — live action items, with the measurements for each.
+- `SUPPORT_MATRIX.md` §4.1–4.3 (arc-vs-arc, the verification tools, the covering proof), §7, §8.
+- `maxQuaPar.m` — `splitTwoArcPiece`, `newRaySign`, `pieceIsCurved` (read its header before
+  touching `curveAfter` anywhere).
+- `functionNDomain.m` — `conjugateOfPiecePoly` and `spreadCollidingEdges`; `region.m` —
+  `getNormalConeVertexQ`.
