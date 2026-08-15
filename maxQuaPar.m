@@ -3054,6 +3054,51 @@ function out = splitTwoArcPiece(piece, arcPos, arcEc)
         out = [pA, pB];
         return
     end
+    % TWO ADJACENT ARCS, on a piece with a diagonal to spare. The loop above tries the two chords
+    % that join the arcs' FACING endpoints, which is right when the arcs are apart -- but when they
+    % share a vertex those two "chords" ARE the arcs' own edges, so one chain comes out with two
+    % vertices, the numel(chain) < 3 guard skips both candidates, and the piece is returned unsplit
+    % with one arc flattened to its chord. matchHalfEdges then refuses to pair that straight
+    % half-edge with the curved one facing it, and the failure surfaces three stages later as an
+    % orphan boundary edge with no hint of the cause.
+    %
+    % MEASURED, seeded shift [-2.6434 -1.8066] of the two-curved fixture: cell src [1 6] splits
+    % into a half with nv = 5, the inherited arc at edge 4 and the splitting curve at edge 5 --
+    % adjacent, sharing vertex V5. The orphan reported is that half's edge (-2,2) ->
+    % (-2.744821,1.372827) facing its neighbour's identical CURVED edge at distance 8e-16, which
+    % reads like a clip dropping a conic and is not.
+    %
+    % The cut that works is the ordinary DIAGONAL from the shared vertex to a NON-ADJACENT one: it
+    % puts one arc in each half by construction, since the two arcs leave the shared vertex in
+    % opposite directions around the boundary. On that piece V5 -> V2 gives chains {5,1,2} and
+    % {2,3,4,5}, carrying the splitting curve and the inherited arc respectively. Same
+    % subdivide-never-widen move as the rest of this function, and the same interiority guard.
+    if nv >= 4 && arcPos ~= c
+        S = intersect([arcPos, mod(arcPos,nv)+1], [c, mod(c,nv)+1]);
+        if numel(S) == 1
+            s = S(1);
+            for step = 2:nv-2
+                q = mod(s+step-1, nv)+1;              % the non-adjacent vertices, s+2 .. s-2
+                chain1 = cycIdx(s, q, nv);
+                chain2 = cycIdx(q, s, nv);
+                if numel(chain1) < 3 || numel(chain2) < 3, continue, end
+                if ~insideStraightHull(piece, arcPos, arcEc, 0.5*(piece.V(s,:) + piece.V(q,:)))
+                    continue
+                end
+                pA = subPiece(piece, chain1, arcPos, arcEc);
+                pB = subPiece(piece, chain2, arcPos, arcEc);
+                if isempty(pA) || isempty(pB), continue, end
+                % A diagonal cannot create a reflex vertex in a convex piece, but a piece bounded
+                % by an arc need not be convex to begin with -- and a reflex half is exactly what
+                % no half-plane point location can represent (see the bent-cut branch above).
+                pA = splitAtReflexVertex(pA);
+                pB = splitAtReflexVertex(pB);
+                if isempty(pA) || isempty(pB), continue, end
+                out = [pA, pB];
+                return
+            end
+        end
+    end
     % A TRIANGLE whose two arcs meet at a shared vertex has no vertex-to-vertex diagonal that
     % separates them (its only diagonals ARE its three edges), so the loop above always falls through
     % here. Cut instead from the shared vertex to the MIDPOINT of the opposite straight edge: each

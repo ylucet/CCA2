@@ -802,6 +802,44 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyTrue(ok, msg);
         end
 
+        function arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal(testCase)
+            % The shape splitTwoArcPiece could not cut: two arcs that SHARE A VERTEX on a piece
+            % with four or more of them. Its two candidate chords join the arcs' facing endpoints,
+            % which for adjacent arcs ARE the arcs' own edges -- so one chain comes out with two
+            % vertices, the numel(chain) < 3 guard skips both, and the piece was returned unsplit
+            % with one arc flattened to its chord. matchHalfEdges then correctly refused to pair
+            % that straight half-edge with the curved one facing it, and the whole assembly failed
+            % with maxQuaPar:internal three stages later -- an orphan boundary edge naming a
+            % neighbour whose identical edge is CURVED at distance 8e-16, which reads like a clip
+            % dropping a conic and is not.
+            %
+            % On this fixture the offending half is src [1 6] with nv = 5, the inherited arc at
+            % edge 4 and the splitting curve at edge 5, sharing vertex V5. The diagonal V5 -> V2
+            % puts one arc in each half. Pinned by VALUE, not merely by not-erroring: exact at all
+            % 117 ground-truth samples, near the arcs and on a radius-25 ring.
+            %
+            % This shift is one of arcVsArcMatchesGroundTruthOverRandomShifts' own 18, and that
+            % test would NOT have caught the regression: it asserts nWrong == 0, and an input that
+            % ERRORS is counted in nErr. Hence a pin of its own.
+            T1 = [0 0; 3 -5; 4 -4];
+            T2 = [-2.6434291022558289 -1.8065930638786885
+                   0.35657089774417106 -6.8065930638786885
+                   1.3565708977441711  -5.8065930638786885];
+            [g1, g2] = maxQuaParTest.buildCurvedG1G2(T1, T2);
+            testCase.verifyTrue(any(g1.Ec(:) ~= 0) && any(g2.Ec(:) ~= 0), ...
+                'both operands must be curved for this test to mean anything');
+            g = maxQuaPar(g1, g2);
+            testCase.verifyClass(g, 'QuaPar');
+
+            far = 25*[cos(linspace(0,2*pi,49))', sin(linspace(0,2*pi,49))'];
+            S = [maxQuaParTest.curvedSamplePoints(g1); maxQuaParTest.curvedSamplePoints(g2); far];
+            for i = 1:size(S,1)
+                s = S(i,:);
+                testCase.verifyEqual(g.eval(s), max(g1.eval(s), g2.eval(s)), ...
+                    'RelTol', 1e-9, 'AbsTol', 1e-9, sprintf('s=(%.6f,%.6f)', s(1), s(2)));
+            end
+        end
+
         function coverProofRejectsBrokenArrangements(testCase)
             % A PROVER THAT CANNOT BE MADE TO FAIL IS NOT A PROVER. arcVsArcResultsCoverThePlane
             % shows verifyFacesCoverThePlane accepting correct results; on its own that is equally
