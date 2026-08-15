@@ -90,16 +90,22 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Bugs, in the order they should be taken (2026-08-15)
 
-- [ ] **BUG 1 -- conjugate of a bounded piece with a parabolic edge returns the conjugate of its
-      CHORD.** A wrong answer, not an error. `functionNDomain.conjugateOfPiecePoly` decides how many
-      edges a piece has from `size(d.ineqs,2) == d.nv` -- a constraint COUNT standing in for "is
-      this region unbounded". The half-lens `{(s1+s2)^2 <= 4s1, (s1+s2)^2 <= 4s2, s2 <= s1}` has
-      `nv = 2` with FIVE stored constraints (the scatter duplicates `s2-s1` and parks the arc's
-      conic in slot 4), so the count says "unbounded", `endNv = nv-1 = 1`, and the arc is never read
-      as an edge at all. The result is `max(0, x+y-1)`, finite only on a strip. Because `f**` is a
-      MAX, one piece answering on a strip collapses the whole biconjugate.
-      Fix: derive the edge list from the GEOMETRY (`region.vertexOfEdge`), not from the count.
-      Pinned by `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`.
+- [ ] **BUG 1 -- TWO defects, and the description this item used to carry was wrong about the
+      cause.** Measured 2026-08-15; full write-up in `DECISIONS.md`.
+      **(1a) The pinned test no longer fails the way it says.** Since `conj` began returning a
+      MESHED QuaPar for a bounded multi-face domain, `biconj`'s second conjugation is handed a
+      CURVED QuaPar and `quaPolToPlq` refuses it -- the test ERRORS at `quaPolToPlq:curvedEdge`
+      before any of (1b) is reached. Either the second conjugation learns to take a curved QuaPar,
+      or `biconj` routes a bounded multi-face domain through the symbolic form on purpose.
+      **(1b) The lens defect, reachable by forcing the symbolic route.** The cause is NOT the
+      `size(d.ineqs,2) == d.nv` count: it is that `getEdgeNosInf` numbers an edge by one of its
+      ENDPOINT VERTICES, and a lens has two edges joining the SAME pair, so they get the same
+      number and the last-write-wins scatter destroys one. Fixing the numbering is NECESSARY and
+      NOT SUFFICIENT -- measured: hand-build the lens with only its two genuine edges and
+      `conjugateOfPiecePoly` still returns 1 cell where the piece needs 4. **Do the downstream half
+      first** (4 cells for a bounded 2-vertex region with one curved edge, checked on that
+      hand-built region, which needs no pipeline); the numbering fix is written up in
+      `DECISIONS.md` and can be re-applied after.
 
 - [ ] **BUG 2 -- cPLQ Step 3 over-claims on the 4-cone fan.** A wrong answer, never returned
       (`assertStep3MatchesPieces` catches it). At `s = (-3,-2.4)` the assembly gives `5.130` where
@@ -122,8 +128,19 @@ the tooling that judged them was itself broken, in two ways, and silently.
       `unboundedFaceTest/nonconvexQuadraticWithACurvedEnvelopeOverAHalfStripIsExact` and
       `unboundedFaceTest/curvedEnvelopeOverAWedgeIsExact`.
 
-- [ ] **BUG 5 -- a piece that spans TWO sub-arcs of the same conic.** See the fully-diagnosed entry
-      below; it is the only `maxQuaPar` case left and it is an ERROR, not a wrong answer.
+- [ ] **BUG 5 -- `splitTwoArcPiece` finds no cut when the two arcs are ADJACENT.** (The
+      "two sub-arcs of the same conic" description this item used to carry was REFUTED by
+      measurement on 2026-08-15 -- see `DECISIONS.md`. The two arcs are on DIFFERENT conics.)
+      LOCATED, and the fix is one case: on seeded shift `[-2.6434 -1.8066]`, cell `src [1 6]`
+      splits into a half with `nv=5`, the inherited arc at edge 4 and the splitting curve at edge
+      5 -- **adjacent, sharing vertex V5**. `splitTwoArcPiece`'s two candidate chords are
+      `arcPos+1 -> c+1` and `arcPos -> c`, which for adjacent arcs ARE those two edges, so both
+      chains come out with 2 vertices and the `numel(chain) < 3` guard skips them; the `nv == 3`
+      shared-vertex fallback does not apply at `nv = 5`. The piece is returned unsplit with the
+      inherited arc flattened, and assembly reports it as an orphan three stages later.
+      Fix: generalise the shared-vertex case to `nv >= 4` -- cut from the shared vertex to a
+      NON-ADJACENT one. Here `V5 -> V2` gives chains {2,3,4,5} and {5,1,2}, one arc each. Guard it
+      with `insideStraightHull` like the existing candidates and fall through unsplit otherwise.
 
 
 - [x] **FIXED** `arcVsArcDoesNotCrashOnSeededQuadSplits` -- the last piece was a REFLEX vertex left by the

@@ -25,6 +25,96 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 — Two of the five "remaining bugs" were described WRONG. Measure before fixing.
+
+Both descriptions had been written from a symptom and carried forward as fact. Each cost an
+attempt before measurement refuted it. Corrected shapes below; neither is fixed.
+
+### BUG 1 — "conjugateOfPiecePoly returns the conjugate of the chord"
+
+- **What the record said:** the routine decides how many edges a piece has from
+  `size(d.ineqs,2) == d.nv`, a COUNT standing in for "is this region unbounded", so the half-lens
+  takes the unbounded convention and its arc is never read as an edge. Fix: derive the edge list
+  from geometry.
+- **What is actually true, measured** (instrumented dump of the pre-scatter constraint list):
+  the half-lens arrives with `nv = 2` and FIVE constraints, and `edgeNo = [3 1 2 2 2]` —
+  **three** constraints claim edge slot 2, all with both vertices on them:
+      con 3: (s1+s2)^2 - 4*s1     con 4: (s1+s2)^2 - 4*s2     con 5: s2 - s1
+  `getEdgeNosInf` numbers an edge by one of its ENDPOINT VERTICES, and a lens has two edges
+  joining the SAME pair — so they are indistinguishable to it. The scatter
+  `d.ineqs(edgeNo) = d.ineqs` is last-write-wins, so one edge is destroyed and another stored
+  twice. Feed the arc first and both slots end up holding the CHORD; feed the chord first and both
+  hold the arc. That is the whole of the "conjugate of the chord" symptom, and the count test is a
+  consequence, not the cause.
+- **Also measured, and this is why fixing the numbering is not enough:** hand-build the lens with
+  ONLY its two genuine edges (`{(s1+s2)^2 <= 4*s2, s2 <= s1}` carrying `s1`, `nv = 2`,
+  `nineq = 2`) and `conjugateOfPiecePoly` still returns **1 cell**, not the 4 the piece needs
+  (2 vertex cones + 2 edge cells). So the downstream cell generation does not handle a 2-vertex
+  CURVED region either.
+- **Tried, twice, both REVERTED:** (i) spreading colliding genuine edges over distinct numbers;
+  (ii) the same, plus dropping constraints that bound no edge — a constraint whose curve between
+  the shared vertices leaves the region (which is what con 3 is, and which LP redundancy cannot
+  see because it is not linear), and constraints active at a single vertex of a bounded region.
+  Both make the lens's slots correct — measured, `nineq = 2` with the arc and the chord in
+  distinct slots — and both take the second conjugation from WRONG VALUES to
+  `QuaParCPLQ:conj:emptyResult`, no pieces at all.
+- **Before retrying:** the edge numbering is necessary and not sufficient. Do the downstream half
+  FIRST — make `conjugateOfPiecePoly` produce 4 cells for a bounded 2-vertex region with one
+  curved edge, checked on the hand-built lens above, which needs no pipeline. Only then re-apply
+  the numbering fix. Note also that `size(d.ineqs,2) == d.nv` is used a SECOND time, to choose
+  between the polyhedral and the quadratic-aware normal-cone routines
+  (`getNormalConeVertex`/`getNormalConeEdgeQ3` vs `getNormalConeVertexQ`/`getNormalConeEdgeQ`),
+  so changing the count changes which of those runs.
+- **Separately: the pinned test no longer fails the way it says it does.** Since `conj` began
+  returning a MESHED QuaPar for a bounded multi-face domain (2026-08-13),
+  `biconjugateOverATwoFaceSubdivisionIsTheEnvelope` ERRORS at `quaPolToPlq:curvedEdge` — the
+  second conjugation is handed a curved QuaPar and `quaPolToPlq` requires a polyhedral domain. The
+  symbolic route reaches the lens defect only when forced. Both need fixing; they are different.
+- **Refuted on the way:** `convEnvCPLQ` is NOT a route to `f**` here. `f** = conv f` for a compact
+  domain, but `convEnvCPLQ` is Step 1, a PER-TRIANGLE envelope with no cross-piece hull — measured
+  on this input, it returns the per-piece envelopes (0.25 at (0.5,0.5) where the truth is 0).
+
+### BUG 5 — "a piece that spans TWO sub-arcs of the SAME conic"
+
+- **What the record said** (written 2026-08-14, from the piece's vertex list): piece 4 `src [1 6]`
+  has g1's arc cut twice and spans both sub-arcs, so its one curve slot holds one and the other
+  becomes a chord.
+- **Measured, and it is false:** evaluating piece 4's own conic at its vertices gives
+      V1 (-2.960609, 0.9606088) -> 0        V5 (-2.744821, 1.372827) -> 0
+      V4 (-2, 2) -> +0.149        V2 -> +0.161        V3 -> +0.327
+  with a tolerance of 8.8e-07. Only V1 and V5 are on it. The two curved edges are on **different**
+  conics: piece 4's own slot holds the SPLITTING curve `{g1f1 = g2f6}`, and the flattened edge
+  `(-2,2) -> (-2.744821,1.372827)` is a sub-arc of **g1's arc**, which its neighbour piece 5
+  `src [2 6]` carries curved on `[-0.015625 -0.03125 -0.015625 -0.25 0.25 -1]`.
+- **So it is the ordinary two-DIFFERENT-arcs case**, which `splitTwoArcPiece` exists for — and the
+  cell does carry the arc going in: `src [1 6]`, `nv = 4`, `arcPos0 = 2`, arc
+  `(-2,2) -> (-3.125,1.125)`. But `splitTwoArcPiece` is called exactly ONCE on this input and not
+  for this cell, so the loss happens before it: either the crossed-arc restoration finds no
+  position for the sub-arc (`findArcPosition` returning 0) or the piece is emitted before reaching
+  it.
+- **AND THE CAUSE IS NOW LOCATED, by that instrumentation.** For `src [1 6]` on that shift:
+      HITS: 2 hits on edges [2 3] at (-2.744821,1.372827) and (-2.960609,0.9606088), arcPos0 = 2
+      RESTORE half: nv=5 curveAfter=5 **p=4** straightCut=0
+  So the crossed-arc restoration works perfectly: it FINDS the inherited sub-arc at edge 4, the
+  splitting curve is genuinely curved (straightCut=0), and the half is correctly handed to
+  `splitTwoArcPiece(half, 4, arcEc0)`. **`splitTwoArcPiece` then returns it UNSPLIT**, which its
+  own header says it may do — "if neither works the piece is returned unsplit ... the assembly's
+  own arrangement check is what would catch a dropped arc". It did, three stages later, as the
+  orphan.
+- **Why it finds no cut: THE TWO ARCS ARE ADJACENT.** They share vertex V5 (arc at edge 4, split
+  curve at edge 5, `nv = 5`). Its two candidate chords are `arcPos+1 -> c+1` = V5->V1 and
+  `arcPos -> c` = V4->V5 — but those ARE edges 5 and 4 themselves, so one chain comes out with 2
+  vertices and the `numel(chain) < 3` guard skips both. The `nv == 3` fallback that handles the
+  shared-vertex case (cut from the shared vertex to the midpoint of the opposite straight edge)
+  does not apply at `nv = 5`.
+- **The fix, not yet written:** generalise that shared-vertex case to `nv >= 4` — cut from the
+  shared vertex S to a NON-ADJACENT vertex. On this piece S = V5 and the diagonal V5->V2 gives
+  chains {2,3,4,5} (carrying edge 4, the inherited arc) and {5,1,2} (carrying edge 5, the split
+  curve): one arc each, which is the invariant. Guard it with `insideStraightHull` exactly as the
+  existing candidates are, and fall through unsplit when no diagonal is interior.
+- Do NOT write a same-conic sub-arc splitter; that shape has never been observed, and the code for
+  it was written and removed on 2026-08-15.
+
 ## 2026-08-14 — RESOLVED: the two-arc ray split, and why two attempts at it failed
 
 - **Outcome:** `arcVsArcRefusesAnUnboundedTwoArcSplit` is GREEN and `maxQuaParTest` is 28 / 0 (from
