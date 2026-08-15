@@ -25,6 +25,45 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 (later) — BUG 1: three defects fixed, and one attempted fix that is UNSOUND
+
+**Fixed, and each was necessary before the next was visible.** The lever that made this tractable
+was a unit-level reproducer: the half-lens `{(s1+s2)² ≤ 4·s2, s2 ≤ s1}` carrying `s1`, built by
+hand as a `region` and conjugated against a brute-force sup over its own boundary. No pipeline,
+seconds per run, and it went from **2 identical wrong cells to 3 cells exact at all 10 probe
+points**. Build that first next time; the pipeline runs took 10–40 minutes each.
+
+1. `getEdgeNosInf` numbers an edge by one of its endpoint VERTICES, so a LENS — two edges joining
+   the same pair — gets one number for both, and the last-write-wins scatter destroys one.
+2. `getNormalConeVertexQ` (the routine that builds a vertex cone from the CONSTRAINT's own tangent
+   rather than the chord) indexed its second constraint as `j+1` unwrapped, so it raised
+   `badsubscript` on any BOUNDED region — which is why its only caller gated it behind a
+   constraint COUNT and sent every bounded region to the polyhedral routine instead. Wrapped
+   cyclically; identical to `j+1` for the unbounded layout, so nothing that worked changes.
+3. `biconj` handed its second conjugation the curved MESH `conj` has returned since 2026-08-13,
+   and `quaPolToPlq` refuses a curved domain. It now asks `conjCPLQ` for the symbolic form.
+
+**UNSOUND, and reverted: freeing an edge slot by dropping the constraint holding it.**
+
+- **Tried:** the lens's two edges need slots 1 and 2, which are held by constraints with a single
+  vertex on them. Dropping constraints with `nOn ≤ 1` on a bounded region frees them.
+- **Why it failed:** a constraint active at exactly one vertex of a convex region can still be
+  ESSENTIAL. Removing it enlarges the piece, and an enlarged piece of `f*` has a SMALLER conjugate
+  domain — so `f**` loses coverage somewhere else. Measured: with the drop, `f**` is exact at
+  `(0.25,0.25)` and `(0.1,0.1)` and `+inf` at `(0.9,0.6)` and `(0.6,0.6)`; without it, exactly the
+  other way round. Both are 5 of 7 and only one is sound.
+- **A second, independent unsoundness found on the way, and worth its own note:** the boundedness
+  test written for that drop read the vertex list AFTER `removeInfV`, which deletes the `±intmax`
+  box-clip vertices that are the only mark of an unbounded region — so every region looked
+  bounded. Fixed on its own merits (read it before `removeInfV`, which is the codebase's own
+  convention), and it did NOT rescue the drop: the harmed piece is genuinely bounded.
+- **Before retrying:** do not look for a better rule for dropping. Give `conjugateOfPiecePoly` an
+  explicit EDGE LIST instead of a count with two conventions (`endNv = nv` or `nv-1`; edge `j` at
+  `ineqs(j)` or `ineqs(j+1)`). It cannot be done in that routine alone — `j` indexes
+  `getNormalConeEdgeQ`/`Q3`'s output and `getSubdiffVertexT2`/`T2Q`'s `subdE` simultaneously, so
+  all four move together. That is why the original "derive the edge list from the geometry" note
+  underestimated the job.
+
 ## 2026-08-15 — Two of the five "remaining bugs" were described WRONG. Measure before fixing.
 
 Both descriptions had been written from a symptom and carried forward as fact. Each cost an

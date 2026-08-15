@@ -121,11 +121,21 @@ the tooling that judged them was itself broken, in two ways, and silently.
            MESH `conj` now returns and died at `quaPolToPlq:curvedEdge`.
       Unit level: the half-lens conjugates to 3 cells matching a brute-force sup at all 10 probe
       points (2 identical wrong cells before).
-      **REMAINING:** `f**` is exact on `{x+y <= 1}` and `+Inf` on `{x+y > 1}` -- a hole in the
-      DOMAIN, not a wrong value. Since `f**`'s domain is the INTERSECTION of the per-piece
-      conjugate domains, one piece of `f*` still conjugates onto too small a set. A piece carrying
-      `s1` whose region recedes along `(1,1)` would produce exactly `{x+y <= 1}`, so look for an
-      over-extended or mis-bounded piece there first.
+      **REMAINING, and it is a REFACTOR, not a fix.** `f**` is exact at 5 of 7 probe points; the
+      other two come back `+Inf` -- a hole in the DOMAIN, not a wrong value, since `f**`'s domain
+      is the INTERSECTION of the per-piece conjugate domains and one piece of `f*` still
+      conjugates onto too small a set.
+      What that piece needs is its two lens edges in slots 1 and 2, and those slots are held by
+      constraints that bound no edge. **Freeing them by DROPPING those constraints was tried and
+      is unsound** -- a constraint active at exactly one vertex of a convex region can still be
+      essential, and removing it enlarges the piece, which SHRINKS its conjugate domain. Measured:
+      with the drop, `f**` is exact at `(0.25,0.25)` and `(0.1,0.1)` and `+inf` at `(0.9,0.6)` and
+      `(0.6,0.6)`; without it, exactly the other way round. Both 5 of 7, one of them sound.
+      The real fix is to give `conjugateOfPiecePoly` an explicit EDGE LIST instead of a count with
+      two conventions (`endNv = nv` or `nv-1`; edge `j` at `ineqs(j)` or `ineqs(j+1)`). It cannot
+      be done in that routine alone: the loop variable `j` indexes `getNormalConeEdgeQ`/`Q3`'s
+      output and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
+      Start from the hand-built lens in the probe -- it needs no pipeline and runs in seconds.
 
 - [ ] **BUG 2 -- cPLQ Step 3 over-claims on the 4-cone fan.** A wrong answer, never returned
       (`assertStep3MatchesPieces` catches it). At `s = (-3,-2.4)` the assembly gives `5.130` where
