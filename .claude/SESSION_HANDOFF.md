@@ -5,14 +5,16 @@ _Last updated: 2026-08-15_
 ## Where things stand
 
 - On **`main`**, pushed. (The `overnight/2026-08-13` branch was merged and is history.)
-- **`maxQuaParTest` 29 / 0. Fast bucket 204 / 0.** `MAXQP_ASSERT = 1` is now ON for every test in
+- **`maxQuaParTest` 29 / 0. `conjCPLQTest` 25 / 0. Fast bucket 204 / 0.** `MAXQP_ASSERT = 1` is now ON for every test in
   `maxQuaParTest`, via a `TestMethodSetup` that restores the previous value on teardown.
 - **`maxQuaPar` has NO open case.** The seeded arc-vs-arc sweep (seed 20260803, N=18) is
   **18 exact / 0 wrong / 0 errored**, from 16 / 0 / 2 two sessions ago.
-- Slow bucket: the four documented reds
-  (`biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, `step3UnboundedAssemblyMatchesTheTruth`,
-  two in `unboundedFaceTest`). `testMaxMultiRegion` 24 / 0, `testcPLQ` 8 / 0, `testRegion` 23 / 0
-  and `biconjCPLQTest` 10 / 0 were re-run against the current tree and are clean.
+- Slow bucket: **three** reds, down from four —
+  `biconjugateOverATwoFaceSubdivisionIsTheEnvelope` and the two in `unboundedFaceTest`.
+  `step3UnboundedAssemblyMatchesTheTruth` is GREEN. `testMaxMultiRegion` 24 / 0, `testcPLQ` 8 / 0,
+  `testRegion` 23 / 0 and `biconjCPLQTest` 10 / 0 re-run clean.
+- **`SUPPORT_MATRIX.md` §8.2's blocker is closed**: Steps 1, 2 and 3 are all done for unbounded
+  multi-face domains. What remains there is new item (f), Step 1's CURVED convex envelope.
 
 ## What happened this session
 
@@ -34,8 +36,13 @@ two-face square is now exact at 5 of 7 probe points; it was 0 of 7.
 3. `biconj` handed its second conjugation the curved MESH `conj` has returned since 2026-08-13;
    `quaPolToPlq` refuses a curved domain. It now asks for the symbolic form on purpose.
 
-**Bug 2 — localised, not fixed.** Step 2 is right; the assembled Step 3 cell has lost its `−s1 ≤ 0`
-and the quadratics that replaced it are blind to the sign of `s1`.
+**Bug 2 — FIXED.** `region.removeTangent` built the TANGENT LINE to a quadratic constraint at a
+vertex where that quadratic's GRADIENT VANISHES — the apex of a cone, which is exactly where an
+unbounded fan's Step 3 split conics meet — and deleted a constraint matching that meaningless
+"tangent". It removed `−s1 ≤ 0`, leaving two constraints blind to the sign of `s1`, so the region
+went symmetric and claimed the mirror wedge. **This is the SECOND routine to fall into that trap
+on that same input**; §8.2(e) records `simplifyUnboundedRegion` doing it, fixed 2026-08-02 by
+`region.witnessAwayFrom`.
 
 ## Next steps
 
@@ -45,13 +52,13 @@ and the quadratics that replaced it are blind to the sign of `s1`.
    and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
    **Do NOT free a slot by dropping the constraint holding it** — tried, unsound, see
    `DECISIONS.md`.
-2. **Bug 2:** dump the cells carrying `s1²/4 + s2²/2` immediately before `functionNDomain.mergeL`.
-   Either `region.merge` is unioning two cells whose union is not convex (and `unionIsExact`
-   should refuse), or a mirror cell gets that quadratic wrongly earlier. `redundantSubset` is
-   already exonerated.
-3. **Bugs 3–4 are a missing ALGORITHM, not a defect**, and are worth taking off the bug list:
+2. **Bugs 3–4 are a missing ALGORITHM, not a defect**, and are worth taking off the bug list:
    `convEnvUnbounded` computes only the AFFINE envelope over an unbounded face and refuses the
-   rest by design. Both fixtures have envelopes that are convex and not affine.
+   rest by design. **Both envelopes are already derived in `TODO.md`** —
+   `co(x·y + I_K) = y²` on `K = {0 ≤ y ≤ x}` with its proof, and `co(−x²+y²) = −x + y²` on the
+   half-strip — together with the pattern they share. Prove the general rule the way
+   `convEnvUnbounded`'s header proves the affine case; do not ship a formula that merely matches
+   the two fixtures.
 4. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
    → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box → performance.
 
@@ -63,9 +70,14 @@ against a brute-force sup over its own boundary, runs in SECONDS and needs no pi
 runs of the same defect take 10–40 minutes. That one change is what made bug 1 tractable after two
 sessions of failed attempts.
 
-**Sign-blind quadratic constraints are a recurring failure mode.** A region bounded by a conic that
-cannot tell its two branches apart claims territory on the wrong side. It caused the `maxQuaPar`
-defect fixed on 2026-08-14 and it is what bug 2 looks like now.
+**A degenerate geometric object is not a geometric object, and this codebase keeps assuming it is.**
+Three separate defects this month, in three different routines, were all one of these: a quadratic
+has no TANGENT LINE at its own apex, where the gradient vanishes (`removeTangent`, and
+`simplifyUnboundedRegion` before it); two arcs sharing a vertex have no separating CHORD, because
+the candidate chords are the arcs' own edges (`splitTwoArcPiece`); a conic cannot tell its two
+BRANCHES apart, so a region bounded by one claims territory on the wrong side (`maxQuaPar`, and
+bug 2's symptom). When a routine computes a geometric object from a degenerate configuration, check
+that the object exists before using it.
 
 ## Relevant files
 

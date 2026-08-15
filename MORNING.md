@@ -8,9 +8,17 @@ instructions: parallel agents permitted, do not stop after three failures, do no
 
 ## Headline
 
-**Two bugs fixed, one localised, one re-scoped.** `maxQuaPar` now has **no open case**: the seeded
-arc-vs-arc sweep is **18 exact / 0 wrong / 0 errored of 18**, from 16 / 0 / 2 two sessions ago.
-`maxQuaParTest` 29 / 0; fast bucket 204 / 0.
+**Bugs 2 and 5 FIXED, bug 1 taken from 0 to 5 of 7, bugs 3–4 re-scoped and their maths derived.**
+`maxQuaPar` has **no open case** (seeded sweep **18 / 0 / 0**, from 16 / 0 / 2 two sessions ago),
+and **cPLQ's Step 3 cross-piece maximum is closed** — the last blocker of `SUPPORT_MATRIX.md`
+§8.2. `maxQuaParTest` 29 / 0, `conjCPLQTest` 25 / 0, fast bucket 204 / 0.
+
+The two fixes turned out to be the same lesson twice over, one per subsystem:
+
+> **A degenerate geometric object is not a geometric object.** Bug 5: two arcs that share a vertex
+> have no separating chord, because the "chords" are the arcs' own edges. Bug 2: a quadratic has no
+> tangent line at its own apex, where the gradient vanishes — and `SUPPORT_MATRIX.md` §8.2(e)
+> already recorded a *different* routine falling into that exact trap on that exact input.
 
 ## What changed
 
@@ -43,22 +51,34 @@ arc-vs-arc sweep is **18 exact / 0 wrong / 0 errored of 18**, from 16 / 0 / 2 tw
   Unit level: the half-lens conjugates to 3 cells exact against a brute-force sup at all 10 probe
   points (2 identical wrong cells before).
 
-- **BUG 2 — LOCALISED** (`1f02101`), and two suspects cleared. Step 2 is right (each piece's own
-  conjugate has the correct quadrant constraints, and the per-piece max at `(-3,-2.4)` is the
-  truth). The assembled cell is `s1²/4 + s2²/2` on `{s2 ≤ 0, s2²/2 − s1² ≤ 0, s1² − 2s2² ≤ 0}`:
-  the sign constraint `−s1 ≤ 0` is gone and the quadratics that replaced it are **blind to the
-  sign of `s1`**, so the region is symmetric and claims the mirror wedge.
-  `region.redundantSubset` is exonerated — asked directly, it certifies nothing as redundant.
+- **BUG 2 — FIXED** (`1d04c75`). `region.removeTangent` builds the TANGENT LINE to a quadratic
+  constraint at a vertex and deletes any constraint matching it. At the APEX OF A CONE the
+  gradient vanishes, there is no tangent, and what it computes is meaningless — and that apex is
+  exactly where an unbounded fan's Step 3 split conics meet. It deleted `−s1 ≤ 0`, leaving two
+  constraints **blind to the sign of `s1`**, so the region went symmetric and claimed the mirror
+  wedge. `f*(-3,-2.4)` is now **4.5**, the truth; it was 5.130. **`conjCPLQTest` 25 / 0.**
+  Cleared on the way, so nobody re-checks them: `redundantSubset`, `simplifyUnboundedRegion`, and
+  Step 2 itself. The old `step3DropsCellsOnSomeUnboundedAssemblies` pinned the GATE firing; it no
+  longer does, so it is renamed and rewritten to pin what the gate protects.
 
-- **BUGS 3–4 — re-scoped, not attempted.** They are a missing ALGORITHM, not a defect:
-  `convEnvUnbounded` computes only the AFFINE envelope over an unbounded face and refuses the
-  rest by design, and both fixtures have envelopes that are convex and not affine.
+- **BUGS 3–4 — re-scoped, and their mathematics derived.** They are a missing ALGORITHM, not a
+  defect: `convEnvUnbounded` computes only the AFFINE envelope and refuses the rest by design.
+  Both envelopes are now in `TODO.md` rather than left to the next attempt:
+  `co(x·y + I_K) = y²` on `K = {0 ≤ y ≤ x}` — with its proof — and `co(−x²+y²) = −x + y²` on the
+  half-strip, plus the pattern they share and a warning not to ship a formula that merely matches
+  the two fixtures.
 
 ## What is broken
 
-The four documented slow-bucket reds, unchanged in kind:
-`biconjugateOverATwoFaceSubdivisionIsTheEnvelope` (now 5 of 7 points right instead of 0),
-`step3UnboundedAssemblyMatchesTheTruth`, and two in `unboundedFaceTest`.
+Three reds, down from four:
+`biconjugateOverATwoFaceSubdivisionIsTheEnvelope` (now 5 of 7 points right instead of 0) and the
+two in `unboundedFaceTest` (bugs 3–4, the missing algorithm).
+`step3UnboundedAssemblyMatchesTheTruth` is GREEN.
+
+The full slow bucket was still running against the final tree when this was written — check it
+before merging anything on top. Every suite re-run individually against these changes was clean:
+`conjCPLQTest` 25 / 0, `testMaxMultiRegion` 24 / 0, `testcPLQ` 8 / 0, `testRegion` 23 / 0,
+`biconjCPLQTest` 10 / 0.
 
 ## Needs a decision
 
