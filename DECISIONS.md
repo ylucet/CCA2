@@ -25,6 +25,31 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 — BUG 2 localised, and two suspects cleared before they cost a session
+
+Not fixed; recorded because the measurements rule out the two places one would naturally look.
+
+- **Step 2 is right, so the whole defect is in the Step 3 assembly.** Each primal piece's own
+  conjugate comes back with 4 cells and the correct quadrant constraints — face 4's cell 4 is
+  `s1²/4 + s2²/2` on exactly `{-s1 ≤ 0, s2 ≤ 0}` — and the four per-piece values at `(-3,-2.4)`
+  are `0, 4.5, 3.69, 2.88`, whose max is the truth.
+- **The offending assembled cell, exactly:** `f = s1²/4 + s2²/2` on
+  `{s2 ≤ 0, s2²/2 − s1² ≤ 0, s1² − 2s2² ≤ 0}`. The sign constraint `−s1 ≤ 0` is gone, and the two
+  quadratics that replaced it are **blind to the sign of `s1`**, so the region is symmetric under
+  `s1 → −s1` and claims the mirror wedge. Verified directly: drop `−s1 ≤ 0` and `(-3,-2.4)`
+  becomes feasible; keep it and it does not.
+- **`region.redundantSubset` is NOT the culprit.** Asked about
+  `{−s1, s2, s2²/2 − s1², s1² − 2s2²}` it certifies nothing as redundant, which is right. Do not
+  spend time there.
+- **Where to look next:** `functionNDomain.mergeL` groups cells by EQUAL function and unions their
+  regions with `region.merge`, which deletes the shared facet. Two cells carrying `s1²/4 + s2²/2`
+  on opposite sides of `s1 = 0` merge into precisely the symmetric region observed. So either the
+  union is not convex and `region.unionIsExact` fails to refuse it, or a mirror cell is being
+  given that quadratic wrongly earlier. Dump the cells carrying it immediately before `mergeL`.
+- **Shape worth noticing:** this is the same family as the `maxQuaPar` defect fixed on 2026-08-14
+  — a region bounded by a conic that cannot distinguish two branches, so a piece claims territory
+  on the wrong side of it. Sign-blind quadratic constraints are a recurring failure mode here.
+
 ## 2026-08-15 (later) — BUG 1: three defects fixed, and one attempted fix that is UNSOUND
 
 **Fixed, and each was necessary before the next was visible.** The lever that made this tractable

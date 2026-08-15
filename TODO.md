@@ -139,11 +139,28 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 - [ ] **BUG 2 -- cPLQ Step 3 over-claims on the 4-cone fan.** A wrong answer, never returned
       (`assertStep3MatchesPieces` catches it). At `s = (-3,-2.4)` the assembly gives `5.130` where
-      the per-piece max gives `4.500` (right: the four cone suprema there are `0`, `4.5`, `3.69`,
-      `2.88`). `5.13 = s1^2/4 + s2^2/2` is face 4's cell, and face 4's cell belongs on
-      `{s1>=0, s2<=0}` -- so some region has grown across `s1 = 0`. The companion DROP half of this
-      was fixed 2026-08-02 (`region.witnessAwayFrom`); this half is unstarted.
-      Pinned by `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`.
+      the per-piece max gives `4.500`.
+      **LOCALISED 2026-08-15 -- measured, and two suspects cleared.**
+        * **Step 2 is RIGHT.** Each primal piece's own conjugate has 4 cells with the correct
+          quadrant constraints; face 4's cell 4 is `s1^2/4 + s2^2/2` on exactly `{-s1 <= 0,
+          s2 <= 0}`, and the four per-piece values at `(-3,-2.4)` are `0, 4.5, 3.69, 2.88`, max
+          `4.5` = the truth. So the defect is entirely in the Step 3 ASSEMBLY.
+        * **The offending assembled cell, exactly:** `f = s1^2/4 + s2^2/2` on
+          `{s2 <= 0, s2^2/2 - s1^2 <= 0, s1^2 - 2*s2^2 <= 0}`. The sign constraint `-s1 <= 0` is
+          GONE, and the two quadratics that replaced it are **blind to the sign of `s1`** -- the
+          region is symmetric under `s1 -> -s1` and so claims the mirror wedge. Confirmed
+          directly: without `-s1 <= 0` the point `(-3,-2.4)` is feasible for that region; with it,
+          it is not.
+        * **`region.redundantSubset` is EXONERATED.** Asked directly about
+          `{-s1, s2, s2^2/2 - s1^2, s1^2 - 2*s2^2}` it certifies NOTHING as redundant, which is
+          correct.
+      **Next:** `functionNDomain.mergeL` groups cells by EQUAL function and unions their regions
+      via `region.merge`, which works by deleting the shared facet. Two cells carrying
+      `s1^2/4 + s2^2/2` on opposite sides of `s1 = 0` would merge into exactly the symmetric
+      region observed. So either the merge is unioning two cells whose union is not convex
+      (`region.unionIsExact` should refuse), or a mirror cell is being given that quadratic
+      wrongly before the merge. Check which by dumping the cells that carry it just before
+      `mergeL`. Pinned by `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`.
 
 - [ ] **BUGS 3 and 4 -- a curved convex envelope over an UNBOUNDED face.** A gap, refused loudly.
       `convEnvUnbounded` handles only an AFFINE envelope, and both fixtures have envelopes that are
