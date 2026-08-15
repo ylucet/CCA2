@@ -8,17 +8,23 @@ instructions: parallel agents permitted, do not stop after three failures, do no
 
 ## Headline
 
-**Bugs 2 and 5 FIXED, bug 1 taken from 0 to 5 of 7, bugs 3–4 re-scoped and their maths derived.**
-`maxQuaPar` has **no open case** (seeded sweep **18 / 0 / 0**, from 16 / 0 / 2 two sessions ago),
-and **cPLQ's Step 3 cross-piece maximum is closed** — the last blocker of `SUPPORT_MATRIX.md`
-§8.2. `maxQuaParTest` 29 / 0, `conjCPLQTest` 25 / 0, fast bucket 204 / 0.
+**FOUR of the five bugs are FIXED — 2, 3, 4 and 5 — and bug 1 went from 0 to 5 of 7 probe
+points.** The whole repository is down to **ONE red**.
 
-The two fixes turned out to be the same lesson twice over, one per subsystem:
+`maxQuaParTest` 29 / 0, `conjCPLQTest` 25 / 0, `unboundedFaceTest` 18 / 0, fast bucket 204 / 0,
+slow bucket **114 / 1**. `maxQuaPar` has no open case (seeded sweep **18 / 0 / 0**, from 16 / 0 / 2
+two sessions ago), and **`SUPPORT_MATRIX.md` §8's second release blocker — unbounded multi-face
+domains — is closed**: Steps 1, 2 and 3 are all done, the last two pieces on the same day.
 
-> **A degenerate geometric object is not a geometric object.** Bug 5: two arcs that share a vertex
-> have no separating chord, because the "chords" are the arcs' own edges. Bug 2: a quadratic has no
-> tangent line at its own apex, where the gradient vanishes — and `SUPPORT_MATRIX.md` §8.2(e)
-> already recorded a *different* routine falling into that exact trap on that exact input.
+Three of the four fixes were one lesson, in three different routines:
+
+> **A degenerate geometric object is not a geometric object, and this codebase keeps assuming it
+> is.** Two arcs sharing a vertex have no separating CHORD, because the candidate chords are the
+> arcs' own edges (bug 5). A quadratic has no TANGENT LINE at its own apex, where the gradient
+> vanishes (bug 2) — and §8.2(e) already recorded a *different* routine falling into that exact
+> trap on that exact input. A lens's two edges join the same two vertices, so numbering an edge by
+> an ENDPOINT cannot tell them apart (bug 1). In each case a routine computed a geometric object
+> from a degenerate configuration and used it without checking that the object exists.
 
 ## What changed
 
@@ -61,36 +67,34 @@ The two fixes turned out to be the same lesson twice over, one per subsystem:
   Step 2 itself. The old `step3DropsCellsOnSomeUnboundedAssemblies` pinned the GATE firing; it no
   longer does, so it is renamed and rewritten to pin what the gate protects.
 
-- **BUGS 3–4 — re-scoped, and their mathematics derived.** They are a missing ALGORITHM, not a
-  defect: `convEnvUnbounded` computes only the AFFINE envelope and refuses the rest by design.
-  Both envelopes are now in `TODO.md` rather than left to the next attempt:
-  `co(x·y + I_K) = y²` on `K = {0 ≤ y ≤ x}` — with its proof — and `co(−x²+y²) = −x + y²` on the
-  half-strip, plus the pattern they share and a warning not to ship a formula that merely matches
-  the two fixtures.
+- **BUGS 3 and 4 — FIXED** (`1b98e30`). These were a missing ALGORITHM rather than a defect:
+  `convEnvUnbounded` computed only the AFFINE envelope and refused the rest by design. Two shapes
+  are now derived and implemented, each with its proof in the source:
+  a **wedge** with one flat and one convex ray, whose envelope is `q` with its CROSS TERM deleted;
+  and a **half-strip** convex along the ray whose base edge is Q-orthogonal to it, where `q`
+  separates into the affine interpolant along the concave base plus the convex part along the ray.
+  A negative cross term on the wedge means the envelope is `−inf` — now reported, not answered —
+  and a non-orthogonal half-strip is refused loudly rather than approximated.
+  **`unboundedFaceTest` 18 / 0**, from 16 / 2. The formulas were checked against the fixtures, not
+  fitted to them: they reproduce the `y²` and `−x + y²` those tests derive by hand.
 
 ## What is broken
 
-Three reds, down from four:
-`biconjugateOverATwoFaceSubdivisionIsTheEnvelope` (now 5 of 7 points right instead of 0) and the
-two in `unboundedFaceTest` (bugs 3–4, the missing algorithm).
-`step3UnboundedAssemblyMatchesTheTruth` is GREEN.
-
-The full slow bucket was still running against the final tree when this was written — check it
-before merging anything on top. Every suite re-run individually against these changes was clean:
-`conjCPLQTest` 25 / 0, `testMaxMultiRegion` 24 / 0, `testcPLQ` 8 / 0, `testRegion` 23 / 0,
-`biconjCPLQTest` 10 / 0.
+**One red in the whole repository**: `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, now 5
+of 7 points right instead of 0. Slow bucket 114 / 1, fast bucket 204 / 0.
 
 ## Needs a decision
 
-1. **Bug 1's remainder is a refactor, and I stopped rather than force it.** The lens's two edges
-   need slots 1 and 2, held by constraints that bound no edge. Freeing them by DROPPING those was
-   tried and is **unsound** — a constraint active at one vertex of a convex region can still be
-   essential, and removing it enlarges the piece, which SHRINKS its conjugate domain. Measured:
-   with the drop, `f**` is exact at two points and `+inf` at two others; without it, exactly the
-   other way round. Both 5 of 7, one of them sound. The real fix is an explicit EDGE LIST spanning
-   `conjugateOfPiecePoly`, `getNormalConeEdgeQ`/`Q3` and `getSubdiffVertexT2`/`T2Q` together,
-   because the loop variable indexes all of them.
-2. **Bugs 3–4 belong off the bug list**, as research items.
+**Bug 1's remainder is a refactor, and I stopped rather than force it.** The lens needs the
+BOUNDED index layout and cannot get it: it has 2 vertices and 2 genuine edges, but arrives with 5
+constraints, and the layout is chosen by that COUNT. `TODO.md` now maps the full indexing
+contract — two layouts across four routines, with the loop variable indexing `NCE`'s rows,
+`subdE`'s rows and `d.ineqs` at once — and records the two ways to give the lens the right layout
+together with the trap in each. Freeing the slots by DROPPING the non-edge constraints was tried
+and is **unsound**; it would be sound behind a redundancy PROOF, which `redundantSubset` cannot
+supply past a conic.
+
+I would take that refactor next, from the hand-built lens probe rather than from the pipeline.
 
 ## Where I stopped
 

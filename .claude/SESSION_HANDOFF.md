@@ -9,12 +9,12 @@ _Last updated: 2026-08-15_
   `maxQuaParTest`, via a `TestMethodSetup` that restores the previous value on teardown.
 - **`maxQuaPar` has NO open case.** The seeded arc-vs-arc sweep (seed 20260803, N=18) is
   **18 exact / 0 wrong / 0 errored**, from 16 / 0 / 2 two sessions ago.
-- Slow bucket: **three** reds, down from four —
-  `biconjugateOverATwoFaceSubdivisionIsTheEnvelope` and the two in `unboundedFaceTest`.
-  `step3UnboundedAssemblyMatchesTheTruth` is GREEN. `testMaxMultiRegion` 24 / 0, `testcPLQ` 8 / 0,
-  `testRegion` 23 / 0 and `biconjCPLQTest` 10 / 0 re-run clean.
-- **`SUPPORT_MATRIX.md` §8.2's blocker is closed**: Steps 1, 2 and 3 are all done for unbounded
-  multi-face domains. What remains there is new item (f), Step 1's CURVED convex envelope.
+- **Slow bucket 114 / 1 — ONE red in the whole repository**,
+  `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, and it is now 5 of 7 probe points right
+  instead of 0. `unboundedFaceTest` 18 / 0, `conjCPLQTest` 25 / 0, `testMaxMultiRegion` 24 / 0,
+  `testcPLQ` 8 / 0, `testRegion` 23 / 0, `biconjCPLQTest` 10 / 0.
+- **`SUPPORT_MATRIX.md` §8's second release blocker is CLOSED** — unbounded multi-face domains.
+  Steps 1, 2 and 3 are all done; the last two pieces closed on the same day.
 
 ## What happened this session
 
@@ -36,6 +36,13 @@ two-face square is now exact at 5 of 7 probe points; it was 0 of 7.
 3. `biconj` handed its second conjugation the curved MESH `conj` has returned since 2026-08-13;
    `quaPolToPlq` refuses a curved domain. It now asks for the symbolic form on purpose.
 
+**Bugs 3 and 4 — FIXED.** `convEnvUnbounded` computed only the AFFINE envelope and refused
+anything with `d'Qd > 0` along a ray. Two shapes are now derived and implemented with their proofs
+in the source: a WEDGE with one flat and one convex ray, whose envelope is `q` with its CROSS TERM
+deleted; and a HALF-STRIP convex along the ray whose base edge is Q-orthogonal to it, where `q`
+separates. A negative cross term means the envelope is `−inf` (now reported); a non-orthogonal
+half-strip is refused. `unboundedFaceTest` 18 / 0, from 16 / 2.
+
 **Bug 2 — FIXED.** `region.removeTangent` built the TANGENT LINE to a quadratic constraint at a
 vertex where that quadratic's GRADIENT VANISHES — the apex of a cone, which is exactly where an
 unbounded fan's Step 3 split conics meet — and deleted a constraint matching that meaningless
@@ -52,14 +59,7 @@ on that same input**; §8.2(e) records `simplifyUnboundedRegion` doing it, fixed
    and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
    **Do NOT free a slot by dropping the constraint holding it** — tried, unsound, see
    `DECISIONS.md`.
-2. **Bugs 3–4 are a missing ALGORITHM, not a defect**, and are worth taking off the bug list:
-   `convEnvUnbounded` computes only the AFFINE envelope over an unbounded face and refuses the
-   rest by design. **Both envelopes are already derived in `TODO.md`** —
-   `co(x·y + I_K) = y²` on `K = {0 ≤ y ≤ x}` with its proof, and `co(−x²+y²) = −x + y²` on the
-   half-strip — together with the pattern they share. Prove the general rule the way
-   `convEnvUnbounded`'s header proves the affine case; do not ship a formula that merely matches
-   the two fixtures.
-3. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
+2. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
    → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box → performance.
 
 ## How to work on the symbolic layer, learned the hard way
