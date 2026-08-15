@@ -98,17 +98,38 @@ the tooling that judged them was itself broken, in two ways, and silently.
       other two come back `+Inf` -- a hole in the DOMAIN, not a wrong value, since `f**`'s domain
       is the INTERSECTION of the per-piece conjugate domains and one piece of `f*` still
       conjugates onto too small a set.
-      What that piece needs is its two lens edges in slots 1 and 2, and those slots are held by
-      constraints that bound no edge. **Freeing them by DROPPING those constraints was tried and
-      is unsound** -- a constraint active at exactly one vertex of a convex region can still be
-      essential, and removing it enlarges the piece, which SHRINKS its conjugate domain. Measured:
-      with the drop, `f**` is exact at `(0.25,0.25)` and `(0.1,0.1)` and `+inf` at `(0.9,0.6)` and
-      `(0.6,0.6)`; without it, exactly the other way round. Both 5 of 7, one of them sound.
-      The real fix is to give `conjugateOfPiecePoly` an explicit EDGE LIST instead of a count with
-      two conventions (`endNv = nv` or `nv-1`; edge `j` at `ineqs(j)` or `ineqs(j+1)`). It cannot
-      be done in that routine alone: the loop variable `j` indexes `getNormalConeEdgeQ`/`Q3`'s
-      output and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
-      Start from the hand-built lens in the probe -- it needs no pipeline and runs in seconds.
+
+      **THE INDEXING CONTRACT, mapped 2026-08-15 -- this is what the refactor has to preserve.**
+      Two conventions run through four routines at once, chosen by the COUNT
+      `size(d.ineqs,2) == d.nv`:
+        * BOUNDED layout: `nv` slots, edge `j` at `ineqs(j)`, `endNv = nv`, cones from
+          `getNormalConeVertexQ` / `getNormalConeEdgeQ3` and `getSubdiffVertexT2`.
+        * UNBOUNDED layout: `nv+1` slots with slot 1 reserved for the ray, edge `j` at
+          `ineqs(j+1)`, `endNv = nv-1`, cones from `getNormalConeEdgeQ` and `getSubdiffVertexT2Q`.
+        * Confirmed in the source: `getNormalConeEdgeQ` loops `j = 1:nv-1` and reads
+          `slopeIneq(j+1, vertex j)`, so its output ROW `j` is the edge at slot `j+1`.
+          `getNormalConeVertexQ` uses the same "vertex `j` lies on constraints `j` and `j+1`" rule
+          (now wrapped cyclically, so it works in the bounded layout too).
+      The loop variable `j` indexes `NCE`'s rows, `subdE`'s rows and `d.ineqs` SIMULTANEOUSLY, so
+      the count cannot simply be replaced -- all four move together.
+
+      **THE LENS NEEDS THE BOUNDED LAYOUT AND CANNOT GET IT.** It has `nv = 2` and 2 genuine edges,
+      so the bounded layout is right; but it arrives with 5 constraints, so the count picks the
+      unbounded one, `endNv = 1`, and only one edge cell is built.
+      Two ways to give it the bounded layout, and the trap in each:
+        1. DROP the three non-edge constraints. **Unsound** -- a constraint active at exactly one
+           vertex of a convex region can still be essential; measured, see `DECISIONS.md`. It would
+           be sound if guarded by a REDUNDANCY PROOF, but `redundantSubset` is an LP and cannot
+           certify redundancy in the presence of a conic. A closed-form "maximise this linear form
+           over the region's own boundary" test would -- the machinery exists in
+           `verifyMaxIsExactSymbolically`, for QuaPar faces rather than `region`s.
+        2. PARK them above slot `nv` and dispatch on boundedness instead of the count.
+           `wasBounded` is now computed soundly (before `removeInfV`, which deletes the evidence).
+           The trap: the `f.isQuad` chord rewrite iterates ALL slots, so a parked QUADRATIC
+           constraint gets a chord derived from vertices it does not join -- the harm rule (2) in
+           `conjugateOfPiecePoly` already records. Scope any parking to `~obj(i).f.isQuad`.
+      Start from the hand-built lens probe -- it needs no pipeline and runs in seconds, and with
+      the three fixes already in it produces the correct 3 cells when handed exactly its 2 edges.
 
 - [x] **BUG 2 -- FIXED 2026-08-15.** `region.removeTangent` built a TANGENT LINE to a quadratic
       constraint at a vertex where that quadratic's GRADIENT VANISHES -- the apex of a cone, which
