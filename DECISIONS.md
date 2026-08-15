@@ -105,7 +105,17 @@ points**. Build that first next time; the pipeline runs took 10–40 minutes eac
   box-clip vertices that are the only mark of an unbounded region — so every region looked
   bounded. Fixed on its own merits (read it before `removeInfV`, which is the codebase's own
   convention), and it did NOT rescue the drop: the harmed piece is genuinely bounded.
-- **Before retrying:** do not look for a better rule for dropping. Give `conjugateOfPiecePoly` an
+- **A FOURTH attempt, also reverted: PARKING the slot claim instead of dropping the constraint.**
+  Since only `endNv` constraints are ever read as edges — and on a lens that is ONE — the arc and
+  its chord fight for one slot, and the scatter's last-write-wins hands it to the chord. Of the
+  two, only the ARC has a two-dimensional dual cell (every point of an arc has its own normal, so
+  it sweeps a cone; a straight edge has one normal and contributes a ray). So: give the arc the
+  slot and PARK the chord's claim above the edge slots, dropping nothing — the region as a
+  constraint set is unchanged, and only the label "this is edge number k" moves.
+  The reasoning is sound and the result was worse: `conjugateOfPiecePoly` returned NO pieces at
+  all, so it breaks something beyond the lens. Not diagnosed further.
+- **Before retrying:** do not look for a better rule for dropping, and do not re-try parking
+  without first finding out which OTHER piece the parking breaks. Give `conjugateOfPiecePoly` an
   explicit EDGE LIST instead of a count with two conventions (`endNv = nv` or `nv-1`; edge `j` at
   `ineqs(j)` or `ineqs(j+1)`). It cannot be done in that routine alone — `j` indexes
   `getNormalConeEdgeQ`/`Q3`'s output and `getSubdiffVertexT2`/`T2Q`'s `subdE` simultaneously, so
