@@ -45,43 +45,15 @@ verify with zero findings.
   vertex list can no longer index off the end (the two seeded crash fixtures no longer crash).
 - `dropDegeneratePieces`: collapsed pieces (2 vertices, no arc, bounded) no longer reach assembly.
 
-### 2026-08-14 -- `maxQuaParTest` IS GREEN: 28 pass / 0 fail (from 25 / 1)
+### 2026-08-15 -- `maxQuaParTest` 29 / 0, fast bucket 204 / 0, `conjCPLQTest` 25 / 0
 
-Measured: fast bucket **202 / 0** (was 200 / 1), normal bucket **6 / 0**. Every arc-vs-arc red is
-closed. What it took is in `SUPPORT_MATRIX.md` 4.1 and `DECISIONS.md`; the short version is that
+`maxQuaPar` has NO open case: the seeded arc-vs-arc sweep is **18 exact / 0 wrong / 0 errored of
+18**, from 16 / 0 / 2 on 2026-08-13. Bugs 2 and 5 are fixed; bug 1 is 5 of 7 probe points, was 0 of
+7. Every arc-vs-arc red is closed. What it took is in `SUPPORT_MATRIX.md` 4.1 and `DECISIONS.md`; the short version is that
 **neither of the two earlier attempts at the last red failed for the reason it was thought to** --
 the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Still open, in the order they should be taken
-
-- [ ] **A piece that spans TWO sub-arcs of the same conic.** The only `maxQuaPar` case left, and it
-      is an ERROR (`maxQuaPar:internal`, an orphan half-edge), not a wrong answer. It was masked
-      until 2026-08-14 by the two-arc refusal upstream. The seeded sweep is otherwise
-      **17 exact / 0 wrong / 1 errored of 18** (was 16 / 0 / 2).
-      **DIAGNOSED -- do not re-derive it.** Reproducer: seeded shift `[-2.6434 -1.8066]` of the
-      two-curved fixture. The assembly error names a straight edge of piece 4 `src [1 6]` facing an
-      identical CURVED edge of piece 5 `src [2 6]` at distance 8e-16, which reads like a clip
-      dropping a conic. It is not. Measured, on the captured piece list:
-
-        piece 4 src [1 6] nv=5 curveAfter=5
-           V = (-2.960609,0.9606088) (-2.581582,0.581582) (-1.581582,1.581582) (-2,2)
-               (-2.744821,1.372827)
-
-      Its edge 5 is the arc `(-2.744821,1.372827)->(-2.960609,0.9606088)` and its edge 4 is
-      `(-2,2)->(-2.744821,1.372827)`. **Both lie on g1's parabola** -- the arc between g1 faces 1
-      and 2 was cut TWICE, at `(-2.744821,1.372827)` and at `(-2.960609,0.9606088)`, so this one
-      piece spans two consecutive sub-arcs of ONE conic. A piece has ONE curve slot, so the second
-      sub-arc is represented by its chord, and `matchHalfEdges` correctly refuses to pair a
-      straight half-edge with a curved one.
-      Note the halves of the neighbouring `src [2 6]` cell are BOTH correct (traced: each relabels
-      to `curveAfter=1` with a real conic), so `splitCell`'s crossed-arc restoration is not at
-      fault. This is the same limitation `insertPassthroughVertices` raises at `maxQuaPar.m:1077`,
-      reached by a path that does not go through that guard.
-      The fix is to SUBDIVIDE such a piece -- a chord between the two sub-arcs, the same
-      subdivide-never-widen move `splitTwoArcPiece` makes for two DIFFERENT conics -- rather than
-      to give a piece several curve slots. Design it before writing it: `splitTwoArcPiece` assumes
-      the two arcs are on different conics, and two sub-arcs of the SAME conic meeting at a shared
-      vertex is a different shape.
 
 - [x] **`MAXQP_ASSERT` is now ON in `maxQuaParTest`** (2026-08-15), at level 1, via a
       `TestMethodSetup` that restores the previous value on teardown. 28 / 0 with it on. Level 2
@@ -137,30 +109,23 @@ the tooling that judged them was itself broken, in two ways, and silently.
       output and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
       Start from the hand-built lens in the probe -- it needs no pipeline and runs in seconds.
 
-- [ ] **BUG 2 -- cPLQ Step 3 over-claims on the 4-cone fan.** A wrong answer, never returned
-      (`assertStep3MatchesPieces` catches it). At `s = (-3,-2.4)` the assembly gives `5.130` where
-      the per-piece max gives `4.500`.
-      **LOCALISED 2026-08-15 -- measured, and two suspects cleared.**
-        * **Step 2 is RIGHT.** Each primal piece's own conjugate has 4 cells with the correct
-          quadrant constraints; face 4's cell 4 is `s1^2/4 + s2^2/2` on exactly `{-s1 <= 0,
-          s2 <= 0}`, and the four per-piece values at `(-3,-2.4)` are `0, 4.5, 3.69, 2.88`, max
-          `4.5` = the truth. So the defect is entirely in the Step 3 ASSEMBLY.
-        * **The offending assembled cell, exactly:** `f = s1^2/4 + s2^2/2` on
-          `{s2 <= 0, s2^2/2 - s1^2 <= 0, s1^2 - 2*s2^2 <= 0}`. The sign constraint `-s1 <= 0` is
-          GONE, and the two quadratics that replaced it are **blind to the sign of `s1`** -- the
-          region is symmetric under `s1 -> -s1` and so claims the mirror wedge. Confirmed
-          directly: without `-s1 <= 0` the point `(-3,-2.4)` is feasible for that region; with it,
-          it is not.
-        * **`region.redundantSubset` is EXONERATED.** Asked directly about
-          `{-s1, s2, s2^2/2 - s1^2, s1^2 - 2*s2^2}` it certifies NOTHING as redundant, which is
-          correct.
-      **Next:** `functionNDomain.mergeL` groups cells by EQUAL function and unions their regions
-      via `region.merge`, which works by deleting the shared facet. Two cells carrying
-      `s1^2/4 + s2^2/2` on opposite sides of `s1 = 0` would merge into exactly the symmetric
-      region observed. So either the merge is unioning two cells whose union is not convex
-      (`region.unionIsExact` should refuse), or a mirror cell is being given that quadratic
-      wrongly before the merge. Check which by dumping the cells that carry it just before
-      `mergeL`. Pinned by `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`.
+- [x] **BUG 2 -- FIXED 2026-08-15.** `region.removeTangent` built a TANGENT LINE to a quadratic
+      constraint at a vertex where that quadratic's GRADIENT VANISHES -- the apex of a cone, which
+      is exactly where the Step 3 split conics of an unbounded fan meet. There is no tangent line
+      there, every direction is tangent, and whatever it computed was meaningless; it then deleted
+      a constraint matching that "tangent". On the 4-cone fan it deleted `-s1 <= 0` from the cell
+      carrying `s1^2/4 + s2^2/2`, leaving only `{s2 <= 0, s2^2/2 - s1^2 <= 0, s1^2 - 2*s2^2 <= 0}`
+      -- two constraints BLIND TO THE SIGN of `s1` -- so the region became symmetric under
+      `s1 -> -s1` and claimed the mirror wedge. `f*(-3,-2.4)` is now **4.5**, the truth; it was
+      5.130. `conjCPLQTest` 25 / 0.
+      This is the SIBLING of the 2026-08-02 fix: `simplifyUnboundedRegion` fell into the same trap
+      on the same input, and `region.witnessAwayFrom` was written for it. One input, one trap, two
+      routines -- **a vanishing gradient at a cone's apex is a recurring failure mode here.**
+      Cleared on the way, so nobody re-checks them: `redundantSubset` (certifies nothing there,
+      correctly) and `simplifyUnboundedRegion` (leaves the constraint alone).
+      `step3DropsCellsOnSomeUnboundedAssemblies` asserted the GATE firing; it no longer does, so
+      that test is renamed `step3UnboundedAssemblyAgreesWithItsOwnPieces` and now pins what the
+      gate protects.
 
 - [ ] **BUGS 3 and 4 -- a curved convex envelope over an UNBOUNDED face.** A gap, refused loudly.
       `convEnvUnbounded` handles only an AFFINE envelope, and both fixtures have envelopes that are
