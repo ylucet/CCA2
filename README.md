@@ -33,14 +33,18 @@ branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classif
 
 **Alpha — not yet released.** The API is still changing; there is no tagged version.
 
-Test suite: **262 passed / 1 failed** across 22 suites — the 17 CCA2 suites (`*Test.m`) are 187 / 0,
-and the single failure is `testRegion/testCreation` in the vendored cPLQ suites, a longstanding
-toolbox-compatibility issue unrelated to the conjugate pipeline.
+Test suite (measured 2026-08-15): **324 passed / 1 failed** across 26 suites — fast bucket 204 / 0,
+normal 6 / 0, slow 114 / 1. The single failure is
+`biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, left failing deliberately: it
+pins the one open defect in `SUPPORT_MATRIX.md` §7 and its comment carries the traced mechanism.
+Run everything with `bash .claude/suite.sh` (or `--fast` / `--normal` / `--slow`).
 
 Before depending on CCA2, read `SUPPORT_MATRIX.md` §8 — the summary of what actually blocks a
 general release. The largest gaps today: `partialConj` is unimplemented for every engine; the
-`'pqp'` and `'graph'` conjugate engines do not exist; unbounded multi-face domains error; and
-`conj` of a triangle whose envelope splits into 4 faces stops in cPLQ's Step 3.
+`'pqp'` and `'graph'` conjugate engines do not exist; and `RatPol.conj`/`biconj`/`add` are
+missing. **Unbounded multi-face domains no longer error** — that blocker closed on 2026-08-15,
+when Step 3's cross-piece maximum and Step 1's curved envelope over an unbounded face were both
+fixed.
 
 ---
 
