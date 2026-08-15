@@ -59,7 +59,7 @@ on that same input**; §8.2(e) records `simplifyUnboundedRegion` doing it, fixed
    half-strip — together with the pattern they share. Prove the general rule the way
    `convEnvUnbounded`'s header proves the affine case; do not ship a formula that merely matches
    the two fixtures.
-4. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
+3. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
    → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box → performance.
 
 ## How to work on the symbolic layer, learned the hard way
@@ -81,8 +81,8 @@ that the object exists before using it.
 
 ## Relevant files
 
-- `DECISIONS.md` — dead ends and refuted reasoning. Read before attacking bug 1 or 2; several
-  natural-looking approaches are recorded there as unsound.
+- `DECISIONS.md` — dead ends and refuted reasoning. Read before attacking bug 1 or bugs 3–4;
+  several natural-looking approaches are recorded there as unsound.
 - `TODO.md` — live action items, with the measurements for each.
 - `SUPPORT_MATRIX.md` §4.1–4.3 (arc-vs-arc, the verification tools, the covering proof), §7, §8.
 - `maxQuaPar.m` — `splitTwoArcPiece`, `newRaySign`, `pieceIsCurved` (read its header before
