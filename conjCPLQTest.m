@@ -446,46 +446,53 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             end
         end
 
-        function step3DropsCellsOnSomeUnboundedAssemblies(testCase)
-        % THE REMAINING BLOCKER, pinned. The SAME 4-cone geometry as above, differing only in
-        % which quadratic sits on which cone, makes cPLQ's cross-piece maximum disagree with its
-        % own per-piece conjugates. Still true, but the FAILURE HAS MOVED (2026-08-02) and the
-        % name of this test is now half right -- read this before working on it.
+        function step3UnboundedAssemblyAgreesWithItsOwnPieces(testCase)
+        % RENAMED 2026-08-15 from step3DropsCellsOnSomeUnboundedAssemblies, whose assertion was
+        % `verifyError(..., 'PLQ:conjCPLQ:cplqFailed')` -- it pinned the GATE firing on this
+        % input. The defect the gate was catching is FIXED, so the gate no longer fires and the
+        % old assertion is now backwards. What this pins instead is the property the gate exists
+        % to protect: the assembled cross-piece maximum agrees with the pointwise max of the
+        % per-piece conjugates -- the same f*, computed the other way, which is exactly what
+        % conjCPLQ's own assertStep3MatchesPieces checks before returning.
         %
-        % WAS: the assembled maximum kept only 4 of the 16 cells, LOSING face 1's s_2^2/2 cell on
-        % {s1<=0, s2>=0}, so f*(-0.5,2) came back 1.125 for a truth of 2. Cause: splitting that
-        % quadrant on s2^2/2 = s1^2/2 + s2^2/4 produced the half {s1<=0, s2>=0, s1^2/2-s2^2/4<=0}
-        % -- a genuine 2-D cone containing (-0.5,2), (-0.1,3), (-1,4) -- and
-        % region.simplifyUnboundedRegion declared it EMPTY, because it decides that from probe
-        % directions built out of constraint SLOPES at a vertex and the split conic's gradient
-        % vanishes at exactly that vertex. Fixed by region.witnessAwayFrom, which refutes an
-        % emptiness verdict with an actual feasible point (sound: an empty region has none).
+        % THE TWO DEFECTS THIS INPUT FOUND, both now closed, both worth keeping:
         %
-        % IS: 8 cells assemble and f*(-0.5,2) is 2, correct, along with 7 other probes. What
-        % assertStep3MatchesPieces now catches is the OPPOSITE error at a different point --
-        % s = (-3,-2.4), where the assembly gives 5.130 and the per-piece max gives 4.500. The
-        % per-piece value is the right one (by hand: the four cone suprema are 0, 4.5, 3.69 and
-        % 2.88). 5.13 = s1^2/4 + s2^2/2 there, which is face 4's cell -- and face 4's cell should
-        % live on {s1>=0, s2<=0}, so a region is claiming territory across s1 = 0. That is an
-        % OVER-claim, not a drop; the next session should start from which region grew.
+        % (1) A DROP, fixed 2026-08-02. The assembled maximum kept only 4 of the 16 cells, losing
+        % face 1's s_2^2/2 cell on {s1<=0, s2>=0}, so f*(-0.5,2) came back 1.125 for a truth of 2.
+        % region.simplifyUnboundedRegion declared a genuine 2-D cone EMPTY, because it decides
+        % that from probe directions built out of constraint SLOPES at a vertex and the split
+        % conic's gradient VANISHES at exactly that vertex. Fixed by region.witnessAwayFrom.
         %
-        % The defect is DATA-DEPENDENT, not universal, which is exactly why the cross-check
-        % matters: without it Step 3 returns plausible numbers on the cases it gets wrong.
-        % assertStep3MatchesPieces compares the assembled maximum against the pointwise max of
-        % the per-piece conjugates -- the same f*, computed the other way.
+        % (2) An OVER-CLAIM, fixed 2026-08-15, and it is the SAME trap one level over. At
+        % s = (-3,-2.4) the assembly gave 5.130 where the per-piece max gives 4.500 (right: the
+        % four cone suprema are 0, 4.5, 3.69, 2.88). The cell carrying s1^2/4 + s2^2/2 had lost
+        % its -s1 <= 0 and kept only {s2 <= 0, s2^2/2 - s1^2 <= 0, s1^2 - 2*s2^2 <= 0} -- two
+        % constraints BLIND TO THE SIGN of s1, so the region was symmetric under s1 -> -s1 and
+        % claimed the mirror wedge. region.removeTangent deleted that constraint after building a
+        % "tangent" to a quadratic AT ITS OWN APEX, where the gradient vanishes and no tangent
+        % exists. Fixed by refusing to conclude anything from a vanishing gradient.
+        %
+        % Measure both halves here, since one input exhibited both.
             V = [0 0;-1 0; 0 1;1 0;0 -1];
             E = [1 2 0;1 3 0;1 4 0;1 5 0];
             f = [1 0 1 0 0 0;1 0 2 0 0 0;2 0 2 0 0 0;2 0 1 0 0 0];
             F = [3 2;2 1;1 4;4 3];
             p = QuaPol(V,E,f,F);
-            testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
+            g = p.conj('cplq');     % assertStep3MatchesPieces runs inside, and must not fire
+            testCase.verifyTrue(isa(g, 'RatPar'));
+            for sPt = {[-0.5 2], [-3 -2.4], [3 3], [-2 -3], [1 1]}
+                s = sPt{1};
+                testCase.verifyEqual(evalFunctionNDomain(g.fnd, s), ...
+                    conjCPLQTest.fourConeTruth(s), 'AbsTol', 1e-9, ...
+                    sprintf('4-cone fan at (%g,%g)', s(1), s(2)));
+            end
         end
 
         function step3UnboundedAssemblyMatchesTheTruth(testCase)
-        % The SAME 4-cone fan as step3DropsCellsOnSomeUnboundedAssemblies, pinned by VALUE instead
-        % of by the loud failure. That test asserts the gate fires; this one asserts what the gate
-        % is protecting -- and the two are meant to be resolved together: when the over-claim is
-        % fixed, this test passes and that one must be rewritten to expect a result.
+        % The SAME 4-cone fan as step3UnboundedAssemblyAgreesWithItsOwnPieces, pinned against a
+        % CLOSED-FORM truth rather than against the pipeline's own per-piece max. The two are
+        % complementary and were resolved together on 2026-08-15: that one says the assembly
+        % agrees with its own pieces, this one says both are right.
         %
         % Ground truth needs no pipeline. Each face carries q = a*x^2 + b*y^2 on one quadrant, and
         % for a cone C = {sigma1*x >= 0, sigma2*y >= 0} the sup separates:

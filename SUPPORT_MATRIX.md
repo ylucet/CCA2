@@ -743,7 +743,7 @@ Ordered by how likely a downstream caller is to hit it:
 
    Neither is ever returned: `conjCPLQ`'s `assertStep3MatchesPieces` is applied to Case C and
    raises `PLQ:conjCPLQ:cplqFailed`. Pinned by
-   `conjCPLQTest/step3DropsCellsOnSomeUnboundedAssemblies`, whose comment carries both halves.
+   `conjCPLQTest/step3UnboundedAssemblyAgreesWithItsOwnPieces`, whose comment carries both halves.
 
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).

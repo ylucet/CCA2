@@ -76,7 +76,17 @@ function h = biconjCPLQ(obj)
     % over the unit square given as TWO triangles: this route returns the McCormick envelope
     % max(0, x+y-1); the meshed route errors before producing anything.
     if obj.isDomBounded && ~hasCurvedEdge(obj)
-        h = conj(conjCPLQ(asQuaPol(obj), [], 'symbolic'), 'cplq');
+        g = conj(obj, 'cplq');
+        % ONLY when the mesh is CURVED. Taking the symbolic route unconditionally here was
+        % measured to be a regression: for a CONVEX q on this domain the numeric first conjugate
+        % is polyhedral, the second conjugation handles it, and forcing the symbolic form instead
+        % puts it back on the functionNDomain.getInterior chain that SUPPORT_MATRIX.md section 7
+        % records as broken -- conjCPLQTest/biconjCoverageByInputCase pins exactly that, and it
+        % went red. A curved mesh is the only thing the second conjugation cannot take.
+        if isMeshed(g) && hasCurvedEdge(g)
+            g = conjCPLQ(asQuaPol(obj), [], 'symbolic');
+        end
+        h = conj(g, 'cplq');
         return
     end
 

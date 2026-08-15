@@ -1194,7 +1194,7 @@ classdef region
         %     {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2}, whose only vertices (0,0) and (1,1) both
         %     lie on s1 = s2. One probe put s2 on the whole lens, so f*(0.66,0.18) came out 0.18
         %     for a truth of 0.66 -- wrong at 800 of 40000 grid points, and silent.
-        %   * The 4-cone fan of conjCPLQTest/step3DropsCellsOnSomeUnboundedAssemblies. On the
+        %   * The 4-cone fan of conjCPLQTest/step3UnboundedAssemblyAgreesWithItsOwnPieces. On the
         %     quadrant {s1<=0, s2>=0} the candidates are s2^2/2 and s1^2/2 + s2^2/4, whose
         %     difference s2^2/4 - s1^2/2 changes sign inside; the cone's single vertex is the
         %     origin, where both vanish, and the only feasible probe (-0.1, 0) reported the
@@ -1965,9 +1965,28 @@ classdef region
                 if ~obj.ineqs(i).subsF(vars,[px(j),py(j)]).isZero  
                   continue
                 end
-                %obj.ineqs(i)
-                % px(j)
-                % py(j)
+                % A TANGENT NEEDS A GRADIENT. At a vertex where this quadratic's gradient
+                % VANISHES there is no tangent line -- every direction is tangent -- and whatever
+                % `tangent` returns there is meaningless. Concluding from it deletes constraints
+                % the region actually needs.
+                %
+                % That is not a corner case: it is the apex of a cone, which is exactly where the
+                % Step 3 split conics of an unbounded fan meet. SUPPORT_MATRIX.md 8.2(e) records
+                % the same trap in simplifyUnboundedRegion -- "the split conic's gradient vanishes
+                % at exactly that vertex, so those directions are meaningless" -- fixed there by
+                % region.witnessAwayFrom. This is its sibling.
+                %
+                % MEASURED, the 4-cone fan of conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth:
+                % the Step 3 cell {s2 <= 0, s2^2/2 - s1^2 <= 0, -s1 <= 0, s1^2 - 2*s2^2 <= 0} has
+                % both quadratics' gradients vanishing at its own apex, the origin. removeTangent
+                % deleted -s1 <= 0 there. The two quadratics are BLIND TO THE SIGN of s1 -- they
+                % constrain |s1| -- so the region became symmetric under s1 -> -s1 and claimed the
+                % mirror wedge: f*(-3,-2.4) came back 5.130 for a truth of 4.500.
+                gI = [obj.ineqs(i).dfdx(vars(1)).subsF(vars,[px(j),py(j)]).f, ...
+                      obj.ineqs(i).dfdx(vars(2)).subsF(vars,[px(j),py(j)]).f];
+                if isAlways(gI(1) == 0) && isAlways(gI(2) == 0)
+                    continue
+                end
                 tangent = obj.ineqs(i).tangent(px(j),py(j));
                 %tangent
                 tangent = tangent.normalize1;
