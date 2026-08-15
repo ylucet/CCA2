@@ -1,4 +1,4 @@
-function g = conjCPLQ(obj, idx)
+function g = conjCPLQ(obj, idx, route)
 % conjCPLQ  Fenchel conjugate via the symbolic per-piece ('cplq') engine.
 %
 % objective: Compute the Legendre-Fenchel conjugate f*(s) = sup_x <s,x> - f(x) of a 2D
@@ -53,6 +53,23 @@ function g = conjCPLQ(obj, idx)
         error('PLQ:conjCPLQ:partialNotImplemented', ...
             'Partial conjugate (''cplq'' engine) is not implemented yet.');
     end
+    % ROUTE. 'auto' (the default, and what every caller but one uses) tries the numeric path first
+    % for a bounded domain and falls back to Case C's symbolic pipeline. 'symbolic' skips straight
+    % to Case C.
+    %
+    % The two produce the SAME function in different representations, so choosing between them is
+    % a representation decision, not a mathematical one -- and biconjCPLQ has to make it. Since
+    % 2026-08-13 the numeric path completes on a bounded multi-face domain and returns a MESHED
+    % QuaPar with parabolic edges, which is what the SCIP bridge wants; but f** = (f*)* then hands
+    % that curved QuaPar to a second conjugation, and quaPolToPlq requires a polyhedral domain, so
+    % biconj died at quaPolToPlq:curvedEdge on every such input. The symbolic form conjugates
+    % again through cPLQ's own machinery, which handles a curved domain. So conj keeps returning
+    % the mesh and biconj asks for the symbolic form on purpose.
+    if nargin < 3 || isempty(route), route = 'auto'; end
+    if ~ismember(lower(route), {'auto','symbolic'})
+        error('PLQ:conjCPLQ:route', 'route must be ''auto'' or ''symbolic''; got ''%s''.', route);
+    end
+    forceSymbolic = strcmpi(route, 'symbolic');
     obj.assertOperable();   % degree<=2 (cubic rejected; cubic is for isConvex only)
 
     % ---- Case A: full-domain quadratic (no vertices, single face) -----------------------
@@ -104,7 +121,7 @@ function g = conjCPLQ(obj, idx)
     % all come back exact -- 4.4e-16 against an EXACT QP reference, not a sampled one. (A
     % sampled reference reported ~3e-5 on the convex cases; refining it 160 -> 320 -> 640 drove
     % that to 1e-6, which is how it was identified as the reference's error, not CCA2's.)
-    if obj.isDomBounded
+    if obj.isDomBounded && ~forceSymbolic
         try
             g = conjBoundedPolygon(obj);
             return

@@ -63,6 +63,23 @@ function h = biconjCPLQ(obj)
         return
     end
 
+    % ---- A BOUNDED multi-face domain: first conjugate in SYMBOLIC form, deliberately ---------
+    % f** = (f*)*, and f* is the same function whichever representation conjCPLQ returns -- so
+    % this is a representation choice, not a mathematical one. It has to be made because the two
+    % representations are not equally conjugable: since 2026-08-13 the numeric path completes here
+    % and returns a MESHED QuaPar with parabolic edges (which is what the SCIP bridge wants from
+    % conj), and handing that to a second conjugation dies at quaPolToPlq:curvedEdge, because
+    % quaPolToPlq requires a polyhedral domain. The symbolic QuaParCPLQ conjugates again through
+    % cPLQ's own machinery, which handles a curved domain.
+    %
+    % So conj keeps returning the mesh and biconj asks for the symbolic form. Measured on f = x*y
+    % over the unit square given as TWO triangles: this route returns the McCormick envelope
+    % max(0, x+y-1); the meshed route errors before producing anything.
+    if obj.isDomBounded && ~hasCurvedEdge(obj)
+        h = conj(conjCPLQ(asQuaPol(obj), [], 'symbolic'), 'cplq');
+        return
+    end
+
     % ---- Cases A and C (and every unsupported shape): unchanged double conjugation ----------
     h = conj(conj(obj, 'cplq'), 'cplq');
 end

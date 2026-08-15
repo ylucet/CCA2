@@ -4194,7 +4194,20 @@ classdef region
                 % end
                 NC(j,1) = eq.f;
 
-                slope = obj.slopeIneq(j+1,[obj.vx(j),obj.vy(j)]);
+                % THE SECOND CONSTRAINT AT THIS VERTEX, WRAPPED. This routine's convention is
+                % that vertex j lies on constraints j and j+1, which holds for the UNBOUNDED
+                % layout conjugateOfPiecePoly builds (slot 1 reserved for the ray, so there are
+                % nv+1 slots for nv vertices). On a BOUNDED region there are exactly nv slots and
+                % the last vertex's second constraint is slot 1, not slot nv+1 -- indexing it
+                % unwrapped raised MATLAB:badsubscript, which is why the only caller used to send
+                % every bounded region to the POLYHEDRAL getNormalConeVertex instead. That is
+                % wrong for a bounded region with a curved edge: the polyhedral routine builds the
+                % cone from the CHORD between vertices, and the chord is not the boundary there.
+                % Wrapping is a strict generalisation -- for nIn = nv+1 and j <= nv it is exactly
+                % j+1, so no previously-working input changes.
+                nIn = size(obj.ineqs,2);
+                jNext = mod(j, nIn) + 1;
+                slope = obj.slopeIneq(jNext,[obj.vx(j),obj.vy(j)]);
                 pslope = -1/slope;
                 if pslope == -inf
                     pslope = inf;
@@ -4207,7 +4220,7 @@ classdef region
                 end
                 eq = symbolicFunction(eq);
                 if obj.nv > 1
-                k = j+1;
+                k = jNext;
                 if k >obj.nv
                     % if size(vs,2) == 1 & isAlways(vs(1) == 's_2')
                     %   py = obj.vy(j) - 0.1;
@@ -4218,7 +4231,7 @@ classdef region
                     %   end
                     % else
                     %   px = obj.vx(j) - 0.1;
-                    %   ey = subs(obj.ineqs(j+1).f,obj.vars(1),px);
+                    %   ey = subs(obj.ineqs(jNext).f,obj.vars(1),px);
                     %   py = solve(ey,obj.vars(2));
                     %   if ~obj.ptFeasible(obj.vars,[px,py])
                     %     px = obj.vx(j) + 0.1;
@@ -4235,7 +4248,7 @@ classdef region
                     % end
 
 
-                   vs = obj.ineqs(j+1).getVars();
+                   vs = obj.ineqs(jNext).getVars();
                  
                    if size(vs,2) == 1 & isAlways(vs(1) == vars(2))
                       py = obj.vy(j);
@@ -4253,7 +4266,7 @@ classdef region
                       end
                    else
                       px = obj.vx(j) - 0.1;
-                      ey = subs(obj.ineqs(j+1).f,obj.vars(1),px);
+                      ey = subs(obj.ineqs(jNext).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % see the matching HISTORY comment above: reduce a possibly-multi-root py
                       % (quadratic-in-y ineqs(j+1)) to a single candidate before use.

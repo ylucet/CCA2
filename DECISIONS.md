@@ -107,11 +107,18 @@ attempt before measurement refuted it. Corrected shapes below; neither is fixed.
   vertices and the `numel(chain) < 3` guard skips both. The `nv == 3` fallback that handles the
   shared-vertex case (cut from the shared vertex to the midpoint of the opposite straight edge)
   does not apply at `nv = 5`.
-- **The fix, not yet written:** generalise that shared-vertex case to `nv >= 4` — cut from the
-  shared vertex S to a NON-ADJACENT vertex. On this piece S = V5 and the diagonal V5->V2 gives
-  chains {2,3,4,5} (carrying edge 4, the inherited arc) and {5,1,2} (carrying edge 5, the split
-  curve): one arc each, which is the invariant. Guard it with `insideStraightHull` exactly as the
-  existing candidates are, and fall through unsplit when no diagonal is interior.
+- **FIXED 2026-08-15, exactly as prescribed:** the shared-vertex case is generalised to `nv >= 4`
+  with the ordinary diagonal from S to a NON-ADJACENT vertex. On this piece S = V5 and `V5 -> V2`
+  gives chains {2,3,4,5} (carrying edge 4, the inherited arc) and {5,1,2} (carrying edge 5, the
+  split curve): one arc each. Guarded by `insideStraightHull` like the existing candidates, and
+  each half passed through `splitAtReflexVertex`. **Seeded sweep 17 exact / 0 wrong / 1 errored →
+  18 / 0 / 0**; `maxQuaParTest` 29 / 0; fast bucket 203 / 0. Pinned by
+  `arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal`.
+- **Worth keeping:** the symptom pointed at the wrong stage twice. A straight edge facing an
+  identical CURVED one at 8e-16 reads as a clip dropping a conic; the actual cause was a
+  subdivision that declined to cut and announced it only by leaving an arc flattened. When a piece
+  reaches assembly with an edge its neighbour calls curved, ask which producer returned it UNSPLIT
+  before looking at the clip.
 - Do NOT write a same-conic sub-arc splitter; that shape has never been observed, and the code for
   it was written and removed on 2026-08-15.
 

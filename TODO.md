@@ -106,6 +106,26 @@ the tooling that judged them was itself broken, in two ways, and silently.
       first** (4 cells for a bounded 2-vertex region with one curved edge, checked on that
       hand-built region, which needs no pipeline); the numbering fix is written up in
       `DECISIONS.md` and can be re-applied after.
+      **PROGRESS 2026-08-15 (uncommitted at the time of writing): 5 of 7 probe points now right,
+      was 0 of 7.** Three defects fixed, in the order they had to be:
+        1. `spreadCollidingEdges` -- give a lens's two edges distinct numbers instead of letting
+           the scatter destroy one. Scoped to fire only on that signature.
+        2. `getNormalConeVertexQ` indexed its second constraint as `j+1` UNWRAPPED, so it raised
+           `badsubscript` on any BOUNDED region -- which is why the only caller sent every bounded
+           region to the POLYHEDRAL `getNormalConeVertex`, whose cones come from the CHORD and are
+           wrong for a curved edge. Wrapped cyclically (identical to `j+1` for the unbounded
+           layout, so nothing that worked changes), and the dispatch now asks whether a constraint
+           is quadratic rather than comparing a constraint COUNT to the vertex count.
+        3. `biconj` on a bounded multi-face domain takes its FIRST conjugate in symbolic form
+           (`conjCPLQ(..., 'symbolic')`), because the second conjugation cannot take the curved
+           MESH `conj` now returns and died at `quaPolToPlq:curvedEdge`.
+      Unit level: the half-lens conjugates to 3 cells matching a brute-force sup at all 10 probe
+      points (2 identical wrong cells before).
+      **REMAINING:** `f**` is exact on `{x+y <= 1}` and `+Inf` on `{x+y > 1}` -- a hole in the
+      DOMAIN, not a wrong value. Since `f**`'s domain is the INTERSECTION of the per-piece
+      conjugate domains, one piece of `f*` still conjugates onto too small a set. A piece carrying
+      `s1` whose region recedes along `(1,1)` would produce exactly `{x+y <= 1}`, so look for an
+      over-extended or mis-bounded piece there first.
 
 - [ ] **BUG 2 -- cPLQ Step 3 over-claims on the 4-cone fan.** A wrong answer, never returned
       (`assertStep3MatchesPieces` catches it). At `s = (-3,-2.4)` the assembly gives `5.130` where
@@ -128,19 +148,22 @@ the tooling that judged them was itself broken, in two ways, and silently.
       `unboundedFaceTest/nonconvexQuadraticWithACurvedEnvelopeOverAHalfStripIsExact` and
       `unboundedFaceTest/curvedEnvelopeOverAWedgeIsExact`.
 
-- [ ] **BUG 5 -- `splitTwoArcPiece` finds no cut when the two arcs are ADJACENT.** (The
-      "two sub-arcs of the same conic" description this item used to carry was REFUTED by
-      measurement on 2026-08-15 -- see `DECISIONS.md`. The two arcs are on DIFFERENT conics.)
-      LOCATED, and the fix is one case: on seeded shift `[-2.6434 -1.8066]`, cell `src [1 6]`
-      splits into a half with `nv=5`, the inherited arc at edge 4 and the splitting curve at edge
-      5 -- **adjacent, sharing vertex V5**. `splitTwoArcPiece`'s two candidate chords are
-      `arcPos+1 -> c+1` and `arcPos -> c`, which for adjacent arcs ARE those two edges, so both
-      chains come out with 2 vertices and the `numel(chain) < 3` guard skips them; the `nv == 3`
-      shared-vertex fallback does not apply at `nv = 5`. The piece is returned unsplit with the
-      inherited arc flattened, and assembly reports it as an orphan three stages later.
-      Fix: generalise the shared-vertex case to `nv >= 4` -- cut from the shared vertex to a
-      NON-ADJACENT one. Here `V5 -> V2` gives chains {2,3,4,5} and {5,1,2}, one arc each. Guard it
-      with `insideStraightHull` like the existing candidates and fall through unsplit otherwise.
+- [x] **BUG 5 -- FIXED 2026-08-15.** `splitTwoArcPiece` found no cut when the two arcs are
+      ADJACENT: its two candidate chords join the arcs' facing endpoints, which for adjacent arcs
+      ARE the arcs' own edges, so both chains come out with two vertices, the `numel(chain) < 3`
+      guard skips them, and the piece was returned unsplit with one arc flattened to its chord.
+      The `nv == 3` shared-vertex fallback did not apply at `nv = 5`.
+      Generalised to `nv >= 4` with the ordinary DIAGONAL from the shared vertex to a non-adjacent
+      one -- the two arcs leave that vertex in opposite directions around the boundary, so any such
+      diagonal puts one arc in each half by construction. Same `insideStraightHull` guard as the
+      existing candidates, and each half goes through `splitAtReflexVertex`.
+      **Measured: the seeded sweep goes 17 exact / 0 wrong / 1 errored -> 18 / 0 / 0.**
+      `maxQuaParTest` 29 / 0, fast bucket 203 / 0. Pinned by
+      `arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal` -- by VALUE, and with its own test
+      because `arcVsArcMatchesGroundTruthOverRandomShifts` asserts `nWrong == 0` and would have
+      counted this input in `nErr`.
+      (The "two sub-arcs of the same conic" description this item used to carry was refuted by
+      measurement; `DECISIONS.md` records it.)
 
 
 - [x] **FIXED** `arcVsArcDoesNotCrashOnSeededQuadSplits` -- the last piece was a REFLEX vertex left by the

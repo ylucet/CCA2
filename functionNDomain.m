@@ -1141,6 +1141,25 @@ classdef functionNDomain
                     end
                 end
 
+                % (4) TWO GENUINE EDGES BETWEEN THE SAME TWO VERTICES. The three rules above all
+                % resolve a collision by DROPPING a constraint, which is right when the collision
+                % comes from a redundant or edge-less one. It is wrong when both constraints bound
+                % a real edge -- and that is exactly a LENS: one arc and its chord, or two arcs,
+                % joining the SAME pair of vertices. getEdgeNosInf numbers an edge by one of its
+                % endpoint VERTICES, so two edges on the same pair are indistinguishable to it and
+                % get the same number; the scatter below is last-write-wins, so one of them is then
+                % destroyed and the other stored twice.
+                %
+                % MEASURED on the half-lens {(s1+s2)^2 <= 4*s2, s2 <= s1} carrying s1 -- which is
+                % what f* of x*y over the unit square is made of: nv = 2, both constraints have
+                % both vertices on them, both get edgeNo 1, and the conjugate comes out as TWO
+                % IDENTICAL cells built from whichever constraint came last. Fed the arc first it
+                % is the conjugate of the CHORD, finite only on a strip.
+                %
+                % So spread them instead of dropping one: both are edges, they simply need
+                % distinct numbers.
+                [edgeNo, keepE] = functionNDomain.spreadCollidingEdges(d, edgeNo, keepE, nOn);
+
                 d.ineqs = d.ineqs(keepE);
                 edgeNo  = edgeNo(keepE);
                 d.ineqs(edgeNo) = d.ineqs;
@@ -1193,8 +1212,23 @@ classdef functionNDomain
                        end
                    end
                end
-               % fix this for quad
-               if size(d.ineqs,2) == d.nv
+               % WHICH NORMAL-CONE ROUTINE. getNormalConeVertex builds the cone at a vertex from
+               % the SLOPE OF THE CHORD to the next vertex (region.slope); getNormalConeVertexQ
+               % builds it from the slope of the CONSTRAINT ITSELF at that vertex
+               % (region.slopeIneq), i.e. the curve's own tangent. For a region with a parabolic
+               % edge only the second is right -- the chord is not the boundary there.
+               %
+               % The test used to be `size(d.ineqs,2) == d.nv`, a constraint COUNT standing in for
+               % "is this region unbounded", which is not the question. It fails exactly on a
+               % bounded region with a curved edge: the half-lens has nv = 2 and, once its two
+               % edges are given distinct numbers, exactly 2 constraints -- so the count sends a
+               % CURVED region to the polyhedral routine, its vertex cones come out wrong, and
+               % every vertex cell is dropped as empty. Ask about the constraints instead.
+               hasQuadCon = false;
+               for kq = 1:size(d.ineqs,2)
+                   if d.ineqs(kq).isQuad, hasQuadCon = true; break, end
+               end
+               if size(d.ineqs,2) == d.nv && ~hasQuadCon
                    NCV = d.getNormalConeVertex(x, y);
                else
                    NCV = d0.getNormalConeVertexQ(x, y);
@@ -1721,6 +1755,173 @@ classdef functionNDomain
      
 
      methods (Static)
+         function [edgeNo, keepE] = spreadCollidingEdges(d, edgeNo, keepE, nOn)
+         % Give two GENUINE edges that collided on one edge number distinct numbers, instead of
+         % letting conjugateOfPiecePoly's scatter destroy one. See the call site for the shape and
+         % the measurement.
+         %
+         % ONLY constraints with at least TWO of the region's vertices on them count as edges
+         % here. A constraint active at one vertex only is either a RAY of an unbounded region --
+         % which getEdgeNosInf already reserves slot 1 for, so it never collides -- or the
+         % edge-less kind the three rules above exist to drop. Leaving those alone is what keeps
+         % this from touching any piece the old code handled.
+         %
+         % THE NUMBER EACH GETS. getEdgeNosInf's convention is "edge j starts at vertex j", so two
+         % edges sharing vertices j1 and j2 want those two indices -- one traversed out of each.
+         % The group keeps the number it already has for its first member and the others take the
+         % index of another vertex they are actually on, so this can never invent an edge where
+         % the region has none.
+         %
+         % SCOPE. An extra is moved only to a number no surviving constraint already claims. If
+         % there is none, nothing changes and the old behaviour stands, so this can only ever add
+         % an edge that was being destroyed -- never remove or renumber one that was fine.
+             if isempty(edgeNo), return, end
+
+             % SCOPE. Everything below runs only when some edge number is claimed by two or more
+             % constraints that each have at least two of the region's vertices on them. That is
+             % the lens signature; nothing else reaches it, which is what keeps a change to
+             % vendored, index-fragile code away from pieces that were already right.
+             still = find(keepE(:))';
+             isLens = false;
+             for sIdx = unique(edgeNo(still))'
+                 g = still(edgeNo(still) == sIdx);
+                 if numel(g(nOn(g) >= 2)) >= 2, isLens = true; break, end
+             end
+             if ~isLens, return, end
+
+             % (i) Within a colliding group, drop any constraint whose curve between the shared
+             % vertices LEAVES the region: it meets the region only at those vertices and bounds
+             % no edge. On the half-lens that is the SECOND conic, which passes through both
+             % vertices and is redundant -- and which LP redundancy cannot see, because it is not
+             % linear.
+             for sIdx = unique(edgeNo(still))'
+                 g = still(edgeNo(still) == sIdx);
+                 g = g(nOn(g) >= 2);
+                 if numel(g) < 2, continue, end
+                 for k = g
+                     if keepE(k) && ~functionNDomain.boundsAnEdge(d, k, keepE)
+                         keepE(k) = false;
+                     end
+                 end
+             end
+
+             % (ii) The numbers the surviving edges need are the indices of the vertices they
+             % share, and on the pipeline's own lens those are held by constraints that bound NO
+             % edge of a bounded region -- one vertex is a touch, not an edge. Clear those out of
+             % the edge indexing so the real edges can have their slots. Deliberately NOT done
+             % when the region is unbounded, where a RAY edge is active at exactly one finite
+             % vertex and is load-bearing.
+             still = find(keepE(:))';
+             need = false;
+             for sIdx = unique(edgeNo(still))'
+                 g = still(edgeNo(still) == sIdx);
+                 if numel(g(nOn(g) >= 2)) >= 2, need = true; break, end
+             end
+             if need && functionNDomain.regionLooksBounded(d)
+                 for k = find(keepE(:))'
+                     if nOn(k) <= 1, keepE(k) = false; end
+                 end
+                 edges = find(keepE(:))';
+                 for t = 1:numel(edges)
+                     edgeNo(edges(t)) = t;
+                 end
+                 return
+             end
+
+             still = find(keepE(:))';
+             for sIdx = unique(edgeNo(still))'
+                 grp = still(edgeNo(still) == sIdx);
+                 grp = grp(nOn(grp) >= 2);
+                 if numel(grp) < 2, continue, end
+                 for gi = 2:numel(grp)
+                     k = grp(gi);
+                     [~, vxk, vyk] = d.vertexOfEdge(k);
+                     for t = 1:numel(vxk)
+                         cand = 0;
+                         for j = 1:d.nv
+                             if isAlways(d.vx(j) == vxk(t)) && isAlways(d.vy(j) == vyk(t))
+                                 cand = j; break
+                             end
+                         end
+                         if cand == 0 || cand == sIdx, continue, end
+                         if any(keepE(:) & edgeNo(:) == cand), continue, end   % already claimed
+                         edgeNo(k) = cand;
+                         break
+                     end
+                 end
+             end
+         end
+
+         function tf = boundsAnEdge(d, k, keepE)
+         % Does constraint k bound a genuine EDGE of d, or does it only touch the region at
+         % vertices? Decided from a point strictly BETWEEN two of its vertices, ON its own curve --
+         % the rule this repository keeps re-learning (QuaPar.chordCuts, pieceRecessionRays), and
+         % for the same reason: the shared vertices lie on every candidate at once and so say
+         % nothing. Anything undecidable is reported as a genuine edge, so this can only ever drop
+         % a constraint it has positive evidence against.
+             tf = true;
+             M = functionNDomain.pointBetweenOnCurve(d, k);
+             if isempty(M), return, end
+             for j = 1:numel(keepE)
+                 if j == k || ~keepE(j), continue, end
+                 try
+                     v = d.ineqs(j).subsF(d.vars, M);
+                     if isAlways(v.f > 0), tf = false; return, end
+                 catch
+                     return                      % undecidable: keep k
+                 end
+             end
+         end
+
+         function tf = regionLooksBounded(d)
+         % Bounded enough for the purpose above: every vertex finite and away from region's own
+         % infinity markers. Errs towards UNBOUNDED, which is the side that changes nothing.
+             tf = false;
+             try
+                 for j = 1:d.nv
+                     xj = double(d.vx(j)); yj = double(d.vy(j));
+                     if ~isfinite(xj) || ~isfinite(yj), return, end
+                     if max(abs([xj yj])) >= 0.9*double(intmax), return, end
+                 end
+                 tf = d.nv >= 2;
+             catch
+                 tf = false;
+             end
+         end
+
+         function M = pointBetweenOnCurve(d, k)
+         % A point ON {ineqs(k) = 0} strictly between two of the region's vertices that lie on it.
+         % Empty when there is no such point this can produce, which the caller reads as
+         % "undecidable".
+             M = [];
+             [nvk, vxk, vyk] = d.vertexOfEdge(k);
+             if nvk < 2, return, end
+             A = [vxk(1), vyk(1)];
+             B = [vxk(2), vyk(2)];
+             mid = (A + B)/2;
+             c = d.ineqs(k);
+             try
+                 if isAlways(c.subsF(d.vars, mid).f == 0)
+                     M = mid; return                 % straight edge: the chord IS the curve
+                 end
+             catch
+             end
+             try
+                 t = sym('t_pbc');
+                 dir = [-(B(2)-A(2)), B(1)-A(1)];    % perpendicular bisector of AB
+                 P = mid + t*dir;
+                 sol = solve(c.subsF(d.vars, P).f == 0, t, 'Real', true);
+                 if isempty(sol), return, end
+                 sol = double(sol);
+                 sol = sol(isfinite(sol));
+                 if isempty(sol), return, end
+                 [~, i0] = min(abs(sol));            % the root nearest the chord
+                 M = sym(double(mid) + sol(i0)*double(dir));
+             catch
+                 M = [];
+             end
+         end
+
          function objR = maxOfList(groups)
          % THE pointwise maximum of several piecewise functions. `groups` is a cell array; each
          % entry is a functionNDomain array whose cells are disjoint (one piecewise function).

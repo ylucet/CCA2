@@ -36,7 +36,36 @@ The five bugs this run is for. Starting state, all pre-existing:
 | 3–4 | curved convex envelope over an unbounded face | gap, refused |
 | 5 | a piece spanning two sub-arcs of the same conic | error |
 
-- **Bugs 1–5 — DIAGNOSED, none fixed.** Two of the five descriptions on record turned out to be
+- **BUG 5 — FIXED (`db4a188`).** `splitTwoArcPiece` found no cut when the two arcs are ADJACENT:
+  its two candidate chords join the arcs' facing endpoints, which for arcs sharing a vertex ARE
+  the arcs' own edges, so both chains came out too short and the piece was returned unsplit with
+  one arc flattened to its chord. Generalised the `nv == 3` shared-vertex fallback to `nv >= 4`
+  with the ordinary diagonal to a non-adjacent vertex. **The seeded sweep goes 17 exact / 0 wrong /
+  1 errored → 18 / 0 / 0**; `maxQuaParTest` 29 / 0; fast bucket 204 / 0. Pinned by
+  `arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal`, which exists because the sweep test
+  asserts `nWrong == 0` and would have counted this input in `nErr`. **`maxQuaPar` now has no open
+  case.**
+- **BUG 1 — three defects found and fixed, 5 of 7 probe points now right (was 0 of 7); not
+  finished.** Uncommitted at the time of writing. In order:
+  1. `getEdgeNosInf` numbers an edge by an endpoint VERTEX, so a lens's two edges get one number
+     and the last-write-wins scatter destroys one. `spreadCollidingEdges` gives them distinct
+     numbers, scoped to fire only on that signature.
+  2. `getNormalConeVertexQ` — the routine that builds a vertex cone from the CONSTRAINT's own
+     tangent rather than from the chord — indexed its second constraint as `j+1` unwrapped, so it
+     raised `badsubscript` on any BOUNDED region and the only caller therefore sent every bounded
+     region to the polyhedral routine. Wrapped cyclically (a strict generalisation: for the
+     unbounded layout it is exactly `j+1`), and the dispatch now asks whether a constraint is
+     quadratic instead of comparing a constraint COUNT to the vertex count.
+  3. `biconj` for a bounded multi-face domain now takes its FIRST conjugate in symbolic form on
+     purpose (`conjCPLQ(..., 'symbolic')`). `conj` keeps returning the mesh the SCIP bridge wants;
+     but the second conjugation cannot take a curved mesh, and died at `quaPolToPlq:curvedEdge`.
+  **Measured at unit level:** the half-lens now conjugates to 3 cells that match a brute-force sup
+  at all 10 probe points (it produced 2 identical wrong cells before).
+  **What is left:** `f**` is exact on `{x+y ≤ 1}` and `+Inf` on `{x+y > 1}` — a hole in the
+  DOMAIN, not a wrong value. `f**`'s domain is the intersection of the per-piece conjugate
+  domains, so one piece of `f*` still conjugates onto too small a set.
+- **Bugs 2–4 — not started / re-scoped.**
+  Original assessment of all five: Two of the five descriptions on record turned out to be
   **wrong about the cause**, and each cost an attempt before measurement refuted it. Every fix
   attempted was reverted; the tree is exactly the housekeeping commit plus documentation.
 
