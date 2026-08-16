@@ -1391,12 +1391,32 @@ classdef functionNDomain
                        c1 = coeffs(eq1,obj.d.vars(1));
                        c2 = coeffs(eq2,obj.d.vars(1));
 
-                       if size(c1,2) == 2
+                       % ELIMINATE vars(1) BETWEEN eq1 AND eq2. coeffs returns [const, slope]
+                       % when the expression depends on vars(1) and just [const] when it does
+                       % not, so the two sizes must be tested SEPARATELY. This tested only
+                       % size(c1,2) and then indexed c2(2), raising MATLAB:badsubscript for any
+                       % f with an s1^2 term but no s1*s2 term -- eq1 = x - s1 has two
+                       % coefficients, eq2 = y - <no s1> has one. Same "index used outside the
+                       % guard that established it" shape as region.probeVertexIndex's case.
+                       %
+                       % When only ONE of the two depends on vars(1) there is nothing to
+                       % eliminate: the other equation is already free of it and IS the
+                       % relation, which is what the elimination would have produced. When
+                       % NEITHER does, the expression below is identically zero -- no extra cut,
+                       % which is the right answer for an affine f (constant gradient, so the
+                       % edge cell needs no interior side) and is what every case that reaches
+                       % here today relies on.
+                       n1 = size(c1,2);
+                       n2 = size(c2,2);
+                       if n1 == 2 && n2 == 2
                            ineq = c2(2)*eq1 - c1(2)*eq2;
+                       elseif n1 == 2
+                           ineq = eq2;
+                       elseif n2 == 2
+                           ineq = eq1;
                        else
                            ineq = c2*eq1 - c1*eq2;
                        end
-                       %ineq = c2(2)*eq1 - c1(2)*eq2;
 
                     end
                 %else
@@ -1872,10 +1892,11 @@ classdef functionNDomain
              % without it, exactly the other way round. Both are 5 of 7, and only one of them is
              % sound, so the drop is out.
              % Deciding boundedness correctly does NOT rescue it -- the harmed piece is genuinely
-             % bounded too. What would rescue it is giving this routine an explicit EDGE LIST
-             % instead of a count with two conventions, which has to be done in step with
-             % getNormalConeEdgeQ/Q3 and getSubdiffVertexT2/T2Q, since `j` indexes all of them at
-             % once. That is the remaining work; see TODO.md.
+             % bounded too. And it is not needed: what a lens actually needs is an explicit EDGE
+             % LIST rather than a slot convention, which conjugateOfPiecePoly now derives when
+             % this routine leaves a collision unresolved (functionNDomain.edgeIndexList). So no
+             % constraint is dropped, and the slot the two edges were fighting over stops
+             % mattering.
 
              still = find(keepE(:))';
              for sIdx = unique(edgeNo(still))'
@@ -1933,14 +1954,17 @@ classdef functionNDomain
              if m < 1
                  return
              end
-             if wasBounded
-                 nE = nv;
-             else
-                 nE = nv - 1;
-             end
-             if nE < 1
+             % BOUNDED ONLY. The list is consumed by getNormalConeVertexQ, which walks all nv
+             % vertices and asks for the edge leaving each one -- so it needs a CLOSED cycle,
+             % nE = nv. An unbounded region has nv-1 edges between its finite vertices and two
+             % rays, the first vertex has no predecessor edge, and there is no entry for the
+             % caller to look up; indexing eIdx(nv) there would run off the end. Unbounded lenses
+             % are not a shape the pipeline has produced -- a lens is bounded by construction --
+             % so refuse rather than invent a convention for one.
+             if ~wasBounded
                  return
              end
+             nE = nv;
              % today's convention, kept as the preferred answer wherever it is still valid
              if m == nv
                  prefer = 1:nv;

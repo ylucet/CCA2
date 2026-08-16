@@ -4138,9 +4138,14 @@ classdef region
             %disp('normalConeQ')
             vars = obj.vars;
              for j = 1: obj.nv
+                % WHICH EDGE IS "THE FIRST CONSTRAINT AT VERTEX j". This routine's own probe
+                % points settle it: the first half probes at vertex j-1 and the second at vertex
+                % j+1, so the first half is the edge ARRIVING at vertex j and the second the edge
+                % LEAVING it. In eIdx's convention edge e runs from vertex e to vertex e+1, so the
+                % arriving edge is e = j-1 and the leaving edge is e = j.
                 cj = j;
                 if ~isempty(eIdx)
-                    cj = eIdx(j);
+                    cj = eIdx(mod(j-2, obj.nv) + 1);
                 end
                 slope = obj.slopeIneq(cj,[obj.vx(j),obj.vy(j)]);
                 pslope = -1/slope;
@@ -4283,10 +4288,10 @@ classdef region
                 jNext = mod(j, nIn) + 1;
                 cNext = jNext;
                 if ~isempty(eIdx)
-                    % With a list, "the next constraint" means the next EDGE -- vertex j to
-                    % vertex j+1 round the cycle -- and its constraint comes from the list.
+                    % The edge LEAVING vertex j, which in eIdx's convention is edge j itself;
+                    % jNext stays what the probe below wants, the next VERTEX.
                     jNext = mod(j, obj.nv) + 1;
-                    cNext = eIdx(jNext);
+                    cNext = eIdx(j);
                 end
                 slope = obj.slopeIneq(cNext,[obj.vx(j),obj.vy(j)]);
                 pslope = -1/slope;
