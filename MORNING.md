@@ -7,10 +7,14 @@ stop after three failures, do not wait for input.
 
 ## Headline
 
-**BUG 1 IS FIXED, and with it the repository has NO failing test.**
-`biconjugateTest` **7 / 0** — including `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, which had
-been the single red for weeks and was marked BLOCKED after four attempts. Fast bucket 204 / 0,
-normal bucket 8 / 0.
+**BUG 1 IS FIXED, and with it the repository has NO failing test: 327 pass / 0 fail** across all
+26 suites — fast 204 / 0, normal 8 / 0, slow **115 / 0**. `biconjugateTest` is 7 / 0, including
+`biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, which had been the single red for weeks and was
+marked BLOCKED after four attempts.
+
+Confirmed independently: `checkBiconjDomainCoverage` re-measures the two-face box — the row that
+read **WRONG** — as **OK with error 0**, against a ground truth that owes nothing to the conjugate
+pipeline (the lower convex hull of the sampled graph).
 
 The four earlier attempts all failed for one reason, and stating it is the fix:
 
@@ -68,9 +72,9 @@ The four earlier attempts all failed for one reason, and stating it is the fix:
 
 ## What is broken
 
-**Nothing that has a test.** Fast 204 / 0, normal 8 / 0, slow bucket green so far
-(`biconjCPLQTest` 10 / 0, `biconjugateTest` 7 / 0; the remaining suites were still running when
-this was written — see the final section).
+**Nothing that has a test.** Every suite is green: `biconjCPLQTest` 10 / 0, `biconjugateTest` 7 / 0,
+`conjCPLQTest` 25 / 0, `testMaxMultiRegion` 24 / 0, `testRegion` 23 / 0, `testcPLQ` 8 / 0,
+`unboundedFaceTest` 18 / 0.
 
 Two documented cases still ERROR, and both are **unimplemented paths, not wrong answers** — they
 refuse loudly rather than answering:
@@ -81,7 +85,12 @@ refuse loudly rather than answering:
   ([COAP] A.5, `splitThreeConvex`); it is simply not reachable from `conj`/`biconj`. A concrete
   wiring plan is in `TODO.md`.
 - **Parallelogram, one face.** Fails in the SECOND conjugation with
-  `QuaParCPLQ:conj:emptyResult`. Different defect; not diagnosed this run.
+  `QuaParCPLQ:conj:emptyResult` — **and the message names the wrong routine**. It says
+  "conjugateOfPiecePoly returned no pieces"; it did not, all **12** pieces conjugate, to **27**
+  cells. What returns nothing is `functionNDomain.maxOfList`: folding the groups one at a time, the
+  accumulator runs 2, 3, 4, 3, 3, 3, 3, 1, 1 cells and then group 11 empties it. A max's domain is
+  the INTERSECTION of the domains, so shrinking is legitimate; empty is not, since that asserts
+  `f** = +inf` everywhere. Next attempt starts at group 11, not in Step 2.
 
 ## Needs a decision
 

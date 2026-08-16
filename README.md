@@ -33,18 +33,19 @@ branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classif
 
 **Alpha — not yet released.** The API is still changing; there is no tagged version.
 
-Test suite (measured 2026-08-15): **324 passed / 1 failed** across 26 suites — fast bucket 204 / 0,
-normal 6 / 0, slow 114 / 1. The single failure is
-`biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, left failing deliberately: it
-pins the one open defect in `SUPPORT_MATRIX.md` §7 and its comment carries the traced mechanism.
-Run everything with `bash .claude/suite.sh` (or `--fast` / `--normal` / `--slow`).
+Test suite (measured 2026-08-15): **327 passed / 0 failed** across 26 suites — fast bucket 204 / 0,
+normal 8 / 0, slow 115 / 0. Run everything with `bash .claude/suite.sh` (or `--fast` / `--normal`
+/ `--slow`). The last red — `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, the
+open §7 defect — closed on 2026-08-15.
 
 Before depending on CCA2, read `SUPPORT_MATRIX.md` §8 — the summary of what actually blocks a
 general release. The largest gaps today: `partialConj` is unimplemented for every engine; the
 `'pqp'` and `'graph'` conjugate engines do not exist; and `RatPol.conj`/`biconj`/`add` are
-missing. **Unbounded multi-face domains no longer error** — that blocker closed on 2026-08-15,
-when Step 3's cross-piece maximum and Step 1's curved envelope over an unbounded face were both
-fixed.
+missing. Two domain shapes still ERROR rather than answering — a general convex quadrilateral (the
+`nCE == 3` gap in the vendored Step 1) and a parallelogram (an empty max in the second
+conjugation); both are §7.1, with the located step and a route in `TODO.md`.
+**Unbounded multi-face domains no longer error** — that blocker closed on 2026-08-15, when Step 3's
+cross-piece maximum and Step 1's curved envelope over an unbounded face were both fixed.
 
 ---
 
