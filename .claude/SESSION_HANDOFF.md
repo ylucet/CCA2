@@ -28,18 +28,25 @@ the edge list from the geometry instead, and the three edge-indexed readers take
 
 ## Next steps
 
-1. **cPLQ's Step 2 on a 2-convex-edge triangle is WRONG — a live silent defect, found 2026-08-15
-   and the reason the quadrilateral's `nCE == 3` wiring was written and then reverted.** The wiring
-   works at Step 1 (4 envelope faces, all `≤ x·y`, no more crash) but the answer is then wrong, and
-   a silent wrong answer is worse than a loud refusal. Of the two triangles the test quadrilateral
-   splits into, the new `nE = 3` one gets its envelope and **Step 2 returns zero conjugate cells**,
-   while the `nE = 2` one — untouched — **carries the whole error**: `f*(0,0) = 0.28647` for a truth
-   of `0`, `f*(0.5,1) = 1.00464` for `1`, and a hole in the third quadrant.
-   The measurement that localises it, and the trap it avoids: that same triangle conjugated ON ITS
-   OWN via `QuaPol.conj` is exact at 7 of 7 — because a single bounded triangle takes the NUMERIC
-   route (`conjBoundedPolygon`), not cPLQ. **Checking a suspect piece "on its own" through the
-   public API can silently change which implementation runs**; evaluate `p.pieces(k).maxConjugate`
-   inside the pipeline instead. Order of attack and the ready-to-re-land branch are in `TODO.md`.
+1. **cPLQ's `nCE == 2` Step 1 envelope is NOT the envelope — a live silent defect, found and fully
+   diagnosed 2026-08-15.** It applies [COAP]'s single-quadratic form to the whole triangle; that
+   form is a valid convex MINORANT but A.4 shows it is tight only over a sub-region, and the branch
+   never tests. On `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x·y` its envelope reaches **−0.2835** at
+   `(1,0)`, where the true envelope is `≥ 0` (on that triangle `x·y ≥ 0`, so the affine minorant `0`
+   is admissible). A too-small envelope gives a too-large conjugate: `f*(0,0) = 0.28647` for a truth
+   of `0`. `convEnvCPLQ` on the same triangle returns 2 faces, minimum `0`.
+   **Two fixes were written, measured and reverted** (both in `DECISIONS.md`): wiring the missing
+   `nCE == 3` branch, and routing `nCE == 2`/`3` through `convEnvCPLQ`. The second fails because
+   `conjugateFunction` reads its envelope with `coeffs(...)` and A.4/A.5's faces are RATIONAL —
+   **cPLQ's Step 2 has no rational-envelope branch at all**. So the split belongs in the DOMAIN:
+   have `plq_1p.triangulate` emit the A.4/A.5 sub-triangles as PIECES, the shape
+   `conjEnvelopeViaCPLQ` already uses for rational faces. The cost is moving a web of file-local
+   functions out of `convEnvCPLQ.m` and re-verifying every Case C result — a design change, with
+   the plan in `TODO.md`.
+   **A trap worth keeping:** that same triangle conjugated ON ITS OWN via `QuaPol.conj` is exact at
+   7 of 7, because a single bounded triangle takes the NUMERIC route (`conjBoundedPolygon`), not
+   cPLQ. Checking a suspect piece "on its own" through the public API can silently change which
+   implementation runs; evaluate `p.pieces(k).maxConjugate` inside the pipeline instead.
 2. **The parallelogram's `emptyResult` — LOCATED, and the error message names the wrong routine.**
    All 12 pieces conjugate (27 cells); it is `functionNDomain.maxOfList` that returns nothing, and
    folding the groups one at a time shows **group 11** emptying the accumulator. Start there, and

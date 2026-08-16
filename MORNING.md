@@ -86,14 +86,22 @@ refuse loudly rather than answering:
   reverted it.** `f*` comes out over-claiming `0.28647` at `(0,0)` where the truth is `0` and
   `1.00464` at `(0.5,1)` where it is `1`, with a hole in the third quadrant — and a silent wrong
   answer is worse than a loud refusal.
-  Where the fault is, separated by measurement: of the two triangles the quadrilateral splits into,
-  the NEW one gets its 4 envelope faces and **Step 2 returns zero conjugate cells for it**, while
-  the OTHER one — `nE = 2`, untouched by any of this — **carries the whole error on its own**.
-  The measurement that localises it: that same triangle conjugated ON ITS OWN via `QuaPol.conj` is
-  exact at 7 of 7, because a single bounded triangle takes the NUMERIC route rather than cPLQ.
-  **The numeric Step 2 is right on this input and the vendored symbolic one is not**, and
-  `assertStep3MatchesPieces` correctly does not fire because Step 3 agrees with Step 2. The crash
-  was masking that. Order of attack in `TODO.md`; the branch itself is ready to re-land after.
+  **And I found what it was masking.** `plq_1p.convexEnvelope1`'s `nCE == 2` branch applies
+  [COAP]'s single-quadratic form to the WHOLE triangle. That form is a valid convex MINORANT, but
+  A.4 shows it is tight only over a sub-region — and this branch never tests. On
+  `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x·y` its envelope reaches **−0.2835** at `(1,0)`; on that
+  triangle `x ≥ 0` and `y ≥ 0`, so `x·y ≥ 0`, the affine minorant `0` is admissible, and the true
+  envelope is `≥ 0` everywhere. A too-small envelope gives a too-large conjugate — that is exactly
+  the `0.28647`. `convEnvCPLQ` on the same triangle returns 2 faces, with minimum `0`: it does
+  apply the split.
+  **Routing Step 1 through `convEnvCPLQ` does not fix it either** — also written, measured,
+  reverted. `conjugateFunction` reads its envelope with `coeffs(...)` and matches monomials, and
+  A.4/A.5's faces are RATIONAL, so it raises `symbolic:coeffs:NotAPolynomial`: **cPLQ's Step 2 has
+  no rational-envelope branch at all.** So the split belongs in the DOMAIN — have `triangulate`
+  emit the A.4/A.5 sub-triangles as PIECES, the same shape `conjEnvelopeViaCPLQ` already uses for
+  rational faces. That means moving a connected web of file-local functions out of `convEnvCPLQ.m`
+  and re-verifying every Case C result, which is a design change rather than a fix, so I stopped
+  there and wrote it up instead.
 - **Parallelogram, one face.** Fails in the SECOND conjugation with
   `QuaParCPLQ:conj:emptyResult` — **and the message names the wrong routine**. It says
   "conjugateOfPiecePoly returned no pieces"; it did not, all **12** pieces conjugate, to **27**

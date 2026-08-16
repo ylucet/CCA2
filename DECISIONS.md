@@ -25,6 +25,50 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 — cPLQ's `nCE == 2` envelope is NOT the envelope, and the obvious fix cannot work
+
+**The defect, derived and then measured.** `plq_1p.convexEnvelope1`'s `nCE == 2` branch applies
+[COAP]'s single-quadratic form to the WHOLE triangle. That form touches `x·y` along both convex
+edges and is a valid convex MINORANT — but Appendix A.4 shows it is tight only over a sub-region,
+which is exactly what `convEnvCPLQ`'s `splitTwoConvexEdges` tests for and splits on. This branch
+never tests.
+
+Measured on `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x·y`, the piece `triangulate` produces from the
+test quadrilateral. cPLQ returns
+
+    0.954915·y − 0.572949·x + 0.427051·x·y + 0.286475·x² + 0.159153·y²
+
+whose minimum over the triangle is **−0.2835**, at `(1,0)`. On that triangle `x ≥ 0` and `y ≥ 0`, so
+`x·y ≥ 0` and the affine minorant `0` is admissible: **the true envelope is ≥ 0 everywhere**, and
+this is strictly below it. A too-small envelope gives a too-large conjugate, and that is the whole
+error — `f*(0,0) = 0.28647` for a truth of `0`, `f*(0.5,1) = 1.00464` for `1`. `convEnvCPLQ` on the
+same triangle returns **2 faces** — it does apply the split — with minimum `0`.
+
+The `0.28647` is not a coincidence worth chasing: it is the form's own `x²` coefficient,
+`m_h·m_w/(√m_h+√m_w)²` with the two convex slopes `3` and `0.6`.
+
+**AND ROUTING STEP 1 THROUGH `convEnvCPLQ` DOES NOT FIX IT.** Tried, measured, reverted:
+`plq_1p.conjugateFunction`'s `nCE == 2` branch reads its envelope's coefficients with
+`coeffs(envelope.f.f, vars)` and matches monomials. `convEnvCPLQ`'s A.4/A.5 faces are **RATIONAL**,
+so it raises `symbolic:coeffs:NotAPolynomial` outright. **cPLQ's Step 2 has no rational-envelope
+branch at all**, and the dispatch keys on the PIECE's `nCE` rather than on the envelope face in
+hand — which the routine's own header already complains about for a different reason.
+
+**So the split belongs in the DOMAIN, not in the envelope.** The route that already works for
+rational faces is `conjCPLQ`'s `conjEnvelopeViaCPLQ`: it hands each rational face to cPLQ as its own
+PIECE via `ratPolToPlq`, and lets `plq.maximum` take the max. The same idea applies here — have
+`plq_1p.triangulate` split a 2- or 3-convex-edge triangle into the A.4/A.5 sub-triangles and emit
+each as a piece, recursing while `splitTwoConvexEdges` still reports `needsSplit`. Every sub-piece
+is then a triangle on which cPLQ's own closed form IS tight, so Step 2 is untouched and every
+envelope stays polynomial.
+
+**What that costs, and why it was not done unattended.** `splitTwoConvexEdges`, `splitThreeConvex`
+and their helpers (`classifyConvexEdges`, `solveTriangleBF`, `envelopeFromClassified`,
+`bilinearFrame`, …) are all file-local to `convEnvCPLQ.m`, so exposing them means moving a
+connected web of functions out of a well-tested file — and `triangulate` feeds every Case C result,
+so the blast radius is the whole symbolic pipeline. That is a design change with a full
+re-verification behind it, not a fix.
+
 ## 2026-08-15 — The general quadrilateral's `nCE == 3` wiring: written, measured, REVERTED
 
 **Do not re-land this until cPLQ's Step 2 is fixed.** The `nCE == 3` branch is not the reason the

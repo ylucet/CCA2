@@ -92,13 +92,30 @@ the tooling that judged them was itself broken, in two ways, and silently.
       takes the NUMERIC route (`conjBoundedPolygon`), not cPLQ. **The numeric Step 2 is right on
       this input and the vendored symbolic one is not.** `assertStep3MatchesPieces` correctly does
       NOT fire: Step 3 agrees with Step 2: the fault is inside Step 2.
-      **So the order is:** (1) find why cPLQ's Step 2 over-claims and leaves a third-quadrant hole
-      on the `nE = 2` triangle -- that is a live silent defect, reachable today from any Case C
-      input with such a piece; (2) find why it returns nothing for a multi-face rational envelope;
-      (3) only then re-land the `nCE == 3` branch, which is otherwise ready.
-      A question worth answering deliberately on the way: `plq_1p`'s `nCE == 2` branch uses the
-      single-quadratic formula unconditionally while `convEnvCPLQ` applies A.4's tightness split,
-      so the two Step 1s do not agree on 2-convex-edge triangles -- which may be exactly (1).
+      **THE UNDERLYING DEFECT IS FOUND, and it is in STEP 1, not Step 2.** `plq_1p`'s `nCE == 2`
+      branch applies [COAP]'s single-quadratic form to the WHOLE triangle. That form is a valid
+      convex MINORANT but A.4 shows it is tight only over a sub-region -- and this branch never
+      tests. Measured on `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x*y`, it returns an envelope whose
+      minimum over the triangle is **-0.2835** at `(1,0)`; on that triangle `x >= 0` and `y >= 0`,
+      so `x*y >= 0`, the affine minorant `0` is admissible, and the TRUE envelope is `>= 0`
+      everywhere. A too-small envelope gives a too-large conjugate: that is the `0.28647`.
+      `convEnvCPLQ` on the same triangle returns 2 faces -- it does apply the split -- with
+      minimum `0`.
+      **And routing Step 1 through `convEnvCPLQ` does NOT fix it -- tried, measured, reverted.**
+      `conjugateFunction`'s `nCE == 2` branch reads its envelope with `coeffs(...)` and matches
+      monomials; `convEnvCPLQ`'s A.4/A.5 faces are RATIONAL, so it raises
+      `symbolic:coeffs:NotAPolynomial`. **cPLQ's Step 2 has no rational-envelope branch at all.**
+      **So the split belongs in the DOMAIN.** The route that already works for rational faces is
+      `conjCPLQ`'s `conjEnvelopeViaCPLQ`, which hands each rational face to cPLQ as its own PIECE
+      through `ratPolToPlq`. Do the same here: have `plq_1p.triangulate` split a 2- or
+      3-convex-edge triangle into the A.4/A.5 sub-triangles and emit each as a piece, recursing
+      while `splitTwoConvexEdges` still reports `needsSplit`. Every sub-piece is then a triangle on
+      which cPLQ's own closed form IS tight, Step 2 is untouched, and every envelope stays
+      polynomial.
+      **The cost, which is why it was not done unattended:** `splitTwoConvexEdges`,
+      `splitThreeConvex` and their helpers are file-local to `convEnvCPLQ.m`, so exposing them
+      means moving a connected web of functions out of a well-tested file -- and `triangulate`
+      feeds every Case C result. Design change plus a full re-verification, not a fix.
 
 - [ ] **`QuaParCPLQ:conj:emptyResult` on a PARALLELOGRAM (one face, `f = x*y`) — LOCATED
       2026-08-15, and the error message names the WRONG routine.** It says "conjugateOfPiecePoly

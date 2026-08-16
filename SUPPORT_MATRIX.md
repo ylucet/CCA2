@@ -704,9 +704,27 @@ and piece 2 `[2.5 1.5; 0 0; 0.5 1]` (`nE = 3`), and with the branch in:
 So **the crash was masking a silent wrong answer**, and landing the wiring alone trades a loud
 refusal for it. The measurement that localises it: that same triangle conjugated ON ITS OWN via
 `QuaPol.conj` is exact at 7 of 7 probes, because a single bounded triangle takes the NUMERIC route
-(`conjBoundedPolygon`) rather than cPLQ — **the numeric Step 2 is right on this input and the
+(`conjBoundedPolygon`) rather than cPLQ — **the numeric route is right on this input and the
 vendored symbolic one is not**. `assertStep3MatchesPieces` correctly does not fire, since Step 3
-agrees with Step 2; the fault is inside Step 2. `TODO.md` has the order to attack it in.
+agrees with Step 2.
+
+**THE UNDERLYING DEFECT IS IN STEP 1, and it is a silent wrong answer in its own right.**
+`plq_1p.convexEnvelope1`'s `nCE == 2` branch applies [COAP]'s single-quadratic form to the WHOLE
+triangle. That form is a valid convex MINORANT, but Appendix A.4 shows it is tight only over a
+sub-region — which is what `convEnvCPLQ`'s `splitTwoConvexEdges` tests for; this branch never tests.
+On `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x·y` it returns an envelope whose minimum over the
+triangle is **−0.2835** at `(1,0)`. There `x ≥ 0` and `y ≥ 0`, so `x·y ≥ 0`, the affine minorant `0`
+is admissible, and the true envelope is `≥ 0` everywhere: this one is strictly below it. A too-small
+envelope gives a too-large conjugate — that is the `0.28647`. `convEnvCPLQ` on the same triangle
+returns 2 faces, with minimum `0`.
+
+**And routing Step 1 through `convEnvCPLQ` does not fix it** — tried and reverted:
+`conjugateFunction`'s `nCE == 2` branch reads its envelope with `coeffs(...)` and matches monomials,
+while A.4/A.5's faces are RATIONAL, so it raises `symbolic:coeffs:NotAPolynomial`. **cPLQ's Step 2
+has no rational-envelope branch at all.** The split therefore belongs in the DOMAIN: have
+`plq_1p.triangulate` emit the A.4/A.5 sub-triangles as PIECES — the same shape as
+`conjEnvelopeViaCPLQ`, which already hands rational faces to cPLQ one piece at a time. `TODO.md`
+has the plan and its cost.
 
 The wiring half of the story, which stands and is ready to re-land once Step 2 is fixed: there are
 two Step 1 implementations in this repository:
