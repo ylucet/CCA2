@@ -25,6 +25,45 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 — The general quadrilateral's `nCE == 3` wiring: written, measured, REVERTED
+
+**Do not re-land this until cPLQ's Step 2 is fixed.** The `nCE == 3` branch is not the reason the
+general convex quadrilateral fails; it is only the reason it fails LOUDLY.
+
+**What was written, and it is correct as far as it goes.** In `plq_1p.convexEnvelope1`, for
+`nCE == 3`, build the triangle as a one-face `QuaPol` carrying `x·y` — safe, because reaching that
+line with an indefinite `q` means `plq_1p.isCanonicalXY` held, so `q` is EXACTLY `x·y` with no
+linear or constant part — call `convEnvCPLQ` (which has [COAP] A.5's `splitThreeConvex`, and
+recurses so each half also gets A.4's tightness check), convert with `ratPolToPlq`, and install the
+faces as envelope pieces. `plq_1p.conjugate` already loops over envelope pieces and accumulates
+`conjfia`, so several per input piece is the normal shape, and Step 3's max over the results is
+correct because a sup over a union is the max of the sups. **Measured: 4 envelope faces for the
+offending triangle, two quadratic and two rational, all ≤ `x·y`, and `conj` stops raising
+`MATLAB:badsubscript`.**
+
+**Why it was reverted.** With the branch in, `f*` of the quadrilateral is WRONG at 4 of 8 probe
+points — over-claiming `0.28647` at `(0,0)` where the truth is `0`, `1.00464` at `(0.5,1)` where it
+is `1`, and uncovered at `(-1,0.5)` and `(-2,-2)`. **A silent wrong answer is worse than a loud
+refusal**, so the crash stays until the thing underneath it is fixed.
+
+**Where the fault actually is, separated by measurement rather than argued.** `triangulate` splits
+the test quadrilateral into piece 1 `[2.5 1.5; 2 0; 0 0]` (`nE = 2`) and piece 2
+`[2.5 1.5; 0 0; 0.5 1]` (`nE = 3`). Evaluating each piece's own Step 2 conjugate inside Case C:
+
+- **piece 2 gets its 4 envelope faces and Step 2 returns ZERO conjugate cells for it.** The new
+  envelope is computed and then discarded, so the wiring buys nothing today.
+- **piece 1 — untouched by any of this — carries the whole error**: 6 cells, and every wrong value
+  above is its.
+
+**The measurement that localises it, and the trap it avoids.** That same `nE = 2` triangle
+conjugated ON ITS OWN via `QuaPol.conj` is exact at 7 of 7 probes — which looks like an alibi and is
+not: a single bounded triangle takes the NUMERIC route (`conjBoundedPolygon`), not cPLQ. **The
+numeric Step 2 is right on this input and the vendored symbolic one is not.** Checking a suspect
+piece "on its own" through the public API can silently change which implementation runs; evaluate
+`p.pieces(k).maxConjugate` inside the pipeline instead. `assertStep3MatchesPieces` correctly does
+not fire here, because Step 3 does agree with Step 2 — the gate is doing its job, and the fault is
+one stage earlier than it looks at.
+
 ## 2026-08-15 (last) — BUG 1 FIXED: the edge list, and why the four earlier attempts could not have worked
 
 **What the refactor turned out to be, and it is smaller than the note below predicted.** Four

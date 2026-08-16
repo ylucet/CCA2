@@ -63,37 +63,42 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Next up (2026-08-15, after bug 1 closed the last red)
 
-- [ ] **WIRE `nCE == 3` INTO CASE C'S STEP 1 — the general convex quadrilateral.** The one
-      remaining hard failure with a known route. `p.conj('cplq')` on a non-square quadrilateral
-      raises `MATLAB:badsubscript` at `plq_1p.conjugateFunction` (measured again 2026-08-15,
-      unchanged): `plq_1p.convexEnvelope1` branches on `nCE == 0, 1, 2` and simply falls off the
-      end, so `obj.envelope` stays EMPTY and `conjugate`'s `for i = 1:max(1,size(envelope,2))`
-      indexes `envelope(1)`. It is an ERROR, not a wrong answer.
-      **CCA2 already has the algorithm.** `convEnvCPLQ`'s `splitThreeConvex` is [COAP] A.5 — cut
-      the triangle by the smooth-fit line through the middle vertex into two 2-convex-edge
-      sub-triangles — and `solveTriangleBF` recurses so each half also gets A.4's tightness check.
-      Case C drives Step 1 through the VENDORED `plq_1p.convexEnvelope1` instead, so none of it is
-      reachable.
-      **The route I would take, worked out but NOT implemented.** In the `nCE == 3` case build the
-      triangle as a one-face `QuaPol` carrying `x*y`, call `convEnvCPLQ`, and install its faces as
-      TWO `plq_1p` envelope pieces:
-      `obj.envelope = [obj.envelope, functionNDomain(symbolicFunction(num/den), domain(Vk,x,y).polygon)]`.
-      Three things make this cheap rather than a reimplementation:
-        * By the time `convexEnvelope1` is reached with an indefinite `q`,
-          `plq_1p.isCanonicalXY` has already guaranteed `q` is EXACTLY `x*y` — no linear part, no
-          constant — so `convEnvCPLQ` can be called on the plain bilinear triangle.
-        * `plq_1p.conjugate` already loops over envelope pieces and accumulates `conjugates` with
-          `conjfia`, so more than one envelope piece per input piece is structurally supported.
-          Step 3's max over pieces is then correct by `sup` over a union = `max` of `sup`s.
-        * `ratPolToPlq.m` shows the exact construction to copy (`plq_1p(domain(V,x,y),
-          symbolicFunction(simplifyFraction(num/den)))`, plus the file-local `faceVertexIndices`
-          each of these files duplicates).
-      **The one question it raises, worth answering deliberately:** `plq_1p`'s `nCE == 2` branch
-      uses the single-quadratic formula unconditionally, while `convEnvCPLQ` applies A.4's
-      tightness split. Routing `nCE == 3` through `convEnvCPLQ` therefore makes the two Step 1s
-      AGREE on the sub-triangles rather than merely filling a hole — decide whether `nCE == 2`
-      should follow, and measure it before changing it, since every cPLQ input goes through that
-      branch.
+- [ ] **THE GENERAL CONVEX QUADRILATERAL — the "wiring gap" description is WRONG, and filling the
+      gap is not enough. IMPLEMENTED, MEASURED and REVERTED 2026-08-15; read this before trying
+      again.**
+      What was on record: `p.conj('cplq')` raises `MATLAB:badsubscript` because
+      `plq_1p.convexEnvelope1` branches on `nCE == 0, 1, 2` and falls off the end, so
+      `obj.envelope` stays EMPTY and `conjugate`'s `for i = 1:max(1,size(envelope,2))` indexes
+      `envelope(1)`. All true, and CCA2 already has the missing algorithm ([COAP] A.5,
+      `convEnvCPLQ`'s `splitThreeConvex`).
+      **The wiring was written and it WORKS at Step 1.** Build the triangle as a one-face `QuaPol`
+      carrying `x*y` (safe: reaching that line with an indefinite `q` means `isCanonicalXY` held,
+      so `q` is EXACTLY `x*y`), call `convEnvCPLQ`, convert with `ratPolToPlq` and install the
+      faces as envelope pieces -- `plq_1p.conjugate` already loops over them. Measured on the
+      offending triangle: **4 envelope faces** come back (the A.5 split, each half then needing
+      A.4's), two quadratic and two rational, all `<= x*y`. `conj` no longer raises.
+      **AND THE ANSWER IS THEN WRONG, so it was reverted.** `triangulate` splits the test
+      quadrilateral into piece 1 = `[2.5 1.5; 2 0; 0 0]` (`nE = 2`) and piece 2 =
+      `[2.5 1.5; 0 0; 0.5 1]` (`nE = 3`). With the branch in:
+        * **piece 2 gets 4 envelope faces and cPLQ's Step 2 returns ZERO conjugate cells for it**
+          -- the new envelope is computed and then discarded, so the wiring buys nothing today;
+        * **piece 1, untouched by any of this, is WRONG on its own through cPLQ's Step 2**: 6
+          cells, `f*(0,0) = 0.28647` where the truth over its own triangle is `0`,
+          `f*(0.5,1) = 1.00464` where it is `1`, and NOT COVERED at `(-1,0.5)` and `(-2,-2)`.
+      So the crash was masking a **silent wrong answer**, and landing the wiring alone trades a
+      loud refusal for it. That is why it is not committed.
+      **The one measurement that tells you where to look.** That same triangle conjugated ON ITS
+      OWN via `QuaPol.conj` is exact at 7 of 7 probe points -- because a single bounded triangle
+      takes the NUMERIC route (`conjBoundedPolygon`), not cPLQ. **The numeric Step 2 is right on
+      this input and the vendored symbolic one is not.** `assertStep3MatchesPieces` correctly does
+      NOT fire: Step 3 agrees with Step 2: the fault is inside Step 2.
+      **So the order is:** (1) find why cPLQ's Step 2 over-claims and leaves a third-quadrant hole
+      on the `nE = 2` triangle -- that is a live silent defect, reachable today from any Case C
+      input with such a piece; (2) find why it returns nothing for a multi-face rational envelope;
+      (3) only then re-land the `nCE == 3` branch, which is otherwise ready.
+      A question worth answering deliberately on the way: `plq_1p`'s `nCE == 2` branch uses the
+      single-quadratic formula unconditionally while `convEnvCPLQ` applies A.4's tightness split,
+      so the two Step 1s do not agree on 2-convex-edge triangles -- which may be exactly (1).
 
 - [ ] **`QuaParCPLQ:conj:emptyResult` on a PARALLELOGRAM (one face, `f = x*y`) — LOCATED
       2026-08-15, and the error message names the WRONG routine.** It says "conjugateOfPiecePoly

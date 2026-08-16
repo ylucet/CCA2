@@ -687,8 +687,29 @@ the domains, so it may legitimately shrink; **empty it may not be**, since that 
 `+inf` everywhere. So either one piece's conjugate domain is too small or `maxOfList` drops a cell,
 and the next person should start at group 11 rather than in Step 2.
 
-The general-quadrilateral failure is a **WIRING gap, not a missing algorithm.** There are two
-Step 1 implementations in this repository:
+**THE GENERAL QUADRILATERAL IS NOT ONLY A WIRING GAP — measured 2026-08-15 by writing the wiring
+and reverting it.** The `nCE == 3` branch below was implemented (build the triangle as a one-face
+`QuaPol` carrying `x·y`, call `convEnvCPLQ`, install its faces through `ratPolToPlq`) and **works at
+Step 1**: 4 envelope faces come back for the offending triangle — the A.5 split, each half then
+needing A.4's — all `≤ x·y`, and `conj` stops raising. The answer is then **wrong**, so it was not
+committed. `triangulate` splits the test quadrilateral into piece 1 `[2.5 1.5; 2 0; 0 0]` (`nE = 2`)
+and piece 2 `[2.5 1.5; 0 0; 0.5 1]` (`nE = 3`), and with the branch in:
+
+* **piece 2 gets its 4 envelope faces and cPLQ's Step 2 returns ZERO conjugate cells for it** — the
+  new envelope is computed and discarded;
+* **piece 1, untouched by any of this, is wrong on its own through cPLQ's Step 2**: 6 cells,
+  `f*(0,0) = 0.28647` where the truth over its own triangle is `0`, `f*(0.5,1) = 1.00464` where it
+  is `1`, and NOT COVERED at `(-1,0.5)` and `(-2,-2)`.
+
+So **the crash was masking a silent wrong answer**, and landing the wiring alone trades a loud
+refusal for it. The measurement that localises it: that same triangle conjugated ON ITS OWN via
+`QuaPol.conj` is exact at 7 of 7 probes, because a single bounded triangle takes the NUMERIC route
+(`conjBoundedPolygon`) rather than cPLQ — **the numeric Step 2 is right on this input and the
+vendored symbolic one is not**. `assertStep3MatchesPieces` correctly does not fire, since Step 3
+agrees with Step 2; the fault is inside Step 2. `TODO.md` has the order to attack it in.
+
+The wiring half of the story, which stands and is ready to re-land once Step 2 is fixed: there are
+two Step 1 implementations in this repository:
 
 * **`convEnvCPLQ.m` — CCA2's own.** It *has* the 3-convex-edge case: `splitThreeConvex` cuts the
   triangle (in the bilinear frame) through the middle vertex into two 2-convex-edge sub-triangles,

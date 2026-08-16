@@ -79,11 +79,21 @@ The four earlier attempts all failed for one reason, and stating it is the fix:
 Two documented cases still ERROR, and both are **unimplemented paths, not wrong answers** — they
 refuse loudly rather than answering:
 
-- **General convex quadrilateral, one face.** Fails in the FIRST conjugation, at
-  `plq_1p.conjugateFunction` indexing an EMPTY envelope: `plq_1p.convexEnvelope1` branches on
-  `nCE == 0, 1, 2` and falls off the end at `nCE == 3`. CCA2's own `convEnvCPLQ` HAS that case
-  ([COAP] A.5, `splitThreeConvex`); it is simply not reachable from `conj`/`biconj`. A concrete
-  wiring plan is in `TODO.md`.
+- **General convex quadrilateral, one face** — and the "wiring gap" description of it was WRONG.
+  I wrote the missing `nCE == 3` branch (build the triangle as a one-face `QuaPol` carrying `x·y`,
+  call `convEnvCPLQ`, install its faces through `ratPolToPlq`) and it **works at Step 1**: 4
+  envelope faces come back, all `≤ x·y`, and `conj` stops raising. **The answer is then wrong, so I
+  reverted it.** `f*` comes out over-claiming `0.28647` at `(0,0)` where the truth is `0` and
+  `1.00464` at `(0.5,1)` where it is `1`, with a hole in the third quadrant — and a silent wrong
+  answer is worse than a loud refusal.
+  Where the fault is, separated by measurement: of the two triangles the quadrilateral splits into,
+  the NEW one gets its 4 envelope faces and **Step 2 returns zero conjugate cells for it**, while
+  the OTHER one — `nE = 2`, untouched by any of this — **carries the whole error on its own**.
+  The measurement that localises it: that same triangle conjugated ON ITS OWN via `QuaPol.conj` is
+  exact at 7 of 7, because a single bounded triangle takes the NUMERIC route rather than cPLQ.
+  **The numeric Step 2 is right on this input and the vendored symbolic one is not**, and
+  `assertStep3MatchesPieces` correctly does not fire because Step 3 agrees with Step 2. The crash
+  was masking that. Order of attack in `TODO.md`; the branch itself is ready to re-land after.
 - **Parallelogram, one face.** Fails in the SECOND conjugation with
   `QuaParCPLQ:conj:emptyResult` — **and the message names the wrong routine**. It says
   "conjugateOfPiecePoly returned no pieces"; it did not, all **12** pieces conjugate, to **27**

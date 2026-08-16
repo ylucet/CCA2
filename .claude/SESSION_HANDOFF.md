@@ -28,12 +28,18 @@ the edge list from the geometry instead, and the three edge-indexed readers take
 
 ## Next steps
 
-1. **Wire `nCE == 3` into Case C's Step 1** — the quadrilateral. CCA2 already has the algorithm
-   (`convEnvCPLQ`'s `splitThreeConvex`, [COAP] A.5); the vendored `plq_1p.convexEnvelope1` simply
-   falls off the end after `nCE == 2`. `TODO.md`'s first item has the route worked out — including
-   why it is cheap (`isCanonicalXY` guarantees the piece is exactly `x*y` by then; `plq_1p.conjugate`
-   already loops over multiple envelope pieces; `ratPolToPlq.m` shows the construction to copy) and
-   the one question it raises about `nCE == 2` and A.4.
+1. **cPLQ's Step 2 on a 2-convex-edge triangle is WRONG — a live silent defect, found 2026-08-15
+   and the reason the quadrilateral's `nCE == 3` wiring was written and then reverted.** The wiring
+   works at Step 1 (4 envelope faces, all `≤ x·y`, no more crash) but the answer is then wrong, and
+   a silent wrong answer is worse than a loud refusal. Of the two triangles the test quadrilateral
+   splits into, the new `nE = 3` one gets its envelope and **Step 2 returns zero conjugate cells**,
+   while the `nE = 2` one — untouched — **carries the whole error**: `f*(0,0) = 0.28647` for a truth
+   of `0`, `f*(0.5,1) = 1.00464` for `1`, and a hole in the third quadrant.
+   The measurement that localises it, and the trap it avoids: that same triangle conjugated ON ITS
+   OWN via `QuaPol.conj` is exact at 7 of 7 — because a single bounded triangle takes the NUMERIC
+   route (`conjBoundedPolygon`), not cPLQ. **Checking a suspect piece "on its own" through the
+   public API can silently change which implementation runs**; evaluate `p.pieces(k).maxConjugate`
+   inside the pipeline instead. Order of attack and the ready-to-re-land branch are in `TODO.md`.
 2. **The parallelogram's `emptyResult` — LOCATED, and the error message names the wrong routine.**
    All 12 pieces conjugate (27 cells); it is `functionNDomain.maxOfList` that returns nothing, and
    folding the groups one at a time shows **group 11** emptying the accumulator. Start there, and
