@@ -182,7 +182,7 @@ classdef plq_1p
             end
 
             if d.polygon.nv == 3
-                ps = [ps,obj];
+                ps = obj.appendTriangle(ps, [d.polygon.vx(:), d.polygon.vy(:)], vars);
                 return
             end
             vx = d.polygon.vx;
@@ -212,26 +212,67 @@ classdef plq_1p
                 triangle = [start,i,i+1];
                  t(:,1) = vx(triangle);
                  t(:,2) = vy(triangle);
-                 ps = [ps,plq_1p(domain(t,vars(1),vars(2)),obj.f)];
-                 
-                 
+                 ps = obj.appendTriangle(ps, t, vars);
+
+
             end
             if start ~= 1 & start ~= d.polygon.nv
                 triangle = [start,d.polygon.nv,1];
                  t(:,1) = vx(triangle);
                  t(:,2) = vy(triangle);
-                 ps = [ps,plq_1p(domain(t,vars(1),vars(2)),obj.f)];
+                 ps = obj.appendTriangle(ps, t, vars);
             end
             for i = 1: start-2
                 triangle = [start,i,i+1];
                  t(:,1) = vx(triangle);
                  t(:,2) = vy(triangle);
-                 ps = [ps,plq_1p(domain(t,vars(1),vars(2)),obj.f)];
+                 ps = obj.appendTriangle(ps, t, vars);
             end
-           
+
+        end
+
+        function ps = appendTriangle(obj, ps, t, vars)
+        % Append the triangle `t` (3x2 of vertex coordinates) as one piece -- or, when cPLQ's own
+        % closed form is not the convex ENVELOPE there, as the sub-triangles on which it is.
+        %
+        % [COAP] Appendix A.4 shows the two-convex-edge form is tight only over a sub-region, and
+        % A.5's three-convex-edge case has no such form at all -- so cPLQ's Step 1 returns a
+        % MINORANT for the first and NOTHING for the second. Splitting the DOMAIN, rather than the
+        % envelope, leaves every sub-piece on a path Step 2 already has.
+        % splitTightTriangleSym has the derivation, the measurements and the reason it is symbolic.
+        %
+        % GATED on the piece being exactly x*y. That is what cPLQ's closed forms -- and the split
+        % -- are written for; convexEnvelope sends any other indefinite quadratic through xyFrame,
+        % and plq_1p.isCanonicalXY is the same test that gate uses. Everything else keeps the
+        % vertices it arrives with, exactly.
+            if ~obj.isBilinear
+                ps = [ps, plq_1p(domain(t, vars(1), vars(2)), obj.f)];
+                return
+            end
+            sub = splitTightTriangleSym(t);
+            if numel(sub) < 2
+                ps = [ps, plq_1p(domain(t, vars(1), vars(2)), obj.f)];
+                return
+            end
+            for k = 1:numel(sub)
+                ps = [ps, plq_1p(domain(sub{k}, vars(1), vars(2)), obj.f)]; %#ok<AGROW>
+            end
+        end
+
+        function tf = isBilinear(obj)
+        % Is this piece's function EXACTLY x*y -- no linear part, no constant? Tested rather than
+        % assumed, because the piece reaching triangulate can also carry a RATIONAL function fed
+        % back in by ratPolToPlq, whose quadParts throws rather than returning a constant matrix.
+            tf = false;
+            try
+                [Q, L, c] = obj.quadParts;
+                tf = plq_1p.isCanonicalXY(Q, L, c);
+            catch
+                tf = false;
+            end
         end
     end
-    
+
     methods (Static)
         function tf = isCanonicalXY(Q, L, c)
         % Is q ALREADY exactly x*y? cPLQ's closed forms assume that literally -- not "indefinite",
