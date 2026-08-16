@@ -63,9 +63,29 @@ the tooling that judged them was itself broken, in two ways, and silently.
 
 ### Next up (2026-08-15, after bug 1 closed the last red)
 
-- [ ] **THE GENERAL CONVEX QUADRILATERAL — the "wiring gap" description is WRONG, and filling the
-      gap is not enough. IMPLEMENTED, MEASURED and REVERTED 2026-08-15; read this before trying
-      again.**
+- [ ] **THE GENERAL CONVEX QUADRILATERAL — THREE attempts now, all measured and all reverted, and
+      the third one names the real blocker: ARITHMETIC, not structure. Read this before trying
+      again; `DECISIONS.md` has all three.**
+      **The remaining work, in one line:** implement [COAP] A.4's cevian and A.5's smooth-fit line
+      SYMBOLICALLY -- the cevian's slope is exactly `-sqrt(mh*mw)`, so its foot is an exact
+      algebraic number -- and have `plq_1p.triangulate` emit the sub-triangles as PIECES. Bounded
+      work: two line intersections and a curvature test.
+      **Attempt 3 (2026-08-16), and why it failed.** The domain split was built exactly as attempt
+      2's write-up prescribed, taking the sub-triangles from `convEnvCPLQ`'s own faces, and it
+      WORKED at Step 1. It then turned the crash into a **HANG** -- the first conjugate ran 45+
+      minutes with no output, stuck in a symbolic call behind 3.8 MB of `isAlways:TruthUnknown`
+      warnings carrying denominators around `1e25`. The cause is inherent to taking the geometry
+      from `convEnvCPLQ`: that routine is double precision, `sym` of a double is EXACT (denominator
+      near `2^53`), and snapping the new vertices to the simplest rational within `1e-10` bounds
+      the VERTEX denominators but not the downstream ones -- the conjugate is a rational function of
+      those coordinates, so a few squarings carry `1e5` to `1e25`. A hang is worse than a crash.
+      **Attempts 1 and 2 (2026-08-15), for the record.** Wiring the missing `nCE == 3` branch alone
+      leaves the answer wrong, because the `nCE == 2` branch returns a MINORANT and not the
+      ENVELOPE (measured: its envelope reaches `-0.2835` on a triangle where the truth is `>= 0`,
+      so `f*(0,0) = 0.28647` for a truth of `0`). Routing the envelope through `convEnvCPLQ`
+      instead raises `symbolic:coeffs:NotAPolynomial`, because A.4/A.5's faces are RATIONAL and
+      **cPLQ's Step 2 has no rational-envelope branch at all**.
+      Original framing follows.
       What was on record: `p.conj('cplq')` raises `MATLAB:badsubscript` because
       `plq_1p.convexEnvelope1` branches on `nCE == 0, 1, 2` and falls off the end, so
       `obj.envelope` stays EMPTY and `conjugate`'s `for i = 1:max(1,size(envelope,2))` indexes
@@ -117,17 +137,35 @@ the tooling that judged them was itself broken, in two ways, and silently.
       means moving a connected web of functions out of a well-tested file -- and `triangulate`
       feeds every Case C result. Design change plus a full re-verification, not a fix.
 
-- [ ] **`QuaParCPLQ:conj:emptyResult` on a PARALLELOGRAM (one face, `f = x*y`) — LOCATED
-      2026-08-15, and the error message names the WRONG routine.** It says "conjugateOfPiecePoly
-      returned no pieces". It did not: all **12** pieces of that `f*` conjugate, to **27** cells
-      between them. What returns nothing is the step after it, `functionNDomain.maxOfList`.
-      Measured by folding the groups one at a time: the accumulator runs 2, 3, 4, 3, 3, 3, 3, 1, 1
-      cells and then **group 11** -- the piece carrying `s1 - 2*s2 + s1*s2/2 + s1^2/8 + s2^2/2 + 2`
-      -- empties it.
-      The domain of a max IS the intersection of the domains, so it may legitimately shrink;
-      **empty it may not be**, since that asserts `f** = +inf` everywhere. So either group 11's
-      conjugate domain is too small or `maxOfList` drops a cell. **Start at group 11**, and fix
-      `QuaParCPLQ.conj`'s message while you are there -- it has been pointing at Step 2 for weeks.
+- [x] **The PARALLELOGRAM's `emptyResult` — TWO defects found and FIXED 2026-08-16**, taking its
+      worst piece from **6 of 10** probe points wrong or uncovered to **2**, against a brute-force
+      sup. Both are of this codebase's recurring kind, and both are general fixes rather than
+      special cases.
+      1. **`region.simplifyUnboundedRegion` declared any region with no finite VERTEX empty** --
+         a half-plane, a slab, the whole plane. A half-plane is exactly what a TANGENT vertex
+         produces: the cone there is built from the two edges meeting at it, and when those are
+         tangent (an arc and its chord touching, how a curvilinear piece ends) both half-planes
+         are the SAME one. Now refuted by a WITNESS. `regionTest/aHalfPlaneIsNotEmpty`.
+      2. **The edge list, in bug 1's other form.** 3 vertices, 3 genuine edges, plus a conic
+         touching one vertex: 4 constraints for 3 vertices, so the count called a BOUNDED region
+         unbounded and it was built one edge cell short. `conjugateOfPiecePoly` now derives the
+         list for any bounded piece the count mislabels, not just for a lens.
+      `functionNDomainTest/aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane` pins it.
+      **How it was found, worth reusing:** `f**` of a bounded domain is finite exactly on that
+      domain and is a MAX, so EVERY per-piece conjugate must be finite there. Evaluating all 12
+      groups at six interior points named the three bad ones in one cheap run.
+
+- [ ] **The parallelogram's LAST 2 of 10 — `getInterior` on a SINGULAR quadratic.** The chord's
+      edge cell and the arc's claim the SAME region and the chord's is checked first and is wrong
+      there (0.0176 and -0.0138 against 0.0333 and 0.0363; the arc's cell is right at both).
+      `f` is a singular convex quadratic on that piece -- constant along one whole edge, `∇f = 0`
+      at two of the three vertices -- so `functionNDomain.getInterior`, which eliminates `s`
+      between `x = ∂1f` and `y = ∂2f`, returns the gradient map's image LINE instead of a curve
+      separating the two cells.
+      **Do NOT attack the `isQuad` chord rewrite for this.** Both alternatives were measured
+      2026-08-16 and are recorded in `DECISIONS.md`: chording the vertices the conic actually
+      touches makes the piece WORSE (2 wrong of 10 -> 3), and skipping the rewrite changes nothing.
+      Start from `functionNDomainTest.parallelogramPiece9`, which reproduces it in about a minute.
 
 ### Bugs, in the order they should be taken (2026-08-15)
 

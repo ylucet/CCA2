@@ -631,6 +631,9 @@ unbounded piece straddling `{f1=f2}` when that curve is a pair of lines (§4, §
 
 | Defect | Impact | Where |
 |---|---|---|
+| ~~**A region with no finite VERTEX was declared EMPTY**~~ — **FIXED 2026-08-16** | `simplifyUnboundedRegion` counted finite vertices and returned `region.empty()` when there were none. A half-plane has none; nor does a slab, nor the whole plane. **A half-plane is exactly what a TANGENT vertex produces**, so this was not a corner case: the cone at a vertex is built from the two edges meeting there, and when those are tangent — an arc and its chord touching, which is how a curvilinear piece ends — both half-planes are the SAME one. Measured on piece 9 of `f*` for `x·y` over the parallelogram `conv{(0,0),(2,0),(2.5,1),(0.5,1)}`: the cone at `(1/4,7/8)` is `{2x/3 + y ≥ 4/3}` carrying `x/4 + 7y/8 − 1/2`, and deleting it left that piece's conjugate uncovered on exactly that half-plane — 6 of 10 probe points wrong or uncovered against a brute-force sup. The verdict is now refuted by a WITNESS: a feasible point certifies non-emptiness, failing to find one proves nothing, so the old verdict stands whenever no witness turns up and this can only ever recover a region that was being deleted. Pinned by `regionTest/aHalfPlaneIsNotEmpty` and its converse | `region.simplifyUnboundedRegion` |
+| ~~**A BOUNDED region with an extra constraint was read as UNBOUNDED**~~ — **FIXED 2026-08-16**, the same root cause as bug 1 without the lens collision | Both slot conventions in `conjugateOfPiecePoly` are chosen by `size(ineqs,2) == nv`, so a bounded region carrying a constraint that bounds no edge is read with the unbounded one: `endNv = nv−1`, one edge cell SHORT, and every edge read one slot along. A bounded piece's conjugate is finite everywhere, so the missing cell is a hole where the answer must be finite. Measured on the same piece 9 — 3 vertices, 3 genuine edges, plus a conic touching one vertex, so 4 constraints for 3 vertices. `functionNDomain.edgeIndexList` now supplies the list for any bounded piece the count mislabels, not only for a lens; the count-matching branches keep precedence, so a region the conventions already describe correctly is untouched. Together with the row above: **6 of 10 probe points wrong or uncovered → 2**, and the parallelogram's `biconj` went from `emptyResult` to a finite answer, exact at all four vertices and `+inf` outside. Pinned by `functionNDomainTest/aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane` | `functionNDomain.conjugateOfPiecePoly` |
+| **`getInterior` on a SINGULAR quadratic** — LIVE, found 2026-08-16 | `getInterior` separates an edge cell from its neighbours by eliminating `s` between `x = ∂₁f` and `y = ∂₂f`. When `f` is a singular convex quadratic the gradient map is not invertible and that elimination returns the map's IMAGE LINE, which is not a separating curve — so two edge cells come out on the SAME region and the first one checked wins. On piece 9 of the parallelogram's `f*` (where `f` is constant along a whole edge and `∇f = 0` at two of three vertices) the chord's cell wins over the arc's and is low: `0.0176` and `−0.0138` where the truth is `0.0333` and `0.0363`. End to end that is the last 2 of 10 interior points of the parallelogram's `f**`, each about 4% LOW. **Do not attack the `isQuad` chord rewrite for this** — chording the vertices the conic actually touches makes it WORSE (2 wrong of 10 → 3) and skipping the rewrite changes nothing; both measured 2026-08-16, in `DECISIONS.md`. Reproduce with `functionNDomainTest.parallelogramPiece9` in about a minute | `functionNDomain.getInterior` |
 | ~~Cross-piece maximum decided dominance from ONE probe point~~ — **FIXED 2026-08-02** | `region.maxArray` falls back to interior probes when the two candidate functions tie at every vertex of the cell, and it returned on the FIRST feasible probe — asserting global dominance from one sample. Wrong on any cell the tie line crosses. Concretely, for `f = x*y` on `[0,1]²` given as TWO triangles, the two conjugates overlap in the lens `{(s1+s2)² ≤ 4s1, (s1+s2)² ≤ 4s2}`, whose only vertices `(0,0)` and `(1,1)` both lie on `s1 = s2`; the lens came back carrying `s2` throughout, so `f*(0.66,0.18)` was `0.18` for a truth of `0.66` — **wrong at 800 of 40000 grid points, worst error 0.48**, and silent. The recorded check that had passed used 7 hand-picked dual points and missed it. Now `region.maxFromPts` requires every decisive probe to agree and reports disagreement, which makes the caller split on `f1 = f2`. Pinned by `biconjugateTest/twoFaceConjugateIsExactIncludingTheLensCell` | `region.maxArray` / `region.maxFromPts` |
 | ~~`getNormalConeVertexQ` indexed a vertex outside its own guard~~ — **FIXED 2026-08-02** | Both halves of the routine pair vertex `j` with a neighbour `k` (`j∓1`) and guard `k` falling off the ends — then the `isZero` fallback that follows re-probed from vertex `k` **unguarded**, raising `MATLAB:badsubscript` on `obj.vx(0)` / `obj.vx(nv+1)`. Same shape as the already-corrected `getEdges` / `splitmax3` / `poly2orderUnbounded` cases. `region.probeVertexIndex` now clamps to `j`. (The same block also had the `py = py(1)` before `isempty(py)` inversion, corrected twice before elsewhere in the same function) | `region.getNormalConeVertexQ` |
 | ~~**Conjugate of a BOUNDED piece with a parabolic edge**~~ — **FIXED 2026-08-15.** The last step was the one the four earlier attempts had all been circling: both slot conventions identify an edge by a VERTEX INDEX (`edge j is at ineqs(j)` / `at ineqs(j+1)`), and a LENS's two edges join the SAME pair of vertices — so neither convention can name them apart, and no reassignment of slots to constraints ever could. `functionNDomain.edgeIndexList` derives the edge list from the geometry instead (both endpoints on the constraint AND its own curve between them inside the region — the second half is necessary, since the lens's redundant conic passes through both vertices too), and the three edge-indexed readers take it as an argument. It turned out much smaller than the mapped-out refactor predicted: `getNormalConeEdgeQ` and `getNormalConeEdgeQ3` are the SAME routine under two slot conventions and collapse into one (`getNormalConeEdgeQE` over `region.coneNormalAt`), `getSubdiffVertexT2` and `T2Q` are identical on these inputs, and both loops live in `conjugateOfPiecePoly` itself so the list needs no field and no signature change. Entered only on the lens signature (`edgesStillCollide`); no constraint is dropped, so the two unsound drops recorded in `DECISIONS.md` stay ruled out. **Measured: both half-lenses conjugate to 3 cells — 2 vertex cones plus the arc, the chord's cell being a ray that drops out — exact against a brute-force sup at 12 points, 0 wrong, where the old code was `+inf` at `(0,0)` and `(-1,0.5)` and `0` at `(2,-1)` for a truth of `1/2`. `biconjugateTest` is 7 / 0**, including `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, which had been the repository's only red. Pinned at unit level by `functionNDomainTest/twoEdgesOnOneVertexPairAreBothKept` and `halfLensConjugateIsFiniteEverywhereAndExact` (~10 s, against 10–40 minutes through the pipeline) | `functionNDomain.edgeIndexList` / `conjugateOfPiecePoly`, `region.getNormalConeVertexQ` / `getNormalConeEdgeQE` |
@@ -665,7 +668,7 @@ to the conjugate pipeline: for a bounded domain it is the lower convex hull of t
 | unbounded, 4 cones | `\|x\|+\|y\|` | **OK** |
 | unbounded, 3 wedges | `max(0,x,y)` | **OK** |
 | box, TWO faces sharing a diagonal | `x·y` | ~~**WRONG**~~ — **OK, re-measured 2026-08-15**: error 0, 4/4 points inside and 1/1 outside, against the `convhulln` ground truth. This was §7's open defect; see the struck-through row there |
-| parallelogram, one face | `x·y` | **ERROR** `QuaParCPLQ:conj:emptyResult` — and the message names the WRONG routine, see below |
+| parallelogram, one face | `x·y` | ~~**ERROR** `QuaParCPLQ:conj:emptyResult`~~ — **COMPUTES since 2026-08-16, and is nearly right**: exact at all four vertices, `+inf` outside the domain, and 8 of 10 interior probe points correct against a brute-force double conjugate. The other two are LOW by about 4% (`0.986` for `1.031`, `1.913` for `1.950`) — an envelope that is still slightly too small, from the residual `getInterior` defect below. Two defects fixed to get here, both general: see §7 |
 | general convex quadrilateral, one face | `x·y` | **ERROR** `MATLAB:badsubscript` |
 
 **These are not failures of the ALGORITHM, and the two remaining ones are different defects.**
@@ -674,18 +677,42 @@ Read the failing step before drawing a conclusion:
 | case | which conjugation | cause |
 |---|---|---|
 | general quadrilateral | **FIRST** | Step 1 has no `nCE == 3` branch on the path taken |
-| parallelogram | **SECOND** | the **max**, not the per-piece conjugate — see below |
+| ~~parallelogram~~ | ~~SECOND~~ | fixed 2026-08-16 — three per-piece conjugates had holes, so the max was empty; see below |
 | ~~two-face box~~ | ~~SECOND~~ | fixed 2026-08-15, §7 |
 
-**The parallelogram's error message blames the wrong routine — measured 2026-08-15.**
-`QuaParCPLQ.conj` raises `emptyResult` saying "conjugateOfPiecePoly returned no pieces", but it did
-not: all **12** pieces of this `f*` conjugate, to **27** cells between them. What returns nothing is
-the step after it, `functionNDomain.maxOfList`. Folding the groups one at a time, the accumulator
-runs 2, 3, 4, 3, 3, 3, 3, 1, 1 cells and then group 11 — the piece carrying
-`s1 − 2·s2 + s1·s2/2 + s1²/8 + s2²/2 + 2` — empties it. The domain of a max IS the intersection of
-the domains, so it may legitimately shrink; **empty it may not be**, since that asserts `f**` is
-`+inf` everywhere. So either one piece's conjugate domain is too small or `maxOfList` drops a cell,
-and the next person should start at group 11 rather than in Step 2.
+**The parallelogram — RESOLVED 2026-08-16, and the error message had been blaming the wrong
+routine.** `QuaParCPLQ.conj` raised `emptyResult` saying "conjugateOfPiecePoly returned no pieces";
+it did not — all **12** pieces conjugated, to **27** cells. What returned nothing was the step
+after, `functionNDomain.maxOfList`, and the max was empty for an honest reason: three of the twelve
+per-piece conjugates had HOLES inside the parallelogram, and since `f**` is a max its domain is the
+INTERSECTION of theirs.
+
+*How the three were identified, which is the reusable part:* `f**` of a bounded domain is finite
+exactly ON that domain, so **every** per-piece conjugate must be finite there. Evaluating all 12
+groups at six interior points named groups 9, 11 and 12 in one cheap run, turning "the max is
+empty" into "these three pieces are wrong".
+
+Two defects, both fixed and both general (§7):
+
+1. **`region.simplifyUnboundedRegion` declared any region with no finite VERTEX empty.** A
+   half-plane has none — and a half-plane is exactly what a TANGENT vertex produces, since the cone
+   there is built from the two edges meeting at it and tangent edges give the SAME half-plane
+   twice. On piece 9 the cone at `(1/4,7/8)` is `{2x/3 + y ≥ 4/3}` carrying `x/4 + 7y/8 − 1/2`.
+2. **The edge list, in bug 1's other form.** Piece 9 is bounded with 3 vertices and 3 genuine edges
+   plus a conic touching one vertex: 4 constraints for 3 vertices, so the COUNT called it unbounded
+   and it was built one edge cell short.
+
+All 12 groups now cover the parallelogram, and `biconj` returns a `QuaParCPLQ` instead of raising.
+
+**What remains, and it is a distinct defect:** the last 2 of 10 interior points come back about 4%
+LOW. On piece 9 the chord's edge cell and the arc's claim the SAME region and the chord's is checked
+first and is wrong there. `f` is a SINGULAR convex quadratic on that piece — constant along one
+whole edge, `∇f = 0` at two of its three vertices — so `functionNDomain.getInterior`, which
+eliminates `s` between `x = ∂₁f` and `y = ∂₂f`, returns the gradient map's image LINE rather than a
+curve separating the two cells. **Do not attack the `isQuad` chord rewrite for it**: both
+alternatives were measured on 2026-08-16 and are recorded in `DECISIONS.md` — chording the vertices
+the conic actually touches makes the piece WORSE (2 wrong of 10 → 3), and skipping the rewrite
+changes nothing at all.
 
 **THE GENERAL QUADRILATERAL IS NOT ONLY A WIRING GAP — measured 2026-08-15 by writing the wiring
 and reverting it.** The `nCE == 3` branch below was implemented (build the triangle as a one-face

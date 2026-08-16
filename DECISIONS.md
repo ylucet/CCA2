@@ -25,6 +25,89 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-16 — The parallelogram's `emptyResult`: TWO defects, both fixed, and two more measured and not taken
+
+Traced from `QuaParCPLQ:conj:emptyResult` down to a single piece, then to a unit reproducer that
+runs in about a minute. Piece 9 of `f*` for `x·y` over `conv{(0,0),(2,0),(2.5,1),(0.5,1)}` went from
+**6 of 10 probe points wrong or uncovered to 2**, against a brute-force sup over the piece.
+
+**How it was found, which is the reusable part.** `f**` of a bounded domain is finite exactly ON
+that domain, and `f**` is a MAX, so EVERY per-piece conjugate must be finite there. Evaluating all
+12 groups at six points inside the parallelogram showed three with holes — 9, 11 and 12 — while the
+other nine covered everything. That turned "the max comes out empty" into "these three pieces are
+wrong", in one cheap measurement. The accumulator and group 11 covered DISJOINT halves of the
+parallelogram, so the empty intersection was the honest answer to a wrong question.
+
+**Defect 1 — `region.simplifyUnboundedRegion` declares any region with no finite vertex empty.** A
+half-plane has none; so do a slab and the whole plane. And a half-plane is exactly what a TANGENT
+vertex produces: the cone at a vertex is built from the two edges meeting there, and when those are
+tangent — an arc and its chord touching, which is how a curvilinear piece ends — both half-planes
+are the SAME one. Here the cone at `(1/4,7/8)` is `{2x/3 + y ≥ 4/3}` carrying `x/4 + 7y/8 − 1/2`,
+and it was being deleted. Now refuted by a WITNESS: a feasible point certifies non-emptiness, while
+failing to find one proves nothing, so the old verdict stands whenever no witness turns up.
+
+**Defect 2 — the edge list, again, in its other form.** The piece has 3 vertices and 3 genuine
+edges plus a conic touching one vertex: 4 constraints for 3 vertices, so `size(ineqs,2) == nv` calls
+a BOUNDED region unbounded, `endNv` comes out `nv−1`, and it is built one edge cell short. Same
+root cause as bug 1, without the lens collision — so `conjugateOfPiecePoly` now derives the edge
+list for any bounded piece the count mislabels, with the count-matching branches keeping precedence.
+
+**Measured and NOT taken, both at the `isQuad` chord rewrite.** `biconjugateTest`'s own comment
+asked for new evidence before re-trying this; here it is, and it says leave it alone.
+- Chording **the vertices the conic actually touches** (`region.vertexOfEdge`) instead of
+  `vx(1),vx(2)`: makes this piece WORSE, 2 wrong of 10 → 3. The arc's cell grows to swallow a
+  region the vertex cone was answering correctly.
+- **Skipping the rewrite entirely**: changes this piece not at all, 2 of 10 either way.
+
+**What the last 2 of 10 are.** The chord's edge cell and the arc's claim the SAME region, and the
+chord's is checked first and is wrong there (0.0176 and −0.0138 against 0.0333 and 0.0363; the
+arc's cell has the right value at both). `f` is a SINGULAR convex quadratic on this piece —
+constant along one whole edge, `∇f = 0` at two of the three vertices — so `functionNDomain.getInterior`,
+which eliminates `s` between `x = ∂₁f` and `y = ∂₂f`, returns the gradient map's image LINE rather
+than a curve separating the two cells. That is the next defect, and it is not in the chord rewrite.
+
+## 2026-08-16 — The A.4/A.5 split as a DOMAIN split: written, measured, REVERTED. The blocker is arithmetic, not structure.
+
+Third attempt at the general quadrilateral, and the first one that failed for a reason none of the
+previous analysis predicted. **The structure was right; the ARITHMETIC is what kills it.**
+
+**What was built.** `plq_1p.triangulate` split each indefinite triangle into the A.4/A.5
+sub-triangles before emitting pieces, so every sub-piece lands on a path Step 2 already has — a
+2-convex-edge sub-triangle where cPLQ's own closed form IS tight, plus a 1-convex-edge one whose
+A.3 rational envelope the `nCE == 1` branch derives analytically. The sub-triangles came from
+`convEnvCPLQ` itself (its FACES are the split, in x coordinates, recursion done), so nothing had to
+be moved out of that file. It worked at Step 1 exactly as designed.
+
+**Why it was reverted: it turns the crash into a HANG.** The quadrilateral's first conjugate ran
+for over 45 minutes without finishing, against ~3 minutes before, and had stopped producing output
+— stuck inside a symbolic call, with 3.8 MB of `isAlways:TruthUnknown` warnings behind it carrying
+coefficients like
+
+    −609298613085773108668343859 / 14507109835375549828038656 .
+
+A hang is worse than a crash here: this repository's own suite driver exists because "a wedged
+suite no longer costs the whole run."
+
+**The cause, and it is inherent to the approach.** [COAP] A.4's cevian has slope `−sqrt(mh·mw)`, so
+its foot is IRRATIONAL in general. `convEnvCPLQ` is double precision throughout, and `sym` of a
+double is EXACT — a denominator near `2^53`. Snapping the new vertices to the simplest rational
+within `1e-10` (which the reverted code did, and which is the same numeric→symbolic hygiene
+`ratPolToPlq` already applies to coefficients) bounds the VERTEX denominators but not the
+downstream ones: the conjugate is a rational function of those coordinates, so a few squarings and
+additions carry `1e5` denominators to `1e25`, and MuPAD's `isAlways` then cannot decide anything.
+
+**So the split has to be carried SYMBOLICALLY, not snapped.** The cevian foot is an exact algebraic
+number — intersect the line through the far vertex of slope `−sqrt(mh·mw)` with the other convex
+edge — and `sqrt` is something the symbolic layer handles natively and keeps small. That means
+implementing A.4 (and A.5's smooth-fit line) in symbolic form beside the existing double version,
+rather than calling `convEnvCPLQ` for the geometry. It is a bounded piece of work — the formulas
+are two line intersections and a curvature test — but it is new code, not wiring.
+
+**What NOT to do next.** Do not re-try any of: installing A.4/A.5 faces as ENVELOPE faces (Step 2
+has no rational-envelope branch — 2026-08-15 entry), calling `convEnvCPLQ` for the domains and
+rounding (this entry), or leaving `nCE == 2` alone in the hope the error is elsewhere (it is the
+envelope itself — 2026-08-15 entry, with the −0.2835 measurement).
+
 ## 2026-08-15 — cPLQ's `nCE == 2` envelope is NOT the envelope, and the obvious fix cannot work
 
 **The defect, derived and then measured.** `plq_1p.convexEnvelope1`'s `nCE == 2` branch applies
