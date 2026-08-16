@@ -991,7 +991,11 @@ classdef functionNDomain
 
         function [pc,ia] = conjugateOfPiecePoly (obj)
             disp("in conjugateOfPiecePoly")
-            
+
+            % EXPLICIT EDGE LIST PER PIECE, empty where the slot conventions still hold. Built in
+            % the loop below and consumed in the second one -- both are in this function, so no
+            % class or cross-file contract changes to carry it. See functionNDomain.edgeIndexList.
+            eIdxAll = cell(1, size(obj,2));
 
             for i=1:size(obj,2)
                 d = obj(i).d;
@@ -1175,12 +1179,41 @@ classdef functionNDomain
                 % distinct numbers.
                 [edgeNo, keepE] = functionNDomain.spreadCollidingEdges(d, edgeNo, keepE, nOn, wasBounded);
 
-                d.ineqs = d.ineqs(keepE);
-                edgeNo  = edgeNo(keepE);
-                d.ineqs(edgeNo) = d.ineqs;
+                % (5) STILL COLLIDING, and both are genuine edges. spreadCollidingEdges resolves
+                % a collision when some edge number is free; on the pipeline's own lens every
+                % number it could move to is held by another constraint, so it leaves things
+                % alone and the last-write-wins scatter below then DESTROYS one of the two edges.
+                %
+                % There is nothing left to rearrange at that point -- the slot conventions cannot
+                % represent two edges on one vertex pair at all -- so stop using slots for this
+                % piece and derive the edge list from the geometry instead. The scatter is what
+                % maintains the slot correspondence, so it is skipped exactly when the list
+                % replaces it; the constraints themselves are all kept, which is what the vertex
+                % cones and every feasibility test below still need.
+                %
+                % SCOPE. edgesStillCollide is the lens signature and nothing else reaches it, and
+                % edgeIndexList prefers today's slot wherever it is geometrically valid -- so a
+                % piece that works today keeps the same indices whether it takes this branch or
+                % not.
+                eList = [];
+                if functionNDomain.edgesStillCollide(edgeNo, keepE, nOn)
+                    dTry = d;
+                    dTry.ineqs = dTry.ineqs(keepE);
+                    [eTry, okL] = functionNDomain.edgeIndexList(dTry, wasBounded);
+                    if okL
+                        d = dTry;
+                        eList = eTry;
+                    end
+                end
+                if isempty(eList)
+                    d.ineqs = d.ineqs(keepE);
+                    edgeNo  = edgeNo(keepE);
+                    d.ineqs(edgeNo) = d.ineqs;
+                end
+                eIdxAll{i} = eList;
 
                 obj(i).d = d;
-               
+
             end
          
              % redesign so u can have a list of piecewise functions
@@ -1243,7 +1276,10 @@ classdef functionNDomain
                for kq = 1:size(d.ineqs,2)
                    if d.ineqs(kq).isQuad, hasQuadCon = true; break, end
                end
-               if size(d.ineqs,2) == d.nv && ~hasQuadCon
+               eIdx = eIdxAll{i};
+               if ~isempty(eIdx)
+                   NCV = d0.getNormalConeVertexQ(x, y, eIdx);
+               elseif size(d.ineqs,2) == d.nv && ~hasQuadCon
                    NCV = d.getNormalConeVertex(x, y);
                else
                    NCV = d0.getNormalConeVertexQ(x, y);
@@ -1259,19 +1295,25 @@ classdef functionNDomain
                    end
                end
                if obj(i).d.nv > 1
-                   if size(d0.ineqs,2) == d.nv
+                   if ~isempty(eIdx)
+                       NCE = d0.getNormalConeEdgeQE(x, y, eIdx);
+                       [subdE,unR] = obj(i).getSubdiffVertexT2Q (NCE, [x,y]);
+                       endNv = numel(eIdx);
+                   elseif size(d0.ineqs,2) == d.nv
                        NCE = d0.getNormalConeEdgeQ3(x, y);
                        [subdE,unR] = obj(i).getSubdiffVertexT2 (NCE, [x,y]);
+                       endNv = obj(i).d.nv;
                    else
                        NCE = d0.getNormalConeEdgeQ(x, y);
                        [subdE,unR] = obj(i).getSubdiffVertexT2Q (NCE, [x,y]);
-                   end
-                   endNv = obj(i).d.nv-1;
-                   if size(obj(i).d.ineqs,2) == obj(i).d.nv
-                       endNv = obj(i).d.nv;
+                       % d0 is a copy of d = obj(i).d, so reaching this branch already means
+                       % size(obj(i).d.ineqs,2) ~= nv -- the old test here was dead.
+                       endNv = obj(i).d.nv-1;
                    end
                    for j = 1:endNv % fix this  obj(i).d.nv-1 ?
-                       if endNv ==  obj(i).d.nv
+                       if ~isempty(eIdx)
+                           ineq = subs(obj(i).d.ineqs(eIdx(j)).f,obj(i).d.vars,[x,y]);
+                       elseif endNv ==  obj(i).d.nv
                            ineq = subs(obj(i).d.ineqs(j).f,obj(i).d.vars,[x,y]);
                        else
                            ineq = subs(obj(i).d.ineqs(j+1).f,obj(i).d.vars,[x,y]);
@@ -1855,6 +1897,114 @@ classdef functionNDomain
                          edgeNo(k) = cand;
                          break
                      end
+                 end
+             end
+         end
+
+         function [eIdx, ok] = edgeIndexList(d, wasBounded)
+         % WHICH CONSTRAINT BOUNDS WHICH EDGE, read off the region's own geometry rather than off
+         % a slot. eIdx(j) is the index into d.ineqs of the constraint bounding the edge from
+         % vertex j to vertex j+1 (cyclically, when the region is bounded). ok is false when the
+         % geometry does not settle the whole list, and the caller then leaves the slot
+         % conventions exactly as they are.
+         %
+         % WHY THIS EXISTS. Everything downstream in conjugateOfPiecePoly is edge-indexed --
+         % getNormalConeVertexQ reads the constraints of the edges meeting at a vertex,
+         % getNormalConeEdgeQ/Q3 the constraint of each edge, and the edge loop that same
+         % constraint again -- under one of two slot conventions chosen by the COUNT
+         % `size(ineqs,2) == nv`. That count stands in for "is this region unbounded", and on a
+         % LENS it is simply the wrong question: two vertices, two genuine edges (an arc and its
+         % chord), five constraints. The count says unbounded, so edge 1 is read from ineqs(2),
+         % the arc is never read as an edge at all, and what comes out is the conjugate of the
+         % CHORD -- finite on a strip where the truth is finite everywhere.
+         %
+         % HOW THE LIST IS BUILT. A constraint bounds the edge between two consecutive vertices
+         % when both vertices lie on it AND its own curve between them stays in the region --
+         % region.vertexOfEdge answers the first, boundsAnEdge the second (the second matters:
+         % the lens's OTHER conic passes through both vertices too, and meets the region nowhere
+         % else). Where several qualify, today's slot is preferred whenever it is among them, so
+         % a piece whose indexing already works keeps exactly the list it has.
+             eIdx = []; ok = false;
+             if isempty(d) || d.nv < 2
+                 return
+             end
+             nv = d.nv;
+             m  = size(d.ineqs,2);
+             if m < 1
+                 return
+             end
+             if wasBounded
+                 nE = nv;
+             else
+                 nE = nv - 1;
+             end
+             if nE < 1
+                 return
+             end
+             % today's convention, kept as the preferred answer wherever it is still valid
+             if m == nv
+                 prefer = 1:nv;
+             else
+                 prefer = 2:(nv+1);
+             end
+
+             % which vertices lie on which constraint
+             onV = false(m, nv);
+             for k = 1:m
+                 [~, vxk, vyk] = d.vertexOfEdge(k);
+                 for t = 1:numel(vxk)
+                     for vI = 1:nv
+                         if isAlways(d.vx(vI) == vxk(t)) && isAlways(d.vy(vI) == vyk(t))
+                             onV(k, vI) = true;
+                         end
+                     end
+                 end
+             end
+
+             eIdx = zeros(1, nE);
+             for j = 1:nE
+                 a = j;
+                 b = mod(j, nv) + 1;
+                 cand = find(onV(:,a)' & onV(:,b)');
+                 cand = cand(~ismember(cand, eIdx(1:j-1)));
+                 % PASSING THROUGH BOTH VERTICES IS NOT ENOUGH. On the lens BOTH conics do -- the
+                 % second one meets the region at those two points and nowhere else. Keep only
+                 % constraints whose own curve between the vertices stays inside; boundsAnEdge
+                 % reports anything undecidable as an edge, so this only ever drops a candidate it
+                 % has positive evidence against. Filtering BEFORE the preference below matters:
+                 % preferring today's slot unconditionally would hand edge 2 of the lens that
+                 % second conic, which bounds nothing.
+                 cand = cand(arrayfun(@(k) functionNDomain.boundsAnEdge(d, k, true(1, m)), cand));
+                 if isempty(cand)
+                     eIdx = []; return
+                 end
+                 p = prefer(j);
+                 if p <= m && any(cand == p)
+                     eIdx(j) = p;
+                 else
+                     eIdx(j) = cand(1);
+                 end
+             end
+             ok = true;
+         end
+
+         function tf = edgesStillCollide(edgeNo, keepE, nOn)
+         % Do two constraints that each bound a genuine EDGE still share one edge number, after
+         % spreadCollidingEdges has moved everything it can?
+         %
+         % This is the LENS signature and the only condition under which conjugateOfPiecePoly
+         % departs from its slot conventions. It is deliberately narrow: when it is false the
+         % scatter stores every edge in a distinct slot, the two conventions are consistent, and
+         % nothing about the piece changes.
+             tf = false;
+             still = find(keepE(:))';
+             if isempty(still)
+                 return
+             end
+             for sIdx = unique(edgeNo(still))'
+                 g = still(edgeNo(still) == sIdx);
+                 if numel(g(nOn(g) >= 2)) >= 2
+                     tf = true; return
                  end
              end
          end

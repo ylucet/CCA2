@@ -64,9 +64,105 @@ classdef functionNDomainTest < matlab.unittest.TestCase
             testCase.verifyTrue(isAlways(v == sym(16)/5));
         end
 
+        function twoEdgesOnOneVertexPairAreBothKept (testCase)
+        % A LENS -- two genuine edges joining the SAME pair of vertices -- is what neither slot
+        % convention in conjugateOfPiecePoly can express, and it is the precondition of the test
+        % below. getEdgeNosInf numbers an edge by one of its ENDPOINT vertices, so an arc and its
+        % chord get the same number, and the scatter that re-indexes constraints by edge number
+        % is last-write-wins: one of the two is destroyed outright.
+        %
+        % Pinned here so that if the numbering ever stops colliding, the next test stops silently
+        % covering nothing.
+            [~, d] = functionNDomainTest.halfLens;
+            d0 = d.removeInfV;
+            if d0.nv == size(d0.ineqs,2)
+                d0 = d0.poly2order;
+            else
+                d0 = d0.poly2orderUnbounded;
+            end
+            edgeNo = d0.getEdgeNosInf(d0.vars);
+            nOn = zeros(size(edgeNo));
+            for k = 1:size(d0.ineqs,2)
+                nOn(k) = d0.vertexOfEdge(k);
+            end
+            testCase.verifyTrue( ...
+                functionNDomain.edgesStillCollide(edgeNo, true(size(edgeNo)), nOn), ...
+                'expected two two-vertex constraints to claim the same edge slot');
+
+            % And the geometry does settle which constraint bounds which edge.
+            [eIdx, ok] = functionNDomain.edgeIndexList(d0, true);
+            testCase.verifyTrue(ok, 'the edge list must be derivable from the geometry');
+            testCase.verifyEqual(numel(eIdx), 2, 'a lens has exactly two edges');
+            testCase.verifyEqual(numel(unique(eIdx)), 2, 'and they are distinct constraints');
+            % One of them has to be the ARC. Reading the edge list off the slot count instead
+            % never selected it, which is the whole defect: the conjugate came out as that of the
+            % straight CHORD, finite only on a strip.
+            isQ = arrayfun(@(k) d0.ineqs(k).isQuad, eIdx);
+            testCase.verifyEqual(nnz(isQ), 1, 'exactly one of the lens edges is the arc');
+        end
+
+        function halfLensConjugateIsFiniteEverywhereAndExact (testCase)
+        % The half-lens {(s1+s2)^2 <= 4*s1, (s1+s2)^2 <= 4*s2, s2 <= s1} carrying s1 -- piece 1 of
+        % f* for f = x*y over the unit square given as TWO faces. It is BOUNDED with a curved
+        % edge, so its conjugate is finite on all of R^2 and genuinely curved.
+        %
+        % It used to come back as two cells carrying max(0, x+y-1), the conjugate of the straight
+        % segment conv{(0,0),(1,1)}: +inf off a strip, where the truth is finite. Because f** is a
+        % MAX over the pieces, its domain is the INTERSECTION of theirs, so this one piece
+        % answering on a strip collapsed the whole biconjugate -- it is the entirety of
+        % biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope, at ~10 s instead of the
+        % 10-40 minutes that test needs to reach the same piece.
+        %
+        % The three points checked first are exactly the ones a brute-force sup over the lens
+        % showed wrong: +inf where the truth is 0, and 0 where the truth is 1/2.
+            pc = functionNDomainTest.halfLens;
+            x = sym('x'); y = sym('y');
+            testCase.verifyEqual(size(pc,2), 3, ...
+                '2 vertex cones + the arc; the chord''s cell is a ray and drops out');
+
+            want = {[0 0], sym(0); [-1 sym(1)/2], sym(0); [2 -1], sym(1)/2; ...
+                    [sym(9)/10 sym(3)/5], sym(1)/2; [sym(3)/5 sym(3)/5], sym(1)/5; ...
+                    [3 3], sym(5)};
+            for i = 1:size(want,1)
+                pt = want{i,1};
+                [v, n] = functionNDomainTest.evalAt(pc, pt, x, y);
+                testCase.verifyEqual(n, 1, sprintf( ...
+                    'the cells must partition, not overlap, at (%s,%s)', ...
+                    char(string(pt(1))), char(string(pt(2)))));
+                testCase.verifyTrue(isAlways(v == want{i,2}), sprintf( ...
+                    'half-lens conjugate at (%s,%s)', char(string(pt(1))), ...
+                    char(string(pt(2)))));
+            end
+
+            % FINITE EVERYWHERE is the property the strip broke; check it away from the region
+            % the old answer covered, in all four quadrants.
+            for pt = [4 -4; -4 4; -4 -4; 6 6]'
+                [~, n] = functionNDomainTest.evalAt(pc, pt', x, y);
+                testCase.verifyEqual(n, 1, sprintf( ...
+                    'a bounded piece''s conjugate is finite everywhere -- at (%g,%g) it is not', ...
+                    pt(1), pt(2)));
+            end
+        end
+
     end
 
     methods (Static)
+
+        function [pc, d] = halfLens
+        % Piece 1 of f* for f = x*y over the unit square as two faces, verbatim as the pipeline
+        % delivers it: nv = 2, five constraints, of which two are the conics (s1+s2)^2 = 4*s1 and
+        % (s1+s2)^2 = 4*s2. With s2 <= s1 the second is the ARC and the first meets the region
+        % only at its two vertices; -s1-s2 <= 0 and s1+s2-2 <= 0 are implied by the others but no
+        % LP can see that past a conic, so they arrive and stay.
+            s1 = sym('s_1'); s2 = sym('s_2');
+            f = symbolicFunction(s1);
+            d = region([ -s1 - s2, ...
+                          s1 + s2 - 2, ...
+                          2*s1*s2 - 4*s1 + s1^2 + s2^2, ...
+                          2*s1*s2 - 4*s2 + s1^2 + s2^2, ...
+                          s2 - s1 ], [s1, s2]);
+            pc = functionNDomain(f, d).conjugateOfPiecePoly;
+        end
 
         function [pc, d] = piece23
         % Piece 23 of testcPLQ/testRectBiconj's biconjugate, verbatim: a triangle with vertices

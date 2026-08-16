@@ -48,6 +48,31 @@ classdef region
              end
          end
 
+         function eq = coneNormalAt (obj, cI, at, opp, s1, s2)
+         % One half-plane of an edge's normal cone: the line through vertex `at`, perpendicular to
+         % constraint cI's tangent THERE, oriented so that vertex `opp` satisfies it.
+         %
+         % Factored out of getNormalConeEdgeQ/Q3, which each repeat it twice, so that
+         % getNormalConeEdgeQE can build the same object from an explicit edge list. The tangent
+         % is taken at the vertex rather than from the chord between the vertices -- that is the
+         % whole difference between these routines and the polyhedral getNormalConeEdge, and it is
+         % what a curved edge needs.
+             slope = obj.slopeIneq(cI, [obj.vx(at), obj.vy(at)]);
+             pslope = -1/slope;
+             if pslope == -inf
+                 pslope = inf;
+             end
+             if pslope ~= inf
+                 q = obj.yIntercept(at, pslope);
+                 eq = s2 - pslope*s1 - q;
+             else
+                 eq = s1 - obj.vx(at);
+             end
+             if isAlways(subs(eq, [s1,s2], [obj.vx(opp), obj.vy(opp)]) > 0)
+                 eq = -eq;
+             end
+         end
+
          % ---- LP certificates ------------------------------------------------------------
          % Two of this class's set operations used to decide a GLOBAL question -- "is this
          % constraint implied by the others?" (simplifyUnboundedRegion) and "is the union of
@@ -4085,8 +4110,24 @@ classdef region
      end
 
      methods % normal cone
-         function NC = getNormalConeVertexQ(obj, s1, s2)
+         function NC = getNormalConeVertexQ(obj, s1, s2, eIdx)
              % obj = obj.envelope(i).d
+             %
+             % EXPLICIT EDGE LIST (optional 4th argument). Without it this routine reads the
+             % constraint bounding an edge off a SLOT: the cone at vertex j is built from
+             % ineqs(j) and ineqs(j+1), wrapped modulo the number of constraints. That works
+             % only while "constraint j bounds edge j" holds, which is the correspondence
+             % conjugateOfPiecePoly's scatter maintains -- and which it cannot maintain for a
+             % LENS, where two genuine edges join the SAME pair of vertices and therefore
+             % collide on one edge number (see functionNDomain.edgeIndexList).
+             %
+             % Given eIdx, edge j is the edge from vertex j to vertex j+1 (cyclically) and its
+             % constraint is ineqs(eIdx(j)) -- so every index below that stood for "the
+             % constraint of edge j" is looked up in the list instead. Nothing else changes:
+             % hand this eIdx = 1:nv and it is the routine it was, index for index.
+            if nargin < 4
+                eIdx = [];
+            end
             NC = sym(zeros(obj.nv,2));
             meanx = sum(obj.vx)/obj.nv;
             meany = sum(obj.vy)/obj.nv;
@@ -4097,8 +4138,11 @@ classdef region
             %disp('normalConeQ')
             vars = obj.vars;
              for j = 1: obj.nv
-                
-                slope = obj.slopeIneq(j,[obj.vx(j),obj.vy(j)]);
+                cj = j;
+                if ~isempty(eIdx)
+                    cj = eIdx(j);
+                end
+                slope = obj.slopeIneq(cj,[obj.vx(j),obj.vy(j)]);
                 pslope = -1/slope;
                 if pslope == -inf
                     pslope = inf;
@@ -4112,9 +4156,16 @@ classdef region
                 eq = symbolicFunction(eq);
                 if obj.nv > 1
                     k = j-1;
+                    % With an explicit edge list the region is CLOSED -- edge nv runs from the
+                    % last vertex back to the first -- so vertex 1's predecessor is vertex nv,
+                    % not "off the end". Wrapping here is what makes the k<1 probe construction
+                    % below unnecessary in that case; without a list nothing changes.
+                    if k < 1 && ~isempty(eIdx)
+                        k = obj.nv;
+                    end
                     if k < 1
-                   
-                      vs = obj.ineqs(j).getVars();
+
+                      vs = obj.ineqs(cj).getVars();
                   if size(vs,2) == 1 & isAlways(vs(1) == vars(2))
                       py = obj.vy(j);
                       px = obj.vx(j)+0.1 ;
@@ -4148,7 +4199,7 @@ classdef region
                       end
                   else
                       px = obj.vx(j) - 0.1;
-                      ey = subs(obj.ineqs(j).f,obj.vars(1),px);
+                      ey = subs(obj.ineqs(cj).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % py can have >1 root when obj.ineqs(j) is quadratic in y (this is
                       % getNormalConeVertexQ, the curved/quadratic-edge case) -- reduce to a
@@ -4165,7 +4216,7 @@ classdef region
                       %obj.ptFeasible(obj.vars,[double(px),double(py)])
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(j) + 0.1;
-                          ey = subs(obj.ineqs(j).f,obj.vars(1),px);
+                          ey = subs(obj.ineqs(cj).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
                           if isempty(py)
                             py = obj.vy(j);
@@ -4184,8 +4235,12 @@ classdef region
                 end
                 if eq.subsF([s1,s2],[px,py]).isZero
                     kk = region.probeVertexIndex(k, j, obj.nv);
+                    ckk = kk;
+                    if ~isempty(eIdx)
+                        ckk = eIdx(kk);
+                    end
                     px = obj.vx(kk) - 0.1;
-                      ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
+                      ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % see the matching HISTORY comment above: reduce a possibly-multi-root py
                       % (quadratic-in-y ineqs(kk)) to a single candidate before use.
@@ -4196,7 +4251,7 @@ classdef region
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(kk) + 0.1;
-                          ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
+                          ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
                           if isempty(py)
                             py = obj.vy(kk);
@@ -4226,7 +4281,14 @@ classdef region
                 % j+1, so no previously-working input changes.
                 nIn = size(obj.ineqs,2);
                 jNext = mod(j, nIn) + 1;
-                slope = obj.slopeIneq(jNext,[obj.vx(j),obj.vy(j)]);
+                cNext = jNext;
+                if ~isempty(eIdx)
+                    % With a list, "the next constraint" means the next EDGE -- vertex j to
+                    % vertex j+1 round the cycle -- and its constraint comes from the list.
+                    jNext = mod(j, obj.nv) + 1;
+                    cNext = eIdx(jNext);
+                end
+                slope = obj.slopeIneq(cNext,[obj.vx(j),obj.vy(j)]);
                 pslope = -1/slope;
                 if pslope == -inf
                     pslope = inf;
@@ -4267,8 +4329,8 @@ classdef region
                     % end
 
 
-                   vs = obj.ineqs(jNext).getVars();
-                 
+                   vs = obj.ineqs(cNext).getVars();
+
                    if size(vs,2) == 1 & isAlways(vs(1) == vars(2))
                       py = obj.vy(j);
                       px = obj.vx(j)+0.1 ;
@@ -4285,7 +4347,7 @@ classdef region
                       end
                    else
                       px = obj.vx(j) - 0.1;
-                      ey = subs(obj.ineqs(jNext).f,obj.vars(1),px);
+                      ey = subs(obj.ineqs(cNext).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % see the matching HISTORY comment above: reduce a possibly-multi-root py
                       % (quadratic-in-y ineqs(j+1)) to a single candidate before use.
@@ -4296,7 +4358,7 @@ classdef region
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(j) + 0.1;
-                          ey = subs(obj.ineqs(j).f,obj.vars(1),px);
+                          ey = subs(obj.ineqs(cj).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
                           % HISTORY: this read `py = py(1); if isempty(py) ... end`, indexing
                           % BEFORE the emptiness guard, so an empty solve threw
@@ -4320,8 +4382,12 @@ classdef region
                 %isAlways(subs(eq,[s1,s2],[px,py]) == 0)
                 if eq.subsF([s1,s2],[px,py]).isZero
                     kk = region.probeVertexIndex(k, j, obj.nv);
+                    ckk = kk;
+                    if ~isempty(eIdx)
+                        ckk = eIdx(kk);
+                    end
                     px = obj.vx(kk) - 0.1;
-                      ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
+                      ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
                       py = solve(ey,obj.vars(2));
                       % see the matching HISTORY comment above: reduce a possibly-multi-root py
                       % (quadratic-in-y ineqs(kk)) to a single candidate before use.
@@ -4332,7 +4398,7 @@ classdef region
                       end
                       if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
                           px = obj.vx(kk) + 0.1;
-                          ey = subs(obj.ineqs(kk).f,obj.vars(1),px);
+                          ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
                           py = solve(ey,obj.vars(2));
                           % HISTORY: this read `py = py(1); if isempty(py) ... end`, indexing
                           % BEFORE the emptiness guard -- the same inversion already corrected
@@ -4372,6 +4438,27 @@ classdef region
              end
                 
         end
+
+         function NC = getNormalConeEdgeQE(obj, s1, s2, eIdx)
+         % EDGE normal cones from an EXPLICIT edge list. Edge j joins vertex j to vertex j+1
+         % (cyclically) and is bounded by ineqs(eIdx(j)).
+         %
+         % This is getNormalConeEdgeQ3 and getNormalConeEdgeQ with their one difference removed.
+         % Both build the same two half-planes per edge -- the perpendicular to the EDGE'S OWN
+         % constraint at each of the edge's two endpoints, oriented by the other endpoint -- and
+         % differ only in WHICH slot they believe that constraint sits in: ineqs(j) for a region
+         % with nv constraints, ineqs(j+1) for one with nv+1 (slot 1 reserved for a ray). Neither
+         % convention can express a LENS, where two edges join the same pair of vertices; see
+         % functionNDomain.edgeIndexList. Hand this eIdx = 1:nv and it is Q3; hand it 2:nv and it
+         % is Q, edge for edge.
+            NC = sym(zeros(max(numel(eIdx), obj.nv), 3));
+            for j = 1:numel(eIdx)
+                a = j;
+                b = mod(j, obj.nv) + 1;
+                NC(j,1) = region.coneNormalAt(obj, eIdx(j), a, b, s1, s2);
+                NC(j,2) = region.coneNormalAt(obj, eIdx(j), b, a, s1, s2);
+            end
+         end
 
          function NC = getNormalConeEdgeQ(obj, s1, s2)
              % obj = obj.envelope(i).d
