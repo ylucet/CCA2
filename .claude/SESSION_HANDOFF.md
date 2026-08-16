@@ -2,90 +2,60 @@
 
 _Last updated: 2026-08-15_
 
-## Where things stand
-
-- On **`main`**, pushed. (The `overnight/2026-08-13` branch was merged and is history.)
-- **`maxQuaParTest` 29 / 0. `conjCPLQTest` 25 / 0. Fast bucket 204 / 0.** `MAXQP_ASSERT = 1` is now ON for every test in
-  `maxQuaParTest`, via a `TestMethodSetup` that restores the previous value on teardown.
-- **`maxQuaPar` has NO open case.** The seeded arc-vs-arc sweep (seed 20260803, N=18) is
-  **18 exact / 0 wrong / 0 errored**, from 16 / 0 / 2 two sessions ago.
-- **Slow bucket 114 / 1 — ONE red in the whole repository**,
-  `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, and it is now 5 of 7 probe points right
-  instead of 0. `unboundedFaceTest` 18 / 0, `conjCPLQTest` 25 / 0, `testMaxMultiRegion` 24 / 0,
-  `testcPLQ` 8 / 0, `testRegion` 23 / 0, `biconjCPLQTest` 10 / 0.
-- **`SUPPORT_MATRIX.md` §8's second release blocker is CLOSED** — unbounded multi-face domains.
-  Steps 1, 2 and 3 are all done; the last two pieces closed on the same day.
-
 ## What happened this session
 
-**Bug 5 — FIXED.** `splitTwoArcPiece` found no cut when a piece's two arcs are ADJACENT: its two
-candidate chords join the arcs' facing endpoints, which for arcs sharing a vertex ARE the arcs' own
-edges, so both chains came out too short and the piece was returned unsplit with one arc flattened
-to its chord. Generalised the `nv == 3` shared-vertex fallback to `nv >= 4` with the ordinary
-diagonal to a non-adjacent vertex. Pinned by
-`arcVsArcSplitsTwoADJACENTArcsOnAPieceWithADiagonal`.
+**Bug 1 is fixed, and the repository now has no failing test.** It was the last red, marked BLOCKED
+after four attempts. The whole thing comes down to one sentence: *both slot conventions identify an
+edge by a VERTEX INDEX, and a lens's two edges join the SAME pair of vertices* — so neither
+convention can name them apart and no reassignment of slots to constraints ever could. The four
+earlier attempts were all variations on reassigning slots. `functionNDomain.edgeIndexList` derives
+the edge list from the geometry instead, and the three edge-indexed readers take it as an argument.
 
-**Bug 1 — three defects fixed, one attempted fix rejected as unsound.** `f**` of `x·y` over the
-two-face square is now exact at 5 of 7 probe points; it was 0 of 7.
+## Where things stand
 
-1. `getEdgeNosInf` numbers an edge by one of its endpoint VERTICES, so a LENS — two edges joining
-   the same pair — gets one number for both, and the last-write-wins scatter destroys one.
-2. `getNormalConeVertexQ` indexed its second constraint as `j+1` unwrapped, raising
-   `badsubscript` on any BOUNDED region — which is why its only caller sent every bounded region
-   to the POLYHEDRAL routine, whose cones come from the chord and are wrong for a curved edge.
-3. `biconj` handed its second conjugation the curved MESH `conj` has returned since 2026-08-13;
-   `quaPolToPlq` refuses a curved domain. It now asks for the symbolic form on purpose.
-
-**Bugs 3 and 4 — FIXED.** `convEnvUnbounded` computed only the AFFINE envelope and refused
-anything with `d'Qd > 0` along a ray. Two shapes are now derived and implemented with their proofs
-in the source: a WEDGE with one flat and one convex ray, whose envelope is `q` with its CROSS TERM
-deleted; and a HALF-STRIP convex along the ray whose base edge is Q-orthogonal to it, where `q`
-separates. A negative cross term means the envelope is `−inf` (now reported); a non-orthogonal
-half-strip is refused. `unboundedFaceTest` 18 / 0, from 16 / 2.
-
-**Bug 2 — FIXED.** `region.removeTangent` built the TANGENT LINE to a quadratic constraint at a
-vertex where that quadratic's GRADIENT VANISHES — the apex of a cone, which is exactly where an
-unbounded fan's Step 3 split conics meet — and deleted a constraint matching that meaningless
-"tangent". It removed `−s1 ≤ 0`, leaving two constraints blind to the sign of `s1`, so the region
-went symmetric and claimed the mirror wedge. **This is the SECOND routine to fall into that trap
-on that same input**; §8.2(e) records `simplifyUnboundedRegion` doing it, fixed 2026-08-02 by
-`region.witnessAwayFrom`.
+- Branch: `main`, pushed, tree clean.
+- **Fast bucket 204 / 0. Normal bucket 8 / 0. Slow bucket green** (`biconjugateTest` 7 / 0 —
+  including the test that had been red — and `biconjCPLQTest` 10 / 0; see `MORNING.md` for the
+  full run).
+- Measured, unit level: both half-lenses conjugate to **3 cells** (2 vertex cones plus the arc; the
+  chord's cell is a ray and drops out), exact against a brute-force sup over the lens at 12 of 12
+  points. The old code was `+inf` at `(0,0)` and `(-1,0.5)` where the truth is `0`, and `0` at
+  `(2,-1)` where it is `1/2`.
+- Two documented cases still ERROR. Both **refuse loudly rather than answering wrongly**, and both
+  are unimplemented paths, not defects: the general convex quadrilateral (FIRST conjugation, the
+  `nCE == 3` gap) and the parallelogram (SECOND conjugation, `emptyResult`).
 
 ## Next steps
 
-1. **Bug 1's remainder is a REFACTOR, not a fix.** Give `conjugateOfPiecePoly` an explicit EDGE
-   LIST instead of a count with two conventions (`endNv = nv` or `nv−1`; edge `j` at `ineqs(j)` or
-   `ineqs(j+1)`). It cannot be done there alone — `j` indexes `getNormalConeEdgeQ`/`Q3`'s output
-   and `getSubdiffVertexT2`/`T2Q`'s `subdE` at the same time, so all four move together.
-   **Do NOT free a slot by dropping the constraint holding it** — tried, unsound, see
-   `DECISIONS.md`.
-2. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
-   → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box → performance.
+1. **Wire `nCE == 3` into Case C's Step 1** — the quadrilateral. CCA2 already has the algorithm
+   (`convEnvCPLQ`'s `splitThreeConvex`, [COAP] A.5); the vendored `plq_1p.convexEnvelope1` simply
+   falls off the end after `nCE == 2`. `TODO.md`'s first item has the route worked out — including
+   why it is cheap (`isCanonicalXY` guarantees the piece is exactly `x*y` by then; `plq_1p.conjugate`
+   already loops over multiple envelope pieces; `ratPolToPlq.m` shows the construction to copy) and
+   the one question it raises about `nCE == 2` and A.4.
+2. **The parallelogram's `emptyResult`.** Undiagnosed. Use the per-piece dump that cracked bug 1 —
+   conjugate each piece of `f*` on its own and find the one returning no cells — not `biconj`.
+3. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
+   → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box (`x²−y²`,
+   `(x²+y²)/2` on `[0,1]²` still error in the second conjugation) → performance (~40–60 s/term).
 
-## How to work on the symbolic layer, learned the hard way
+## Two methods that keep paying off
 
-**Build a unit-level reproducer before touching anything.** The half-lens
-`{(s1+s2)² ≤ 4·s2, s2 ≤ s1}` carrying `s1`, constructed by hand as a `region` and conjugated
-against a brute-force sup over its own boundary, runs in SECONDS and needs no pipeline. Pipeline
-runs of the same defect take 10–40 minutes. That one change is what made bug 1 tractable after two
-sessions of failed attempts.
+**Build a unit-level reproducer before touching the symbolic layer.** The half-lens conjugates in
+~10 s against a brute-force sup; the same piece reached through `biconjugateTest` takes 10–40
+minutes. Bug 1's whole fix was developed on a saved copy of that one piece.
 
-**A degenerate geometric object is not a geometric object, and this codebase keeps assuming it is.**
-Three separate defects this month, in three different routines, were all one of these: a quadratic
-has no TANGENT LINE at its own apex, where the gradient vanishes (`removeTangent`, and
-`simplifyUnboundedRegion` before it); two arcs sharing a vertex have no separating CHORD, because
-the candidate chords are the arcs' own edges (`splitTwoArcPiece`); a conic cannot tell its two
-BRANCHES apart, so a region bounded by one claims territory on the wrong side (`maxQuaPar`, and
-bug 2's symptom). When a routine computes a geometric object from a degenerate configuration, check
-that the object exists before using it.
+**When a routine's index convention is unclear, read its PROBE POINTS.** `getNormalConeVertexQ`'s
+two halves probe at vertex `j-1` and vertex `j+1`, which is what settles that they mean the edge
+ARRIVING at `j` and the edge LEAVING it. Reading that off the code rather than the comments caught
+an off-by-one in the new edge list that no current test would have shown.
 
 ## Relevant files
 
-- `DECISIONS.md` — dead ends and refuted reasoning. Read before attacking bug 1 or bugs 3–4;
-  several natural-looking approaches are recorded there as unsound.
-- `TODO.md` — live action items, with the measurements for each.
-- `SUPPORT_MATRIX.md` §4.1–4.3 (arc-vs-arc, the verification tools, the covering proof), §7, §8.
-- `maxQuaPar.m` — `splitTwoArcPiece`, `newRaySign`, `pieceIsCurved` (read its header before
-  touching `curveAfter` anywhere).
-- `functionNDomain.m` — `conjugateOfPiecePoly` and `spreadCollidingEdges`; `region.m` —
-  `getNormalConeVertexQ`.
+- `DECISIONS.md` — dead ends and refuted reasoning; the newest entry is bug 1's, with the reason
+  none of the four earlier attempts could have worked.
+- `TODO.md` — live action items; the quadrilateral wiring is first.
+- `SUPPORT_MATRIX.md` §7 — the defect table; bug 1's row is struck through with the measurement.
+- `functionNDomain.m` — `edgeIndexList`, `edgesStillCollide`, `conjugateOfPiecePoly`, `getInterior`.
+- `region.m` — `getNormalConeVertexQ` (optional edge list), `getNormalConeEdgeQE`, `coneNormalAt`.
+- `functionNDomainTest.m` — the two unit tests that pin the lens without the pipeline.

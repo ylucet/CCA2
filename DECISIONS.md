@@ -25,6 +25,58 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-15 (last) — BUG 1 FIXED: the edge list, and why the four earlier attempts could not have worked
+
+**What the refactor turned out to be, and it is smaller than the note below predicted.** Four
+attempts had all tried to make the LENS fit one of the two slot conventions — free a slot, park a
+claim, drop a constraint. None can work, and the reason is worth stating plainly: *the conventions
+cannot express a lens at all.* Both say "edge `j` is at `ineqs(j)`" or "at `ineqs(j+1)`", i.e. they
+identify an edge by a VERTEX INDEX — and a lens's two edges join the SAME pair of vertices, so no
+assignment of slots to constraints can name them apart. The question is not which constraint gets
+which slot; it is that slots are the wrong addressing scheme for this shape.
+
+So `functionNDomain.edgeIndexList` derives `eIdx(j)` — the constraint bounding the edge from vertex
+`j` to vertex `j+1` — from the geometry, and the three edge-indexed readers take it as an argument.
+Two things made this much less invasive than the earlier note predicted:
+
+- **Both loops are in `conjugateOfPiecePoly` itself**, so the list is built in the first and
+  consumed in the second with no class field, no signature change on the pieces, nothing to carry.
+- **`getNormalConeEdgeQ` and `getNormalConeEdgeQ3` are the SAME routine.** Both build the
+  perpendicular to the EDGE'S OWN constraint at each endpoint, oriented by the other endpoint; they
+  differ only in which slot they believe that constraint occupies. Given the list they collapse to
+  one routine (`getNormalConeEdgeQE`, over `region.coneNormalAt`). Likewise `getSubdiffVertexT2` and
+  `getSubdiffVertexT2Q` are identical on these inputs — `T2Q`'s extra third column is only ever
+  read when `NCE(:,3)` is non-zero, and neither edge routine sets it. **Three of the "four routines
+  that move together" were two routines wearing four names.**
+
+**How the list is decided, and the trap in the obvious version.** A constraint bounds the edge
+between two consecutive vertices when both vertices lie on it AND its own curve between them stays
+in the region. The second half is not a refinement: on the pipeline's own lens BOTH conics pass
+through both vertices, and the redundant one meets the region nowhere else. The first version of
+this preferred "the slot today's convention would use" before filtering on that, which handed edge
+2 the redundant conic — a constraint bounding nothing. **Filter first, prefer second.** The
+preference is what keeps every piece that works today on exactly the indices it has.
+
+**Scope, and why it is safe.** The new path is entered only when two constraints that each bound a
+genuine edge STILL share an edge number after `spreadCollidingEdges` has moved everything it can
+(`edgesStillCollide`) — the lens signature, reached by nothing else. No constraint is dropped: the
+two unsound drops recorded below stay ruled out, and the vertex cones' own feasibility probes
+(`ptFeasible`, inside `getNormalConeVertexQ`) need the full constraint set.
+
+**Measured.** Both half-lenses conjugate to 3 cells — two vertex cones plus the arc; the chord's
+cell is a ray and drops out — exact against a brute-force sup over the lens at 12 points, 0 wrong.
+The three the old code got wrong: `(0,0)` and `(-1,0.5)`, `+inf` where the truth is `0`, and
+`(2,-1)`, `0` where the truth is `1/2`.
+
+**Two defects were found by re-reading the finished code, not by a test**, and both are recorded
+because the second is the same shape as three other bugs in this file. (i) The two halves of
+`getNormalConeVertexQ` were given `eIdx(j)` and `eIdx(j+1)` where the routine's own probe points say
+they mean `eIdx(j-1)` and `eIdx(j)` — invisible at `nv = 2`, where predecessor and successor
+coincide, and wrong for any larger region. **When a routine's index convention is unclear, read its
+PROBE POINTS: they are the geometry it is actually using.** (ii) `edgeIndexList` built `nv-1`
+entries for an unbounded region while its consumer walks all `nv` vertices — an index used outside
+the guard that produced it, for the fourth time in this codebase.
+
 ## 2026-08-15 — BUGS 3 and 4 FIXED: the curved envelope over an unbounded face
 
 Recorded because the DERIVATIONS are the reusable part, and because the shape of the argument is

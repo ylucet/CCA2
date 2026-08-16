@@ -61,13 +61,73 @@ the tooling that judged them was itself broken, in two ways, and silently.
       stays opt-in -- it costs seconds per call, and the tools that want it call
       `pieceRecessionRays` directly.
 
+### Next up (2026-08-15, after bug 1 closed the last red)
+
+- [ ] **WIRE `nCE == 3` INTO CASE C'S STEP 1 — the general convex quadrilateral.** The one
+      remaining hard failure with a known route. `p.conj('cplq')` on a non-square quadrilateral
+      raises `MATLAB:badsubscript` at `plq_1p.conjugateFunction` (measured again 2026-08-15,
+      unchanged): `plq_1p.convexEnvelope1` branches on `nCE == 0, 1, 2` and simply falls off the
+      end, so `obj.envelope` stays EMPTY and `conjugate`'s `for i = 1:max(1,size(envelope,2))`
+      indexes `envelope(1)`. It is an ERROR, not a wrong answer.
+      **CCA2 already has the algorithm.** `convEnvCPLQ`'s `splitThreeConvex` is [COAP] A.5 — cut
+      the triangle by the smooth-fit line through the middle vertex into two 2-convex-edge
+      sub-triangles — and `solveTriangleBF` recurses so each half also gets A.4's tightness check.
+      Case C drives Step 1 through the VENDORED `plq_1p.convexEnvelope1` instead, so none of it is
+      reachable.
+      **The route I would take, worked out but NOT implemented.** In the `nCE == 3` case build the
+      triangle as a one-face `QuaPol` carrying `x*y`, call `convEnvCPLQ`, and install its faces as
+      TWO `plq_1p` envelope pieces:
+      `obj.envelope = [obj.envelope, functionNDomain(symbolicFunction(num/den), domain(Vk,x,y).polygon)]`.
+      Three things make this cheap rather than a reimplementation:
+        * By the time `convexEnvelope1` is reached with an indefinite `q`,
+          `plq_1p.isCanonicalXY` has already guaranteed `q` is EXACTLY `x*y` — no linear part, no
+          constant — so `convEnvCPLQ` can be called on the plain bilinear triangle.
+        * `plq_1p.conjugate` already loops over envelope pieces and accumulates `conjugates` with
+          `conjfia`, so more than one envelope piece per input piece is structurally supported.
+          Step 3's max over pieces is then correct by `sup` over a union = `max` of `sup`s.
+        * `ratPolToPlq.m` shows the exact construction to copy (`plq_1p(domain(V,x,y),
+          symbolicFunction(simplifyFraction(num/den)))`, plus the file-local `faceVertexIndices`
+          each of these files duplicates).
+      **The one question it raises, worth answering deliberately:** `plq_1p`'s `nCE == 2` branch
+      uses the single-quadratic formula unconditionally, while `convEnvCPLQ` applies A.4's
+      tightness split. Routing `nCE == 3` through `convEnvCPLQ` therefore makes the two Step 1s
+      AGREE on the sub-triangles rather than merely filling a hole — decide whether `nCE == 2`
+      should follow, and measure it before changing it, since every cPLQ input goes through that
+      branch.
+
+- [ ] **`QuaParCPLQ:conj:emptyResult` on a PARALLELOGRAM (one face, `f = x*y`).** Fails in the
+      SECOND conjugation, not the first (`p.conj('cplq')` returns a `QuaParCPLQ` fine). Not
+      diagnosed. Start with the per-piece dump used for bug 1 — conjugate each piece of `f*` on
+      its own and find which returns no cells — rather than through `biconj`.
+
 ### Bugs, in the order they should be taken (2026-08-15)
 
-- [ ] **BUG 1 -- BLOCKED on a refactor, after FOUR distinct attempts (all recorded in
-      `DECISIONS.md`).** Three real defects inside it were found and FIXED, taking `f**` from 0
-      to 5 of 7 probe points; what is left is not another fix but the edge-list refactor
-      mapped below. Do not attack it with a fifth variation on "free the slot" -- two of the
-      four attempts were unsound and one made things strictly worse.
+- [x] **BUG 1 -- FIXED 2026-08-15**, by the edge-list refactor mapped below. Everything from
+      "Original framing" down is HISTORY, kept because the four failed attempts are recorded
+      against it; the live write-up is the newest `DECISIONS.md` entry.
+      **What it was.** Both slot conventions identify an edge by a VERTEX INDEX, and a LENS's two
+      edges join the SAME pair of vertices -- so neither convention can name them apart, and no
+      reassignment of slots to constraints ever could. That is why all four earlier attempts
+      failed, and it is a stronger statement than "the count is the wrong test".
+      **What it took.** `functionNDomain.edgeIndexList` derives `eIdx(j)` -- the constraint
+      bounding the edge from vertex `j` to vertex `j+1` -- from the geometry (both endpoints on
+      the constraint AND its own curve between them inside the region; the second half is
+      necessary, since the lens's redundant conic passes through both vertices too).
+      `region.getNormalConeVertexQ` takes the list as an optional argument;
+      `region.getNormalConeEdgeQE` replaces `getNormalConeEdgeQ` and `Q3`, which turned out to be
+      the same routine under two slot conventions; `getSubdiffVertexT2` and `T2Q` are identical on
+      these inputs. **The refactor was smaller than this item predicted: three of the "four
+      routines that move together" were two routines wearing four names, and both loops are in
+      `conjugateOfPiecePoly` itself, so the list needs no field and no signature change.**
+      **Scope.** Entered only when two constraints that each bound a genuine edge still share an
+      edge number after `spreadCollidingEdges` (`edgesStillCollide`) -- the lens signature. No
+      constraint is dropped, so the two unsound drops stay ruled out.
+      **Measured.** Both half-lenses conjugate to 3 cells (2 vertex cones + the arc; the chord's
+      cell is a ray and drops out), exact against a brute-force sup at 12 points, 0 wrong -- where
+      the old code was `+inf` at `(0,0)` and `(-1,0.5)` and `0` at `(2,-1)` for a truth of `1/2`.
+      Pinned by `functionNDomainTest/twoEdgesOnOneVertexPairAreBothKept` and
+      `halfLensConjugateIsFiniteEverywhereAndExact`, ~10 s where reaching the same piece through
+      `biconjugateTest` takes 10-40 minutes.
       Original framing follows.
       **TWO defects, and the description this item used to carry was wrong about the
       cause.** Measured 2026-08-15; full write-up in `DECISIONS.md`.
