@@ -95,10 +95,17 @@ the tooling that judged them was itself broken, in two ways, and silently.
       should follow, and measure it before changing it, since every cPLQ input goes through that
       branch.
 
-- [ ] **`QuaParCPLQ:conj:emptyResult` on a PARALLELOGRAM (one face, `f = x*y`).** Fails in the
-      SECOND conjugation, not the first (`p.conj('cplq')` returns a `QuaParCPLQ` fine). Not
-      diagnosed. Start with the per-piece dump used for bug 1 — conjugate each piece of `f*` on
-      its own and find which returns no cells — rather than through `biconj`.
+- [ ] **`QuaParCPLQ:conj:emptyResult` on a PARALLELOGRAM (one face, `f = x*y`) — LOCATED
+      2026-08-15, and the error message names the WRONG routine.** It says "conjugateOfPiecePoly
+      returned no pieces". It did not: all **12** pieces of that `f*` conjugate, to **27** cells
+      between them. What returns nothing is the step after it, `functionNDomain.maxOfList`.
+      Measured by folding the groups one at a time: the accumulator runs 2, 3, 4, 3, 3, 3, 3, 1, 1
+      cells and then **group 11** -- the piece carrying `s1 - 2*s2 + s1*s2/2 + s1^2/8 + s2^2/2 + 2`
+      -- empties it.
+      The domain of a max IS the intersection of the domains, so it may legitimately shrink;
+      **empty it may not be**, since that asserts `f** = +inf` everywhere. So either group 11's
+      conjugate domain is too small or `maxOfList` drops a cell. **Start at group 11**, and fix
+      `QuaParCPLQ.conj`'s message while you are there -- it has been pointing at Step 2 for weeks.
 
 ### Bugs, in the order they should be taken (2026-08-15)
 

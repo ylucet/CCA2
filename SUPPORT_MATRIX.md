@@ -639,7 +639,8 @@ unbounded piece straddling `{f1=f2}` when that curve is a pair of lines (§4, §
 | ~~`QuaPar.eval` exactly **at a vertex**~~ — **FIXED and VERIFIED 2026-08-02** | Cause was `QuaPar.eval`'s exact, no-tolerance point location: `all(vals <= 0, 2)` on a conic that is only zero in exact arithmetic, so a `+1e-17` left the point in NO face and `eval` returned its `Inf` initialization. A conic-magnitude-relative tolerance fixes it. NOW REPRODUCED AND MEASURED, which is what was missing: `sweepQuaParEvalAtVertices(20260802, 200)` finds **225 of 1205** subdivision vertices unlocatable under the exact test and **0** under the current one, with all 7230 probes on rings of radius 1e-8 around them correct — the exact signature recorded for the defect. Deterministically pinned by `QuaParTest/evalLocatesAPointExactlyAtItsOwnVertex`, whose mesh is case 2 of that sweep. Still open, separately: the CURVED half of the original claim (~0.8%) is not covered by this sweep | `QuaPar.eval` |
 | ~~`testRegion/testCreation`~~ — **PASSES since 2026-07-28**, and re-measured 2026-08-15 (`testRegion` 23 / 0). Row kept struck through because this file cited it as the suite's single failure for weeks after it had stopped failing | — | — |
 | ~~Step 1 ignored the face's function~~ - **FIXED 2026-08-01** | Step 1 now classifies by the SIGNS OF THE EIGENVALUES of `Q`, not by `nCE` (which tests edge slopes and so only classifies `x*y`). Convex/affine keep `q` as their own envelope; concave get the affine interpolant through the actual values of `q`; indefinite are moved by `xyFrame.m` into the frame where `q` **is** `x*y`, so cPLQ's own closed forms apply to the function they were written for. Case C values verified exact against brute force for `(x^2+y^2)/2`, `x*y`, `x^2-y^2`, `3xy+7x-2y+5` and `-(x^2+y^2)/2`, where `f*(0.3,0.4)` used to be `0.4` for a truth of `0.125` | `plq_1p.convexEnvelope1`, `xyFrame.m` |
-| Case C's **biconjugate** — **the CONVEX case works since 2026-08-13**; the `getInterior` chain below is still on the INDEFINITE path | `caseC.biconj()` gives ZERO pieces on pristine `HEAD` - `f** = +inf` everywhere - for an `f` that is convex and hence its own biconjugate. The old test passed anyway: it asserted only `.kind()`, and `QuaParCPLQ(empty).kind()` is still `'QuaParCPLQ'`. It fails inside `conjugateOfPiecePoly` behind a CHAIN of latent bugs, each reachable only once the previous is fixed. Fixed so far: `region.getNormalConeVertexQ` indexed `py(1)` before its own `isempty(py)` guard (dead code); `region.splitmax3` left its output unassigned when `f1 < f2` at every vertex. Next down: `functionNDomain.getInterior` indexes `c2(2)` under a guard testing only `size(c1,2)`. Unrelated to the unbounded / general-quadratic work, which only makes the FIRST conjugation richer (11 pieces vs 9) and so carries the second far enough to reach these | `functionNDomain.conjugateOfPiecePoly` |
+| ~~Case C's **biconjugate**~~ — **CLOSED 2026-08-15.** The convex case has worked since 2026-08-13, and the INDEFINITE path is the two-face unit square with `f = x·y`, i.e. exactly the row above: `biconjugateOverATwoFaceSubdivisionIsTheEnvelope` passes and `checkBiconjDomainCoverage` re-measures that case as **OK, error 0**. The chain's last named link was fixed with it — `functionNDomain.getInterior` indexed `c2(2)` under a guard testing only `size(c1,2)`; the two `coeffs` results have independent sizes, so any `f` with an `s1²` term but no `s1·s2` term raised `badsubscript`. Where only one of the two equations depends on `s1` there is nothing to eliminate and the other equation IS the relation; where neither does, the old expression is identically zero, which is right for an affine `f` and is what every case reaching there relies on, so that branch is untouched. History follows | `functionNDomain.conjugateOfPiecePoly`, `getInterior` |
+| _history of the row above_ | `caseC.biconj()` gives ZERO pieces on pristine `HEAD` - `f** = +inf` everywhere - for an `f` that is convex and hence its own biconjugate. The old test passed anyway: it asserted only `.kind()`, and `QuaParCPLQ(empty).kind()` is still `'QuaParCPLQ'`. It fails inside `conjugateOfPiecePoly` behind a CHAIN of latent bugs, each reachable only once the previous is fixed. Fixed so far: `region.getNormalConeVertexQ` indexed `py(1)` before its own `isempty(py)` guard (dead code); `region.splitmax3` left its output unassigned when `f1 < f2` at every vertex. Next down: `functionNDomain.getInterior` indexes `c2(2)` under a guard testing only `size(c1,2)`. Unrelated to the unbounded / general-quadratic work, which only makes the FIRST conjugation richer (11 pieces vs 9) and so carries the second far enough to reach these | `functionNDomain.conjugateOfPiecePoly` |
 
 _Status 2026-08-15: `conjCPLQTest/biconjCoverageByInputCase` asserts `f** = f` for the convex Case C and passes, because Case B2 answers that domain in closed form and the second conjugation is handed a clean mesh. The chain described in this row is unfixed and still reachable from an INDEFINITE domain._
 
@@ -663,18 +664,28 @@ to the conjugate pipeline: for a bounded domain it is the lower convex hull of t
 | unbounded, full domain | `(x²+y²)/2` | **OK** |
 | unbounded, 4 cones | `\|x\|+\|y\|` | **OK** |
 | unbounded, 3 wedges | `max(0,x,y)` | **OK** |
-| box, TWO faces sharing a diagonal | `x·y` | **WRONG** (§7, the open defect) |
-| parallelogram, one face | `x·y` | **ERROR** `QuaParCPLQ:conj:emptyResult` |
+| box, TWO faces sharing a diagonal | `x·y` | ~~**WRONG**~~ — **OK, re-measured 2026-08-15**: error 0, 4/4 points inside and 1/1 outside, against the `convhulln` ground truth. This was §7's open defect; see the struck-through row there |
+| parallelogram, one face | `x·y` | **ERROR** `QuaParCPLQ:conj:emptyResult` — and the message names the WRONG routine, see below |
 | general convex quadrilateral, one face | `x·y` | **ERROR** `MATLAB:badsubscript` |
 
-**These are not failures of the ALGORITHM, and two of the three are not even the same defect.**
+**These are not failures of the ALGORITHM, and the two remaining ones are different defects.**
 Read the failing step before drawing a conclusion:
 
 | case | which conjugation | cause |
 |---|---|---|
 | general quadrilateral | **FIRST** | Step 1 has no `nCE == 3` branch on the path taken |
-| parallelogram | **SECOND** | `QuaParCPLQ.conj` returns no pieces |
-| two-face box | **SECOND** | the §7 arc-not-conjugated defect |
+| parallelogram | **SECOND** | the **max**, not the per-piece conjugate — see below |
+| ~~two-face box~~ | ~~SECOND~~ | fixed 2026-08-15, §7 |
+
+**The parallelogram's error message blames the wrong routine — measured 2026-08-15.**
+`QuaParCPLQ.conj` raises `emptyResult` saying "conjugateOfPiecePoly returned no pieces", but it did
+not: all **12** pieces of this `f*` conjugate, to **27** cells between them. What returns nothing is
+the step after it, `functionNDomain.maxOfList`. Folding the groups one at a time, the accumulator
+runs 2, 3, 4, 3, 3, 3, 3, 1, 1 cells and then group 11 — the piece carrying
+`s1 − 2·s2 + s1·s2/2 + s1²/8 + s2²/2 + 2` — empties it. The domain of a max IS the intersection of
+the domains, so it may legitimately shrink; **empty it may not be**, since that asserts `f**` is
+`+inf` everywhere. So either one piece's conjugate domain is too small or `maxOfList` drops a cell,
+and the next person should start at group 11 rather than in Step 2.
 
 The general-quadrilateral failure is a **WIRING gap, not a missing algorithm.** There are two
 Step 1 implementations in this repository:
