@@ -1,77 +1,68 @@
 # Session Handoff
 
-_Last updated: 2026-08-15_
+_Last updated: 2026-08-16_
 
 ## What happened this session
 
-**Bug 1 is fixed, and the repository now has no failing test.** It was the last red, marked BLOCKED
-after four attempts. The whole thing comes down to one sentence: *both slot conventions identify an
-edge by a VERTEX INDEX, and a lens's two edges join the SAME pair of vertices* — so neither
-convention can name them apart and no reassignment of slots to constraints ever could. The four
-earlier attempts were all variations on reassigning slots. `functionNDomain.edgeIndexList` derives
-the edge list from the geometry instead, and the three edge-indexed readers take it as an argument.
+**The parallelogram's `QuaParCPLQ:conj:emptyResult` is fixed**, and the two defects behind it are
+general, not special cases. **The general quadrilateral is not fixed**, and the third attempt at it
+is the one that finally names the blocker: the split has to be carried SYMBOLICALLY, because taking
+it from `convEnvCPLQ`'s double-precision faces makes the exact symbolic arithmetic downstream
+explode.
 
 ## Where things stand
 
-- Branch: `main`, pushed, tree clean.
-- **327 pass / 0 fail across all 26 suites** — fast 204 / 0, normal 8 / 0, slow **115 / 0**. The
-  repository has no failing test for the first time in weeks.
-- `checkBiconjDomainCoverage` re-measures the two-face box — the row that read WRONG — as **OK,
-  error 0**, against a ground truth that owes nothing to the conjugate pipeline.
-- Measured, unit level: both half-lenses conjugate to **3 cells** (2 vertex cones plus the arc; the
-  chord's cell is a ray and drops out), exact against a brute-force sup over the lens at 12 of 12
-  points. The old code was `+inf` at `(0,0)` and `(-1,0.5)` where the truth is `0`, and `0` at
-  `(2,-1)` where it is `1/2`.
-- Two documented cases still ERROR. Both **refuse loudly rather than answering wrongly**, and both
-  are unimplemented paths, not defects: the general convex quadrilateral (FIRST conjugation, the
-  `nCE == 3` gap) and the parallelogram (SECOND conjugation, `emptyResult`).
+- Branch: `main`, pushed, tree clean, no debug instrumentation.
+- **330 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 9 / 0, slow **115 / 0**.
+- The parallelogram's `biconj` now computes: exact at all four vertices, `+inf` outside the domain,
+  8 of 10 interior probe points right against a brute-force double conjugate. The other two are
+  about 4% LOW — the residual defect below.
+- The general quadrilateral still raises `MATLAB:badsubscript`, loudly, as before.
 
 ## Next steps
 
-1. **cPLQ's `nCE == 2` Step 1 envelope is NOT the envelope — a live silent defect, found and fully
-   diagnosed 2026-08-15.** It applies [COAP]'s single-quadratic form to the whole triangle; that
-   form is a valid convex MINORANT but A.4 shows it is tight only over a sub-region, and the branch
-   never tests. On `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x·y` its envelope reaches **−0.2835** at
-   `(1,0)`, where the true envelope is `≥ 0` (on that triangle `x·y ≥ 0`, so the affine minorant `0`
-   is admissible). A too-small envelope gives a too-large conjugate: `f*(0,0) = 0.28647` for a truth
-   of `0`. `convEnvCPLQ` on the same triangle returns 2 faces, minimum `0`.
-   **Two fixes were written, measured and reverted** (both in `DECISIONS.md`): wiring the missing
-   `nCE == 3` branch, and routing `nCE == 2`/`3` through `convEnvCPLQ`. The second fails because
-   `conjugateFunction` reads its envelope with `coeffs(...)` and A.4/A.5's faces are RATIONAL —
-   **cPLQ's Step 2 has no rational-envelope branch at all**. So the split belongs in the DOMAIN:
-   have `plq_1p.triangulate` emit the A.4/A.5 sub-triangles as PIECES, the shape
-   `conjEnvelopeViaCPLQ` already uses for rational faces. The cost is moving a web of file-local
-   functions out of `convEnvCPLQ.m` and re-verifying every Case C result — a design change, with
-   the plan in `TODO.md`.
-   **A trap worth keeping:** that same triangle conjugated ON ITS OWN via `QuaPol.conj` is exact at
-   7 of 7, because a single bounded triangle takes the NUMERIC route (`conjBoundedPolygon`), not
-   cPLQ. Checking a suspect piece "on its own" through the public API can silently change which
-   implementation runs; evaluate `p.pieces(k).maxConjugate` inside the pipeline instead.
-2. **The parallelogram's `emptyResult` — LOCATED, and the error message names the wrong routine.**
-   All 12 pieces conjugate (27 cells); it is `functionNDomain.maxOfList` that returns nothing, and
-   folding the groups one at a time shows **group 11** emptying the accumulator. Start there, and
-   fix `QuaParCPLQ.conj`'s message while you are in it.
+1. **`getInterior` on a SINGULAR quadratic — the parallelogram's last 4%.** `getInterior` separates
+   an edge cell from its neighbours by eliminating `s` between `x = ∂₁f` and `y = ∂₂f`. When `f` is
+   a singular convex quadratic the gradient map is not invertible and that elimination returns the
+   map's IMAGE LINE, which separates nothing — so two edge cells come out on the SAME region and
+   the first one checked wins. Reproduce in about a minute with
+   `functionNDomainTest.parallelogramPiece9`.
+   **Do NOT attack the `isQuad` chord rewrite for it.** Both alternatives were measured 2026-08-16
+   and are in `DECISIONS.md`: chording the vertices the conic actually touches makes that piece
+   WORSE (2 wrong of 10 → 3), and skipping the rewrite changes nothing.
+2. **The general quadrilateral — implement [COAP] A.4's cevian and A.5's smooth-fit line
+   SYMBOLICALLY**, and have `plq_1p.triangulate` emit the sub-triangles as PIECES. The cevian's
+   slope is exactly `−sqrt(mh·mw)`, so its foot is an exact algebraic number and `sqrt` is something
+   the symbolic layer keeps small. Bounded work — two line intersections and a curvature test — but
+   new code, not wiring. **Three attempts are recorded in `DECISIONS.md` with what not to re-try**;
+   the shortest version is that envelope-level splitting cannot work (Step 2 has no
+   rational-envelope branch) and domain-level splitting taken from `convEnvCPLQ` hangs (irrational
+   cevian foot → `1e25` denominators → `isAlways` decides nothing).
 3. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
    → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box (`x²−y²`,
    `(x²+y²)/2` on `[0,1]²` still error in the second conjugation) → performance (~40–60 s/term).
 
-## Two methods that keep paying off
+## Three methods that keep paying off
 
-**Build a unit-level reproducer before touching the symbolic layer.** The half-lens conjugates in
-~10 s against a brute-force sup; the same piece reached through `biconjugateTest` takes 10–40
-minutes. Bug 1's whole fix was developed on a saved copy of that one piece.
+**Build a unit-level reproducer before touching the symbolic layer.** Piece 9 of the
+parallelogram's `f*`, hand-built as a `region`, runs in about a minute; reaching the same piece
+through `biconj` takes far longer and buries the evidence.
 
 **When a routine's index convention is unclear, read its PROBE POINTS.** `getNormalConeVertexQ`'s
-two halves probe at vertex `j-1` and vertex `j+1`, which is what settles that they mean the edge
-ARRIVING at `j` and the edge LEAVING it. Reading that off the code rather than the comments caught
-an off-by-one in the new edge list that no current test would have shown.
+two halves probe at vertex `j−1` and vertex `j+1`, which is what settles that they mean the edge
+ARRIVING at `j` and the edge LEAVING it.
+
+**To find which piece of a MAX is wrong, use the property the max must have.** `f**` of a bounded
+domain is finite exactly ON that domain and is a max, so EVERY per-piece conjugate must be finite
+there. Evaluating all 12 groups at six interior points turned "the max comes out empty" into "these
+three pieces are wrong" in one cheap run.
 
 ## Relevant files
 
-- `DECISIONS.md` — dead ends and refuted reasoning; the newest entry is bug 1's, with the reason
-  none of the four earlier attempts could have worked.
-- `TODO.md` — live action items; the quadrilateral wiring is first.
-- `SUPPORT_MATRIX.md` §7 — the defect table; bug 1's row is struck through with the measurement.
-- `functionNDomain.m` — `edgeIndexList`, `edgesStillCollide`, `conjugateOfPiecePoly`, `getInterior`.
-- `region.m` — `getNormalConeVertexQ` (optional edge list), `getNormalConeEdgeQE`, `coneNormalAt`.
-- `functionNDomainTest.m` — the two unit tests that pin the lens without the pipeline.
+- `DECISIONS.md` — dead ends and refuted reasoning; the newest entries are the parallelogram's two
+  defects and the three failed quadrilateral attempts.
+- `TODO.md` — live action items; the quadrilateral leads, with its one-line remaining task.
+- `SUPPORT_MATRIX.md` §7 / §7.1 — the defect table and the domain-coverage measurements.
+- `region.m` — `simplifyUnboundedRegion` (the witness), `getNormalConeVertexQ`, `getNormalConeEdgeQE`.
+- `functionNDomain.m` — `edgeIndexList`, `conjugateOfPiecePoly`, `getInterior`.
+- `functionNDomainTest.m` / `regionTest.m` — the unit tests that pin all of this without the pipeline.

@@ -1,127 +1,79 @@
-# Morning report — 2026-08-15 overnight run
+# Morning report — 2026-08-16
 
 Branch: **`main`** (pushed as the run went — you authorised pushing for this run)
 
-Task as given: fix the remaining bugs. Standing instructions: parallel agents permitted, do not
-stop after three failures, do not wait for input.
+Task as given: do (1) the sub-triangle split that fixes the vendored Step 1's minorant defect and
+unblocks the general quadrilateral, and (2) the parallelogram's empty max. Do not wait for input.
 
 ## Headline
 
-**BUG 1 IS FIXED, and with it the repository has NO failing test: 327 pass / 0 fail** across all
-26 suites — fast 204 / 0, normal 8 / 0, slow **115 / 0**. `biconjugateTest` is 7 / 0, including
-`biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, which had been the single red for weeks and was
-marked BLOCKED after four attempts.
+**(2) is FIXED — the parallelogram's `emptyResult` is gone, and two general defects went with it.**
+Its biconjugate now computes: exact at all four vertices, `+inf` outside the domain, and 8 of 10
+interior probe points correct against a brute-force double conjugate.
 
-Confirmed independently: `checkBiconjDomainCoverage` re-measures the two-face box — the row that
-read **WRONG** — as **OK with error 0**, against a ground truth that owes nothing to the conjugate
-pipeline (the lower convex hull of the sampled graph).
-
-The four earlier attempts all failed for one reason, and stating it is the fix:
-
-> **Both slot conventions identify an edge by a VERTEX INDEX** — "edge `j` is at `ineqs(j)`", or
-> "at `ineqs(j+1)`" — and a **LENS's two edges join the SAME pair of vertices**. So neither
-> convention can name them apart, and *no* reassignment of slots to constraints ever could. The
-> question was never which constraint gets which slot; it is that slots are the wrong addressing
-> scheme for this shape.
+**(1) is NOT fixed, and the third attempt is what finally names the blocker: ARITHMETIC, not
+structure.** The split was built exactly as the previous write-up prescribed, it worked at Step 1,
+and it turned the quadrilateral's crash into a **HANG**. Reverted.
 
 ## What changed
 
-- **BUG 1 — FIXED** (`ddb01c6`, `d06453c`). `functionNDomain.edgeIndexList` derives `eIdx(j)` — the
-  constraint bounding the edge from vertex `j` to vertex `j+1` — from the geometry: both endpoints
-  on the constraint AND its own curve between them inside the region. The second half is not a
-  refinement; on the pipeline's own lens BOTH conics pass through both vertices and the redundant
-  one meets the region nowhere else. The three edge-indexed readers take the list as an argument.
+- **The parallelogram — TWO defects, both FIXED, both general** (`e528943`). Its worst piece went
+  from **6 of 10** probe points wrong or uncovered to **2**, against a brute-force sup.
 
-  **The refactor was much smaller than the mapped-out plan predicted**, and the reason is worth
-  keeping: `getNormalConeEdgeQ` and `getNormalConeEdgeQ3` are the SAME routine under two slot
-  conventions — both build the perpendicular to the edge's own constraint at each endpoint,
-  oriented by the other endpoint — and collapse into one; `getSubdiffVertexT2` and `T2Q` are
-  identical on these inputs. **Three of the "four routines that move together" were two routines
-  wearing four names.** And both loops are inside `conjugateOfPiecePoly`, so the list needs no
-  field and no signature change on the pieces.
+  1. **`region.simplifyUnboundedRegion` declared any region with no finite VERTEX empty** — a
+     half-plane, a slab, the whole plane. And **a half-plane is exactly what a TANGENT vertex
+     produces**: the cone at a vertex is built from the two edges meeting there, and when those are
+     tangent — an arc and its chord touching, which is how a curvilinear piece ends — both
+     half-planes are the SAME one. On the offending piece the cone at `(1/4,7/8)` is
+     `{2x/3 + y ≥ 4/3}` carrying `x/4 + 7y/8 − 1/2`, and it was being deleted. Now refuted by a
+     WITNESS: a feasible point certifies non-emptiness, failing to find one proves nothing, so the
+     old verdict stands whenever no witness turns up.
+  2. **The edge list, in bug 1's other form.** The piece is bounded with 3 vertices and 3 genuine
+     edges plus a conic touching one vertex: 4 constraints for 3 vertices, so `size(ineqs,2) == nv`
+     called a bounded region unbounded, `endNv` came out `nv−1`, and it was built one edge cell
+     short. The edge list now covers any bounded piece the count mislabels, not only a lens.
 
-  **Scope:** the new path is entered only when two constraints that each bound a genuine edge still
-  share an edge number after `spreadCollidingEdges` — the lens signature, reached by nothing else —
-  and where it is entered, today's slot is preferred whenever it is still geometrically valid. No
-  constraint is dropped, so the two unsound drops recorded in `DECISIONS.md` stay ruled out.
+  Pinned by `regionTest/aHalfPlaneIsNotEmpty` (with its converse, so a genuinely empty region is
+  still reported empty) and
+  `functionNDomainTest/aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane`.
 
-  **Measured:** both half-lenses conjugate to **3 cells** (2 vertex cones plus the arc; the chord's
-  cell is a ray and drops out), exact against a brute-force sup over the lens at **12 of 12** points.
-  The old code was `+inf` at `(0,0)` and `(-1,0.5)` where the truth is `0`, and `0` at `(2,-1)`
-  where it is `1/2`.
-
-- **Two defects in the new code, found by RE-READING it rather than by a test** (`d06453c`), plus a
-  third that was already on the open list:
-  1. The two halves of `getNormalConeVertexQ` were handed `eIdx(j)` and `eIdx(j+1)` where the
-     routine's own probe points say they mean `eIdx(j-1)` and `eIdx(j)`. Invisible on a lens
-     (`nv = 2`, predecessor and successor coincide), wrong for any larger region.
-     **When a routine's index convention is unclear, read its PROBE POINTS — they are the geometry
-     it is actually using.**
-  2. `edgeIndexList` built `nv-1` entries for an unbounded region while its consumer walks all
-     `nv` vertices: an index used outside the guard that produced it, for the fourth time in this
-     codebase. It now refuses an unbounded region outright (a lens is bounded by construction).
-  3. `functionNDomain.getInterior` indexed `c2(2)` under a guard testing only `size(c1,2)` —
-     `SUPPORT_MATRIX.md` §7 had this recorded as the next link in Case C's biconjugate chain. The
-     two sizes are independent, and any `f` with an `s1²` term but no `s1·s2` term raised
-     `badsubscript`.
-
-- **New unit tests** (`functionNDomainTest`, ~10 s where reaching the same piece through
-  `biconjugateTest` takes 10–40 minutes): `twoEdgesOnOneVertexPairAreBothKept` pins the precondition
-  (the numbering does collide, the geometry does settle it, and one of the two edges is the arc) and
-  `halfLensConjugateIsFiniteEverywhereAndExact` pins the conjugate being finite everywhere and exact.
+- **The A.4/A.5 domain split — built, measured, REVERTED** (`b0a36de`). See below.
 
 ## What is broken
 
-**Nothing that has a test.** Every suite is green: `biconjCPLQTest` 10 / 0, `biconjugateTest` 7 / 0,
-`conjCPLQTest` 25 / 0, `testMaxMultiRegion` 24 / 0, `testRegion` 23 / 0, `testcPLQ` 8 / 0,
-`unboundedFaceTest` 18 / 0.
+Nothing that has a test. **330 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 9 / 0,
+slow **115 / 0**, every suite green on the committed tree.
 
-Two documented cases still ERROR, and both are **unimplemented paths, not wrong answers** — they
-refuse loudly rather than answering:
+Two things are known-imperfect and documented rather than hidden:
 
-- **General convex quadrilateral, one face** — and the "wiring gap" description of it was WRONG.
-  I wrote the missing `nCE == 3` branch (build the triangle as a one-face `QuaPol` carrying `x·y`,
-  call `convEnvCPLQ`, install its faces through `ratPolToPlq`) and it **works at Step 1**: 4
-  envelope faces come back, all `≤ x·y`, and `conj` stops raising. **The answer is then wrong, so I
-  reverted it.** `f*` comes out over-claiming `0.28647` at `(0,0)` where the truth is `0` and
-  `1.00464` at `(0.5,1)` where it is `1`, with a hole in the third quadrant — and a silent wrong
-  answer is worse than a loud refusal.
-  **And I found what it was masking.** `plq_1p.convexEnvelope1`'s `nCE == 2` branch applies
-  [COAP]'s single-quadratic form to the WHOLE triangle. That form is a valid convex MINORANT, but
-  A.4 shows it is tight only over a sub-region — and this branch never tests. On
-  `conv{(2.5,1.5),(2,0),(0,0)}` carrying `x·y` its envelope reaches **−0.2835** at `(1,0)`; on that
-  triangle `x ≥ 0` and `y ≥ 0`, so `x·y ≥ 0`, the affine minorant `0` is admissible, and the true
-  envelope is `≥ 0` everywhere. A too-small envelope gives a too-large conjugate — that is exactly
-  the `0.28647`. `convEnvCPLQ` on the same triangle returns 2 faces, with minimum `0`: it does
-  apply the split.
-  **Routing Step 1 through `convEnvCPLQ` does not fix it either** — also written, measured,
-  reverted. `conjugateFunction` reads its envelope with `coeffs(...)` and matches monomials, and
-  A.4/A.5's faces are RATIONAL, so it raises `symbolic:coeffs:NotAPolynomial`: **cPLQ's Step 2 has
-  no rational-envelope branch at all.** So the split belongs in the DOMAIN — have `triangulate`
-  emit the A.4/A.5 sub-triangles as PIECES, the same shape `conjEnvelopeViaCPLQ` already uses for
-  rational faces. That means moving a connected web of file-local functions out of `convEnvCPLQ.m`
-  and re-verifying every Case C result, which is a design change rather than a fix, so I stopped
-  there and wrote it up instead.
-- **Parallelogram, one face.** Fails in the SECOND conjugation with
-  `QuaParCPLQ:conj:emptyResult` — **and the message names the wrong routine**. It says
-  "conjugateOfPiecePoly returned no pieces"; it did not, all **12** pieces conjugate, to **27**
-  cells. What returns nothing is `functionNDomain.maxOfList`: folding the groups one at a time, the
-  accumulator runs 2, 3, 4, 3, 3, 3, 3, 1, 1 cells and then group 11 empties it. A max's domain is
-  the INTERSECTION of the domains, so shrinking is legitimate; empty is not, since that asserts
-  `f** = +inf` everywhere. Next attempt starts at group 11, not in Step 2.
+- **The parallelogram is 4% LOW at 2 of 10 interior points** — `0.986` for `1.031`, `1.913` for
+  `1.950`. Cause found: on that piece `f` is a SINGULAR convex quadratic (constant along one whole
+  edge, `∇f = 0` at two of three vertices), so `getInterior` — which separates an edge cell from
+  its neighbours by eliminating `s` between `x = ∂₁f` and `y = ∂₂f` — returns the gradient map's
+  image LINE rather than a separating curve, two edge cells come out on the same region, and the
+  wrong one is checked first. **Do not attack the `isQuad` chord rewrite for it**: chording the
+  vertices the conic actually touches makes the piece WORSE (2 wrong of 10 → 3), and skipping the
+  rewrite changes nothing at all. Both measured today.
+- **The general quadrilateral still raises `MATLAB:badsubscript`**, as before. Loudly.
 
 ## Needs a decision
 
-Nothing is blocked on you. The next item is the quadrilateral wiring above, and `TODO.md` records
-the route I would take (build the sub-envelopes with `convEnvCPLQ` and install them as two
-`plq_1p` envelope pieces — `conjugate` already loops over them, and `ratPolToPlq` shows the exact
-construction) together with the one question it raises: `plq_1p`'s `nCE == 2` branch does not apply
-[COAP] A.4's tightness split, which `convEnvCPLQ` does, so routing through `convEnvCPLQ` makes the
-two Step 1s agree rather than just filling a hole.
+Nothing is blocked on you. The quadrilateral's remaining work is now one line — implement [COAP]
+A.4's cevian and A.5's smooth-fit line SYMBOLICALLY and have `triangulate` emit the sub-triangles
+as pieces — and `TODO.md` leads with it.
+
+Why the third attempt failed, since it is the useful part: the split was taken from `convEnvCPLQ`'s
+own faces, which is double precision, and `sym` of a double is EXACT — a denominator near `2^53`.
+Snapping the new vertices to the simplest rational within `1e-10` bounds the VERTEX denominators
+but not the downstream ones, because the conjugate is a rational function of those coordinates: a
+few squarings carry `1e5` to `1e25`, and MuPAD's `isAlways` then decides nothing. The conjugate ran
+45+ minutes with no output behind 3.8 MB of `TruthUnknown` warnings. A.4's cevian has slope exactly
+`−sqrt(mh·mw)`, so its foot is an exact algebraic number and `sqrt` is something the symbolic layer
+keeps small — that is the way in.
 
 ## Where I stopped
 
 All work committed and pushed on `main`; tree clean; no debug instrumentation left. `TODO.md`,
-`DECISIONS.md` and `SUPPORT_MATRIX.md` §7 are updated — bug 1's row is struck through with the
-measurement, and the four failed attempts are kept against it in `DECISIONS.md` with the one-line
-reason none of them could have worked.
+`DECISIONS.md` and `SUPPORT_MATRIX.md` §7 / §7.1 are updated — the parallelogram's row is struck
+through with the measurement, the quadrilateral's carries all three failed attempts and what not to
+re-try, and the residual `getInterior` defect has its own row and its own one-minute reproducer.
