@@ -61,15 +61,43 @@ the tooling that judged them was itself broken, in two ways, and silently.
       stays opt-in -- it costs seconds per call, and the tools that want it call
       `pieceRecessionRays` directly.
 
-### Next up (2026-08-15, after bug 1 closed the last red)
+### Next up (2026-08-16)
 
-- [ ] **THE GENERAL CONVEX QUADRILATERAL — THREE attempts now, all measured and all reverted, and
-      the third one names the real blocker: ARITHMETIC, not structure. Read this before trying
-      again; `DECISIONS.md` has all three.**
-      **The remaining work, in one line:** implement [COAP] A.4's cevian and A.5's smooth-fit line
-      SYMBOLICALLY -- the cevian's slope is exactly `-sqrt(mh*mw)`, so its foot is an exact
-      algebraic number -- and have `plq_1p.triangulate` emit the sub-triangles as PIECES. Bounded
-      work: two line intersections and a curvature test.
+- [ ] **STEP 3's CROSS-PIECE MAXIMUM DOES NOT SCALE, and it is now the binding cost.** Measured
+      2026-08-16 on `x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`, which the A.4/A.5 split turns
+      into 6 pieces: Steps 1 and 2 take about 25 s for all six, and `functionNDomain.maxOfList`
+      then takes **73 minutes** -- folds of 93, 294, 647, 1273 and 2087 s, with the cell count
+      running 5, 14, 29, 45, 70, **86**. `SUPPORT_MATRIX.md` records the same shape for a pentagon
+      (885 s, 41 regions).
+      **86 cells is roughly ten times what the answer needs.** `f*` of `x*y` over a convex
+      quadrilateral has a cone per vertex and a cell per edge -- of the order of a dozen. The
+      surplus is adjacent cells carrying the SAME function that are never merged, which is
+      `region.merge` / `unionIsExact` refusing a union it cannot certify across a conic edge.
+      **Where to start:** merge same-function neighbours after each fold, not only at the end. Many
+      of these cells are POLYHEDRAL (the vertex cones), where `unionIsExact` already decides
+      exactly, so a large fraction should collapse without needing the conic case at all. Measure
+      the cell count per fold before and after -- that is the number that predicts the time.
+
+### Then (2026-08-15, after bug 1 closed the last red)
+
+- [x] **THE GENERAL CONVEX QUADRILATERAL — FIXED 2026-08-16, on the fourth attempt, by doing the
+      split SYMBOLICALLY.** `splitTightTriangleSym` splits a triangle into sub-triangles on each of
+      which cPLQ's own closed form for THAT sub-triangle's convex-edge count IS the convex
+      envelope, and `plq_1p.triangulate` emits them as PIECES.
+      **Measured:** `f*` of `x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}` is exact at 10 of 10
+      probe points against the vertex-attained sup, with no piece leaving a hole; the fully
+      assembled Step 3 answer is exact too, at 8 of 8. Pinned by
+      `cplqAdapterTest/generalQuadrilateralStep1IsTheEnvelopeNotAMinorant` (the envelope must
+      exist, be a minorant, and be `>= 0` where `x*y >= 0`) and
+      `generalQuadrilateralConjugateMatchesTheSup`.
+      **What made attempt 4 work where attempt 3 hung:** exact symbolic arithmetic. A.4's cevian
+      foot is irrational, and taking it from `convEnvCPLQ`'s doubles gives `2^53` denominators that
+      grow to `1e25` downstream; carried symbolically the coordinates stay compact surds
+      (`5/2 - sqrt(5)/2`, `3/2 - 3*sqrt(5)/10`).
+      **A COST, not a defect, and it is Step 3's:** assembling the cross-piece maximum for this
+      input takes **73 minutes** (folds of 93, 294, 647, 1273, 2087 s, cells running 5, 14, 29, 45,
+      70, 86). The per-piece conjugates take about 25 s in total. See the next item.
+      History of the three failed attempts follows.
       **Attempt 3 (2026-08-16), and why it failed.** The domain split was built exactly as attempt
       2's write-up prescribed, taking the sub-triangles from `convEnvCPLQ`'s own faces, and it
       WORKED at Step 1. It then turned the crash into a **HANG** -- the first conjugate ran 45+

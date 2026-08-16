@@ -669,7 +669,7 @@ to the conjugate pipeline: for a bounded domain it is the lower convex hull of t
 | unbounded, 3 wedges | `max(0,x,y)` | **OK** |
 | box, TWO faces sharing a diagonal | `x·y` | ~~**WRONG**~~ — **OK, re-measured 2026-08-15**: error 0, 4/4 points inside and 1/1 outside, against the `convhulln` ground truth. This was §7's open defect; see the struck-through row there |
 | parallelogram, one face | `x·y` | ~~**ERROR** `QuaParCPLQ:conj:emptyResult`~~ — **COMPUTES since 2026-08-16, and is nearly right**: exact at all four vertices, `+inf` outside the domain, and 8 of 10 interior probe points correct against a brute-force double conjugate. The other two are LOW by about 4% (`0.986` for `1.031`, `1.913` for `1.950`) — an envelope that is still slightly too small, from the residual `getInterior` defect below. Two defects fixed to get here, both general: see §7 |
-| general convex quadrilateral, one face | `x·y` | **ERROR** `MATLAB:badsubscript` |
+| general convex quadrilateral, one face | `x·y` | ~~**ERROR** `MATLAB:badsubscript`~~ — **OK since 2026-08-16**: exact at 10 of 10 probe points against the vertex-attained sup, with no piece leaving a hole, and the fully assembled Step 3 answer exact at 8 of 8. The assembly costs 73 minutes; see §8 |
 
 **These are not failures of the ALGORITHM, and the two remaining ones are different defects.**
 Read the failing step before drawing a conclusion:
@@ -713,6 +713,32 @@ curve separating the two cells. **Do not attack the `isQuad` chord rewrite for i
 alternatives were measured on 2026-08-16 and are recorded in `DECISIONS.md` — chording the vertices
 the conic actually touches makes the piece WORSE (2 wrong of 10 → 3), and skipping the rewrite
 changes nothing at all.
+
+**THE GENERAL QUADRILATERAL — FIXED 2026-08-16, on the fourth attempt, and the fix is a DOMAIN
+split done in EXACT SYMBOLIC arithmetic.** `splitTightTriangleSym` splits a triangle into
+sub-triangles on each of which cPLQ's own closed form for THAT sub-triangle's convex-edge count IS
+the convex envelope — [COAP] A.4 gives one two-convex-edge half, its own form unchanged and now
+tight, plus one one-convex-edge half whose A.3 rational form the `nCE == 1` branch derives
+analytically; A.5 gives two two-convex-edge halves that recurse into A.4 — and
+`plq_1p.triangulate` emits them as PIECES, which keeps every one of them on a path Step 2 already
+has. Sound for Step 3 because a sup over a union is the max of the sups.
+
+**Symbolic is the whole difference from the attempt that hung.** A.4's cevian has slope
+`−sqrt(mh·mw)`, so its foot is irrational; taking it from `convEnvCPLQ`'s double-precision faces
+gives `2^53` denominators that grow past `1e25` downstream and `isAlways` then decides nothing.
+Carried symbolically the coordinates stay compact surds. Measured: the no-split path costs 20 ms —
+which is why nothing else in the suite moved — and the split paths 0.3 s (A.4) and 1.2 s (A.5).
+
+**What it costs is Step 3's, not the split's.** Six pieces instead of two, and the cross-piece
+maximum then takes **73 minutes** (folds of 93, 294, 647, 1273, 2087 s; cells 5, 14, 29, 45, 70,
+86). The answer is exact at both levels. That blow-up has its own `TODO.md` item — 86 cells is
+about ten times what the answer needs, and the surplus is same-function neighbours that
+`region.merge` never merges.
+
+Pinned by `cplqAdapterTest/generalQuadrilateralStep1IsTheEnvelopeNotAMinorant`, which asserts only
+what must hold of an envelope (it exists, it is `≤ x·y`, and where `x·y ≥ 0` it is `≥ 0`), and
+`generalQuadrilateralConjugateMatchesTheSup`. The three failed attempts are in `DECISIONS.md`; what
+follows is the diagnosis they produced.
 
 **THE GENERAL QUADRILATERAL IS NOT ONLY A WIRING GAP — measured 2026-08-15 by writing the wiring
 and reverting it.** The `nCE == 3` branch below was implemented (build the triangle as a one-face
@@ -844,11 +870,20 @@ Ordered by how likely a downstream caller is to hit it:
 
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
-5. **One known wrong-answer defect, and it is new** (§7.1): `plq_1p.convexEnvelope1`'s `nCE == 2`
-   branch returns a convex MINORANT, not the convex ENVELOPE, because it applies [COAP]'s
-   single-quadratic form to the whole triangle without A.4's tightness test. A too-small envelope
-   gives a too-large conjugate. Reachable from any Case C input carrying such a triangle; the two
-   §7 rows that stood here before are both struck through as of 2026-08-15.
+5. ~~**One known wrong-answer defect** — `plq_1p.convexEnvelope1`'s `nCE == 2` branch returns a
+   convex MINORANT rather than the ENVELOPE~~ — **RESOLVED 2026-08-16** by splitting the DOMAIN
+   along [COAP] A.4/A.5 in exact symbolic arithmetic (§7.1). What is left of that entry is a
+   PERFORMANCE problem, not a wrong answer, and it is now the binding one — see 5b.
+5b. **Step 3's cross-piece maximum does not scale.** Measured on `x·y` over
+   `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`: Steps 1 and 2 take about 25 s for all six pieces, and
+   `functionNDomain.maxOfList` then takes **73 minutes**, with the cell count running 5, 14, 29,
+   45, 70, **86**. The same shape is on record for a pentagon (885 s, 41 regions). 86 cells is
+   roughly ten times what the answer needs — `f*` of `x·y` over a convex quadrilateral has a cone
+   per vertex and a cell per edge — and the surplus is adjacent cells carrying the SAME function
+   that `region.merge` never merges. `TODO.md` has where to start.
+5c. **`getInterior` on a SINGULAR quadratic** — the one remaining wrong ANSWER, and it is small:
+   about 4% low at 2 of 10 interior points of the parallelogram's `f**` (§7, with a one-minute
+   reproducer).
 6. ~~**`maxQuaPar`: a piece whose two arcs are ADJACENT**~~ — **RESOLVED 2026-08-15.**
    `splitTwoArcPiece`'s two candidate chords join the arcs' facing endpoints, which for arcs
    sharing a vertex ARE the arcs' own edges, so both chains came out too short, the piece was

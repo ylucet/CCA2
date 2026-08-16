@@ -25,6 +25,42 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-16 (later) — The general quadrilateral, FIXED on the fourth attempt. What the three failures were each worth.
+
+The method the user prescribed is what worked, and it is worth stating on its own: **do it
+symbolically first, and only then reach for explicit formulas.** Attempt 3 failed for exactly the
+reason attempt 4 succeeded — it computed the same geometry in double precision and let `sym` turn
+the result into `2^53` denominators.
+
+**The fix.** `splitTightTriangleSym` splits a triangle into sub-triangles on each of which cPLQ's
+own closed form for THAT sub-triangle's convex-edge count IS the convex envelope, and
+`plq_1p.triangulate` emits them as PIECES. A.4 gives one two-convex-edge half (its own form
+unchanged and now tight) plus one one-convex-edge half (A.3's rational form, which the `nCE == 1`
+branch derives analytically); A.5 gives two two-convex-edge halves that recurse into A.4. Exact
+symbolic arithmetic throughout, so the cevian foot — irrational in general — stays a compact surd
+(`5/2 − sqrt(5)/2`, `3/2 − 3·sqrt(5)/10`).
+
+**Two things learned while writing it that are worth keeping.**
+
+- **`twoEdgeQuadPlain`'s ± branch search is vestigial: it always returns `s = +1`.** Substituting
+  `y = mh·x + qh` into the `s`-form gives `x²` coefficient `mh·denom/denom = mh`, `x` coefficient
+  `qh·denom/denom = qh` and constant `0` — for BOTH signs. So the form touches `x·y` along edge `h`
+  either way and the touching test cannot separate them; `s = −1` is merely undefined when
+  `mh = mw`. cPLQ hard-codes `s = +1` and is right to.
+- **The "no split needed" test has a one-line geometric reading.** With `s = +1` the curvature of
+  `q1` along the weak edge `AB` is `(sqrt(mh·mw)·dx + dy)² / (sqrt(mh) + sqrt(mw))²` — a perfect
+  square — so it vanishes exactly when `AB` is PARALLEL to the cevian direction `−sqrt(mh·mw)`.
+  That is the same degeneracy `convEnvCPLQ`'s header describes as "both candidate cevians
+  degenerate", arrived at from the other side.
+
+**What the split costs, and where the cost actually is.** The no-split path — every input cPLQ
+itself ever had — is 20 ms, which is why nothing else in the suite moved. The split paths are
+0.3 s (A.4) and 1.2 s (A.5). What is expensive is what comes AFTER: six pieces instead of two, and
+Step 3's cross-piece maximum then takes **73 minutes**, with the cell count running 5, 14, 29, 45,
+70, 86. The answer is exact at both levels — 10 of 10 on the per-piece max, 8 of 8 on the assembled
+one — so this is a scaling problem in `maxOfList`, not a defect in the split. It has its own
+`TODO.md` item.
+
 ## 2026-08-16 — The parallelogram's `emptyResult`: TWO defects, both fixed, and two more measured and not taken
 
 Traced from `QuaParCPLQ:conj:emptyResult` down to a single piece, then to a unit reproducer that
