@@ -817,7 +817,11 @@ Ordered by how likely a downstream caller is to hit it:
 
 3. **`'pqp'` and `'graph'` engines missing** (§1.1).
 4. **`RatPol.conj`/`biconj`/`add` missing** (§3, §5).
-5. **Two known wrong-answer defects** (§7).
+5. **One known wrong-answer defect, and it is new** (§7.1): `plq_1p.convexEnvelope1`'s `nCE == 2`
+   branch returns a convex MINORANT, not the convex ENVELOPE, because it applies [COAP]'s
+   single-quadratic form to the whole triangle without A.4's tightness test. A too-small envelope
+   gives a too-large conjugate. Reachable from any Case C input carrying such a triangle; the two
+   §7 rows that stood here before are both struck through as of 2026-08-15.
 6. ~~**`maxQuaPar`: a piece whose two arcs are ADJACENT**~~ — **RESOLVED 2026-08-15.**
    `splitTwoArcPiece`'s two candidate chords join the arcs' facing endpoints, which for arcs
    sharing a vertex ARE the arcs' own edges, so both chains came out too short, the piece was
