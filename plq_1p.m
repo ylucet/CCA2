@@ -182,7 +182,7 @@ classdef plq_1p
             end
 
             if d.polygon.nv == 3
-                ps = [ps,obj];
+                ps = obj.appendTriangle(ps, [d.polygon.vx(:), d.polygon.vy(:)], vars);
                 return
             end
             vx = d.polygon.vx;
@@ -212,27 +212,178 @@ classdef plq_1p
                 triangle = [start,i,i+1];
                  t(:,1) = vx(triangle);
                  t(:,2) = vy(triangle);
-                 ps = [ps,plq_1p(domain(t,vars(1),vars(2)),obj.f)];
-                 
-                 
+                 ps = obj.appendTriangle(ps, t, vars);
+
+
             end
             if start ~= 1 & start ~= d.polygon.nv
                 triangle = [start,d.polygon.nv,1];
                  t(:,1) = vx(triangle);
                  t(:,2) = vy(triangle);
-                 ps = [ps,plq_1p(domain(t,vars(1),vars(2)),obj.f)];
+                 ps = obj.appendTriangle(ps, t, vars);
             end
             for i = 1: start-2
                 triangle = [start,i,i+1];
                  t(:,1) = vx(triangle);
                  t(:,2) = vy(triangle);
-                 ps = [ps,plq_1p(domain(t,vars(1),vars(2)),obj.f)];
+                 ps = obj.appendTriangle(ps, t, vars);
             end
-           
+
+        end
+
+        function ps = appendTriangle(obj, ps, t, vars)
+        % Append the triangle `t` (3x2 of vertex coordinates) as one piece -- or, when cPLQ's own
+        % closed form is not the convex ENVELOPE there, as the sub-triangles on which it is.
+        %
+        % WHY. cPLQ's Step 1 applies its 2-convex-edge closed form to the WHOLE triangle. That form
+        % touches the function along both convex edges and is a valid convex MINORANT, but [COAP]
+        % Appendix A.4 shows it is tight only over a sub-region -- and plq_1p.convexEnvelope1 never
+        % tests. Measured on conv{(2.5,1.5),(2,0),(0,0)} carrying x*y: the returned envelope reaches
+        % -0.2835 at (1,0), while on that triangle x >= 0 and y >= 0, so x*y >= 0, the affine
+        % minorant 0 is admissible, and the true envelope is >= 0 everywhere. A too-small envelope
+        % gives a too-large conjugate: f*(0,0) came out 0.28647 for a truth of 0. A 3-convex-edge
+        % triangle (A.5) has no such form at all, which is where convexEnvelope1 falls off the end
+        % and conjugate() then indexes an empty envelope -- the general-quadrilateral crash.
+        %
+        % WHY THE SPLIT IS A DOMAIN SPLIT AND NOT AN ENVELOPE SPLIT. Installing A.4/A.5's faces as
+        % several ENVELOPE faces of one piece was tried and cannot work (DECISIONS.md): those faces
+        % are RATIONAL, and conjugateFunction reads its envelope with coeffs() and dispatches on the
+        % PIECE's nCE, so it raises symbolic:coeffs:NotAPolynomial. Splitting the DOMAIN instead
+        % leaves every sub-piece on a path Step 2 already has -- A.4 yields one 2-convex-edge
+        % sub-triangle, on which its own form IS tight, plus one 1-convex-edge sub-triangle, whose
+        % A.3 rational envelope cPLQ's nCE == 1 branch derives analytically rather than from
+        % coefficients; A.5 yields two 2-convex-edge ones that recurse into A.4. And it is sound for
+        % Step 3 for the same reason the fan above is: a sup over a union is the max of the sups.
+            sub = plq_1p.tightSubTriangles(obj, t);
+            if numel(sub) < 2
+                % No split: pass the ORIGINAL vertices through, which are symbolic and exact. The
+                % split path necessarily goes through convEnvCPLQ's double arithmetic (the cevian
+                % foot is irrational in general), and there is no reason to spend that precision on
+                % the triangles that never needed it.
+                ps = [ps, plq_1p(domain(t, vars(1), vars(2)), obj.f)];
+                return
+            end
+            for k = 1:numel(sub)
+                ps = [ps, plq_1p(domain(sub{k}, vars(1), vars(2)), obj.f)]; %#ok<AGROW>
+            end
         end
     end
-    
+
     methods (Static)
+        function ts = tightSubTriangles(obj, V)
+        % The sub-triangles of V on each of which cPLQ's closed form for its own convex-edge count
+        % IS the convex envelope of this piece's quadratic -- [COAP] Appendix A.4 (2 convex edges,
+        % split by the tangency cevian) and A.5 (3 convex edges, split by the smooth-fit line
+        % through the middle vertex), recursively. Returns {V} when no split is needed, which is
+        % every input cPLQ itself ever had. See appendTriangle for why this exists.
+        %
+        % convEnvCPLQ ALREADY COMPUTES THIS SPLIT and its FACES are the sub-triangles, in x
+        % coordinates, with the bilinear change of variables and the recursion already done
+        % (solveTriangleBF recurses so either half of an A.5 split can split again under A.4). So
+        % ask it for them rather than moving its file-local geometry out into a shared file. Only
+        % the DOMAINS are taken; the envelope values it returns are discarded, because Step 2
+        % recomputes them per sub-triangle in the polynomial/rational forms it can conjugate.
+        %
+        % REFUSALS ARE NOT ERRORS HERE. convEnvCPLQ raises for a convex or concave q, a
+        % non-triangle, or anything else it does not implement; every one of those is a triangle
+        % that needs no split, so the catch returns it unchanged. This can therefore only ever
+        % subdivide a triangle whose envelope cPLQ was getting wrong, never disturb one it was
+        % getting right.
+            ts = {V};
+            W = double(V);
+            if size(W,1) ~= 3 || any(~isfinite(W(:)))
+                return
+            end
+            try
+                [Q, L, c] = obj.quadParts;
+                Q = double((Q+Q')/2);
+                ev = eig(Q);
+                tol = 1e-9 * max(1, max(abs(Q(:))));
+                if ~(min(ev) < -tol && max(ev) > tol)
+                    return          % A.4/A.5 are about an INDEFINITE quadratic only
+                end
+                if (W(2,1)-W(1,1))*(W(3,2)-W(1,2)) - (W(3,1)-W(1,1))*(W(2,2)-W(1,2)) < 0
+                    W = W([1 3 2], :);      % QuaPol's edge/face convention wants CCW
+                end
+                stored = [Q(1,1), Q(1,2), Q(2,2), double(L(1)), double(L(2)), double(c)];
+                r = convEnvCPLQ(QuaPol(W, [1 2 1; 2 3 1; 3 1 1], stored, [1 0; 1 0; 1 0]));
+                if r.nf < 2
+                    return
+                end
+                out = cell(1, r.nf);
+                for k = 1:r.nf
+                    Wk = plq_1p.faceVertices(r, k);
+                    if size(Wk,1) ~= 3
+                        return      % not a triangulation: leave the piece alone
+                    end
+                    out{k} = plq_1p.exactVertices(Wk, V);
+                end
+                ts = out;
+            catch
+                ts = {V};
+            end
+        end
+
+        function W = exactVertices(Wd, V)
+        % Turn a sub-triangle's DOUBLE vertices back into values the symbolic pipeline can carry.
+        %
+        % TWO KINDS OF VERTEX come out of the split, and they need opposite treatment. A vertex the
+        % sub-triangle INHERITS from the original triangle already has an exact symbolic value, and
+        % that value is restored here -- there is no reason to spend the original's exactness on a
+        % round trip through double. A vertex the split CREATES (the cevian foot, A.5's Pnew) is
+        % irrational in general, so it is snapped to the simplest rational within 1e-10.
+        %
+        % WHY SNAPPING IS NECESSARY, not tidiness. sym(x) on a double is EXACT: it produces the
+        % binary rational the double stands for, with a denominator around 2^53. Two of those
+        % multiplied and added give the 34-digit rationals that made MuPAD's numden return
+        % 'undefined' from inside region.removeTangent -- measured, it is what this branch first
+        % did. Snapping bounds the denominator instead.
+        %
+        % WHY IT IS SOUND HERE. Step 1 is double precision throughout (convEnvCPLQ's own header
+        % says so, and ratPolToPlq already drops coefficient dust at the same boundary), so the
+        % split point carries ~1e-15 of error before this rounds it to 1e-10. The sub-triangles
+        % still TILE exactly, because a shared split point is snapped to the same rational in every
+        % face that names it. What the snap costs is tightness, not validity: the closed form on
+        % each sub-triangle stays a convex minorant, and it is the envelope up to the cevian's own
+        % 1e-10 displacement -- against the 0.28 error the split removes.
+            W = sym(zeros(size(Wd,1), 2));
+            tol = 1e-8 * max(1, max(abs(Wd(:))));
+            Vd = double(V);
+            for i = 1:size(Wd,1)
+                hit = 0;
+                for j = 1:size(Vd,1)
+                    if norm(Wd(i,:) - Vd(j,:)) <= tol, hit = j; break, end
+                end
+                if hit > 0
+                    W(i,:) = V(hit,:);
+                else
+                    W(i,1) = plq_1p.snapRational(Wd(i,1));
+                    W(i,2) = plq_1p.snapRational(Wd(i,2));
+                end
+            end
+        end
+
+        function s = snapRational(x)
+        % The simplest rational within 1e-10 of x, with the denominator capped so the symbolic
+        % arithmetic downstream stays small. See exactVertices for why this is done at all.
+            [n, dd] = rat(x, 1e-10);
+            if dd == 0 || abs(dd) > 1e8
+                dd = 2^20; n = round(x*dd);
+            end
+            s = sym(n)/sym(dd);
+        end
+
+        function W = faceVertices(r, k)
+        % Vertices of face k of a RatPol, in its own ordered edge order -- the same walk over P{k}
+        % that convEnvCPLQ, quaPolToPlq, conjCPLQ and ratPolToPlq each keep file-locally.
+            face = r.P{k};
+            W = zeros(numel(face), 2);
+            for i = 1:numel(face)
+                j = face(i);
+                if j > 0, W(i,:) = r.V(r.E(j,1), :); else, W(i,:) = r.V(r.E(-j,2), :); end
+            end
+        end
+
         function tf = isCanonicalXY(Q, L, c)
         % Is q ALREADY exactly x*y? cPLQ's closed forms assume that literally -- not "indefinite",
         % not "a multiple of x*y", but q = x*y with no linear or constant part -- so anything

@@ -1209,6 +1209,33 @@ classdef functionNDomain
                     d.ineqs = d.ineqs(keepE);
                     edgeNo  = edgeNo(keepE);
                     d.ineqs(edgeNo) = d.ineqs;
+
+                    % (6) A BOUNDED region whose constraint COUNT does not match its vertex count.
+                    % Both slot conventions are chosen by that count, so such a region is read with
+                    % the UNBOUNDED one -- endNv = nv-1, so it is built one edge cell SHORT, and
+                    % every edge is read one slot along. A bounded piece's conjugate is finite
+                    % everywhere, so a missing edge cell is a hole where the answer must be finite.
+                    %
+                    % MEASURED on piece 9 of f* for x*y over the parallelogram
+                    % conv{(0,0),(2,0),(2.5,1),(0.5,1)}: a bounded region with 3 vertices and 3
+                    % genuine edges, carrying a fourth constraint -- a conic touching it at ONE
+                    % vertex. 4 constraints, 3 vertices, so the count says "unbounded"; the
+                    % conjugate came back with 4 cells instead of 6, wrong or uncovered at 6 of 10
+                    % probe points against a brute-force sup, and the biconjugate over the whole
+                    % parallelogram then collapsed to nothing (QuaParCPLQ:conj:emptyResult).
+                    %
+                    % SCOPE, and why this cannot disturb what works. It runs only when the count
+                    % DISAGREES with the vertex count, so every piece the conventions already
+                    % describe correctly is untouched; edgeIndexList refuses an unbounded region
+                    % outright and returns ok = false whenever the geometry does not settle the
+                    % whole list, in which case the old reading stands; and the readers below give
+                    % the count-matching branches precedence over the list.
+                    if size(d.ineqs,2) ~= d.nv
+                        [eTry, okL] = functionNDomain.edgeIndexList(d, wasBounded);
+                        if okL
+                            eList = eTry;
+                        end
+                    end
                 end
                 eIdxAll{i} = eList;
 
@@ -1241,9 +1268,18 @@ classdef functionNDomain
 
                    for j = 1:size(d0.ineqs,2)
                        if (d0.ineqs(j).isQuad)
+                           % CHORDING THE FIRST TWO VERTICES, whatever the conic actually joins,
+                           % is deliberate here for want of anything better -- and it is NOT the
+                           % cause of the two remaining wrong values on the parallelogram's piece
+                           % 9. Both alternatives were measured 2026-08-16 and are recorded in
+                           % DECISIONS.md: chording the vertices the conic actually touches
+                           % (region.vertexOfEdge) makes that piece WORSE, 2 wrong of 10 -> 3, and
+                           % skipping the rewrite altogether changes nothing there at all. The
+                           % remaining defect is functionNDomain.getInterior on a SINGULAR
+                           % quadratic; do not attack this line again for it.
                            m0 = (d0.vy(1)-d0.vy(2))/(d0.vx(1)-d0.vx(2));
                            c = d0.vy(1) - m0*d0.vx(1);
-                           nineq = symbolicFunction(vars(2)-m0*vars(1)-c); 
+                           nineq = symbolicFunction(vars(2)-m0*vars(1)-c);
                            mx = (d0.vx(1)+d0.vx(2))/2;
                            d1 = d0.ineqs(j).subsF(vars(1),mx);
                            my2 = solve(d1.f,vars(2));
@@ -1276,11 +1312,15 @@ classdef functionNDomain
                for kq = 1:size(d.ineqs,2)
                    if d.ineqs(kq).isQuad, hasQuadCon = true; break, end
                end
+               % PRECEDENCE. The count-matching branches come FIRST, so a region the slot
+               % conventions already describe correctly keeps exactly the reading it has; the
+               % explicit list is consulted only where the count disagrees with the vertex count,
+               % which is the case those conventions cannot express.
                eIdx = eIdxAll{i};
-               if ~isempty(eIdx)
-                   NCV = d0.getNormalConeVertexQ(x, y, eIdx);
-               elseif size(d.ineqs,2) == d.nv && ~hasQuadCon
+               if size(d.ineqs,2) == d.nv && ~hasQuadCon
                    NCV = d.getNormalConeVertex(x, y);
+               elseif ~isempty(eIdx)
+                   NCV = d0.getNormalConeVertexQ(x, y, eIdx);
                else
                    NCV = d0.getNormalConeVertexQ(x, y);
                end
@@ -1295,30 +1335,29 @@ classdef functionNDomain
                    end
                end
                if obj(i).d.nv > 1
-                   if ~isempty(eIdx)
-                       NCE = d0.getNormalConeEdgeQE(x, y, eIdx);
-                       [subdE,unR] = obj(i).getSubdiffVertexT2Q (NCE, [x,y]);
-                       endNv = numel(eIdx);
-                   elseif size(d0.ineqs,2) == d.nv
+                   % ONE STATEMENT OF THE CONVENTION, not two. edgeIneq(j) is the constraint
+                   % bounding edge j, and the loop below reads it from there instead of
+                   % re-deriving the same rule from endNv -- which is how the two could disagree
+                   % once a third branch existed.
+                   if size(d0.ineqs,2) == d.nv
                        NCE = d0.getNormalConeEdgeQ3(x, y);
                        [subdE,unR] = obj(i).getSubdiffVertexT2 (NCE, [x,y]);
-                       endNv = obj(i).d.nv;
+                       edgeIneq = 1:obj(i).d.nv;
+                   elseif ~isempty(eIdx)
+                       NCE = d0.getNormalConeEdgeQE(x, y, eIdx);
+                       [subdE,unR] = obj(i).getSubdiffVertexT2Q (NCE, [x,y]);
+                       edgeIneq = eIdx;
                    else
                        NCE = d0.getNormalConeEdgeQ(x, y);
                        [subdE,unR] = obj(i).getSubdiffVertexT2Q (NCE, [x,y]);
                        % d0 is a copy of d = obj(i).d, so reaching this branch already means
                        % size(obj(i).d.ineqs,2) ~= nv -- the old test here was dead.
-                       endNv = obj(i).d.nv-1;
+                       edgeIneq = 2:obj(i).d.nv;
                    end
+                   endNv = numel(edgeIneq);
                    for j = 1:endNv % fix this  obj(i).d.nv-1 ?
-                       if ~isempty(eIdx)
-                           ineq = subs(obj(i).d.ineqs(eIdx(j)).f,obj(i).d.vars,[x,y]);
-                       elseif endNv ==  obj(i).d.nv
-                           ineq = subs(obj(i).d.ineqs(j).f,obj(i).d.vars,[x,y]);
-                       else
-                           ineq = subs(obj(i).d.ineqs(j+1).f,obj(i).d.vars,[x,y]);
-                       end
-                   
+                       ineq = subs(obj(i).d.ineqs(edgeIneq(j)).f,obj(i).d.vars,[x,y]);
+
                        f0 = subs(obj(i).f.f,obj(i).d.vars,[x,y]);
                        [expr] = simplifyFraction(conjugateExpr(ineq,f0,x,y));
                        ineq1 = subdE(j,:);

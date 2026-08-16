@@ -144,9 +144,68 @@ classdef functionNDomainTest < matlab.unittest.TestCase
             end
         end
 
+        function aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane (testCase)
+        % A BOUNDED piece's conjugate is finite EVERYWHERE. This one was finite on part of the
+        % plane only, and that hole is what collapsed the parallelogram's biconjugate to nothing
+        % (QuaParCPLQ:conj:emptyResult).
+        %
+        % Piece 9 of f* for x*y over conv{(0,0),(2,0),(2.5,1),(0.5,1)}, verbatim: 3 vertices, 3
+        % genuine edges -- a chord, a line and an ARC -- plus a conic touching at one vertex only.
+        % TWO defects met here, and both are of this codebase's recurring kind.
+        %   1. 4 constraints for 3 vertices, so the COUNT `size(ineqs,2) == nv` called a bounded
+        %      region unbounded, endNv came out nv-1, and it was built one edge cell SHORT.
+        %      conjugateOfPiecePoly now derives the edge list from the geometry for any bounded
+        %      piece the count mislabels, not only for a lens.
+        %   2. At (1/4,7/8) the arc is TANGENT to the chord, so the two half-planes of the vertex
+        %      cone coincide and the cone is a HALF-PLANE -- which has no finite vertex, which
+        %      region.simplifyUnboundedRegion read as empty. See regionTest/aHalfPlaneIsNotEmpty.
+        %
+        % Measured against a brute-force sup over the piece: 6 of 10 probe points wrong or
+        % uncovered before, 2 after. The two that remain are (0.25,0.25) and (1,0.2), where the
+        % chord's edge cell and the arc's claim the SAME region and the chord's is checked first;
+        % f is a SINGULAR convex quadratic here (constant along one whole edge), so
+        % functionNDomain.getInterior returns the gradient map's image LINE rather than a
+        % separating curve and cannot split them. That is a different defect, recorded in
+        % DECISIONS.md -- do not attack the isQuad chord rewrite for it, which was tried twice.
+            pc = functionNDomainTest.parallelogramPiece9;
+            x = sym('x'); y = sym('y');
+
+            % COVERAGE is the property a bounded piece guarantees, and the one that was broken.
+            for pt = [0.6 0.95; 2.2 0.9; 1.5 0.6; 3 3; -2 -2; -1 0.5; 0 0]'
+                [~, n] = functionNDomainTest.evalAt(pc, pt', x, y);
+                testCase.verifyGreaterThanOrEqual(n, 1, sprintf( ...
+                    'a bounded piece''s conjugate is finite at (%g,%g)', pt(1), pt(2)));
+            end
+
+            % VALUES, against the closed-form sup (each attained at a vertex of the piece).
+            want = {[3 3], sym(23)/8; [sym(11)/5 sym(9)/10], sym(67)/80; ...
+                    [-2 -2], sym(1)/4; [-1 sym(1)/2], sym(5)/16; [0 0], sym(0)};
+            for i = 1:size(want,1)
+                pt = want{i,1};
+                v = functionNDomainTest.evalAt(pc, pt, x, y);
+                testCase.verifyTrue(isAlways(v == want{i,2}), sprintf( ...
+                    'conjugate of the parallelogram''s piece 9 at (%s,%s)', ...
+                    char(string(pt(1))), char(string(pt(2)))));
+            end
+        end
+
     end
 
     methods (Static)
+
+        function pc = parallelogramPiece9
+        % Piece 9 of f* for x*y over the parallelogram conv{(0,0),(2,0),(2.5,1),(0.5,1)}, exactly
+        % as the pipeline delivers it. Its three edges are the chord s1 = 2*s2/3 - 1/3, the line
+        % s1 + 2*s2 = 0 and the arc; the fourth constraint, s1 + 2*s2 <= 2, touches one vertex and
+        % bounds no edge. Bounded, so its conjugate must be finite everywhere.
+            s1 = sym('s_1'); s2 = sym('s_2');
+            f = symbolicFunction((s1*s2)/2 + s1^2/8 + s2^2/2);
+            d = region([ (2*s2)/3 - s1 - sym(1)/3, ...
+                         -s1 - 2*s2, ...
+                         s1 + 2*s2 - 2, ...
+                         16*s1 - 4*s1*s2 - s1^2 - 4*s2^2 ], [s1, s2]);
+            pc = functionNDomain(f, d).conjugateOfPiecePoly;
+        end
 
         function [pc, d] = halfLens
         % Piece 1 of f* for f = x*y over the unit square as two faces, verbatim as the pipeline

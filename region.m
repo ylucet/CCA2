@@ -2361,7 +2361,33 @@ classdef region
             
             end
             if nP == 0
-                obj = region.empty();
+                % NO FINITE VERTEX IS NOT THE SAME AS EMPTY. A half-plane, a slab and the whole
+                % plane all have no corner, and this routine declared every one of them empty --
+                % the same "a degenerate geometric object is not a geometric object" trap as
+                % removeTangent's apex and getEdgeNosInf's lens, in the one direction that
+                % silently deletes an answer.
+                %
+                % A HALF-PLANE IS EXACTLY WHAT A TANGENT VERTEX PRODUCES, so this is not a corner
+                % case. getNormalConeVertexQ builds the cone at a vertex from the two edges meeting
+                % there; when those edges are TANGENT -- an arc and its chord touching, which is
+                % how a curvilinear piece ends -- both half-planes are the SAME one and the cone is
+                % a half-plane with no vertex. Measured on piece 9 of f* for x*y over the
+                % parallelogram conv{(0,0),(2,0),(2.5,1),(0.5,1)}: the cone at (1/4,7/8) is
+                % {2x/3 + y >= 4/3}, its cell carries x/4 + 7y/8 - 1/2, and dropping it left the
+                % conjugate uncovered on exactly that half-plane -- wrong or uncovered at 6 of 10
+                % probe points against a brute-force sup, and the biconjugate over the whole
+                % parallelogram then collapsed to nothing.
+                %
+                % Refute the verdict with a WITNESS rather than reversing it: a feasible point is a
+                % certificate of non-emptiness (ptFeasible tests every constraint, conics
+                % included), while failing to find one proves nothing -- so the old verdict stands
+                % whenever no witness turns up, and this can only ever recover a region that was
+                % being deleted. Nothing is simplified here: with no vertex there is no
+                % vertex-based simplification to do, and over-describing a region is harmless
+                % (this class's LP-certificate header says so).
+                if ~obj.witnessAwayFrom(sym.empty(), sym.empty())
+                    obj = region.empty();
+                end
                 return
             end
             obj = obj.simplifyOpenRegion1 (nP, px, py);

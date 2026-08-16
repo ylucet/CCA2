@@ -24,6 +24,48 @@ classdef regionTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        % ---- simplifyUnboundedRegion ----------------------------------------------------
+        function aHalfPlaneIsNotEmpty(testCase)
+        % simplifyUnboundedRegion decided a region had no interior from the count of its FINITE
+        % vertices, and a half-plane has none -- nor does a slab, nor the whole plane. Every one
+        % of them came back region.empty(), which deletes an answer silently.
+        %
+        % A HALF-PLANE IS EXACTLY WHAT A TANGENT VERTEX PRODUCES, so this is not a corner case.
+        % getNormalConeVertexQ builds the cone at a vertex from the two edges meeting there;
+        % when those edges are TANGENT -- an arc and its chord touching, the way a curvilinear
+        % piece ends -- both half-planes are the SAME one and the cone is a half-plane. On piece
+        % 9 of f* for x*y over the parallelogram conv{(0,0),(2,0),(2.5,1),(0.5,1)} that cone is
+        % {2x/3 + y >= 4/3}; dropping it left the conjugate uncovered on exactly that half-plane
+        % and the biconjugate then collapsed to nothing.
+        %
+        % All four spellings are checked because the caller produces the duplicated one: two
+        % identical half-planes plus a trivial 0 is what a tangent vertex's two constraints and
+        % the unused third slot come to.
+            x = sym('x'); y = sym('y');
+            a = sym(4)/3 - y - (2*x)/3;              % the cone at that vertex, {2x/3 + y >= 4/3}
+            forms = { a, [a, a], [a, sym(0)], [a, a, sym(0)] };
+            for k = 1:numel(forms)
+                r = region(forms{k}, [x,y]);
+                testCase.verifyTrue(r.ptFeasible([x,y], [3,3]), ...
+                    'precondition: (3,3) is in this half-plane');
+                r2 = r.simplifyUnboundedRegion;
+                testCase.verifyFalse(isempty(r2), sprintf( ...
+                    'a half-plane is not empty (form %d)', k));
+                testCase.verifyTrue(r2.ptFeasible([x,y], [3,3]), sprintf( ...
+                    'and it still contains its own points (form %d)', k));
+            end
+        end
+
+        function aGenuinelyEmptyRegionIsStillReportedEmpty(testCase)
+        % The other side of the test above: refuting an emptiness verdict must need a WITNESS, so
+        % a region that really is empty has to survive the change. Two opposite half-planes with
+        % no common point have none.
+            x = sym('x'); y = sym('y');
+            r = region([x - 1, 2 - x], [x,y]);       % x >= 2 and x <= 1
+            r2 = r.simplifyUnboundedRegion;
+            testCase.verifyTrue(isempty(r2), 'x >= 2 and x <= 1 is empty');
+        end
+
         % ---- maxLinear ------------------------------------------------------------------
         function maxLinearReportsOptimalUnboundedAndInfeasible(testCase)
             % The three answers callers branch on. Unboundedness and infeasibility are
