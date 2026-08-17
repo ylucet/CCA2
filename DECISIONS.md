@@ -25,6 +25,22 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-16 (last) — Making the A.4/A.5 split the DEFAULT: deliberately not done
+
+- **Tried:** shipping the split on by default, since it fixes a documented crash and a documented
+  wrong answer (`plq_1p.appendTriangle`, `splitTightTriangleSym`).
+- **Why it was not kept:** with it on, `testcPLQ` runs 4728 s against 1542 s off (its historical
+  time is 1427 s), **and `testcPLQ/testRectBiconj` ERRORS**. That test has no assertions — it runs
+  `triangulate`, `maximum`, `biconjugateF` and nothing else — so the failure is an exception, not a
+  wrong value. Undiagnosed. Turning the split on therefore trades a documented, LOUD failure on one
+  domain shape for a new one on another, which is not a trade to make silently.
+- **Before retrying:** fix Step 3's cell blow-up (the cost) and diagnose `testRectBiconj`'s
+  exception (the correctness question), in that order. Both are in `TODO.md` with their numbers.
+  The switch is `CCA2_A45_SPLIT`; the two quadrilateral tests set it themselves, so the fix stays
+  exercised either way.
+- **Evidence:** the runs behind those two timings are the `testcPLQ`-only runs of 2026-08-16,
+  uncontended in both directions; commit `ba3457d`.
+
 ## 2026-08-16 (later) — The general quadrilateral, FIXED on the fourth attempt. What the three failures were each worth.
 
 The method the user prescribed is what worked, and it is worth stating on its own: **do it
