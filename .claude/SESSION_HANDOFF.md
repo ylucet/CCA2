@@ -28,7 +28,7 @@ were always correct. What is left is small and splits evenly in two, both measur
 ## Where things stand
 
 - Branch: `main` @ `4e23b0d` — the Step 3 measurement work above
-- Pushed: yes
+- Pushed: NO -- six commits sit on local `main`, unpushed (pushing was never asked for)
 - **332 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 11 / 0, slow **115 / 0**, every
   suite at its historical runtime.
 - The parallelogram's `biconj` computes: exact at all four vertices, `+inf` outside the domain,
@@ -39,38 +39,44 @@ were always correct. What is left is small and splits evenly in two, both measur
 
 ## Next steps
 
-1. **DECIDED 2026-08-17 — option (a): the split stays opt-in and STEP 3's COST is the work.** The
-   standing rule the user attached to it outranks the flag and settles future versions of the same
-   question: **every computation has to be correct even if it is slow; a slow correct path gets its
-   test moved to a slower bucket, never traded away — the one exception being a computation so slow
-   it does not finish, since a timeout helps nobody.** So `testcPLQ` at 4728 s is a bucket question;
-   what blocks the default is the undiagnosed `testcPLQ/testRectBiconj` exception. `DECISIONS.md`'s
-   newest entry has it in full.
-   **Started, and BLOCKED on the VPN:** instrumentation for the blow-up is written
-   (`region.mergeTally`, the refusal reason out of `unionIsExact`, `CCA2_TRACE_MAXP` in
-   `functionNDomain.maximumP`) along with the harness `.claude/step3cost.m` — but MATLAB cannot
-   check out a licence off the UBC network (`License Manager Error -96`), so **none of it has been
-   run, not even for syntax.** `TODO.md`'s newest item has the command to run first and the three
-   ranked hypotheses that one run decides between.
-2. **`getInterior` on a SINGULAR quadratic — the parallelogram's last 4%.** It separates an edge
-   cell from its neighbours by eliminating `s` between `x = ∂₁f` and `y = ∂₂f`; when `f` is a
-   singular convex quadratic the gradient map is not invertible and that elimination returns the
-   map's IMAGE LINE, which separates nothing — so two edge cells come out on the SAME region and the
-   first one checked wins. Reproduce in about a minute with
-   `functionNDomainTest.parallelogramPiece9`.
-   **Do NOT attack the `isQuad` chord rewrite for it.** Both alternatives were measured 2026-08-16
-   and are in `DECISIONS.md`: chording the vertices the conic actually touches makes that piece
-   WORSE (2 wrong of 10 → 3), and skipping the rewrite changes nothing.
-3. **Step 3's cross-piece maximum does not scale, and it is the binding cost.** Measured on the
-   quadrilateral: Steps 1 and 2 take about 25 s for all six pieces, `functionNDomain.maxOfList` then
-   takes **73 minutes**, and the cell count runs 5, 14, 29, 45, 70, **86** — roughly ten times what
-   the answer needs, since `f*` of `x·y` over a convex quadrilateral has a cone per vertex and a
-   cell per edge. The surplus is adjacent cells carrying the SAME function that `region.merge` never
-   merges. **Start by merging same-function neighbours after each fold rather than only at the end**;
-   many of those cells are POLYHEDRAL, where `unionIsExact` already decides exactly.
-4. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
-   → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box (`x²−y²`,
-   `(x²+y²)/2` on `[0,1]²` still error in the second conjugation) → performance (~40–60 s/term).
+1. **The 5 pairs whose shared facet `merge` cannot see.** Measured with EXACT arithmetic, so this
+   is not rounding: they carry the same hyperplane with opposite orientation and meet in a
+   SEGMENT, and `ineqs(i) == -ineqs(j)` still finds nothing. `symbolicFunction.eq` is
+   `if (obj1.f == obj2.f)`, a STRUCTURAL test whose own comment says "change to isAlways", so the
+   same constraint at a different positive SCALE does not match. `region.normalize1` divides by
+   `abs(coeffs(f,vars))(end)` and is supposed to prevent exactly that -- check first whether it
+   picks the same term for both operands. Reproduce in about 4 minutes with
+   `.claude/step3adjacency.m`.
+2. **The 6 pairs `certifiesNonPositive` declines.** They ARE found, reach `unionIsExact`, and are
+   refused there -- the fold-1 tally's `lin_exactCurvedTest = 6` matches the count exactly. The
+   certificate refuses by design outside its hypothesis: a rational `h`, a non-convex quadratic,
+   or a linear relaxation with no vertex. Instrument WHICH of the three fires before extending it;
+   the derivation in the method's header says what each would need.
+3. **Then re-measure and settle the A.4/A.5 default.** Rerun `.claude/step3cost.m` on the
+   quadrilateral once 1 and 2 land (cells ran 5, 14, 29, 45, 70, 86 before any of this work), then
+   diagnose `testcPLQ/testRectBiconj`'s exception -- with the cost question answered that is the
+   only correctness objection left to turning `CCA2_A45_SPLIT` on.
+4. **`getInterior` on a SINGULAR quadratic — the parallelogram's last 4%.** Unchanged by this
+   session. It separates an edge cell from its neighbours by eliminating `s` between `x = d1f` and
+   `y = d2f`; for a singular convex quadratic the gradient map is not invertible and that
+   elimination returns the map's IMAGE LINE, which separates nothing. Reproduce in about a minute
+   with `functionNDomainTest.parallelogramPiece9`.
+   **Do NOT attack the `isQuad` chord rewrite for it** -- both alternatives were measured
+   2026-08-16 and are in `DECISIONS.md`.
+5. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
+   -> expose value+subgradient off `QuaParCPLQ` -> fix diagonal terms over a box (`x^2-y^2`,
+   `(x^2+y^2)/2` on `[0,1]^2` still error in the second conjugation) -> performance.
+
+## New tools this session, both cheap to rerun
+
+- `.claude/step3cost.m` -- folds the pieces one at a time and reports cells, DISTINCT FUNCTIONS,
+  and `region.mergeTally`'s refusal reasons per fold. `CCA2_STEP3_CASE=tri` switches to the
+  all-rational control; `CCA2_STEP3_FOLDS` bounds the work.
+- `.claude/step3adjacency.m` -- classifies every same-function pair three ways at once: does
+  `merge` see a facet, is there a shared hyperplane, do the cells actually meet in a SEGMENT.
+  The third column is what showed that 21 of 38 refusals were correct all along.
+- `CCA2_TRACE_BIGNUM` in `region`'s constructor prints the stack whenever a region is built from a
+  constraint carrying a 15-digit integer. All three double leaks were found with it.
 
 ## Three methods that keep paying off
 
