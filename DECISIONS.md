@@ -25,6 +25,23 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (latest) — testRectBiconj PASSES with the split on: the correctness blocker is gone
+
+`testcPLQ/testRectBiconj` ERRORED with `CCA2_A45_SPLIT` set, and that -- not the runtime -- was
+the stated reason the split could not be the default. Re-run against the exactness work
+(`domain.mE`/`cE`, `region.limitOfFAtVertices`, `plq_1p.quadPartsOf`, `conjConvexOverPiece`):
+
+    RESULT passed=1 failed=0 incomplete=0
+
+So the exception was a casualty of the double leaks -- 145-digit coefficients and comparisons
+`isAlways` could not decide -- and not an independent defect. Nothing was changed in that test or
+in the split to achieve it.
+
+**What remains for the default is therefore ONLY cost**, which by the standing rule
+(2026-08-17, "DECIDED") is a bucket question rather than a blocker, unless it is on the way to not
+finishing. Measure `testcPLQ` with the split on against its 1542 s off / 4728 s on, and note that
+the machine is shared so a single timing decides nothing.
+
 ## 2026-08-17 (last) — the blow-up, finally COUNTED: two causes, and neither is the arithmetic
 
 `.claude/step3adjacency.m` classifies every same-function pair of fold-1 cells three ways at once:
