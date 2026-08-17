@@ -735,6 +735,16 @@ maximum then takes **73 minutes** (folds of 93, 294, 647, 1273, 2087 s; cells 5,
 about ten times what the answer needs, and the surplus is same-function neighbours that
 `region.merge` never merges.
 
+**And the cost is paid by any `x·y` polygon whose triangles need the split**, because A.4's cevian
+foot is irrational: a split sub-triangle has SURD coordinates, so every symbolic operation
+downstream works in a quadratic extension rather than the rationals. Measured on `testcPLQ`, whose
+domains are general polygons carrying `x·y`: **1542 s with the split off (matching its historical
+1427 s), over 3100 s with it on and still unfinished when stopped**, uncontended both times — and
+only two of its six domains even gain a piece (2 → 3 and 1 → 2), so this is the algebraic degree of
+the coordinates, not the piece count. **`CCA2_NO_A45_SPLIT` opts out** for a session where speed
+matters more and the input is known not to need it; correctness keeps the default, since without
+the split a 3-convex-edge triangle crashes and a 2-convex-edge one returns a minorant.
+
 Pinned by `cplqAdapterTest/generalQuadrilateralStep1IsTheEnvelopeNotAMinorant`, which asserts only
 what must hold of an envelope (it exists, it is `≤ x·y`, and where `x·y ≥ 0` it is `≥ 0`), and
 `generalQuadrilateralConjugateMatchesTheSup`. The three failed attempts are in `DECISIONS.md`; what

@@ -54,12 +54,21 @@ symbolic arithmetic throughout, so the cevian foot — irrational in general —
   degenerate", arrived at from the other side.
 
 **What the split costs, and where the cost actually is.** The no-split path — every input cPLQ
-itself ever had — is 20 ms, which is why nothing else in the suite moved. The split paths are
-0.3 s (A.4) and 1.2 s (A.5). What is expensive is what comes AFTER: six pieces instead of two, and
+itself ever had — is 20 ms, which is why the fast bucket did not move. The split paths are 0.3 s
+(A.4) and 1.2 s (A.5). What is expensive is what comes AFTER: six pieces instead of two, and
 Step 3's cross-piece maximum then takes **73 minutes**, with the cell count running 5, 14, 29, 45,
 70, 86. The answer is exact at both levels — 10 of 10 on the per-piece max, 8 of 8 on the assembled
 one — so this is a scaling problem in `maxOfList`, not a defect in the split. It has its own
 `TODO.md` item.
+
+**And the real reason it is expensive is the ALGEBRAIC DEGREE, not the piece count — which is worth
+knowing before optimising the wrong thing.** A.4's cevian foot is irrational, so a split
+sub-triangle has SURD coordinates and every symbolic operation downstream works in a quadratic
+extension instead of the rationals. Measured on `testcPLQ`, whose domains are general polygons
+carrying `x·y`: **1542 s with the split off (matching its historical 1427 s), over 3100 s with it on
+and still unfinished when stopped**, uncontended both times — while only two of its six domains
+gain a piece at all (2 → 3 and 1 → 2). Two extra pieces cannot explain a 2×+ slowdown; surds can.
+`CCA2_NO_A45_SPLIT` therefore exists as an opt-out, and correctness keeps the default.
 
 ## 2026-08-16 — The parallelogram's `emptyResult`: TWO defects, both fixed, and two more measured and not taken
 

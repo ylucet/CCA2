@@ -77,6 +77,9 @@ the tooling that judged them was itself broken, in two ways, and silently.
       of these cells are POLYHEDRAL (the vertex cones), where `unionIsExact` already decides
       exactly, so a large fraction should collapse without needing the conic case at all. Measure
       the cell count per fold before and after -- that is the number that predicts the time.
+      **This is now what stands between the A.4/A.5 split and being affordable by default**:
+      `testcPLQ` goes from 1542 s to over 3100 s (unfinished) with the split on, which is why
+      `CCA2_NO_A45_SPLIT` exists. Fix this and the escape hatch stops being needed.
 
 ### Then (2026-08-15, after bug 1 closed the last red)
 
@@ -97,6 +100,17 @@ the tooling that judged them was itself broken, in two ways, and silently.
       **A COST, not a defect, and it is Step 3's:** assembling the cross-piece maximum for this
       input takes **73 minutes** (folds of 93, 294, 647, 1273, 2087 s, cells running 5, 14, 29, 45,
       70, 86). The per-piece conjugates take about 25 s in total. See the next item.
+      **The cost is paid by any x*y polygon whose triangles need the split**, because A.4's cevian
+      foot is IRRATIONAL: a split sub-triangle has SURD coordinates, and every symbolic operation
+      downstream then works in a quadratic extension instead of the rationals. Measured on
+      `testcPLQ`, whose domains are general polygons carrying `x*y`: **1542 s with the split off
+      (matching its historical 1427 s), over 3100 s with it on and still unfinished when stopped**,
+      uncontended both times. Only two of its six domains even gain a piece (2 -> 3 and 1 -> 2), so
+      this is the algebraic degree of the coordinates, not the piece count.
+      **`CCA2_NO_A45_SPLIT` opts out** for a session where speed matters more and the input is
+      known not to need the split -- same convention as `MAXQP_ASSERT` and `QUAPAR_VALIDATE`.
+      Correctness keeps the default: without the split a 3-convex-edge triangle CRASHES and a
+      2-convex-edge one returns a MINORANT in place of the envelope.
       History of the three failed attempts follows.
       **Attempt 3 (2026-08-16), and why it failed.** The domain split was built exactly as attempt
       2's write-up prescribed, taking the sub-triangles from `convEnvCPLQ`'s own faces, and it

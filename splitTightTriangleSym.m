@@ -106,9 +106,19 @@ function halves = splitTwoConvexSym(V, ce)
 % convEnvCPLQ's splitTwoConvexEdges carries the full derivation; this is the same construction in
 % exact arithmetic.
 %
-% Empty means "no split": either q1 is already affine along the weak edge (the measure-zero
-% mirror-symmetric case, where it touches the chord everywhere), or neither candidate cevian can be
-% certified to land strictly inside its target edge.
+% THE "NO SPLIT NEEDED" TEST, IN CLOSED FORM. q1's quadratic part is
+% [mh*mw, 2*sqrt(mh*mw), 1]/denom (see buildTwoEdgeSym), so its curvature along the weak edge AB is
+%
+%     ( sqrt(mh*mw)*dx + dy )^2 / ( sqrt(mh) + sqrt(mw) )^2 ,
+%
+% a PERFECT SQUARE -- which vanishes exactly when AB is PARALLEL to the cevian direction
+% -sqrt(mh*mw). That is the measure-zero mirror-symmetric case where q1 already touches the chord
+% along the whole weak edge (e.g. (0,0),(2,1),(1,2), where mh*mw = 1), and it is the same
+% degeneracy convEnvCPLQ's header describes as "both candidate cevians degenerate". Testing it
+% this way needs neither q1 nor the +/- branch selection.
+%
+% Empty means "no split": that degeneracy, or neither candidate cevian certifiably landing inside
+% its target edge.
     halves = {};
     Bidx = double(ce(1,3)); Aidx = double(ce(2,3));
     Pidx = setdiff(1:3, [Bidx Aidx]);
@@ -116,18 +126,12 @@ function halves = splitTwoConvexSym(V, ce)
     mh = ce(1,1); qh = ce(1,2);      % edge P-A
     mw = ce(2,1); qw = ce(2,2);      % edge P-B
 
-    q1 = twoEdgeQuadSym(mh, qh, mw, qw, V);
-    if isempty(q1)
-        return
-    end
-
-    dxAB = B(1) - A(1); dyAB = B(2) - A(2);
-    curv = q1(1)*dxAB^2 + q1(2)*dxAB*dyAB + q1(3)*dyAB^2;   % q1's curvature along the weak edge
-    if provably(curv == 0)
+    g = sqrt(mh*mw);
+    if provably(g*(B(1)-A(1)) + (B(2)-A(2)) == 0)
         return                       % q1 already touches the chord along the whole weak edge
     end
 
-    slope = -sqrt(mh*mw);            % forced tangency direction; independent of the affine part
+    slope = -g;                      % forced tangency direction; independent of the affine part
 
     [Ra, ta] = tangentCevianSym(A, slope, mw, qw, P, B);
     if provably(ta > 0) && provably(ta < 1)
@@ -166,9 +170,17 @@ function halves = splitThreeConvexSym(V)
     mw  = (vhigh(2)-vlow(2))/(vhigh(1)-vlow(1)); qw  = vlow(2) - mw*vlow(1);
     mh2 = (vhigh(2)-vmid(2))/(vhigh(1)-vmid(1)); qh2 = vmid(2) - mh2*vmid(1);
 
-    c1 = buildTwoEdgeSym(mh1, qh1, mw, qw, 1);
-    c2 = buildTwoEdgeSym(mh2, qh2, mw, qw, 1);
-    d  = simplify(c1 - c2);                      % vanishes on the low-high line
+    % Only three components of c1 - c2 are used, so write them out rather than build and simplify
+    % two six-vectors. denom_i = mh_i + mw + 2*sqrt(mh_i*mw) = (sqrt(mh_i) + sqrt(mw))^2 > 0.
+    den1 = mh1 + mw + 2*sqrt(mh1*mw);
+    den2 = mh2 + mw + 2*sqrt(mh2*mw);
+    if provably(den1 == 0) || provably(den2 == 0)
+        return
+    end
+    d2 = 2*sqrt(mh1*mw)/den1 - 2*sqrt(mh2*mw)/den2;                  % x*y coefficient
+    d3 = 1/den1 - 1/den2;                                            % y^2 coefficient
+    d4 = (mh1*qw + mw*qh1)/den1 - (mh2*qw + mw*qh2)/den2;            % x coefficient
+    d  = [sym(0), d2, d3, d4];                   % c1 - c2 vanishes on the low-high line
     q  = -d(3);
     pp = mw*q - d(2);
     if provably(pp + q*mw == 0)
@@ -182,31 +194,15 @@ function halves = splitThreeConvexSym(V)
 end
 
 % ------------------------------------------------------------------------------------------------
-function q = twoEdgeQuadSym(mh, qh, mw, qw, V)
-% conv(x*y) over a triangle with two convex edges (Appendix A.4), plain coeffs [a b c d e f] for
-% a*x^2 + b*x*y + c*y^2 + d*x + e*y + f. Of the two (+/-) solutions, take the one that TOUCHES x*y
-% along a convex edge; empty when neither can be certified to.
-    q = [];
-    for s = [1 -1]
-        cand = buildTwoEdgeSym(mh, qh, mw, qw, s);
-        xt = sum(V(:,1))/3;                       % a point on edge h, generic along it
-        yt = mh*xt + qh;
-        if provably(evalPlainSym(cand, xt, yt) - xt*yt == 0)
-            q = cand; return
-        end
-    end
-end
-
-function c = buildTwoEdgeSym(mh, qh, mw, qw, s)
-    rr = sqrt(mh*mw);
-    denom = mh + mw + s*2*rr;
-    c = simplify([ mh*mw/denom, s*2*rr/denom, 1/denom, ...
-                   (mh*qw + mw*qh)/denom, -(qh+qw)/denom, qh*qw/denom ]);
-end
-
-function v = evalPlainSym(c, x, y)
-    v = c(1)*x^2 + c(2)*x*y + c(3)*y^2 + c(4)*x + c(5)*y + c(6);
-end
+% THE +/- BRANCH OF [COAP] A.4's FORM IS VESTIGIAL, and this file therefore does not carry it.
+% convEnvCPLQ's twoEdgeQuadPlain builds both signs and keeps the one that TOUCHES x*y along a convex
+% edge. Substituting y = mh*x + qh into the s-form, with denom = mh + mw + s*2*sqrt(mh*mw):
+%   x^2 coefficient : ( mh*mw + 2*s*sqrt(mh*mw)*mh + mh^2 ) / denom = mh*denom/denom = mh
+%   x   coefficient : ( 2*s*sqrt(mh*mw)*qh + mh*qh + mw*qh ) / denom = qh*denom/denom = qh
+%   constant        : ( qh^2 - (qh+qw)*qh + qh*qw ) / denom = 0
+% -- for BOTH signs. So the form touches x*y along that whole edge either way, the touching test
+% cannot separate them, and s = -1 is merely UNDEFINED when mh = mw. s = +1 always wins, which is
+% what cPLQ hard-codes. Only the quantities the split actually needs are written out above.
 
 % ------------------------------------------------------------------------------------------------
 function [R, t] = tangentCevianSym(anchor, slope, mTarget, qTarget, Pp, otherEnd)
