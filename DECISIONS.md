@@ -25,6 +25,41 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (last) — the blow-up, finally COUNTED: two causes, and neither is the arithmetic
+
+`.claude/step3adjacency.m` classifies every same-function pair of fold-1 cells three ways at once:
+does `merge`'s own test see a shared facet; do the two carry the same hyperplane with opposite
+orientation (numeric rows, so independent of how the constraint is written); and do they actually
+MEET in a segment rather than a point. Run with Step 2 exact, on the control case:
+
+    merge sees | same hyperplane | how they meet | pairs
+    no         | no              | do not touch  |  5
+    no         | yes             | a point only  |  7
+    NO         | yes             | A SEGMENT     |  5     <-- facet detection FAILS
+    yes        | yes             | do not touch  |  1
+    yes        | yes             | a point only  | 14
+    yes        | yes             | A SEGMENT     |  6     <-- reaches unionIsExact; 1 merged
+
+**Only the 11 `segment` pairs are ones a merge could ever be right about.** 21 of the 38 pairs meet
+at a POINT and must not merge -- the union of two cells touching at a corner is not convex, so
+those refusals are correct and were never the problem. That alone retires "578 refusals" as a
+number to reason from: most of them are right.
+
+**The 11 split evenly into two DIFFERENT defects:**
+
+1. **5 pairs share a real facet that `ineqs(i) == -ineqs(j)` does not find** -- with exact
+   arithmetic, so this is not rounding. `symbolicFunction.eq` is `if (obj1.f == obj2.f)`, a
+   STRUCTURAL comparison (its own comment says "change to isAlways"), so the same constraint
+   written at a different positive SCALE does not match. `region.normalize1` is supposed to
+   prevent that by dividing by `abs(coeffs(f,vars))(end)` -- check whether it picks the same
+   term for both operands, which for two differently-written forms it need not.
+2. **6 pairs are found and then refused by `unionIsExact`** -- and the fold-1 tally's
+   `lin_exactCurvedTest = 6` matches exactly, so all six are `certifiesNonPositive` declining.
+   It declines by design outside its hypothesis: a rational `h`, a non-convex quadratic, or a
+   relaxation with no vertex. Find out WHICH of the three before extending it.
+
+Both are small and both are now counted rather than guessed. That is the state to start from.
+
 ## 2026-08-17 (final for the session) — Step 2 is EXACT now, and Step 3 STILL does not merge
 
 **Read this before spending another hour on exactness.** Three double leaks are fixed and the
