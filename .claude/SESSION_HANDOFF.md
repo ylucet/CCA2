@@ -4,22 +4,30 @@ _Last updated: 2026-08-17_
 
 ## What happened this session
 
-**Every documented ERROR case now has a fix.** Bug 1 (the lens) closed, taking the repository to no
-failing test for the first time in weeks; the parallelogram's `QuaParCPLQ:conj:emptyResult` closed,
-along with two general defects behind it; and the general convex quadrilateral's
-`MATLAB:badsubscript` closed on the fourth attempt. The quadrilateral was done test-first — red,
-then green — and the attempt that worked differed from the one that hung in exactly one respect:
-**it does the geometry SYMBOLICALLY.** [COAP] A.4's cevian foot is irrational, so computing it in
-double precision and converting gives `2^53` denominators that grow past `1e25` downstream; carried
-symbolically the coordinates stay compact surds and the pipeline finishes.
+**Option (a) was chosen and worked on: the A.4/A.5 split stays opt-in, Step 3's cost is the job.**
+The standing rule the user attached to it outranks the flag and settles the whole class of
+question: **every computation has to be CORRECT even if it is slow -- a slow correct path gets its
+test moved to a slower bucket, never traded away -- with the one exception of a computation so slow
+it does not finish, since a timeout helps nobody.**
 
-**The quadrilateral fix is OPT-IN (`CCA2_A45_SPLIT`) and OFF by default** — the one judgement call
-left open. See "Next steps" 1.
+**THREE double leaks found and fixed; Step 2 is now exact end to end.** `domain.mE`/`cE` were
+DOUBLE arrays (an exact slope arrived as `0.6`, an exact zero y-intercept as `-9.06e-72`);
+`region.limitOfFAtVertices` let its `limf(j) = 0` branch decide the array's class, silently
+rounding every exact gradient limit written after it; and `conjConvexOverPiece` converted `Q, L, c`
+and the piece's vertices to double by design. Worst denominator in the quadrilateral's conjugate
+cells: **1.4e145 -> 56**.
+
+**And the blow-up is now COUNTED rather than guessed -- which twice refuted what this session
+believed.** Exactness turned out not to be what blocks merging, and "nothing merges" was the wrong
+framing: of 38 same-function pairs, 21 meet only at a POINT and must not merge, so most refusals
+were always correct. What is left is small and splits evenly in two, both measured. See
+"Next steps" 1 and 2, and `DECISIONS.md`'s newest three entries for the two retractions.
+
+**332 pass / 0 fail** -- fast 206, normal 11, slow 115 -- with everything above in.
 
 ## Where things stand
 
-- Branch: `main` @ `ba3457d` — "Make the A.4/A.5 split OPT-IN: with it on, testcPLQ/testRectBiconj
-  ERRORS"
+- Branch: `main` @ `4e23b0d` — the Step 3 measurement work above
 - Pushed: yes
 - **332 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 11 / 0, slow **115 / 0**, every
   suite at its historical runtime.
