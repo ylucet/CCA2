@@ -61,147 +61,50 @@ the tooling that judged them was itself broken, in two ways, and silently.
       stays opt-in -- it costs seconds per call, and the tools that want it call
       `pieceRecessionRays` directly.
 
-### Next up (2026-08-17) — Step 3's cost, with the decision behind it recorded
+### Next up (2026-08-18) — where Step 3 actually stands
 
-**DECIDED 2026-08-17 (option (a)): the A.4/A.5 split stays opt-in and Step 3's cost is the work.**
-And the reason is NOT the runtime. The user's standing rule is that **every computation has to be
-correct even if it is slow — a slow correct path gets its test moved to a slower bucket, never
-traded away — with the single exception of a computation so slow that it does not finish, since a
-timeout helps nobody.** So `testcPLQ` at 4728 s instead of 1542 s is a bucket question, not a
-blocker; what actually blocks the default is the undiagnosed `testcPLQ/testRectBiconj` EXCEPTION,
-and the risk that the cost curve runs on into "does not finish". Full entry in `DECISIONS.md`.
+**MEASURED end to end on the A.4/A.5 quadrilateral, after this session's work:**
 
-- [ ] **MEASURED 2026-08-17. TWO findings, and the second is the root cause.**
+    cells per fold   5, 14, 29, 45, 70, 86   ->   5, 12, 23, 38, 51, 60
+    total            73 min                  ->   43 min (2579 s)
 
-      **(1) After fold 1, `region.merge` succeeds ZERO times, and that IS the blow-up.**
+The machine was running three MATLABs throughout, so that timing is pessimistic, and a single
+timing settles nothing anyway (see `CLAUDE.md` §3).
 
-          FOLD 0 (seed): cells=5  distinctF=5
-          FOLD 1: paired=16 -> cells=14 distinctF=7   mtimes 40 s, maximumP 89 s
-            merge: okLinear=3 quadCutsOther=13 noSharedFacet=7 quadMismatch=6
-                   lin_exactCurvedTest=2 quadFacet_exactCurvedTest=2
-          FOLD 2: paired=24 -> cells=29 distinctF=7   mtimes 136 s, maximumP 223 s
-            merge: noSharedFacet=70 quadMismatch=50 quadCutsOther=34
-                   quadFacet_exactCurvedTest=26 quadFacet_exactBnotInA=2 quadFacet_exactAnotInB=2
-                   lin_exactAnotInB=2 lin_exactCurvedTest=4
-          [maxP] in=16 afterSplit=17 merge1=14 merge2=14 (60 s)
-          [maxP] in=24 afterSplit=29 merge1=29 merge2=29 (182 s)
+**What got it there, all measured:** three double leaks fixed so Step 2 is exact
+(`domain.mE`/`cE`, `region.limitOfFAtVertices`, `plq_1p.quadPartsOf` + `conjConvexOverPiece`); a
+sound certificate for a curved constraint (`region.certifiesNonPositive`) replacing merge's two
+quadratic heuristics; `quadprog` deciding the CONCAVE conics, which is what the conics here
+actually are; and `functionNDomain.singularEdgeCut` closing the singular-quadratic overlap.
 
-      190 merge attempts at fold 2, **not one success**, while the 29 cells carry only **7
-      distinct functions**. `distinctF` stays at 7 from fold 1 on — the answer never needs more
-      than a handful of cells, and every extra cell is a merge that was refused. That is the
-      whole of 5, 14, 29, 45, 70, 86. Merging is also half the cost: 182 s of fold 2's 223 s.
+**AND `testcPLQ/testRectBiconj` NOW PASSES with `CCA2_A45_SPLIT` on** -- `passed=1 failed=0
+incomplete=0`, nothing changed in the test or the split. That exception was the stated correctness
+blocker for making the split the default, and it was a casualty of the double leaks.
 
-      **(2) THE ROOT CAUSE: `plq_1p.conjugate` reintroduces DOUBLES, and they explode.** Worst
-      denominator, measured stage by stage on the same six pieces:
+- [ ] **1. SETTLE THE A.4/A.5 DEFAULT.** Only cost is left, and by the standing rule
+      (`DECISIONS.md`, 2026-08-17) cost is a bucket question unless it is on the way to not
+      finishing. `testcPLQ` with the split ON is being timed against its 1542 s off / 4728 s on.
+      If it now finishes in a comparable time, turn `CCA2_A45_SPLIT` on by default, move whatever
+      suite it slows into the next bucket down, and delete the opt-in.
 
-          split sub-triangle DOMAINS   12       clean surds: 5/2 - sqrt(5)/2, sqrt(30)/6
-          Step 1 ENVELOPE faces        20       still clean
-          Step 2 `conjugates`          1.2e18, 9.7e33, 2.6e144, 1.4e145
-          `maximumConjugate`           unchanged -- it adds nothing
+- [ ] **2. `region.impliedBy` over a region with a CURVED facet -- the largest named gate left.**
+      `quadFacet_exactAnotInB` is 98 of fold 5's refusals and 63 of fold 3's. `impliedBy` tests an
+      affine constraint over the region's LINEAR RELAXATION, which is sound but conservative
+      exactly when a conic facet would have cut the violating part away. The max of an affine form
+      over such a region is attained at a VERTEX or at an ARC TANGENCY (where the conic's gradient
+      is parallel to the form) -- both closed-form, both already computable here. That makes the
+      test exact for the shapes this codebase produces instead of merely sound.
 
-      So the split is exact, Step 1 is exact, and **Step 2 is where it goes wrong**. The cells'
-      own constraints show it directly: piece 4 carries `24667231058826811/22517998136852480`
-      (= 2^51*10 denominator) and `7307585874000779/9007199254740992` (**2^53**) side by side
-      with the exact `30^(1/2)/12 - 15^(1/2)/6 + 3/4` -- the SAME quantity in two forms, one
-      exact and one a double. One constraint's coefficient is 97 digits long.
-      **This is attempt 3's pathology, downstream of the fix that removed it.** It explains both
-      the cost (every symbolic call works on 145-digit rationals) and finding 1: `merge` detects
-      a shared facet with `ineqs(i) == -ineqs(j)` and compares quadratics with `~=`, and neither
-      can decide when one side is exact and the other is its own double. `noSharedFacet=70` and
-      `quadMismatch=50` are the shape of a comparison that cannot be made, not of geometry.
+- [ ] **3. `noSharedFacet` is the biggest raw count (819 at fold 5) but mostly HONEST.** Measured
+      on the tri case with `.claude/step3adjacency.m`: 21 of 38 same-function pairs meet at a
+      POINT and must not merge. Re-run that probe on the quadrilateral before treating this count
+      as a defect. What is NOT honest there is item 4 below.
 
-      **(3) The double leak is HALF FIXED, and it turned out NOT to be the blow-up.**
-      `domain.mE`/`domain.cE` were DOUBLE arrays -- fixed 2026-08-17, and it was a wrong value
-      as well as a slow one (an exact zero y-intercept arrived as `-9.06e-72`). Worst
-      coefficient `1e144 -> 1e33`, Steps 1+2 50 s -> 36 s. **Step 3 did not move at all**: same
-      cell counts, byte-identical tally.
-      A second leak remains and is located exactly: `conjConvexOverPiece` converts `Q, L, c` and
-      the piece's vertices to double BY DESIGN (its own lines 59 and 73), and pieces 1 and 3
-      route through it. Making it exact means carrying `Q, L, c`, the vertices AND the edge
-      directions symbolically while leaving the tolerance-based active-set decisions numeric --
-      worth doing for exactness, but see (4): it is not what unblocks Step 3.
-
-      **(4) THE CONTROL CASE, and it is what says where to work.** `CCA2_STEP3_CASE=tri` runs
-      `x*y` over `conv{(0,0),(3,3),(1,2)}` through `convEnvCPLQ` + `ratPolToPlq`: four pieces,
-      ALL RATIONAL, no split, no surds, no doubles.
-
-          FOLD 1: 17 -> 20 cells, distinctF= 7   okLinear=1  noSharedFacet=14  quadCutsOther=14  quadMismatch=34
-          FOLD 2: 36 -> 37 cells, distinctF=11   okLinear=2  noSharedFacet=54  quadCutsOther=26  quadMismatch=58
-          FOLD 3: 60 -> 57 cells, distinctF=10   okLinear=4  noSharedFacet=266 quadCutsOther=50  quadMismatch=272  lin_exactCurvedTest=19
-
-      **57 cells for 10 distinct functions, and 4 merges out of 612.** Same blow-up on clean
-      numbers, so **`region.merge`'s gates are the defect**, not the arithmetic.
-
-      **NEXT, and it is one fix.** `quadMismatch` (272) and `quadCutsOther` (50) are HEURISTICS
-      standing in for the certificate `unionIsExact` cannot supply (`exactCurvedTest`, 19).
-      `quadMismatch` is the worst of them: when both regions carry a quadratic and neither is the
-      shared facet, it demands EVERY quadratic of A equal EVERY quadratic of B as a cross
-      product -- two adjacent cells with different arcs elsewhere have a convex union and are
-      refused anyway.
-      Give `unionIsExact` the missing certificate -- `max h <= 0` over the other region for a
-      non-affine `h`; for a CONVEX quadratic over a polyhedron that is decided exactly by the
-      vertices plus the recession directions, and the region's own curved facets may be dropped
-      first because the linear relaxation is a superset (the routine already argues this for the
-      region tested OVER) -- then delete the two heuristics. `unionIsExact` is the exact
-      criterion, and refusing only ever costs compactness, never correctness.
-      Check `noSharedFacet` (266) separately before attacking it: with 10 functions over 57 cells
-      the groups are ~6 wide and most pairs are honestly not adjacent.
-
-      Reproduce either case with:
-
-          CCA2_STEP3_FOLDS=2 matlab -batch "run('.claude/step3cost.m')"
-          CCA2_STEP3_CASE=tri CCA2_STEP3_FOLDS=9 matlab -batch "run('.claude/step3cost.m')"
-
-      `.claude/step3cost.m` folds the six quadrilateral pieces one at a time and reports, per
-      fold: cells after `mtimes`, after `maximumP`'s split loop, after each `mergeL` pass, the
-      number of DISTINCT functions among the survivors, and `region.mergeTally`'s refusal
-      reasons. Two folds is about 7 minutes; all five is the full 73.
-      **The one number that decides the fix** is `distinctF` against the cell count. If
-      `distinctF` is around a dozen while cells run to 86, the cells exist and merging is
-      refusing them — read the tally. If `distinctF` tracks the cell count, then `mergeL`'s
-      grouping test is failing to RECOGNISE equal functions and the merge gates are innocent.
-
-      **Ranked hypotheses, to be confirmed or killed by that one run:**
-      1. **`unionIsExact` refuses outright whenever any constraint it must TEST is non-affine**
-         (`if ~all(linA(keepA)) || ~all(linB(keepB)), return`). `splitmax3` emits the split
-         constraint as `f1 - f2` and `-(f1 - f2)`, and with the A.4/A.5 split in play the
-         per-piece conjugates are RATIONAL (A.3's form), so every fold deposits another
-         non-affine constraint on the cells it makes. After two folds a cell carries several, and
-         from then on no merge involving it can ever be certified. This predicts the tally being
-         dominated by `quadFacet_exactCurvedTest` / `lin_exactCurvedTest`, and it explains why the
-         blow-up tracks the ALGEBRAIC DEGREE rather than the piece count — which is the same thing
-         the `testcPLQ` timing said.
-         **Confirmed by reading, 2026-08-17, and it is WIDER than the split:** `region.linearForm`
-         marks a facet non-affine when it is rational OR QUADRATIC, and `unionIsExact` excludes
-         only the SHARED facet from the tested set. So two cells that meet along a straight edge
-         and each carry a parabolic arc ELSEWHERE — the ordinary shape of a conjugate cell here —
-         can never be merged either. That predicts the same refusal dominating with the split OFF,
-         which is a cheap cross-check: run `.claude/step3cost.m` without `CCA2_A45_SPLIT` on a
-         triangle and compare the tallies.
-         **What a fix has to supply** is a certificate for "max of this non-affine `h` over that
-         region is `<= 0`". For a CONVEX quadratic `h` over a polyhedron the max sits at an extreme
-         point, so vertices plus recession directions decide it in closed form; the region's own
-         curved facets can be dropped first because the linear relaxation is a superset, exactly as
-         the routine already does for the region tested OVER. Nothing here is safe to write before
-         the tally says this is the gate that fires.
-      2. **`mergeL`'s grouping test cannot prove two surd-carrying functions equal.** It groups on
-         `isAlways(simplifyFraction(f_i - f_j) == 0)`, whose default on an undecided comparison is
-         to warn and answer FALSE. A.4's cevian foot is irrational, so these functions carry
-         `sqrt(5)`-type surds and `simplifyFraction` alone may not cancel them. If so, cells that
-         are the same function never even become merge candidates. Predicts `distinctF` tracking
-         the cell count. **Sound fix if confirmed:** a cheap NUMERIC probe at a few points as a
-         REJECT filter (never an accept), then a stronger symbolic proof (`simplify(...,'Steps',N)`
-         after `simplifyFraction`) on the few pairs that survive it. Rejecting is always safe;
-         accepting must stay a proof, or cells with different functions get merged.
-      3. **Redundant inherited constraints.** `region.plus` unions the two operands' constraint
-         lists and drops only EXACT duplicates, so a constraint that is redundant for B can still
-         cut A and make `A subset B'` false. Pruning redundant constraints per cell after each
-         fold would unblock those merges and shrink every downstream symbolic call. `redundantSubset`
-         is an LP and cannot certify in the presence of a conic, so this helps the polyhedral cells
-         only — which is most of them (the vertex cones).
-
-      Do NOT start writing the fix before that run: 1 and 2 want different code, and 3 is worth
-      doing only if the tally says the refusals are `lin_exactAnotInB` / `lin_exactBnotInA`.
+- [ ] **4. `RatPar`'s `V (:,2){mustBeNumeric}` -- a DESIGN change, priced but not made.** Mesh
+      vertices are constrained numeric lattice-wide, so `convEnvCPLQ` returns `sqrt(2)` as
+      `1.4142` and two cells get two roundings of one number, one ULP apart; 5 of 31 pairs on the
+      tri case lose a real facet to it. The A.4/A.5 path does NOT go through the mesh and is
+      exact, so price that before changing the lattice. `DECISIONS.md` has the full entry.
 
 ### Measurements that stand (2026-08-16)
 

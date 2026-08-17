@@ -13,4 +13,8 @@ FOLD 2: paired= 24 -> cells= 23 distinctF=  7   mtimes 68 s, maximumP 147 s
   merge: okLinear=6 noSharedFacet=101 quadFacet_exactAnotInB=16 lin_curved_positiveSomewhereOnP=3 okQuadFacet=1 quadFacet_curved_positiveAtAVertex=2 lin_exactAnotInB=1
 FOLD 3: paired= 46 -> cells= 38 distinctF=  7   mtimes 245 s, maximumP 242 s
   merge: noSharedFacet=344 okLinear=3 quadFacet_exactAnotInB=63 okQuadFacet=4 lin_curved_positiveAtAVertex=2 quadFacet_curved_positiveAtAVertex=2 lin_curved_positiveSomewhereOnP=2
-TOTAL 828 s
+FOLD 4: paired= 58 -> cells= 51 distinctF=  8   mtimes 326 s, maximumP 402 s
+  merge: noSharedFacet=583 lin_curved_positiveAtAVertex=5 quadFacet_exactAnotInB=48 quadFacet_curved_positiveAtAVertex=2 okLinear=8 okQuadFacet=1 quadFacet_curved_indefinite=2 lin_exactAnotInB=1 lin_curved_positiveSomewhereOnP=4
+FOLD 5: paired= 65 -> cells= 60 distinctF=  8   mtimes 506 s, maximumP 520 s
+  merge: okLinear=2 noSharedFacet=819 lin_curved_positiveAtAVertex=7 quadFacet_exactAnotInB=98 quadFacet_curved_positiveAtAVertex=2 quadFacet_curved_indefinite=2 okQuadFacet=3 lin_exactAnotInB=1 lin_curved_positiveSomewhereOnP=4
+TOTAL 2579 s
