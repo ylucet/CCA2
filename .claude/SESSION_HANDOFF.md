@@ -31,12 +31,19 @@ left open. See "Next steps" 1.
 
 ## Next steps
 
-1. **AWAITING A DECISION: should the A.4/A.5 split become the default?** It is off because turning
-   it on costs `testcPLQ` 1542 s → 4728 s **and** makes `testcPLQ/testRectBiconj` ERROR (a test with
-   no assertions, so that is an exception, undiagnosed). Three options were put to the user:
-   (a) leave it opt-in and fix Step 3's cost first — recommended, since that is also what the 4%
-   error in 2 needs; (b) diagnose the `testRectBiconj` exception first, then flip the default;
-   (c) flip it now and accept both costs. Full reasoning in `DECISIONS.md`'s newest entry.
+1. **DECIDED 2026-08-17 — option (a): the split stays opt-in and STEP 3's COST is the work.** The
+   standing rule the user attached to it outranks the flag and settles future versions of the same
+   question: **every computation has to be correct even if it is slow; a slow correct path gets its
+   test moved to a slower bucket, never traded away — the one exception being a computation so slow
+   it does not finish, since a timeout helps nobody.** So `testcPLQ` at 4728 s is a bucket question;
+   what blocks the default is the undiagnosed `testcPLQ/testRectBiconj` exception. `DECISIONS.md`'s
+   newest entry has it in full.
+   **Started, and BLOCKED on the VPN:** instrumentation for the blow-up is written
+   (`region.mergeTally`, the refusal reason out of `unionIsExact`, `CCA2_TRACE_MAXP` in
+   `functionNDomain.maximumP`) along with the harness `.claude/step3cost.m` — but MATLAB cannot
+   check out a licence off the UBC network (`License Manager Error -96`), so **none of it has been
+   run, not even for syntax.** `TODO.md`'s newest item has the command to run first and the three
+   ranked hypotheses that one run decides between.
 2. **`getInterior` on a SINGULAR quadratic — the parallelogram's last 4%.** It separates an edge
    cell from its neighbours by eliminating `s` between `x = ∂₁f` and `y = ∂₂f`; when `f` is a
    singular convex quadratic the gradient map is not invertible and that elimination returns the

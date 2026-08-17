@@ -483,8 +483,19 @@ classdef functionNDomain
                return
             end
 
+           % INSTRUMENTATION (CCA2_TRACE_MAXP). Step 3's cost is driven by the CELL COUNT, and
+           % the count is set here: the split loop above makes cells and mergeL below is the
+           % only thing that ever unmakes them. Printing in/afterSplit/afterMerge per fold is
+           % what says whether a fold's growth is cells being created or merges being refused;
+           % region.mergeTally says WHY they were refused.
+           lTrace = ~isempty(getenv('CCA2_TRACE_MAXP'));
+           if lTrace, tMerge = tic; end
            objR2 = mergeL(objR);
             objR3 = mergeL(objR2);
+           if lTrace
+             fprintf('[maxP] in=%d afterSplit=%d merge1=%d merge2=%d (%.0f s)\n', ...
+                     size(objL,2), n, size(objR2,2), size(objR3,2), toc(tMerge));
+           end
            % objR2 = mergeL(objR3);
             % disp("aft merge")
             % objR.printL

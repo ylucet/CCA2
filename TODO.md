@@ -61,7 +61,62 @@ the tooling that judged them was itself broken, in two ways, and silently.
       stays opt-in -- it costs seconds per call, and the tools that want it call
       `pieceRecessionRays` directly.
 
-### Next up (2026-08-16)
+### Next up (2026-08-17) — Step 3's cost, with the decision behind it recorded
+
+**DECIDED 2026-08-17 (option (a)): the A.4/A.5 split stays opt-in and Step 3's cost is the work.**
+And the reason is NOT the runtime. The user's standing rule is that **every computation has to be
+correct even if it is slow — a slow correct path gets its test moved to a slower bucket, never
+traded away — with the single exception of a computation so slow that it does not finish, since a
+timeout helps nobody.** So `testcPLQ` at 4728 s instead of 1542 s is a bucket question, not a
+blocker; what actually blocks the default is the undiagnosed `testcPLQ/testRectBiconj` EXCEPTION,
+and the risk that the cost curve runs on into "does not finish". Full entry in `DECISIONS.md`.
+
+- [ ] **MEASURE FIRST — the instrumentation is in, the measurement is NOT RUN.** Blocked
+      2026-08-17: MATLAB cannot check out a licence off the UBC VPN (`License Manager Error -96`,
+      `SLMS-SMATLABP1.ead.ubc.ca` does not resolve), so nothing below has been run, not even for
+      syntax. **Run this first, before changing any logic:**
+
+          CCA2_STEP3_FOLDS=2 matlab -batch "run('.claude/step3cost.m')"
+
+      `.claude/step3cost.m` folds the six quadrilateral pieces one at a time and reports, per
+      fold: cells after `mtimes`, after `maximumP`'s split loop, after each `mergeL` pass, the
+      number of DISTINCT functions among the survivors, and `region.mergeTally`'s refusal
+      reasons. Two folds is about 7 minutes; all five is the full 73.
+      **The one number that decides the fix** is `distinctF` against the cell count. If
+      `distinctF` is around a dozen while cells run to 86, the cells exist and merging is
+      refusing them — read the tally. If `distinctF` tracks the cell count, then `mergeL`'s
+      grouping test is failing to RECOGNISE equal functions and the merge gates are innocent.
+
+      **Ranked hypotheses, to be confirmed or killed by that one run:**
+      1. **`unionIsExact` refuses outright whenever any constraint it must TEST is non-affine**
+         (`if ~all(linA(keepA)) || ~all(linB(keepB)), return`). `splitmax3` emits the split
+         constraint as `f1 - f2` and `-(f1 - f2)`, and with the A.4/A.5 split in play the
+         per-piece conjugates are RATIONAL (A.3's form), so every fold deposits another
+         non-affine constraint on the cells it makes. After two folds a cell carries several, and
+         from then on no merge involving it can ever be certified. This predicts the tally being
+         dominated by `quadFacet_exactCurvedTest` / `lin_exactCurvedTest`, and it explains why the
+         blow-up tracks the ALGEBRAIC DEGREE rather than the piece count — which is the same thing
+         the `testcPLQ` timing said.
+      2. **`mergeL`'s grouping test cannot prove two surd-carrying functions equal.** It groups on
+         `isAlways(simplifyFraction(f_i - f_j) == 0)`, whose default on an undecided comparison is
+         to warn and answer FALSE. A.4's cevian foot is irrational, so these functions carry
+         `sqrt(5)`-type surds and `simplifyFraction` alone may not cancel them. If so, cells that
+         are the same function never even become merge candidates. Predicts `distinctF` tracking
+         the cell count. **Sound fix if confirmed:** a cheap NUMERIC probe at a few points as a
+         REJECT filter (never an accept), then a stronger symbolic proof (`simplify(...,'Steps',N)`
+         after `simplifyFraction`) on the few pairs that survive it. Rejecting is always safe;
+         accepting must stay a proof, or cells with different functions get merged.
+      3. **Redundant inherited constraints.** `region.plus` unions the two operands' constraint
+         lists and drops only EXACT duplicates, so a constraint that is redundant for B can still
+         cut A and make `A subset B'` false. Pruning redundant constraints per cell after each
+         fold would unblock those merges and shrink every downstream symbolic call. `redundantSubset`
+         is an LP and cannot certify in the presence of a conic, so this helps the polyhedral cells
+         only — which is most of them (the vertex cones).
+
+      Do NOT start writing the fix before that run: 1 and 2 want different code, and 3 is worth
+      doing only if the tally says the refusals are `lin_exactAnotInB` / `lin_exactBnotInA`.
+
+### Measurements that stand (2026-08-16)
 
 - [ ] **STEP 3's CROSS-PIECE MAXIMUM DOES NOT SCALE, and it is now the binding cost.** Measured
       2026-08-16 on `x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`, which the A.4/A.5 split turns

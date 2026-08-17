@@ -25,6 +25,32 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 — DECIDED: the split stays opt-in until Step 3's cost is fixed, and the principle behind it
+
+**The user's call, and the reasoning is worth keeping because it settles a whole class of future
+questions.**
+
+**Chosen: option (a)** — leave `CCA2_A45_SPLIT` opt-in and attack Step 3's cell blow-up first,
+because that is also what the parallelogram's residual 4% needs. Options (b) (diagnose
+`testRectBiconj` first) and (c) (flip now) were declined.
+
+**The principle the user attached to it, which is general and outranks the flag:**
+
+> Ultimately all computations have to be CORRECT even if they take a long time. In that case,
+> split the unit tests between fast, medium and slow. Correctness is more important than speed —
+> **unless** it is so slow that the user does not wait, because getting a timeout is not helpful
+> either.
+
+So the reason the split is still opt-in is **not** that it costs 1542 s → 4728 s. A correct path
+that is slow gets its test moved down a bucket (`.claude/suite.sh` already has fast / normal /
+slow) and keeps running. The only live objection is the **`testcPLQ/testRectBiconj` EXCEPTION**,
+which is a correctness question, plus the risk that 4728 s is on the way to "does not finish",
+which is the one failure mode the principle does not tolerate either. Both of those are what
+Step 3's cost work addresses.
+
+**What this rules out for good:** proposing that a proven-correct path be reverted or gated purely
+because it is slower. That is not an available answer here.
+
 ## 2026-08-16 (last) — Making the A.4/A.5 split the DEFAULT: deliberately not done
 
 - **Tried:** shipping the split on by default, since it fixes a documented crash and a documented

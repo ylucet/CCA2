@@ -140,6 +140,32 @@ classdef region
              end
              l = true;
          end
+
+         function out = mergeTally (reason)
+         % INSTRUMENTATION for Step 3's cell blow-up. `region.merge` is what is supposed to
+         % collapse adjacent same-valued cells; when it refuses, the cell count grows and
+         % functionNDomain.maxOfList's cost grows with it. Counting the refusals BY REASON is
+         % what turns "merge never merges" into a specific gate to fix.
+         %
+         %   region.mergeTally('reset')      clear the counters
+         %   s = region.mergeTally('get')    the counts, as a struct
+         %   region.mergeTally('<reason>')   record one occurrence
+         %
+         % Always on: one struct-field increment per merge attempt is nothing beside the
+         % symbolic comparisons merge already does, and a counter that has to be switched on
+         % is a counter that is off when the interesting run happens.
+             persistent T
+             if isempty(T), T = struct(); end
+             out = [];
+             switch reason
+                 case 'reset', T = struct();
+                 case 'get',   out = T;
+                 otherwise
+                     if isfield(T, reason), T.(reason) = T.(reason) + 1;
+                     else,                  T.(reason) = 1;
+                     end
+             end
+         end
      end
 
 %  57 methods
@@ -1908,7 +1934,7 @@ classdef region
             end
         end
 
-        function l = unionIsExact (objA, objB, ia, ib)
+        function [l, why] = unionIsExact (objA, objB, ia, ib)
         % Precondition: objA.ineqs(ia) == -objB.ineqs(ib), i.e. the two regions meet on the
         % facet {g = 0} of that shared constraint, with objA on {g <= 0} and objB on {g >= 0}.
         %
@@ -1936,6 +1962,7 @@ classdef region
         % Refusing only leaves the two regions separate, which is always correct, just less
         % compact -- so every uncertain answer is a refusal.
             l = false;
+            why = 'exactCurvedTest';
             [AA, bA, linA] = objA.linearForm;
             [AB, bB, linB] = objB.linearForm;
             keepA = true(1, numel(bA)); keepA(ia) = false;   % A' = A minus the shared facet
@@ -1943,13 +1970,16 @@ classdef region
             if ~all(linA(keepA)) || ~all(linB(keepB))
                 return                                      % a curved constraint to test
             end
+            why = 'exactAnotInB';
             if ~region.impliedBy(AB(keepB,:), bB(keepB), AA(linA,:), bA(linA))   % A subset B'?
                 return
             end
+            why = 'exactBnotInA';
             if ~region.impliedBy(AA(keepA,:), bA(keepA), AB(linB,:), bB(linB))   % B subset A'?
                 return
             end
             l = true;
+            why = 'ok';
         end
 
         function [nP, px, py] = finiteVertices (obj)
@@ -3930,6 +3960,7 @@ classdef region
          % to index, which errors rather than behaving like an empty set;
          % merging with an empty region is a no-op, so just say so.
          if isempty(obj) || isempty(obj2)
+             region.mergeTally('emptyOperand');
              return
          end
          n = 0;
@@ -3972,19 +4003,28 @@ classdef region
              % point with g1<=0 and g2>=0 lies in neither operand yet survives into M. And
              % without unionIsExact the single-facet case is the over-claiming defect this
              % function's header describes.
-             if n == 1 && obj.unionIsExact(obj2, marki(1), markj(1))
-               l = true;
-               obj3 = obj;
-               obj.ineqs(marki) = [];
-               obj2.ineqs(markj) = [];
-               obj = obj+obj2;
-               if isempty(obj)
-                   l = false;
-                   obj=obj3;
+             if n == 1
+               [okU, whyU] = obj.unionIsExact(obj2, marki(1), markj(1));
+               if okU
+                 l = true;
+                 obj3 = obj;
+                 obj.ineqs(marki) = [];
+                 obj2.ineqs(markj) = [];
+                 obj = obj+obj2;
+                 if isempty(obj)
+                     l = false;
+                     obj=obj3;
+                     region.mergeTally('quadFacetEmptyUnion');
+                 else
+                     region.mergeTally('okQuadFacet');
+                 end
+                 return
                end
+               region.mergeTally(['quadFacet_' whyU]);
                return
              end
-             if n > 0
+             if n > 1
+               region.mergeTally('quadFacetMultiShared');
                return          % shares a quadratic facet, but not exactly/convexly: no merge
              end
           end
@@ -3993,11 +4033,12 @@ classdef region
              for i = 1:nmq1
                for j = 1:nmq2
                    if obj.ineqs(mq1(i)).f ~= obj2.ineqs(mq2(j)).f
+                       region.mergeTally('quadMismatch');
                        return;
                    end
                end
              end
-             
+
              lQuad= false;
          end
          if lQuad
@@ -4008,8 +4049,9 @@ classdef region
                      if ~ isempty(V)
                          if ~obj2.isVertex(V)
                              %disp('not vertex')
+                           region.mergeTally('quadCutsOther');
                            return
-                         end 
+                         end
                      end
                  end
              end
@@ -4020,8 +4062,9 @@ classdef region
                      if ~ isempty(V)
                          if ~obj.isVertex(V)
                              %disp('not vertex')
+                           region.mergeTally('quadCutsOther');
                            return
-                         end 
+                         end
                      end
                  end
              end
@@ -4077,19 +4120,31 @@ classdef region
          % sufficient -- it says nothing about the two regions' other constraints, and those
          % are what decide whether A' n B' over-claims. Same single-facet requirement as the
          % quadratic branch above, for the same reason.
-         if l && n == 1 && obj.unionIsExact(obj2, marki(1), markj(1))
-           obj3 = obj;
-           obj.ineqs(marki) = [];
-           obj2.ineqs(markj) = [];
-           obj = obj+obj2;
-           obj = obj.simplifyUnboundedRegion;
-           if isempty(obj)
-               disp('empty')
-               l = false;
-               obj = obj3;
-           end
-         else
+         if ~l
+           region.mergeTally('noSharedFacet');
+         elseif n > 1
            l = false;
+           region.mergeTally('multiSharedFacet');
+         else
+           [okU, whyU] = obj.unionIsExact(obj2, marki(1), markj(1));
+           if ~okU
+             l = false;
+             region.mergeTally(['lin_' whyU]);
+           else
+             obj3 = obj;
+             obj.ineqs(marki) = [];
+             obj2.ineqs(markj) = [];
+             obj = obj+obj2;
+             obj = obj.simplifyUnboundedRegion;
+             if isempty(obj)
+                 disp('empty')
+                 l = false;
+                 obj = obj3;
+                 region.mergeTally('linEmptyUnion');
+             else
+                 region.mergeTally('okLinear');
+             end
+           end
          end
      end
 
