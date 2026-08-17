@@ -33,19 +33,20 @@ branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classif
 
 **Alpha — not yet released.** The API is still changing; there is no tagged version.
 
-Test suite (measured 2026-08-16): **330 passed / 0 failed** across 26 suites — fast bucket 206 / 0,
-normal 9 / 0, slow 115 / 0. Run everything with `bash .claude/suite.sh` (or `--fast` / `--normal`
+Test suite (measured 2026-08-16): **332 passed / 0 failed** across 26 suites — fast bucket 206 / 0,
+normal 11 / 0, slow 115 / 0. Run everything with `bash .claude/suite.sh` (or `--fast` / `--normal`
 / `--slow`). The last red — `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, the
 open §7 defect — closed on 2026-08-15.
 
 Before depending on CCA2, read `SUPPORT_MATRIX.md` §8 — the summary of what actually blocks a
 general release. The largest gaps today: `partialConj` is unimplemented for every engine; the
 `'pqp'` and `'graph'` conjugate engines do not exist; and `RatPol.conj`/`biconj`/`add` are
-missing. One domain shape still ERRORs rather than answering — a general convex quadrilateral,
-where the vendored Step 1 returns a convex MINORANT rather than the ENVELOPE and has no branch at
-all for a 3-convex-edge triangle (§7.1, with three recorded attempts and the remaining route in
-`TODO.md`). The parallelogram, which used to error, computes since 2026-08-16 and is exact except
-for a ~4% shortfall traced to `getInterior` on a singular quadratic (§7).
+missing. A general convex quadrilateral still ERRORs by DEFAULT: the vendored Step 1 returns a
+convex MINORANT rather than the ENVELOPE and has no branch at all for a 3-convex-edge triangle.
+The fix is written and tested — set `CCA2_A45_SPLIT` and it is exact — but it is opt-in, because
+turning it on triples `testcPLQ` and makes one of its tests error (§7.1). The parallelogram, which
+used to error, computes since 2026-08-16 and is exact except for a ~4% shortfall traced to
+`getInterior` on a singular quadratic (§7).
 **Unbounded multi-face domains no longer error** — that blocker closed on 2026-08-15, when Step 3's
 cross-piece maximum and Step 1's curved envelope over an unbounded face were both fixed.
 

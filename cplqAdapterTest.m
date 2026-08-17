@@ -5,6 +5,16 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
 %   standard convention, e.g. conjPieceCPLQTest.m). See DESIGN.md II.5.1 and
 %   .claude/SESSION_HANDOFF.md.
 
+    methods (Static)
+        function restoreSplit(prev)
+            if isempty(prev)
+                setenv('CCA2_A45_SPLIT', '');
+            else
+                setenv('CCA2_A45_SPLIT', prev);
+            end
+        end
+    end
+
     methods (Test)
 
         function singleTriangleMatchesConjPieceCPLQ(testCase)
@@ -84,6 +94,13 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
         % Both checks below are exact statements about the envelope, not comparisons against a
         % sampled reference: an envelope must exist, must be <= x*y (a minorant), and on a
         % triangle where x*y >= 0 must be >= 0.
+        %
+        % The A.4/A.5 split is OPT-IN (plq_1p.appendTriangle says why, with the measurements), so
+        % these two tests turn it on and restore whatever was there before.
+            prev = getenv('CCA2_A45_SPLIT');
+            testCase.addTeardown(@() cplqAdapterTest.restoreSplit(prev));
+            setenv('CCA2_A45_SPLIT', '1');
+
             V = [0 0; 2 0; 2.5 1.5; 0.5 1];
             E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0; 1 0; 1 0; 1 0];
             q = QuaPol(V, E, [0 1 0 0 0 0], F);
@@ -143,6 +160,10 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
         % The uncovered count matters as much as the values: f* of a BOUNDED domain is finite
         % everywhere, so every piece must answer at every point, and a hole would mean a piece's
         % conjugate domain is too small.
+            prev = getenv('CCA2_A45_SPLIT');
+            testCase.addTeardown(@() cplqAdapterTest.restoreSplit(prev));
+            setenv('CCA2_A45_SPLIT', '1');
+
             V = [0 0; 2 0; 2.5 1.5; 0.5 1];
             E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0; 1 0; 1 0; 1 0];
             q = QuaPol(V, E, [0 1 0 0 0 0], F);

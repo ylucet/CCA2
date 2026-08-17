@@ -669,7 +669,7 @@ to the conjugate pipeline: for a bounded domain it is the lower convex hull of t
 | unbounded, 3 wedges | `max(0,x,y)` | **OK** |
 | box, TWO faces sharing a diagonal | `x·y` | ~~**WRONG**~~ — **OK, re-measured 2026-08-15**: error 0, 4/4 points inside and 1/1 outside, against the `convhulln` ground truth. This was §7's open defect; see the struck-through row there |
 | parallelogram, one face | `x·y` | ~~**ERROR** `QuaParCPLQ:conj:emptyResult`~~ — **COMPUTES since 2026-08-16, and is nearly right**: exact at all four vertices, `+inf` outside the domain, and 8 of 10 interior probe points correct against a brute-force double conjugate. The other two are LOW by about 4% (`0.986` for `1.031`, `1.913` for `1.950`) — an envelope that is still slightly too small, from the residual `getInterior` defect below. Two defects fixed to get here, both general: see §7 |
-| general convex quadrilateral, one face | `x·y` | ~~**ERROR** `MATLAB:badsubscript`~~ — **OK since 2026-08-16**: exact at 10 of 10 probe points against the vertex-attained sup, with no piece leaving a hole, and the fully assembled Step 3 answer exact at 8 of 8. The assembly costs 73 minutes; see §8 |
+| general convex quadrilateral, one face | `x·y` | **ERROR** `MATLAB:badsubscript` by default; **OK with `CCA2_A45_SPLIT` set** (2026-08-16) — exact at 10 of 10 probe points against the vertex-attained sup, with no piece leaving a hole, and the fully assembled Step 3 answer exact at 8 of 8. The fix is written and tested; it is opt-in because turning it on costs `testcPLQ` 1542 s → 4728 s and makes `testRectBiconj` error. See below and §8 |
 
 **These are not failures of the ALGORITHM, and the two remaining ones are different defects.**
 Read the failing step before drawing a conclusion:
@@ -741,9 +741,11 @@ downstream works in a quadratic extension rather than the rationals. Measured on
 domains are general polygons carrying `x·y`: **1542 s with the split off (matching its historical
 1427 s), over 3100 s with it on and still unfinished when stopped**, uncontended both times — and
 only two of its six domains even gain a piece (2 → 3 and 1 → 2), so this is the algebraic degree of
-the coordinates, not the piece count. **`CCA2_NO_A45_SPLIT` opts out** for a session where speed
-matters more and the input is known not to need it; correctness keeps the default, since without
-the split a 3-convex-edge triangle crashes and a 2-convex-edge one returns a minorant.
+the coordinates, not the piece count. **The split is therefore OPT-IN, via `CCA2_A45_SPLIT`, and OFF by
+default** — and off for a measured reason: with it on `testcPLQ` takes 4728 s instead of 1542 s AND
+`testRectBiconj` ERRORS. It trades a documented, LOUD failure on one domain shape for a new one on
+another, and until that is understood it cannot be the default. Two things to fix before it can be,
+in order: Step 3's cell blow-up, and that error.
 
 Pinned by `cplqAdapterTest/generalQuadrilateralStep1IsTheEnvelopeNotAMinorant`, which asserts only
 what must hold of an envelope (it exists, it is `≤ x·y`, and where `x·y ≥ 0` it is `≥ 0`), and

@@ -246,19 +246,27 @@ classdef plq_1p
         % and plq_1p.isCanonicalXY is the same test that gate uses. Everything else keeps the
         % vertices it arrives with, exactly.
         %
-        % WHAT IT COSTS, and the escape hatch. A.4's cevian foot is IRRATIONAL, so a split
-        % sub-triangle has SURD coordinates and every symbolic operation downstream of it works in
-        % a quadratic extension instead of the rationals. The split itself is cheap -- 20 ms on the
-        % no-split path, which is every input cPLQ itself ever had, and 0.3 s (A.4) / 1.2 s (A.5)
-        % when it fires -- but Step 3's cross-piece maximum is not: `testcPLQ`, whose domains are
-        % general polygons carrying x*y, goes from 24 minutes to over 51 (measured uncontended,
-        % still unfinished when stopped). That is Step 3's known blow-up amplified, not a cost of
-        % the split proper, and it has its own TODO.md item.
-        % Correctness wins the default: without the split a 3-convex-edge triangle CRASHES and a
-        % 2-convex-edge one returns a MINORANT in place of the envelope. Set CCA2_NO_A45_SPLIT to
-        % opt out for a session where speed matters more and the input is known not to need it --
-        % same convention as MAXQP_ASSERT and QUAPAR_VALIDATE.
-            if ~isempty(getenv('CCA2_NO_A45_SPLIT')) || ~obj.isBilinear
+        % OPT-IN, via CCA2_A45_SPLIT -- same convention as MAXQP_ASSERT and QUAPAR_VALIDATE, and
+        % OFF by default. It is off for a measured reason, not caution.
+        %
+        % A.4's cevian foot is IRRATIONAL, so a split sub-triangle has SURD coordinates and every
+        % symbolic operation downstream works in a quadratic extension instead of the rationals.
+        % The split itself is cheap -- 20 ms on the no-split path, 0.3 s (A.4) / 1.2 s (A.5) when
+        % it fires -- but what follows is not. MEASURED on testcPLQ, whose domains are general
+        % polygons carrying x*y: 1542 s with it off (matching its historical 1427 s), 4728 s with
+        % it on, AND testRectBiconj then ERRORS. Only two of that suite's six domains even gain a
+        % piece (2 -> 3 and 1 -> 2), so this is the algebraic degree of the coordinates, not the
+        % piece count.
+        %
+        % So the split trades a documented, LOUD failure on one domain shape (a 3-convex-edge
+        % triangle crashes; a 2-convex-edge one returns a MINORANT in place of the envelope) for a
+        % new failure on another, and until that is understood the default cannot be ON. What the
+        % flag buys, and what the tests exercise, is a general convex quadrilateral coming out
+        % EXACT -- 10 of 10 probe points, and 8 of 8 through the full assembly.
+        %
+        % Two things to fix before this can be the default, in order: Step 3's cell blow-up (86
+        % cells where about a dozen are needed -- see TODO.md), and testRectBiconj's error.
+            if isempty(getenv('CCA2_A45_SPLIT')) || ~obj.isBilinear
                 ps = [ps, plq_1p(domain(t, vars(1), vars(2)), obj.f)];
                 return
             end

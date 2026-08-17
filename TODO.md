@@ -77,9 +77,9 @@ the tooling that judged them was itself broken, in two ways, and silently.
       of these cells are POLYHEDRAL (the vertex cones), where `unionIsExact` already decides
       exactly, so a large fraction should collapse without needing the conic case at all. Measure
       the cell count per fold before and after -- that is the number that predicts the time.
-      **This is now what stands between the A.4/A.5 split and being affordable by default**:
-      `testcPLQ` goes from 1542 s to over 3100 s (unfinished) with the split on, which is why
-      `CCA2_NO_A45_SPLIT` exists. Fix this and the escape hatch stops being needed.
+      **This is the FIRST of two things standing between the A.4/A.5 split and being the default**:
+      `testcPLQ` goes from 1542 s to 4728 s with the split on. The second is that `testRectBiconj`
+      then ERRORS -- a separate, undiagnosed failure, and the reason the split is opt-in.
 
 ### Then (2026-08-15, after bug 1 closed the last red)
 
@@ -107,10 +107,10 @@ the tooling that judged them was itself broken, in two ways, and silently.
       (matching its historical 1427 s), over 3100 s with it on and still unfinished when stopped**,
       uncontended both times. Only two of its six domains even gain a piece (2 -> 3 and 1 -> 2), so
       this is the algebraic degree of the coordinates, not the piece count.
-      **`CCA2_NO_A45_SPLIT` opts out** for a session where speed matters more and the input is
-      known not to need the split -- same convention as `MAXQP_ASSERT` and `QUAPAR_VALIDATE`.
-      Correctness keeps the default: without the split a 3-convex-edge triangle CRASHES and a
-      2-convex-edge one returns a MINORANT in place of the envelope.
+      **The split is OPT-IN, via `CCA2_A45_SPLIT`, and OFF by default** -- and off for a measured
+      reason: with it on, `testcPLQ` takes 4728 s instead of 1542 s AND `testRectBiconj` ERRORS.
+      So it trades a documented, LOUD failure on one domain shape for a new one on another, and
+      until that is understood it cannot be the default. The two tests turn it on themselves.
       History of the three failed attempts follows.
       **Attempt 3 (2026-08-16), and why it failed.** The domain split was built exactly as attempt
       2's write-up prescribed, taking the sub-triangles from `convEnvCPLQ`'s own faces, and it

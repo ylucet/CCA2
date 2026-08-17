@@ -14,7 +14,8 @@ same geometry in double precision.** Doing it symbolically is what kept the numb
 for the pipeline to finish.
 
 - **The quadrilateral:** `f*` of `x·y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}` is exact at 10 of
-  10 probe points, and the fully assembled answer at 8 of 8. Was `MATLAB:badsubscript`.
+  10 probe points, and the fully assembled answer at 8 of 8. Was `MATLAB:badsubscript`. **The fix
+  is OPT-IN** (`CCA2_A45_SPLIT`) — see "Needs a decision".
 - **The parallelogram:** `emptyResult` is gone, and two general defects went with it. Its
   biconjugate is exact at all four vertices, `+inf` outside the domain, and right at 8 of 10
   interior points.
@@ -80,32 +81,35 @@ Two things are known-imperfect and documented rather than hidden:
   wrong one is checked first. **Do not attack the `isQuad` chord rewrite for it**: chording the
   vertices the conic actually touches makes the piece WORSE (2 wrong of 10 → 3), and skipping the
   rewrite changes nothing at all. Both measured today.
-- **The general quadrilateral still raises `MATLAB:badsubscript`**, as before. Loudly.
+- **The general quadrilateral still raises `MATLAB:badsubscript` BY DEFAULT.** The fix is written
+  and tested; it is opt-in. See "Needs a decision".
 
 ## Needs a decision
 
-**The split is correct and ON by default, and it makes one suite substantially slower.** You may
-want to overrule the default; here is the number to decide on.
+**The quadrilateral fix is correct but OPT-IN (`CCA2_A45_SPLIT`), and I left it off by default.**
+That is the one judgement call in this run, and here is what it rests on.
 
-A.4's cevian foot is IRRATIONAL, so a split sub-triangle has SURD coordinates and every symbolic
-operation downstream works in a quadratic extension instead of the rationals. Measured on
-`testcPLQ`, whose domains are general polygons carrying `x·y`: **1542 s with the split off (matching
-its historical 1427 s), over 3100 s with it on and still unfinished when stopped**, uncontended both
-times. Only two of its six domains even gain a piece (2 → 3 and 1 → 2), so this is the algebraic
-degree of the coordinates, not the piece count. Nothing else moved — the fast bucket is unchanged at
-206 / 0, because the no-split path costs 20 ms.
+Turning it on costs two things, both measured:
 
-I kept correctness as the default, because without the split a 3-convex-edge triangle CRASHES and a
-2-convex-edge one returns a MINORANT in place of the envelope — a silent wrong answer. **Set
-`CCA2_NO_A45_SPLIT` to opt out** for a session where speed matters more and the input is known not
-to need it (same convention as `MAXQP_ASSERT` and `QUAPAR_VALIDATE`).
+- **`testcPLQ` goes from 1542 s to 4728 s** (its historical time is 1427 s). A.4's cevian foot is
+  IRRATIONAL, so a split sub-triangle has SURD coordinates and every symbolic operation downstream
+  works in a quadratic extension instead of the rationals. Only two of that suite's six domains even
+  gain a piece (2 → 3 and 1 → 2), so this is the algebraic degree of the coordinates, not the piece
+  count. Nothing else moves — the fast bucket is unchanged at 206 / 0, because the no-split path
+  costs 20 ms.
+- **`testcPLQ/testRectBiconj` then ERRORS.** That test has no assertions; it runs the pipeline, so
+  the failure is an exception. Undiagnosed.
 
-**The real fix is Step 3, and it is now the top `TODO.md` item with its numbers.** Assembling the
+So switching it on trades a documented, LOUD failure on one domain shape for a new one on another,
+and I did not think that was mine to decide silently. **Say the word and I will flip the default**,
+or fix the `testRectBiconj` error first — that is the smaller of the two remaining jobs.
+
+**The larger one is Step 3, now the top `TODO.md` item with its numbers.** Assembling the
 cross-piece maximum for the quadrilateral takes 73 minutes while Steps 1 and 2 take 25 seconds, and
 the cell count runs 5, 14, 29, 45, 70, **86**. Eighty-six is about ten times what the answer needs —
 `f*` of `x·y` over a convex quadrilateral has a cone per vertex and a cell per edge — and the
 surplus is adjacent cells carrying the same function that `region.merge` never merges. Fix that and
-the escape hatch stops being needed.
+the split becomes affordable everywhere.
 
 ## Where I stopped
 
