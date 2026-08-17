@@ -25,6 +25,36 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (later) — Step 3's blow-up MEASURED: merge stops working entirely, and doubles are why
+
+Two measurements, on `x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}` with `CCA2_A45_SPLIT` on.
+Both are reproducible with `.claude/step3cost.m`.
+
+**Merge succeeds ZERO times from fold 2 on.** 190 attempts, no success, while the 29 surviving
+cells carry only **7 distinct functions** -- and `distinctF` is 7 at fold 1 too, so the answer
+never needs more than a handful of cells. The cell sequence 5, 14, 29, 45, 70, 86 is not cells
+being created, it is merges being refused. Merging is also half the cost (182 s of fold 2's
+223 s). Refusals by reason: `noSharedFacet` 70, `quadMismatch` 50, `quadCutsOther` 34,
+`exactCurvedTest` 30, `exactAnotInB`/`exactBnotInA` 6.
+
+**And the reason merge cannot decide anything is that Step 2 reintroduces DOUBLES.** Worst
+denominator by stage: split sub-triangle domains **12**, Step 1 envelope faces **20**, Step 2
+`conjugates` **1.2e18 / 9.7e33 / 2.6e144 / 1.4e145**, `maximumConjugate` unchanged. The split is
+exact and Step 1 is exact; `plq_1p.conjugate` is where it goes wrong. Piece 4's conjugate
+constraints carry `7307585874000779/9007199254740992` (denominator **2^53**) alongside the exact
+`30^(1/2)/12 - 15^(1/2)/6 + 3/4` -- the same kind of quantity in two forms, one exact and one its
+own double -- and one coefficient is 97 digits long.
+
+**Why this reframes the work.** `merge` finds a shared facet by `ineqs(i) == -ineqs(j)` and
+compares quadratics by `~=`. Neither test can succeed when one side is exact and the other is a
+double of it, which is exactly what `noSharedFacet=70` and `quadMismatch=50` look like. So the
+merge gates are not established as the defect yet: the numbers they are being asked to compare
+are. **Fix the Step 2 leak first, then re-measure the tally**, and only judge `unionIsExact` and
+the two quadratic pre-checks against clean numbers.
+
+This is attempt 3's pathology surviving downstream of the fix that removed it from the split --
+the same lesson the quadrilateral entry records, in a place nobody had looked.
+
 ## 2026-08-17 — DECIDED: the split stays opt-in until Step 3's cost is fixed, and the principle behind it
 
 **The user's call, and the reasoning is worth keeping because it settles a whole class of future

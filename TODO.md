@@ -71,10 +71,52 @@ timeout helps nobody.** So `testcPLQ` at 4728 s instead of 1542 s is a bucket qu
 blocker; what actually blocks the default is the undiagnosed `testcPLQ/testRectBiconj` EXCEPTION,
 and the risk that the cost curve runs on into "does not finish". Full entry in `DECISIONS.md`.
 
-- [ ] **MEASURE FIRST — the instrumentation is in, the measurement is NOT RUN.** Blocked
-      2026-08-17: MATLAB cannot check out a licence off the UBC VPN (`License Manager Error -96`,
-      `SLMS-SMATLABP1.ead.ubc.ca` does not resolve), so nothing below has been run, not even for
-      syntax. **Run this first, before changing any logic:**
+- [ ] **MEASURED 2026-08-17. TWO findings, and the second is the root cause.**
+
+      **(1) After fold 1, `region.merge` succeeds ZERO times, and that IS the blow-up.**
+
+          FOLD 0 (seed): cells=5  distinctF=5
+          FOLD 1: paired=16 -> cells=14 distinctF=7   mtimes 40 s, maximumP 89 s
+            merge: okLinear=3 quadCutsOther=13 noSharedFacet=7 quadMismatch=6
+                   lin_exactCurvedTest=2 quadFacet_exactCurvedTest=2
+          FOLD 2: paired=24 -> cells=29 distinctF=7   mtimes 136 s, maximumP 223 s
+            merge: noSharedFacet=70 quadMismatch=50 quadCutsOther=34
+                   quadFacet_exactCurvedTest=26 quadFacet_exactBnotInA=2 quadFacet_exactAnotInB=2
+                   lin_exactAnotInB=2 lin_exactCurvedTest=4
+          [maxP] in=16 afterSplit=17 merge1=14 merge2=14 (60 s)
+          [maxP] in=24 afterSplit=29 merge1=29 merge2=29 (182 s)
+
+      190 merge attempts at fold 2, **not one success**, while the 29 cells carry only **7
+      distinct functions**. `distinctF` stays at 7 from fold 1 on — the answer never needs more
+      than a handful of cells, and every extra cell is a merge that was refused. That is the
+      whole of 5, 14, 29, 45, 70, 86. Merging is also half the cost: 182 s of fold 2's 223 s.
+
+      **(2) THE ROOT CAUSE: `plq_1p.conjugate` reintroduces DOUBLES, and they explode.** Worst
+      denominator, measured stage by stage on the same six pieces:
+
+          split sub-triangle DOMAINS   12       clean surds: 5/2 - sqrt(5)/2, sqrt(30)/6
+          Step 1 ENVELOPE faces        20       still clean
+          Step 2 `conjugates`          1.2e18, 9.7e33, 2.6e144, 1.4e145
+          `maximumConjugate`           unchanged -- it adds nothing
+
+      So the split is exact, Step 1 is exact, and **Step 2 is where it goes wrong**. The cells'
+      own constraints show it directly: piece 4 carries `24667231058826811/22517998136852480`
+      (= 2^51*10 denominator) and `7307585874000779/9007199254740992` (**2^53**) side by side
+      with the exact `30^(1/2)/12 - 15^(1/2)/6 + 3/4` -- the SAME quantity in two forms, one
+      exact and one a double. One constraint's coefficient is 97 digits long.
+      **This is attempt 3's pathology, downstream of the fix that removed it.** It explains both
+      the cost (every symbolic call works on 145-digit rationals) and finding 1: `merge` detects
+      a shared facet with `ineqs(i) == -ineqs(j)` and compares quadratics with `~=`, and neither
+      can decide when one side is exact and the other is its own double. `noSharedFacet=70` and
+      `quadMismatch=50` are the shape of a comparison that cannot be made, not of geometry.
+
+      **DO (2) FIRST.** Find where Step 2 takes a double -- the leak is inside
+      `plq_1p.conjugate`/`conjugateFunction`, not in `maximumConjugate`, not in the split, not in
+      Step 1 -- and only then re-measure the merge tally. Some of finding 1's refusals may
+      simply go away; what is left is a real question about `unionIsExact` and the two quadratic
+      pre-checks, and it should be answered against clean numbers.
+
+      Reproduce with:
 
           CCA2_STEP3_FOLDS=2 matlab -batch "run('.claude/step3cost.m')"
 

@@ -23,6 +23,15 @@ fprintf('=== repo: %s ===\n', DIR);
 setenv('CCA2_A45_SPLIT', '1');
 setenv('CCA2_TRACE_MAXP', '1');
 
+% The pipeline emits megabytes of symbolic:sym:isAlways:TruthUnknown warnings on this input --
+% enough to push the numbers this script exists to report out of any capped log. They are not
+% the measurement; silence them here and nowhere else.
+warning('off', 'symbolic:sym:isAlways:TruthUnknown');
+warning('off', 'symbolic:isAlways:TruthUnknown');
+% Every reported line also goes to its own file, so a truncated console never loses the result.
+logPath = fullfile(DIR, '.claude', 'step3cost.log');
+logFid = fopen(logPath, 'w');
+
 maxFolds = str2double(getenv('CCA2_STEP3_FOLDS'));
 if isnan(maxFolds), maxFolds = inf; end
 
@@ -33,29 +42,31 @@ q = QuaPol(V, E, [0 1 0 0 0 0], F);
 tAll = tic;
 p = quaPolToPlq(q);
 p = p.triangulate;
-fprintf('pieces: %d\n', p.nPieces);
+both(logFid, 'pieces: %d\n', p.nPieces);
 for i = 1:p.nPieces
     tt = tic;
     p.pieces(i) = p.pieces(i).convexEnvelope;
     p.pieces(i) = p.pieces(i).conjugate;
     p.pieces(i) = p.pieces(i).maximumConjugate;
-    fprintf('piece %d: %d cells (%.0f s)\n', i, size(p.pieces(i).maxConjugate,2), toc(tt));
+    both(logFid, 'piece %d: %d cells (%.0f s)\n', i, size(p.pieces(i).maxConjugate,2), toc(tt));
 end
-fprintf('Steps 1+2 total %.0f s\n', toc(tAll));
+both(logFid, 'Steps 1+2 total %.0f s\n', toc(tAll));
 
 acc = p.pieces(1).maxConjugate;
-fprintf('FOLD 0 (seed): cells=%d distinctF=%d\n', size(acc,2), nDistinct(acc));
+both(logFid, 'FOLD 0 (seed): cells=%d distinctF=%d\n', size(acc,2), nDistinct(acc));
 
 for j = 2:min(p.nPieces, 1 + maxFolds)
     region.mergeTally('reset');
     t1 = tic;  acc = acc * p.pieces(j).maxConjugate;              tMul = toc(t1);
     nPaired = size(acc,2);
     t2 = tic;  acc = acc.maximumP(true);                          tMax = toc(t2);
-    fprintf('FOLD %d: paired=%3d -> cells=%3d distinctF=%3d   mtimes %.0f s, maximumP %.0f s\n', ...
-            j-1, nPaired, size(acc,2), nDistinct(acc), tMul, tMax);
-    printTally(region.mergeTally('get'));
+    both(logFid, 'FOLD %d: paired=%3d -> cells=%3d distinctF=%3d   mtimes %.0f s, maximumP %.0f s\n', ...
+        j-1, nPaired, size(acc,2), nDistinct(acc), tMul, tMax);
+    both(logFid, '  merge: %s\n', tallyString(region.mergeTally('get')));
 end
-fprintf('TOTAL %.0f s\n', toc(tAll));
+both(logFid, 'TOTAL %.0f s\n', toc(tAll));
+fclose(logFid);
+fprintf('summary also written to %s\n', logPath);
 
 function n = nDistinct(acc)
 % How many DIFFERENT functions the surviving cells carry. mergeL groups by exactly this test, so
@@ -73,12 +84,18 @@ function n = nDistinct(acc)
     end
 end
 
-function printTally(T)
-    if isempty(fieldnames(T)), fprintf('  merge: no attempts\n'); return, end
+function s = tallyString(T)
     k = fieldnames(T);
+    if isempty(k), s = 'no attempts'; return, end
     s = '';
     for i = 1:numel(k)
         s = [s sprintf('%s=%d ', k{i}, T.(k{i}))]; %#ok<AGROW>
     end
-    fprintf('  merge: %s\n', strtrim(s));
+    s = strtrim(s);
+end
+
+function both(fid, varargin)
+% Print to the console AND to the run's own log, so a capped console never loses the numbers.
+    fprintf(varargin{:});
+    if fid > 0, fprintf(fid, varargin{:}); end
 end
