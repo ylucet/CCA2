@@ -25,6 +25,41 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (final for the session) — Step 2 is EXACT now, and Step 3 STILL does not merge
+
+**Read this before spending another hour on exactness.** Three double leaks are fixed and the
+whole conjugate is exact -- worst denominator across the six quadrilateral pieces went
+`1.2e18 / 9.7e33 / 9.0e16 / 2.6e144 / 6.1e18 / 1.4e145` to `4 / 4 / 7 / 56 / 14 / 56`. On the
+control case, Step 3 is essentially UNCHANGED:
+
+              before exactness            after exactness
+    FOLD 1    20 cells, 7 fns, 1 merge    21 cells, 7 fns, 1 merge
+    FOLD 2    37 cells, 11 fns, 2 merges  37 cells, 10 fns, 2 merges
+    FOLD 3    57 cells, 10 fns, 4 merges  53 cells,  9 fns, 4 merges
+    fold 3 refusals: noSharedFacet 475 of 511.
+
+**So the ULP-apart doubles were REAL and were NOT the cause.** The entry below identified two
+constraints one ULP apart on `4 - 2*sqrt(2)` and concluded the facet test was blinded by
+arithmetic. The arithmetic is now exact and the test still does not find the facets. That
+conclusion is retracted; what remains true is that the leaks were genuine defects (one of them
+produced a y-intercept of `-9.06e-72` where the exact answer is `0`) and are worth having fixed on
+their own.
+
+**What is NOT yet explained, and is where to start next.** 15 of 31 same-function pairs at fold 1
+carry the same hyperplane with OPPOSITE orientation, measured off `linearForm`'s numeric rows,
+while `merge`'s `ineqs(i) == -ineqs(j)` sees nothing. That measurement predates the exactness work
+and should be REPEATED first -- if it still holds with exact numbers, the remaining candidates are:
+
+  * `symbolicFunction.eq` is `if (obj1.f == obj2.f)`, a STRUCTURAL test (its own comment says
+    "change to isAlways"), so two forms of the same constraint differing by a positive SCALE do
+    not match. `region.normalize1` divides by `abs(coeffs(f,vars))(end)`, which is the highest
+    term in MATLAB's ordering -- check that it picks the same term for both operands.
+  * sharing a hyperplane is necessary for adjacency but NOT sufficient: the two cells may lie on
+    the same line yet not touch. The probe above does not distinguish those, and should.
+
+Do that measurement before writing any code. The three hypotheses this session tested were each
+plausible, each partly right about a real defect, and each wrong about the cell count.
+
 ## 2026-08-17 (latest, and it corrects the entry below) — the facet test cannot match two doubles of the same number
 
 **The entry below is WRONG about the control case, and the way it is wrong is worth keeping.** It

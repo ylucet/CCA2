@@ -5,3 +5,10 @@ piece 3: 5 cells (4 s)
 piece 4: 6 cells (6 s)
 Steps 1+2 total 24 s
 FOLD 0 (seed): cells=5 distinctF=5
+FOLD 1: paired= 18 -> cells= 21 distinctF=  7   mtimes 47 s, maximumP 153 s
+  merge: noSharedFacet=70 lin_exactCurvedTest=6 okLinear=1
+FOLD 2: paired= 37 -> cells= 37 distinctF= 10   mtimes 166 s, maximumP 189 s
+  merge: noSharedFacet=145 lin_exactCurvedTest=8 okLinear=2
+FOLD 3: paired= 56 -> cells= 53 distinctF=  9   mtimes 302 s, maximumP 689 s
+  merge: noSharedFacet=475 lin_exactCurvedTest=31 okLinear=4 emptyOperand=1
+TOTAL 1578 s
