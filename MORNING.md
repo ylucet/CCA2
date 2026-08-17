@@ -2,18 +2,24 @@
 
 Branch: **`main`** (pushed as the run went — you authorised pushing for this run)
 
-Task as given: do (1) the sub-triangle split that fixes the vendored Step 1's minorant defect and
-unblocks the general quadrilateral, and (2) the parallelogram's empty max. Do not wait for input.
+Tasks as given: (1) the sub-triangle split that fixes the vendored Step 1's minorant defect and
+unblocks the general quadrilateral, and (2) the parallelogram's empty max. Then, separately: write
+a test for the quadrilateral, let it fail, and fix it — symbolic first, explicit formulas after.
 
 ## Headline
 
-**(2) is FIXED — the parallelogram's `emptyResult` is gone, and two general defects went with it.**
-Its biconjugate now computes: exact at all four vertices, `+inf` outside the domain, and 8 of 10
-interior probe points correct against a brute-force double conjugate.
+**BOTH ARE FIXED.** The general quadrilateral works, on the fourth attempt, and the method you
+prescribed is exactly what made the difference: **the third attempt failed because it computed the
+same geometry in double precision.** Doing it symbolically is what kept the numbers small enough
+for the pipeline to finish.
 
-**(1) is NOT fixed, and the third attempt is what finally names the blocker: ARITHMETIC, not
-structure.** The split was built exactly as the previous write-up prescribed, it worked at Step 1,
-and it turned the quadrilateral's crash into a **HANG**. Reverted.
+- **The quadrilateral:** `f*` of `x·y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}` is exact at 10 of
+  10 probe points, and the fully assembled answer at 8 of 8. Was `MATLAB:badsubscript`.
+- **The parallelogram:** `emptyResult` is gone, and two general defects went with it. Its
+  biconjugate is exact at all four vertices, `+inf` outside the domain, and right at 8 of 10
+  interior points.
+
+**One thing to decide, and it is a cost, not a bug** — see "Needs a decision".
 
 ## What changed
 
@@ -37,7 +43,27 @@ and it turned the quadrilateral's crash into a **HANG**. Reverted.
   still reported empty) and
   `functionNDomainTest/aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane`.
 
-- **The A.4/A.5 domain split — built, measured, REVERTED** (`b0a36de`). See below.
+- **The general quadrilateral — FIXED** (`eb7d11d`, `309b0f7`), after a red test written first
+  (`6505077`). `splitTightTriangleSym` splits a triangle into sub-triangles on each of which
+  cPLQ's own closed form for THAT sub-triangle's convex-edge count IS the convex envelope, and
+  `triangulate` emits them as pieces — which keeps every one of them on a path Step 2 already has.
+  Two tests: one asserting only what must hold of an envelope (it exists, it is `≤ x·y`, and where
+  `x·y ≥ 0` it is `≥ 0`), one on `f*` against the vertex-attained sup.
+
+  **Why symbolic mattered, since it is the whole difference from the attempt that hung:** A.4's
+  cevian has slope `−sqrt(mh·mw)`, so its foot is irrational. Taking it from the existing
+  double-precision routine gives `2^53` denominators that grow past `1e25` downstream, and the
+  symbolic engine then cannot decide anything. Carried symbolically the coordinates stay compact
+  surds — `5/2 − sqrt(5)/2`, `3/2 − 3·sqrt(5)/10`.
+
+  **Two results fell out of writing it, both now in the source.** The `±` branch of A.4's form is
+  vestigial: substituting the edge into either sign gives the same three coefficients, so the
+  touching test cannot separate them and `+1` always wins. And the "no split needed" test is a
+  perfect square, `(sqrt(mh·mw)·dx + dy)²/(sqrt(mh)+sqrt(mw))²`, so it vanishes exactly when the
+  weak edge is PARALLEL to the cevian direction — no `q1` and no branch selection needed.
+
+- **The A.4/A.5 domain split taken from double precision — built, measured, REVERTED**
+  (`b0a36de`). The attempt the above replaced. See below.
 
 ## What is broken
 
@@ -58,18 +84,28 @@ Two things are known-imperfect and documented rather than hidden:
 
 ## Needs a decision
 
-Nothing is blocked on you. The quadrilateral's remaining work is now one line — implement [COAP]
-A.4's cevian and A.5's smooth-fit line SYMBOLICALLY and have `triangulate` emit the sub-triangles
-as pieces — and `TODO.md` leads with it.
+**The split is correct and ON by default, and it makes one suite substantially slower.** You may
+want to overrule the default; here is the number to decide on.
 
-Why the third attempt failed, since it is the useful part: the split was taken from `convEnvCPLQ`'s
-own faces, which is double precision, and `sym` of a double is EXACT — a denominator near `2^53`.
-Snapping the new vertices to the simplest rational within `1e-10` bounds the VERTEX denominators
-but not the downstream ones, because the conjugate is a rational function of those coordinates: a
-few squarings carry `1e5` to `1e25`, and MuPAD's `isAlways` then decides nothing. The conjugate ran
-45+ minutes with no output behind 3.8 MB of `TruthUnknown` warnings. A.4's cevian has slope exactly
-`−sqrt(mh·mw)`, so its foot is an exact algebraic number and `sqrt` is something the symbolic layer
-keeps small — that is the way in.
+A.4's cevian foot is IRRATIONAL, so a split sub-triangle has SURD coordinates and every symbolic
+operation downstream works in a quadratic extension instead of the rationals. Measured on
+`testcPLQ`, whose domains are general polygons carrying `x·y`: **1542 s with the split off (matching
+its historical 1427 s), over 3100 s with it on and still unfinished when stopped**, uncontended both
+times. Only two of its six domains even gain a piece (2 → 3 and 1 → 2), so this is the algebraic
+degree of the coordinates, not the piece count. Nothing else moved — the fast bucket is unchanged at
+206 / 0, because the no-split path costs 20 ms.
+
+I kept correctness as the default, because without the split a 3-convex-edge triangle CRASHES and a
+2-convex-edge one returns a MINORANT in place of the envelope — a silent wrong answer. **Set
+`CCA2_NO_A45_SPLIT` to opt out** for a session where speed matters more and the input is known not
+to need it (same convention as `MAXQP_ASSERT` and `QUAPAR_VALIDATE`).
+
+**The real fix is Step 3, and it is now the top `TODO.md` item with its numbers.** Assembling the
+cross-piece maximum for the quadrilateral takes 73 minutes while Steps 1 and 2 take 25 seconds, and
+the cell count runs 5, 14, 29, 45, 70, **86**. Eighty-six is about ten times what the answer needs —
+`f*` of `x·y` over a convex quadrilateral has a cone per vertex and a cell per edge — and the
+surplus is adjacent cells carrying the same function that `region.merge` never merges. Fix that and
+the escape hatch stops being needed.
 
 ## Where I stopped
 

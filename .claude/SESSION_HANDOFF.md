@@ -4,11 +4,16 @@ _Last updated: 2026-08-16_
 
 ## What happened this session
 
-**The parallelogram's `QuaParCPLQ:conj:emptyResult` is fixed**, and the two defects behind it are
-general, not special cases. **The general quadrilateral is not fixed**, and the third attempt at it
-is the one that finally names the blocker: the split has to be carried SYMBOLICALLY, because taking
-it from `convEnvCPLQ`'s double-precision faces makes the exact symbolic arithmetic downstream
-explode.
+**Both remaining ERROR cases are fixed** — the parallelogram's `QuaParCPLQ:conj:emptyResult` and the
+general quadrilateral's `MATLAB:badsubscript`. The quadrilateral took four attempts, and the one
+that worked differed from the one that hung in exactly one respect: **it does the geometry
+SYMBOLICALLY.** [COAP] A.4's cevian foot is irrational, so computing it in double precision and
+converting gives `2^53` denominators that grow past `1e25` downstream; carried symbolically the
+coordinates stay compact surds and the pipeline finishes.
+
+**What it costs is now the open question**, and it is a performance one: surd coordinates make every
+symbolic operation downstream work in a quadratic extension, and `testcPLQ` goes from 1542 s to over
+3100 s. `CCA2_NO_A45_SPLIT` opts out; fixing Step 3's cell blow-up is what would remove the need.
 
 ## Where things stand
 
@@ -30,14 +35,14 @@ explode.
    **Do NOT attack the `isQuad` chord rewrite for it.** Both alternatives were measured 2026-08-16
    and are in `DECISIONS.md`: chording the vertices the conic actually touches makes that piece
    WORSE (2 wrong of 10 → 3), and skipping the rewrite changes nothing.
-2. **The general quadrilateral — implement [COAP] A.4's cevian and A.5's smooth-fit line
-   SYMBOLICALLY**, and have `plq_1p.triangulate` emit the sub-triangles as PIECES. The cevian's
-   slope is exactly `−sqrt(mh·mw)`, so its foot is an exact algebraic number and `sqrt` is something
-   the symbolic layer keeps small. Bounded work — two line intersections and a curvature test — but
-   new code, not wiring. **Three attempts are recorded in `DECISIONS.md` with what not to re-try**;
-   the shortest version is that envelope-level splitting cannot work (Step 2 has no
-   rational-envelope branch) and domain-level splitting taken from `convEnvCPLQ` hangs (irrational
-   cevian foot → `1e25` denominators → `isAlways` decides nothing).
+2. **Step 3's cross-piece maximum does not scale, and it is now the binding cost.** Measured on the
+   quadrilateral: Steps 1 and 2 take about 25 s for all six pieces, `functionNDomain.maxOfList` then
+   takes **73 minutes**, and the cell count runs 5, 14, 29, 45, 70, **86** — roughly ten times what
+   the answer needs, since `f*` of `x·y` over a convex quadrilateral has a cone per vertex and a
+   cell per edge. The surplus is adjacent cells carrying the SAME function that `region.merge` never
+   merges. **Start by merging same-function neighbours after each fold rather than only at the end**;
+   many of these cells are POLYHEDRAL, where `unionIsExact` already decides exactly. This is what
+   stands between the A.4/A.5 split and being affordable without `CCA2_NO_A45_SPLIT`.
 3. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
    → expose value+subgradient off `QuaParCPLQ` → fix diagonal terms over a box (`x²−y²`,
    `(x²+y²)/2` on `[0,1]²` still error in the second conjugation) → performance (~40–60 s/term).
