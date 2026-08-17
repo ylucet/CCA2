@@ -97,6 +97,19 @@ and the risk that the cost curve runs on into "does not finish". Full entry in `
          dominated by `quadFacet_exactCurvedTest` / `lin_exactCurvedTest`, and it explains why the
          blow-up tracks the ALGEBRAIC DEGREE rather than the piece count — which is the same thing
          the `testcPLQ` timing said.
+         **Confirmed by reading, 2026-08-17, and it is WIDER than the split:** `region.linearForm`
+         marks a facet non-affine when it is rational OR QUADRATIC, and `unionIsExact` excludes
+         only the SHARED facet from the tested set. So two cells that meet along a straight edge
+         and each carry a parabolic arc ELSEWHERE — the ordinary shape of a conjugate cell here —
+         can never be merged either. That predicts the same refusal dominating with the split OFF,
+         which is a cheap cross-check: run `.claude/step3cost.m` without `CCA2_A45_SPLIT` on a
+         triangle and compare the tallies.
+         **What a fix has to supply** is a certificate for "max of this non-affine `h` over that
+         region is `<= 0`". For a CONVEX quadratic `h` over a polyhedron the max sits at an extreme
+         point, so vertices plus recession directions decide it in closed form; the region's own
+         curved facets can be dropped first because the linear relaxation is a superset, exactly as
+         the routine already does for the region tested OVER. Nothing here is safe to write before
+         the tally says this is the gate that fires.
       2. **`mergeL`'s grouping test cannot prove two surd-carrying functions equal.** It groups on
          `isAlways(simplifyFraction(f_i - f_j) == 0)`, whose default on an undecided comparison is
          to warn and answer FALSE. A.4's cevian foot is irrational, so these functions carry
