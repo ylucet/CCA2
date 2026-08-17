@@ -25,6 +25,48 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (latest) — The CONTROL case: the doubles are real but they are NOT the blow-up
+
+**This corrects the entry below.** `domain.mE`/`cE` really were double arrays and that really was a
+defect -- an exact slope arrived as `0.6` and an exact zero y-intercept as `-9.06e-72`, which is a
+wrong value, not merely an expensive one, and fixing it took the quadrilateral's worst conjugate
+coefficient from `1e144` to `1e33`. But it changed Step 3 **not at all**: cell counts and the merge
+tally came back byte-identical.
+
+**The control that decides it.** `.claude/step3cost.m` with `CCA2_STEP3_CASE=tri` runs `x*y` over
+`conv{(0,0),(3,3),(1,2)}` through `convEnvCPLQ` + `ratPolToPlq` -- four pieces, ALL RATIONAL, no
+A.4/A.5 split, no surds and no doubles anywhere:
+
+    FOLD 1: paired=17 -> cells=20 distinctF= 7   merge: okLinear=1  noSharedFacet=14 quadCutsOther=14 quadMismatch=34
+    FOLD 2: paired=36 -> cells=37 distinctF=11   merge: okLinear=2  noSharedFacet=54 quadCutsOther=26 quadMismatch=58
+    FOLD 3: paired=60 -> cells=57 distinctF=10   merge: okLinear=4  noSharedFacet=266 quadCutsOther=50 quadMismatch=272 lin_exactCurvedTest=19
+
+57 cells for 10 distinct functions, and **4 successful merges out of 612 attempts**. Same blow-up,
+clean numbers. So exactness is not the lever: **`region.merge`'s own gates are**, and they are what
+to fix.
+
+**Ranked by what actually fires, measured:**
+
+1. **`quadMismatch`** -- 272 of fold 3's 612. When BOTH regions carry a quadratic constraint and
+   they do not share one as a facet, merge demands that EVERY quadratic of A equal EVERY quadratic
+   of B, as a cross product, and refuses otherwise. Two adjacent cells each carrying a different
+   parabolic arc elsewhere have a perfectly convex union; this refuses them outright.
+2. **`noSharedFacet`** -- 266. With clean numbers a large part of this is honest: 10 functions over
+   57 cells means groups of ~6, most of whose pairs are genuinely not adjacent. Check before
+   attacking it.
+3. **`quadCutsOther`** -- 50. The other heuristic: refuse if one region's quadratic meets the other
+   anywhere but at a vertex.
+4. **`exactCurvedTest`** -- 19. The SOUND gate: `unionIsExact` cannot certify `A subset B'` when a
+   constraint it must test is non-affine, so it refuses.
+
+**The fix these point to, and it is one fix.** 1 and 3 are heuristics standing in for the
+certificate 4 cannot supply. Give `unionIsExact` that certificate -- "is `max h <= 0` over the other
+region" for a non-affine `h`, which for a CONVEX quadratic over a polyhedron is decided exactly by
+its vertices plus its recession directions, the region's own curved facets being droppable because
+the linear relaxation is a superset -- and then the two heuristics can go, because `unionIsExact` is
+the exact criterion (`M = A' n B'` equals `A u B` iff `A subset B'` and `B subset A'`) and refusing
+only ever costs compactness, never correctness.
+
 ## 2026-08-17 (later) — Step 3's blow-up MEASURED: merge stops working entirely, and doubles are why
 
 Two measurements, on `x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}` with `CCA2_A45_SPLIT` on.

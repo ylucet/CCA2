@@ -110,15 +110,47 @@ and the risk that the cost curve runs on into "does not finish". Full entry in `
       can decide when one side is exact and the other is its own double. `noSharedFacet=70` and
       `quadMismatch=50` are the shape of a comparison that cannot be made, not of geometry.
 
-      **DO (2) FIRST.** Find where Step 2 takes a double -- the leak is inside
-      `plq_1p.conjugate`/`conjugateFunction`, not in `maximumConjugate`, not in the split, not in
-      Step 1 -- and only then re-measure the merge tally. Some of finding 1's refusals may
-      simply go away; what is left is a real question about `unionIsExact` and the two quadratic
-      pre-checks, and it should be answered against clean numbers.
+      **(3) The double leak is HALF FIXED, and it turned out NOT to be the blow-up.**
+      `domain.mE`/`domain.cE` were DOUBLE arrays -- fixed 2026-08-17, and it was a wrong value
+      as well as a slow one (an exact zero y-intercept arrived as `-9.06e-72`). Worst
+      coefficient `1e144 -> 1e33`, Steps 1+2 50 s -> 36 s. **Step 3 did not move at all**: same
+      cell counts, byte-identical tally.
+      A second leak remains and is located exactly: `conjConvexOverPiece` converts `Q, L, c` and
+      the piece's vertices to double BY DESIGN (its own lines 59 and 73), and pieces 1 and 3
+      route through it. Making it exact means carrying `Q, L, c`, the vertices AND the edge
+      directions symbolically while leaving the tolerance-based active-set decisions numeric --
+      worth doing for exactness, but see (4): it is not what unblocks Step 3.
 
-      Reproduce with:
+      **(4) THE CONTROL CASE, and it is what says where to work.** `CCA2_STEP3_CASE=tri` runs
+      `x*y` over `conv{(0,0),(3,3),(1,2)}` through `convEnvCPLQ` + `ratPolToPlq`: four pieces,
+      ALL RATIONAL, no split, no surds, no doubles.
+
+          FOLD 1: 17 -> 20 cells, distinctF= 7   okLinear=1  noSharedFacet=14  quadCutsOther=14  quadMismatch=34
+          FOLD 2: 36 -> 37 cells, distinctF=11   okLinear=2  noSharedFacet=54  quadCutsOther=26  quadMismatch=58
+          FOLD 3: 60 -> 57 cells, distinctF=10   okLinear=4  noSharedFacet=266 quadCutsOther=50  quadMismatch=272  lin_exactCurvedTest=19
+
+      **57 cells for 10 distinct functions, and 4 merges out of 612.** Same blow-up on clean
+      numbers, so **`region.merge`'s gates are the defect**, not the arithmetic.
+
+      **NEXT, and it is one fix.** `quadMismatch` (272) and `quadCutsOther` (50) are HEURISTICS
+      standing in for the certificate `unionIsExact` cannot supply (`exactCurvedTest`, 19).
+      `quadMismatch` is the worst of them: when both regions carry a quadratic and neither is the
+      shared facet, it demands EVERY quadratic of A equal EVERY quadratic of B as a cross
+      product -- two adjacent cells with different arcs elsewhere have a convex union and are
+      refused anyway.
+      Give `unionIsExact` the missing certificate -- `max h <= 0` over the other region for a
+      non-affine `h`; for a CONVEX quadratic over a polyhedron that is decided exactly by the
+      vertices plus the recession directions, and the region's own curved facets may be dropped
+      first because the linear relaxation is a superset (the routine already argues this for the
+      region tested OVER) -- then delete the two heuristics. `unionIsExact` is the exact
+      criterion, and refusing only ever costs compactness, never correctness.
+      Check `noSharedFacet` (266) separately before attacking it: with 10 functions over 57 cells
+      the groups are ~6 wide and most pairs are honestly not adjacent.
+
+      Reproduce either case with:
 
           CCA2_STEP3_FOLDS=2 matlab -batch "run('.claude/step3cost.m')"
+          CCA2_STEP3_CASE=tri CCA2_STEP3_FOLDS=9 matlab -batch "run('.claude/step3cost.m')"
 
       `.claude/step3cost.m` folds the six quadrilateral pieces one at a time and reports, per
       fold: cells after `mtimes`, after `maximumP`'s split loop, after each `mergeL` pass, the

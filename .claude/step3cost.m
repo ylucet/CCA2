@@ -44,15 +44,24 @@ switch getenv('CCA2_STEP3_CASE')
         setenv('CCA2_A45_SPLIT', '');
         V = [0 0; 3 3; 1 2];
         E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+        lRatPol = true;
     otherwise
         V = [0 0; 2 0; 2.5 1.5; 0.5 1];
         E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0; 1 0; 1 0; 1 0];
 end
 q = QuaPol(V, E, [0 1 0 0 0 0], F);
+if ~exist('lRatPol','var'), lRatPol = false; end
 
 tAll = tic;
-p = quaPolToPlq(q);
-p = p.triangulate;
+if lRatPol
+    % The all-rational control: take the envelope through convEnvCPLQ and hand its faces to
+    % Step 2 as pieces, which is what conjCPLQ's conjEnvelopeViaCPLQ does. No A.4/A.5 split,
+    % so no surds anywhere -- the point of the case.
+    p = ratPolToPlq(convEnvCPLQ(q));
+else
+    p = quaPolToPlq(q);
+    p = p.triangulate;
+end
 both(logFid, 'pieces: %d\n', p.nPieces);
 for i = 1:p.nPieces
     tt = tic;
