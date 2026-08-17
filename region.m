@@ -193,7 +193,32 @@ classdef region
               end
             end
             
-            obj.vars = vars;  
+            % INSTRUMENTATION (CCA2_TRACE_BIGNUM): name whoever builds a region out of
+            % DOUBLE-DERIVED numbers. A 15-digit integer literal in a constraint means some
+            % exact quantity went through a double on the way here -- `sym` of a double is an
+            % exact binary rational with a 2^53 denominator, and a few multiplications later
+            % the coefficients are 145 digits long, every symbolic call is slow, and `isAlways`
+            % can no longer prove that two forms of the same number are equal.
+            %
+            % That is not hypothetical: this is what found it. domain.mE / domain.cE were
+            % DOUBLE arrays, so an exact edge slope became 0.6 and an exact zero y-intercept
+            % became -9.06e-72; plq_1p.conjugateFunction's nCE == 1 branch builds a whole
+            % conjugate out of those two numbers, and Step 3's merge then stopped working
+            % because nothing could be compared. See domain.m's property comment.
+            if ~isempty(getenv('CCA2_TRACE_BIGNUM'))
+                for iBN = 1:nineq
+                    if ~isempty(regexp(char(obj.ineqs(iBN).f), '\d{15,}', 'once'))
+                        stBN = dbstack;
+                        fprintf('BIGNUM region ctor ineq %d:', iBN);
+                        for kBN = 2:min(9, numel(stBN))
+                            fprintf(' %s:%d <-', stBN(kBN).name, stBN(kBN).line);
+                        end
+                        fprintf('\n');
+                        break
+                    end
+                end
+            end
+            obj.vars = vars;
             obj = obj.normalize1;
             obj = obj.unique;
             %obj.ineqs.printL

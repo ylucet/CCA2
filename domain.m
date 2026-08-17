@@ -11,8 +11,25 @@ classdef domain
     % edge information
     nE=0; % number of convex edges
     E;    % index set 
-    mE; % slope
-    cE; % y intercept
+    % SYMBOLIC, and the declaration is the whole of it. These were plain `[]`, i.e. DOUBLE
+    % arrays, so `obj.mE(k) = m` silently converted an exact slope to a double -- and
+    % plq_1p.conjugateFunction's nCE == 1 branch builds that piece's entire conjugate out of
+    % mE(1) and cE(1).
+    %
+    % MEASURED 2026-08-17 on the A.4 sub-triangle conv{(1/2,1), (sqrt(30)/6, sqrt(30)/10),
+    % (sqrt(30)/12 - sqrt(15)/6 + 5/4, ...)}: the exact slope
+    % (sqrt(30)/10 - 1)/(sqrt(30)/6 - 1/2) arrived as the double 0.6, whose `sym` is
+    % 5404319552844595/9007199254740992 -- the 2^53 denominator that then multiplied out to
+    % 145-digit coefficients in the conjugate cells. The y-intercept, exactly 0, arrived as
+    % -9.0557e-72. That is a WRONG VALUE, not only an expensive one: an intercept that should
+    % be zero is not.
+    %
+    % Downstream, region.merge finds a shared facet with `ineqs(i) == -ineqs(j)` and compares
+    % quadratics with `~=`; neither can decide when one side is exact and the other is its own
+    % double, which is why Step 3's cross-piece maximum stopped merging anything at all.
+    % DECISIONS.md 2026-08-17 has the measurements.
+    mE = sym.empty(); % slope
+    cE = sym.empty(); % y intercept
     ind;   % misplaced parameter - needed for convex envelope - remove later
     % remaining vertices
     nV=0;
@@ -262,10 +279,10 @@ classdef domain
         disp("Edges joining vertex numbers")
         disp(obj.E)
         fprintf("Slopes =  ")
-        fprintf("%d  ", obj.mE);
+        for iP = 1:numel(obj.mE), fprintf("%s  ", string(obj.mE(iP))); end
         fprintf("\n")
         fprintf("y-intercepts =  ")
-        fprintf("%d  ", obj.cE);
+        for iP = 1:numel(obj.cE), fprintf("%s  ", string(obj.cE(iP))); end
         fprintf("\n")
         disp(["Remaining vertices = ", num2str(obj.nV)])
         disp("Vertex number")

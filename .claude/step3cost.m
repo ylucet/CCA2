@@ -35,8 +35,19 @@ logFid = fopen(logPath, 'w');
 maxFolds = str2double(getenv('CCA2_STEP3_FOLDS'));
 if isnan(maxFolds), maxFolds = inf; end
 
-V = [0 0; 2 0; 2.5 1.5; 0.5 1];
-E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0; 1 0; 1 0; 1 0];
+% CCA2_STEP3_CASE picks the input. 'quad' (default) is the general convex quadrilateral the
+% A.4/A.5 split turns into 6 pieces -- surd coordinates throughout. 'tri' is the all-RATIONAL
+% reference triangle, which needs no split: it is the control that says whether merge's refusals
+% are about exactness or about the gates themselves.
+switch getenv('CCA2_STEP3_CASE')
+    case 'tri'
+        setenv('CCA2_A45_SPLIT', '');
+        V = [0 0; 3 3; 1 2];
+        E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+    otherwise
+        V = [0 0; 2 0; 2.5 1.5; 0.5 1];
+        E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0; 1 0; 1 0; 1 0];
+end
 q = QuaPol(V, E, [0 1 0 0 0 0], F);
 
 tAll = tic;
