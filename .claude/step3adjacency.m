@@ -6,10 +6,21 @@
 % Only "touching" pairs are ones a merge could ever be right about.
 cd(getenv('CCA2DIR'));
 warning('off','symbolic:sym:isAlways:TruthUnknown');
-setenv('CCA2_A45_SPLIT','');
-V = [0 0; 3 3; 1 2];
-E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-p = ratPolToPlq(convEnvCPLQ(QuaPol(V, E, [0 1 0 0 0 0], F)));
+% CCA2_STEP3_CASE=tri uses the convEnvCPLQ route -- which is DOUBLE PRECISION, so its cells are
+% inexact whatever Step 2 does, and it is not a control for anything about exactness. The default
+% is the A.4/A.5 quadrilateral, whose pieces are exact (worst denominator 56).
+if strcmp(getenv('CCA2_STEP3_CASE'), 'tri')
+    setenv('CCA2_A45_SPLIT','');
+    V = [0 0; 3 3; 1 2];
+    E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
+    p = ratPolToPlq(convEnvCPLQ(QuaPol(V, E, [0 1 0 0 0 0], F)));
+else
+    setenv('CCA2_A45_SPLIT','1');
+    V = [0 0; 2 0; 2.5 1.5; 0.5 1];
+    E = [1 2 1; 2 3 1; 3 4 1; 4 1 1]; F = [1 0; 1 0; 1 0; 1 0];
+    p = quaPolToPlq(QuaPol(V, E, [0 1 0 0 0 0], F));
+    p = p.triangulate;
+end
 for i = 1:p.nPieces
     p.pieces(i) = p.pieces(i).convexEnvelope.conjugate.maximumConjugate;
 end

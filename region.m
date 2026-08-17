@@ -1959,7 +1959,7 @@ classdef region
             end
         end
 
-        function tf = certifiesNonPositive (objP, h)
+        function [tf, why] = certifiesNonPositive (objP, h)
         % A SOUND yes/unknown answer to "does h <= 0 hold everywhere on objP?", for an h that is
         % NOT affine. `false` means "not certified" and never "false" -- every uncertain answer
         % is a refusal, exactly as the LP certificates at the top of this file are.
@@ -2000,6 +2000,7 @@ classdef region
         % into the geometry, and it is the same standing this file's LP certificates have; the
         % tolerances match region.impliedBy's.
             tf = false;
+            why = 'notPolynomial';
             if isempty(objP) || ~h.isPolynomial
                 return
             end
@@ -2007,9 +2008,11 @@ classdef region
             % Q, L, c by differentiation -- exact, and independent of how h is written.
             try
                 Qs = hessian(h.f, vars);
+                why = 'degreeAboveTwo';
                 if any(has(Qs(:), vars))
                     return                      % degree 3 or higher: not a quadratic
                 end
+                why = 'unreadableParts';
                 Q = double(Qs);
                 L = double(subs(gradient(h.f, vars), vars, [0 0]));
                 L = L(:);
@@ -2022,12 +2025,14 @@ classdef region
             end
             Q = (Q + Q')/2;
             scaleQ = max(1, max(abs(Q(:))));
+            why = 'notConvex';
             if min(eig(Q)) < -1.0d-9 * scaleQ
                 return                          % not convex: the vertices do not bound it
             end
 
             [A, b, lin] = objP.linearForm;
             A = A(lin,:); b = b(lin);           % the LINEAR RELAXATION: a superset of objP
+            why = 'noConstraints';
             if isempty(b)
                 return                          % the whole plane: no vertex to stand on
             end
@@ -2053,10 +2058,12 @@ classdef region
                     end
                 end
             end
+            why = 'noVertex';
             if isempty(V)
                 return                          % no vertex: outside the argument's hypothesis
             end
             for k = 1:size(V,1)
+                why = 'positiveAtAVertex';
                 if hAt(V(k,:)) > tolH
                     return                      % h is positive somewhere on P
                 end
@@ -2074,6 +2081,7 @@ classdef region
                     if any(A*d > tolA)
                         continue                % not a recession direction
                     end
+                    why = 'growsAlongARay';
                     if abs(d.'*Q*d) > 1.0d-9 * scaleQ
                         return                  % h grows quadratically along a ray of P
                     end
@@ -2083,6 +2091,7 @@ classdef region
                 end
             end
             tf = true;
+            why = 'ok';
         end
 
         function [l, why] = unionIsExact (objA, objB, ia, ib)
@@ -2125,9 +2134,10 @@ classdef region
             if ~region.impliedBy(AB(keepB & linB,:), bB(keepB & linB), AA(linA,:), bA(linA))
                 return
             end
-            why = 'exactCurvedTest';
             for j = find(keepB & ~linB)
-                if ~objA.certifiesNonPositive(objB.ineqs(j))
+                [okC, whyC] = objA.certifiesNonPositive(objB.ineqs(j));
+                if ~okC
+                    why = ['curved_' whyC];
                     return
                 end
             end
@@ -2135,9 +2145,10 @@ classdef region
             if ~region.impliedBy(AA(keepA & linA,:), bA(keepA & linA), AB(linB,:), bB(linB))
                 return
             end
-            why = 'exactCurvedTest';
             for i = find(keepA & ~linA)
-                if ~objB.certifiesNonPositive(objA.ineqs(i))
+                [okC, whyC] = objB.certifiesNonPositive(objA.ineqs(i));
+                if ~okC
+                    why = ['curved_' whyC];
                     return
                 end
             end
