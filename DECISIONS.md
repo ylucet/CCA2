@@ -25,6 +25,37 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (last) — item 1's root cause is the MESH VERTEX TYPE, and that is a design change
+
+The 5 same-function pairs whose shared facet `merge` cannot see are two doubles of the same exact
+number, one ULP apart. Traced to the source, and it is not `conjConvexOverPiece` (which now carries
+whatever it is given exactly) and not `convEnvCPLQ` (which contains no `double(` at all):
+
+    convEnvCPLQ on x*y over conv{(0,0),(3,3),(1,2)} returns envelope vertices
+        (0,0)  (1.4142,1.4142)  (1,2)  (1.5,1.5)  (3,3)  (1.5858,1.5858)
+
+`1.4142` is `sqrt(2)` and `1.5858` is `2 - sqrt(2)`, stored as DOUBLES. The reason is one line in
+`RatPar.m`:
+
+    V (:,2){mustBeNumeric} % nv x 2 matrix storing unique vertices
+
+The mesh vertices are CONSTRAINED to be numeric, for the whole RatPar / RatPol / QuaPol / QuaPar
+lattice, whose header records that every property lives there once and deliberately. So an exact
+cevian point cannot survive being stored, no matter how exactly it was computed.
+
+**This is therefore a design change, not a fix**, and it is why it was not attempted here: relaxing
+`mustBeNumeric` on `V` (and consistently on `f`, `den`, `P`, `Ec`) touches every consumer of the
+lattice, and the classes' own header explains why the properties are declared in exactly one place.
+It also has a cheaper alternative worth pricing first: the A.4/A.5 path already keeps its geometry
+exact WITHOUT going through a RatPol mesh (`splitTightTriangleSym` -> `plq_1p.triangulate`), and it
+is the path the general quadrilateral uses. If the `ratPolToPlq` route is only needed for rational
+envelopes, its inexactness costs cells and time but no correctness -- price that before changing the
+lattice.
+
+**What is measured, so the size of the prize is known:** on the tri case 5 of 31 same-function pairs
+at fold 1 lose a real facet to this. On the A.4/A.5 quadrilateral, which does NOT go through the
+mesh, the conjugate is exact (worst denominator 56).
+
 ## 2026-08-17 (latest) — testRectBiconj PASSES with the split on: the correctness blocker is gone
 
 `testcPLQ/testRectBiconj` ERRORED with `CCA2_A45_SPLIT` set, and that -- not the runtime -- was
