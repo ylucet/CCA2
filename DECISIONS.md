@@ -25,6 +25,39 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-17 (latest, and it corrects the entry below) — the facet test cannot match two doubles of the same number
+
+**The entry below is WRONG about the control case, and the way it is wrong is worth keeping.** It
+concluded that exactness was not the lever because the "all-rational" case blew up too. That case
+is not rational: `conjConvexOverPiece` converts `Q, L, c` and the piece's vertices to DOUBLE by
+design (its own lines 59 and 73), whatever it is handed. There was no control.
+
+**What the refusals actually are.** With merge's two heuristics removed, every refusal on that case
+became `noSharedFacet` -- 578 of fold 3's 612. A direct check of the fold-1 cells says that is a
+FAILING TEST, not geometry: of 31 same-function pairs, **15 carry the same hyperplane with opposite
+orientation and `ineqs(i) == -ineqs(j)` does not see it** (12 are seen by both, 4 share nothing).
+
+**And here is why it cannot see it.** Cells 8 and 9 meet along one facet, and carry
+
+    s_2 - 659536895553805/562949953421312       = 5276295164430440/4503599627370496
+    s_2 - 5276295164430439/4503599627370496
+
+-- two doubles of the same exact number, `4 - 2*sqrt(2)`, **one ULP apart**. No comparison can
+identify them: not the structural `==` this code uses, and not `isAlways` either, because they are
+genuinely different rationals. The facet is real and the arithmetic has destroyed the evidence.
+
+**So the chain is one chain, and exactness is the lever after all:** a double enters Step 2 ->
+the same quantity acquires two different values in two different cells -> merge cannot match the
+shared facet -> nothing merges -> the cell count grows without bound. `domain.mE`/`cE` was one
+source of doubles and is fixed; `conjConvexOverPiece` is the other, and it is the one left.
+
+**What the heuristic removal was worth, honestly.** Nothing yet, on the measurements: cell counts
+and successful merges are unchanged (20/37/57 cells, 1/2/4 merges). It is still the right code --
+two heuristics replaced by `region.certifiesNonPositive`, a sound closed-form certificate -- and it
+is what will do the work once the facets can be found again, since `unionIsExact` then becomes the
+gate that actually decides. But it fixed nothing on its own and should not be described as if it
+had.
+
 ## 2026-08-17 (latest) — The CONTROL case: the doubles are real but they are NOT the blow-up
 
 **This corrects the entry below.** `domain.mE`/`cE` really were double arrays and that really was a
