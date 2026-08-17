@@ -246,27 +246,35 @@ classdef plq_1p
         % and plq_1p.isCanonicalXY is the same test that gate uses. Everything else keeps the
         % vertices it arrives with, exactly.
         %
-        % OPT-IN, via CCA2_A45_SPLIT -- same convention as MAXQP_ASSERT and QUAPAR_VALIDATE, and
-        % OFF by default. It is off for a measured reason, not caution.
+        % ON BY DEFAULT since 2026-08-18. `CCA2_NO_A45_SPLIT` opts OUT, for comparing against the
+        % old behaviour; `CCA2_A45_SPLIT` is still honoured so the tests that set it keep working.
         %
-        % A.4's cevian foot is IRRATIONAL, so a split sub-triangle has SURD coordinates and every
-        % symbolic operation downstream works in a quadratic extension instead of the rationals.
-        % The split itself is cheap -- 20 ms on the no-split path, 0.3 s (A.4) / 1.2 s (A.5) when
-        % it fires -- but what follows is not. MEASURED on testcPLQ, whose domains are general
-        % polygons carrying x*y: 1542 s with it off (matching its historical 1427 s), 4728 s with
-        % it on, AND testRectBiconj then ERRORS. Only two of that suite's six domains even gain a
-        % piece (2 -> 3 and 1 -> 2), so this is the algebraic degree of the coordinates, not the
-        % piece count.
+        % WHY IT WAS OPT-IN, and what changed. A.4's cevian foot is IRRATIONAL, so a split
+        % sub-triangle has SURD coordinates and every symbolic operation downstream works in a
+        % quadratic extension instead of the rationals. The split itself is cheap -- 20 ms on the
+        % no-split path, 0.3 s (A.4) / 1.2 s (A.5) when it fires -- but what followed was not:
+        % `testcPLQ` went 1542 s to 4728 s, AND `testcPLQ/testRectBiconj` ERRORED. Trading a
+        % documented, loud failure on one domain shape for a new one on another is not a trade to
+        % make silently, so it stayed off.
         %
-        % So the split trades a documented, LOUD failure on one domain shape (a 3-convex-edge
-        % triangle crashes; a 2-convex-edge one returns a MINORANT in place of the envelope) for a
-        % new failure on another, and until that is understood the default cannot be ON. What the
-        % flag buys, and what the tests exercise, is a general convex quadrilateral coming out
-        % EXACT -- 10 of 10 probe points, and 8 of 8 through the full assembly.
+        % BOTH OBJECTIONS ARE GONE, measured 2026-08-18 after Step 2 was made exact (three double
+        % leaks: `domain.mE`/`cE`, `region.limitOfFAtVertices`, `plq_1p.quadPartsOf` +
+        % `conjConvexOverPiece`) and Step 3's merge was repaired:
+        %   * `testcPLQ` 8 passed / 0 failed in 2273 s, against 4728 s -- and testRectBiconj is
+        %     one of the eight. That exception was a casualty of the double leaks, not a defect
+        %     of the split; nothing in the test or the split was changed to fix it.
+        %   * assembling f* for the general quadrilateral: 86 cells and 73 min -> 60 cells and
+        %     43 min.
+        % 2273 s against 1542 s off is a bucket question, not a blocker -- testcPLQ is already in
+        % the slow bucket and finishes well inside its timeout. The standing rule is in
+        % DECISIONS.md (2026-08-17): a computation has to be CORRECT even when it is slow, and a
+        % slow correct path gets its test moved down a bucket rather than traded away.
         %
-        % Two things to fix before this can be the default, in order: Step 3's cell blow-up (86
-        % cells where about a dozen are needed -- see TODO.md), and testRectBiconj's error.
-            if isempty(getenv('CCA2_A45_SPLIT')) || ~obj.isBilinear
+        % What the split buys is a general convex quadrilateral coming out EXACT -- 10 of 10
+        % probe points, 8 of 8 through the full assembly -- where the default used to raise
+        % MATLAB:badsubscript on a 3-convex-edge triangle and return a MINORANT in place of the
+        % envelope on a 2-convex-edge one.
+            if ~isempty(getenv('CCA2_NO_A45_SPLIT')) || ~obj.isBilinear
                 ps = [ps, plq_1p(domain(t, vars(1), vars(2)), obj.f)];
                 return
             end

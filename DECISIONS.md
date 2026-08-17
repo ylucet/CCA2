@@ -25,6 +25,46 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 — the A.4/A.5 split is now the DEFAULT
+
+Both objections recorded on 2026-08-16 are gone, measured:
+
+  * `testcPLQ` with the split on: **8 passed / 0 failed in 2273 s**, against 4728 s and one ERROR.
+    `testRectBiconj` is one of the eight -- that exception was a casualty of the double leaks and
+    nothing in the test or the split was changed to fix it.
+  * assembling `f*` for the general quadrilateral: 86 cells / 73 min -> 60 cells / 43 min.
+
+2273 s against 1542 s off is a BUCKET question by the standing rule (2026-08-17), not a blocker:
+`testcPLQ` is already in the slow bucket and finishes well inside its timeout. Verified with the
+flip alone: fast 206/0, normal 11/0 in 230 s.
+
+`plq_1p.appendTriangle` now gates on `CCA2_NO_A45_SPLIT` (opt OUT); `CCA2_A45_SPLIT` is still
+honoured so the two quadrilateral tests that set it keep working.
+
+## 2026-08-18 — REVERTED: an exact max over a region with a CURVED facet, for unionIsExact
+
+- **Tried:** replacing `region.impliedBy`'s LP-over-the-linear-relaxation with an exact maximum
+  over the region itself (`maxAffineOverRegion` + `holdsOn`). The relaxation drops a conic facet,
+  so it is sound but conservative exactly when that conic is what would have cut the violating
+  part away -- `quadFacet_exactAnotInB`, 98 of fold 5's refusals and the largest NAMED gate left.
+- **The argument, which still looks right:** a linear form on a compact set attains its max on the
+  boundary; on a straight edge that is an endpoint (a vertex), on a conic arc it is an endpoint or
+  a point where `grad h` is PARALLEL to the form. That parallel condition is affine, so it meets
+  the conic in at most two points, in closed form. Vertices plus those points therefore cover
+  every candidate.
+- **Why it was reverted:** it FAILS. `testfunctionNDomain/testMerge` and
+  `cplqAdapterTest/twoTriangleSquareMaxMatchesNumericSup` both go red with it in, and both go
+  green the moment it comes out (11/0 with only the A.4/A.5 default flip live). Since the whole
+  point of `unionIsExact` is soundness, a gate that admits merges the old one refused and then
+  changes a VALUE is refuted, not debuggable by guesswork.
+- **Where the hole most likely is, for whoever picks it up:** the argument needs the region's
+  `vx`/`vy` to be every corner of its boundary, and needs the region to be the compact convex set
+  it is assumed to be. A REDUNDANT conic facet is enough to break the first -- it makes `lin`
+  false, so the refinement engages, while the vertex list still describes only the polyhedral
+  part. Test that specific case first, on a region built by hand, before touching `merge` again.
+- **Do not re-run this as-is.** The next attempt should be measured on
+  `testfunctionNDomain/testMerge` FIRST, which is a unit-level merge test and takes seconds.
+
 ## 2026-08-17 (last) — item 1's root cause is the MESH VERTEX TYPE, and that is a design change
 
 The 5 same-function pairs whose shared facet `merge` cannot see are two doubles of the same exact
