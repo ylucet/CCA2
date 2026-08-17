@@ -1999,6 +1999,7 @@ classdef region
         % The arithmetic here is NUMERIC on purpose. This is a DECISION, not a value that flows
         % into the geometry, and it is the same standing this file's LP certificates have; the
         % tolerances match region.impliedBy's.
+            persistent qopts
             tf = false;
             why = 'notPolynomial';
             if isempty(objP) || ~h.isPolynomial
@@ -2025,9 +2026,12 @@ classdef region
             end
             Q = (Q + Q')/2;
             scaleQ = max(1, max(abs(Q(:))));
-            why = 'notConvex';
-            if min(eig(Q)) < -1.0d-9 * scaleQ
-                return                          % not convex: the vertices do not bound it
+            evQ = eig(Q);
+            isConvexH = min(evQ) >= -1.0d-9 * scaleQ;
+            isConcaveH = max(evQ) <=  1.0d-9 * scaleQ;
+            why = 'indefinite';
+            if ~isConvexH && ~isConcaveH
+                return          % neither argument below applies to a saddle
             end
 
             [A, b, lin] = objP.linearForm;
@@ -2058,6 +2062,43 @@ classdef region
                     end
                 end
             end
+            % THE CONCAVE CASE, and it is the one that actually fires here. A parabolic facet
+            % like -(s1+2*s2)^2 + 16*s1 has a NEGATIVE semidefinite Hessian, so the vertices
+            % bound nothing -- a concave function is LARGEST in the middle. Measured
+            % 2026-08-17 on the A.4/A.5 quadrilateral: every refusal this routine made came
+            % back `curved_notConvex`, all of them this shape.
+            %
+            % Maximising a concave quadratic over a polyhedron is a CONVEX program -- minimise
+            % -h, whose Hessian -Q is PSD -- so quadprog decides it outright, in the same
+            % standing as the LP certificates this file already relies on (same toolbox, same
+            % tolerance convention, and an unbounded or undecided answer is a refusal).
+            if isConcaveH && ~isConvexH
+                why = 'concaveQpUndecided';
+                if isempty(qopts)
+                    qopts = optimoptions('quadprog', 'Display', 'none');
+                end
+                ws = warning('off', 'all');
+                try
+                    [~, negMax, ef] = quadprog(-Q, -L, A, b, [], [], [], [], [], qopts);
+                catch
+                    ef = 0; negMax = [];
+                end
+                warning(ws);
+                if ef == -2
+                    tf = true; why = 'ok';      % P is empty: h <= 0 on it vacuously
+                    return
+                end
+                if ef ~= 1
+                    return                      % unbounded above, or no certificate
+                end
+                why = 'positiveSomewhereOnP';
+                if -negMax + c > tolH
+                    return                      % h really is positive somewhere on P
+                end
+                tf = true; why = 'ok';
+                return
+            end
+
             why = 'noVertex';
             if isempty(V)
                 return                          % no vertex: outside the argument's hypothesis

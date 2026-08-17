@@ -161,12 +161,13 @@ classdef functionNDomainTest < matlab.unittest.TestCase
         %      region.simplifyUnboundedRegion read as empty. See regionTest/aHalfPlaneIsNotEmpty.
         %
         % Measured against a brute-force sup over the piece: 6 of 10 probe points wrong or
-        % uncovered before, 2 after. The two that remain are (0.25,0.25) and (1,0.2), where the
-        % chord's edge cell and the arc's claim the SAME region and the chord's is checked first;
-        % f is a SINGULAR convex quadratic here (constant along one whole edge), so
-        % functionNDomain.getInterior returns the gradient map's image LINE rather than a
-        % separating curve and cannot split them. That is a different defect, recorded in
-        % DECISIONS.md -- do not attack the isQuad chord rewrite for it, which was tried twice.
+        % uncovered before, 2 after -- and 2026-08-17 the SINGULAR-quadratic overlap behind those
+        % two was closed as well (functionNDomain.singularEdgeCut). f is singular here (constant
+        % along one whole edge), so the elimination in getInterior returned the gradient map's
+        % image LINE, which separates nothing; the KKT multiplier does separate them, is affine
+        % in s, and needs no inversion. See the header of getInterior.
+        % Do not attack the isQuad chord rewrite for any of this -- it was tried twice and is
+        % recorded in DECISIONS.md.
             pc = functionNDomainTest.parallelogramPiece9;
             x = sym('x'); y = sym('y');
 
@@ -187,6 +188,18 @@ classdef functionNDomainTest < matlab.unittest.TestCase
                     'conjugate of the parallelogram''s piece 9 at (%s,%s)', ...
                     char(string(pt(1))), char(string(pt(2)))));
             end
+
+            % THE SINGULAR-QUADRATIC OVERLAP, pinned by the property that fails without the fix:
+            % the cells must not OVERLAP, and the value must be the sup. At (1/2,1/4) two cells
+            % claimed the point and the first one checked answered 0.00195 where the sup over the
+            % piece is 0.03845 (measured on a 1400^2 grid of the piece's own bounding box).
+            % f = s1*s2/2 + s1^2/8 + s2^2/2 has a SINGULAR Hessian, so getInterior's elimination
+            % returns the gradient map's image line and separates nothing.
+            [v, nCells] = functionNDomainTest.evalAt(pc, [sym(1)/2, sym(1)/4], x, y);
+            testCase.verifyEqual(nCells, 1, ...
+                'exactly one cell may claim (1/2,1/4): a singular f made two of them overlap');
+            testCase.verifyEqual(double(v), 0.038452, 'AbsTol', 1e-4, ...
+                'conjugate of piece 9 at (1/2,1/4), against a brute-force sup over the piece');
         end
 
     end

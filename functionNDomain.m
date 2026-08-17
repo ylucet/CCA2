@@ -1373,7 +1373,7 @@ classdef functionNDomain
                        [expr] = simplifyFraction(conjugateExpr(ineq,f0,x,y));
                        ineq1 = subdE(j,:);
                    if obj(i).f.isQuad
-                       edgeInt = obj(i).getInterior(x,y) ;
+                       edgeInt = obj(i).getInterior(x,y,obj(i).d.ineqs(edgeIneq(j))) ;
                        s = solve(ineq1,[x,y]);
                        px = s.x;
                        py = s.y;
@@ -1388,7 +1388,7 @@ classdef functionNDomain
                        ineq1 = [ineq1,edgeInt];
                        r = region(ineq1, [x,y]);
                     else
-                       edgeInt = obj(i).getInterior(x,y) ;
+                       edgeInt = obj(i).getInterior(x,y,obj(i).d.ineqs(edgeIneq(j))) ;
                        ineq1 = [ineq1,edgeInt];
                        r = region(ineq1, [x,y]);
                    end
@@ -1407,7 +1407,84 @@ classdef functionNDomain
 
         end
 
-        function ineq = getInterior(obj,x,y)
+        function ineq = singularEdgeCut(obj, x, y, edgeIneq)
+        % The multiplier cut described in getInterior's header, or [] when this is not the case
+        % it is for. Deliberately narrow: it fires ONLY for a quadratic f whose Hessian is
+        % singular and an AFFINE edge, which is exactly the case the elimination cannot do.
+        % Everything else keeps the behaviour it had.
+            ineq = [];
+            vars = obj.d.vars;
+            try
+                Q = double(hessian(obj.f.f, vars));
+            catch
+                return
+            end
+            if any(~isfinite(Q(:))), return, end
+            Q = (Q + Q')/2;
+            if abs(det(Q)) > 1.0d-9 * max(1, max(abs(Q(:))))^2
+                return                      % nonsingular: the elimination is already right
+            end
+            e = edgeIneq;
+            if ~e.isLinear, return, end
+            cf = e.getLinearCoeffs(vars);   % [a1 a2 a0] for a1*v1 + a2*v2 + a0 <= 0
+            a1 = cf(1); a2 = cf(2); a0 = cf(3);
+            if isAlways(a1 == 0) && isAlways(a2 == 0), return, end
+            n = [a1; a2];
+            d = [-a2; a1];
+            Qs = sym(Q);
+            dQd = simplify(d.' * Qs * d);
+            if isAlways(dQd == 0)
+                return                      % f is affine along this edge: no interior cut
+            end
+            % A point on the edge line, picked from whichever coefficient is nonzero.
+            if isAlways(a1 == 0)
+                x0 = [sym(0); -a0/a2];
+            else
+                x0 = [-a0/a1; sym(0)];
+            end
+            L = sym(zeros(2,1));
+            L(1) = subs(obj.f.dfdx(vars(1)).f, vars, [0 0]);
+            L(2) = subs(obj.f.dfdx(vars(2)).f, vars, [0 0]);
+            sv = [x; y];
+            tstar = ((sv - (Qs*x0 + L)).' * d) / dQd;
+            xstar = x0 + d*tstar;
+            mu    = n.' * (sv - (Qs*xstar + L));
+            ineq  = simplifyFraction(expand(-mu));   % mu >= 0
+        end
+
+        function ineq = getInterior(obj,x,y,edgeIneq)
+        % The cut that separates an EDGE cell of the conjugate from the interior.
+        %
+        % SINGULAR QUADRATIC (4th argument, the edge's own primal constraint). The elimination
+        % below reads the interior side off `x = d1f, y = d2f`. When f is a NONSINGULAR
+        % quadratic the gradient map is a bijection, the elimination is vacuous, and the answer
+        % is the identically-zero expression `region` then drops -- which is right, because the
+        % subdifferential cone already bounds the cell.
+        %
+        % When f is SINGULAR it is neither. The gradient map collapses the plane onto a LINE,
+        % `solve` returns that line, and the elimination hands back the map's IMAGE -- a curve
+        % that separates nothing, added to the cell as if it did. Measured on piece 9 of f* for
+        % x*y over conv{(0,0),(2,0),(2.5,1),(0.5,1)}, whose f = s1*s2/2 + s1^2/8 + s2^2/2 has
+        % det(hessian) = 0: the chord's edge cell and the arc's then claim the SAME region, the
+        % chord's is checked first, and it is wrong there -- 4 of 10 probe points wrong or
+        % double-covered against a brute-force sup.
+        %
+        % WHAT THE CUT ACTUALLY IS, and it needs no inversion. The edge cell holds the s whose
+        % maximiser sits in the relative interior of that edge, and the boundary with the
+        % interior cell is where the KKT multiplier vanishes:
+        %       x* = x0 + t* d,   t* = <s - grad f(x0), d> / (d'Qd),   mu = <n, s - grad f(x*)>,
+        % with n the edge's outward normal and d its direction. mu is AFFINE in s, so the cell
+        % stays representable; `d'Qd = 0` means f is affine along that edge, its max sits at an
+        % endpoint, and the vertex cones already cover it -- so no cut, which is what the
+        % elimination happens to give too. This is the same construction conjConvexOverPiece
+        % uses for its edge cells, and it never inverts Q.
+                if nargin >= 4 && obj.f.isQuad
+                    ineqS = obj.singularEdgeCut(x, y, edgeIneq);
+                    if ~isempty(ineqS)
+                        ineq = ineqS;
+                        return
+                    end
+                end
                 g(1) = obj.f.dfdx(obj.d.vars(1));
                 g(2) = obj.f.dfdx(obj.d.vars(2));
                 eq1 = x - g(1).f;
