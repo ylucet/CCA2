@@ -56,7 +56,28 @@ function cj = conjConvexOverPiece(r, Q, L, c, dualVars)
     % be tested with isAlways, where a stray conj/abs is not harmless.
     cj = functionNDomain.empty();
 
-    Q = double(Q); L = double(L(:)); c = double(c);
+    % EXACT VALUES, NUMERIC DECISIONS. This routine used to open with
+    %     Q = double(Q); L = double(L(:)); c = double(c);   and   V = double([px, py])
+    % and build every cell out of those. That is a defect, and a subtle one: the numbers are
+    % right to 16 digits, every value check passes, and yet two cells that SHARE A FACET come out
+    % carrying two different doubles of the same exact number, because each rounds it by its own
+    % route. MEASURED 2026-08-17 on x*y over conv{(0,0),(3,3),(1,2)}: two adjacent cells carried
+    %     s_2 - 659536895553805/562949953421312   and   s_2 - 5276295164430439/4503599627370496
+    % -- both are `4 - 2*sqrt(2)`, ONE ULP APART. region.merge finds a shared facet by asking
+    % whether one constraint is the negation of another, and no comparison, structural or
+    % symbolic, can identify those two. So the facet is invisible, the cells never merge, and
+    % Step 3's cross-piece maximum grows without bound: 57 cells carrying 10 distinct functions,
+    % 4 merges out of 612 attempts. DECISIONS.md 2026-08-17 has the chain.
+    %
+    % The split below is the fix and the rule: anything that becomes part of an EXPRESSION is
+    % built from the exact `*S` quantities; the doubles decide only COMBINATORICS -- which facets
+    % are active at a vertex, which side of a probe a point falls, whether an edge runs to
+    % infinity, whether Q is invertible. Those are decisions, not values, and they are where this
+    % file's tolerances belong.
+    QS = sym(Q); QS = (QS + QS.')/2;
+    LS = sym(L(:));
+    cS = sym(c);
+    Q = double(QS); L = double(LS); c = double(cS);
     tolQ = 1e-9 * max(1, max(abs(Q(:))));
     if any(eig((Q+Q')/2) < -tolQ)
         error('conjConvexOverPiece:notConvex', ...
@@ -69,28 +90,45 @@ function cj = conjConvexOverPiece(r, Q, L, c, dualVars)
         error('conjConvexOverPiece:nonAffineFacet', ...
             'every facet must be affine to read the active set.');
     end
+    % The same rows, exactly: constraint j is ineqs(j) = c0 + c1*x + c2*y <= 0, so
+    % A(j,:) = [c1 c2] and b(j) = -c0 -- read by EVALUATION, the convention region.linearForm
+    % states and for the reason it gives (it does not care how the expression is written).
+    AS = sym(zeros(size(A))); bS = sym(zeros(size(b)));
+    for j = 1:size(A,1)
+        gj = r.ineqs(j).f;
+        e0 = subs(gj, r.vars, [0 0]);
+        AS(j,:) = [subs(gj, r.vars, [1 0]) - e0, subs(gj, r.vars, [0 1]) - e0];
+        bS(j)   = -e0;
+    end
+
     [~, px, py] = r.finiteVertices;
-    V = uniqueRows(double([px(:), py(:)]));
+    VS = [px(:), py(:)];
+    [V, keepV] = uniqueRows(double(VS));
+    VS = VS(keepV,:);
 
     scale = max(1, max(abs([A(:); b(:)])));
     tolA  = 1e-7 * scale;
-    inP   = @(z) all(A*z(:) <= b + tolA);
-    gradq = @(z) Q*z(:) + L;
-    qAt   = @(z) 0.5*(z(:).'*Q*z(:)) + L.'*z(:) + c;
+    gradqS = @(z) QS*z(:) + LS;
+    qAtS   = @(z) 0.5*(z(:).'*QS*z(:)) + LS.'*z(:) + cS;
 
     % ---- vertex cells ---------------------------------------------------------------------
     for k = 1:size(V,1)
         v = V(k,:)';
-        dirs = edgeDirsAt(A, b, v, tolA);
-        if isempty(dirs), continue, end
+        vS = VS(k,:).';
+        [dirIdx, dirSgn] = edgeDirsAt(A, b, v, tolA);
+        if isempty(dirIdx), continue, end
         g = sym.empty(1,0);
-        gv = gradq(v);
-        for t = 1:size(dirs,1)
-            g(t) = dirs(t,1)*(s1 - gv(1)) + dirs(t,2)*(s2 - gv(2));
+        gv = gradqS(vS);
+        for t = 1:numel(dirIdx)
+            % The exact edge direction, deliberately NOT normalized: normalizing would introduce
+            % a square root for nothing, and a cone constraint is unchanged by a POSITIVE scaling
+            % of its direction.
+            e = dirSgn(t) * [-AS(dirIdx(t),2); AS(dirIdx(t),1)];
+            g(t) = e(1)*(s1 - gv(1)) + e(2)*(s2 - gv(2));
         end
         rk = region(g, dualVars);
         if isempty(rk), continue, end
-        fk = symbolicFunction(simplify(s1*v(1) + s2*v(2) - qAt(v)));
+        fk = symbolicFunction(simplify(s1*vS(1) + s2*vS(2) - qAtS(vS)));
         cj = [cj, functionNDomain(fk, rk)]; %#ok<AGROW>
     end
 
@@ -98,9 +136,15 @@ function cj = conjConvexOverPiece(r, Q, L, c, dualVars)
     for i = 1:size(A,1)
         n = A(i,:)';
         if norm(n) <= tolA, continue, end
-        d = [-n(2); n(1)];  d = d / norm(d);
-        dQd = d'*Q*d;
-        if dQd <= tolQ
+        nS = AS(i,:).';
+        dS = [-nS(2); nS(1)];               % exact, unnormalized (see below)
+        d  = [-n(2); n(1)];                 % the same vector, numerically
+        du = d / norm(d);                   % unit, for the run-to-infinity probe only
+        dQd = dS.'*QS*dS;
+        % `tstar` scales like 1/alpha under d -> alpha*d and `xstar = x0 + dS*tstar` is therefore
+        % INVARIANT, so leaving dS unnormalized changes no cell -- it only keeps the square root
+        % out of every expression below. The extents tS are put in the same parametrization.
+        if double(dQd) <= tolQ * max(1, norm(d)^2)
             continue        % q is affine along this edge: its max is at an endpoint, no cell
         end
         onIdx = [];
@@ -109,35 +153,46 @@ function cj = conjConvexOverPiece(r, Q, L, c, dualVars)
         end
         if isempty(onIdx), continue, end
         x0 = V(onIdx(1),:)';
-        [tmin, tmax] = edgeExtent(A, b, V, onIdx, x0, d, tolA);
+        x0S = VS(onIdx(1),:).';
 
-        g0 = gradq(x0);
-        tstar = ( d(1)*(s1 - g0(1)) + d(2)*(s2 - g0(2)) ) / dQd;   % affine in s
-        xstar = x0 + d*tstar;                                       % affine in s
-        gx    = Q*xstar + L;
-        mu    = n.'*(sv - gx) / (n.'*n);                            % affine in s
+        tS = sym(zeros(1, numel(onIdx)));
+        for k = 1:numel(onIdx)
+            tS(k) = ((VS(onIdx(k),:).' - x0S).' * dS) / (dS.'*dS);
+        end
+        tn = double(tS);
+        [~, kmin] = min(tn); [~, kmax] = max(tn);
+        tminS = tS(kmin); tmaxS = tS(kmax);
+        big = 1e8;
+        runsUp   = all(A*(x0 + big*du) <= b + tolA*big);
+        runsDown = all(A*(x0 - big*du) <= b + tolA*big);
+
+        g0 = gradqS(x0S);
+        tstar = ( dS(1)*(s1 - g0(1)) + dS(2)*(s2 - g0(2)) ) / dQd;   % affine in s
+        xstar = x0S + dS*tstar;                                      % affine in s
+        gx    = QS*xstar + LS;
+        mu    = nS.'*(sv - gx) / (nS.'*nS);                          % affine in s
 
         g = sym.empty(1,0); ng = 0;
-        ng = ng+1; g(ng) = -mu;                                     % mu >= 0
-        if isfinite(tmin), ng = ng+1; g(ng) = tmin - tstar; end
-        if isfinite(tmax), ng = ng+1; g(ng) = tstar - tmax; end
+        ng = ng+1; g(ng) = -mu;                                      % mu >= 0
+        if ~runsDown, ng = ng+1; g(ng) = tminS - tstar; end
+        if ~runsUp,   ng = ng+1; g(ng) = tstar - tmaxS; end
         rk = region(expand(g), dualVars);
         if isempty(rk), continue, end
-        val = sv.'*xstar - (0.5*(xstar.'*Q*xstar) + L.'*xstar + c);
+        val = sv.'*xstar - (0.5*(xstar.'*QS*xstar) + LS.'*xstar + cS);
         cj = [cj, functionNDomain(symbolicFunction(simplify(expand(val))), rk)]; %#ok<AGROW>
     end
 
     % ---- interior cell --------------------------------------------------------------------
     if rcond(Q) > 1e-12
-        Qi = inv(Q);
-        xstar = Qi*(sv - L);
+        QiS = inv(QS);
+        xstar = QiS*(sv - LS);
         g = sym.empty(1,0);
         for i = 1:size(A,1)
-            g(i) = expand(A(i,:)*xstar - b(i));
+            g(i) = expand(AS(i,:)*xstar - bS(i));
         end
         rk = region(g, dualVars);
         if ~isempty(rk)
-            val = 0.5*((sv - L).'*Qi*(sv - L)) - c;
+            val = 0.5*((sv - LS).'*QiS*(sv - LS)) - cS;
             cj = [cj, functionNDomain(symbolicFunction(simplify(expand(val))), rk)];
         end
     end
@@ -149,10 +204,15 @@ function cj = conjConvexOverPiece(r, Q, L, c, dualVars)
 end
 
 % ------------------------------------------------------------------------------------------
-function dirs = edgeDirsAt(A, b, v, tolA)
+function [idx, sgn] = edgeDirsAt(A, b, v, tolA)
 % Directions of the edges of {A x <= b} leaving vertex v: for each ACTIVE facet, whichever of
 % the two directions along it stays feasible. A ray is found the same way a bounded edge is.
-    dirs = zeros(0,2);
+%
+% Returns the facet INDEX and the SIGN rather than the direction itself, so the caller can
+% rebuild the direction EXACTLY from its symbolic constraint row. The feasibility probe and the
+% deduplication stay numeric -- they are decisions, and this file's tolerances belong to them.
+    idx = []; sgn = [];
+    seen = zeros(0,2);
     for i = 1:size(A,1)
         if abs(A(i,:)*v - b(i)) > tolA, continue, end
         n = A(i,:);
@@ -160,27 +220,25 @@ function dirs = edgeDirsAt(A, b, v, tolA)
         e = [-n(2), n(1)] / norm(n);
         for sg = [1 -1]
             if all(A*(v + 1e-6*sg*e') <= b + tolA)
-                dirs(end+1,:) = sg*e; %#ok<AGROW>
+                cand = sg*e;
+                dup = false;
+                for t = 1:size(seen,1)
+                    if norm(seen(t,:) - cand) < 1e-9, dup = true; break, end
+                end
+                if dup, continue, end
+                seen(end+1,:) = cand;   %#ok<AGROW>
+                idx(end+1) = i;         %#ok<AGROW>
+                sgn(end+1) = sg;        %#ok<AGROW>
             end
         end
     end
-    dirs = uniqueRows(dirs);
 end
 
-function [tmin, tmax] = edgeExtent(A, b, V, onIdx, x0, d, tolA)
-% The t-range of the facet's edge in the parametrization x0 + t*d, with -inf/+inf where the edge
-% runs off to infinity (which is exactly when +-d is a recession direction of the region).
-    ts = zeros(1, numel(onIdx));
-    for k = 1:numel(onIdx)
-        ts(k) = (V(onIdx(k),:)' - x0)' * d;
-    end
-    tmin = min(ts); tmax = max(ts);
-    big = 1e8;
-    if all(A*(x0 + big*d) <= b + tolA*big), tmax = inf; end
-    if all(A*(x0 - big*d) <= b + tolA*big), tmin = -inf; end
-end
+% edgeExtent is gone: its two jobs are now split by the rule this file runs on. The t-range
+% itself is a VALUE and is computed exactly, inline, from the symbolic vertices; whether the edge
+% runs off to infinity is a DECISION and stays the same numeric probe it always was.
 
-function V = uniqueRows(V)
+function [V, keep] = uniqueRows(V)
     keep = true(size(V,1),1);
     for i = 2:size(V,1)
         for j = 1:i-1

@@ -4321,27 +4321,41 @@ classdef region
 
      methods % limits
        function [l,limf] = limitOfFAtVertices (obj, f)
-         vars = obj.vars;  
+       % PREALLOCATED AS SYM, and that line is the whole point of this comment. `limf` used to
+       % be built by assignment alone, so its CLASS was decided by whichever branch ran first --
+       % and the `limf(j) = 0` branch below writes a DOUBLE. One vertex where the two iterated
+       % limits disagree therefore turned the array double, and every exact value written after
+       % it was silently rounded on the way in.
+       %
+       % MEASURED 2026-08-17 on the A.4 sub-triangle of the general convex quadrilateral: the
+       % envelope's gradient is 0/0 at the first vertex, so `l` came back [0 1 1] and the exact
+       % gradient limits at the other two arrived as 0.70778 and 0.81131 --
+       % 7307585874000779/9007199254740992 and its neighbour, 2^53 denominators. Those go
+       % straight into getSubdiffVertexT1/T2, hence into every conjugate cell of the piece.
+       %
+       % Why that is a defect and not an inefficiency: two cells that SHARE A FACET can then
+       % carry two different doubles of the same exact number, and region.merge finds a facet by
+       % asking whether one constraint is the negation of another. Measured, one ULP apart, on
+       % `4 - 2*sqrt(2)`. The facet becomes invisible and Step 3's cell count grows without
+       % bound. Same defect as domain.mE/cE; DECISIONS.md 2026-08-17 has the chain.
+         vars = obj.vars;
          vars2 = [vars(2),vars(1)];
-         %obj.nv
+         l = false(1, obj.nv);
+         limf = sym(zeros(1, obj.nv));
          for j = 1: obj.nv
-            
+
            l1 = f.limit(vars,[obj.vx(j),obj.vy(j)]);
            l2 = f.limit(vars2,[obj.vy(j),obj.vx(j)]);
-           
+
            if (isAlways(l1.f == l2.f))
              l(j) = true;
-             %limf(j) = double(l1.f);
              limf(j) = l1.f;
            else
-               l(j) = false;
-             %limf(j) = double(l1.f);
-             limf(j) = 0;
-             %ldrx1(j) = false;
-             %limdrx1(j) = 0;
+             l(j) = false;
+             limf(j) = sym(0);
            end
          end
-       end 
+       end
        %limf
      end
 

@@ -1104,11 +1104,18 @@ end
 % ==================================================================================================
 function [Q, L, c] = quadPartsOf(sf, vars)
 % The quadratic parts of a symbolicFunction, by differentiation rather than monomial matching.
+%
+% SYMBOLIC, not double. These three go straight into conjConvexOverPiece, which builds a whole
+% conjugate cell out of them; taking a double here means two cells that share a facet can end up
+% carrying two DIFFERENT doubles of the same exact number, and then region.merge's facet test
+% cannot match them. Measured 2026-08-17: two cells sharing a facet carried
+% 659536895553805/562949953421312 and 5276295164430439/4503599627370496 -- both `4 - 2*sqrt(2)`,
+% one ULP apart. DECISIONS.md has it.
     q = sf.f;
-    Q = double(hessian(q, vars));
-    g = double(subs(gradient(q, vars), vars, [0 0]));
+    Q = hessian(q, vars);
+    g = subs(gradient(q, vars), vars, [0 0]);
     L = g(:);
-    c = double(subs(q, vars, [0 0]));
+    c = subs(q, vars, [0 0]);
 end
 
 function k = envelopeKind(sf, vars)

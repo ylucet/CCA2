@@ -1480,11 +1480,16 @@ classdef functionNDomain
      
      methods
        function [lg,limg] = limitOfGradientAtVertices (obj)
+       % limg is PREALLOCATED AS SYM for the same reason region.limitOfFAtVertices is: an array
+       % whose class is decided by its first assignment will silently round every exact value
+       % written into it afterwards, and these values become the conjugate's cell boundaries.
            g = obj.f.gradient(obj.d.vars);
+           lg = false(2, obj.d.nv);
+           limg = sym(zeros(2, obj.d.nv));
            for i = 1:2   % Size of variables - change it
                [lg(i,:),limg(i,:)] = obj.d.limitOfFAtVertices (g(i));
            end
-           
+
        end
      end
      methods % subdifferentials

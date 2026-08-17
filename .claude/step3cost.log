@@ -1,14 +1,7 @@
 pieces: 4
 piece 1: 5 cells (5 s)
-piece 2: 6 cells (5 s)
-piece 3: 5 cells (3 s)
-piece 4: 6 cells (4 s)
-Steps 1+2 total 21 s
+piece 2: 6 cells (6 s)
+piece 3: 5 cells (4 s)
+piece 4: 6 cells (6 s)
+Steps 1+2 total 24 s
 FOLD 0 (seed): cells=5 distinctF=5
-FOLD 1: paired= 17 -> cells= 20 distinctF=  7   mtimes 47 s, maximumP 218 s
-  merge: noSharedFacet=60 okLinear=1 lin_exactCurvedTest=2
-FOLD 2: paired= 36 -> cells= 37 distinctF= 11   mtimes 226 s, maximumP 229 s
-  merge: noSharedFacet=136 okLinear=2 lin_exactCurvedTest=2
-FOLD 3: paired= 60 -> cells= 57 distinctF= 10   mtimes 332 s, maximumP 703 s
-  merge: noSharedFacet=578 okLinear=4 lin_exactCurvedTest=29 emptyOperand=1
-TOTAL 1788 s
