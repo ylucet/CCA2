@@ -181,6 +181,27 @@ classdef plq_1p
                 return
             end
 
+            % A CONVEX (or affine) quadratic needs NO TRIANGULATION -- and triangulating it is
+            % expensive and slightly wrong. co(q|P) = q on any convex P, so Step 1 has nothing to
+            % do (convexEnvelope1's own convex branch says exactly this), and Step 2 conjugates
+            % it by the KKT active set -- vertex, edge and interior cells -- which
+            % conjConvexOverPiece computes for a region with ANY number of affine facets, not
+            % just three. Splitting the polygon first only forces Step 3 to glue back together
+            % what was never broken.
+            %
+            % MEASURED on f = (x^2+y^2)/2 over the unit square, which is the QPLIB diagonal-term
+            % shape:
+            %     via triangulate   2 triangles -> 7 + 7 cells -> Step 3 -> 9 cells, 456 s,
+            %                       worst error 1.6e-4 against the closed form
+            %     direct            9 cells, 4.2 s, EXACT at 10 of 10
+            % The 9 cells are the product structure the answer actually has: f separates and the
+            % box is a product, so f*(s) = g(s1) + g(s2) with g the 1-D conjugate, three pieces
+            % each. Triangulation destroys that structure and Step 3 pays to rebuild it.
+            if any(strcmp(obj.quadKind, {'convex', 'affine'})) || obj.separableParts
+                ps = [ps, obj];
+                return
+            end
+
             if d.polygon.nv == 3
                 ps = obj.appendTriangle(ps, [d.polygon.vx(:), d.polygon.vy(:)], vars);
                 return
@@ -405,6 +426,64 @@ classdef plq_1p
             elseif max(ev) <=  tol,            k = 'concave';
             else,                              k = 'indefinite';
             end
+        end
+
+        function [ok, ax, dx, ay, dy, c, lo, hi] = separableParts(obj)
+        % Is this piece SEPARABLE OVER A PRODUCT -- f(x,y) = f1(x) + f2(y) + c with the domain an
+        % axis-aligned BOX? Both halves are required and neither implies the other: a separable f
+        % over a triangle does not separate (the domain couples the variables), and a box under a
+        % cross term does not either.
+        %
+        % When it holds, conjSeparableOverBox computes f* as two 1-D conjugates and a product,
+        % with no 2-D region arithmetic at all. See that file for the derivation and the numbers.
+        %
+        % Everything here is a decision, so it is taken numerically and conservatively: anything
+        % unreadable answers false, and the caller falls back to the general path.
+            ok = false; ax = 0; dx = 0; ay = 0; dy = 0; c = 0; lo = [0 0]; hi = [0 0];
+            try
+                vars = obj.pieceVars;
+                [Q, L, cc] = obj.quadParts;
+            catch
+                return
+            end
+            if any(~isfinite(Q(:))) || any(~isfinite(L(:))) || ~isfinite(cc)
+                return
+            end
+            % NO CROSS TERM. Q is the Hessian, so Q(1,2) is the coefficient of x*y.
+            if abs(Q(1,2)) > 1.0d-12 * max(1, max(abs(Q(:))))
+                return
+            end
+            % THE DOMAIN MUST BE A BOX: every facet affine and axis-aligned, two bounds per axis.
+            d = obj.d.polygon;
+            if isempty(d), return, end
+            [A, b, lin] = d.linearForm;
+            if ~all(lin), return, end
+            loB = [-inf -inf]; hiB = [inf inf];
+            for k = 1:size(A,1)
+                r = A(k,:);
+                nr = norm(r);
+                if nr <= 1.0d-12, continue, end
+                r = r / nr; bk = b(k) / nr;
+                if abs(r(2)) <= 1.0d-9                      % a bound on x
+                    if r(1) > 0, hiB(1) = min(hiB(1), bk/r(1));
+                    else,        loB(1) = max(loB(1), bk/r(1));
+                    end
+                elseif abs(r(1)) <= 1.0d-9                  % a bound on y
+                    if r(2) > 0, hiB(2) = min(hiB(2), bk/r(2));
+                    else,        loB(2) = max(loB(2), bk/r(2));
+                    end
+                else
+                    return                                  % an oblique facet: not a box
+                end
+            end
+            if any(~isfinite([loB hiB])) || any(hiB <= loB)
+                return                                      % unbounded or empty in some axis
+            end
+            ax = Q(1,1)/2; ay = Q(2,2)/2;                   % q = 1/2 x'Qx + L'x + c
+            dx = L(1);     dy = L(2);
+            c  = cc;
+            lo = loB; hi = hiB;
+            ok = true;
         end
 
         function obj = convexEnvelope(obj)
@@ -637,6 +716,21 @@ classdef plq_1p
 
     methods % conjugate
         function obj = conjugate (obj)
+            % SEPARABLE OVER A BOX -- taken FIRST, because it makes every step below unnecessary.
+            % f = f1(x) + f2(y) + c on a product domain conjugates to f1*(s1) + f2*(s2) - c, two
+            % 1-D problems in closed form. No envelope, no normal cones, no region arithmetic.
+            % This is checked before the frame change on purpose: an indefinite DIAGONAL quadratic
+            % such as x^2 - y^2 is separable as it stands, and rotating it into the x*y frame
+            % would destroy both the separability and the box. See conjSeparableOverBox.m.
+            [okSep, axS, dxS, ayS, dyS, cS, loS, hiS] = obj.separableParts;
+            if okSep
+                obj.conjugates = conjSeparableOverBox(axS, dxS, ayS, dyS, cS, loS, hiS, ...
+                                                      [sym('s_1'), sym('s_2')]);
+                obj.conjfia = [1, numel(obj.conjugates)+1];
+                obj.lConj = true;
+                return
+            end
+
             % FRAME CHANGE. When convexEnvelope decided this piece's quadratic is indefinite but
             % not x*y, the whole computation is redone in the z-frame where it IS x*y -- domain
             % and all -- and the resulting conjugate is read back through
