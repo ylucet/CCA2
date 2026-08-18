@@ -18,6 +18,56 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function convexOverABoxIsItsOwnBiconjugate(testCase)
+        % biconj IS the closed convex envelope, so a CONVEX f is its own answer and there is
+        % nothing to compute. Pinned because the short-circuit that says so is easy to lose and
+        % its absence is not visible in any VALUE -- only in the clock: this input cost 436 s
+        % through conj-of-conj before, and 0.05 s after, for the same function.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 1 0; 1 0];
+            p = QuaPol(V, E, [1 0 1 0 0 0], F);          % (x^2 + y^2)/2, convex
+            h = p.biconj('cplq');
+            testCase.verifyEqual(h.f(1,5:10), p.f(1,5:10), 'AbsTol', 1e-12, ...
+                'co f must be f itself for a convex f');
+        end
+
+        function separableOverABoxTakesTheOneDimensionalRoute(testCase)
+        % f = x^2 - y^2 over the unit box is SEPARABLE, so its envelope is one 1-D envelope per
+        % axis: x^2 is convex in x and survives; -y^2 is concave in y, so it is replaced by the
+        % CHORD through its endpoint values, which on [0,1] is -y. Hence co f = x^2 - y.
+        %
+        % This is the case that used to raise MATLAB:badsubscript, and then cost 29 s once the
+        % first conjugation learned the separable route while the second did not. It must not
+        % go back to either.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 1 0; 1 0];
+            p = QuaPol(V, E, [2 0 -2 0 0 0], F);          % x^2 - y^2, indefinite and DIAGONAL
+            h = p.biconj('cplq');
+            testCase.verifyEqual(h.f(1,5:10), [2 0 0 0 -1 0], 'AbsTol', 1e-12, ...
+                'co(x^2 - y^2) over the unit box is x^2 - y');
+
+            % and it really is the envelope: <= f on the box, and equal at the y-endpoints where
+            % the chord touches.
+            [uu, vv] = meshgrid(linspace(0,1,40), linspace(0,1,40));
+            env = uu.^2 - vv;
+            testCase.verifyLessThanOrEqual(max(env(:) - (uu(:).^2 - vv(:).^2)), 1e-12, ...
+                'the envelope must be a MINORANT of f on the box');
+        end
+
+        function aWrongConvexityFlagIsRefusedNotTrusted(testCase)
+        % The flag is trusted, but not blindly: the free NECESSARY condition -- every piece's
+        % Hessian positive semidefinite -- is still enforced, because honouring a wrong flag
+        % would return a NON-convex f as its own convex envelope, silently.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 1 0; 1 0];
+            p = QuaPol(V, E, [0 1 0 0 0 0], F);           % x*y: indefinite, NOT convex
+            p.fIsConvex = true;                           % ... and the caller says otherwise
+            testCase.verifyError(@() p.biconj('cplq'), 'PLQ:biconj:notConvexDespiteFlag');
+        end
+
         function singleBoundedTriangleNoLongerErrors(testCase)
             % The exact input SUPPORT_MATRIX.md section 8 listed as blocker 1: f = xy over the
             % unit triangle. conj works and gives a QuaPar; biconj used to raise
@@ -46,8 +96,15 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
                 [name, V, f6] = deal(cases{c}{:});
                 p = biconjCPLQTest.triangle(V, f6);
                 b = p.biconj();
-                testCase.verifyEqual(b.kind(), 'RatPol', ...
-                    sprintf('%s: expected a RatPol biconjugate', name));
+                % TYPE: a RatPar, and WHICH one is deliberately not pinned here.
+                % biconj's own contract is "a RatPar -- QuaPol (Case A), RatPol (Case B) or
+                % QuaParCPLQ (Case C); call kind() to learn which". Since 2026-08-18 the convex
+                % and affine rows come back as the QuaPol they went in as, because co f = f for
+                % a convex f and returning the input unchanged is the faithful answer -- Step 1
+                % would only re-derive it and widen the type. The VALUE checks below are what
+                % this test is really for, and they are unchanged.
+                testCase.verifyTrue(isa(b, 'RatPar'), ...
+                    sprintf('%s: expected a RatPar biconjugate, got %s', name, class(b)));
                 X = [0.6 0.2 0.2; 0.2 0.2 0.6; 1/3 1/3 1/3] * p.V;
                 for i = 1:size(X,1)
                     truth = biconjCPLQTest.biconjTrue(f6, p.V, X(i,:));

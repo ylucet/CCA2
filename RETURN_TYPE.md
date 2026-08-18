@@ -173,3 +173,23 @@ Building `RatPar` does **not** mean implementing every possible `RatPar`. Per `S
 special cases (e.g. a parabolic edge only ever occurs surrounded by two parallel rays, and
 hyperbolic edges never arise at all). `RatPar` is needed here as a **common type**, not as a
 general rational-cubic-on-parabolic engine.
+
+## 2026-08-18 — `biconj` of a CONVEX or SEPARABLE input returns a `QuaPol`, not a `RatPol`
+
+An API-visible consequence of the short-circuits added that day, recorded here because it changes
+what a caller receives:
+
+* **convex or affine `f`** — `co f = f`, so `biconj` returns the INPUT unchanged, a `QuaPol`.
+  Previously it went through Step 1, which re-derived the same function and returned a `RatPol`.
+* **separable `f` over a box** — the envelope is one 1-D envelope per axis, built on the input's
+  own mesh, so it is likewise a `QuaPol`.
+
+Both remain within `biconj`'s stated contract ("a RatPar -- QuaPol (Case A), RatPol (Case B) or
+QuaParCPLQ (Case C); call `kind()` to learn which"), and both are strictly MORE useful to the SCIP
+bridge than the old answer: a `QuaPol` carries `V/E/F/f` and a unit `den`, so the bridge can read
+it directly, where the previous conj-of-conj path for those inputs returned a `QuaParCPLQ` with NO
+MESH at all.
+
+`biconjCPLQTest/matchesIndependentBiconjugate` used to assert `kind() == 'RatPol'` for every row.
+It now asserts `isa(b, 'RatPar')` and keeps every VALUE check unchanged -- the type was pinning an
+implementation detail of Step 1, not a property of the answer.
