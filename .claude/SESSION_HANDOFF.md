@@ -4,40 +4,50 @@ _Last updated: 2026-08-18_
 
 ## What happened this session
 
-**The A.4/A.5 split is ON BY DEFAULT.** Both objections that kept it opt-in are gone, measured:
-`testcPLQ` runs **8 passed / 0 failed in 2188-2273 s** against 4728 s and one ERROR, with
-`testRectBiconj` among the eight -- that exception was a casualty of the double leaks, and nothing
-in the test or the split was changed to fix it. `CCA2_NO_A45_SPLIT` opts out.
+**The A.4/A.5 split is ON BY DEFAULT.** `testcPLQ` runs **8 passed / 0 failed in 2083 s** against
+4728 s and one ERROR, with `testRectBiconj` among the eight -- that exception was a casualty of the
+double leaks, and nothing in the test or the split was changed to fix it. `CCA2_NO_A45_SPLIT` opts
+out. A general convex quadrilateral is now exact by default where it used to raise
+`MATLAB:badsubscript`.
 
-**STEP 2 IS NOW EXACT, and that was the session's real find.** Three separate places turned exact
-values into doubles, each because an array's CLASS was decided by whichever branch wrote to it
-first, or by a deliberate conversion: `domain.mE`/`cE`, `region.limitOfFAtVertices` (with
-`functionNDomain.limitOfGradientAtVertices`), and `plq_1p.quadPartsOf` + `conjConvexOverPiece`.
-Worst denominator in the quadrilateral's conjugate cells: **1.4e145 -> 56**. One of them was
-returning a y-intercept of `-9.06e-72` where the exact answer is `0`, so this was a WRONG VALUE and
-not only an expensive one.
+**STEP 2 IS EXACT.** Three places turned exact values into doubles, each because an array's CLASS
+was decided by whichever branch wrote first, or by a deliberate conversion: `domain.mE`/`cE`,
+`region.limitOfFAtVertices` (with `functionNDomain.limitOfGradientAtVertices`), and
+`plq_1p.quadPartsOf` + `conjConvexOverPiece`. Worst denominator **1.4e145 -> 56**. One returned a
+y-intercept of `-9.06e-72` where the exact answer is `0`, so this was a WRONG VALUE too.
 
-**Step 3's assembly: 86 cells / 73 min -> 60 cells / 43 min.** What did it: the exactness above
-(two cells sharing a facet were carrying two doubles of the same number, ONE ULP APART, so
-`merge` could not see the facet at all); `region.certifiesNonPositive`, a sound closed-form
-certificate for a curved constraint, replacing merge's two quadratic HEURISTICS; and `quadprog`
-deciding the CONCAVE conics, which is what these conics actually are.
+**Step 3: 86 cells / 73 min -> 60 cells / 43 min**, and every slow suite got faster
+(total 6783 s -> 6017 s). What did it: the exactness above (two cells sharing a facet were carrying
+two doubles of one number, ONE ULP APART, so `merge` could not see the facet); `certifiesNonPositive`,
+a sound closed-form certificate for a curved constraint, replacing two HEURISTICS; `quadprog`
+deciding the CONCAVE conics; and `holdsOn`/`maxAffineOverRegion`, which take the max over the region
+ITSELF -- vertices plus arc tangencies in closed form -- instead of over its linear relaxation.
 
-**The singular-quadratic overlap is closed.** `functionNDomain.singularEdgeCut` -- the KKT
-multiplier, affine in s, no inversion of Q -- where `getInterior`'s elimination returned the
-gradient map's image LINE, which separates nothing. Piece 9 at `(1/2,1/4)`: 2 overlapping cells
-answering 0.00195 -> 1 cell answering 0.03846, against a sup of 0.03845. Pinned by test.
+**The parallelogram's piece 9 is exact at 10 of 10**, via `functionNDomain.singularEdgeCut`: the
+KKT multiplier, affine in s, where `getInterior`'s elimination returned the gradient map's image
+LINE and separated nothing.
 
-**332 pass / 0 fail** -- fast 206, normal 11, slow 115, no timeouts -- with all of it in.
+**332 pass / 0 fail** -- fast 206, normal 11, slow 115, no timeouts.
 
-**TWO THINGS TO READ BEFORE TRUSTING ANYTHING HERE.** A `DECISIONS.md` entry records that an
-earlier commit in this session reported Step 3 numbers that were never measured; the correction
-is committed. And a second entry records a REVERTED attempt at the largest remaining gate -- read
-it before retrying that.
+## READ THIS BEFORE TRUSTING THE RECORD
+
+Three `DECISIONS.md` entries record MY errors, not the code's, and they are the most useful thing
+here:
+
+1. A commit reported Step 3 numbers that were never measured. Corrected, but check any figure
+   against a tool result.
+2. A working fix was REVERTED as "unsound" when the actual error was two helpers in the instance
+   block called as static -- MATLAB said so plainly. **Read the error before theorising about the
+   math.**
+3. The parallelogram's "remaining 1%" and part of the `noSharedFacet` count were CORRECT results
+   read as defects, because a grid reference missed the vertex where the sup is attained.
+
+Twice in one session a correct result was chased as a bug. `TODO.md` carries that warning against
+the next candidate, `unionIsExact`.
 
 ## Where things stand
 
-- Branch: `main` @ `6b67838` — the default flip; nine commits, none pushed
+- Branch: `main` @ `a21c3c3` — sixteen commits this session, none pushed
 - Pushed: NO -- six commits sit on local `main`, unpushed (pushing was never asked for)
 - **332 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 11 / 0, slow **115 / 0**, no
   timeouts, with the A.4/A.5 split ON. The slow bucket is now about 113 minutes (was ~92): the

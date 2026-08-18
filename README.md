@@ -35,7 +35,7 @@ branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classif
 
 Test suite (measured 2026-08-18): **332 passed / 0 failed** across 26 suites — fast bucket 206 / 0,
 normal 11 / 0, slow 115 / 0, no timeouts. Run everything with `bash .claude/suite.sh` (or `--fast`
-/ `--normal` / `--slow`). The slow bucket is about 113 minutes: it runs the Symbolic Math Toolbox
+/ `--normal` / `--slow`). The slow bucket is about 100 minutes: it runs the Symbolic Math Toolbox
 pipeline, and a correct-but-slow path belongs in it rather than being traded away.
 
 A general convex quadrilateral is now **exact by default** — the A.4/A.5 domain split became the
