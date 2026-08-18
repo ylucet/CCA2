@@ -25,6 +25,32 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (decision) — `RatPar.V` stays `{mustBeNumeric}`. The mesh route is a known-inexact FALLBACK.
+
+**The question.** Mesh vertices are declared `V (:,2){mustBeNumeric}` on `RatPar`, for the whole
+RatPar / RatPol / QuaPol / QuaPar lattice, so `convEnvCPLQ` returns `sqrt(2)` as `1.4142` and two
+cells can carry two roundings of one number. That is the last double leak, and it costs 5 of 31
+same-function pairs a real shared facet on the tri case.
+
+**DECIDED: do not change it.** Three reasons, in order of weight.
+
+1. **It costs cells and time, not correctness.** Every consequence measured is a merge refused and
+   a cell not collapsed. No wrong value has been traced to it.
+2. **The path that matters no longer goes through the mesh.** `plq_1p.triangulate` +
+   `splitTightTriangleSym` is the DEFAULT since 2026-08-18 and keeps its geometry exact without a
+   RatPol mesh; the general quadrilateral -- the case that motivated all of this -- is exact
+   (worst denominator 56). `convEnvCPLQ` + `ratPolToPlq` survives as `conjCPLQ`'s FALLBACK for a
+   rational envelope face, reached only after `conjPieceCPLQ` and the direct face routes decline.
+3. **The change is lattice-wide and the classes say so on purpose.** `RatPar`'s header records
+   that every property is declared in exactly one place because a property defined in two
+   superclasses is fatal in MATLAB and would make `QuaPol < RatPol & QuaPar` impossible. Relaxing
+   `mustBeNumeric` on `V` (and consistently on `f`, `den`, `P`, `Ec`) touches every consumer, and
+   those consumers do numeric work -- `double(V)`, `norm`, indexing, plotting.
+
+**What would reverse this decision:** a WRONG VALUE traced to mesh rounding, or the rational-face
+fallback becoming common again. If it is only cost that bites, the cheaper move is to widen the
+A.4/A.5 path so fewer inputs fall back at all -- that is where the code is already going.
+
 ## 2026-08-18 (last) — the parallelogram's "remaining 1%" was MY REFERENCE, not the code
 
 Piece 9 of `f*` for `x*y` over `conv{(0,0),(2,0),(2.5,1),(0.5,1)}` is EXACT at all ten probe

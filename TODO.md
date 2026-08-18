@@ -86,29 +86,27 @@ blocker for making the split the default, and it was a casualty of the double le
       out. The slow bucket went ~92 -> ~113 minutes, which is the bucket cost the standing rule
       says to accept.
 
-- [ ] **2. `region.impliedBy` over a region with a CURVED facet -- the largest named gate left,
-      and ONE ATTEMPT HAS ALREADY FAILED.** `quadFacet_exactAnotInB` is 98 of fold 5's refusals
-      and 63 of fold 3's. `impliedBy` tests an affine constraint over the region's LINEAR
-      RELAXATION, sound but conservative exactly when a conic facet would have cut the violating
-      part away.
-      **READ `DECISIONS.md` 2026-08-18 FIRST.** The vertex-plus-arc-tangency construction was
-      written and REVERTED: it fails `testfunctionNDomain/testMerge` and
-      `cplqAdapterTest/twoTriangleSquareMaxMatchesNumericSup`, both of which go green the moment
-      it comes out. The likely hole is a REDUNDANT conic facet -- it makes `lin` false so the
-      refinement engages, while the vertex list still describes only the polyhedral part.
-      **Measure on `testMerge` first**: it is a unit-level merge test and runs in seconds, where
-      the normal bucket takes four minutes to tell you the same thing.
+- [x] **2. `region.impliedBy` over a region with a CURVED facet -- DONE 2026-08-18.**
+      `region.holdsOn` + `maxAffineOverRegion` take the max over the region ITSELF (vertices, plus
+      arc tangencies found in closed form) instead of over its linear relaxation. Measured on three
+      folds: `quadFacet_exactAnotInB` 63 -> 41, fold-3 cells 38 -> 36, merges 7 -> 9.
+      **An earlier revert of this was MY ERROR** -- two helpers in the instance block called as
+      static -- see `DECISIONS.md`.
 
-- [ ] **3. `noSharedFacet` is the biggest raw count (819 at fold 5) but mostly HONEST.** Measured
-      on the tri case with `.claude/step3adjacency.m`: 21 of 38 same-function pairs meet at a
-      POINT and must not merge. Re-run that probe on the quadrilateral before treating this count
-      as a defect. What is NOT honest there is item 4 below.
+- [ ] **3. `noSharedFacet` -- still the biggest raw count (346 at fold 3, 819 at fold 5).**
+      `.claude/step3adjacency.m` classifies every same-function pair three ways and now takes
+      `CCA2_ADJ_FOLDS` to reach the deeper folds. On the tri case at fold 1, 21 of 38 pairs meet
+      at a POINT and must not merge, so a large part of this count is honest -- establish how large
+      on the quadrilateral before treating it as a defect.
 
-- [ ] **4. `RatPar`'s `V (:,2){mustBeNumeric}` -- a DESIGN change, priced but not made.** Mesh
-      vertices are constrained numeric lattice-wide, so `convEnvCPLQ` returns `sqrt(2)` as
-      `1.4142` and two cells get two roundings of one number, one ULP apart; 5 of 31 pairs on the
-      tri case lose a real facet to it. The A.4/A.5 path does NOT go through the mesh and is
-      exact, so price that before changing the lattice. `DECISIONS.md` has the full entry.
+- [x] **4. The parallelogram's piece 9 -- DONE 2026-08-18, `BAD 0 of 10`.** The singular-quadratic
+      overlap was the only defect; the "remaining 1%" was a grid reference that missed the vertex
+      where the sup is attained. See `DECISIONS.md`.
+
+- [x] **5. `RatPar`'s `V (:,2){mustBeNumeric}` -- DECIDED 2026-08-18: leave it.** It costs cells
+      and time, not correctness; the default path no longer goes through the mesh; and the change
+      is lattice-wide against a design the classes state deliberately. `DECISIONS.md` records what
+      would reverse it.
 
 ### Measurements that stand (2026-08-16)
 
