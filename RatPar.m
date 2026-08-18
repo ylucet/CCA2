@@ -107,6 +107,23 @@ classdef (Abstract) RatPar < Rat & Par
             %       representing the domain with the INVERSE convention as P above to obtain a unique representation.
             %   isConvex: boolean. true if the domain is convex
 
+        % ---- a CALLER'S ASSERTION, not a computed fact ---------------------------------------
+        fIsConvex {mustBeNumericOrLogical} = []   % [] = unknown (the default), true = the CALLER
+            % asserts the function is convex, false = asserts it is not. It is an assertion about
+            % f AS AN EXTENDED-REAL FUNCTION, i.e. including the indicator of its domain.
+            %
+            % WHY IT IS TRUSTED. Convexity of a SINGLE quadratic piece is free to determine (the
+            % eigenvalues of a 2x2 Hessian), and the operators do determine it -- no flag needed.
+            % Convexity of a MULTI-PIECE function is not: it needs per-piece convexity AND the
+            % gradient jump across every shared edge to be consistent (isFaceConvex + isEdgeConvex,
+            % the latter still marked untested). The flag exists for exactly that case, and it
+            % unlocks the largest short-circuit in the toolbox -- biconj of a convex f IS f, with
+            % nothing to compute.
+            %
+            % WHAT IS STILL CHECKED. The free NECESSARY condition: every piece's Hessian must be
+            % positive semidefinite. A flag contradicting that is refused LOUDLY rather than
+            % trusted, because the failure it would otherwise cause is silent -- biconj returning
+            % a non-convex f as its own convex envelope. See ALGORITHM.md.
         % ---- the two AXIS-VARYING properties -------------------------------------------------
         % Each is general on its own axis and pinned to a trivial value on the specialization; the
         % pinning is enforced by the set validators below, keyed on the object's own traits.

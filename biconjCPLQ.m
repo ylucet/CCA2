@@ -54,7 +54,34 @@ function h = biconjCPLQ(obj)
 
     obj.assertOperable();   % degree<=2 (cubic rejected; cubic is for isConvex only)
 
-    % ---- Case B: a single bounded triangle -> Step 1's convex envelope ----------------------
+    % ---- f IS ALREADY CONVEX -> f** = f, and there is nothing whatever to compute -----------
+    % biconj IS the closed-convex-envelope operator, so a convex f is its own answer. Taken
+    % first, before any dispatch, because it is the largest short-circuit here and it costs one
+    % eigenvalue test per face.
+    %
+    % Two ways to reach it, and they differ in what they trust:
+    %   * PROVEN, for a single piece -- per-face convexity plus a convex domain IS convexity when
+    %     there is only one face, so nothing is assumed;
+    %   * ASSERTED, via the caller's fIsConvex flag, for several faces, where the honest test
+    %     needs the gradient jump across every shared edge to be consistent. The free NECESSARY
+    %     condition is still enforced there (see convexEnough), so a wrong flag is refused loudly
+    %     rather than silently answered.
+    if convexEnough(obj)
+        h = obj;
+        return
+    end
+
+    % ---- Case B: a single bounded TRIANGLE -> Step 1's convex envelope ----------------------
+    % THE TRIANGLE RESTRICTION IS REAL, and widening it to "any bounded piece" was tried and
+    % REVERTED on 2026-08-18. convEnvCPLQ's classification is by Hessian: PSD is convex and
+    % returns q on any convex P, but the NEGATIVE SEMIDEFINITE and INDEFINITE branches are stated
+    % for a TRIANGLE and raise convEnvCPLQ:notImplemented otherwise. Widening therefore turned
+    % all four bilinear box rows of checkBoxEnvelopeForSCIP from OK into that error.
+    %
+    % Nothing was lost by reverting: the case the widening was meant to reach -- a CONVEX
+    % quadratic over a box -- is caught by the convexity short-circuit above, which returns f
+    % itself in 0.05 s without calling Step 1 at all.
+    %
     % Same predicate as conjCPLQ.m's own Case B, plus "no curved edge": a QuaPar whose triangle
     % has a parabolic side is NOT what convEnvCPLQ takes (it reads V/E/F as straight edges), so
     % it falls through to the conj-of-conj path below and errors there exactly as it did before.
@@ -109,4 +136,65 @@ function p = asQuaPol(obj)
     else
         p = QuaPol(obj.V, obj.E, obj.f, obj.F);
     end
+end
+
+% ------------------------------------------------------------------------------------------------
+function tf = convexEnough(obj)
+% Is f convex -- either PROVEN cheaply, or ASSERTED by the caller and not contradicted?
+% Answers false whenever it cannot say yes; a false answer only costs the caller the short-cut.
+    tf = false;
+    [allPSD, readable] = everyPieceConvex(obj);
+    if ~readable
+        return                      % cubic, or coefficients we cannot read: say nothing
+    end
+
+    asserted = ~isempty(obj.fIsConvex) && any(obj.fIsConvex);
+    if asserted && ~allPSD
+        % THE FREE NECESSARY CONDITION, and it fails. Refuse loudly: honouring the flag here
+        % would return a non-convex f as its own convex envelope, silently.
+        error('PLQ:biconj:notConvexDespiteFlag', ...
+              ['fIsConvex is set, but some piece has a Hessian that is not positive ' ...
+               'semidefinite, so f cannot be convex. Clear the flag or fix the input.']);
+    end
+    if ~allPSD
+        return
+    end
+
+    % Every piece is convex. With ONE piece on a convex domain that is already convexity -- no
+    % edges to be inconsistent across -- so this needs no flag and assumes nothing.
+    if obj.nf == 1
+        try
+            tf = logical(obj.dom.isConvex);
+        catch
+            tf = false;             % domain convexity not recorded: do not guess
+        end
+        return
+    end
+
+    % SEVERAL pieces: per-piece convexity is necessary and NOT sufficient. Only the caller's
+    % assertion gets us the rest of the way.
+    tf = asserted;
+end
+
+% ------------------------------------------------------------------------------------------------
+function [tf, readable] = everyPieceConvex(obj)
+% Is every piece's quadratic convex? `readable` is false when the coefficients are not a
+% quadratic this can classify, in which case tf means nothing.
+    tf = false; readable = false;
+    try
+        if obj.nf < 1, return, end
+        for k = 1:obj.nf
+            [~, Q, C] = QuaPol.matrixForm(obj.f(k,:));
+            if sum(abs(C), 'all') > sqrt(eps)
+                return              % genuinely cubic: outside this test
+            end
+            if ~QuaPol.isPositiveSemidefinite(Q)
+                readable = true;    % readable and NOT convex -- a definite no
+                return
+            end
+        end
+    catch
+        return
+    end
+    tf = true; readable = true;
 end
