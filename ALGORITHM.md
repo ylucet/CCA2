@@ -29,8 +29,9 @@ took a symbolic cross-piece maximum, and conjugated the result back.
     1. f CONVEX       -> return f                        (nothing to compute)      [built]
     2. f SEPARABLE on a box  -> 1-D envelope per axis, sum                         [built]
     3. f BILINEAR on a box   -> McCormick / Al-Khayyal-Falk, in closed form        [built]
-    4. SINGLE bounded TRIANGLE -> Step 1 directly        (no conjugation at all)   [built]
-    5. otherwise      -> conj(conj(f))                   (the exception, not the rule)
+    4. f BILINEAR on a DIAMOND -> rotate 45 deg, separate, rotate back             [built]
+    5. SINGLE bounded TRIANGLE -> Step 1 directly        (no conjugation at all)   [built]
+    6. otherwise      -> conj(conj(f))                   (the exception, not the rule)
 
 Case 3 is the closed form `max( b(xl*y + yl*x - xl*yl), b(xu*y + yu*x - xu*yu) )` for `b > 0`,
 and the other affine pair for `b < 0` (write `b*x*y = -|b|*x*y` and take `-|b|` times the CONCAVE
@@ -40,22 +41,39 @@ triangular faces. It does not help SCIP, which applies McCormick itself; it help
 for whom `co(x*y)` over a rectangle is the most elementary nonconvex envelope there is and should
 not cost a minute.
 
-Case 4 is deliberately NOT widened to "any single bounded piece". `convEnvCPLQ` classifies by
+Case 4 is the one place where rotating `x*y` into separable form actually pays. The identity
+`x*y = (u^2 - v^2)/2` with `u = (x+y)/sqrt(2)`, `v = (x-y)/sqrt(2)` is free, but separability of
+the ENVELOPE needs the function AND the domain to separate in the same coordinates -- and rotating
+the function rotates the domain with it. A triangle stays a triangle; a box becomes a diamond.
+So the rotation helps exactly when the domain is ALREADY a diamond, which rotates to a box.
+The result is a SINGLE smooth quadratic, because the concave direction contributes its chord,
+which is affine: on the unit diamond `co(x*y) = (x+y)^2/4 - 1/4`. Verified against an LP
+reference -- the definition of the envelope -- at error 0.
+
+As a general strategy the rotation is NOT competitive, and the reason is worth keeping: the
+per-piece work is already closed form and is about 1.4% of the runtime. On the quadrilateral,
+Steps 1 and 2 take 35 s of 2579 s; Step 3's cross-piece maximum is the rest. A better per-piece
+method competes for a rounding error. What would pay is avoiding the TRIANGULATION, and the
+rotation does not: `u^2/2` is convex on the rotated polygon, but `-v^2/2` is concave, and a
+concave envelope over a many-sided polygon is piecewise affine over the lower hull, so it splits
+anyway.
+
+Case 5 is deliberately NOT widened to "any single bounded piece". `convEnvCPLQ` classifies by
 Hessian: the PSD branch returns `q` over any convex `P`, but the negative-semidefinite and
 INDEFINITE branches are stated for a TRIANGLE and raise `convEnvCPLQ:notImplemented` otherwise.
 Widening was tried on 2026-08-18 and turned all four bilinear box rows into that error.
 
-Cases 1 and 4 are the same short-circuit at two scales, and the convex half of it **already
+Cases 1 and 5 are the same short-circuit at two scales, and the convex half of it **already
 existed inside Step 1** — `convEnvCPLQ` returns `q` unchanged as soon as the Hessian is positive
 semidefinite. The problem was never that the check was missing; it was that `biconj` only reached
 Step 1 for a TRIANGLE, so a box (`nv == 4`) fell through to the double conjugation. Case 1 now
 catches it before the dispatch, without calling Step 1 at all.
 
 Step 0 matters more than it looks, and is the one piece not yet built. `biconjugateTest` hands the
-unit square in as two triangles sharing a diagonal; merged, it is one face, cases 1–3 become
-reachable, and the piece-coupling that forces case 5 disappears.
+unit square in as two triangles sharing a diagonal; merged, it is one face, cases 1–4 become
+reachable, and the piece-coupling that forces case 6 disappears.
 
-Case 5 is genuinely needed only when the envelope COUPLES several pieces — the convex hull of a
+Case 6 is genuinely needed only when the envelope COUPLES several pieces — the convex hull of a
 union is not determined piecewise.
 
 ---

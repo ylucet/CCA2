@@ -119,6 +119,28 @@ function h = biconjCPLQ(obj)
         return
     end
 
+    % ---- f BILINEAR over a DIAMOND -> rotate, separate, rotate back --------------------------
+    % x*y is separable in the 45-degree frame:  with u = (x+y)/sqrt(2), v = (x-y)/sqrt(2),
+    %       x*y = (u^2 - v^2)/2.
+    % That identity alone buys nothing, because separability of the ENVELOPE needs the function
+    % AND the domain to separate in the SAME coordinates, and rotating the function rotates the
+    % domain with it -- a triangle stays a triangle, a box becomes a diamond.
+    %
+    % It pays in exactly one shape: when the domain is ALREADY a diamond, i.e. an axis-aligned
+    % rectangle rotated by 45 degrees, because then the rotated domain IS a box. The diamond with
+    % corners (+-c,0),(0,+-c) maps to the square [-c/sqrt(2), c/sqrt(2)]^2, and the whole problem
+    % becomes one 1-D envelope per axis -- the case handled just above.
+    %
+    % The envelope comes back through the same change of variables: with g(z) = f(Mz),
+    % co f (x) = co g (M^{-1} x), and M is ORTHOGONAL here, so M^{-1} = M'. Nothing is
+    % approximated and no square root survives in the answer: the rotation contributes 1/sqrt(2)
+    % twice to every quadratic term, which is exactly the factor of 2 in the identity above.
+    hDi = diamondEnvelope(obj);
+    if ~isempty(hDi)
+        h = hDi;
+        return
+    end
+
     % ---- Case B: a single bounded TRIANGLE -> Step 1's convex envelope ----------------------
     % THE TRIANGLE RESTRICTION IS REAL, and widening it to "any bounded piece" was tried and
     % REVERTED on 2026-08-18. convEnvCPLQ's classification is by Hessian: PSD is convex and
@@ -276,7 +298,8 @@ function [ok, coefs] = separableEnvelopeCoefs(obj)
     for i = 1:4
         if ~any(abs(V(i,1) - xs) < 1e-12) || ~any(abs(V(i,2) - ys) < 1e-12), return, end
     end
-    lo = [min(xs), min(ys)]; hi = [max(xs), max(ys)];
+    % bounds from the RAW vertices; the rounding above only grouped them (see diamondEnvelope)
+    lo = [min(V(:,1)), min(V(:,2))]; hi = [max(V(:,1)), max(V(:,2))];
 
     ax = c(5)/2; ay = c(7)/2; dx = c(8); dy = c(9); k0 = c(10);
     [ax2, dx2, kx] = oned(ax, dx, lo(1), hi(1));
@@ -332,7 +355,8 @@ function h = mccormickEnvelope(obj)
     for i = 1:4
         if ~any(abs(V0(i,1) - xs) < 1e-12) || ~any(abs(V0(i,2) - ys) < 1e-12), return, end
     end
-    xl = min(xs); xu = max(xs); yl = min(ys); yu = max(ys);
+    % bounds from the RAW vertices; the rounding above only grouped them (see diamondEnvelope)
+    xl = min(V0(:,1)); xu = max(V0(:,1)); yl = min(V0(:,2)); yu = max(V0(:,2));
     if xu - xl <= 1e-12 || yu - yl <= 1e-12, return, end
 
     % Corners counter-clockwise, so that "face on the left of each directed edge" holds.
@@ -356,4 +380,91 @@ function h = mccormickEnvelope(obj)
         fc = [fA; fB];
     end
     h = QuaPol(V, E, fc, F);
+end
+
+% ------------------------------------------------------------------------------------------------
+function h = diamondEnvelope(obj)
+% The convex envelope of a BILINEAR function over a DIAMOND -- a rectangle rotated 45 degrees --
+% by rotating into the frame where the function separates and the domain is a box. Empty when the
+% hypothesis does not hold.
+%
+% The rotation is  u = (x+y)/sqrt(2),  v = (x-y)/sqrt(2),  i.e.  z = M'p  with
+%       M = [1 1; 1 -1]/sqrt(2),   M' = M,   M*M = I   (M is orthogonal AND an involution),
+% and it turns b*x*y into (b/2)*(u^2 - v^2).
+    h = [];
+    try
+        if obj.nf ~= 1 || obj.nv ~= 4 || obj.ne ~= 4, return, end
+        if ~obj.isDomBounded, return, end
+        if any(obj.Ec(:) ~= 0), return, end
+        c = obj.f(1,:);
+        if any(abs(c(1:4)) > sqrt(eps)), return, end
+        if abs(c(5)) > sqrt(eps) || abs(c(7)) > sqrt(eps), return, end   % must be pure bilinear
+        b = c(6);
+        if abs(b) <= sqrt(eps), return, end
+        d = c(8); e = c(9); k0 = c(10);
+    catch
+        return
+    end
+
+    % ROTATE THE VERTICES and require the image to be an axis-aligned rectangle. That test is
+    % what identifies a diamond, and it is done on the image rather than by trying to recognise
+    % the shape in the original coordinates.
+    V0 = obj.V;
+    r = 1/sqrt(2);
+    U = [ (V0(:,1) + V0(:,2))*r, (V0(:,1) - V0(:,2))*r ];
+    % ROUND ONLY TO DECIDE THE GROUPING, never to produce the bounds. Taking ul/uu/vl/vu from
+    % the rounded values makes the ROUNDING the answer: the unit diamond's corners rotate to
+    % +-1/sqrt(2), and reading those back at 10 decimals put 9.5e-12 into co(x*y) at the origin.
+    us = unique(round(U(:,1), 10));
+    vs = unique(round(U(:,2), 10));
+    if numel(us) ~= 2 || numel(vs) ~= 2, return, end
+    for i = 1:4
+        if ~any(abs(U(i,1) - us) < 1e-9) || ~any(abs(U(i,2) - vs) < 1e-9), return, end
+    end
+    ul = min(U(:,1)); uu = max(U(:,1)); vl = min(U(:,2)); vu = max(U(:,2));
+    if uu - ul <= 1e-12 || vu - vl <= 1e-12, return, end
+
+    % IN THE ROTATED FRAME:  b*x*y + d*x + e*y + k  =  (b/2)u^2 - (b/2)v^2 + du*u + dv*v + k,
+    % using x = (u+v)/sqrt(2), y = (u-v)/sqrt(2), so d*x + e*y = (d+e)/sqrt(2) * u
+    %                                                          + (d-e)/sqrt(2) * v.
+    au = b/2;   du = (d + e)*r;
+    av = -b/2;  dv = (d - e)*r;
+
+    % ONE 1-D ENVELOPE PER AXIS: a >= 0 keeps the quadratic, a < 0 takes the CHORD.
+    [au2, du2, ku] = onedEnv(au, du, ul, uu);
+    [av2, dv2, kv] = onedEnv(av, dv, vl, vu);
+
+    % ROTATE BACK. With u = (x+y)/sqrt(2) and v = (x-y)/sqrt(2):
+    %   u^2 = (x^2 + 2xy + y^2)/2 ,  v^2 = (x^2 - 2xy + y^2)/2 ,
+    % so  au2*u^2 + av2*v^2 = (au2+av2)/2 * (x^2 + y^2) + (au2-av2) * x*y,
+    % and du2*u + dv2*v = (du2+dv2)/sqrt(2) * x + (du2-dv2)/sqrt(2) * y.
+    qxx = (au2 + av2)/2;            % coefficient of x^2 (and of y^2)
+    qxy = (au2 - av2);              % coefficient of x*y
+    lx  = (du2 + dv2)*r;
+    ly  = (du2 - dv2)*r;
+
+    % In this class's basis f = c5/2 x^2 + c6 xy + c7/2 y^2 + c8 x + c9 y + c10.
+    coefs = zeros(1,10);
+    coefs(5)  = 2*qxx;
+    coefs(6)  = qxy;
+    coefs(7)  = 2*qxx;
+    coefs(8)  = lx;
+    coefs(9)  = ly;
+    coefs(10) = k0 + ku + kv;
+
+    h = obj;
+    h.f = coefs;
+end
+
+% ------------------------------------------------------------------------------------------------
+function [a2, d2, k2] = onedEnv(a, d, l, hi)
+% The convex envelope of a*t^2 + d*t on [l,hi], as a2*t^2 + d2*t + k2.
+    if a >= -sqrt(eps)
+        a2 = a; d2 = d; k2 = 0;
+    else
+        phiL = a*l^2 + d*l;
+        phiH = a*hi^2 + d*hi;
+        m = (phiH - phiL)/(hi - l);
+        a2 = 0; d2 = m; k2 = phiL - m*l;
+    end
 end

@@ -110,6 +110,35 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             end
         end
 
+        function bilinearOverADiamondRotatesToTheSeparableCase(testCase)
+        % x*y separates in the 45-degree frame -- with u = (x+y)/sqrt(2), v = (x-y)/sqrt(2),
+        % x*y = (u^2 - v^2)/2 -- but that alone buys nothing, because the ENVELOPE separates only
+        % when the DOMAIN is a product in the same coordinates, and rotating the function rotates
+        % the domain too. It pays in exactly one shape: a DIAMOND, which rotates to a box.
+        %
+        % On the unit diamond |x| + |y| <= 1 the answer is a SINGLE smooth quadratic, because the
+        % concave direction contributes its chord, which is affine:
+        %       co(x*y) = (x+y)^2/4 - 1/4.
+        % Check it at the origin: (1/2,-1/2) and (-1/2,1/2) both give x*y = -1/4 and average to
+        % the origin, so co f (0,0) = -1/4, which is what the formula gives.
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 1 0; 1 0];
+            V = [1 0; 0 1; -1 0; 0 -1];              % the unit diamond, counter-clockwise
+            p = QuaPol(V, E, [0 1 0 0 0 0], F);      % f = x*y
+            h = p.biconj('cplq');
+            testCase.verifyEqual(h.nf, 1, 'the envelope over a diamond is one smooth quadratic');
+
+            X = [0 0; 0.5 -0.5; -0.5 0.5; 0.25 0.25; 0.5 0.25; -0.3 -0.2; 0.9 0; 0 -0.75];
+            for i = 1:size(X,1)
+                want = (X(i,1) + X(i,2))^2/4 - 0.25;
+                testCase.verifyEqual(h.eval(X(i,:)), want, 'AbsTol', 1e-12, ...
+                    sprintf('co(x*y) over the unit diamond at (%g,%g)', X(i,1), X(i,2)));
+                % and a MINORANT of f on the diamond
+                testCase.verifyLessThanOrEqual(want - X(i,1)*X(i,2), 1e-12, ...
+                    sprintf('envelope must underestimate x*y at (%g,%g)', X(i,1), X(i,2)));
+            end
+        end
+
         function singleBoundedTriangleNoLongerErrors(testCase)
             % The exact input SUPPORT_MATRIX.md section 8 listed as blocker 1: f = xy over the
             % unit triangle. conj works and gives a QuaPar; biconj used to raise
