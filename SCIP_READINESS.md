@@ -167,3 +167,58 @@ Only then: wire the bridge, expose value and subgradient off whatever B2 names, 
 A1 is cheap and goes first -- it may change A2's shape. B1 can run in parallel with A2, being
 mostly reading and measuring rather than fixing. C is last, because B2 may remove most of the
 problem C is trying to solve.
+
+
+---
+
+## Phase B, measured: PROFILE OF ONE FOLD (2026-08-18)
+
+Two folds of Step 3 on the A.4/A.5 quadrilateral, under MATLAB's own profiler so that nothing in
+the repository is instrumented. **Call counts are the measurement** -- the machine is shared, so
+absolute times are contended, but counts are not, and the two folds give the SCALING.
+
+### It refuted the static prediction
+
+The Phase B table guessed that `mergeL`'s pairwise "are these the same function" test -- an
+`isAlways(simplifyFraction(...))` per pair, O(n^2) -- was the cost. **It is not.**
+`simplifyFraction` runs 4735 times in fold 2 and costs **3.1 s** of a 200 s fold. The equality
+test is cheap.
+
+### What actually costs
+
+    engine call     fold 1     fold 2      of fold 2's ~200 s
+    subs              3215      11803      85.0 s   <-- the single largest
+    isAlways          3664      11793      18.3 s
+    simplify           914       2256      19.4 s
+    solve              203        700      21.5 s
+    simplifyFraction  1401       4735       3.1 s
+
+    routine          calls (f1 -> f2)   time in fold 2
+    mergeL              2  ->  2          165.2 s   (83% of maximumP's 199.8 s)
+    getVertices        57  -> 131         133.1 s
+    region ctor        31  ->  75          89.3 s
+    merge              32  -> 130          66.2 s
+    ptFeasible       1204  -> 3538          40.7 s
+
+**The chain is: `merge` -> build a candidate `region` -> `getVertices` -> `ptFeasible` per
+candidate -> `subsF` -> `subs`.** Substitution is 7.2 ms per call because each one is a round
+trip to MuPAD, and there are 11803 of them in one fold.
+
+### Scaling confirms it is quadratic in the cell count
+
+Cells grow 12 -> 23 (1.9x) while the engine calls grow 3.2-3.7x and `merge` calls 4.1x -- i.e.
+~n^2, which is what trying to merge every same-function pair predicts.
+
+### The revised lever, in order
+
+1. **Make `ptFeasible` numeric-first.** It substitutes symbolically and then tests a SIGN. Now
+   that Step 2 is exact, evaluating in double precision and falling back to the symbolic path
+   only when the value is near zero is sound -- the classic filter. 3538 calls per fold, driving
+   most of the 11803 substitutions.
+2. **Finish `getVertices`.** The affine x affine pair is already closed form (a determinant, done
+   for exactly this reason -- it was 322 of 438 solve calls). Affine x conic and conic x conic
+   still call `solve`: 700 calls, 21.5 s in fold 2, and both have textbook closed forms.
+3. **Do not rebuild the region to test a merge.** 130 merge attempts per fold, few of which
+   succeed, and each one constructs geometry.
+
+Only after those is the O(n^2) pair count itself worth attacking.
