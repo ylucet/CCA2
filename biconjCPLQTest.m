@@ -68,6 +68,48 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             testCase.verifyError(@() p.biconj('cplq'), 'PLQ:biconj:notConvexDespiteFlag');
         end
 
+        function bilinearOverABoxReturnsMcCormickDirectly(testCase)
+        % co(b*x*y + d*x + e*y + k) over a rectangle is Al-Khayyal-Falk's McCormick envelope, the
+        % max of two affine functions. It is returned in closed form rather than derived through
+        % triangulate -> conjugate -> Step 3 -> conjugate, which cost 40-63 s for an answer that
+        % has been in the literature since 1983.
+        %
+        % Checked on BOTH signs of b, because they use different affine pairs and meet on
+        % different diagonals of the box -- the anti-diagonal for b > 0, the main diagonal for
+        % b < 0.
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 1 0; 1 0];
+            cases = { [0 1 0 0 0 0],   [0 1 0 1]        % x*y on the unit box
+                      [0 1 0 0 0 0],   [-2 3 -1 4]      % x*y, general bounds
+                      [0 3 0 7 -2 5],  [0 1 0 1]        % with a linear part
+                      [0 -2 0 0 0 0],  [0 1 0 1] };     % b < 0: the other diagonal
+            for c = 1:size(cases,1)
+                coef = cases{c,1}; bb = cases{c,2};
+                xl = bb(1); xu = bb(2); yl = bb(3); yu = bb(4);
+                p = QuaPol([xl yl; xu yl; xu yu; xl yu], E, coef, F);
+                h = p.biconj('cplq');
+                testCase.verifyEqual(h.nf, 2, 'the McCormick envelope has exactly two faces');
+
+                b = coef(2); d = coef(4); e = coef(5); k0 = coef(6);
+                if b > 0
+                    mc = @(x,y) max(b*(xl*y + yl*x - xl*yl), b*(xu*y + yu*x - xu*yu)) ...
+                                + d*x + e*y + k0;
+                else
+                    mc = @(x,y) max(b*(xu*y + yl*x - xu*yl), b*(xl*y + yu*x - xl*yu)) ...
+                                + d*x + e*y + k0;
+                end
+                [uu, vv] = meshgrid(linspace(xl,xu,12), linspace(yl,yu,12));
+                for i = 1:numel(uu)
+                    pt = [uu(i), vv(i)];
+                    testCase.verifyEqual(h.eval(pt), mc(pt(1), pt(2)), 'AbsTol', 1e-9, ...
+                        sprintf('McCormick at (%g,%g), case %d', pt(1), pt(2), c));
+                    % and a MINORANT of f, which is what makes it an envelope and not merely a fit
+                    testCase.verifyLessThanOrEqual(mc(pt(1),pt(2)) - ...
+                        (b*pt(1)*pt(2) + d*pt(1) + e*pt(2) + k0), 1e-9);
+                end
+            end
+        end
+
         function singleBoundedTriangleNoLongerErrors(testCase)
             % The exact input SUPPORT_MATRIX.md section 8 listed as blocker 1: f = xy over the
             % unit triangle. conj works and gives a QuaPar; biconj used to raise

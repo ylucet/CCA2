@@ -25,11 +25,25 @@ took a symbolic cross-piece maximum, and conjugated the result back.
 
 ## `biconj(f)` — the convex envelope
 
-    0. NORMALISE      merge adjacent faces carrying the same quadratic
-    1. f CONVEX       -> return f                        (nothing to compute)
-    2. f SEPARABLE on a box  -> 1-D envelope per axis, sum
-    3. SINGLE piece   -> Step 1 directly                 (no conjugation at all)
-    4. otherwise      -> conj(conj(f))                   (the exception, not the rule)
+    0. NORMALISE      merge adjacent faces carrying the same quadratic   [not yet built]
+    1. f CONVEX       -> return f                        (nothing to compute)      [built]
+    2. f SEPARABLE on a box  -> 1-D envelope per axis, sum                         [built]
+    3. f BILINEAR on a box   -> McCormick / Al-Khayyal-Falk, in closed form        [built]
+    4. SINGLE bounded TRIANGLE -> Step 1 directly        (no conjugation at all)   [built]
+    5. otherwise      -> conj(conj(f))                   (the exception, not the rule)
+
+Case 3 is the closed form `max( b(xl*y + yl*x - xl*yl), b(xu*y + yu*x - xu*yu) )` for `b > 0`,
+and the other affine pair for `b < 0` (write `b*x*y = -|b|*x*y` and take `-|b|` times the CONCAVE
+envelope, which turns the min into a max). The two pieces meet on a DIAGONAL of the box -- the
+anti-diagonal when `b > 0`, the main diagonal when `b < 0` -- which is what makes the result two
+triangular faces. It does not help SCIP, which applies McCormick itself; it helps a CCA2 user,
+for whom `co(x*y)` over a rectangle is the most elementary nonconvex envelope there is and should
+not cost a minute.
+
+Case 4 is deliberately NOT widened to "any single bounded piece". `convEnvCPLQ` classifies by
+Hessian: the PSD branch returns `q` over any convex `P`, but the negative-semidefinite and
+INDEFINITE branches are stated for a TRIANGLE and raise `convEnvCPLQ:notImplemented` otherwise.
+Widening was tried on 2026-08-18 and turned all four bilinear box rows into that error.
 
 Steps 1 and 3 are the same short-circuit at two scales. **Both already exist inside Step 1** —
 `convEnvCPLQ` returns `q` unchanged as soon as the Hessian is positive semidefinite. The problem
@@ -159,6 +173,45 @@ exact at 7 of 7 probe points and never introduces a surd. Whether that route can
 | `(x²+y²)/2` on `[0,1]²`, first conjugation | 2 triangles, 14 cells, Step 3, **456 s**, err 1.6e-4 | 9 cells, **4.2 s**, exact 10/10 |
 | `x² − y²` on `[0,1]²` | `MATLAB:badsubscript` | exact, 6 cells, 1.9 s |
 | `f*` of `x*y` over a general quadrilateral | 86 cells, 73 min | 60 cells, 43 min |
+
+And `biconj` over a box, the whole of `checkBoxEnvelopeForSCIP`, start of session to end:
+
+| box case | before | after |
+|---|---|---|
+| `x*y` | 62 s, no mesh | **0 s**, `QuaPol` |
+| `3xy+7x-2y+5` | 49 s, no mesh | **0 s**, `QuaPol` |
+| `x^2-y^2` | **ERROR** | **0 s**, `QuaPol` |
+| `(x^2+y^2)/2` | 456 s, no mesh | **0 s**, `QuaPol` |
+| `x*y` on a sub-box | 43 s, no mesh | **0 s**, `QuaPol` |
+| `x*y` on a wide box | 42 s, no mesh | **0 s**, `QuaPol` |
+
+Every row also went from a mesh-less `QuaParCPLQ` to a meshed `QuaPol`, which is what a consumer
+can actually read (`RETURN_TYPE.md` records that change).
+
+---
+
+## The 1-D UNBOUNDED case -- deliberately not built, and why
+
+`conjSeparableOverBox` requires FINITE bounds, because every piece it builds is anchored on an
+endpoint value `phi(l)` or `phi(h)`. Dropping a bound is easy algebra and awkward representation:
+
+* `a > 0` -- unboundedness makes it EASIER: the maximiser `t* = (sigma-d)/(2a)` always exists, so
+  each dropped bound removes a clamp. On all of `R` the conjugate is `(sigma-d)^2/(4a)`, ONE
+  piece, no breakpoints.
+* `a = 0` -- the conjugate's DOMAIN degenerates. On `[l,inf)` it is a half-line; on `R` it is the
+  single point `sigma = d`.
+* `a < 0` -- on any unbounded interval the sup is `+inf`, i.e. the envelope is `-inf`. Degenerate,
+  and it must be REPORTED rather than answered.
+
+The representational hazard is the reason to wait: a point-domain in one axis crossed with a full
+line in the other gives a 2-D cell with EMPTY INTERIOR, and `region` reasons about vertices. That
+is exactly the shape this codebase keeps getting wrong -- `simplifyUnboundedRegion` declared a
+half-plane empty for want of a finite vertex, fixed 2026-08-16.
+
+It is also no longer NEEDED for the box cases: `biconj` now short-circuits convex, separable and
+bilinear inputs, so none of them conjugates twice. It would still pay for a genuinely unbounded
+separable input (`x^2 + y^2` over a quadrant), but that needs TWO changes, not one -- `f*` is
+piecewise, so the detector would have to test separability PER CELL, not on a single quadratic.
 
 The 9 cells for `(x²+y²)/2` are the product structure the answer actually has: `f` separates and
 the box is a product, so `f*(s) = g(s₁) + g(s₂)` with `g` the 1-D conjugate in three pieces.

@@ -93,6 +93,32 @@ function h = biconjCPLQ(obj)
         return
     end
 
+    % ---- f BILINEAR over a BOX -> the McCORMICK envelope, in closed form --------------------
+    % For b*x*y + d*x + e*y + k over [xl,xu] x [yl,yu] the convex envelope is Al-Khayyal-Falk's,
+    % the pointwise MAX of two affine functions:
+    %       b > 0:  max( b(xl*y + yl*x - xl*yl),  b(xu*y + yu*x - xu*yu) )
+    %       b < 0:  max( b(xu*y + yl*x - xu*yl),  b(xl*y + yu*x - xl*yu) )
+    % (for b < 0 write b*x*y = -|b|*x*y and take -|b| times the CONCAVE envelope, which turns the
+    % min into a max). The linear part passes straight through.
+    %
+    % The two affine pieces meet on a DIAGONAL of the box -- the anti-diagonal (xl,yu)-(xu,yl)
+    % when b > 0, the main diagonal (xl,yl)-(xu,yu) when b < 0 -- which is checked below rather
+    % than assumed, since it is what makes the result representable as two triangular faces.
+    %
+    % WHY SHORT-CIRCUIT IT. Nothing is gained by deriving a known closed form the long way: this
+    % input took 40-63 s through triangulate -> per-piece conjugate -> Step 3 -> second
+    % conjugation, and it is the one shape where the answer has been in the literature since
+    % Al-Khayyal & Falk (1983). It also returns a MESHED QuaPol rather than the QuaParCPLQ with
+    % no mesh that the long route produces, which is what a consumer can actually read.
+    %
+    % This does NOT help the SCIP spike -- SCIP already applies McCormick on box domains, so CCA2
+    % was only ever reimplementing it there (SUPPORT_MATRIX.md 0.0.1). It helps a CCA2 user.
+    hMc = mccormickEnvelope(obj);
+    if ~isempty(hMc)
+        h = hMc;
+        return
+    end
+
     % ---- Case B: a single bounded TRIANGLE -> Step 1's convex envelope ----------------------
     % THE TRIANGLE RESTRICTION IS REAL, and widening it to "any bounded piece" was tried and
     % REVERTED on 2026-08-18. convEnvCPLQ's classification is by Hessian: PSD is convex and
@@ -276,4 +302,58 @@ function [a2, d2, k2] = oned(a, d, l, h)
         m = (phiH - phiL)/(h - l);          % the CHORD: a concave function's envelope
         a2 = 0; d2 = m; k2 = phiL - m*l;
     end
+end
+
+% ------------------------------------------------------------------------------------------------
+function h = mccormickEnvelope(obj)
+% The convex envelope of a BILINEAR function over an axis-aligned BOX, as a two-face QuaPol.
+% Empty when the hypothesis does not hold, and the caller falls through to the general path.
+    h = [];
+    try
+        if obj.nf ~= 1 || obj.nv ~= 4 || obj.ne ~= 4, return, end
+        if ~obj.isDomBounded, return, end
+        if any(obj.Ec(:) ~= 0), return, end            % a curved edge: not a box
+        c = obj.f(1,:);
+        if any(abs(c(1:4)) > sqrt(eps)), return, end   % genuinely cubic
+        if abs(c(5)) > sqrt(eps) || abs(c(7)) > sqrt(eps)
+            return                                     % has x^2 or y^2: not bilinear
+        end
+        b = c(6);
+        if abs(b) <= sqrt(eps), return, end            % no cross term: separable, handled above
+        d = c(8); e = c(9); k0 = c(10);
+    catch
+        return
+    end
+
+    V0 = obj.V;
+    xs = unique(round(V0(:,1), 12));
+    ys = unique(round(V0(:,2), 12));
+    if numel(xs) ~= 2 || numel(ys) ~= 2 || size(V0,1) ~= 4, return, end
+    for i = 1:4
+        if ~any(abs(V0(i,1) - xs) < 1e-12) || ~any(abs(V0(i,2) - ys) < 1e-12), return, end
+    end
+    xl = min(xs); xu = max(xs); yl = min(ys); yu = max(ys);
+    if xu - xl <= 1e-12 || yu - yl <= 1e-12, return, end
+
+    % Corners counter-clockwise, so that "face on the left of each directed edge" holds.
+    V = [xl yl; xu yl; xu yu; xl yu];
+
+    if b > 0
+        % pieces  A = b(xl*y + yl*x - xl*yl)   and   B = b(xu*y + yu*x - xu*yu),
+        % meeting on the ANTI-diagonal V2-V4. A wins on the corner (xl,yl), B on (xu,yu).
+        fA = [0 0 0 b*yl + d, b*xl + e, k0 - b*xl*yl];
+        fB = [0 0 0 b*yu + d, b*xu + e, k0 - b*xu*yu];
+        E = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 2 4 1];
+        F = [1 0; 2 0; 2 0; 1 0; 1 2];
+        fc = [fA; fB];
+    else
+        % pieces  A = b(xu*y + yl*x - xu*yl)   and   B = b(xl*y + yu*x - xl*yu),
+        % meeting on the MAIN diagonal V1-V3. A wins on the corner (xu,yl), B on (xl,yu).
+        fA = [0 0 0 b*yl + d, b*xu + e, k0 - b*xu*yl];
+        fB = [0 0 0 b*yu + d, b*xl + e, k0 - b*xl*yu];
+        E = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
+        F = [1 0; 1 0; 2 0; 2 0; 2 1];
+        fc = [fA; fB];
+    end
+    h = QuaPol(V, E, fc, F);
 end
