@@ -25,6 +25,30 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (evening) — REVERTED: closed-form NORMAL CONES. solve()'s root ORDER is not reproducible.
+
+- **Tried:** `region.solveForY`, a closed-form replacement for the ten
+  `ey = subs(ineq, x, px); py = solve(ey, y)` pairs in `getNormalConeVertexQ` and
+  `getNormalConeEdgeQ0`. Fixing `x = px` turns a conic into a quadratic in `y`, so the roots are
+  the quadratic formula. Eight sites converted cleanly and the algebra is right.
+- **Why it was reverted, and it is NOT the mathematics:** the callers take **`py(1)`** as a probe
+  point, test it with `ptFeasible`, and if it fails flip `px` to the other side -- they never try
+  the OTHER root. So which root comes first changes the probe point, and can change the cone.
+- **`solve()`'s ordering cannot be reproduced.** Measured against it on six conics:
+
+        (x+y)^2 - 4x  at x = 1   solve gives  [-3 ; 1]                   ASCENDING
+        x^2 + y^2 - 4 at x = 1   solve gives  [3^(1/2) ; -3^(1/2)]       DESCENDING
+
+  Sorting ascending fixes the first and breaks the second. It is an internal MuPAD convention,
+  not a rule to reimplement.
+- **What would make it safe**, and is the right fix when this is next picked up: make the callers
+  order-INDEPENDENT -- try both roots and keep whichever is feasible, instead of taking `py(1)`
+  and flipping `px`. That is strictly more robust than today's behaviour, but it CHANGES
+  behaviour, so it needs the slow bucket, where `conjCPLQTest` and `testMaxMultiRegion` exercise
+  the curved normal-cone paths.
+- **Do not retry without the slow bucket.** Fast and normal do not cover those paths, so they
+  would have passed either way -- which is exactly how a silent geometry regression gets in.
+
 ## 2026-08-18 (measurement) — `noSharedFacet` is MOSTLY HONEST; the open question moved to `unionIsExact`
 
 `.claude/step3adjacency.m` with `CCA2_ADJ_FOLDS=3`, on the A.4/A.5 quadrilateral -- 137
