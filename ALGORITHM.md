@@ -45,17 +45,17 @@ Hessian: the PSD branch returns `q` over any convex `P`, but the negative-semide
 INDEFINITE branches are stated for a TRIANGLE and raise `convEnvCPLQ:notImplemented` otherwise.
 Widening was tried on 2026-08-18 and turned all four bilinear box rows into that error.
 
-Steps 1 and 3 are the same short-circuit at two scales. **Both already exist inside Step 1** —
-`convEnvCPLQ` returns `q` unchanged as soon as the Hessian is positive semidefinite. The problem
-was never that the check was missing; it was that `biconj` only reached Step 1 when the domain
-was a TRIANGLE (`nf==1 && nv==3 && ne==3`), and a box has `nv == 4`, so it fell through to the
-double conjugation.
+Cases 1 and 4 are the same short-circuit at two scales, and the convex half of it **already
+existed inside Step 1** — `convEnvCPLQ` returns `q` unchanged as soon as the Hessian is positive
+semidefinite. The problem was never that the check was missing; it was that `biconj` only reached
+Step 1 for a TRIANGLE, so a box (`nv == 4`) fell through to the double conjugation. Case 1 now
+catches it before the dispatch, without calling Step 1 at all.
 
-Step 0 matters more than it looks. `biconjugateTest` hands the unit square in as two triangles
-sharing a diagonal; merged, it is one face, case 3 applies, and the piece-coupling that forces
-case 4 disappears.
+Step 0 matters more than it looks, and is the one piece not yet built. `biconjugateTest` hands the
+unit square in as two triangles sharing a diagonal; merged, it is one face, cases 1–3 become
+reachable, and the piece-coupling that forces case 5 disappears.
 
-Case 4 is genuinely needed only when the envelope COUPLES several pieces — the convex hull of a
+Case 5 is genuinely needed only when the envelope COUPLES several pieces — the convex hull of a
 union is not determined piecewise.
 
 ---
