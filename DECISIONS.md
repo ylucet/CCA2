@@ -25,6 +25,24 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (last) — the parallelogram's "remaining 1%" was MY REFERENCE, not the code
+
+Piece 9 of `f*` for `x*y` over `conv{(0,0),(2,0),(2.5,1),(0.5,1)}` is EXACT at all ten probe
+points, one cell each -- `BAD 0 of 10`. The singular-quadratic overlap at `(1/2,1/4)` was the only
+real defect, and `functionNDomain.singularEdgeCut` closed it.
+
+**The three points I reported as a lingering ~1% over-claim were a broken reference.** The
+brute-force sup was a grid over the piece, and for this piece the sup is attained AT A VERTEX --
+`(1/4, 7/8)`, on the conic. A grid never lands there, so it reported `2.840439` where the true sup
+is `2.875`, and the correct vertex cone read as over-claiming by 1%. Adding the exact vertices to
+the candidate set makes all ten agree.
+
+**The reusable part: a grid is not a reference for a sup that a VERTEX attains.** Every conjugate
+in this codebase is a sup of an affine form, so its maximiser is at an extreme point far more
+often than not -- put the region's own vertices in the reference before reading any disagreement
+as a defect. This is the second time in one session that a measurement artefact was reported as a
+code defect (the first is the correction entry about unmeasured Step 3 numbers).
+
 ## 2026-08-18 (later) — that revert was WRONG: the code was fine, the methods were in the wrong block
 
 **Overturns the entry below, and the mistake is worth more than the fix.** The vertex-plus-arc-

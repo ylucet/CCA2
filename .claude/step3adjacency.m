@@ -24,8 +24,16 @@ end
 for i = 1:p.nPieces
     p.pieces(i) = p.pieces(i).convexEnvelope.conjugate.maximumConjugate;
 end
-acc = p.pieces(1).maxConjugate * p.pieces(2).maxConjugate;
-acc = acc.maximumP(true);
+% CCA2_ADJ_FOLDS folds this many pieces in before classifying (default 1). The interesting
+% `noSharedFacet` counts are at the DEEPER folds -- 346 at fold 3, 819 at fold 5 -- and a fold-1
+% reading says nothing about them.
+nFold = str2double(getenv('CCA2_ADJ_FOLDS'));
+if isnan(nFold) || nFold < 1, nFold = 1; end
+acc = p.pieces(1).maxConjugate;
+for kf = 2:min(p.nPieces, 1+nFold)
+    acc = acc * p.pieces(kf).maxConjugate;
+    acc = acc.maximumP(true);
+end
 n = numel(acc);
 grp = zeros(1,n); g = 0;
 for i = 1:n
