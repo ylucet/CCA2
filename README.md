@@ -33,10 +33,15 @@ branches. They are assertions, not missing features. `SUPPORT_MATRIX.md` classif
 
 **Alpha — not yet released.** The API is still changing; there is no tagged version.
 
-Test suite (measured 2026-08-16): **332 passed / 0 failed** across 26 suites — fast bucket 206 / 0,
-normal 11 / 0, slow 115 / 0. Run everything with `bash .claude/suite.sh` (or `--fast` / `--normal`
-/ `--slow`). The last red — `biconjugateTest/biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, the
-open §7 defect — closed on 2026-08-15.
+Test suite (measured 2026-08-18): **332 passed / 0 failed** across 26 suites — fast bucket 206 / 0,
+normal 11 / 0, slow 115 / 0, no timeouts. Run everything with `bash .claude/suite.sh` (or `--fast`
+/ `--normal` / `--slow`). The slow bucket is about 113 minutes: it runs the Symbolic Math Toolbox
+pipeline, and a correct-but-slow path belongs in it rather than being traded away.
+
+A general convex quadrilateral is now **exact by default** — the A.4/A.5 domain split became the
+default on 2026-08-18, with `CCA2_NO_A45_SPLIT` to opt out. It used to raise
+`MATLAB:badsubscript`, because the vendored Step 1 returned a convex MINORANT rather than the
+ENVELOPE and had no branch at all for a 3-convex-edge triangle.
 
 Before depending on CCA2, read `SUPPORT_MATRIX.md` §8 — the summary of what actually blocks a
 general release. The largest gaps today: `partialConj` is unimplemented for every engine; the

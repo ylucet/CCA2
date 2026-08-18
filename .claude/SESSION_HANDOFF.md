@@ -1,41 +1,53 @@
 # Session Handoff
 
-_Last updated: 2026-08-17_
+_Last updated: 2026-08-18_
 
 ## What happened this session
 
-**Option (a) was chosen and worked on: the A.4/A.5 split stays opt-in, Step 3's cost is the job.**
-The standing rule the user attached to it outranks the flag and settles the whole class of
-question: **every computation has to be CORRECT even if it is slow -- a slow correct path gets its
-test moved to a slower bucket, never traded away -- with the one exception of a computation so slow
-it does not finish, since a timeout helps nobody.**
+**The A.4/A.5 split is ON BY DEFAULT.** Both objections that kept it opt-in are gone, measured:
+`testcPLQ` runs **8 passed / 0 failed in 2188-2273 s** against 4728 s and one ERROR, with
+`testRectBiconj` among the eight -- that exception was a casualty of the double leaks, and nothing
+in the test or the split was changed to fix it. `CCA2_NO_A45_SPLIT` opts out.
 
-**THREE double leaks found and fixed; Step 2 is now exact end to end.** `domain.mE`/`cE` were
-DOUBLE arrays (an exact slope arrived as `0.6`, an exact zero y-intercept as `-9.06e-72`);
-`region.limitOfFAtVertices` let its `limf(j) = 0` branch decide the array's class, silently
-rounding every exact gradient limit written after it; and `conjConvexOverPiece` converted `Q, L, c`
-and the piece's vertices to double by design. Worst denominator in the quadrilateral's conjugate
-cells: **1.4e145 -> 56**.
+**STEP 2 IS NOW EXACT, and that was the session's real find.** Three separate places turned exact
+values into doubles, each because an array's CLASS was decided by whichever branch wrote to it
+first, or by a deliberate conversion: `domain.mE`/`cE`, `region.limitOfFAtVertices` (with
+`functionNDomain.limitOfGradientAtVertices`), and `plq_1p.quadPartsOf` + `conjConvexOverPiece`.
+Worst denominator in the quadrilateral's conjugate cells: **1.4e145 -> 56**. One of them was
+returning a y-intercept of `-9.06e-72` where the exact answer is `0`, so this was a WRONG VALUE and
+not only an expensive one.
 
-**And the blow-up is now COUNTED rather than guessed -- which twice refuted what this session
-believed.** Exactness turned out not to be what blocks merging, and "nothing merges" was the wrong
-framing: of 38 same-function pairs, 21 meet only at a POINT and must not merge, so most refusals
-were always correct. What is left is small and splits evenly in two, both measured. See
-"Next steps" 1 and 2, and `DECISIONS.md`'s newest three entries for the two retractions.
+**Step 3's assembly: 86 cells / 73 min -> 60 cells / 43 min.** What did it: the exactness above
+(two cells sharing a facet were carrying two doubles of the same number, ONE ULP APART, so
+`merge` could not see the facet at all); `region.certifiesNonPositive`, a sound closed-form
+certificate for a curved constraint, replacing merge's two quadratic HEURISTICS; and `quadprog`
+deciding the CONCAVE conics, which is what these conics actually are.
 
-**332 pass / 0 fail** -- fast 206, normal 11, slow 115 -- with everything above in.
+**The singular-quadratic overlap is closed.** `functionNDomain.singularEdgeCut` -- the KKT
+multiplier, affine in s, no inversion of Q -- where `getInterior`'s elimination returned the
+gradient map's image LINE, which separates nothing. Piece 9 at `(1/2,1/4)`: 2 overlapping cells
+answering 0.00195 -> 1 cell answering 0.03846, against a sup of 0.03845. Pinned by test.
+
+**332 pass / 0 fail** -- fast 206, normal 11, slow 115, no timeouts -- with all of it in.
+
+**TWO THINGS TO READ BEFORE TRUSTING ANYTHING HERE.** A `DECISIONS.md` entry records that an
+earlier commit in this session reported Step 3 numbers that were never measured; the correction
+is committed. And a second entry records a REVERTED attempt at the largest remaining gate -- read
+it before retrying that.
 
 ## Where things stand
 
-- Branch: `main` @ `4e23b0d` — the Step 3 measurement work above
+- Branch: `main` @ `6b67838` — the default flip; nine commits, none pushed
 - Pushed: NO -- six commits sit on local `main`, unpushed (pushing was never asked for)
-- **332 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 11 / 0, slow **115 / 0**, every
-  suite at its historical runtime.
-- The parallelogram's `biconj` computes: exact at all four vertices, `+inf` outside the domain,
-  8 of 10 interior probe points right against a brute-force double conjugate. The other two are
-  about 4% LOW — see "Next steps" 2.
-- The general quadrilateral raises `MATLAB:badsubscript` by DEFAULT and is exact with
-  `CCA2_A45_SPLIT` set (10 of 10 probe points, and 8 of 8 through the full assembly).
+- **332 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 11 / 0, slow **115 / 0**, no
+  timeouts, with the A.4/A.5 split ON. The slow bucket is now about 113 minutes (was ~92): the
+  split makes `testcPLQ` 2188 s where it was 1274 s. That is the bucket cost the standing rule
+  says to accept.
+- The parallelogram's piece 9 no longer double-covers `(1/2,1/4)`; 4 of 10 probe points wrong or
+  double-covered, down from 4 with an overlap among them. The three that remain are a DIFFERENT
+  defect — a vertex cone over-claiming by about 1% — not the singular quadratic.
+- The general quadrilateral is exact BY DEFAULT now (10 of 10 probe points, 8 of 8 through the
+  full assembly). It used to raise `MATLAB:badsubscript`.
 
 ## Next steps
 
