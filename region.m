@@ -141,6 +141,63 @@ classdef region
              l = true;
          end
 
+         function [Q, L, c, ok] = quadraticParts (sf, vars)
+         % Q, L, c with sf = 1/2 z'Qz + L'z + c, read by differentiation. ok is false for
+         % anything that is not a polynomial of degree at most two.
+             Q = zeros(2); L = zeros(2,1); c = 0; ok = false;
+             if ~sf.isPolynomial, return, end
+             try
+                 Qs = hessian(sf.f, vars);
+                 if any(has(Qs(:), vars)), return, end
+                 Q = double(Qs);
+                 L = double(subs(gradient(sf.f, vars), vars, [0 0]));
+                 L = L(:);
+                 c = double(subs(sf.f, vars, [0 0]));
+             catch
+                 return
+             end
+             if any(~isfinite([Q(:); L(:); c])), return, end
+             Q = (Q + Q')/2;
+             ok = true;
+         end
+
+         function pts = lineMeetsConic (aLin, bLin, Q, L, c)
+         % The points of {1/2 z'Qz + L'z + c = 0} on the line {aLin*z = bLin}: at most two, in
+         % closed form. Empty when the line is degenerate or the intersection is not real.
+             pts = zeros(0,2);
+             if norm(aLin) <= 1.0d-12
+                 return
+             end
+             % Parameterise the line as p0 + t*dir.
+             if abs(aLin(1)) >= abs(aLin(2))
+                 p0 = [bLin/aLin(1), 0];
+             else
+                 p0 = [0, bLin/aLin(2)];
+             end
+             dir = [-aLin(2), aLin(1)];
+             dir = dir / norm(dir);
+             % 1/2 (p0+t d)'Q(p0+t d) + L'(p0+t d) + c = 0
+             aq = 0.5 * (dir * Q * dir.');
+             bq = dir * (Q * p0.') + dir * L;
+             cq = 0.5 * (p0 * Q * p0.') + L.' * p0.' + c;
+             if abs(aq) <= 1.0d-14 * max(1, abs(bq))
+                 if abs(bq) <= 1.0d-14
+                     return
+                 end
+                 ts = -cq / bq;
+             else
+                 disc = bq^2 - 4*aq*cq;
+                 if disc < 0
+                     return
+                 end
+                 sq = sqrt(disc);
+                 ts = [(-bq + sq)/(2*aq), (-bq - sq)/(2*aq)];
+             end
+             for t = ts
+                 pts(end+1,:) = p0 + t*dir; %#ok<AGROW>
+             end
+         end
+
          function out = mergeTally (reason)
          % INSTRUMENTATION for Step 3's cell blow-up. `region.merge` is what is supposed to
          % collapse adjacent same-valued cells; when it refuses, the cell count grows and
@@ -1959,6 +2016,122 @@ classdef region
             end
         end
 
+        function tf = holdsOn (objA, Ac, bc)
+        % Does every affine constraint Ac(i,:)*z <= bc(i) hold at every point of THIS region?
+        % Same question region.impliedBy answers, asked over the region ITSELF rather than over
+        % its linear relaxation, so a conic facet no longer costs a merge that is genuinely sound.
+        % Answers false whenever it cannot prove true.
+            tf = false;
+            for i = 1:size(Ac,1)
+                [val, st] = objA.maxAffineOverRegion(Ac(i,:));
+                if st == -1
+                    tf = true;      % the region is empty: nothing left to violate anything
+                    return
+                end
+                if st ~= 0
+                    return          % unbounded above, or undecided: no certificate
+                end
+                if val > bc(i) + 1.0d-9 * max(1, abs(bc(i)))
+                    return
+                end
+            end
+            tf = true;
+        end
+
+        function [val, st] = maxAffineOverRegion (objA, cRow)
+        % max of the affine form cRow*[v1;v2] over THIS region, as an upper bound that is EXACT
+        % when the region is bounded. st follows region.maxLinear: 0 decided, 1 unbounded above,
+        % -1 the region is empty, 2 undecided.
+        %
+        % WHY IT IS NOT JUST THE LP. unionIsExact asks "does every constraint of B' hold on A",
+        % and for an affine constraint that has always been an LP over A's LINEAR RELAXATION --
+        % A's curved facets dropped. The relaxation is a SUPERSET, so the answer is sound, but it
+        % is conservative exactly when a conic facet is what would have cut the violating part
+        % away. MEASURED 2026-08-17 on the A.4/A.5 quadrilateral: that conservatism
+        % (`quadFacet_exactAnotInB`) refused 98 of fold 5's merge attempts and 63 of fold 3's,
+        % the largest NAMED gate left once the arithmetic was exact.
+        %
+        % THE EXACT ANSWER, and why these candidates are all of them. A linear form on a compact
+        % set attains its max on the boundary. This class's boundary is straight edges between
+        % vertices, and conic ARCS. On a straight edge the max sits at an endpoint -- a vertex.
+        % On an arc it sits at an endpoint (again a vertex) or at an interior point where the
+        % arc's tangent is perpendicular to cRow, i.e. where grad h is PARALLEL to cRow. That
+        % parallel condition is LINEAR in the point, so intersecting it with the conic is a line
+        % meeting a conic: at most two points, in closed form. Vertices plus those points
+        % therefore cover every candidate, and the largest feasible one IS the max.
+        %
+        % UNBOUNDED REGIONS keep the LP answer. The argument above needs a compact boundary, and
+        % an unbounded region's max may be approached along a ray rather than attained; the LP
+        % over the relaxation is still a sound upper bound, so nothing is lost but tightness.
+            [A, b, lin] = objA.linearForm;
+            [val, st] = region.maxLinear(A(lin,:), b(lin), cRow);
+            if st ~= 0
+                return                              % empty, unbounded or undecided: as before
+            end
+            if all(lin)
+                return                              % polyhedral: the LP is already exact
+            end
+            % Every vertex must be a finite point for the compactness argument to apply.
+            for j = 1:objA.nv
+                if abs(objA.vx(j)) == intmax || abs(objA.vy(j)) == intmax
+                    return
+                end
+            end
+            if objA.nv == 0
+                return
+            end
+
+            cand = zeros(0,2);
+            for j = 1:objA.nv
+                try
+                    cand(end+1,:) = [double(objA.vx(j)), double(objA.vy(j))]; %#ok<AGROW>
+                catch
+                    return                          % a vertex we cannot place: keep the LP bound
+                end
+            end
+
+            vars = objA.vars;
+            for k = 1:size(objA.ineqs,2)
+                if lin(k), continue, end
+                [Qh, Lh, ch, okh] = region.quadraticParts(objA.ineqs(k), vars);
+                if ~okh
+                    return                          % not a conic: outside the argument
+                end
+                % grad h = Qh*z + Lh, parallel to cRow  <=>  cRow(2)*gx - cRow(1)*gy = 0,
+                % which is affine in z; intersect that line with {h = 0}.
+                w = [cRow(2), -cRow(1)];
+                aLin = w * Qh;                      % aLin*z + w*Lh = 0
+                bLin = -(w * Lh);
+                pts = region.lineMeetsConic(aLin, bLin, Qh, Lh, ch);
+                if isempty(pts) && any(abs(aLin) > 0)
+                    continue                        % no tangency on this conic: nothing to add
+                end
+                cand = [cand; pts]; %#ok<AGROW>
+            end
+
+            % Keep only the candidates the region actually admits, conics included.
+            tolF = 1.0d-7 * max(1, max(abs([A(:); b(:)])));
+            best = -inf;
+            for t = 1:size(cand,1)
+                z = cand(t,:);
+                if any(~isfinite(z)), continue, end
+                ok = true;
+                for k = 1:size(objA.ineqs,2)
+                    try
+                        gv = double(subs(objA.ineqs(k).f, vars, z));
+                    catch
+                        ok = false; break
+                    end
+                    if ~isfinite(gv) || gv > tolF, ok = false; break, end
+                end
+                if ~ok, continue, end
+                best = max(best, cRow(:).' * z(:));
+            end
+            if isfinite(best) && best <= val
+                val = best;                         % the exact max, never above the LP bound
+            end
+        end
+
         function [tf, why] = certifiesNonPositive (objP, h)
         % A SOUND yes/unknown answer to "does h <= 0 hold everywhere on objP?", for an h that is
         % NOT affine. `false` means "not certified" and never "false" -- every uncertain answer
@@ -2172,7 +2345,7 @@ classdef region
             % certificate. A curved constraint used to refuse outright here; that refusal is
             % what merge's two quadratic heuristics were standing in for.
             why = 'exactAnotInB';
-            if ~region.impliedBy(AB(keepB & linB,:), bB(keepB & linB), AA(linA,:), bA(linA))
+            if ~objA.holdsOn(AB(keepB & linB,:), bB(keepB & linB))
                 return
             end
             for j = find(keepB & ~linB)
@@ -2183,7 +2356,7 @@ classdef region
                 end
             end
             why = 'exactBnotInA';
-            if ~region.impliedBy(AA(keepA & linA,:), bA(keepA & linA), AB(linB,:), bB(linB))
+            if ~objB.holdsOn(AA(keepA & linA,:), bA(keepA & linA))
                 return
             end
             for i = find(keepA & ~linA)

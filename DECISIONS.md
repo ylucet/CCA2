@@ -25,6 +25,34 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (later) — that revert was WRONG: the code was fine, the methods were in the wrong block
+
+**Overturns the entry below, and the mistake is worth more than the fix.** The vertex-plus-arc-
+tangency maximum was reverted after `testfunctionNDomain/testMerge` and
+`cplqAdapterTest/twoTriangleSquareMaxMatchesNumericSup` went red, and it was written up as a
+soundness failure with a guess about redundant conic facets. It was neither. The actual error:
+
+    The class region has no Constant property or Static method named 'quadraticParts'.
+
+`quadraticParts` and `lineMeetsConic` were appended next to `maxAffineOverRegion`, an INSTANCE
+method, and then called as `region.quadraticParts(...)`. Moving them into the `methods (Static)`
+block is the whole fix. `testMerge` has no assertions, so its "failure" was that exception --
+which a single look at the report would have said, and which cost a revert instead.
+
+**The lesson, and it is the reusable part: READ THE ERROR BEFORE THEORISING ABOUT THE MATH.** A
+red test in this codebase is as likely to be a MATLAB scoping rule as a defect in the geometry,
+and the report says which. The `unionIsExact` gate is soundness-critical, which is exactly why the
+temptation was to assume the deep explanation.
+
+**Measured with it back in**, same three folds of the A.4/A.5 quadrilateral:
+
+    fold 3 cells                38 -> 36
+    quadFacet_exactAnotInB      63 -> 41
+    merges at fold 3             7 -> 9
+    TOTAL                      828 -> 804 s
+
+Green: fast 206/0, normal 11/0, testfunctionNDomain + regionTest 17/0, cplqAdapterTest 4/0.
+
 ## 2026-08-18 — the A.4/A.5 split is now the DEFAULT
 
 Both objections recorded on 2026-08-16 are gone, measured:
@@ -41,7 +69,7 @@ flip alone: fast 206/0, normal 11/0 in 230 s.
 `plq_1p.appendTriangle` now gates on `CCA2_NO_A45_SPLIT` (opt OUT); `CCA2_A45_SPLIT` is still
 honoured so the two quadrilateral tests that set it keep working.
 
-## 2026-08-18 — REVERTED: an exact max over a region with a CURVED facet, for unionIsExact
+## ~~2026-08-18 — REVERTED: an exact max over a region with a CURVED facet, for unionIsExact~~ (OVERTURNED, see below)
 
 - **Tried:** replacing `region.impliedBy`'s LP-over-the-linear-relaxation with an exact maximum
   over the region itself (`maxAffineOverRegion` + `holdsOn`). The relaxation drops a conic facet,
