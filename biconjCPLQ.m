@@ -71,6 +71,28 @@ function h = biconjCPLQ(obj)
         return
     end
 
+    % ---- f SEPARABLE over a BOX -> one 1-D envelope per axis, no conjugation at all ---------
+    % The convex envelope passes through a separable sum on a product domain:
+    %       f = f1(x) + f2(y) + c  on  X x Y   =>   co f = co(f1 + I_X) + co(f2 + I_Y) + c,
+    % which follows from conjugating twice -- (f1 (+) f2)* = f1* (+) f2*, applied to f and then
+    % to f* -- and needs the domain to be a PRODUCT so the two suprema share no constraint.
+    %
+    % Each 1-D envelope is immediate: a quadratic with a >= 0 is already convex on the interval
+    % and is its own envelope; with a < 0 it is concave, so its envelope is the CHORD through the
+    % two endpoint values. No conjugation, no cells, no Step 3.
+    %
+    % WHY THIS IS SEPARATE FROM THE CONVEXITY SHORT-CIRCUIT ABOVE: it catches the INDEFINITE
+    % diagonal, which is not convex and so never reaches that branch. f = x^2 - y^2 over the unit
+    % box has co f = x^2 - y, and cost 29 s to reach through conj-of-conj -- the first conjugation
+    % took the separable route in about 2 s and the second, whose domain is the whole plane and
+    % therefore not a box, did not.
+    [okSep, envCoef] = separableEnvelopeCoefs(obj);
+    if okSep
+        h = obj;
+        h.f = envCoef;
+        return
+    end
+
     % ---- Case B: a single bounded TRIANGLE -> Step 1's convex envelope ----------------------
     % THE TRIANGLE RESTRICTION IS REAL, and widening it to "any bounded piece" was tried and
     % REVERTED on 2026-08-18. convEnvCPLQ's classification is by Hessian: PSD is convex and
@@ -197,4 +219,61 @@ function [tf, readable] = everyPieceConvex(obj)
         return
     end
     tf = true; readable = true;
+end
+
+% ------------------------------------------------------------------------------------------------
+function [ok, coefs] = separableEnvelopeCoefs(obj)
+% The convex envelope of a SEPARABLE quadratic over an axis-aligned BOX, as a coefficient row in
+% this class's own cubic basis. ok is false whenever the hypothesis does not hold, and the caller
+% falls through to the general path.
+%
+% The basis, from RatPar's weight vector [1/6 1/2 1/2 1/6 1/2 1 1/2 1 1 1]: columns 5..10 give
+%       f = c5/2 * x^2 + c6 * x*y + c7/2 * y^2 + c8 * x + c9 * y + c10.
+    ok = false; coefs = [];
+    try
+        if obj.nf ~= 1 || obj.nv ~= 4 || obj.ne ~= 4, return, end
+        if ~obj.isDomBounded, return, end
+        if any(obj.Ec(:) ~= 0), return, end        % a curved edge: not a box
+        c = obj.f(1,:);
+        if any(abs(c(1:4)) > sqrt(eps)), return, end   % genuinely cubic
+        if abs(c(6)) > sqrt(eps), return, end          % a CROSS TERM: not separable
+    catch
+        return
+    end
+
+    % THE DOMAIN MUST BE A BOX: four vertices at the corners of an axis-aligned rectangle.
+    V = obj.V;
+    xs = unique(round(V(:,1), 12));
+    ys = unique(round(V(:,2), 12));
+    if numel(xs) ~= 2 || numel(ys) ~= 2, return, end
+    if size(V,1) ~= 4, return, end
+    for i = 1:4
+        if ~any(abs(V(i,1) - xs) < 1e-12) || ~any(abs(V(i,2) - ys) < 1e-12), return, end
+    end
+    lo = [min(xs), min(ys)]; hi = [max(xs), max(ys)];
+
+    ax = c(5)/2; ay = c(7)/2; dx = c(8); dy = c(9); k0 = c(10);
+    [ax2, dx2, kx] = oned(ax, dx, lo(1), hi(1));
+    [ay2, dy2, ky] = oned(ay, dy, lo(2), hi(2));
+
+    coefs = zeros(1,10);
+    coefs(5)  = 2*ax2;
+    coefs(7)  = 2*ay2;
+    coefs(8)  = dx2;
+    coefs(9)  = dy2;
+    coefs(10) = k0 + kx + ky;
+    ok = true;
+end
+
+% ------------------------------------------------------------------------------------------------
+function [a2, d2, k2] = oned(a, d, l, h)
+% The convex envelope of a*t^2 + d*t on [l,h], returned as a2*t^2 + d2*t + k2.
+    if a >= -sqrt(eps)
+        a2 = a; d2 = d; k2 = 0;             % already convex on the interval
+    else
+        phiL = a*l^2 + d*l;
+        phiH = a*h^2 + d*h;
+        m = (phiH - phiL)/(h - l);          % the CHORD: a concave function's envelope
+        a2 = 0; d2 = m; k2 = phiL - m*l;
+    end
 end
