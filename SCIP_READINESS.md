@@ -222,3 +222,36 @@ Cells grow 12 -> 23 (1.9x) while the engine calls grow 3.2-3.7x and `merge` call
    succeed, and each one constructs geometry.
 
 Only after those is the O(n^2) pair count itself worth attacking.
+
+
+### The ptFeasible numeric filter, measured (2026-08-18)
+
+Implemented and re-profiled on the same two folds. **Counts are the measurement**; the machine was
+contended in both runs, so the wall-clock column is indicative only.
+
+    fold 2 (23 cells)        before      after     change
+    subs                      11803       9445      -20%
+    isAlways                  11793       8683      -26%
+    ptFeasible own time        40.7 s     32.2 s     -21%
+    maximumP total            199.8 s    195.9 s      -2%
+    fold wall time              289 s      280 s      -3%
+
+    fold 1 (12 cells)
+    subs                       3215       2512      -22%
+    isAlways                   3664       2657      -27%
+
+**It works, and it is smaller than hoped.** The filter removes a fifth of the substitutions and a
+quarter of the `isAlways` calls, exactly where predicted -- but `ptFeasible` was only 20% of the
+fold, so cutting it by 21% moves the fold by ~4%, which is inside contention noise. Kept, because
+the call-count reduction is real, machine-independent and sound; not claimed as a speed-up.
+
+**What the same profile now says to do next**, fold 2, after the filter:
+
+    getVertices     125.6 s     (still 700 solve calls -- untouched by the filter)
+    region ctor      84.3 s
+    merge            66.1 s
+    subsF            61.2 s  (4471 calls)
+
+`getVertices` is the target. Its affine x affine pair is already a determinant; affine x conic and
+conic x conic still call `solve` 700 times per fold, and both have textbook closed forms -- the
+line substituted into the conic gives a quadratic in one variable.

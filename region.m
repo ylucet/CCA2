@@ -198,6 +198,59 @@ classdef region
              end
          end
 
+         function [C, ok] = monomialCoefs (g, vars)
+         % Coefficients of each entry of the sym row `g` in the basis [1 x y x^2 xy y^2], as a
+         % numeric matrix, or ok = false when some entry is not a quadratic polynomial.
+         %
+         % CACHED on the expression text, because the caller (ptFeasible) is invoked many times
+         % per region and the extraction costs six substitutions. The cache is keyed by char(g)
+         % together with the variable names, so two regions with the same constraints share it
+         % and two with different variables never collide.
+             persistent memo
+             if isempty(memo), memo = containers.Map('KeyType','char','ValueType','any'); end
+             C = []; ok = false;
+             try
+                 key = [char(g) '|' char(vars(1)) ',' char(vars(2))];
+             catch
+                 return
+             end
+             if isKey(memo, key)
+                 rec = memo(key); C = rec.C; ok = rec.ok; return
+             end
+
+             try
+                 P = [0 0; 1 0; 0 1; 1 1; 2 1; 1 2];      % six probe points
+                 M = [ones(6,1), P(:,1), P(:,2), P(:,1).^2, P(:,1).*P(:,2), P(:,2).^2];
+                 if rcond(M) < 1.0d-10
+                     memo(key) = struct('C',[],'ok',false); return
+                 end
+                 V = zeros(6, numel(g));
+                 for k = 1:6
+                     V(k,:) = double(subs(g, vars, P(k,:)));
+                 end
+                 if any(~isfinite(V(:)))
+                     memo(key) = struct('C',[],'ok',false); return
+                 end
+                 Cc = (M \ V).';                          % one row of coefficients per constraint
+                 % CONFIRM rather than assume: a rational or cubic entry fits the quadratic basis
+                 % badly, and reconstructing at two further points catches that.
+                 Q = [0.37 -0.21; -1.3 0.77];
+                 for t = 1:2
+                     q = Q(t,:);
+                     mq = [1, q(1), q(2), q(1)^2, q(1)*q(2), q(2)^2];
+                     want = double(subs(g, vars, q));
+                     got  = (Cc * mq.').';
+                     if any(~isfinite(want)) || max(abs(got - want)) > 1.0d-9 * max(1, max(abs(want)))
+                         memo(key) = struct('C',[],'ok',false); return
+                     end
+                 end
+                 C = Cc; ok = true;
+             catch
+                 C = []; ok = false;
+             end
+             memo(key) = struct('C',C,'ok',ok);
+         end
+
          function out = mergeTally (reason)
          % INSTRUMENTATION for Step 3's cell blow-up. `region.merge` is what is supposed to
          % collapse adjacent same-valued cells; when it refuses, the cell count grows and
@@ -3282,11 +3335,60 @@ classdef region
          % are now evaluated even when the first already fails. That is a strictly better trade
          % here: n is small (a handful of constraints) and one batched round trip beats even a
          % single unbatched one.
+        % NUMERIC FILTER, added 2026-08-18 after profiling one Step 3 fold. `subs` is the single
+        % largest engine cost in the whole assembly -- 11803 calls and 85 s of a 200 s fold, at
+        % ~7 ms of interprocess overhead each -- and this routine is 3538 of those calls.
+        %
+        % What it asks is only a SIGN: is any constraint strictly positive at the point. So
+        % evaluate the constraints in DOUBLE precision first, and take the symbolic path only
+        % when the numeric answer is too close to zero to be trusted.
+        %
+        % SOUND, and here is the argument. Each constraint is a polynomial with exact
+        % coefficients, so writing it in the monomial basis as v = c . m(p), the floating-point
+        % evaluation errs by at most n*eps*(|c| . |m(p)|) -- the sum of the term MAGNITUDES,
+        % which is what `scale` below computes. With n = 6 that bound is about 1.3e-15*scale,
+        % and the routine only trusts a numeric verdict when |v| > 1e-12*scale, three orders
+        % clear of it. Anything nearer than that falls through to the exact test, so no
+        % conclusion is ever drawn from a value the arithmetic cannot resolve. A rational or
+        % non-polynomial constraint has no such basis and also falls through.
+        %
+        % The coefficients are extracted ONCE per distinct constraint set and cached, because
+        % ptFeasible is called about 47 times per region in a fold (3538 calls over ~75
+        % regions) -- so the extraction is amortised heavily.
            l = true;
            if isempty(obj.ineqs)
                return
            end
            g = [obj.ineqs.f];
+
+           [C, ok] = region.monomialCoefs(g, vars);
+           if ok
+               allDecided = true;
+               for j = 1:size(point,1)
+                   pd = NaN;
+                   try
+                       pd = double(point(j,:));
+                   catch
+                   end
+                   if numel(pd) ~= 2 || any(~isfinite(pd))
+                       allDecided = false; break
+                   end
+                   m  = [1, pd(1), pd(2), pd(1)^2, pd(1)*pd(2), pd(2)^2];
+                   v  = C * m.';
+                   sc = abs(C) * abs(m).';
+                   tol = 1.0d-12 * max(1, max(sc));
+                   if any(v > tol)
+                       l = false; return              % comfortably positive: infeasible
+                   end
+                   if any(abs(v) <= tol)
+                       allDecided = false; break      % too close to call: use the exact test
+                   end
+               end
+               if allDecided
+                   return                             % every value comfortably negative
+               end
+           end
+
            for j = 1:size(point,1)
                if any(isAlways(subs(g, vars, point(j,:)) > 0))
                    l = false;
