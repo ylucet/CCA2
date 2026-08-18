@@ -1,0 +1,169 @@
+# Readiness plan — what must be true before the SCIP/QPLIB work starts
+
+_Written 2026-08-18. The gate has three conditions: **the bugs are ironed out**, **it is clear
+what has a direct formula and what needs symbolic computation**, and **timing is understood and
+acceptable**. We are not there. This file says what remains, in the order it has to happen, with
+the measurement that closes each step._
+
+The consumer is `AI/spike/SCIP` (`src/cca2ConvexEnvelope.m`, via the MATLAB Engine API for
+Python). `SUPPORT_MATRIX.md` sections 0.0 and 0.0.1 are the standing description of that
+interface.
+
+---
+
+## 0. The finding that shapes the whole plan
+
+From `SUPPORT_MATRIX.md` 0.0.1, and it decides what is worth building:
+
+> For a BILINEAR term over a BOX the convex envelope **is** McCormick (Al-Khayyal-Falk), in
+> closed form -- which is what CCA2 returns, and the pin
+> `biconjugateTest/bilinearOverABoxGivesTheMcCormickEnvelope` holds it. On QPLIB's box-domain
+> bilinear terms CCA2 is a 40-second reimplementation of a formula SCIP already applies:
+> correct, a good validation, **and no stronger as a cut**.
+
+CCA2 can only beat McCormick in two places:
+
+* the domain is **not a box** -- a triangle cut out by constraints;
+* the piece is **not bilinear** -- a diagonal term such as `x^2 - y^2`.
+
+**Both of those are exactly what fails or is slow today.** So the readiness work is not
+"make the existing path production-ready"; it is "make the two cases that would justify the
+approach work at all, and know what they cost". A SCIP run built only on box+bilinear terms
+would be green and scientifically empty.
+
+---
+
+## Phase A -- correctness (the "no bugs" gate)
+
+### A1. Re-measure 0.0.1. It is stale, and nothing should be planned on it.
+
+Every number in that section dates from **2026-08-02**. Since then the conjugate pipeline changed
+substantially: three double leaks fixed (Step 2 is exact), `merge` repaired, the A.4/A.5 split
+turned on by default. The two ERROR rows may have moved in either direction, and the timings
+certainly have.
+
+* **Do:** run `checkBoxEnvelopeForSCIP` and rewrite 0.0.1 from its output.
+* **Closes when:** the table is re-derived, with its date, on the current tree.
+* **Cost:** one run, about 10 minutes of compute.
+
+### A2. Fix the DIAGONAL terms over a box -- the one correctness gap on SCIP's path.
+
+`x^2 - y^2` and `(x^2+y^2)/2` on the unit box raise `MATLAB:badsubscript` in the SECOND
+conjugation (`functionNDomain.conjugateOfPiecePoly`). QPLIB objectives are sums of `x_i*x_j`
+**including i = j**, so this is not optional -- and per section 0 it is one of only two cases
+where CCA2 has anything to offer over McCormick.
+
+* **Do:** reproduce at unit level (build the piece directly, as `functionNDomainTest`'s fixtures
+  do -- not through `biconj`, which buries the evidence), then fix.
+* **Closes when:** both shapes return an envelope matching the lower convex hull of the sampled
+  graph, pinned by a test in `biconjugateTest`.
+* **Risk:** unknown until reproduced. This is the one genuinely open piece of mathematics here.
+
+### A3. Decide the `unionIsExact` question -- an unknown, not a known bug.
+
+At fold 3 of the quadrilateral, 52 same-function pairs reach `unionIsExact` and about 9 merge.
+Whether the other ~43 refusals are **correct** is not established: two cells can share a facet,
+touch along a segment, and still have a non-convex union.
+
+* **Do:** take a handful of the 46 `sym=1 hyp=1 touch=seg` pairs from `.claude/step3adjacency.m`
+  and test directly whether the union is convex.
+* **Closes when:** each is classified correct or defective. If correct, the cell counts are near
+  optimal and Phase C's target changes; if defective, that is the next fix.
+* **Why it sits in the correctness phase:** three times this session a CORRECT result was read as
+  a defect (`DECISIONS.md`). Do not optimise this gate before knowing which it is.
+
+### A4. State what is deliberately NOT fixed, and confirm it is off SCIP's path.
+
+`SUPPORT_MATRIX.md` section 8 lists open items -- `partialConj` unimplemented, the `pqp` and
+`graph` engines missing, `RatPol.conj`/`biconj`/`add` missing. Section 0.0 already records that
+SCIP calls none of them.
+
+* **Do:** confirm against the current `cca2ConvexEnvelope.m` and write the exclusion into 0.0.
+* **Closes when:** the SCIP-relevant surface is a short, explicit list of entry points.
+
+---
+
+## Phase B -- the direct-formula / symbolic map (the "clear picture" gate)
+
+**This does not exist today in one place, and it is the deliverable most likely to change what we
+build.** The question is not academic: anything with a direct formula should not be paying for the
+symbolic engine, and anything that needs the engine has a cost floor no tuning removes.
+
+### B1. Build the map.
+
+One table, per input shape, with four columns: **route taken**, **closed form or symbolic**,
+**where the formula is** (source, and the [COAP] appendix where applicable), **measured cost**.
+The shapes that matter:
+
+| shape | expected route |
+|---|---|
+| bilinear over a BOX | McCormick / Al-Khayyal-Falk -- closed form |
+| bilinear over a TRIANGLE, 0/1/2 convex edges | cPLQ Step 1 closed forms (A.2 / A.3 / A.4) |
+| bilinear over a TRIANGLE, 3 convex edges | A.5 split into A.4 -- closed form, SURD coordinates |
+| bilinear over a general POLYGON | triangulate, per-piece closed form, **Step 3 symbolic max** |
+| convex quadratic over a piece | `conjConvexOverPiece`, KKT active set -- closed form per cell |
+| diagonal / indefinite non-bilinear quadratic | `xyFrame` change of variables, then the above |
+| anything UNBOUNDED | `fanUnboundedFace` + `convEnvUnbounded` -- closed form per shape |
+
+* **Closes when:** every row cites its routine, says closed-form or symbolic, and carries a
+  measured time from the current tree.
+* **The expected conclusion, to be confirmed or refuted:** every PIECE has a closed form, and
+  **all** the symbolic cost is Step 3's cross-piece maximum (`functionNDomain.maximumP`) -- which
+  is why the quadrilateral spends about 35 s in Steps 1+2 and about 43 minutes in Step 3.
+
+### B2. Draw the consequence for SCIP.
+
+If B1 confirms that a single piece is always closed-form, then a separator needing one term's
+envelope over a box **never needs Step 3 at all** -- and the 40-60 s per term is being paid for
+machinery the caller does not use. That turns the integration from "call `biconj`" into "call the
+per-piece closed form", and it is the largest performance lever available.
+
+* **Closes when:** the answer is written down either way, with the entry point named.
+
+---
+
+## Phase C -- timing (the "acceptable performance" gate)
+
+### C1. Set the target BEFORE optimising.
+
+No threshold is stated today. The measured facts: 40-60 s per term (stale, pre-session);
+`QPLIB_1940` has 288 objective off-diagonal terms, about 4 h offline at that rate, with ~27,586
+more in its constraints; per-node recomputation is out of reach at any rate near this.
+
+* **Do:** state the target as a decision -- e.g. offline pre-computation of one QPLIB instance's
+  objective must fit in X minutes, and per-node recomputation is out of scope for the spike.
+* **Closes when:** the number is here and `AI/spike/SCIP/PROJECT_PLAN.md` agrees.
+
+### C2. Attribute the cost.
+
+Split one term's time across Step 1, Step 2, Step 3 and the MATLAB-Engine round trip.
+
+* **Closes when:** a per-stage breakdown exists for the box case and one non-box case.
+
+### C3. Only then optimise, guided by B2.
+
+If B2 says the per-piece closed form suffices, this is a routing change and probably ends the
+performance problem outright. If Step 3 is genuinely required, the levers are the ones already
+measured: cell count (86 to 60 so far) and the merge gates.
+
+---
+
+## Gate -- what "ready for SCIP" means
+
+All of the following, each with a measurement on the current tree:
+
+1. `checkBoxEnvelopeForSCIP` shows **no ERROR rows** (A1, A2).
+2. The direct-formula / symbolic map exists and names the entry point a separator should call
+   (B1, B2).
+3. Per-term cost is measured, attributed, and inside a **stated** target (C1-C3).
+4. Full suite green -- currently **332 / 0** -- with A2's new tests in it.
+
+Only then: wire the bridge, expose value and subgradient off whatever B2 names, and run QPLIB.
+
+---
+
+## Sequencing
+
+A1 is cheap and goes first -- it may change A2's shape. B1 can run in parallel with A2, being
+mostly reading and measuring rather than fixing. C is last, because B2 may remove most of the
+problem C is trying to solve.
