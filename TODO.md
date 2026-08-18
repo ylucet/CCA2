@@ -81,19 +81,23 @@ actually are; and `functionNDomain.singularEdgeCut` closing the singular-quadrat
 incomplete=0`, nothing changed in the test or the split. That exception was the stated correctness
 blocker for making the split the default, and it was a casualty of the double leaks.
 
-- [ ] **1. SETTLE THE A.4/A.5 DEFAULT.** Only cost is left, and by the standing rule
-      (`DECISIONS.md`, 2026-08-17) cost is a bucket question unless it is on the way to not
-      finishing. `testcPLQ` with the split ON is being timed against its 1542 s off / 4728 s on.
-      If it now finishes in a comparable time, turn `CCA2_A45_SPLIT` on by default, move whatever
-      suite it slows into the next bucket down, and delete the opt-in.
+- [x] **1. THE A.4/A.5 SPLIT IS THE DEFAULT since 2026-08-18.** `testcPLQ` 8 passed / 0 failed in
+      2188 s against 4728 s and one ERROR; full suite 332 / 0 with it on. `CCA2_NO_A45_SPLIT` opts
+      out. The slow bucket went ~92 -> ~113 minutes, which is the bucket cost the standing rule
+      says to accept.
 
-- [ ] **2. `region.impliedBy` over a region with a CURVED facet -- the largest named gate left.**
-      `quadFacet_exactAnotInB` is 98 of fold 5's refusals and 63 of fold 3's. `impliedBy` tests an
-      affine constraint over the region's LINEAR RELAXATION, which is sound but conservative
-      exactly when a conic facet would have cut the violating part away. The max of an affine form
-      over such a region is attained at a VERTEX or at an ARC TANGENCY (where the conic's gradient
-      is parallel to the form) -- both closed-form, both already computable here. That makes the
-      test exact for the shapes this codebase produces instead of merely sound.
+- [ ] **2. `region.impliedBy` over a region with a CURVED facet -- the largest named gate left,
+      and ONE ATTEMPT HAS ALREADY FAILED.** `quadFacet_exactAnotInB` is 98 of fold 5's refusals
+      and 63 of fold 3's. `impliedBy` tests an affine constraint over the region's LINEAR
+      RELAXATION, sound but conservative exactly when a conic facet would have cut the violating
+      part away.
+      **READ `DECISIONS.md` 2026-08-18 FIRST.** The vertex-plus-arc-tangency construction was
+      written and REVERTED: it fails `testfunctionNDomain/testMerge` and
+      `cplqAdapterTest/twoTriangleSquareMaxMatchesNumericSup`, both of which go green the moment
+      it comes out. The likely hole is a REDUNDANT conic facet -- it makes `lin` false so the
+      refinement engages, while the vertex list still describes only the polyhedral part.
+      **Measure on `testMerge` first**: it is a unit-level merge test and runs in seconds, where
+      the normal bucket takes four minutes to tell you the same thing.
 
 - [ ] **3. `noSharedFacet` is the biggest raw count (819 at fold 5) but mostly HONEST.** Measured
       on the tri case with `.claude/step3adjacency.m`: 21 of 38 same-function pairs meet at a
