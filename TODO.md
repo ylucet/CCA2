@@ -93,11 +93,15 @@ blocker for making the split the default, and it was a casualty of the double le
       **An earlier revert of this was MY ERROR** -- two helpers in the instance block called as
       static -- see `DECISIONS.md`.
 
-- [ ] **3. `noSharedFacet` -- still the biggest raw count (346 at fold 3, 819 at fold 5).**
-      `.claude/step3adjacency.m` classifies every same-function pair three ways and now takes
-      `CCA2_ADJ_FOLDS` to reach the deeper folds. On the tri case at fold 1, 21 of 38 pairs meet
-      at a POINT and must not merge, so a large part of this count is honest -- establish how large
-      on the quadrilateral before treating it as a defect.
+- [x] **3. `noSharedFacet` -- MEASURED 2026-08-18 and mostly HONEST.** At fold 3, of 137
+      same-function pairs, 74 do not touch or touch at a single POINT, where merging would be
+      wrong. Only 11 are genuine misses: 4 share an affine hyperplane the symbolic test does not
+      match, 7 meet along a CONIC that neither facet search identifies.
+      **The open question moved to `unionIsExact`**: 52 pairs reach it and about 9 merge, so ~43
+      are refused by the sound gate -- and whether those are right is NOT established. Two cells
+      can share a facet, touch along a segment, and still have a non-convex union. Check a handful
+      of them directly before optimising, or risk reading a correct refusal as a defect for the
+      third time this session.
 
 - [x] **4. The parallelogram's piece 9 -- DONE 2026-08-18, `BAD 0 of 10`.** The singular-quadratic
       overlap was the only defect; the "remaining 1%" was a grid reference that missed the vertex

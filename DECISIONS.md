@@ -25,6 +25,37 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (measurement) — `noSharedFacet` is MOSTLY HONEST; the open question moved to `unionIsExact`
+
+`.claude/step3adjacency.m` with `CCA2_ADJ_FOLDS=3`, on the A.4/A.5 quadrilateral -- 137
+same-function pairs over 36 cells carrying 7 distinct functions:
+
+    merge sees | shared plane | how they meet | pairs
+    no         | no           | do not touch  |  42   correctly refused
+    no         | no           | a point       |   2   correctly refused
+    yes        | yes          | do not touch  |  14   correctly refused
+    yes        | yes          | a point       |  16   correctly refused
+    NO         | no           | A SEGMENT     |   7   meet along a CONIC merge cannot see
+    NO         | yes          | A SEGMENT     |   4   genuine facet-detection misses
+    yes        | no           | a segment     |   6   seen via a quadratic facet
+    yes        | yes          | a segment     |  46   reach unionIsExact
+
+**54% of the pairs are correctly not merged** -- they do not touch, or touch at a single point,
+where the union of two cells is not convex and merging would be wrong. So the raw
+`noSharedFacet` count (346 at fold 3, 819 at fold 5) is NOT a defect count, which is what the
+2026-08-17 entry suspected and this settles.
+
+**Only 11 pairs are genuine detection misses**, and they split in two: 4 share an affine
+hyperplane the symbolic test does not match, and 7 meet along a CONIC that neither the linear
+facet search nor the quadratic branch identifies.
+
+**The open question has moved.** 52 pairs reach `unionIsExact` and about 9 merges happen at that
+fold, so roughly 43 are refused by the sound gate. Whether those refusals are RIGHT is not
+established here -- two cells can share a facet, touch along a segment, and still have a
+non-convex union. **Measure that before optimising it**: take a handful of the 46 and check
+directly whether `A u B` is convex. Chasing `unionIsExact` without that risks the same mistake
+this session made twice, of reading a correct refusal as a defect.
+
 ## 2026-08-18 (decision) — `RatPar.V` stays `{mustBeNumeric}`. The mesh route is a known-inexact FALLBACK.
 
 **The question.** Mesh vertices are declared `V (:,2){mustBeNumeric}` on `RatPar`, for the whole
