@@ -255,3 +255,38 @@ the call-count reduction is real, machine-independent and sound; not claimed as 
 `getVertices` is the target. Its affine x affine pair is already a determinant; affine x conic and
 conic x conic still call `solve` 700 times per fold, and both have textbook closed forms -- the
 line substituted into the conic gives a quadratic in one variable.
+
+
+### getVertices: affine x conic in closed form (2026-08-18)
+
+An affine constraint meets a conic in at most two points, both given by the quadratic formula.
+Substituting the line into the conic and clearing `b^2` gives `alpha*t1^2 + beta*t1 + gamma = 0`
+with the coefficients in `getVertices`' header; a vertical line swaps the roles. Symbolic
+throughout -- these become the region's VERTICES, and this session showed what one ULP of vertex
+error costs.
+
+Cumulative effect on one fold, with the `ptFeasible` filter:
+
+    fold 2 (23 cells)      orig    +ptFeas   +getVert    net
+    solve                   700        700        405   -42%
+    subs                  11803       9445       9843   -17%
+    isAlways              11793       8683       8688   -26%
+    simplify               2256       2256       2256     0%
+    getVertices           133.1 s    125.6 s    123.3 s   -7%
+    maximumP              199.8 s    195.9 s    181.1 s   -9%
+    fold wall               289 s      280 s      265 s   -8%
+
+**TWO THINGS WENT WRONG ON THE WAY, and both are the same mistake.** The first version guarded
+the closed form with a SAMPLED REFIT -- re-evaluate at two probe points, `simplify` the residual,
+`isAlways` it -- to catch a cubic being truncated by a six-point quadratic basis. That guard cost
+more than the `solve` calls it saved: `getVertices` went 125.6 s -> 136.9 s even though `solve`
+fell 700 -> 405. The guard is a DEGREE question and `symbolicFunction.degreeNum` already answers
+it for nothing.
+
+The second: the affine and conic paths each built their own evaluation table, 3 + 6 = 9
+substitutions per region where 6 suffice. Sharing one six-point table is what took the change
+from break-even to -8%.
+
+The lesson is the one this session keeps re-learning: **a safety check added to a hot path has to
+be priced like anything else on that path.** The `ptFeasible` filter survived only because its
+guard is a cheap numeric test.

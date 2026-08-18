@@ -251,6 +251,62 @@ classdef region
              memo(key) = struct('C',C,'ok',ok);
          end
 
+         function s = lineMeetsConicSym (ln, cq)
+         % The at most two points where the line ln = [a b c] (meaning a*t1 + b*t2 + c = 0) meets
+         % the conic cq = [F D E A B C] (meaning A*t1^2 + B*t1*t2 + C*t2^2 + D*t1 + E*t2 + F = 0),
+         % as a struct with fields t1, t2 -- the shape solve() returns -- or [] to fall through.
+         %
+         % All arithmetic is SYMBOLIC: these become region vertices and must stay exact. The
+         % derivation is in getVertices' header. Complex roots are left for that caller's
+         % existing isreal filter to drop, exactly as it drops solve()'s.
+             s = [];
+             a = ln(1); b = ln(2); c = ln(3);
+             Fc = cq(1); Dc = cq(2); Ec = cq(3); Ac = cq(4); Bc = cq(5); Cc = cq(6);
+             try
+                 if ~region.clearlyNonzero(b)
+                     if ~region.clearlyNonzero(a)
+                         return                          % degenerate line: fall through
+                     end
+                     % VERTICAL line: t1 = -c/a, and the conic becomes a quadratic in t2.
+                     t1v = -c/a;
+                     al = Cc;
+                     be = Bc*t1v + Ec;
+                     ga = Ac*t1v^2 + Dc*t1v + Fc;
+                     if ~region.clearlyNonzero(al)
+                         return
+                     end
+                     rad = sqrt(be^2 - 4*al*ga);
+                     s = struct('t1', [t1v; t1v], 't2', [(-be + rad)/(2*al); (-be - rad)/(2*al)]);
+                     return
+                 end
+                 al = Ac*b^2 - Bc*a*b + Cc*a^2;
+                 be = -Bc*b*c + 2*Cc*a*c + Dc*b^2 - Ec*a*b;
+                 ga = Cc*c^2 - Ec*b*c + Fc*b^2;
+                 if ~region.clearlyNonzero(al)
+                     return                              % degenerate: fall through to solve()
+                 end
+                 rad = sqrt(be^2 - 4*al*ga);
+                 t1r = [(-be + rad)/(2*al); (-be - rad)/(2*al)];
+                 s = struct('t1', t1r, 't2', -(a*t1r + c)/b);
+             catch
+                 s = [];
+             end
+         end
+
+         function tf = clearlyNonzero (v)
+         % Is this symbolic value safely nonzero to divide by? Numeric first, and anything not
+         % comfortably away from zero -- or not numerically evaluable -- answers FALSE, so the
+         % caller falls back to solve() rather than dividing by something it cannot resolve.
+             tf = false;
+             try
+                 d = double(v);
+             catch
+                 return
+             end
+             if ~isfinite(d), return, end
+             tf = abs(d) > 1.0d-12;
+         end
+
          function out = mergeTally (reason)
          % INSTRUMENTATION for Step 3's cell blow-up. `region.merge` is what is supposed to
          % collapse adjacent same-valued cells; when it refuses, the cell count grows and
@@ -3704,13 +3760,29 @@ classdef region
        % that is affine/affine with a NONZERO determinant; a curved constraint, parallel lines or
        % coincident lines all fall through to solve() and keep their existing behaviour, whatever
        % it is, rather than having a new answer invented for them here.
-       affT = false(1,nIn); cf = sym(zeros(nIn,3));
+       % ONE evaluation table, six points, shared by BOTH fast paths below. The affine path
+       % needs three of them and the conic path all six; computing them separately cost 9
+       % substitutions per region where 6 suffice, and substitution is the dominant engine cost
+       % in the whole assembly (profiled 2026-08-18: 7 ms per call, ~10k calls per fold).
+       P6 = [0 0; 1 0; 0 1; 1 1; 2 1; 1 2];
+       V6 = sym.empty(); haveV6 = false;
        if nIn > 0
            GT = [fT.f];
            try
-               e00 = subs(GT, varsTemp, [0 0]);
-               e10 = subs(GT, varsTemp, [1 0]);
-               e01 = subs(GT, varsTemp, [0 1]);
+               V6 = sym(zeros(6, nIn));
+               for k6 = 1:6
+                   V6(k6,:) = subs(GT, varsTemp, P6(k6,:));
+               end
+               haveV6 = true;
+           catch
+               haveV6 = false;
+           end
+       end
+
+       affT = false(1,nIn); cf = sym(zeros(nIn,3));
+       if nIn > 0 && haveV6
+           try
+               e00 = V6(1,:); e10 = V6(2,:); e01 = V6(3,:);
                for i = 1:nIn
                    % isLinear is degreeNum == 1 AND degreeDen == 0, so it already rules out a
                    % rational facet; no separate isPolynomial round trip needed.
@@ -3724,6 +3796,51 @@ classdef region
                affT(:) = false;      % anything unevaluable: every pair uses solve(), as before
            end
        end
+
+       % PERFORMANCE, part 3: an AFFINE constraint meets a CONIC in at most two points, and both
+       % are given by the quadratic formula. Profiling one Step 3 fold (2026-08-18) put
+       % getVertices at 126 s of a 200 s fold with 700 solve() calls still in it -- the affine
+       % pair above having already removed the rest.
+       %
+       % Substituting the line into the conic gives, for a line a*t1 + b*t2 + c = 0 with b ~= 0
+       % and a conic A*t1^2 + B*t1*t2 + C*t2^2 + D*t1 + E*t2 + F = 0 (multiplying through by b^2):
+       %       alpha = A*b^2 - B*a*b + C*a^2
+       %       beta  = -B*b*c + 2*C*a*c + D*b^2 - E*a*b
+       %       gamma = C*c^2 - E*b*c + F*b^2
+       % with t2 recovered as -(a*t1 + c)/b. For a VERTICAL line (b == 0) the roles swap and the
+       % quadratic is in t2 directly.
+       %
+       % EXACT, and that is why these coefficients are symbolic rather than the doubles
+       % region.monomialCoefs returns: they become the region's VERTICES, and this session showed
+       % what one ULP of vertex error costs -- merge stops seeing shared facets and Step 3 stops
+       % terminating. Six substitutions per region replace O(n^2) solve() calls.
+       %
+       % A COMPLEX root needs no test here: sqrt of a negative discriminant gives a complex sym,
+       % and the isreal(double(...)) filter already in the loop below drops it, exactly as it
+       % drops solve()'s complex roots today. A degenerate leading coefficient falls through to
+       % solve() rather than being divided by.
+       quadOK = false(1,nIn); qc = sym(zeros(nIn,6));
+       if nIn > 0 && haveV6
+           try
+               M6 = sym([ones(6,1), P6(:,1), P6(:,2), P6(:,1).^2, P6(:,1).*P6(:,2), P6(:,2).^2]);
+               Cq = (M6 \ V6).';                 % rows: [F D E A B C] per constraint
+               for i = 1:nIn
+                   % DEGREE, not a sampled refit. The six-point basis is exact for a quadratic
+                   % and would silently TRUNCATE a cubic, so the fit has to be guarded -- but
+                   % asking symbolicFunction for the degree it already knows costs nothing,
+                   % where re-evaluating at probe points and simplifying the residual cost more
+                   % than the solve() calls this whole path exists to avoid. MEASURED: with the
+                   % sampled check, getVertices went 125.6 s -> 136.9 s on fold 2 even though
+                   % solve() calls fell 700 -> 405.
+                   if affT(i) || ~fT(i).isPolynomial || fT(i).degreeNum > 2
+                       continue                   % affine (handled above), rational, or cubic
+                   end
+                   quadOK(i) = true; qc(i,:) = Cq(i,:);
+               end
+           catch
+               quadOK(:) = false;   % anything unevaluable: keep solve(), as before
+           end
+       end
        for i = 1:nIn
            f1 = fT(i);
            for j = i+1:nIn
@@ -3735,6 +3852,10 @@ classdef region
                        s = struct('t1', (cf(i,2)*cf(j,3) - cf(j,2)*cf(i,3))/dt, ...
                                   't2', (cf(j,1)*cf(i,3) - cf(i,1)*cf(j,3))/dt);
                    end
+               elseif affT(i) && quadOK(j)
+                   s = region.lineMeetsConicSym(cf(i,:), qc(j,:));
+               elseif affT(j) && quadOK(i)
+                   s = region.lineMeetsConicSym(cf(j,:), qc(i,:));
                end
                if isempty(s)
                    s = solve ([f1.f==0,f2.f==0],varsTemp);
