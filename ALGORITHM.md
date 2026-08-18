@@ -1,0 +1,165 @@
+# The algorithm — what runs, in what order, and why
+
+_Written 2026-08-18. This is the ORDER of operations, not a list of routines. It exists because
+the ordering is the design: the same mathematics costs seconds or hours depending on when each
+question is asked._
+
+There are **two operators**, and they are not the same computation:
+
+* `conj` — the Fenchel conjugate `f*`.
+* `biconj` — `f** = cl co f`, i.e. **the closed convex envelope**. CCA2 has a DIRECT algorithm
+  for this (Step 1 of [COAP]/[JOGO]), so computing it as `conj(conj(f))` is a detour.
+
+---
+
+## The governing principle
+
+**Classify first, split last, and prefer the direct operator over a composition.**
+
+Every expensive path in this toolbox comes from violating one of those three. The measured
+example: `f = (x²+y²)/2` over the unit square is convex, so `f** = f` and there is nothing to
+compute — yet it cost **436 s**, because the code split it into triangles, conjugated each,
+took a symbolic cross-piece maximum, and conjugated the result back.
+
+---
+
+## `biconj(f)` — the convex envelope
+
+    0. NORMALISE      merge adjacent faces carrying the same quadratic
+    1. f CONVEX       -> return f                        (nothing to compute)
+    2. f SEPARABLE on a box  -> 1-D envelope per axis, sum
+    3. SINGLE piece   -> Step 1 directly                 (no conjugation at all)
+    4. otherwise      -> conj(conj(f))                   (the exception, not the rule)
+
+Steps 1 and 3 are the same short-circuit at two scales. **Both already exist inside Step 1** —
+`convEnvCPLQ` returns `q` unchanged as soon as the Hessian is positive semidefinite. The problem
+was never that the check was missing; it was that `biconj` only reached Step 1 when the domain
+was a TRIANGLE (`nf==1 && nv==3 && ne==3`), and a box has `nv == 4`, so it fell through to the
+double conjugation.
+
+Step 0 matters more than it looks. `biconjugateTest` hands the unit square in as two triangles
+sharing a diagonal; merged, it is one face, case 3 applies, and the piece-coupling that forces
+case 4 disappears.
+
+Case 4 is genuinely needed only when the envelope COUPLES several pieces — the convex hull of a
+union is not determined piecewise.
+
+---
+
+## `conj(f)` — the conjugate
+
+    0. NORMALISE      merge adjacent faces carrying the same quadratic
+    1. f SEPARABLE on a box -> 1-D conjugate per axis, sum
+    2. per piece, classify by the SIGN OF THE HESSIAN:
+         convex / affine -> envelope = f (co f = f);
+                            cells from normal cones / KKT, on the polygon AS IT STANDS
+         concave         -> envelope is affine, from the vertex values;
+                            the conjugate is the support function
+         indefinite      -> change variables to x*y, triangulate,
+                            [COAP] A.2 / A.3 / A.4 by convex-edge count,
+                            A.5-split when three edges are convex
+    3. Step 3: max ACROSS pieces -- only if more than one piece survived
+
+---
+
+## Why the triangulation exists, and why it is not universal
+
+The whole apparatus of triangulating, counting convex edges and selecting among A.2/A.3/A.4/A.5
+is **the indefinite case's algorithm**. It is per-triangle because those closed forms are. No
+other sign class needs any of it:
+
+* **convex** — `co f = f`. Step 1 is the identity. Step 2 is the KKT active set (a cell per
+  vertex, per edge, one interior), which works on a polygon with ANY number of affine facets.
+  A convex piece never needed a triangle; splitting it only forces Step 3 to glue back together
+  what was never broken.
+* **concave** — `co f` is the affine interpolant of the vertex values. On a many-sided polygon
+  the envelope really is piecewise affine over the LOWER HULL, so a split is genuinely needed
+  there; but any fan stays CORRECT, because conjugation turns a union into a max
+  (`f* = maxₖ (f|Tₖ)*`). It is suboptimal, not wrong.
+* **separable on a box** — drops to 1-D entirely, below all of the above.
+
+Separability is tested FIRST and specifically BEFORE the change of variables, because an
+indefinite DIAGONAL quadratic such as `x² − y²` is separable as written, and rotating it into
+the `x*y` frame destroys both the separability and the box. That ordering is the whole reason
+`x² − y²` over a box went from `MATLAB:badsubscript` to exact.
+
+Separability is a property of the FUNCTION AND THE DOMAIN TOGETHER. `x*y` separates in rotated
+coordinates (`u = x+y, v = x−y`), but the box is not a box there, so that does not help and is
+deliberately not attempted.
+
+---
+
+## Two invariants worth exploiting
+
+1. **`f*` is always convex.** So in `biconj = conj(conj(f))` the second conjugation always has a
+   convex input and must never enter the indefinite machinery.
+2. **`conj(f) = conj(co f)`.** Conjugating the envelope gives the same answer, so when Step 1 is
+   cheap it is always worth doing first.
+
+---
+
+## The `isConvex` flag — trusted, with one free guard
+
+Convexity of a SINGLE quadratic piece is free to check (`eig` of a 2×2 Hessian). Convexity of a
+MULTI-PIECE PLQ is not: it needs per-piece convexity plus consistency of the gradient jump across
+every shared edge. The flag therefore earns its keep exactly where verification is expensive, and
+it unlocks the largest short-circuit there is (`biconj` of a convex `f` is `f`).
+
+The hazard is equally specific: a wrong flag makes `biconj` return a NON-convex `f` as its own
+envelope, silently. Two mitigations, both cheap:
+
+* **The free necessary condition is still checked.** Every piece's Hessian must be positive
+  semidefinite. That is necessary, not sufficient, and costs microseconds — so a flag that
+  contradicts it is refused LOUDLY rather than trusted.
+* **Full verification under an opt-in assert**, in the established `MAXQP_ASSERT` /
+  `QUAPAR_VALIDATE` style.
+
+The flag lives on the function object, not in an argument, so it travels with the data.
+
+---
+
+## Rational split points — where the principle applies, and where it must not
+
+Split points divide into **chosen** and **determined**, and the distinction is the whole story.
+
+* **CHOSEN — keep rational.** The fan triangulation of a polygon is free: any triangulation
+  works, because `f* = maxₖ (f|Tₖ)*`. Its vertices are the polygon's own, so it is already
+  rational whenever the input is. The genuinely free points that are NOT yet rational by
+  construction are elsewhere — notably the midpoint `M` picked between two arcs in the two-arc
+  split, chosen for convenience rather than determined by any tightness condition.
+* **DETERMINED — must not be moved.** A.4/A.5's split is the cevian along which cPLQ's closed
+  form stops being tight. Move it and one sub-triangle straddles the tightness boundary, so the
+  closed form there is a strict MINORANT rather than the envelope. That is precisely the defect
+  the `nCE == 2` branch carried before it was fixed: a minorant reaching `−0.2835` where the
+  truth is `≥ 0`, and a correspondingly too-large conjugate.
+
+**Prior art, and it is recorded.** Attempt 3 of the general-quadrilateral fix did snap this split
+to rationals — taking the geometry from double-precision `convEnvCPLQ` and snapping vertices to
+the simplest rational within `1e-10`. `DECISIONS.md` records why it failed: bounding the VERTEX
+denominators does not bound the downstream ones, because the conjugate is a rational function of
+those coordinates, so a few squarings carried `1e5` to `1e25` and the run hung. Attempt 4
+succeeded by doing the opposite — carrying the irrational foot as a compact surd
+(`5/2 − √5/2`).
+
+**The cost is bounded, not runaway.** A.4's foot generates a QUADRATIC EXTENSION, and the
+measured price is `testcPLQ` 1542 s → 2188 s. That buys a correct answer where the default
+previously crashed.
+
+**The better lever for the same goal** is not to relocate the split but to not need A.4 at all: a
+single bounded triangle conjugated through the numeric route (`conjBoundedPolygon`) was measured
+exact at 7 of 7 probe points and never introduces a surd. Whether that route can serve the
+2-convex-edge case generally is unmeasured and is the open question here.
+
+---
+
+## Measured effect of getting the order right
+
+| case | before | after |
+|---|---|---|
+| `(x²+y²)/2` on `[0,1]²`, first conjugation | 2 triangles, 14 cells, Step 3, **456 s**, err 1.6e-4 | 9 cells, **4.2 s**, exact 10/10 |
+| `x² − y²` on `[0,1]²` | `MATLAB:badsubscript` | exact, 6 cells, 1.9 s |
+| `f*` of `x*y` over a general quadrilateral | 86 cells, 73 min | 60 cells, 43 min |
+
+The 9 cells for `(x²+y²)/2` are the product structure the answer actually has: `f` separates and
+the box is a product, so `f*(s) = g(s₁) + g(s₂)` with `g` the 1-D conjugate in three pieces.
+Triangulation destroys that structure and Step 3 pays to rebuild it.
