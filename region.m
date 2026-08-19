@@ -2591,19 +2591,31 @@ classdef region
                 % Same "root chosen before it is checked" shape as the py(1)-before-isempty
                 % inversions corrected three times over in getNormalConeVertexQ. There is no
                 % sensible answer from a point that does not exist: skip this vertex instead.
+                %
+                % WHICH ROOT, and here the property is NOT feasibility. The point is used only to
+                % form the midpoint with the vertex and read the conic's SIGN just inside the
+                % region near that vertex, so the probe must lie on the SAME BRANCH of the conic
+                % as the vertex does -- and at sx = px + 0.1 a conic generally has two, one near
+                % py and one far away. "The first real root" can land on the far branch, and the
+                % midpoint then says nothing about the neighbourhood of this vertex. The nearest
+                % root to py is the branch-continuous choice, and it is order-INDEPENDENT, which
+                % taking root one was not (DECISIONS.md 2026-08-18 on solve()'s ordering).
+                % Roots come from the closed form; solve() remains region.rootsIn's own fallback.
                 sx = px(j) + 0.1;
                 p = obj.ineqs(i).subsF([vars(1)],[sx]);
-                s0 = solve(p.f,vars(2));
-                sy = [];
+                s0 = region.rootsIn(p.f, vars(2));
+                sy = []; bestD = inf;
+                pyj = double(py(j));
                 for r0 = 1:numel(s0)
                     try
-                        ok0 = isreal(double(s0(r0)));
+                        d0 = double(s0(r0));
+                        ok0 = isreal(d0) && isfinite(d0);
                     catch
                         ok0 = false;   % not numerically evaluable: not a usable probe point
                     end
-                    if ok0
+                    if ok0 && abs(d0 - pyj) < bestD
+                        bestD = abs(d0 - pyj);
                         sy = s0(r0);
-                        break
                     end
                 end
                 if isempty(sy)
@@ -4550,62 +4562,45 @@ classdef region
            return
        end
 
+       % A STEP ALONG EACH REGION'S OTHER EDGE AT THE SHARED VERTEX. Both steps are chosen by
+       % PROPERTY -- the first point ON that edge that the region actually contains -- rather
+       % than by taking solve()'s first root and, if it is infeasible, flipping the abscissa
+       % without ever trying the other root. See region.probeOnConstraint and DECISIONS.md
+       % 2026-08-18: solve()'s ordering is an unreproducible MuPAD convention, so the old form
+       % made this verdict depend on it, and could give up while a good probe sat on the root it
+       % never examined.
+       %
+       % A VERTICAL edge keeps its own branch: there is no root in y to choose, the step is in y,
+       % and probeOnConstraint (which substitutes x and solves for y) does not apply.
+       %
+       % REFUSING IS SAFE, and that is why an unprobeable edge returns false. This routine is a
+       % LOCAL necessary condition, and merge's caller treats false as "these two do not share a
+       % facet" -- the pair is simply not merged (mergeTally 'noSharedFacet'). unionIsExact does
+       % the real decision afterwards, so a false here costs compactness, never correctness.
        if obj.slopeIneq(edgeiNo,[vx,vy]) == inf
            x1 = vx;
            y1 = vy + 0.1;
            if ~ obj.ptFeasible (obj.vars,[x1,y1])
              y1 = vy - 0.1;
-         
            end
-       
        else
-
-       x1 = vx+0.1;
-       f1 = obj.ineqs(edgeiNo).subsF([obj.vars(1)],[x1]);
-       y0 = solve(f1, obj.vars(2));
-       %if (size(y0,1) == 1)
-           y1 = y0(1);
-       %end
-       
-       if ~ obj.ptFeasible (obj.vars,[x1,y1])
-         x1 = vx-0.1;
-         f1 = obj.ineqs(edgeiNo).subsF([obj.vars(1)],[x1]);
-         y0 = solve(f1, obj.vars(2));
-       %if (size(y0,1) == 1)
-           y1 = y0(1);
-       %end
-       
+           [x1, y1, ok1] = obj.probeOnConstraint(edgeiNo, [vx+0.1, vx-0.1]);
+           if ~ok1
+               return
+           end
        end
-       end
-       %x1,y1
        if obj2.slopeIneq(edgejNo,[vx,vy]) == inf
            x2 = vx;
            y2 = vy + 0.1;
            if ~ obj2.ptFeasible (obj2.vars,[x2,y2])
              y2 = vy - 0.1;
-         
            end
-       
        else
-
-       
-       x2 = vx+0.1;
-       f1 = obj2.ineqs(edgejNo).subsF([obj2.vars(1)],[x2]);
-       y0 = solve(f1, obj2.vars(2));
-       %if (size(y0,1) == 1)
-           y2 = y0(1);
-       %end
-       if ~ obj2.ptFeasible (obj2.vars,[x2,y2])
-         x2 = vx-0.1;
-         f1 = obj2.ineqs(edgejNo).subsF([obj2.vars(1)],[x2]);
-         y0 = solve(f1, obj2.vars(2));
-         %if (size(y0,1) == 1)
-           y2 = y0(1);
-         %end
-       
+           [x2, y2, ok2] = obj2.probeOnConstraint(edgejNo, [vx+0.1, vx-0.1]);
+           if ~ok2
+               return
+           end
        end
-       end
-       %x2,y2
        xm = (x1 + x2)/2;
        ym = (y1 + y2)/2;
        if obj.ptFeasible (obj.vars,[xm,ym]) | obj2.ptFeasible (obj2.vars,[xm,ym])
@@ -5500,90 +5495,14 @@ classdef region
           NC(j,2) = eq;
         end
 
-        function [NC] = getNormalConeEdgeQ0(obj, s1, s2)
-          NC = sym(zeros(obj.nv,3));
-          for j = 1: obj.nv-1
-            slope = obj.slope(j,j+1)
-            pslope = -1/slope;
-            if pslope == -inf
-              pslope = inf;
-            end
-            if pslope ~= inf
-              q = obj.yIntercept (j,pslope);
-              eq = s2 - pslope*s1 - q;
-            else
-              eq = s1 - obj.vx(j);
-            end
-            if isAlways(subs(eq,[s1,s2],[obj.vx(j+1),obj.vy(j+1)]) > 0    )
-              eq = -eq;
-            end
-            NC(j,1) = eq;
-            if pslope ~= inf
-              q = obj.yIntercept (j+1,pslope);
-              eq = s2 - pslope*s1 - q;
-            else
-              eq = s1 - obj.vx(j+1);
-            end
-            if isAlways(subs(eq,[s1,s2],[obj.vx(j),obj.vy(j)]) > 0   )
-              eq = -eq;
-            end
-            NC(j,2) = eq;
-            obj.ineqs(j+1)
-            if obj.ineqs(j+1).isQuad
-                mx = (obj.vx(j)+obj.vx(j+1))/2
-                my = (obj.vy(j)+obj.vy(j+1))/2
-                obj.ineqs(j+1).subsF(obj.vars,[mx,my])
-                obj.ineqs(j+1).subsF(obj.vars,[mx,my])<0
-                if isAlways(obj.ineqs(j+1).subsF(obj.vars,[mx,my])<0)
-                   %  tang = obj.ineqs(j+1).tangentOfSlope (slope)
-                   c = sym('c')
-                   
-                   f = obj.ineqs(j+1).subsF(obj.vars(2),slope*obj.vars(1)+c);
-                   ans = solve(f.f,obj.vars(1));
-                
-                   f = ans(1)-ans(2);
-                   c1 = solve(f,c);
-                   %tang 
-                   eq2 = s2-slope*s1-c1;
-                else
-                   eq2 = s2 - obj.vy(j) - slope*(s1 - obj.vx(j));
-                end
-                NC(j,3) = eq2;
-                
-            end
-            
-          end
-          % added for unbounded
-          if obj.nv ~= size(obj.ineqs,2)
-              return
-          end
-          j = obj.nv;
-          slope = obj.slope(j,1);
-          pslope = -1/slope;
-          if pslope == -inf
-            pslope = inf;
-          end
-          if pslope ~= inf
-            q = obj.yIntercept (j,pslope);
-            eq = s2 - pslope*s1 - q;
-          else
-            eq = s1 - obj.vx(j);
-          end
-          if isAlways(subs(eq,[s1,s2],[obj.vx(1),obj.vy(1)]) > 0   )
-            eq = -eq;
-          end
-          NC(j,1) = eq;
-          if pslope ~= inf
-            q = obj.yIntercept (1,pslope);
-            eq  = s2 - pslope*s1 - q;
-          else
-            eq = s1 - obj.vx(1);
-          end
-          if isAlways(subs(eq,[s1,s2],[obj.vx(j),obj.vy(j)]) > 0   )
-            eq = -eq;
-          end
-          NC(j,2) = eq;
-        end
+        % getNormalConeEdgeQ0 was REMOVED 2026-08-19. It was DEAD -- inherited verbatim from
+        % cPLQ at the Phase 1 integration (92c9c96) and never called from anywhere in the
+        % executed tree; the archival original is still `cPLQ/region.m`, which is never run
+        % (SUPPORT_MATRIX.md 0.2). It was on the symbolic-removal list for its two `solve()`
+        % calls -- a TANGENCY condition (the line of a given slope meeting a conic in a double
+        % root), which is the discriminant and has a closed form. Rewriting code with no caller
+        % buys nothing and adds a path no test can reach, so it went instead. Its live siblings
+        % are getNormalConeEdge, getNormalConeEdgeQ, getNormalConeEdgeQ3 and getNormalConeEdgeQE.
 
 
      function NC = adjustNormalConeUnB(obj, NC, edgeNo, s1, s2)

@@ -25,6 +25,58 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 — three more symbolic-removal sites: isconvex rewritten, removeTangent's probe was on the WRONG BRANCH, getNormalConeEdgeQ0 was dead
+
+Items 5a/5b/5c of the symbolic-removal list, all measured before being changed. Live `solve()` in
+`region.m`: **10 → 3**, and two of the three are `region.rootsIn`'s own fallback, so ONE genuine
+call remains (`isFeasible`, which solves a pair of INEQUALITIES and is a different mechanism).
+
+### 5a. `isconvex` — same rewrite as the normal cones, and it refuses exactly where A3 says it should
+
+Four `solve()` calls, same shape as the ones fixed on 2026-08-18: substitute one abscissa, take
+root ONE, and if that point is infeasible flip to the other ABSCISSA — never the other root. Now
+`region.probeOnConstraint`, first FEASIBLE root.
+
+**Differential over the 22 captured merge operands, against an independent midpoint test** (walks
+each region's other edge at the shared vertex at three step sizes, choosing no root by position):
+34 probes, **30 agree, 0 differ**, 4 undecided-by-the-oracle.
+
+**On those 4 the old code said TRUE and the new code says FALSE, and the new answer is the better
+one** — the oracle finds no point of the region on that edge at any step size, so the old `true`
+came from a probe point that had failed its own feasibility test and was used anyway. It costs
+nothing: they are `mg_0003/0004/0009/0013`, which are FOUR OF THE FIVE REFUSALS A3 PROVED CORRECT.
+The pair is refused either way; it is now refused earlier, without the LP.
+
+Refusing is the safe direction here by construction: `isconvex` is a LOCAL necessary condition,
+its caller reads false as "no shared facet" (`mergeTally 'noSharedFacet'`), and `unionIsExact`
+makes the real decision afterwards. A false costs compactness, never correctness.
+
+### 5b. `removeTangent` — the probe was landing on the FAR BRANCH of the conic, 22 times in 34
+
+This one is not a reproducibility fix, it is a DEFECT. The probe exists to read the conic's sign
+just inside the region near a vertex, by forming the midpoint of the vertex and a nearby point of
+the conic. At `sx = px + 0.1` a conic generally has TWO points, one near `py` and one far away,
+and the code took the first REAL root. Measured over every conic-vertex pair in the captured
+operands and the three curved fixtures:
+
+    vertex/conic probes 34   single-root 2   FIRST-REAL-ROOT IS ON THE OTHER BRANCH: 22
+
+and not marginally — the gaps are 1.26, 2.31, 2.45, 3.20, 5.99 units for a probe meant to sit
+0.1 from the vertex. A midpoint built from a point 6 units away says nothing about the
+neighbourhood it is supposed to describe.
+
+The fix is the branch-continuous choice, which is also order-independent: the root NEAREST `py`.
+
+### 5c. `getNormalConeEdgeQ0` — dead, so it was removed rather than rewritten
+
+Its two `solve()` calls encode a TANGENCY condition (the line of a given slope meeting a conic in
+a double root), which is the discriminant and has a closed form. But `grep` over the executed tree
+finds exactly one occurrence of the name: its own definition. It came in verbatim with the Phase 1
+cPLQ integration (`92c9c96`) and was never called; the archival original remains in `cPLQ/`, which
+is never executed. Rewriting code with no caller adds a path no test can reach, so it was deleted
+with a note in its place. Its live siblings (`getNormalConeEdge`, `...Q`, `...Q3`, `...QE`) are
+untouched.
+
 ## 2026-08-19 — A3 ANSWERED: merge never over-claims, and every unresolved refusal is a CURVED certificate
 
 `SCIP_READINESS.md` A3 asked whether `unionIsExact`'s ~43 refusals per fold are CORRECT or a
