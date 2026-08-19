@@ -35,19 +35,21 @@ performance wall — see "Read this first".
 
 ## Where things stand
 
-- Branch: `main` @ `35c550b` — "getNormalConeVertexQ does not compute a normal cone"
-- Pushed: **pending** — 7 commits unpushed (`05df79d`..`35c550b`); everything up to `51c003d`
-  was pushed earlier today
-- **fast 206 / 0**, **normal 11 / 0**, `regionTest` 16 / 0 including the new cone test
-- **SLOW BUCKET NOT RUN** since the `ptFeasible` filter and the `getVertices` closed form. This is
-  the one verification gap. User is running it tonight:
-  `CCA2_TEST_TIMEOUT=7200 bash .claude/suite.sh --slow`
-- `region.m` is at its last green state — every experimental rewrite this evening was reverted
+- Branch: `main` @ `d3d7454`
+- Pushed: **pending** — nothing has been pushed since `51c003d`
+- **fast 217 / 0** (89 s, 17 suites), **normal 11 / 0**, `regionTest` 18 / 0
+- **SLOW BUCKET RUN CLEAN 2026-08-19 and the verification gap is CLOSED** (`.claude/slowrun.log`,
+  ~2 h): 119 / 1 over seven suites, the single red being a STALE type expectation in
+  `conjCPLQTest.biconjCoverageByInputCase` that was already red at this session's starting commit
+  (verified two ways: `git log -S convexEnough`, and running that test in a worktree at `801ee1f`).
+  Fixed; `conjCPLQTest` re-ran alone at **25 / 0**. Everything the `ptFeasible` filter, the
+  `getVertices` closed form, Step 0 and the probe rewrite touch is therefore green.
 
 ## Next steps
 
-1. **Read tonight's slow-bucket result.** It covers `region.m`'s two accepted changes. Nothing
-   else should be built on them until it is green.
+1. **DONE 2026-08-19. The slow bucket is green** — see "Where things stand". Nothing is waiting on
+   it any more. Re-run it after the next `region.m` change; a suite that has not been run since a
+   change is how the one stale expectation above went unnoticed for a day.
 2. **DONE 2026-08-18.** `getNormalConeVertexQ`'s specification is established and is now a test
    (`regionTest.vertexConesMatchTheDefinition`, green, 17/0 in 44 s): the rows' linear parts, read
    as `≤ 0`, are the NORMAL CONE at the vertex; the `s2` coefficient must be `±1` or `0`; the

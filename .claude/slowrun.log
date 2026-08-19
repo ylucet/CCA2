@@ -5,3 +5,6 @@ SUITE conjCPLQTest                 pass= 24 fail=  1 incomplete=  0    185s
   FAIL conjCPLQTest/biconjCoverageByInputCase
 SUITE testMaxMultiRegion           pass= 24 fail=  0 incomplete=  0   2935s
 SUITE testRegion                   pass= 23 fail=  0 incomplete=  0    151s
+SUITE testcPLQ                     pass=  8 fail=  0 incomplete=  0   3562s
+SUITE unboundedFaceTest            pass= 18 fail=  0 incomplete=  0    129s
+TOTALS pass=119 fail=1 incomplete=0 timeout=0 over 7 suites
