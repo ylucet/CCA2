@@ -58,9 +58,21 @@ performance wall — see "Read this first".
    `getEdgeNosInf`'s scatter: 0 of 72 wrong; second test). regionTest 18 / 0 in 45 s.
    **Left open, narrow:** a BOUNDED region for which `edgeIndexList` refuses would still reach the
    fallback with the pair off by one; none has been seen.
-3. **Rewrite `SUPPORT_MATRIX.md` §0.0.1.** Dated 2026-08-02 and now wrong in every row: the six
-   box cases are all 0 s, and its headline finding ("returns `QuaParCPLQ`, NO MESH") no longer
-   holds. It is what a reader consults before planning SCIP work.
+3. **DONE 2026-08-18. `SUPPORT_MATRIX.md` §0.0.1 is re-derived** from `checkBoxEnvelopeForSCIP`
+   on the current tree (log `.claude/boxenvelope.log`): six rows, no ERROR, every one 0 s and
+   returning a MESHED `QuaPol`. Three of its four recorded gaps are closed — the diagonal terms
+   work (separable / convex short-circuits), the "no mesh" headline is false for every box case,
+   and 40–60 s per term is no longer a blocker on that path. `SCIP_READINESS.md`'s A1, A2 and the
+   first gate condition are marked met. The caveat that decides whether a QPLIB run is worth
+   doing is unchanged: on box+bilinear CCA2 reimplements McCormick, now in 0 s instead of 40.
+
+**Also done 2026-08-18: the first symbolic-removal site.** `getNormalConeVertexQ`'s eight
+`solve()` probe calls became four `region.probeOnConstraint` calls — first FEASIBLE root, not
+first root — with closed-form quadratic roots (`region.rootsIn`) and `solve()` kept as a fallback.
+Live `solve()` in `region.m` 16 → 10. With the edge list the cones are still exactly right
+(0 of 72 at every vertex); the eIdx-less fallback moved closer to the definition (32→29, 43→29,
+5→5). Three pinned characterization values flipped orientation and are re-pinned with the reason.
+One defect went with it: the `cNext` block's second attempt probed `ineqs(cj)`.
 4. **DONE 2026-08-18. Phase B is answered, both items.** The map is measured
    (`.claude/phaseBmap.m`, twelve shapes): every single PIECE is closed form and costs ≤ 0.02 s;
    the only symbolic rows are the general polygon (2579 s, Step 3) and a convex MULTI-FACE input

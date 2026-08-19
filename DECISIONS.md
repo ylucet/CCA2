@@ -25,6 +25,44 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (evening, sixth) — the first symbolic-removal site LANDED: probes pick a root by feasibility, not by position
+
+The third entry said the remaining `solve()` sites are a CALLER REWRITE, not a substitution,
+because each computes a probe point on a curve and then picks one root BY POSITION, and `solve()`'s
+ordering is an unreproducible MuPAD convention. `getNormalConeVertexQ` is now rewritten that way,
+which is item 1 of that programme and the one the specification (fifth entry) was blocking.
+
+**What replaced what.** Eight `py = solve(ey, y)` calls, each followed by "take root one; if the
+point is infeasible try the other ABSCISSA" -- never the other ROOT -- became four calls to a new
+`region.probeOnConstraint(cIdx, xs)`: *the first (x,y) with y a real root of constraint cIdx at x
+that the region actually contains*, over the candidate abscissae in order. Roots come from
+`region.rootsIn`, the quadratic formula in closed form, with `solve()` kept as the fallback for
+anything not polynomial of degree <= 2 or with a leading coefficient it cannot show nonzero. Live
+`solve()` calls in `region.m`: **16 -> 10**, and two of the ten are that fallback.
+
+**MEASURED against the specification, which is the whole reason this could be attempted.** With
+the edge list -- the contract of the fifth entry -- all three curved fixtures still score
+**0 of 72 wrong directions at every vertex**. Without it, on the slot fallback applied to bounded
+fixtures where it does not belong, the cones move CLOSER to the definition:
+
+    piece 9    32 -> 29 wrong directions
+    half lens  43 -> 29
+    parabola    5 ->  5
+
+**Three pinned values moved, all orientations**, and that is the mechanism working: piece 9's
+(3,2) row and both of the half-lens's first column flip sign, because a different -- feasible --
+probe now decides which side the cone is on. `regionTest.normalConesOnCurvedEdgesAreUnchanged` is
+re-pinned with the reason written into it; the CONTRACT test is unchanged and still green.
+
+**One defect went with the rewrite.** In the `cNext` block the second attempt read
+`obj.ineqs(cj)` where the first read `obj.ineqs(cNext)` -- so a vertex whose probe failed on the
+left was re-probed against the OTHER edge's constraint. Same copy-paste family as the two index
+inversions already corrected in this routine. Asking one constraint on both sides is what
+`probeOnConstraint` does by construction.
+
+**Not claimed: a speed-up.** The point is reproducibility -- the answer no longer depends on
+`solve()`'s root order -- and the closed form is a by-product. fast 217 / 0, regionTest 18 / 0.
+
 ## 2026-08-18 (evening, fifth) — getNormalConeVertexQ's specification, established. It IS the normal cone, and given the edge list it is exact.
 
 The previous entry said the routine could not be replaced because there was no statement of what a

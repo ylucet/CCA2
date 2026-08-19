@@ -293,6 +293,43 @@ classdef region
              end
          end
 
+         function r = rootsIn (expr, v)
+         % The roots of a polynomial of degree <= 2 in v, in CLOSED FORM and symbolically.
+         %
+         % WHY NOT solve(). Not for speed -- for REPRODUCIBILITY. Every caller of this in
+         % region.m wants a PROBE POINT on a curve and then tests it, and solve()'s root ORDER is
+         % an internal MuPAD convention: measured 2026-08-18, `(x+y)^2-4x` at x=1 comes back
+         % ascending and `x^2+y^2-4` at x=1 descending (DECISIONS.md). A caller that takes root
+         % one is therefore reading that convention, not the geometry. Returning BOTH roots lets
+         % the caller pick by a property instead.
+         %
+         % Falls back to solve() for anything that is not a polynomial of degree <= 2 in v, or
+         % whose leading coefficient cannot be shown nonzero -- the same rule the other closed
+         % forms in this file use (clearlyNonzero).
+             r = sym([]);
+             try
+                 c = coeffs(expr, v, 'All');
+             catch
+                 r = solve(expr, v); return
+             end
+             n = numel(c);
+             if n <= 1
+                 return                                  % constant in v: no root to offer
+             elseif n == 2
+                 if region.clearlyNonzero(c(1)), r = -c(2)/c(1); end
+             elseif n == 3
+                 a = c(1); b = c(2); cc = c(3);
+                 if region.clearlyNonzero(a)
+                     d = sqrt(b^2 - 4*a*cc);
+                     r = [(-b + d)/(2*a); (-b - d)/(2*a)];
+                 elseif region.clearlyNonzero(b)
+                     r = -cc/b;                          % degenerated to affine
+                 end
+             else
+                 r = solve(expr, v);                     % degree > 2 is not a shape this file has
+             end
+         end
+
          function tf = clearlyNonzero (v)
          % Is this symbolic value safely nonzero to divide by? Numeric first, and anything not
          % comfortably away from zero -- or not numerically evaluable -- answers FALSE, so the
@@ -3370,6 +3407,48 @@ classdef region
 
         %function simplifyClosedRegion
         %end
+         function [px, py, ok] = probeOnConstraint(obj, cIdx, xs)
+         % A FEASIBLE point of this region ON constraint cIdx, chosen by PROPERTY, not by root
+         % position: the first (x, y) with y a real root of ineqs(cIdx)(x, .) that the region
+         % actually contains, over the candidate abscissae xs in the order given.
+         %
+         % WHAT IT REPLACES, and why that is a caller rewrite rather than a substitution. The
+         % normal-cone routines used to substitute ONE abscissa, call solve(), take root ONE, and
+         % -- if that point was infeasible -- try the other abscissa, never the other root. Two
+         % consequences, both measured (DECISIONS.md 2026-08-18): the answer depended on solve()'s
+         % internal root ORDER, which no closed form reproduces and which differs between conics;
+         % and the walk could give up while a perfectly good probe sat on the root it never
+         % examined. Asking for the first FEASIBLE root removes both -- the question the caller
+         % actually has is "give me a point of the region on this edge", and that question has an
+         % order-independent answer.
+         %
+         % ok is false when no candidate yields a feasible real root; the caller then keeps
+         % whatever last resort it had.
+             px = sym([]); py = sym([]); ok = false;
+             v = obj.vars;
+             for k = 1:numel(xs)
+                 cx = xs(k);
+                 try
+                     dx = double(cx);
+                 catch
+                     continue
+                 end
+                 ey = subs(obj.ineqs(cIdx).f, v(1), cx);
+                 rts = region.rootsIn(ey, v(2));
+                 for r = 1:numel(rts)
+                     try
+                         dy = double(rts(r));
+                     catch
+                         continue
+                     end
+                     if ~isreal(dy) || ~isfinite(dy), continue, end
+                     if obj.ptFeasible(v, [dx, dy])
+                         px = cx; py = rts(r); ok = true; return
+                     end
+                 end
+             end
+         end
+
          function l = ptFeasible(obj, vars, point)
          % objective: true iff every point is feasible for every constraint (ineqs(i) <= 0).
          %
@@ -4944,33 +5023,15 @@ classdef region
                         %  disp('done')
                       end
                   else
-                      px = obj.vx(j) - 0.1;
-                      ey = subs(obj.ineqs(cj).f,obj.vars(1),px);
-                      py = solve(ey,obj.vars(2));
-                      % py can have >1 root when obj.ineqs(j) is quadratic in y (this is
-                      % getNormalConeVertexQ, the curved/quadratic-edge case) -- reduce to a
-                      % single candidate BEFORE the isempty check (indexing an empty sym array
-                      % errors), matching the same fix already applied a few lines below in this
-                      % same function (see HISTORY: found via testMaxMultiRegion/testMax, a
-                      % plq.biconjugateF call, throwing horzcat:dimensionMismatch when py had 2
-                      % elements here but px stayed a scalar).
-                      if isempty(py)
-                          py = obj.vy(j);
-                      else
-                          py = py(1);
+                      % PROBE BY PROPERTY, NOT BY POSITION -- see region.probeOnConstraint. This
+                      % used to substitute one abscissa, call solve(), take root ONE, and try the
+                      % other abscissa only if that point was infeasible; the other ROOT was never
+                      % examined, and solve()'s ordering decided which probe was used.
+                      [px, py, okP] = obj.probeOnConstraint(cj, [obj.vx(j)-0.1, obj.vx(j)+0.1]);
+                      if ~okP
+                          px = obj.vx(j) - 0.1;   % last resort, as before: no feasible real root
+                          py = obj.vy(j);         % on either side, so use the vertex ordinate
                       end
-                      %obj.ptFeasible(obj.vars,[double(px),double(py)])
-                      if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
-                          px = obj.vx(j) + 0.1;
-                          ey = subs(obj.ineqs(cj).f,obj.vars(1),px);
-                          py = solve(ey,obj.vars(2));
-                          if isempty(py)
-                            py = obj.vy(j);
-                          else
-                            py = py(1);
-                          end
-                      end
-                      %obj.ptFeasible(obj.vars,[double(px),double(py)])
                   end
                   %[tx,ty] = getFeasiblePtNearV (obj, j);
                 else
@@ -4985,26 +5046,12 @@ classdef region
                     if ~isempty(eIdx)
                         ckk = eIdx(kk);
                     end
-                    px = obj.vx(kk) - 0.1;
-                      ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
-                      py = solve(ey,obj.vars(2));
-                      % see the matching HISTORY comment above: reduce a possibly-multi-root py
-                      % (quadratic-in-y ineqs(kk)) to a single candidate before use.
-                      if isempty(py)
-                          py = obj.vy(kk);
-                      else
-                          py = py(1);
-                      end
-                      if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
-                          px = obj.vx(kk) + 0.1;
-                          ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
-                          py = solve(ey,obj.vars(2));
-                          if isempty(py)
-                            py = obj.vy(kk);
-                          else
-                            py = py(1);
-                          end
-                      end
+                    % PROBE BY PROPERTY -- see region.probeOnConstraint and the note above.
+                    [px, py, okP] = obj.probeOnConstraint(ckk, [obj.vx(kk)-0.1, obj.vx(kk)+0.1]);
+                    if ~okP
+                        px = obj.vx(kk) - 0.1;
+                        py = obj.vy(kk);
+                    end
                 end
                 qd = 0;
                   if isAlways(eq.subsF([s1,s2],[px,py]).f < 0)
@@ -5092,31 +5139,17 @@ classdef region
                           py = obj.vy(j)-0.1 ;
                       end
                    else
-                      px = obj.vx(j) - 0.1;
-                      ey = subs(obj.ineqs(cNext).f,obj.vars(1),px);
-                      py = solve(ey,obj.vars(2));
-                      % see the matching HISTORY comment above: reduce a possibly-multi-root py
-                      % (quadratic-in-y ineqs(j+1)) to a single candidate before use.
-                      if isempty(py)
+                      % PROBE BY PROPERTY -- see region.probeOnConstraint and the note above.
+                      %
+                      % AND ONE DEFECT GOES WITH IT: the second attempt here read
+                      % `obj.ineqs(cj)` where the first read `obj.ineqs(cNext)`, so a vertex whose
+                      % probe failed on the left was re-probed on the OTHER edge's constraint --
+                      % the copy-paste twin of the two index inversions already corrected in this
+                      % routine. One constraint is asked once, on both sides.
+                      [px, py, okP] = obj.probeOnConstraint(cNext, [obj.vx(j)-0.1, obj.vx(j)+0.1]);
+                      if ~okP
+                          px = obj.vx(j) - 0.1;
                           py = obj.vy(j);
-                      else
-                          py = py(1);
-                      end
-                      if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
-                          px = obj.vx(j) + 0.1;
-                          ey = subs(obj.ineqs(cj).f,obj.vars(1),px);
-                          py = solve(ey,obj.vars(2));
-                          % HISTORY: this read `py = py(1); if isempty(py) ... end`, indexing
-                          % BEFORE the emptiness guard, so an empty solve threw
-                          % "Index exceeds array bounds" and the guard below it was dead code.
-                          % The identical block a few lines above orders these correctly; this
-                          % copy did not. Reachable from functionNDomain.conjugateOfPiecePoly
-                          % once a Case C conjugate is rich enough to get this far.
-                          if isempty(py)
-                              py = obj.vy(j);
-                          else
-                              py = py(1);
-                          end
                       end
                     end
 
@@ -5132,30 +5165,12 @@ classdef region
                     if ~isempty(eIdx)
                         ckk = eIdx(kk);
                     end
-                    px = obj.vx(kk) - 0.1;
-                      ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
-                      py = solve(ey,obj.vars(2));
-                      % see the matching HISTORY comment above: reduce a possibly-multi-root py
-                      % (quadratic-in-y ineqs(kk)) to a single candidate before use.
-                      if isempty(py)
-                          py = obj.vy(kk);
-                      else
-                          py = py(1);
-                      end
-                      if ~obj.ptFeasible(obj.vars,[double(px),double(py)])
-                          px = obj.vx(kk) + 0.1;
-                          ey = subs(obj.ineqs(ckk).f,obj.vars(1),px);
-                          py = solve(ey,obj.vars(2));
-                          % HISTORY: this read `py = py(1); if isempty(py) ... end`, indexing
-                          % BEFORE the emptiness guard -- the same inversion already corrected
-                          % twice elsewhere in this function; the guard below it was dead code
-                          % and an empty solve threw "Index exceeds array bounds" instead.
-                          if isempty(py)
-                            py = obj.vy(kk);
-                          else
-                            py = py(1);
-                          end
-                      end
+                    % PROBE BY PROPERTY -- see region.probeOnConstraint and the note above.
+                    [px, py, okP] = obj.probeOnConstraint(ckk, [obj.vx(kk)-0.1, obj.vx(kk)+0.1]);
+                    if ~okP
+                        px = obj.vx(kk) - 0.1;
+                        py = obj.vy(kk);
+                    end
                 end
                 
                 
