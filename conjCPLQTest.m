@@ -53,11 +53,18 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(bB.kind(), 'RatPol');
             testCase.verifyEqual(bB.eval([0.2 0.2; 1/3 1/3]), [0; 0], 'AbsTol', 1e-12);
 
-            % ...and a convex triangle piece is its own biconjugate, on the same route.
+            % ...and a convex triangle piece is its own biconjugate -- now WITHOUT taking Case B's
+            % route at all. `biconj` IS the closed-convex-envelope operator, so a convex f is
+            % returned unchanged by the short-circuit at the top of biconjCPLQ (commit 0027900,
+            % 436 s -> 0.05 s), which means the answer keeps the input's own type: QuaPol, not the
+            % RatPol Step 1 would have widened it to. This expectation said RatPol until
+            % 2026-08-19 and was stale from that commit onward -- the slow bucket had not been run
+            % since, which is exactly what the gap in the handoff was about. The VALUE check below
+            % is what this line is really for and is unchanged.
             caseBconvex = QuaPol([0 0; 1 0; 0 1], E3, [1 0 1 0 0 0], F3);
             bBc = caseBconvex.biconj();
             S = [0.2 0.2; 0.6 0.2; 1/3 1/3];
-            testCase.verifyEqual(bBc.kind(), 'RatPol');
+            testCase.verifyEqual(bBc.kind(), 'QuaPol');
             testCase.verifyEqual(bBc.eval(S), caseBconvex.eval(S), 'AbsTol', 1e-12);
 
             % Case C -- general bounded multi-face domain. Its CONVEX member no longer takes the

@@ -1,0 +1,7 @@
+=== suite: C:/Users/ylucet/AI/CCA2 (timeout 7200s per suite) ===
+SUITE biconjCPLQTest               pass= 15 fail=  0 incomplete=  0     59s
+SUITE biconjugateTest              pass=  7 fail=  0 incomplete=  0    186s
+SUITE conjCPLQTest                 pass= 24 fail=  1 incomplete=  0    185s
+  FAIL conjCPLQTest/biconjCoverageByInputCase
+SUITE testMaxMultiRegion           pass= 24 fail=  0 incomplete=  0   2935s
+SUITE testRegion                   pass= 23 fail=  0 incomplete=  0    151s
