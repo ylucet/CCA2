@@ -25,6 +25,51 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (evening, fourth) — getNormalConeVertexQ does NOT compute a normal cone. Its specification is unknown.
+
+The gradient rewrite was built and measured, and the measurement is the useful part.
+
+**The rewrite.** Replace slope-and-probe with `grad g`: the region is `{g_i <= 0}`, so at vertex v
+the outward normal of an ACTIVE constraint is `+grad g_i(v)` -- direction and sign in one
+evaluation. The active set is found by `g_i(v) = 0`, so no edge-slot convention is needed. 21.7 KB
+of code became 5.3 KB, and `solve()` calls in `region.m` fell 19 -> 11.
+
+**It is not correct, and neither is what it replaced.** Tested against the definition of a normal
+cone, with an ORACLE built from that definition rather than from any implementation:
+
+  * `u` in the normal cone at `v`  <=>  `v` maximises `<u,.>` over the region.
+  * GLOBAL form for convex sets; LOCAL form (over the region intersected with a small ball) for
+    non-convex ones.
+
+Two mathematical failure modes, both real:
+
+  * **cone too BIG** -- piece 9's vertex 2. The region is locally `{x <= y^2/4}`, the CONCAVE side
+    of the conic (Hessian eigenvalues 0 and -10), so the gradient half-plane does not contain it:
+    points with `x = y^2/8 > 0` are inside, and direction `(1,0)` is therefore NOT in the true
+    cone though it is a gradient.
+  * **cone too SMALL** -- the half-lens vertex 1. The parabola's gradient `(-4,0)` coincides with
+    `-x`'s, but the region is a CUSP there, whose normal cone is strictly larger than the cone the
+    gradients generate.
+
+So the gradient cone equals the normal cone only under convexity plus a constraint qualification,
+and this codebase's pieces satisfy neither.
+
+**AND THE ORIGINAL FAILS THE SAME TEST.** Measured: the committed implementation disagrees with
+the global definition on 4-30 of 72 directions per vertex, and also fails the local one. So
+`getNormalConeVertexQ` is not computing "the normal cone of this region" in either sense.
+
+**What that means, and it is the actionable part.** Either it computes something else BY DESIGN --
+its own header describes an edge-SLOT convention ("the cone at vertex j is built from ineqs(j) and
+ineqs(j+1)") tied to how `conjugateOfPiecePoly` consumes it, which is a different object from the
+region's normal cone -- or it carries a latent defect that the pipeline compensates for elsewhere.
+**Until that is settled the routine cannot be replaced**, because there is no statement of what a
+replacement must satisfy. Establishing it means reading the CONSUMER (`getSubdiffVertexT1`, which
+re-anchors these rows at `grad f(v)`), not the routine.
+
+**Kept:** the characterization test, which pins the current output in ~13 s. **Reverted:** the
+gradient implementation and the property test, the latter because it fails against the committed
+code and would therefore be red from the start.
+
 ## 2026-08-18 (evening, third) — EVERY solve()-for-a-probe-point site is ORDER-DEPENDENT. Measured.
 
 A differential oracle (`scratchpad/diff_roots.m`, seconds to run) compared `solve()` against the
