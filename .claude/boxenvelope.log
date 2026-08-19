@@ -1,0 +1,21 @@
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCAtmp] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA2] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\common] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\gph] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\pl] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\plots] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\plq] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\soqs] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\tests] 
+
+case                                                     verdict   worst err   returns          time
+-------------------------------------------------------------------------------------------------------------------
+unit box, f = x*y            (QPLIB off-diagonal term)   OK        5.55e-17    QuaPol           0s
+unit box, f = 3xy+7x-2y+5    (term + linear part)        OK        0           QuaPol           0s
+unit box, f = x^2 - y^2      (indefinite, diagonal)      OK        0.000164    QuaPol           0s
+unit box, f = (x^2+y^2)/2    (convex diagonal)           OK        0.000164    QuaPol           0s
+SUB-box [.25,.75]x[0,1], x*y (after one branching)       OK        1.11e-16    QuaPol           0s
+wide box [-2,3]x[-1,4], x*y  (general variable bounds)   OK        0           QuaPol           0s
+

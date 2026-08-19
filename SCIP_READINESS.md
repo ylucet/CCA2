@@ -44,7 +44,8 @@ certainly have.
 
 * **Do:** run `checkBoxEnvelopeForSCIP` and rewrite 0.0.1 from its output.
 * **Closes when:** the table is re-derived, with its date, on the current tree.
-* **Cost:** one run, about 10 minutes of compute.
+* **DONE 2026-08-18.** All six rows OK at 0 s, every one returning a MESHED `QuaPol`; both former
+  ERROR rows pass. 0.0.1 is rewritten from that run (log: `.claude/boxenvelope.log`).
 
 ### A2. Fix the DIAGONAL terms over a box -- the one correctness gap on SCIP's path.
 
@@ -57,7 +58,11 @@ where CCA2 has anything to offer over McCormick.
   do -- not through `biconj`, which buries the evidence), then fix.
 * **Closes when:** both shapes return an envelope matching the lower convex hull of the sampled
   graph, pinned by a test in `biconjugateTest`.
-* **Risk:** unknown until reproduced. This is the one genuinely open piece of mathematics here.
+* **DONE — and there was no mathematics in it.** `x^2 - y^2` is SEPARABLE as written (envelope
+  `x^2 - y`) and `(x^2+y^2)/2` is CONVEX, so both are answered by short-circuits in 0 s and
+  neither reaches the second conjugation where `MATLAB:badsubscript` was raised. Pinned by
+  `biconjCPLQTest.separableOverABoxTakesTheOneDimensionalRoute` and
+  `convexOverABoxIsItsOwnBiconjugate`; measured again in A1's run above.
 
 ### A3. Decide the `unionIsExact` question -- an unknown, not a known bug.
 
@@ -191,7 +196,8 @@ measured: cell count (86 to 60 so far) and the merge gates.
 
 All of the following, each with a measurement on the current tree:
 
-1. `checkBoxEnvelopeForSCIP` shows **no ERROR rows** (A1, A2).
+1. ~~`checkBoxEnvelopeForSCIP` shows **no ERROR rows** (A1, A2).~~ **MET 2026-08-18** -- six rows,
+   no ERROR, every one 0 s and meshed.
 2. ~~The direct-formula / symbolic map exists and names the entry point a separator should call
    (B1, B2).~~ **MET 2026-08-18** -- the map is B1, the entry point is `q.biconj('cplq')`, and on
    SCIP's own shapes it answers in 0.01 s without reaching Step 3.
