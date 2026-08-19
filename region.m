@@ -1370,14 +1370,44 @@ classdef region
                   vars =  obj.vars;
                   drx1 = obj.ineqs(i).dfdx(vars(1));
                   drx2 = obj.ineqs(i).dfdx(vars(2));
-             %     subs(drx2.f,vars,pt)
-                  if abs(subs(drx2.f,vars,pt)) < 1.0d-6
+                  % POLE-SAFE, and the guard is why. It asks "is dg/dy ~ 0 at pt", so that a
+                  % vertical tangent gets slope inf instead of a division by zero -- but it asked
+                  % it by EVALUATING dg/dy at pt, and on this path the constraint can be RATIONAL
+                  % (every second-pass conjugate is), so dg/dy has a denominator of its own that
+                  % can vanish exactly at pt. MATLAB then raises symbolic:kernel:DivisionByZero
+                  % from inside the guard, and the whole biconjugate dies.
+                  %
+                  % MEASURED 2026-08-19: that is what killed testcPLQ's biconjugate stage, via
+                  % simplifyUnboundedRegion -> maximumP -> maxOfList. The routine is unchanged
+                  % since the Phase 1 integration; what changed is which regions reach it.
+                  %
+                  % A POLE IS THE OPPOSITE OF THE CASE THE GUARD IS LOOKING FOR: dg/dy blowing up
+                  % means the tangent is HORIZONTAL, not vertical, so an unevaluable guard must
+                  % fall through to the ratio -- and the ratio is where the two denominators
+                  % CANCEL, which is why simplify recovers a finite slope there.
+                  d2AtPt = NaN;
+                  try
+                      d2AtPt = double(subs(drx2.f, vars, pt));
+                  catch
+                      d2AtPt = NaN;      % a pole: certainly not "close to zero"
+                  end
+                  if isfinite(d2AtPt) && abs(d2AtPt) < 1.0d-6
                       n = n + 1;
                       m(n) = intmax;
                   else
-                      m0 = -drx1.f/drx2.f;
+                      m0 = simplifyFraction(-drx1.f/drx2.f);
                       n = n + 1;
-                      m(n) = subs(m0,vars,pt);
+                      mv = NaN;
+                      try
+                          mv = subs(m0, vars, pt);
+                      catch
+                          % Both derivatives are singular at pt and the ratio does not cancel --
+                          % there is no tangent to report. intmax is this routine's own "vertical
+                          % / undecided" marker (see the caller's -inf normalisation just below),
+                          % so use it rather than inventing a second convention.
+                          mv = intmax;
+                      end
+                      m(n) = mv;
                   end
               end
            end

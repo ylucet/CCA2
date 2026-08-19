@@ -25,6 +25,80 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 (evening) — the crash tests became tests, and the one red turned out to be an unguarded POLE in slopeAtVertex
+
+Four things, and the fourth is the reason the other three were worth doing.
+
+### The two big suites had 32 tests and ZERO assertions
+
+`testcPLQ` (8) and `testMaxMultiRegion` (24) each ran a prefix of
+`triangulate -> convexEnvelope -> conjugate -> maximum -> biconjugateF`, PRINTED the answer, and
+returned. They passed whenever nothing threw. That was 6333 s of a 7207 s bucket -- 90% of it --
+to establish that the functions return. For contrast, `conjCPLQTest` has 74 assertions and costs
+238 s.
+
+Every one now asserts against a DEFINITION rather than a golden value (`plqCheck`), so nothing
+here needs re-pinning when a representation changes:
+
+    convex envelope   co f <= f on the domain, and co f = f at the vertices
+    conjugate         f*(s) = sup_{x in D} <s,x> - f(x), against a numeric sup over the domain
+    biconjugate       f** <= f on the domain, and f** convex along sampled segments
+
+The sup sampler is a LOWER bound (boundary at a fine step, every vertex, plus an interior grid),
+so `f* < sup_sampled` is a definite defect while `f* > sup_sampled` within tolerance is expected;
+both directions are checked with the tolerance each deserves.
+
+**Two bugs in the CHECKS themselves, found by running them.** (a) Step 1's envelope is
+quadratic-over-LINEAR and its denominator vanishes at some domain VERTICES -- exactly where an
+underestimator check most wants to sample -- so `evalFunctionNDomain` raised
+`symbolic:kernel:DivisionByZero` and the test died on the fixture's own geometry;
+`plqCheck.safeEval` now treats a pole as "no value here". (b) `plq.conjugate` leaves each piece's
+result in `.conjugates` (one cell per envelope FACE), while `.maxConjugate` -- what
+`maximumConjugate` writes -- is the object that equals the sup; comparing the wrong one reported
+every point "uncovered".
+
+### The heavy tests are split by STAGE, with the intermediate cached
+
+`plqStage.get(fixture, stage, fcn)` caches each stage keyed by (fixture, stage) and invalidates on
+the mtime of any repository `.m` file. So a cold run costs what it always did, an edit recomputes,
+and a re-run after a failure re-does only the broken stage onward. `testRectBiconj` was ONE test
+of 3198 s that, when it began failing, produced nothing but an exception after 53 minutes; it is
+now four tests that each say which stage broke.
+
+The cache is derived data under `.claude/stagecache/`, is not tracked, and deleting it must change
+nothing but runtime. **No test may assert against a cached value the same run did not verify** --
+otherwise a stale cache becomes a passing test, which is worse than no cache.
+
+### A `--verylong` bucket
+
+`--slow` is now the five suites carrying the real assertions and finishes in minutes;
+`--verylong` is `testcPLQ` + `testMaxMultiRegion`, the pipeline endurance run. Keeping them
+together meant the bucket you run after touching `region.m` cost two hours, so it did not get run
+-- which is precisely how the stale `conjCPLQTest` expectation went unnoticed for a day.
+
+### THE RED: a pole, in a routine nobody has touched since the Phase 1 integration
+
+`testcPLQ/testRectBiconj` passed in the morning's serial run and failed in the evening's. Stack:
+
+    sym/subs                     Division by zero
+    region/slopeAtVertex   1374  abs(subs(drx2.f, vars, pt)) < 1.0d-6
+    region/simplifyUnboundedRegion
+    functionNDomain/maximumP
+    functionNDomain.maxOfList
+    plq/biconjugateF
+
+`git log -S slopeAtVertex` puts its last change at `92c9c96`, the Phase 1 integration. **So none of
+the day's four rewrites broke it; they changed which regions reach it.**
+
+The guard asks "is `dg/dy ~ 0` at pt", so that a vertical tangent gets slope `inf` instead of a
+division by zero -- but it asked by EVALUATING `dg/dy` at pt, and on this path the constraint can
+be RATIONAL (every second-pass conjugate is), so `dg/dy` has a denominator of its OWN which can
+vanish at pt. **A pole is the opposite of what the guard is looking for**: `dg/dy` blowing up means
+the tangent is HORIZONTAL. So an unevaluable guard must fall through to the ratio -- and the ratio
+`-dg/dx / dg/dy` is exactly where the two denominators CANCEL. Fixed that way, with
+`simplifyFraction` on the ratio and `intmax` (this routine's existing "vertical/undecided" marker)
+kept for the case where nothing cancels.
+
 ## 2026-08-19 (later) — the symbolic-removal list is DONE for region.m: isFeasible was weak as well as slow, and both rootsIn fallbacks are dead
 
 Items 5d/5e/5f/5g. Live `solve()` in `region.m` is now **3**, two of which are `region.rootsIn`'s

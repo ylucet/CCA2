@@ -1,4 +1,17 @@
 classdef testMaxMultiRegion < matlab.unittest.TestCase
+% The cPLQ pipeline over MULTI-REGION fixtures, verified numerically.
+%
+% WHAT THIS USED TO BE (changed 2026-08-19): 24 tests and ZERO assertions -- each ran some prefix
+% of `maximum -> biconjugateF`, printed, and returned, so a test passed whenever nothing threw.
+% Four of them ran 6 to 17 minutes apiece and together were half the slow bucket.
+%
+% Every test now asserts against a DEFINITION rather than a golden value (plqCheck): Step 3's
+% output must equal the sup of `<s,x> - f(x)` over the ORIGINAL domain, and f** must be a convex
+% underestimator of f on it. The four heavy ones are additionally split by STAGE and cached
+% (plqStage), so a failure names the stage that broke instead of arriving as an exception at the
+% end of a quarter of an hour.
+%
+% This suite lives in the `--verylong` bucket; see .claude/suite.sh.
 
     properties
         PTri
@@ -89,31 +102,100 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
        end
     end
 
+    methods (Static)
+        function S = dualPoints()
+        % A spread of dual points that puts the sup on different faces of the domain.
+            S = [0 0; 1 0; 0 1; 1 1; -1 1; 1 -1; -1 -1; 2 0.5; -0.5 2];
+        end
+
+        function verifyStep3(tc, p, orig, name)
+        % Step 3's max ACROSS the pieces is f* of the union, so it equals the sup of
+        % `<s,x> - f(x)` over the ORIGINAL, pre-triangulation domain. That identity is what makes
+        % Step 3 correct, and it is exactly what a crash test cannot see.
+            S = testMaxMultiRegion.dualPoints();
+            for i = 1:size(S,1)
+                sPt = S(i,:);
+                got = evalFunctionNDomain(p.maxConjugate, sPt);
+                want = -inf;
+                for k = 1:orig.nPieces
+                    q = orig.pieces(k);
+                    want = max(want, plqCheck.supOverDomain(q.f.f, q.d.polygon.vars, q.d, sPt));
+                end
+                tc.verifyFalse(isnan(got), sprintf('%s: f* uncovered at (%g,%g)', ...
+                    name, sPt(1), sPt(2)));
+                if isnan(got), continue, end
+                tc.verifyEqual(got, want, 'AbsTol', 1e-5 * max(1, abs(want)), sprintf( ...
+                    '%s: f*(%g,%g) = %.9g, sup over the domain is %.9g', ...
+                    name, sPt(1), sPt(2), got, want));
+            end
+        end
+
+        function verifyCellsAreUsable(tc, pc, name)
+        % The weakest honest assertion for a test whose only real output is a
+        % `conjugateOfPiecePoly` result: it produced cells, every cell carries a function and a
+        % non-empty region, and no region is degenerate. These tests were exploratory scratch --
+        % several `return` before they reach anything -- so this checks what actually runs rather
+        % than pretending to verify a value they never compute.
+            tc.verifyNotEmpty(pc, sprintf('%s: conjugateOfPiecePoly returned nothing', name));
+            for k = 1:numel(pc)
+                tc.verifyNotEmpty(pc(k).d, sprintf('%s: cell %d has an empty region', name, k));
+                if isempty(pc(k).d), continue, end
+                tc.verifyGreaterThan(size(pc(k).d.ineqs,2), 0, sprintf( ...
+                    '%s: cell %d has no constraints', name, k));
+                tc.verifyNotEmpty(pc(k).f, sprintf('%s: cell %d carries no function', name, k));
+            end
+        end
+
+        function verifyBiconj(tc, p, orig, name)
+        % f** is a convex underestimator of f on the domain.
+            for k = 1:orig.nPieces
+                q = orig.pieces(k);
+                plqCheck.biconjugateIsAConvexUnderestimator(tc, p.biconjugate, ...
+                    q.f.f, q.d.polygon.vars, q.d, sprintf('%s piece %d f**', name, k));
+            end
+        end
+    end
+
     methods (Test)
 
-        function testMax (testCase)
-            testCase.PRect = testCase.PRect.maximum;
-            %return
-            testCase.PRect = testCase.PRect.biconjugateF;
-           % return
-             testCase.PRect.print;
-             testCase.PRect.printDomainMaple;
-            %% 
-            %testCase.PRect.printLatex
-            
-           
+        function testMaxStep3 (testCase)
+        % Was the first half of `testMax` (932 s, no assertions). Step 3's max across the pieces
+        % IS f* of the union, so it must equal the sup over the ORIGINAL domain -- checked here,
+        % and cached for the biconjugate test below.
+            p = plqStage.get('MMR_PRect', 'max', @() testCase.PRect.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, testCase.PRect, 'PRect');
+        end
+
+        function testMaxBiconjugate (testCase)
+        % The second half. Starts from the cached Step 3 result, so a failure is attributable to
+        % biconjugateF alone.
+            p = plqStage.get('MMR_PRect', 'biconj', @() ...
+                plqStage.get('MMR_PRect', 'max', @() testCase.PRect.maximum).biconjugateF);
+            testCase.verifyNotEmpty(p.biconjugate, 'biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, p, testCase.PRect, 'PRect');
         end
 
         function testPCE0 (testCase)
 
             testCase.PCE0_2 = testCase.PCE0_2.maximum;
             testCase.PCE0_2 = testCase.PCE0_2.biconjugateF;
+            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
+            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
+            % domain; f** must be a convex underestimator of f on it. Placed HERE,
+            % before the print/return block, because several of these tests return
+            % early -- an assertion after that would be dead code that always passes.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE0_2, testCase.PCE0_2, 'PCE0_2');
+            testCase.verifyNotEmpty(testCase.PCE0_2.biconjugate, ...
+                'PCE0_2: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, testCase.PCE0_2, testCase.PCE0_2, 'PCE0_2');
             testCase.PCE0_2.print;
              testCase.PCE0_2.printDomainMaple;
             return
 
             
            
+
         end
 
 
@@ -121,12 +203,22 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
 
             testCase.PCE0_3 = testCase.PCE0_3.maximum;
             testCase.PCE0_3 = testCase.PCE0_3.biconjugateF;
+            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
+            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
+            % domain; f** must be a convex underestimator of f on it. Placed HERE,
+            % before the print/return block, because several of these tests return
+            % early -- an assertion after that would be dead code that always passes.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE0_3, testCase.PCE0_3, 'PCE0_3');
+            testCase.verifyNotEmpty(testCase.PCE0_3.biconjugate, ...
+                'PCE0_3: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, testCase.PCE0_3, testCase.PCE0_3, 'PCE0_3');
             testCase.PCE0_3.print;
              testCase.PCE0_3.printDomainMaple;
             return
 
             
            
+
         end
 
 
@@ -136,12 +228,22 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             % testCase.PCE1 = testCase.PCE1.convexEnvelope;
              testCase.PCE1 = testCase.PCE1.maximum;
              testCase.PCE1 = testCase.PCE1.biconjugateF;
+            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
+            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
+            % domain; f** must be a convex underestimator of f on it. Placed HERE,
+            % before the print/return block, because several of these tests return
+            % early -- an assertion after that would be dead code that always passes.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE1, testCase.PCE1, 'PCE1');
+            testCase.verifyNotEmpty(testCase.PCE1.biconjugate, ...
+                'PCE1: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, testCase.PCE1, testCase.PCE1, 'PCE1');
             testCase.PCE1.print;
             testCase.PCE1.printDomainMaple;
             return
 
             
            
+
         end
 
         function testPCE2 (testCase)
@@ -155,6 +257,9 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             % (functionNDomain.addEq errors with an unassigned output when
             % the biconjugate result is empty for this domain).
              testCase.PCE1 = testCase.PCE1.maximum;
+            % VERIFIED, not merely run -- see plqCheck. Step 3 only: biconjugateF is
+            % deliberately not called here (see the note above), so there is no f** to check.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE1, testCase.PCE1, 'PCE2 fixture');
              testCase.PCE1.print;
             %
             testCase.PCE1.printDomainMaple;
@@ -186,6 +291,8 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             p = functionNDomain([f], [d]);
             p.printL
             pc = p(1).conjugateOfPiecePoly ;
+            % VERIFIED, not merely run: the cells must be a usable cover.
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 1');
 
         end
 
@@ -232,6 +339,8 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             
             %return
             pc = p.conjugateOfPiecePoly ;
+            % VERIFIED, not merely run: the cells must be a usable cover.
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 2');
             pc = pc.addEq;
             pc.printL
             pc.printM
@@ -308,6 +417,8 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             p.printM;
             %return
             pc = p.conjugateOfPiecePoly ;
+            % VERIFIED, not merely run: the cells must be a usable cover.
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 3');
             pc = pc.addEq;
             pc.printL
             pc.printM;
@@ -421,6 +532,8 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             p.printM
             
             pc = p.conjugateOfPiecePoly ;
+            % VERIFIED, not merely run: the cells must be a usable cover.
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 4');
             %pc = pc.mergeL;
             pc = pc.addEq;
             pc.printL
@@ -492,6 +605,8 @@ return
  p.printL
 % return
              pc = p.conjugateOfPiecePoly ;
+             % VERIFIED, not merely run: the cells must be a usable cover.
+             testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 5');
             %pc = pc.mergeL;
             %pc = pc.addEq;
             pc.printL
@@ -532,6 +647,8 @@ return
             p.printL
             
              pc = p.conjugateOfPiecePoly ;
+             % VERIFIED, not merely run: the cells must be a usable cover.
+             testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 6');
             %pc = pc.mergeL;
             pc.printL
             pc = pc.addEq;
@@ -595,6 +712,8 @@ return
             p.printL
             
             pc = p.conjugateOfPiecePoly ;
+            % VERIFIED, not merely run: the cells must be a usable cover.
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 7');
             %pc = pc.mergeL;
             pc.printL
             pc = pc.addEq;
@@ -681,6 +800,8 @@ return
             p.printL
             
             pc = p.conjugateOfPiecePoly ;
+            % VERIFIED, not merely run: the cells must be a usable cover.
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, pc, 'cells 8');
             %pc = pc.mergeL;
             pc.printL
             pc = pc.addEq;
@@ -690,6 +811,13 @@ return
         function testConvex (testCase)
             %testCase.PRect3.print
             testCase.PRect3 = testCase.PRect3.convexEnvelope
+            % VERIFIED, not merely run -- see plqCheck and the note on the first such
+            % block above. Placed immediately after the pipeline call because several
+            % of these tests `return` before their printing.
+            for iP = 1:testCase.PRect3.nPieces
+                plqCheck.envelopeUnderestimates(testCase, testCase.PRect3.pieces(iP), ...
+                    sprintf('PRect3 co f piece %d', iP));
+            end
             
             %% 
             %testCase.PRect.printLatex
@@ -699,6 +827,17 @@ return
         function testConjugate (testCase)
             %testCase.PRect3.print
             testCase.PRect3 = testCase.PRect3.conjugate
+            % VERIFIED, not merely run -- see plqCheck and the note on the first such
+            % block above. Placed immediately after the pipeline call because several
+            % of these tests `return` before their printing.
+            for iP = 1:testCase.PRect3.nPieces
+                % .maxConjugate is written by maximumConjugate, not by conjugate -- comparing
+                % .conjugates to the sup reports every point uncovered.
+                q = testCase.PRect3.pieces(iP).maximumConjugate;
+                plqCheck.conjugateMatchesSup(testCase, q.maxConjugate, q.f.f, ...
+                    q.d.polygon.vars, q.d, testMaxMultiRegion.dualPoints(), ...
+                    sprintf('PRect3 piece %d f*', iP));
+            end
             
             %% 
             %testCase.PRect.printLatex
@@ -710,6 +849,13 @@ return
             testCase.PRect3.print
             testCase.PRect3 = testCase.PRect3.maximum;
             testCase.PRect3 = testCase.PRect3.biconjugateF;
+            % VERIFIED, not merely run -- see plqCheck and the note on the first such
+            % block above. Placed immediately after the pipeline call because several
+            % of these tests `return` before their printing.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PRect3, testCase.PRect3, 'PRect3');
+            testCase.verifyNotEmpty(testCase.PRect3.biconjugate, ...
+                'PRect3: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, testCase.PRect3, testCase.PRect3, 'PRect3');
             %% 
             %return
             %testCase.PRect.printLatex
@@ -718,31 +864,18 @@ return
         end
         
         function testMaxT (testCase)
-            %testCase.PRect3.print
-            testCase.PTri2 = testCase.PTri2.maximum
-            
-            %% 
-            %testCase.PRect.printLatex
-            testCase.PTri2.print
-            testCase.PTri2.printDomainMaple
+        % Step 3 on the two-polygon PTri2 fixture, against the sup over its own domain.
+            p = plqStage.get('MMR_PTri2', 'max', @() testCase.PTri2.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, testCase.PTri2, 'PTri2');
         end
         
         function testMaxP (testCase)
-            %testCase.Poly.print
-            testCase.Poly = testCase.Poly.maximum
-            % return
-            %testCase.Poly = testCase.Poly.biconjugateF
-            testCase.Poly.print
-            testCase.Poly.printDomainMaple
-             return
-             
-           %  return
-          
-            %% 
-           % testCase.Poly.printLatex
-            testCase.Poly.printDomainMaple
-           
-           
+        % Step 3 on the six-vertex polygon -- the longest single job in the bucket at 1023 s, and
+        % previously the one with the least to show for it (it printed and returned).
+            p = plqStage.get('MMR_Poly', 'max', @() testCase.Poly.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, testCase.Poly, 'Poly');
         end
 
         
@@ -752,16 +885,23 @@ return
         % end
 
         function testMax3 (testCase)
-            testCase.PRect2 = testCase.PRect2.maximum
-            testCase.PRect2 = testCase.PRect2.biconjugateF
-            testCase.PRect2.print
-            testCase.PRect2.printDomainMaple
-            %testCase.PRect2.printLatex
-           
+        % x^2 - y^2 over a quadrilateral: Step 3 then the biconjugate, both verified. Split by
+        % stage like testMax above, since this one also runs for minutes.
+            p = plqStage.get('MMR_PRect2', 'max', @() testCase.PRect2.maximum);
+            testMaxMultiRegion.verifyStep3(testCase, p, testCase.PRect2, 'PRect2');
+            p = plqStage.get('MMR_PRect2', 'biconj', @() p.biconjugateF);
+            testCase.verifyNotEmpty(p.biconjugate, 'biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, p, testCase.PRect2, 'PRect2');
         end
 
         function testPSqroot (testCase)
             testCase.PSqroot = testCase.PSqroot.maximum
+            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
+            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
+            % domain; f** must be a convex underestimator of f on it. Placed HERE,
+            % before the print/return block, because several of these tests return
+            % early -- an assertion after that would be dead code that always passes.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PSqroot, testCase.PSqroot, 'PSqroot');
             %testCase.PSqroot = testCase.PSqroot.biconjugateF
             testCase.PSqroot.print
             testCase.PSqroot.printDomainMaple
@@ -789,6 +929,15 @@ return
             P.pieces(1).conjugates(4).d.ineqs(3) = -P.pieces(1).conjugates(4).d.ineqs(3)
             
             P.pieces(1).biconjugateP
+            % VERIFIED, not merely run. This test hand-builds a RATIONAL envelope face and then
+            % hand-flips one conjugate constraint, so the object it produces is deliberately not
+            % the pipeline's own answer -- there is no sup to compare against. What IS assertable
+            % is that the hand-edits left a well-formed conjugate: cells exist, each carries a
+            % function and a non-degenerate region, and the flipped constraint really did flip.
+            testCase.verifyNotEmpty(P.pieces(1).conjugates, ...
+                'testFractional: the conjugate has no cells');
+            testMaxMultiRegion.verifyCellsAreUsable(testCase, P.pieces(1).conjugates, ...
+                'testFractional conjugate');
             P.print
             
             P.printDomainMaple
@@ -800,10 +949,20 @@ return
             warning('off','all') 
             testCase.PThesis = testCase.PThesis.maximum
             testCase.PThesis = testCase.PThesis.biconjugateF
+            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
+            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
+            % domain; f** must be a convex underestimator of f on it. Placed HERE,
+            % before the print/return block, because several of these tests return
+            % early -- an assertion after that would be dead code that always passes.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PThesis, testCase.PThesis, 'PThesis');
+            testCase.verifyNotEmpty(testCase.PThesis.biconjugate, ...
+                'PThesis: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, testCase.PThesis, testCase.PThesis, 'PThesis');
             %% 
             %testCase.PRect.printLatex
            % testCase.PThesis.print
             testCase.PThesis.printDomainMaple
+
         end
 
         function testMaxThesis2 (testCase)
@@ -856,6 +1015,13 @@ return
 
             testCase.PThesis = testCase.PThesis.maximum;
             testCase.PThesis = testCase.PThesis.biconjugateF;
+            % VERIFIED, not merely run -- see plqCheck and the note on the first such
+            % block above. Placed immediately after the pipeline call because several
+            % of these tests `return` before their printing.
+            testMaxMultiRegion.verifyStep3(testCase, testCase.PThesis, testCase.PThesis, 'PThesis2');
+            testCase.verifyNotEmpty(testCase.PThesis.biconjugate, ...
+                'PThesis2: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, testCase.PThesis, testCase.PThesis, 'PThesis2');
             testCase.PThesis.printDomainMaple;
             return
             
@@ -874,6 +1040,13 @@ return
             %d.print
             testCase.POpen = plq([plq_1piece(d,symbolicFunction(x*y))]);
             testCase.POpen = testCase.POpen.convexEnvelope
+            % VERIFIED, not merely run -- see plqCheck and the note on the first such
+            % block above. Placed immediately after the pipeline call because several
+            % of these tests `return` before their printing.
+            for iP = 1:testCase.POpen.nPieces
+                plqCheck.envelopeUnderestimates(testCase, testCase.POpen.pieces(iP), ...
+                    sprintf('POpen co f piece %d', iP));
+            end
             testCase.POpen.print
         end
 

@@ -7,7 +7,8 @@
 #   .claude/suite.sh --fast                       # fast bucket, one process, budget 5 min
 #   .claude/suite.sh --normal                     # normal bucket, one process, budget 10 min
 #   .claude/suite.sh --slow                       # slow (symbolic) bucket, one process per suite
-#   .claude/suite.sh --slow -j 4                  # ...four at a time, big suites split per test
+#   .claude/suite.sh --slow -j 4                  # ...four at a time
+#   .claude/suite.sh --verylong -j 4              # the multi-minute pipeline suites
 #   CCA2_TEST_JOBS=4 .claude/suite.sh --slow      # same, via the environment
 #   .claude/suite.sh regionTest conjCPLQTest      # only these suites
 #
@@ -31,9 +32,20 @@ TIMEOUT="${CCA2_TEST_TIMEOUT:-3600}"
 cd "$CCA2DIR" || exit 1
 
 # ---- BUCKETS ---------------------------------------------------------------------------------
-# fast   : the whole bucket in ONE MATLAB, budget 5 minutes.
-# normal : the whole bucket in ONE MATLAB, budget 10 minutes.
-# slow   : one MATLAB per suite under `timeout`, no budget -- these are the symbolic ones.
+# fast     : the whole bucket in ONE MATLAB, budget 5 minutes.
+# normal   : the whole bucket in ONE MATLAB, budget 10 minutes.
+# slow     : one MATLAB per suite under `timeout`, no budget -- the symbolic ones.
+# verylong : the same, for suites where a SINGLE test runs for many minutes.
+#
+# WHY VERYLONG EXISTS (2026-08-19). Measured: the slow bucket was 7207 s, and 6333 s of that was
+# two suites -- testcPLQ and testMaxMultiRegion -- whose individual tests run 15 to 53 minutes
+# each. They are whole-pipeline runs (triangulate -> envelope -> conjugate -> Step 3 ->
+# biconjugate) on fixtures big enough that Step 3's symbolic max dominates. Keeping them in
+# `--slow` meant the bucket you run after touching region.m cost two hours, so it was not run --
+# and that is exactly how a stale expectation in conjCPLQTest went unnoticed for a day.
+#
+# Split out, `--slow` is the four suites carrying real assertions and finishes in minutes;
+# `--verylong` is the pipeline endurance run, for before a tag or overnight.
 #
 # WHY THE FAST AND NORMAL BUCKETS SHARE A PROCESS. Measured per suite (18 suites, 6 concurrent):
 # every fast suite came in at 41-61 s, and that is almost entirely MATLAB startup plus toolbox
@@ -73,11 +85,12 @@ FAST_SUITES=(PLQVCTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolT
              lasryLionsTest maxQuaParTest mergeSameQuadFacesTest moreauTest proxAverageTest
              regionTest testSymbolicFunction)
 NORMAL_SUITES=(cplqAdapterTest functionNDomainTest testfunctionNDomain)
-# Split PER TEST when running in parallel. These two are 90% of the slow bucket, so they are the
-# only ones whose length sets the wall clock; splitting anything else just adds MATLAB startups.
+# Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
+# wall clock at the suite's whole runtime.
 SHARD_SUITES=(testcPLQ testMaxMultiRegion)
-SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testMaxMultiRegion testRegion
-             testcPLQ unboundedFaceTest)
+SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest)
+# Individual tests here run for many minutes; see the VERYLONG note above.
+VERYLONG_SUITES=(testcPLQ testMaxMultiRegion)
 
 run_job () {
     # $1 = job name ("suite" or "suite/test"), $2 = index. Writes ONE result file and prints
@@ -128,6 +141,8 @@ case "${1:-}" in
     --fast)   SUITES=("${FAST_SUITES[@]}");   ONEPROC=1; shift ;;
     --normal) SUITES=("${NORMAL_SUITES[@]}"); ONEPROC=1; shift ;;
     --slow)   SUITES=("${SLOW_SUITES[@]}");            shift ;;
+    --verylong) SUITES=("${VERYLONG_SUITES[@]}");     shift ;;
+    --all)    SUITES=("${FAST_SUITES[@]}" "${NORMAL_SUITES[@]}" "${SLOW_SUITES[@]}"                       "${VERYLONG_SUITES[@]}");       shift ;;
     *)
         if [ "$#" -gt 0 ] && [ "${1:-}" != "-j" ]; then
             SUITES=("$@")

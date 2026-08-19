@@ -1,27 +1,31 @@
-# The original cPLQ package, kept locally as a reference clone only.
+
 #
 # CCA2 contains a substantially REWRITTEN version of that symbolic per-piece machinery (plq.m,
-# region.m, functionNDomain.m, symbolicFunction.m and companions, in this repository's root), so
-# the original is deliberately NOT bundled. Licensing is not the reason -- cPLQ is GPL-3, same as
 # CCA2. The reason is that shipping both would leave users wondering which version to use.
-cPLQ/
-
-# Reference papers, kept LOCAL only. These are third-party COPYRIGHTED PDFs and must never ship in
-# a public release; CCA2 is private today but is intended to be made public. DESIGN.md and the
-# source headers cite them by their [TAG] and filename so the local copies remain findable, but the
-# files themselves are not distributed -- see README.md's references section for the full citations,
-# which is what a public reader needs.
-reference/
-
 # MATLAB / editor cruft
+# OWN documents and figures in doc/ (3-edge.tex/.pdf, fig_*.pdf, *.svg) remain tracked.
+# Published (version-of-record) PDFs of the project's own papers, kept LOCAL only. Same reason as
+# README.md and DESIGN.md ([COAP] and [JOGO]), which is what a public reader needs. The project's
+# Reference papers, kept LOCAL only. These are third-party COPYRIGHTED PDFs and must never ship in
+# The original cPLQ package, kept locally as a reference clone only.
+# a public release; CCA2 is private today but is intended to be made public. DESIGN.md and the
+# files themselves are not distributed -- see README.md's references section for the full citations,
+# publishing agreement, and CCA2 is intended to become public. The papers are cited in full in
+# reference/ above: redistributing a publisher's typeset version is generally not permitted by the
+# region.m, functionNDomain.m, symbolicFunction.m and companions, in this repository's root), so
+# source headers cite them by their [TAG] and filename so the local copies remain findable, but the
+# the original is deliberately NOT bundled. Licensing is not the reason -- cPLQ is GPL-3, same as
+# which is what a public reader needs.
 *.asv
 *.m~
-slprj/
-
-# Published (version-of-record) PDFs of the project's own papers, kept LOCAL only. Same reason as
-# reference/ above: redistributing a publisher's typeset version is generally not permitted by the
-# publishing agreement, and CCA2 is intended to become public. The papers are cited in full in
-# README.md and DESIGN.md ([COAP] and [JOGO]), which is what a public reader needs. The project's
-# OWN documents and figures in doc/ (3-edge.tex/.pdf, fig_*.pdf, *.svg) remain tracked.
+.claude/*.log
+.claude/stagecache/
+cPLQ/
 doc/s10589-026-00781-5.pdf
 doc/s10898-025-01503-7.pdf
+reference/
+slprj/
+
+# Test stage cache and run logs: derived data, regenerated on demand (plqStage.m).
+.claude/stagecache/
+.claude/*.log
