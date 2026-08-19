@@ -25,6 +25,43 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (evening, third) — EVERY solve()-for-a-probe-point site is ORDER-DEPENDENT. Measured.
+
+A differential oracle (`scratchpad/diff_roots.m`, seconds to run) compared `solve()` against the
+closed-form quadratic on seven conics x six probe abscissae, asking the question the CALLERS
+actually ask -- "the first REAL root":
+
+    cases 42, disagree 16, and every disagreement is a case where BOTH roots are real.
+
+So the picks differ whenever the probe line crosses the conic twice, which for these shapes is
+the common case, not the exception. `removeTangent` loops for the first REAL root rather than
+taking `solve()`'s first, and even that is not enough: with two real roots, position still decides.
+
+**This generalises to the whole substitution programme.** Every remaining `solve()` in `region.m`
+-- the normal cones, `isconvex`, `removeTangent`, `pointBetweenOnCurve` -- computes a PROBE POINT
+on a curve and then picks one root by POSITION. `solve()`'s ordering is an internal MuPAD
+convention (measured: `(x+y)^2-4x` at `x=1` ascending, `x^2+y^2-4` at `x=1` descending), so no
+closed form reproduces it, and substituting changes which probe is used -- hence which orientation
+is deduced, hence the answer.
+
+**The work is therefore not a substitution, it is a caller rewrite.** Each site has to pick its
+root by a PROPERTY -- first feasible, first satisfying the orientation test -- instead of by
+position. That is strictly better than today (it also fixes sites that give up while a good probe
+sits on the root they never examined), but it changes behaviour and so needs a property oracle per
+site.
+
+**And one such oracle exposed a second problem.** `getNormalConeVertexQ` called WITHOUT `eIdx`
+falls back to "constraint j bounds edge j" by slot -- the convention `edgeIndexList` exists to
+replace. Tested standalone against the definition (s is in the normal cone at v iff v maximises
+<s,.> over the region), it disagrees on 4-30 of 72 directions per vertex. So a fast test for that
+routine MUST supply the edge-index list the pipeline supplies; testing it bare pins a
+configuration the pipeline does not use.
+
+**Order of work for the next attempt**, which is now clear:
+1. property oracle for the normal cone WITH `eIdx`, mirroring `conjugateOfPiecePoly`'s call;
+2. rewrite the probe selection to be property-based, verified against it;
+3. only then substitute closed forms, which at that point cannot change the answer.
+
 ## 2026-08-18 (evening, second attempt) — the closed-form normal cones are SLOWER. Measured, not guessed.
 
 The first attempt was reverted because `solve()`'s root order is not reproducible. This attempt
