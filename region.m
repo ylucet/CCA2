@@ -3581,16 +3581,58 @@ classdef region
          end
 
          function l = isFeasible(obj)
+         % A NECESSARY condition for this region to be nonempty. False means provably empty;
+         % true means nothing was found to contradict it, so callers must treat it that way.
+         %
+         % WHAT CHANGED 2026-08-19, and why it is both cheaper and STRONGER. This asked
+         % `solve(g_i <= 0, g_j <= 0)` for every PAIR -- O(n^2) calls into the symbolic engine,
+         % and pairwise emptiness is a weak test: three affine constraints can be jointly
+         % infeasible with every PAIR of them perfectly satisfiable (x >= 1, y >= 1, x + y <= 1),
+         % and no amount of pair-checking sees it.
+         %
+         % The affine constraints are now decided TOGETHER by one LP (`region.maxLinear`, whose
+         % st = -1 IS the infeasibility certificate) -- exact, all n at once, and it catches the
+         % n-way case the pairs cannot. `solve` is kept for the pairs a CONIC takes part in,
+         % which the linear relaxation drops and which therefore still need the engine. On these
+         % regions most constraints are affine, so most of the O(n^2) engine calls disappear.
+         %
+         % The `g_i == -g_j` pair is still refused for EVERY pair, including two affine ones,
+         % because that is this routine's existing verdict: `g <= 0` with `-g <= 0` leaves only
+         % the set `g == 0`, which the LP would happily report feasible. Preserving it keeps the
+         % change to what was measured rather than quietly widening the answer.
              l = false;
-             for i = 1:size(obj.ineqs,2)
-               for j = i+1:size(obj.ineqs,2)
+             % An EMPTY region object (region.empty(), which the constructor itself returns for
+             % an input it can already see is infeasible) has no ineqs to index -- `obj.ineqs` on
+             % a 0x0 object array is a comma-separated list of zero values, so every size() below
+             % gets no argument at all. Empty is empty: the answer is false. Same guard as
+             % region.plus/merge/finiteVertices.
+             if isempty(obj)
+                 return
+             end
+             n = size(obj.ineqs,2);
+             lin = false(1, n);
+             try
+                 [A, b, lin] = obj.linearForm;
+                 if any(lin)
+                     [~, st] = region.maxLinear(A(lin,:), b(lin), [0 0]);
+                     if st == -1
+                         return                    % the affine part alone is empty
+                     end
+                 end
+             catch
+                 lin = false(1, n);                % no relaxation available: every pair below
+             end
+             for i = 1:n
+               for j = i+1:n
                  if ( obj.ineqs(i) == unaryminus(obj.ineqs(j)))
                      return
                  end
                  if ( obj.ineqs(i) == obj.ineqs(j))
                      continue
                  end
-                 
+                 if lin(i) && lin(j)
+                     continue                      % decided exactly by the LP above
+                 end
                  s = solve(obj.ineqs(i).f<=0,obj.ineqs(j).f<=0);
                  if isempty(s)
                      return;

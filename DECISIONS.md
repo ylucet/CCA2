@@ -25,6 +25,71 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 (later) — the symbolic-removal list is DONE for region.m: isFeasible was weak as well as slow, and both rootsIn fallbacks are dead
+
+Items 5d/5e/5f/5g. Live `solve()` in `region.m` is now **3**, two of which are `region.rootsIn`'s
+own fallback and one of which (`isFeasible`) is kept deliberately, for conic pairs only.
+
+### 5f. The sweep outside region.m found ONE genuine instance, and one already-correct one
+
+`functionNDomain.m` has six `solve()` sites, `plq_1p.m` one, and the pattern that produced the
+`removeTangent` defect appears in exactly one of them:
+
+* **`conjugateOfPiecePoly`'s isQuad chord rewrite** (line ~1296) already asked the right question
+  -- "is root one feasible, else take the other" -- but asked it in a way that breaks twice:
+  `my2(2)` is indexed UNCONDITIONALLY when root one fails, so a conic with a single root at the
+  chord midpoint (a tangency) raises `Index exceeds array bounds`; and the second root is never
+  itself tested for feasibility OR realness, so a complex root can become the probe and the
+  orientation test then reads it. Now `probeOnConstraint`, which is that question stated once.
+* **`pointBetweenOnCurve`** (line ~2210) was ALREADY property-based -- it takes
+  `min(abs(sol))`, the root nearest the chord -- and needs nothing. Worth recording as the
+  pattern to copy.
+* The remaining sites solve SYSTEMS (`solve([eq1,eq2], vars)` for a gradient equation,
+  `solve(ineq1,[x,y])` for a subdifferential row) rather than picking one root of one polynomial
+  by position. Different mechanism; out of scope, and left alone.
+
+### 5e. Both `rootsIn` fallbacks are DEAD on every path four suites exercise
+
+Instrumented the five branches and ran `regionTest`, `functionNDomainTest`, `maxQuaParTest`,
+`convEnvCPLQTest` (71 tests, all green):
+
+    not a polynomial in v   0
+    constant in v           2
+    affine                  5
+    QUADRATIC              23
+    degree > 2              0
+
+So every call takes the closed form; **the two `solve()` fallbacks were never entered**. They stay
+anyway -- they cost nothing when unreached and they are the honest answer for a shape this file
+does not currently produce -- but nothing is relying on them. Scope: these four suites. The slow
+bucket was not instrumented, so a slow-only path could in principle differ.
+
+### 5d. `isFeasible` was pairwise, and pairwise emptiness is a WEAK test
+
+It asked `solve(g_i <= 0, g_j <= 0)` for every PAIR -- O(n^2) calls into the engine -- and pairwise
+emptiness cannot see n-way infeasibility: `x >= 1, y >= 1, x + y <= 1` is infeasible with every
+PAIR of its three constraints perfectly satisfiable. The affine constraints are now decided
+TOGETHER by one LP (`region.maxLinear`, whose `st = -1` IS the certificate), and `solve` is kept
+only for pairs a CONIC takes part in, which the linear relaxation drops. Cheaper AND strictly
+stronger on the affine part.
+
+Two things preserved deliberately: the `g_i == -g_j` refusal stays for EVERY pair (the LP would
+report `g == 0` feasible, and changing that verdict is not what this change is for), and an EMPTY
+region object now returns false through an explicit guard rather than erroring on
+`size(obj.ineqs,2)` -- `region()` itself returns `region.empty()` for an input it can already see
+is infeasible, so that path is reachable.
+
+Nine cases, all correct (`.claude/isFeasibleCases.m`), including the three-way case above, a
+tangency, a conic disjoint from a line, and an unbounded wedge.
+
+### 5g. The `solveForY` dead end is struck
+
+That entry's closing recommendation -- "make the callers order-INDEPENDENT" -- has now been
+carried out at four sites and is `region.probeOnConstraint`. It is marked struck with the recipe,
+so it reads as settled rather than as an open invitation to retry the naive substitution. One
+refinement experience added: the property is not always feasibility. A probe that reads a curve's
+SIGN near a vertex needs the root on the same BRANCH, which is the nearest one.
+
 ## 2026-08-19 — three more symbolic-removal sites: isconvex rewritten, removeTangent's probe was on the WRONG BRANCH, getNormalConeEdgeQ0 was dead
 
 Items 5a/5b/5c of the symbolic-removal list, all measured before being changed. Live `solve()` in
@@ -359,6 +424,26 @@ bucket. That test is the reusable result of the exercise; the optimisation is no
 **Rule this establishes for the remaining `solve()` sites:** extraction cost is amortised over the
 number of uses. Convert where one extraction serves many operations; leave it where it serves one.
 
+## ~~2026-08-18 (evening) — REVERTED: closed-form NORMAL CONES. solve()'s root ORDER is not reproducible.~~
+
+> **SETTLED 2026-08-18/19 — this entry's own recommendation was carried out, and the recipe is
+> now `region.probeOnConstraint`.** The diagnosis below stands and is why the naive substitution
+> was right to revert; what is stale is reading it as an OPEN item. Four sites have since been
+> rewritten the way the last bullet asks for -- pick the root by a PROPERTY, not by position:
+>
+>   * `getNormalConeVertexQ` (2026-08-18): eight `solve()` calls -> four `probeOnConstraint`
+>     calls, first FEASIBLE root. Cones still exact against the definition given `eIdx`.
+>   * `isconvex` (2026-08-19): four calls, same recipe; agrees with an independent oracle on
+>     every decidable probe.
+>   * `removeTangent` (2026-08-19): the property there is NOT feasibility but BRANCH CONTINUITY
+>     -- the root nearest the vertex's own ordinate. First-real-root was on the wrong branch in
+>     **22 of 34** probes, so this one was a defect, not just an ordering risk.
+>   * `getNormalConeEdgeQ0` (2026-08-19): deleted instead of rewritten -- it had no caller.
+>
+> Live `solve()` in `region.m`: **16 -> 3**, two of the three being `region.rootsIn`'s own
+> fallback. The "do not retry without the slow bucket" warning was honoured: every one of these
+> went through it. Details in the 2026-08-18 (evening, sixth) and 2026-08-19 entries.
+
 ## 2026-08-18 (evening) — REVERTED: closed-form NORMAL CONES. solve()'s root ORDER is not reproducible.
 
 - **Tried:** `region.solveForY`, a closed-form replacement for the ten
@@ -379,7 +464,10 @@ number of uses. Convert where one extraction serves many operations; leave it wh
   order-INDEPENDENT -- try both roots and keep whichever is feasible, instead of taking `py(1)`
   and flipping `px`. That is strictly more robust than today's behaviour, but it CHANGES
   behaviour, so it needs the slow bucket, where `conjCPLQTest` and `testMaxMultiRegion` exercise
-  the curved normal-cone paths.
+  the curved normal-cone paths. **DONE — that is `region.probeOnConstraint`; see the note above
+  this entry. The one refinement experience added: the property is not always feasibility. A
+  probe that reads a curve's SIGN near a vertex needs the root on the same BRANCH, which is the
+  nearest one, not the first feasible one.**
 - **Do not retry without the slow bucket.** Fast and normal do not cover those paths, so they
   would have passed either way -- which is exactly how a silent geometry regression gets in.
 

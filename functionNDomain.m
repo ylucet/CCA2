@@ -1291,16 +1291,19 @@ classdef functionNDomain
                            m0 = (d0.vy(1)-d0.vy(2))/(d0.vx(1)-d0.vx(2));
                            c = d0.vy(1) - m0*d0.vx(1);
                            nineq = symbolicFunction(vars(2)-m0*vars(1)-c);
+                           % THE PROBE ON THE CONIC, by PROPERTY. This one already asked the
+                           % right question -- is root one feasible, else take the other -- but
+                           % it asked it in a way that breaks two ways: `my2(2)` is indexed
+                           % UNCONDITIONALLY when root one fails, so a conic with a single root
+                           % at mx (a tangency) raises "Index exceeds array bounds"; and the
+                           % second root is never itself checked for feasibility or realness, so
+                           % a complex root becomes the probe and the orientation test below
+                           % reads it. region.probeOnConstraint asks exactly this question --
+                           % first FEASIBLE real root -- and closes both. See DECISIONS.md
+                           % 2026-08-18/19 on the four sibling sites in region.m.
                            mx = (d0.vx(1)+d0.vx(2))/2;
-                           d1 = d0.ineqs(j).subsF(vars(1),mx);
-                           my2 = solve(d1.f,vars(2));
-                           %d0.ptFeasible(vars,[mx,my2(1)])
-                           if (d0.ptFeasible(vars,[mx,my2(1)]))
-                               my = my2(1);
-                           else
-                               my = my2(2);
-                           end
-                           if isAlways(nineq.subsF(vars,[mx,my])>0)
+                           [~, my, okP] = d0.probeOnConstraint(j, mx);
+                           if okP && isAlways(nineq.subsF(vars,[mx,my])>0)
                                nineq = -nineq;
                            end
                            d0.ineqs(j) = nineq;
