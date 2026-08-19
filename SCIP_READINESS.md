@@ -76,6 +76,14 @@ touch along a segment, and still have a non-convex union.
   optimal and Phase C's target changes; if defective, that is the next fix.
 * **Why it sits in the correctness phase:** three times this session a CORRECT result was read as
   a defect (`DECISIONS.md`). Do not optimise this gate before knowing which it is.
+* **DONE 2026-08-19, and it is CORRECT, not defective.** 22 `unionIsExact` calls captured over
+  three folds and scored with a DECISIVE oracle (`.claude/a3score.m`): merge is wrong exactly when
+  it LOSES a point, since `M = A' ∩ B' ⊆ A ∪ B` always. **Zero defects** -- no accepted merge
+  loses a point. Of the ten refusals, five are PROVEN correct by an exact witness, and the other
+  five all fail for the same reason, a CURVED certificate (`certifiesNonPositive`), with no lost
+  point found in 2e6 samples. So the LP verdicts are right, the cell counts are not hiding an
+  over-claim, and the only sharpenable gate is the curved certificate -- worth at most 5 of 22
+  calls. Details in `DECISIONS.md` 2026-08-19.
 
 ### A4. State what is deliberately NOT fixed, and confirm it is off SCIP's path.
 

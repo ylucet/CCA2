@@ -1,0 +1,212 @@
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCAtmp] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA2] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\common] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\gph] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\pl] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\plots] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\plq] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\soqs] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\tests] 
+Error in simplify
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "2"
+
+vx =  1.500000  2147483647.000000  
+vy =  2.500000  2.500000  
+
+Intersection of following ineqs
+9 - 3*s_2 - s_1 <= 0 
+3 - (3*s_2)/5 - s_1 <= 0 
+(3*5^(1/2)*s_2)/5 - s_1 - (3*5^(1/2))/2 + 3/2 <= 0 
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "1"
+
+vx =  1.500000  2147483647.000000  
+vy =  2.500000  2.500000  
+
+Intersection of following ineqs
+9 - 3*s_2 - s_1 <= 0 
+(3*5^(1/2)*s_2)/5 - s_1 - (3*5^(1/2))/2 + 3/2 <= 0 
+Error in simplify
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "2"
+
+vx =  0.572949  2147483647.000000  
+vy =  1.809017  -2147483647.000000  
+
+Intersection of following ineqs
+s_1 + 3*s_2 - 6 <= 0 
+(3*5^(1/2)*s_2)/5 - s_1 - (3*5^(1/2))/2 + 3/2 <= 0 
+3 - (3*s_2)/5 - (3*5^(1/2))/5 - s_1 <= 0 
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "1"
+
+vx =  0.572949  2147483647.000000  
+vy =  1.809017  -2147483647.000000  
+
+Intersection of following ineqs
+s_1 + 3*s_2 - 6 <= 0 
+3 - (3*s_2)/5 - (3*5^(1/2))/5 - s_1 <= 0 
+Error in removeTangent
+This is okay when 3 vertices are on parabola - its removing middle one
+Error in removeTangent
+This is okay when 3 vertices are on parabola - its removing middle one
+Error in removeTangent
+This is okay when 3 vertices are on parabola - its removing middle one
+Error in simplify
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "2"
+
+vx =  0.000000  0.000000  
+vy =  0.000000  -2147483647.000000  
+
+Intersection of following ineqs
+-s_1 <= 0 
+s_1 + (3*s_2)/5 <= 0 
+s_1 + 2*s_2 <= 0 
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "1"
+
+vx =  0.000000  0.000000  
+vy =  0.000000  -2147483647.000000  
+
+Intersection of following ineqs
+-s_1 <= 0 
+s_1 + (3*s_2)/5 <= 0 
+empty
+Error in simplify
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "4"
+
+vx =  0.000000  -2147483647.000000  0.000000  -2147483647.000000  
+vy =  0.000000  -2147483647.000000  -2147483647.000000  0.000000  
+
+Intersection of following ineqs
+s_1 <= 0 
+s_1 + (3*s_2)/5 <= 0 
+s_1 + 2*s_2 <= 0 
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "1"
+
+vx =  0.000000  -2147483647.000000  0.000000  -2147483647.000000  
+vy =  0.000000  -2147483647.000000  -2147483647.000000  0.000000  
+
+Intersection of following ineqs
+s_1 <= 0 
+s_1 + 2*s_2 <= 0 
+empty
+empty
+Error in simplify
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "2"
+
+vx =  0.000000  0.000000  
+vy =  0.000000  -2147483647.000000  
+
+Intersection of following ineqs
+-s_1 <= 0 
+s_1 + (3*s_2)/5 <= 0 
+(30^(1/2)*s_2)/5 - s_1 <= 0 
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "1"
+
+vx =  0.000000  0.000000  
+vy =  0.000000  -2147483647.000000  
+
+Intersection of following ineqs
+-s_1 <= 0 
+s_1 + (3*s_2)/5 <= 0 
+empty
+Error in simplify
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "2"
+
+vx =  0.000000  -2147483647.000000  
+vy =  0.000000  0.000000  
+
+Intersection of following ineqs
+s_1 <= 0 
+s_1 + 2*s_2 <= 0 
+s_1 - (30^(1/2)*s_2)/5 <= 0 
+Variables
+ 
+ans =
+ 
+[s_1, s_2]
+ 
+    "nVertices = "    "1"
+
+vx =  0.000000  -2147483647.000000  
+vy =  0.000000  0.000000  
+
+Intersection of following ineqs
+s_1 + 2*s_2 <= 0 
+s_1 - (30^(1/2)*s_2)/5 <= 0 
+Error in removeTangent
+This is okay when 3 vertices are on parabola - its removing middle one
+cells = 36, distinct functions = 7
+  sym=0 hyp=0 touch=no         : 42
+  sym=0 hyp=0 touch=point      : 2
+  sym=0 hyp=0 touch=seg        : 7
+  sym=0 hyp=1 touch=seg        : 4
+  sym=1 hyp=0 touch=seg        : 6
+  sym=1 hyp=1 touch=no         : 14
+  sym=1 hyp=1 touch=point      : 16
+  sym=1 hyp=1 touch=seg        : 46

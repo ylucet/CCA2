@@ -25,6 +25,52 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 — A3 ANSWERED: merge never over-claims, and every unresolved refusal is a CURVED certificate
+
+`SCIP_READINESS.md` A3 asked whether `unionIsExact`'s ~43 refusals per fold are CORRECT or a
+defect, and said not to optimise the gate before knowing which. Measured, and the answer splits
+cleanly by REASON.
+
+**The oracle is decisive, not a sampler, and it comes from `unionIsExact`'s own algebra.** merge
+returns `M = A' ∩ B'` (each region with the shared facet deleted) and `M ⊆ A ∪ B` ALWAYS. So the
+only way merge can be wrong is to LOSE a point: a point of `B` violating some constraint of `A'`,
+or the mirror. Finding one PROVES the refusal correct; that is a witness, not evidence. Every
+witness the numeric search reports is re-verified exactly against the region objects
+(`.claude/a3score.m`). Note this also means the question "is `A ∪ B` convex" is a detour --
+losing a point is the whole criterion.
+
+**22 calls captured over three folds of the A.4/A.5 quadrilateral** (temporary probe in `merge`,
+reverted):
+
+    accepted, no lost point                      12     <- sound, every one
+    refused, LOST POINT FOUND (proven correct)    5
+    refused, none found in 2e6 samples            5
+
+**DEFECTS: ZERO.** No accepted merge loses a point. That is the result that matters most, and it
+says the cell counts are not hiding an over-claim.
+
+**Every LP-decided refusal is CORRECT.** All five proven-correct refusals are
+`exactAnotInB` / `exactBnotInA` / one `curved_positiveSomewhereOnP`, each with an exact witness:
+
+    mg_0003, mg_0004  exactBnotInA                witness (-1.542,  5.240)  in B, violates A'
+    mg_0009           curved_positiveSomewhereOnP witness (-2.067,  6.091)  in B, violates A'
+    mg_0013           exactAnotInB                witness (-1.051,  4.442)  in A, violates B'
+    mg_0018           exactBnotInA                witness (-0.722,  2.988)  in B, violates A'
+
+**Every unresolved refusal is a CURVED certificate, and they are the whole conservatism budget.**
+The five with no witness are all `curved_positiveSomewhereOnP` (four) or `curved_positiveAtAVertex`
+(one) -- i.e. `region.certifiesNonPositive` could not certify a conic constraint. Re-probed with
+2e6 candidates over a box padded to 20x each region's extent: still no lost point. Each of those
+pairs carries exactly one or two curved constraints per operand.
+
+**What this decides for Phase C.** The gate worth sharpening is `certifiesNonPositive`, NOT the
+LP and NOT the refusal policy -- the LP's verdicts are provably right, and the refusal policy is
+what keeps merge sound. The upper bound on what a perfect curved certificate could buy is those
+five of 22 calls; whether that is worth doing is a Phase C cost question, not a correctness one.
+
+**Honest limit:** "no lost point in 2e6 samples" is not a proof of convexity, only strong evidence
+that those five merges were available. The five witnesses in the other direction ARE proofs.
+
 ## 2026-08-18 (evening, sixth) — the first symbolic-removal site LANDED: probes pick a root by feasibility, not by position
 
 The third entry said the remaining `solve()` sites are a CALLER REWRITE, not a substitution,
