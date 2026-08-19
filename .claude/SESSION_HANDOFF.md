@@ -61,10 +61,21 @@ performance wall — see "Read this first".
 3. **Rewrite `SUPPORT_MATRIX.md` §0.0.1.** Dated 2026-08-02 and now wrong in every row: the six
    box cases are all 0 s, and its headline finding ("returns `QuaParCPLQ`, NO MESH") no longer
    holds. It is what a reader consults before planning SCIP work.
-4. **Finish Phase B** of `SCIP_READINESS.md` — the direct-formula/symbolic map and the entry point
-   a separator should call. Most evidence is now measured.
-5. **Step 0 of `ALGORITHM.md`'s `biconj` ordering** — merge adjacent faces carrying the same
-   quadratic; the one case in the plan still unbuilt.
+4. **DONE 2026-08-18. Phase B is answered, both items.** The map is measured
+   (`.claude/phaseBmap.m`, twelve shapes): every single PIECE is closed form and costs ≤ 0.02 s;
+   the only symbolic rows are the general polygon (2579 s, Step 3) and a convex MULTI-FACE input
+   that pays 26–28 s because `convexEnough` needs the caller's `fIsConvex` flag. B2: the entry
+   point is `q.biconj('cplq')` itself — on every shape QPLIB's box terms present it returns a
+   meshed `QuaPol` in 0.01 s and never reaches Step 3, so the "40–60 s per term" blocker is stale
+   and Phase C must be re-scoped around the NON-box case. The optimisation notes that were filed
+   under Phase B are now filed under Phase C, which is what made that gate read like a
+   symbolic-removal programme.
+5. **DONE 2026-08-18. Step 0 is built** (`mergeSameQuadFaces.m`, called first by both operators).
+   The two-triangle unit square is now the one-face square: `biconj` 0.1 s and CORRECT (the
+   known-failing `biconjugateOverATwoFaceSubdivisionIsTheEnvelope` is green and untagged), `conj`
+   0.8 s. A merge needs a CONVEX union — a reflex face builds and then evaluates to +inf — and an
+   edge left separating a face from itself goes with it. `CCA2_NO_STEP0` turns it off, for the
+   lens regression only.
 
 ## Relevant files
 

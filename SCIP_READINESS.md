@@ -85,40 +85,79 @@ SCIP calls none of them.
 
 ## Phase B -- the direct-formula / symbolic map (the "clear picture" gate)
 
-**This does not exist today in one place, and it is the deliverable most likely to change what we
-build.** The question is not academic: anything with a direct formula should not be paying for the
-symbolic engine, and anything that needs the engine has a cost floor no tuning removes.
+**BOTH ITEMS ANSWERED 2026-08-18.** The question was not academic: anything with a direct formula
+should not be paying for the symbolic engine, and anything that needs the engine has a cost floor
+no tuning removes. The map below says which is which, and B2 names the entry point.
 
-### B1. Build the map.
+Read Phase B as a MAP, not as a programme of work: it decides which shapes need the symbolic
+engine. Replacing symbolic computation inside the one shape that does need it is Phase C (and the
+separate `solve()`-removal programme in `DECISIONS.md`), not this gate.
 
-One table, per input shape, with four columns: **route taken**, **closed form or symbolic**,
-**where the formula is** (source, and the [COAP] appendix where applicable), **measured cost**.
-The shapes that matter:
+### B1. The map -- MEASURED 2026-08-18 (`.claude/phaseBmap.m`)
 
-| shape | expected route |
-|---|---|
-| bilinear over a BOX | McCormick / Al-Khayyal-Falk -- closed form |
-| bilinear over a TRIANGLE, 0/1/2 convex edges | cPLQ Step 1 closed forms (A.2 / A.3 / A.4) |
-| bilinear over a TRIANGLE, 3 convex edges | A.5 split into A.4 -- closed form, SURD coordinates |
-| bilinear over a general POLYGON | triangulate, per-piece closed form, **Step 3 symbolic max** |
-| convex quadratic over a piece | `conjConvexOverPiece`, KKT active set -- closed form per cell |
-| diagonal / indefinite non-bilinear quadratic | `xyFrame` change of variables, then the above |
-| anything UNBOUNDED | `fanUnboundedFace` + `convEnvUnbounded` -- closed form per shape |
+One row per input SHAPE: the route `biconj` takes, whether it is closed form, where the formula
+is, and what it costs. Times are the **minimum of three** repetitions and the machine was running
+the slow test bucket throughout, so treat them as upper bounds (CLAUDE.md section 3); the ROUTE
+and the returned CLASS are deterministic given the shape and are not contention-sensitive.
 
-* **Closes when:** every row cites its routine, says closed-form or symbolic, and carries a
-  measured time from the current tree.
-* **The expected conclusion, to be confirmed or refuted:** every PIECE has a closed form, and
-  **all** the symbolic cost is Step 3's cross-piece maximum (`functionNDomain.maximumP`) -- which
-  is why the quadrilateral spends about 35 s in Steps 1+2 and about 43 minutes in Step 3.
+| shape | route | form | where the formula is | cost | returns |
+|---|---|---|---|---|---|
+| bilinear over a BOX, one face | McCormick short-circuit | closed | `biconjCPLQ.mccormickEnvelope` (Al-Khayyal-Falk) | 0.01 s | `QuaPol` |
+| bilinear over a BOX, two triangles | Step 0, then McCormick | closed | `mergeSameQuadFaces` + the above | 0.01 s | `QuaPol` |
+| diagonal indefinite over a BOX (`x^2-y^2`) | separable, 1-D per axis | closed | `biconjCPLQ.separableEnvelopeCoefs`/`oned` | 0.00 s | `QuaPol` |
+| convex quadratic over a BOX | `co f = f` | closed | `biconjCPLQ.convexEnough` | 0.00 s | `QuaPol` |
+| bilinear over a DIAMOND | rotate 45 deg, separate, rotate back | closed | `biconjCPLQ.diamondEnvelope` | 0.00 s | `QuaPol` |
+| TRIANGLE, affine or convex | `co f = f` | closed | `biconjCPLQ.convexEnough` | 0.00 s | `QuaPol` |
+| TRIANGLE, concave | Step 1, affine interpolant | closed | `convEnvCPLQ`, [COAP] A.2 | 0.02 s | `RatPol` |
+| TRIANGLE, indefinite 1 convex edge | Step 1 | closed | `convEnvCPLQ`, [COAP] A.3 eq.16 | 0.00 s | `RatPol` |
+| TRIANGLE, indefinite 2 convex edges | Step 1 | closed | `convEnvCPLQ`, [COAP] A.4 | 0.02 s | `RatPol` |
+| TRIANGLE, indefinite 3 convex edges | Step 1, A.5 split into A.4 | closed | `convEnvCPLQ.splitThreeConvexEdges` | 0.01 s | `RatPol` |
+| general POLYGON, indefinite | triangulate, per-piece closed form, **Step 3 symbolic max** | SYMBOLIC | `functionNDomain.maximumP` | **2579 s** (A.4/A.5 quadrilateral, cited from the profile below) | `QuaParCPLQ` |
+| UNBOUNDED multi-face, convex (3 wedges) | no short-circuit fires -- full `conj(conj(f))` | SYMBOLIC | -- | **26-28 s** (three runs) | `QuaParCPLQ` |
 
-### B2. Draw the consequence for SCIP.
+**The expected conclusion is CONFIRMED: every single PIECE is closed form.** Nothing in the first
+ten rows touches the symbolic engine, and none of them costs more than 0.02 s. All symbolic cost
+is the cross-piece work -- Step 3's maximum, and the second conjugation that follows it.
 
-If B1 confirms that a single piece is always closed-form, then a separator needing one term's
-envelope over a box **never needs Step 3 at all** -- and the 40-60 s per term is being paid for
-machinery the caller does not use. That turns the integration from "call `biconj`" into "call the
-per-piece closed form", and it is the largest performance lever available.
+**Two things the map showed that the prediction did not.**
 
-* **Closes when:** the answer is written down either way, with the entry point named.
+1. **A convex MULTI-FACE input pays 26 s for the answer `f`.** `co f = f` is the largest
+   short-circuit there is, but `convexEnough` can only PROVE convexity for a SINGLE piece;
+   for several faces it needs the caller's `fIsConvex` flag, because the honest test requires the
+   gradient jump across every shared edge (biconjCPLQ.m). Unset, the three-wedge
+   `max(0,x,y)` -- convex, and its own biconjugate -- goes the whole way round. Setting the flag
+   is free and is the entire fix; that is a caller-side lever, not a pipeline one.
+2. **The two-triangle spelling of a box is now the one-face spelling** (Step 0, 2026-08-18), so
+   the shape tests in this table are reached by the meshes callers actually build, not only by
+   the tidiest one.
+
+### B2. The consequence for SCIP -- the entry point is `biconj`, and Step 3 is never reached
+
+**Answer: a separator computing one term's envelope over a box never enters Step 3, and needs no
+per-piece entry point of its own.** The short-circuits live INSIDE `biconjCPLQ`, so the entry
+point a separator should call is simply
+
+    h = q.biconj('cplq');        % q a QuaPol: the term, on its box
+
+and for every shape QPLIB's box-domain terms present -- bilinear over the unit box, bilinear over
+a sub-box after branching, and the diagonal `x_i^2` terms -- that call returns in **0.01 s or
+less**, in closed form, as a **meshed `QuaPol`** the bridge can read directly. The plan's own
+premise (call the per-piece closed form rather than `biconj`) is therefore obsolete: `biconj`
+IS the per-piece closed form for these shapes.
+
+Two consequences follow, and they point in opposite directions.
+
+* **The performance blocker on SCIP's path is gone.** The "40-60 s per term" of section 0.0.1
+  (2026-08-02) predates the short-circuits. At 0.01 s per term, `QPLIB_1940`'s 288 objective
+  off-diagonal terms are seconds, not 4 hours, and even its ~27,586 constraint terms are minutes.
+  Phase C's target-setting must be re-scoped around that -- see C1.
+* **What remains expensive is exactly what is scientifically interesting.** Step 3 is reached only
+  when the domain is a genuine multi-piece polygon whose envelope COUPLES the pieces -- the
+  non-box case, where CCA2 has something McCormick does not, and where one quadrilateral term
+  costs 43 minutes. Section 0 said the box+bilinear run would be "green and scientifically empty";
+  the map says it is now also nearly free, which changes nothing about that judgement.
+
+* **Closes:** B1 and B2 are both answered above, with the entry point named.
 
 ---
 
@@ -153,8 +192,9 @@ measured: cell count (86 to 60 so far) and the merge gates.
 All of the following, each with a measurement on the current tree:
 
 1. `checkBoxEnvelopeForSCIP` shows **no ERROR rows** (A1, A2).
-2. The direct-formula / symbolic map exists and names the entry point a separator should call
-   (B1, B2).
+2. ~~The direct-formula / symbolic map exists and names the entry point a separator should call
+   (B1, B2).~~ **MET 2026-08-18** -- the map is B1, the entry point is `q.biconj('cplq')`, and on
+   SCIP's own shapes it answers in 0.01 s without reaching Step 3.
 3. Per-term cost is measured, attributed, and inside a **stated** target (C1-C3).
 4. Full suite green -- currently **332 / 0** -- with A2's new tests in it.
 
@@ -168,10 +208,22 @@ A1 is cheap and goes first -- it may change A2's shape. B1 can run in parallel w
 mostly reading and measuring rather than fixing. C is last, because B2 may remove most of the
 problem C is trying to solve.
 
+**Update 2026-08-18: B is done, and it did remove most of C's problem** -- on SCIP's own shapes
+the per-term cost is 0.01 s, so C1's target must be re-scoped around the NON-box case, which is
+the only one that still reaches Step 3. A1 and A2 are also close: `x^2 - y^2` over the unit box
+now returns in 0.00 s through the separable route (B1's table;
+`biconjCPLQTest.separableOverABoxTakesTheOneDimensionalRoute` pins it), so section 0.0.1's two
+ERROR rows and its "no mesh" headline both need re-deriving.
+
 
 ---
 
-## Phase B, measured: PROFILE OF ONE FOLD (2026-08-18)
+## Phase C evidence: PROFILE OF ONE FOLD (2026-08-18)
+
+_Filed under Phase B when it was written, which made that gate read like an optimisation
+programme. It is not: Phase B decides WHICH shapes need the symbolic engine (answered above), and
+everything below is about making the one shape that does need it cheaper -- C2's attribution and
+C3's levers._
 
 Two folds of Step 3 on the A.4/A.5 quadrilateral, under MATLAB's own profiler so that nothing in
 the repository is instrumented. **Call counts are the measurement** -- the machine is shared, so

@@ -1,0 +1,29 @@
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCAtmp] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA2] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\common] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\gph] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\pl] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\plots] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\plq] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\macros\soqs] 
+[Warning: Name is nonexistent or not a directory: D:\OneDrive - UBC\CCA-redmine\doing\CCA-chapter-Scott\pics\CCA\tests] 
+
+shape                                      biconj kind  min of 3   note
+--------------------------------------------------------------------------------------------
+bilinear over a BOX (1 face)               QuaPol           0.01 s  
+bilinear over a BOX (2 triangles)          QuaPol           0.01 s  
+diagonal indefinite over a BOX (x^2-y^2)   QuaPol           0.00 s  
+convex quadratic over a BOX                QuaPol           0.00 s  
+bilinear over a DIAMOND                    QuaPol           0.00 s  
+TRIANGLE, affine                           QuaPol           0.00 s  
+TRIANGLE, convex                           QuaPol           0.00 s  
+TRIANGLE, concave                          RatPol           0.02 s  
+TRIANGLE, indefinite 1-convex-edge         RatPol           0.00 s  
+TRIANGLE, indefinite 2-convex-edge         RatPol           0.02 s  
+TRIANGLE, indefinite 3-convex-edge         RatPol           0.01 s  
+in conjugateOfPiecePoly
+in conjugateOfPiecePoly
+in conjugateOfPiecePoly
+UNBOUNDED piecewise affine (3 wedges)      QuaParCPLQ      27.52 s  
