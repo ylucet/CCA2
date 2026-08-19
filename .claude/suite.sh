@@ -45,8 +45,8 @@ cd "$CCA2DIR" || exit 1
 # from the symbolic path to closed form is also what moves its test out of the slow bucket.
 FAST_SUITES=(PLQVCTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
              clipArcByHalfPlaneTest conjPieceCPLQTest convEnvCPLQTest infConvTest
-             lasryLionsTest maxQuaParTest moreauTest proxAverageTest regionTest
-             testSymbolicFunction)
+             lasryLionsTest maxQuaParTest mergeSameQuadFacesTest moreauTest proxAverageTest
+             regionTest testSymbolicFunction)
 NORMAL_SUITES=(cplqAdapterTest functionNDomainTest testfunctionNDomain)
 SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testMaxMultiRegion testRegion
              testcPLQ unboundedFaceTest)

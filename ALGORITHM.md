@@ -69,9 +69,29 @@ semidefinite. The problem was never that the check was missing; it was that `bic
 Step 1 for a TRIANGLE, so a box (`nv == 4`) fell through to the double conjugation. Case 1 now
 catches it before the dispatch, without calling Step 1 at all.
 
-Step 0 matters more than it looks, and is the one piece not yet built. `biconjugateTest` hands the
-unit square in as two triangles sharing a diagonal; merged, it is one face, cases 1–4 become
-reachable, and the piece-coupling that forces case 6 disappears.
+Step 0 matters more than it looks, and is **built** (2026-08-18, `mergeSameQuadFaces.m`, called
+first by both `biconjCPLQ` and `conjCPLQ`). `biconjugateTest` hands the unit square in as two
+triangles sharing a diagonal; merged, it is one face, cases 1–4 become reachable, and the
+piece-coupling that forces case 6 disappears. Measured on exactly that input: `biconj` **0.1 s**
+returning a meshed `QuaPol` where it used to take the long route and come out WRONG (the
+known-failing `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, now green), and `conj` **0.8 s**
+exact where it used to assemble ten pieces through Step 3.
+
+Two things the implementation had to learn, both measured:
+
+* **A merge needs a CONVEX union, not just a shared edge.** Three wedges round one vertex fuse
+  into a reflex wedge, and this representation cannot express one — the mesh builds and then
+  `eval` returns `+inf` inside the merged face, because a face is read as an intersection of
+  half-planes. Each candidate merge is therefore built and checked with `orderEdges`' own
+  `isConvex`, and refused if it fails. For a FAN this is restrictive by arithmetic: three wedges
+  sum to 360°, so a pair is convex only when the third is itself at least 180°.
+* **An edge that ends up separating a face from itself goes too.** Two half-planes carrying the
+  same quadratic are drawn as two opposite rays; dropping one leaves the other bounding nothing.
+
+Equality of the two quadratics is EXACT — a normaliser that merged coefficients agreeing to 1e-12
+would be changing the function. The one thing Step 0 does not do is remove the collinear vertex a
+merge can leave behind, so a fan of strips merges into a rectangle that still has six vertices and
+therefore still misses the box short-circuits.
 
 Case 6 is genuinely needed only when the envelope COUPLES several pieces — the convex hull of a
 union is not determined piecewise.

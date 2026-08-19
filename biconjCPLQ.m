@@ -54,6 +54,15 @@ function h = biconjCPLQ(obj)
 
     obj.assertOperable();   % degree<=2 (cubic rejected; cubic is for isConvex only)
 
+    % ---- STEP 0: NORMALISE the subdivision ---------------------------------------------------
+    % Every short-circuit below is stated over a SHAPE -- one bilinear face on a four-vertex box,
+    % one face on a rotated box, one face on a product domain -- so a caller who draws the same
+    % function as two triangles instead of one square gets none of them. Deleting an interior edge
+    % whose two sides carry the same quadratic changes the mesh and not the function, and it is
+    % what makes the answer independent of how the domain was drawn. See mergeSameQuadFaces.m and
+    % ALGORITHM.md's Step 0.
+    obj = mergeSameQuadFaces(obj);
+
     % ---- f IS ALREADY CONVEX -> f** = f, and there is nothing whatever to compute -----------
     % biconj IS the closed-convex-envelope operator, so a convex f is its own answer. Taken
     % first, before any dispatch, because it is the largest short-circuit here and it costs one

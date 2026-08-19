@@ -72,6 +72,14 @@ function g = conjCPLQ(obj, idx, route)
     forceSymbolic = strcmpi(route, 'symbolic');
     obj.assertOperable();   % degree<=2 (cubic rejected; cubic is for isConvex only)
 
+    % ---- STEP 0: NORMALISE the subdivision ---------------------------------------------------
+    % An interior edge whose two sides carry the same quadratic is a line the caller drew, not a
+    % property of f, and every case below dispatches on the mesh: Case A needs one face and no
+    % vertices, Case B one bounded triangle, Case C triangulates and then pays Step 3 to maximise
+    % ACROSS the pieces -- pieces that this normalisation may have removed entirely. Deleting such
+    % an edge changes the mesh and not the function. See mergeSameQuadFaces.m, ALGORITHM.md Step 0.
+    obj = mergeSameQuadFaces(obj);
+
     % ---- Case A: full-domain quadratic (no vertices, single face) -----------------------
     % f(x) = 1/2 x'Q x + L'x + kappa over all of R^2.
     if obj.nv == 0 && obj.nf == 1

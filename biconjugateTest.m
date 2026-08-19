@@ -151,6 +151,13 @@ classdef biconjugateTest < matlab.unittest.TestCase
         % whole lens came back carrying s2, and f*(0.66,0.18) was 0.18 instead of 0.66.
         %
         % (0.66,0.18) below is that point; keep it. See region.maxFromPts for the fix.
+        %
+        % STEP 0 IS SWITCHED OFF HERE ON PURPOSE. Since 2026-08-18 conj normalises the mesh first
+        % (mergeSameQuadFaces), and these two triangles carry the SAME quadratic -- so the input
+        % would become the one-face square and this test would stop exercising the two-face route
+        % it exists to pin. The lens is the two-face route's own failure mode, so the flag stays.
+            testCase.applyFixture(matlab.unittest.fixtures.EnvironmentVariableFixture( ...
+                'CCA2_NO_STEP0', '1'));
             V = [0 0; 1 0; 1 1; 0 1];
             E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
@@ -169,7 +176,6 @@ classdef biconjugateTest < matlab.unittest.TestCase
             end
         end
 
-        % KNOWN FAILING, left in deliberately -- see the note below. Remove the tag when fixed.
         function biconjugateOverATwoFaceSubdivisionIsTheEnvelope(testCase)
         % A genuine multi-FACE subdivision (nf = 2), not one face that triangulate happens to
         % split: the unit square given as two triangles sharing the diagonal, f = x*y on both.
@@ -186,7 +192,13 @@ classdef biconjugateTest < matlab.unittest.TestCase
             E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             p = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
-            % OPEN DEFECT this test pins. The SAME function on the SAME domain gives the right
+            % FIXED 2026-08-18 by Step 0 (mergeSameQuadFaces): the two faces carry the same
+            % quadratic, so the diagonal is a line the CALLER drew and is deleted before the
+            % dispatch reads the mesh. biconj then takes the McCormick short-circuit and answers
+            % in 0.1 s with a meshed QuaPol. Everything below is the record of what it took to
+            % find that out, and is kept because two of the diagnoses along the way were WRONG.
+            %
+            % THE DEFECT THIS USED TO PIN. The SAME function on the SAME domain gave the right
             % answer as ONE face (bilinearOverABoxGivesTheMcCormickEnvelope) and not as two.
             %
             % READ THIS BEFORE WORKING ON IT -- the diagnosis recorded here previously was
