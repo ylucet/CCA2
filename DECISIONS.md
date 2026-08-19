@@ -25,7 +25,75 @@ Newest entries at the top.
 
 ---
 
-## 2026-08-18 (evening, fourth) — getNormalConeVertexQ does NOT compute a normal cone. Its specification is unknown.
+## 2026-08-18 (evening, fifth) — getNormalConeVertexQ's specification, established. It IS the normal cone, and given the edge list it is exact.
+
+The previous entry said the routine could not be replaced because there was no statement of what a
+replacement must satisfy, and that the way to get one was to read the CONSUMER. Done, and the
+answer is short. `functionNDomain.getSubdiffVertexT1` reads a row of `NC` in exactly three ways:
+
+  * it takes `coef = getLinearCoeffs(row)` and branches on the SIGNS of the two coefficients;
+  * it takes the slope as `m = d(row)/d(s1)` -- which is the row's own slope only when the
+    coefficient of `s2` is `+-1`, so **normalisation is part of the contract**, not cosmetics;
+  * it THROWS THE CONSTANT AWAY and re-anchors the line at `grad f(v_j)`.
+
+The region it then builds is `region(subdV(j,:), ...)`, and region's convention is `expr <= 0`
+feasible (`ptFeasible`). So the only observable object is the LINEAR PART under `<= 0`, and the
+identity the vertex branch of the conjugate rests on is
+`subdiff f(v_j) = grad f(v_j) + N_D(v_j)`. Hence:
+
+> **Row j's linear parts, read as `<= 0`, must cut out the normal cone of the region at vertex j;
+> the coefficient of `s2` must be `+-1` or `0` (and then `s1`'s must be `+-1`); the constant is
+> free.**
+
+**GIVEN THE EDGE LIST, THE COMMITTED IMPLEMENTATION SATISFIES THAT EXACTLY.** Same oracle as
+yesterday, built from the definition (`u` in the cone at `v` iff `v` maximises `<u,.>` over the
+region near `v`; local form, 72 directions, sampled to 5% of the vertex), now applied with the
+`<= 0` reading and with `eIdx` supplied:
+
+    piece 9   eIdx [2 1 3]   disagree 0   (per-vertex 0 0 0)     -- vertex 3 has THREE active constraints
+    half lens eIdx [1 3]     disagree 0   (per-vertex 0 0)       -- vertex 1 is a CUSP
+    parabola  eIdx [2 1]     disagree 0   (per-vertex 0 0)
+
+The cusp and the concave-conic vertex are the two cases that killed the gradient rewrite. This
+routine gets both right, which is the reason it exists: it builds the cone from the constraint's
+own tangent, so a concave conic and a cusp are ordinary.
+
+**What the earlier "4-30 of 72 disagree" was measuring.** The eIdx-less SLOT fallback, on fixtures
+it does not apply to. Without `eIdx` the routine pairs vertex j with constraints `j` and `j+1`,
+the layout of an UNBOUNDED region (slot 1 reserved for the ray, nv+1 slots for nv vertices). All
+three fixtures are BOUNDED, so it reads the wrong constraint at some vertices -- the parabola's
+vertex `(1,1)` is bounded by the parabola and `y = 1`, and the fallback used `y = 1` and `x = -1`,
+giving a cone 5 directions too small. With the right pair the same code is exact. Totals without
+`eIdx`: 32, 43 and 5 wrong directions.
+
+    parabola v1 = (-1,1)  3 active constraints  fallback slots [1 2]  disagree 0
+    parabola v2 = ( 1,1)  active [1 2]          fallback slots [2 3]  disagree 5 (all "too small")
+
+**Also measured: with a lens, the edge list must carry the TRAVERSAL ORDER, not just the right
+pair.** Both admissible lists for the half-lens use constraints {1,3} and both vertices see both,
+yet `eIdx = [3 1]` is wrong at vertex 1 on 36 of 72 directions while `[1 3]` is exact. The routine
+deduces each row's orientation from a probe on the ARRIVING edge, so which of the two is arriving
+changes the answer. Mathematically it should not; that is the probe fragility of the previous
+entry, now with a reproducible case.
+
+**Kept:** `regionTest.vertexConesMatchTheDefinition` -- the specification as an executable test,
+72 directions per vertex over the three fixtures, ~30 s, and GREEN against committed code (unlike
+the property test reverted yesterday, which was red because it tested the fallback). regionTest is
+now 17 / 0 in 44 s.
+
+**STILL OPEN, and it is a different question from the one that was asked yesterday:** is the
+eIdx-less fallback correct on the layout it was WRITTEN for -- a genuinely unbounded region with
+nv+1 constraint slots? The three fixtures cannot answer it, and that path is live (the caller
+reaches it whenever `edgeIndexList` refuses, which it does for every unbounded region). The oracle
+is now a reusable static, `regionTest.coneVsDefinition(r, NC, s1, s2)`, so answering it costs one
+captured region from the pipeline.
+
+## ~~2026-08-18 (evening, fourth) — getNormalConeVertexQ does NOT compute a normal cone. Its specification is unknown.~~
+
+> **OVERTURNED the same evening** by the entry above: the specification IS the normal cone, and
+> given `eIdx` this routine computes it exactly. What the measurement below caught is the
+> eIdx-less slot fallback applied to bounded fixtures. The gradient rewrite's two failure modes
+> stand -- they are why the tangent-based construction is the right one.
 
 The gradient rewrite was built and measured, and the measurement is the useful part.
 

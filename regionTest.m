@@ -21,6 +21,51 @@ classdef regionTest < matlab.unittest.TestCase
                 end
             end
         end
+
+        function [bad, per] = coneVsDefinition(r, NC, s1, s2)
+        % THE SPECIFICATION OF A VERTEX CONE, as an oracle built from the definition rather than
+        % from any implementation: `u` is in the normal cone at `v` iff `v` maximises `<u,.>`
+        % over the region NEAR `v` (the local form -- these regions are not all convex).
+        %
+        % What the rows of NC mean is fixed by the CONSUMER, functionNDomain.getSubdiffVertexT1:
+        % it throws the constant term away and re-anchors each line at `grad f(v_j)`, and
+        % region's convention is that `expr <= 0` is feasible. So the object being specified is
+        % the LINEAR PART under `<= 0`, and nothing else about the row is observable.
+        %
+        % Returns the number of directions (of 72) where the two disagree CLEARLY -- directions
+        % whose supporting value is within sampling noise of zero are the cone's own boundary and
+        % are not counted.
+            x = r.vars(1); y = r.vars(2);
+            gf = matlabFunction([r.ineqs.f], 'Vars', {[x y]});
+            nd = 72; ang = (0:nd-1)*(2*pi/nd); U = [cos(ang)', sin(ang)']; epsr = 0.05;
+            per = zeros(1, r.nv);
+            for j = 1:r.nv
+                v = [double(r.vx(j)), double(r.vy(j))];
+                W = [];
+                for rr = epsr*(0.2:0.2:1.0)
+                    th = (0:359)*pi/180;
+                    W = [W; v + rr*[cos(th)', sin(th)']];   %#ok<AGROW>
+                end
+                keep = false(size(W,1),1);
+                for i = 1:size(W,1), keep(i) = all(gf(W(i,:)) <= 1e-12); end
+                D = (W(keep,:) - v)/epsr;
+
+                inCode = true(nd,1);
+                for k = 1:size(NC,2)
+                    e = NC(j,k);
+                    if isAlways(e == 0, 'Unknown', 'false'), continue, end
+                    c0 = double(subs(e, [s1 s2], [0 0]));
+                    L = zeros(nd,1);
+                    for i = 1:nd, L(i) = double(subs(e, [s1 s2], U(i,:))) - c0; end
+                    inCode = inCode & (L <= 1e-9);
+                end
+                m = zeros(nd,1);
+                for i = 1:nd, m(i) = max(D*U(i,:)'); end
+                inTrue = m <= 1e-9; amb = (m > 1e-9) & (m < 1e-3);
+                per(j) = sum((inCode ~= inTrue) & ~amb);
+            end
+            bad = sum(per);
+        end
     end
 
     methods (Test)
@@ -35,7 +80,12 @@ classdef regionTest < matlab.unittest.TestCase
         % fixed and checked immediately.
         %
         % The values below are the output of the suite-green implementation on 2026-08-18, not a
-        % hand derivation: the point is that a refactor must not MOVE them. Three regions, each
+        % hand derivation: the point is that a refactor must not MOVE them. They are NOT normal cones,
+        % and are not claimed to be: called without eIdx this routine falls back to the slot
+        % convention of the UNBOUNDED layout, and all three fixtures are BOUNDED, so it reads the
+        % wrong pair of constraints at some vertices (measured: 32, 43 and 5 wrong directions of
+        % 72 per region). The cones themselves are specified and checked in
+        % vertexConesMatchTheDefinition, which supplies the edge list. Three regions, each
         % with a genuine conic facet -- piece 9 of the parallelogram's f*, a half-lens, and a
         % parabola capped by two lines.
             x = sym('x'); y = sym('y'); s1 = sym('s_1'); s2 = sym('s_2');
@@ -65,6 +115,64 @@ classdef regionTest < matlab.unittest.TestCase
                                     nm, a, b, char(NC(a,b)), want{a,b}));
                     end
                 end
+            end
+        end
+
+        function vertexConesMatchTheDefinition(testCase)
+        % THE SPECIFICATION, and it is executable. `getNormalConeVertexQ` must return, for each
+        % vertex j, two linear forms in the dual variables whose LINEAR PARTS, read as `<= 0`,
+        % cut out the normal cone of the region at that vertex. Two things fix that reading, and
+        % both come from the consumer `functionNDomain.getSubdiffVertexT1`:
+        %
+        %   * it DISCARDS the constant term and re-anchors each line at `grad f(v_j)` -- so the
+        %     conjugate cell it builds is `grad f(v_j) + N_D(v_j) = subdiff f(v_j)`, which is
+        %     the identity the whole vertex branch of the conjugate rests on;
+        %   * the region built from those rows is `region(subdV(j,:), ...)`, and region's
+        %     convention is `expr <= 0` feasible (`ptFeasible`).
+        %
+        % MEASURED 2026-08-18: given the correct edge list, the committed routine satisfies this
+        % on every vertex of all three curved cases -- including the CUSP (half-lens vertex 1)
+        % and the vertex where three constraints are active (piece 9 vertex 3). The earlier
+        % finding that it "does not compute a normal cone" was measured on the eIdx-less SLOT
+        % fallback, which picks the wrong pair of constraints; see DECISIONS.md.
+            x = sym('x'); y = sym('y'); s1 = sym('s_1'); s2 = sym('s_2');
+
+            % {region, edge list, name}. eIdx(j) is the constraint bounding the edge from vertex
+            % j to vertex j+1; for the lens it must be the TRAVERSAL order, not just the right
+            % pair -- reversing it moves the cone at vertex 1 (the routine deduces orientation
+            % from a probe on the ARRIVING edge).
+            cases = { ...
+                region([16*x - 4*x*y - x^2 - 4*y^2, -x-2*y, (2*y)/3 - x - sym(1)/3, ...
+                        x + 2*y - 2], [x y]), [2 1 3], 'piece 9'; ...
+                region([(x+y)^2 - 4*x, -x, -y], [x y]), [1 3], 'half lens'; ...
+                region([x^2 - y, y - 1, -x - 1], [x y]), [2 1], 'parabola' };
+
+            for k = 1:size(cases,1)
+                r = cases{k,1}; eIdx = cases{k,2}; nm = cases{k,3};
+                NC = r.getNormalConeVertexQ(s1, s2, eIdx);
+
+                % NORMALISATION is part of the contract, not cosmetics: getSubdiffVertexT1 uses
+                % `m = d(row)/d(s1)` as the slope of the re-anchored line, which is the row's own
+                % slope only when the coefficient of s2 is +-1.
+                for a = 1:size(NC,1)
+                    for b = 1:size(NC,2)
+                        if isAlways(NC(a,b) == 0, 'Unknown', 'false'), continue, end
+                        c = symbolicFunction(NC(a,b)).getLinearCoeffs([s1 s2]);
+                        if c(2) == 0
+                            ok = abs(double(c(1))) == 1;
+                        else
+                            ok = abs(double(c(2))) == 1;
+                        end
+                        testCase.verifyTrue(logical(ok), sprintf( ...
+                            '%s: NC(%d,%d) = %s is not normalised for getSubdiffVertexT1', ...
+                            nm, a, b, char(NC(a,b))));
+                    end
+                end
+
+                [bad, per] = regionTest.coneVsDefinition(r, NC, s1, s2);
+                testCase.verifyEqual(bad, 0, sprintf( ...
+                    '%s: cone disagrees with the definition on %d of 72 directions [%s]', ...
+                    nm, bad, num2str(per)));
             end
         end
 

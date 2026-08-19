@@ -4811,6 +4811,36 @@ classdef region
          function NC = getNormalConeVertexQ(obj, s1, s2, eIdx)
              % obj = obj.envelope(i).d
              %
+             % WHAT THIS MUST RETURN -- the specification, read off the CONSUMER
+             % (functionNDomain.getSubdiffVertexT1) and measured, 2026-08-18. Row j is two
+             % linear forms in the dual variables and only two things about them are observable:
+             %
+             %   (S1) NORMALISATION. The coefficient of s2 must be +1, -1 or 0, and when it is 0
+             %        the coefficient of s1 must be +-1. getSubdiffVertexT1 takes the slope of
+             %        the re-anchored line as `m = d(row)/d(s1)`, which is the row's own slope
+             %        only under that normalisation. Every branch below builds
+             %        `s2 - pslope*s1 - q` or `s1 - vx(j)`, so this holds by construction --
+             %        a replacement that scales a row breaks the consumer silently.
+             %
+             %   (S2) THE CONE. Reading the LINEAR PARTS as `<= 0` (region's own convention,
+             %        see ptFeasible), the two rows must cut out the NORMAL CONE of the region
+             %        at vertex j: `u` in the cone iff `v_j` maximises `<u,.>` over the region
+             %        near `v_j` (the local form -- these regions are not all convex).
+             %
+             %   (S3) THE CONSTANT IS FREE. getSubdiffVertexT1 discards it and re-anchors each
+             %        line at `grad f(v_j)`, so the cell it builds is
+             %        `grad f(v_j) + N_D(v_j) = subdiff f(v_j)`. That identity is what the whole
+             %        vertex branch of the conjugate rests on; the constants written here (they
+             %        anchor at the PRIMAL vertex, in dual variables) are never read.
+             %
+             % MEASURED against (S2) with an oracle built from the definition: GIVEN eIdx, the
+             % implementation below is exact on every vertex of the three curved fixtures --
+             % including the cusp and the vertex with three active constraints. See
+             % regionTest.vertexConesMatchTheDefinition, which is that statement as a test, and
+             % DECISIONS.md 2026-08-18 (fifth) for what the earlier "it is not a normal cone"
+             % measurement was actually measuring: the eIdx-less slot fallback, on BOUNDED
+             % fixtures whose constraint count matches the UNBOUNDED layout that fallback assumes.
+             %
              % EXPLICIT EDGE LIST (optional 4th argument). Without it this routine reads the
              % constraint bounding an edge off a SLOT: the cone at vertex j is built from
              % ineqs(j) and ineqs(j+1), wrapped modulo the number of constraints. That works

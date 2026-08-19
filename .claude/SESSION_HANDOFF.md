@@ -48,9 +48,14 @@ performance wall — see "Read this first".
 
 1. **Read tonight's slow-bucket result.** It covers `region.m`'s two accepted changes. Nothing
    else should be built on them until it is green.
-2. **Establish `getNormalConeVertexQ`'s specification** by reading its consumer
-   `functionNDomain.getSubdiffVertexT1`, which re-anchors its rows at `∇f(v)`. Without that, item
-   1 of the symbolic-removal list cannot proceed — and it may expose a latent defect.
+2. **DONE 2026-08-18.** `getNormalConeVertexQ`'s specification is established and is now a test
+   (`regionTest.vertexConesMatchTheDefinition`, green, 17/0 in 44 s): the rows' linear parts, read
+   as `≤ 0`, are the NORMAL CONE at the vertex; the `s2` coefficient must be `±1` or `0`; the
+   constant is free. Given `eIdx` the committed routine is EXACT on all three curved fixtures,
+   cusp and three-active-constraint vertex included. Yesterday's "it is not a normal cone" is
+   struck in `DECISIONS.md` — it measured the eIdx-less slot fallback on bounded fixtures.
+   **Left open:** whether that fallback is right on the UNBOUNDED layout it was written for. The
+   oracle is reusable (`regionTest.coneVsDefinition`); it needs one captured pipeline region.
 3. **Rewrite `SUPPORT_MATRIX.md` §0.0.1.** Dated 2026-08-02 and now wrong in every row: the six
    box cases are all 0 s, and its headline finding ("returns `QuaParCPLQ`, NO MESH") no longer
    holds. It is what a reader consults before planning SCIP work.
