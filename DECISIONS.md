@@ -25,6 +25,36 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-18 (evening, second attempt) — the closed-form normal cones are SLOWER. Measured, not guessed.
+
+The first attempt was reverted because `solve()`'s root order is not reproducible. This attempt
+removed the dependence instead of trying to match it: `region.probeOnCurve` tries BOTH sides of
+the vertex and BOTH roots, keeping the first feasible probe, so ordering stops mattering.
+
+**It works and it is slower.** Five calls of `getNormalConeVertexQ` on piece 9:
+
+        solve()                 2.89 s
+        closed form + probe     3.77 s      +30%
+
+The reason is arithmetic, not subtlety: `conicCoefsSym` costs SIX substitutions per call, and the
+probe then runs up to four `ptFeasible` tests, where the original did one or two `solve` calls on
+a small expression. The closed form only wins when the thing replaced is expensive relative to the
+setup -- true for `getVertices`, where one extraction served O(n^2) pairs, and false here, where
+the extraction serves a single vertex.
+
+**Also measured on the way:** converting only ONE of the four probe blocks left the cones
+unchanged; converting the other three MOVED them. So the probe choice is genuinely load-bearing,
+and any future attempt has to justify the new choice rather than assume equivalence.
+
+**What was kept:** `regionTest/normalConesOnCurvedEdgesAreUnchanged`, a characterization test that
+pins the curved-edge cones for three regions in about 13 seconds. It caught both failures in this
+attempt -- a static/instance placement bug, and the probe-order behaviour change -- where the
+suites that cover these paths (`conjCPLQTest`, `testMaxMultiRegion`) are in the ~100-minute slow
+bucket. That test is the reusable result of the exercise; the optimisation is not.
+
+**Rule this establishes for the remaining `solve()` sites:** extraction cost is amortised over the
+number of uses. Convert where one extraction serves many operations; leave it where it serves one.
+
 ## 2026-08-18 (evening) — REVERTED: closed-form NORMAL CONES. solve()'s root ORDER is not reproducible.
 
 - **Tried:** `region.solveForY`, a closed-form replacement for the ten

@@ -24,6 +24,50 @@ classdef regionTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function normalConesOnCurvedEdgesAreUnchanged(testCase)
+        % A CHARACTERIZATION test, and it exists to make one refactor safe.
+        %
+        % getNormalConeVertexQ finds its probe points with solve(), takes the FIRST root, tests
+        % it, and flips the probe to the other side if it fails -- it never tries the second
+        % root. So anything that changes root ORDER can silently change the cone, and the suites
+        % that exercise curved cones (conjCPLQTest, testMaxMultiRegion) are in the SLOW bucket,
+        % ~100 minutes. This pins the same behaviour in about a second, so the ordering can be
+        % fixed and checked immediately.
+        %
+        % The values below are the output of the suite-green implementation on 2026-08-18, not a
+        % hand derivation: the point is that a refactor must not MOVE them. Three regions, each
+        % with a genuine conic facet -- piece 9 of the parallelogram's f*, a half-lens, and a
+        % parabola capped by two lines.
+            x = sym('x'); y = sym('y'); s1 = sym('s_1'); s2 = sym('s_2');
+
+            cases = { ...
+                region([16*x - 4*x*y - x^2 - 4*y^2, -x-2*y, (2*y)/3 - x - sym(1)/3, ...
+                        x + 2*y - 2], [x y]), ...
+                    {'s_2 - 1/8', '2*s_1 - s_2 + 5/8'; ...
+                     's_2 - 2*s_1', '(2*s_1)/3 + s_2'; ...
+                     '25/24 - s_2 - (2*s_1)/3', '2*s_1 - s_2 + 3/8'}, 'piece 9'; ...
+                region([(x+y)^2 - 4*x, -x, -y], [x y]), ...
+                    {'-s_2', 's_2'; '-s_2', '4 - s_1'}, 'half lens'; ...
+                region([x^2 - y, y - 1, -x - 1], [x y]), ...
+                    {'s_1/2 - s_2 + 3/2', 's_1 + 1'; '1 - s_1', '1 - s_2'}, 'parabola' };
+
+            for k = 1:size(cases,1)
+                r = cases{k,1}; want = cases{k,2}; nm = cases{k,3};
+                NC = r.getNormalConeVertexQ(s1, s2);
+                testCase.verifyEqual(size(NC), size(want), ...
+                    sprintf('%s: cone matrix changed shape', nm));
+                for a = 1:size(want,1)
+                    for b = 1:size(want,2)
+                        testCase.verifyTrue( ...
+                            isAlways(simplify(NC(a,b) - str2sym(want{a,b})) == 0, ...
+                                     'Unknown', 'false'), ...
+                            sprintf('%s: NC(%d,%d) moved -- got %s, pinned %s', ...
+                                    nm, a, b, char(NC(a,b)), want{a,b}));
+                    end
+                end
+            end
+        end
+
         % ---- simplifyUnboundedRegion ----------------------------------------------------
         function aHalfPlaneIsNotEmpty(testCase)
         % simplifyUnboundedRegion decided a region had no interior from the count of its FINITE
