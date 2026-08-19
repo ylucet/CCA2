@@ -4,126 +4,70 @@ _Last updated: 2026-08-18_
 
 ## What happened this session
 
-**The A.4/A.5 split is ON BY DEFAULT.** `testcPLQ` runs **8 passed / 0 failed in 2083 s** against
-4728 s and one ERROR, with `testRectBiconj` among the eight -- that exception was a casualty of the
-double leaks, and nothing in the test or the split was changed to fix it. `CCA2_NO_A45_SPLIT` opts
-out. A general convex quadrilateral is now exact by default where it used to raise
-`MATLAB:badsubscript`.
+**Two operators got their short-circuits, and `biconj` over a box is now free.** `biconj` IS the
+convex envelope, so a convex `f` is its own answer — that plus separability, McCormick and the
+diamond case took every row of `checkBoxEnvelopeForSCIP` to **0 s**, from 42–456 s with one
+`MATLAB:badsubscript`. All six now return a meshed `QuaPol` the SCIP bridge can read, where they
+used to return a mesh-less `QuaParCPLQ`.
 
-**STEP 2 IS EXACT.** Three places turned exact values into doubles, each because an array's CLASS
-was decided by whichever branch wrote first, or by a deliberate conversion: `domain.mE`/`cE`,
-`region.limitOfFAtVertices` (with `functionNDomain.limitOfGradientAtVertices`), and
-`plq_1p.quadPartsOf` + `conjConvexOverPiece`. Worst denominator **1.4e145 -> 56**. One returned a
-y-intercept of `-9.06e-72` where the exact answer is `0`, so this was a WRONG VALUE too.
+**Step 3 got measurably faster by profiling first.** `ptFeasible` gained a numeric filter and
+`getVertices` an affine×conic closed form: `solve` −42%, `subs` −17%, one fold 289 s → 265 s.
 
-**Step 3: 86 cells / 73 min -> 60 cells / 43 min**, and every slow suite got faster
-(total 6783 s -> 6017 s). What did it: the exactness above (two cells sharing a facet were carrying
-two doubles of one number, ONE ULP APART, so `merge` could not see the facet); `certifiesNonPositive`,
-a sound closed-form certificate for a curved constraint, replacing two HEURISTICS; `quadprog`
-deciding the CONCAVE conics; and `holdsOn`/`maxAffineOverRegion`, which take the max over the region
-ITSELF -- vertices plus arc tangencies in closed form -- instead of over its linear relaxation.
+**The symbolic-removal programme then hit a wall worth knowing about**, and it is not a
+performance wall — see "Read this first".
 
-**The parallelogram's piece 9 is exact at 10 of 10**, via `functionNDomain.singularEdgeCut`: the
-KKT multiplier, affine in s, where `getInterior`'s elimination returned the gradient map's image
-LINE and separated nothing.
+## READ THIS FIRST — what the record says about my own errors
 
-**332 pass / 0 fail** -- fast 206, normal 11, slow 115, no timeouts.
+`DECISIONS.md` is the valuable artifact from today. Newest entries, all measured:
 
-## READ THIS BEFORE TRUSTING THE RECORD
-
-Three `DECISIONS.md` entries record MY errors, not the code's, and they are the most useful thing
-here:
-
-1. A commit reported Step 3 numbers that were never measured. Corrected, but check any figure
-   against a tool result.
-2. A working fix was REVERTED as "unsound" when the actual error was two helpers in the instance
-   block called as static -- MATLAB said so plainly. **Read the error before theorising about the
-   math.**
-3. The parallelogram's "remaining 1%" and part of the `noSharedFacet` count were CORRECT results
-   read as defects, because a grid reference missed the vertex where the sup is attained.
-
-Twice in one session a correct result was chased as a bug. `TODO.md` carries that warning against
-the next candidate, `unionIsExact`.
+1. **`getNormalConeVertexQ` does NOT compute a normal cone.** Tested against the definition
+   (`u` in the cone at `v` iff `v` maximises `⟨u,·⟩`), the COMMITTED implementation disagrees on
+   4–30 of 72 directions per vertex. A gradient rewrite fails too, in two opposite ways: too big on
+   the concave side of a conic, too small at a cusp. **So there is no statement of what a
+   replacement must satisfy.** Settle it by reading the CONSUMER, `getSubdiffVertexT1`.
+2. **Every `solve()`-for-a-probe-point site is order-dependent.** 42 differential cases, 16
+   disagree, every disagreement has both roots real. `solve`'s ordering is unreproducible, so
+   substitution changes which probe is used. This is a **caller rewrite**, not a substitution.
+3. **A closed-form rewrite was 30% SLOWER** (2.89 → 3.77 s). Extraction cost amortises over uses:
+   convert where one extraction serves many operations (`getVertices`), not where it serves one.
+4. **A safety check on a hot path must be priced like anything else on it** — a sampled refit
+   guard cost more than the `solve` calls it saved.
 
 ## Where things stand
 
-- Branch: `main` @ `a21c3c3` — sixteen commits this session, none pushed
-- Pushed: NO -- six commits sit on local `main`, unpushed (pushing was never asked for)
-- **332 pass / 0 fail across all 26 suites** — fast 206 / 0, normal 11 / 0, slow **115 / 0**, no
-  timeouts, with the A.4/A.5 split ON. The slow bucket is now about 113 minutes (was ~92): the
-  split makes `testcPLQ` 2188 s where it was 1274 s. That is the bucket cost the standing rule
-  says to accept.
-- The parallelogram's piece 9 no longer double-covers `(1/2,1/4)`; 4 of 10 probe points wrong or
-  double-covered, down from 4 with an overlap among them. The three that remain are a DIFFERENT
-  defect — a vertex cone over-claiming by about 1% — not the singular quadratic.
-- The general quadrilateral is exact BY DEFAULT now (10 of 10 probe points, 8 of 8 through the
-  full assembly). It used to raise `MATLAB:badsubscript`.
+- Branch: `main` @ `35c550b` — "getNormalConeVertexQ does not compute a normal cone"
+- Pushed: **pending** — 7 commits unpushed (`05df79d`..`35c550b`); everything up to `51c003d`
+  was pushed earlier today
+- **fast 206 / 0**, **normal 11 / 0**, `regionTest` 16 / 0 including the new cone test
+- **SLOW BUCKET NOT RUN** since the `ptFeasible` filter and the `getVertices` closed form. This is
+  the one verification gap. User is running it tonight:
+  `CCA2_TEST_TIMEOUT=7200 bash .claude/suite.sh --slow`
+- `region.m` is at its last green state — every experimental rewrite this evening was reverted
 
 ## Next steps
 
-1. **The 5 pairs whose shared facet `merge` cannot see.** Measured with EXACT arithmetic, so this
-   is not rounding: they carry the same hyperplane with opposite orientation and meet in a
-   SEGMENT, and `ineqs(i) == -ineqs(j)` still finds nothing. `symbolicFunction.eq` is
-   `if (obj1.f == obj2.f)`, a STRUCTURAL test whose own comment says "change to isAlways", so the
-   same constraint at a different positive SCALE does not match. `region.normalize1` divides by
-   `abs(coeffs(f,vars))(end)` and is supposed to prevent exactly that -- check first whether it
-   picks the same term for both operands. Reproduce in about 4 minutes with
-   `.claude/step3adjacency.m`.
-2. **The 6 pairs `certifiesNonPositive` declines.** They ARE found, reach `unionIsExact`, and are
-   refused there -- the fold-1 tally's `lin_exactCurvedTest = 6` matches the count exactly. The
-   certificate refuses by design outside its hypothesis: a rational `h`, a non-convex quadratic,
-   or a linear relaxation with no vertex. Instrument WHICH of the three fires before extending it;
-   the derivation in the method's header says what each would need.
-3. **Then re-measure and settle the A.4/A.5 default.** Rerun `.claude/step3cost.m` on the
-   quadrilateral once 1 and 2 land (cells ran 5, 14, 29, 45, 70, 86 before any of this work), then
-   diagnose `testcPLQ/testRectBiconj`'s exception -- with the cost question answered that is the
-   only correctness objection left to turning `CCA2_A45_SPLIT` on.
-4. **`getInterior` on a SINGULAR quadratic — the parallelogram's last 4%.** Unchanged by this
-   session. It separates an edge cell from its neighbours by eliminating `s` between `x = d1f` and
-   `y = d2f`; for a singular convex quadratic the gradient map is not invertible and that
-   elimination returns the map's IMAGE LINE, which separates nothing. Reproduce in about a minute
-   with `functionNDomainTest.parallelogramPiece9`.
-   **Do NOT attack the `isQuad` chord rewrite for it** -- both alternatives were measured
-   2026-08-16 and are in `DECISIONS.md`.
-5. **Then SCIP/QPLIB**, in the order that bites: wire `biconj` into `SCIP/src/cca2ConvexEnvelope.m`
-   -> expose value+subgradient off `QuaParCPLQ` -> fix diagonal terms over a box (`x^2-y^2`,
-   `(x^2+y^2)/2` on `[0,1]^2` still error in the second conjugation) -> performance.
-
-## New tools this session, both cheap to rerun
-
-- `.claude/step3cost.m` -- folds the pieces one at a time and reports cells, DISTINCT FUNCTIONS,
-  and `region.mergeTally`'s refusal reasons per fold. `CCA2_STEP3_CASE=tri` switches to the
-  all-rational control; `CCA2_STEP3_FOLDS` bounds the work.
-- `.claude/step3adjacency.m` -- classifies every same-function pair three ways at once: does
-  `merge` see a facet, is there a shared hyperplane, do the cells actually meet in a SEGMENT.
-  The third column is what showed that 21 of 38 refusals were correct all along.
-- `CCA2_TRACE_BIGNUM` in `region`'s constructor prints the stack whenever a region is built from a
-  constraint carrying a 15-digit integer. All three double leaks were found with it.
-
-## Three methods that keep paying off
-
-**Build a unit-level reproducer before touching the symbolic layer.** Piece 9 of the
-parallelogram's `f*`, hand-built as a `region`, runs in about a minute; reaching the same piece
-through `biconj` takes far longer and buries the evidence.
-
-**When a routine's index convention is unclear, read its PROBE POINTS.** `getNormalConeVertexQ`'s
-two halves probe at vertex `j−1` and vertex `j+1`, which is what settles that they mean the edge
-ARRIVING at `j` and the edge LEAVING it.
-
-**To find which piece of a MAX is wrong, use the property the max must have.** `f**` of a bounded
-domain is finite exactly ON that domain and is a max, so EVERY per-piece conjugate must be finite
-there. Evaluating all 12 groups at six interior points turned "the max comes out empty" into "these
-three pieces are wrong" in one cheap run.
+1. **Read tonight's slow-bucket result.** It covers `region.m`'s two accepted changes. Nothing
+   else should be built on them until it is green.
+2. **Establish `getNormalConeVertexQ`'s specification** by reading its consumer
+   `functionNDomain.getSubdiffVertexT1`, which re-anchors its rows at `∇f(v)`. Without that, item
+   1 of the symbolic-removal list cannot proceed — and it may expose a latent defect.
+3. **Rewrite `SUPPORT_MATRIX.md` §0.0.1.** Dated 2026-08-02 and now wrong in every row: the six
+   box cases are all 0 s, and its headline finding ("returns `QuaParCPLQ`, NO MESH") no longer
+   holds. It is what a reader consults before planning SCIP work.
+4. **Finish Phase B** of `SCIP_READINESS.md` — the direct-formula/symbolic map and the entry point
+   a separator should call. Most evidence is now measured.
+5. **Step 0 of `ALGORITHM.md`'s `biconj` ordering** — merge adjacent faces carrying the same
+   quadratic; the one case in the plan still unbuilt.
 
 ## Relevant files
 
-- `DECISIONS.md` — dead ends and refuted reasoning; newest entries are the opt-in judgement call,
-  the quadrilateral's three failed attempts, and the parallelogram's two defects.
-- `TODO.md` — live action items; Step 3's cost leads.
-- `splitTightTriangleSym.m` — the A.4/A.5 split, with its derivations and why it is symbolic.
-- `plq_1p.m` — `appendTriangle` (the `CCA2_A45_SPLIT` gate and what it costs), `triangulate`.
-- `SUPPORT_MATRIX.md` §7 / §7.1 — the defect table and the domain-coverage measurements.
-- `region.m` — `simplifyUnboundedRegion` (the witness), `getNormalConeVertexQ`, `getNormalConeEdgeQE`.
-- `functionNDomain.m` — `edgeIndexList`, `conjugateOfPiecePoly`, `getInterior`.
-- `cplqAdapterTest.m` / `functionNDomainTest.m` / `regionTest.m` — the unit tests that pin all of
-  this without the pipeline.
+- `DECISIONS.md` — dead ends; the four newest entries are today's and are the reason not to retry
+  the normal-cone rewrite blind
+- `ALGORITHM.md` — the ORDER of operations for both operators, and why triangulation is the
+  indefinite case's apparatus only
+- `SCIP_READINESS.md` — the three-phase gate, plus the profile of one Step 3 fold
+- `biconjCPLQ.m` — the four short-circuits (convex, separable, McCormick, diamond)
+- `region.m` — `ptFeasible`'s numeric filter, `getVertices`' closed forms, `getNormalConeVertexQ`
+  (unresolved)
+- `regionTest.m` — `normalConesOnCurvedEdgesAreUnchanged`, 13 s, guards the curved cones
+- `.claude/step3cost.m`, `.claude/step3adjacency.m` — the Step 3 measurement tools
