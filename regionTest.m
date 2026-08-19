@@ -36,21 +36,32 @@ classdef regionTest < matlab.unittest.TestCase
         % whose supporting value is within sampling noise of zero are the cone's own boundary and
         % are not counted.
             x = r.vars(1); y = r.vars(2);
-            gf = matlabFunction([r.ineqs.f], 'Vars', {[x y]});
+            % VECTORISED, and the resolution matters: the oracle can only see a sliver of the
+            % cone as wide as the angular step it samples the boundary with. At 1 degree it
+            % reported a direction 0.96 degrees OUTSIDE a cone as inside (measured, on the
+            % unbounded parabola strip), because the nearest sampled boundary direction landed
+            % exactly on the degenerate value. One handle per constraint, evaluated on the whole
+            % point cloud at once, is what makes a 0.2 degree step affordable.
+            gh = cell(1, size(r.ineqs,2));
+            for k = 1:size(r.ineqs,2)
+                gh{k} = matlabFunction(r.ineqs(k).f, 'Vars', {x, y});
+            end
             nd = 72; ang = (0:nd-1)*(2*pi/nd); U = [cos(ang)', sin(ang)']; epsr = 0.05;
             per = zeros(1, r.nv);
             for j = 1:r.nv
                 v = [double(r.vx(j)), double(r.vy(j))];
+                th = (0:0.2:359.8)'*pi/180;
                 W = [];
                 for rr = epsr*(0.2:0.2:1.0)
-                    th = (0:359)*pi/180;
-                    W = [W; v + rr*[cos(th)', sin(th)']];   %#ok<AGROW>
+                    W = [W; v + rr*[cos(th), sin(th)]];   %#ok<AGROW>
                 end
-                keep = false(size(W,1),1);
-                for i = 1:size(W,1), keep(i) = all(gf(W(i,:)) <= 1e-12); end
+                keep = true(size(W,1),1);
+                for k = 1:numel(gh)
+                    keep = keep & (gh{k}(W(:,1), W(:,2)) <= 1e-12);
+                end
                 D = (W(keep,:) - v)/epsr;
 
-                inCode = true(nd,1);
+                inCode = true(nd,1); onBdry = false(nd,1);
                 for k = 1:size(NC,2)
                     e = NC(j,k);
                     if isAlways(e == 0, 'Unknown', 'false'), continue, end
@@ -58,10 +69,19 @@ classdef regionTest < matlab.unittest.TestCase
                     L = zeros(nd,1);
                     for i = 1:nd, L(i) = double(subs(e, [s1 s2], U(i,:))) - c0; end
                     inCode = inCode & (L <= 1e-9);
+                    onBdry = onBdry | (abs(L) <= 1e-9);
                 end
                 m = zeros(nd,1);
                 for i = 1:nd, m(i) = max(D*U(i,:)'); end
-                inTrue = m <= 1e-9; amb = (m > 1e-9) & (m < 1e-3);
+                % A direction ON THE CONE'S OWN BOUNDARY is never a clear disagreement, and this
+                % is a mathematical exclusion, not a numerical fudge: where the region sits on the
+                % CONCAVE side of a conic the exact normal cone is NOT CLOSED -- piece 9's vertex
+                % 2 is locally {x <= y^2/4}, and (1,0), the perpendicular to the conic's tangent,
+                % has points of the region strictly ahead of it (x = y^2/8 > 0) even though every
+                % direction just inside does not. The routine returns the closed cone; the two
+                % differ by one ray, which is exactly what the cell decomposition does not
+                % distinguish (adjacent conjugate cells share their boundaries anyway).
+                inTrue = m <= 1e-9; amb = ((m > 1e-9) & (m < 1e-3)) | onBdry;
                 per(j) = sum((inCode ~= inTrue) & ~amb);
             end
             bad = sum(per);
@@ -174,6 +194,44 @@ classdef regionTest < matlab.unittest.TestCase
                     '%s: cone disagrees with the definition on %d of 72 directions [%s]', ...
                     nm, bad, num2str(per)));
             end
+        end
+
+        function theSlotFallbackIsRightOnTheUnboundedLayout(testCase)
+        % THE OTHER HALF OF THE SPECIFICATION. Called without an edge list, getNormalConeVertexQ
+        % pairs vertex j with constraints j and j+1. That is the layout `getEdgeNosInf` builds for
+        % an UNBOUNDED region -- slot 1 holds the constraint carrying the ray at vertex 1, and
+        % edge j (vertex j to vertex j+1) lands in slot j+1 -- so the arriving element at vertex j
+        % is slot j and the leaving one is slot j+1, exactly the pair the fallback takes. On a
+        % BOUNDED region edge j is slot j and the same pair is off by one, which is why the
+        % characterization test's three bounded fixtures come out wrong without eIdx.
+        %
+        % So the fallback is built here the way the pipeline builds it -- removeInfV,
+        % poly2orderUnbounded, then the getEdgeNosInf scatter, as conjugateOfPiecePoly does --
+        % rather than by hand, because it is the LAYOUT that is under test.
+        %
+        % MEASURED 2026-08-18: exact, 0 of 72 directions wrong at both vertices. The path is live
+        % (the caller reaches it whenever edgeIndexList refuses, which it does for every unbounded
+        % region), and this is what says it is sound there.
+            x = sym('x'); y = sym('y'); s1 = sym('s_1'); s2 = sym('s_2');
+
+            % {y >= x^2, -2 <= x <= 2}: two finite vertices, two upward rays, a curved edge
+            % between them, and nIneq = nv + 1 -- the unbounded layout's own shape.
+            d = region([x^2 - y, x - 2, -x - 2], [x y]);
+            d = d.removeInfV;
+            d = d.poly2orderUnbounded;
+            edgeNo = d.getEdgeNosInf(d.vars);
+            old = d.ineqs;
+            for k = 1:numel(edgeNo)
+                if edgeNo(k) > 0, d.ineqs(edgeNo(k)) = old(k); end
+            end
+            testCase.verifyEqual(char(d.ineqs(1).f), '- x - 2', ...
+                'precondition: slot 1 carries the ray at vertex 1');
+
+            NC = d.getNormalConeVertexQ(s1, s2);
+            [bad, per] = regionTest.coneVsDefinition(d, NC, s1, s2);
+            testCase.verifyEqual(bad, 0, sprintf( ...
+                'the slot fallback disagrees with the definition on %d directions [%s]', ...
+                bad, num2str(per)));
         end
 
         % ---- simplifyUnboundedRegion ----------------------------------------------------

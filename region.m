@@ -4841,6 +4841,19 @@ classdef region
              % measurement was actually measuring: the eIdx-less slot fallback, on BOUNDED
              % fixtures whose constraint count matches the UNBOUNDED layout that fallback assumes.
              %
+             % WITHOUT eIdx the pair taken is (j, j+1), which is right for the layout
+             % getEdgeNosInf builds for an UNBOUNDED region -- slot 1 carries the ray at vertex 1
+             % and edge j lands in slot j+1 -- and measured exact there
+             % (regionTest.theSlotFallbackIsRightOnTheUnboundedLayout). It is off by one on a
+             % BOUNDED region, where edge j is slot j: supply eIdx for those.
+             %
+             % ONE THING IT CANNOT EXPRESS, and it does not matter. Where the region is on the
+             % CONCAVE side of a conic the exact normal cone is NOT CLOSED -- at piece 9's vertex
+             % 2, locally {x <= y^2/4}, the tangent perpendicular (1,0) has region points strictly
+             % ahead of it while every direction just inside the cone does not. This returns the
+             % CLOSED cone; the two differ by one ray, which the cell decomposition does not
+             % distinguish (adjacent conjugate cells share their boundaries anyway).
+             %
              % EXPLICIT EDGE LIST (optional 4th argument). Without it this routine reads the
              % constraint bounding an edge off a SLOT: the cone at vertex j is built from
              % ineqs(j) and ineqs(j+1), wrapped modulo the number of constraints. That works

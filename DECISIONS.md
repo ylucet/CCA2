@@ -81,12 +81,30 @@ entry, now with a reproducible case.
 the property test reverted yesterday, which was red because it tested the fallback). regionTest is
 now 17 / 0 in 44 s.
 
-**STILL OPEN, and it is a different question from the one that was asked yesterday:** is the
-eIdx-less fallback correct on the layout it was WRITTEN for -- a genuinely unbounded region with
-nv+1 constraint slots? The three fixtures cannot answer it, and that path is live (the caller
-reaches it whenever `edgeIndexList` refuses, which it does for every unbounded region). The oracle
-is now a reusable static, `regionTest.coneVsDefinition(r, NC, s1, s2)`, so answering it costs one
-captured region from the pipeline.
+**AND THE FALLBACK IS SOUND ON ITS OWN LAYOUT -- settled the same evening, so it is not open.**
+Two suites (`functionNDomainTest`, `unboundedFaceTest`, both green) captured ZERO eIdx-less calls,
+so the pipeline was not going to answer it; the layout was rebuilt instead. `getEdgeNosInf` puts
+the constraint carrying the ray at vertex 1 in slot 1 and edge j (vertex j to j+1) in slot j+1, so
+at vertex j the arriving element is slot j and the leaving one slot j+1 -- exactly the pair the
+fallback takes. Built that way (`removeInfV`, `poly2orderUnbounded`, the scatter) on
+`{y >= x^2, -2 <= x <= 2}`: **0 of 72 directions wrong at both vertices**. On a BOUNDED region edge
+j is slot j and the same pair is off by one, which is the whole of the earlier disagreement. Kept
+as `regionTest.theSlotFallbackIsRightOnTheUnboundedLayout`; regionTest is 18 / 0 in 45 s.
+
+**A REAL LIMIT, found by sharpening the oracle, and it is benign.** At 1 degree of boundary
+sampling the oracle called a direction 0.96 degrees OUTSIDE a cone "inside" -- the nearest sampled
+boundary direction landed exactly on the degenerate value. At 0.2 degrees (afforded by vectorising
+the feasibility test) that artifact is gone, and one genuine difference surfaces: **where the
+region is on the CONCAVE side of a conic the exact normal cone is not CLOSED.** At piece 9's vertex
+2, locally `{x <= y^2/4}`, the tangent perpendicular `(1,0)` has region points strictly ahead of it
+(`x = y^2/8 > 0`) while every direction just inside the cone does not. The routine returns the
+CLOSED cone. The two differ by one ray, which the cell decomposition does not distinguish --
+adjacent conjugate cells share their boundaries anyway -- so the test excludes directions ON the
+cone's boundary from its verdict, and says why.
+
+**What is left is a narrow one:** a BOUNDED region for which `edgeIndexList` refuses (returns
+`ok = false`) still reaches the fallback, and there the pair is off by one. Nothing has been seen
+to produce one; the oracle to check it is a reusable static, `regionTest.coneVsDefinition`.
 
 ## ~~2026-08-18 (evening, fourth) — getNormalConeVertexQ does NOT compute a normal cone. Its specification is unknown.~~
 

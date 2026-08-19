@@ -54,8 +54,10 @@ performance wall — see "Read this first".
    constant is free. Given `eIdx` the committed routine is EXACT on all three curved fixtures,
    cusp and three-active-constraint vertex included. Yesterday's "it is not a normal cone" is
    struck in `DECISIONS.md` — it measured the eIdx-less slot fallback on bounded fixtures.
-   **Left open:** whether that fallback is right on the UNBOUNDED layout it was written for. The
-   oracle is reusable (`regionTest.coneVsDefinition`); it needs one captured pipeline region.
+   The fallback is also SOUND on the unbounded layout it was written for (rebuilt from
+   `getEdgeNosInf`'s scatter: 0 of 72 wrong; second test). regionTest 18 / 0 in 45 s.
+   **Left open, narrow:** a BOUNDED region for which `edgeIndexList` refuses would still reach the
+   fallback with the pair off by one; none has been seen.
 3. **Rewrite `SUPPORT_MATRIX.md` §0.0.1.** Dated 2026-08-02 and now wrong in every row: the six
    box cases are all 0 s, and its headline finding ("returns `QuaParCPLQ`, NO MESH") no longer
    holds. It is what a reader consults before planning SCIP work.
