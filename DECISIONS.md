@@ -25,6 +25,90 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 (night) — T1/T2: the number type for a sym-free CCA2 is Q(sqrt(d)), and it is built and tested
+
+T8 (below) established that rationals alone cannot carry this pipeline. T1 is therefore decided
+and T2 is implemented: `exactQ`, values `a + b*sqrt(d)` with `a`, `b` rational (int64
+numerator/denominator, lowest terms) and `d` a squarefree positive integer, or 0 for a purely
+rational value. 19 unit tests, green (`exactQTest`, in the FAST bucket, 0.3 s).
+
+**Three design decisions, each of which is a refusal:**
+
+1. **ONE quadratic extension, and mixing two RAISES.** `sqrt(2) + sqrt(3)` is an error, not a
+   promotion to a tower. Silently building `Q(sqrt2, sqrt3)` is precisely how an exact type turns
+   back into a symbolic engine by accident; making it loud means the caller learns WHICH operation
+   needs the tower instead of every operation paying for one. A rational combines with anything.
+2. **int64 multiply RAISES on overflow.** MATLAB's int64 SATURATES silently, and a wrong answer
+   that looks exact is the one outcome worse than a slow one. Cross-cancellation before every
+   multiply (`mulRat` divides out the two cross-gcds first) is what keeps the guard rare -- a
+   40-term telescoping product of moderate fractions stays exact, and is a test.
+3. **`fromDouble` REFUSES what it cannot represent.** `exactQ(pi)` errors rather than rounding.
+   Converting at the boundary is the caller's job; a type that quietly approximates at its
+   constructor has no exactness to offer.
+
+**Sign is the operation everything downstream rests on**, and it is computed with no floating
+point at all: when `a` and `b` share a sign the answer is that sign, otherwise `a^2*bd^2` is
+compared to `b^2*d*ad^2` in integers. Tested on successive convergents of `sqrt(2)`, which
+alternate about it with shrinking margins -- `1393/985` is below by 3.7e-7 and `665857/470832` is
+above by 1.6e-12, decided by integers one apart (1940449 vs 1940450).
+
+**Two tests caught their own author**, which is the argument for writing them first: the
+convergent's sign was asserted backwards (1393/985 is BELOW sqrt(2), not above), and
+`exactQ(2,1,1,1,2)` was read as `2*sqrt(2)` when the constructor's order `(an,ad,bn,bd,d)` makes it
+`2 + sqrt(2)`. Both are now stated in the tests so the next reader does not repeat them.
+
+**The two refuted number types are pinned as tests**, not just as prose: the A.5 cevian foot
+`5/2 - sqrt(5)/2` is representable and its sign is exact, and `4 - 2*sqrt(2)` -- the value that
+arrived as two doubles one ULP apart and made a shared facet invisible to `merge` -- compares
+equal to itself and negates exactly.
+
+## 2026-08-19 (night) — T8 ANSWERED, NEGATIVELY: the A.5 surd is intrinsic, so a sym-free CCA2 needs quadratic surds
+
+`ALGORITHM.md` left one question open on the way to removing the Symbolic Toolbox: A.5's split
+foot is irrational (`5/2 - sqrt(5)/2`), and a rational route would make the whole pipeline
+representable over the rationals. It recorded that a NUMERIC single bounded triangle "was measured
+exact at 7 of 7 probe points and never introduces a surd", and asked whether that generalises.
+
+**First, the surd's actual source is narrower than the file suggests.** A.4 (TWO convex edges)
+envelopes to a single rank-1 PSD quadratic -- no split, no surd. Only A.5 (THREE convex edges)
+splits along the cevian. So the question is about the 3-convex-edge case alone.
+
+**And the tightness objection does NOT apply to the conjugate.** `ALGORITHM.md` argues the A.5
+foot must not be moved because A.4's closed form is only tight on the right side of it -- but that
+is a statement about STEP 1, the envelope. The conjugate satisfies `f* = max_k (f|T_k)*` for ANY
+cover, with no tightness condition, so a rational split IS sound provided each sub-triangle is
+conjugated DIRECTLY (`conjPieceCPLQ`) rather than through A.4's envelope formula. That is the
+opening this probe tested.
+
+**It is useful only if the split drops every sub-triangle to <= 1 convex edge**, which is what
+`conjPieceCPLQ` accepts. For `f = u1*u2` an edge is CONVEX exactly when its direction `d` has
+`d1*d2 > 0`. Two natural rational splits were measured (`.claude/t8RationalSplitProbe.m`):
+
+    centroid split            all three sub-triangles REFUSED (conjPieceCPLQ:notImplemented)
+    one axis-parallel cut     REFUSED on every fixture, including the A.4 and 1-edge controls
+
+The centroid fails for a reason that generalises: a cevian's slope lies BETWEEN the slopes of the
+two edges it separates, so on a triangle whose edges all have positive slope every cevian has
+positive slope too and the count never drops. One axis-parallel cut gives each sub-triangle only
+ONE affine edge, leaving two convex ones.
+
+**What would work, and why it is not worth it.** Only a decomposition into axis-aligned RIGHT
+triangles gets there: two affine legs plus at most one convex hypotenuse. Two things kill it:
+
+1. **It is rational only when the bilinear FRAME is.** A general indefinite `Q` needs
+   `M = bilinearFrame(Q)`, built from `sqrt(lam1/2)` and `sqrt(-lam2/2)` (convEnvCPLQ:181) -- so
+   the surd reappears in the frame itself, before any split. The route would serve the `b*x*y +
+   linear` family only.
+2. **It multiplies the cell count feeding a QUADRATIC-cost Step 3.** Each triangle becomes up to
+   six, and Step 3 is the measured bottleneck (`maximumP`, ~n^2 in cells). Trading an exact surd
+   for six times the cells is the wrong direction.
+
+**Conclusion, and it decides T1: exact arithmetic over Q(sqrt(d)) is REQUIRED.** A sym-free CCA2
+cannot be built on rationals alone; the number type has to carry one quadratic extension. Doubles
+remain refused for the reason already recorded -- one ULP made a shared facet invisible to `merge`
+and Step 3's cell count grew without bound -- and rational snapping remains refused for the reason
+recorded under attempt 3 (vertex denominators do not bound downstream ones; 1e5 became 1e25).
+
 ## 2026-08-19 (evening) — the crash tests became tests, and the one red turned out to be an unguarded POLE in slopeAtVertex
 
 Four things, and the fourth is the reason the other three were worth doing.

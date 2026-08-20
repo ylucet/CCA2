@@ -1397,15 +1397,27 @@ classdef region
                   else
                       m0 = simplifyFraction(-drx1.f/drx2.f);
                       n = n + 1;
-                      mv = NaN;
+                      % THE RESULT MUST BE A NUMBER, and that is not a formality: the caller
+                      % (simplifyUnboundedRegion) does `sort(double(mp))` and `atan2(double(mp),1)`
+                      % on whatever comes back. A ratio that stays INDETERMINATE at pt -- 0/0
+                      % after the denominators cancel, which is what a cusp gives -- substitutes
+                      % to something `double()` cannot convert, and the failure then surfaces two
+                      % frames away as a MuPAD conversion error with nothing pointing here.
+                      % Measured 2026-08-19: fixing only the pole in the guard above moved the
+                      % crash from slopeAtVertex to exactly that `double()`.
+                      %
+                      % intmax is this routine's OWN marker for "vertical / no usable slope" (the
+                      % branch above uses it, and the caller normalises -inf to inf right after),
+                      % so an unusable value becomes intmax rather than a second convention.
+                      mv = intmax;
                       try
-                          mv = subs(m0, vars, pt);
+                          cand = subs(m0, vars, pt);
+                          cd = double(cand);
+                          if isfinite(cd) || isinf(cd)
+                              mv = cand;
+                          end
                       catch
-                          % Both derivatives are singular at pt and the ratio does not cancel --
-                          % there is no tangent to report. intmax is this routine's own "vertical
-                          % / undecided" marker (see the caller's -inf normalisation just below),
-                          % so use it rather than inventing a second convention.
-                          mv = intmax;
+                          mv = intmax;    % pole or indeterminate: no tangent to report
                       end
                       m(n) = mv;
                   end
