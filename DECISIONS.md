@@ -25,6 +25,51 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-20 (last) — T1 is REFUTED AS STATED: one quadratic extension is not enough. A SINGLE triangle needs two.
+
+T1 decided the sym-free number type is `Q(sqrt(d))` -- one squarefree `d`, with mixing two of them
+an ERROR rather than a promotion to a tower (`exactQ`, 2026-08-19). That decision was taken from
+A.5's cevian foot `5/2 - sqrt(5)/2`, which is a single extension. It does not survive contact with
+a second triangle, let alone a polygon.
+
+**Measured (`.claude/t1RadicandProbe.m`), the radicands appearing in the SUB-TRIANGLE COORDINATES
+`splitTightTriangleSym` produces:**
+
+    conv{(0,0),(2,0),(2.5,1.5)}     2 sub-triangles     sqrt(5)
+    conv{(2.5,1.5),(0,0),(0.5,1)}   4 sub-triangles     sqrt(15) AND sqrt(30)
+    conv{(0,0),(1,0),(2,1)}         2 sub-triangles     sqrt(2)
+    conv{(0,0),(1,1),(3,2)}         4 sub-triangles     sqrt(3)  AND sqrt(6)
+
+The first two are the two triangles of ONE quadrilateral -- the A.4/A.5 fixture the whole Step 3
+cost story is measured on. So:
+
+* **One A.5 triangle already needs two extensions.** Its split recurses into two A.4 halves whose
+  cevian slopes are `-sqrt(mh*mw)` for different edge pairs; nothing makes those two products
+  differ by a square. `exactQ` would RAISE inside a single piece's Step 1.
+* **Step 3 makes it worse by construction.** The cross-piece max subtracts a cell carrying
+  `sqrt(5)` from a cell carrying `sqrt(15)`. That subtraction is the operation `exactQ` is designed
+  to refuse.
+
+**Why the refusal was the right design and still is.** Silently building a tower is how an exact
+type turns back into a symbolic engine. What the measurement changes is the FIELD, not the rule:
+the extensions that arise are square roots of SQUAREFREE INTEGERS, and products of them stay in the
+same family (`sqrt(15)*sqrt(30) = 15*sqrt(2)`). So the type to build is MULTIQUADRATIC --
+`Q(sqrt(p1),...,sqrt(pk))` over the primes actually seen, an element being a rational combination
+of `sqrt(m)` for squarefree `m | p1...pk` -- not a general algebraic number field and not a tower
+of arbitrary degree.
+
+**And it keeps the two properties `exactQ` was built for.** Those `sqrt(m)` are linearly
+INDEPENDENT over Q, so an element is zero exactly when every coefficient is zero -- zero-testing
+stays trivial and exact, which is what `region`'s `isAlways(dt == 0)`-style questions need. Sign
+then follows from refining a rational interval until it excludes zero, which terminates precisely
+because zero-testing is exact. Neither needs floating point.
+
+**What this does NOT overturn:** doubles are still refused (one ULP made a shared facet invisible
+to `merge`), rational snapping is still refused (1e5 became 1e25), and `exactQ`'s other two rules
+-- raise on int64 overflow, refuse `fromDouble` of something unrepresentable -- carry over
+unchanged. `exactQ` is a correct implementation of a field that is too small; it is the base case
+of the one to build, not a dead end.
+
 ## 2026-08-20 (later still) — the A.4 split is LANDED, at the ENVELOPE level, by reusing the split the domain route already had
 
 The item filed as Blocked below is closed. `plq_1p.convexEnvelope1` now splits a piece whose
@@ -289,7 +334,7 @@ fixtures move to the triangulated form and `testFractional` gets a polynomial en
 then `plq_1piece`'s 75 symbolic calls stay, and a sym-free CCA2 must either port them or land
 this migration properly. Reverted to green; nothing is left half-swapped.
 
-## 2026-08-19 (night) — T1/T2: the number type for a sym-free CCA2 is Q(sqrt(d)), and it is built and tested
+## ~~2026-08-19 (night) — T1/T2: the number type for a sym-free CCA2 is Q(sqrt(d)), and it is built and tested~~ (the FIELD is refuted 2026-08-20, see the T1 entry above; the three design rules stand)
 
 T8 (below) established that rationals alone cannot carry this pipeline. T1 is therefore decided
 and T2 is implemented: `exactQ`, values `a + b*sqrt(d)` with `a`, `b` rational (int64
