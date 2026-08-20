@@ -36,7 +36,7 @@ defects that had been invisible.
 ## Where things stand
 
 - Branch: `main` @ `2802f40` — "WIP: slopeAtVertex must return a REAL slope, not merely a convertible one"
-- Pushed: **pending** — nothing pushed since `51c003d`; ~13 commits ahead
+- Pushed: **yes** — 18 commits, `801ee1f..bbb4680`, on 2026-08-20
 - **fast 217 / 0** (93 s), **normal 11 / 0** (215 s), **slow 88 / 0** (601 s, five suites)
 - `--verylong` (`testcPLQ`, `testMaxMultiRegion`): **one known red**, `testPCE2`, cause above
 - **`2802f40` IS UNVERIFIED** — `regionTest` was interrupted before reporting. Run it first.
