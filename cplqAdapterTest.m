@@ -193,6 +193,79 @@ classdef cplqAdapterTest < matlab.unittest.TestCase
             end
         end
 
+        function twoConvexEdgeTriangleEnvelopeIsTightNotAMinorant(testCase)
+        % [COAP] A.4 on the SYMBOLIC per-piece path, on a piece BUILT DIRECTLY rather than
+        % through triangulate. plq_1p.convexEnvelope1's nCE == 2 branch applies A.4's single
+        % quadratic over the WHOLE triangle, and A.4 shows that form is tight only over the
+        % sub-region containing the two convex edges' common vertex. The DOMAIN split
+        % (splitTightTriangleSym, on by default) covers a piece that arrives through
+        % triangulate; a piece constructed directly -- which is how plq_1piece's fixtures and
+        % testMaxMultiRegion/testPCE2 build theirs -- reaches this branch unsplit.
+        %
+        % MEASURED on {(0,0),(1,0),(2,1)} with f = x*y (DECISIONS 2026-08-19, night): the
+        % unsplit form dips to -0.0429 inside the triangle, and f*(0,0) came back 0.0429.
+        %
+        % BOTH REFERENCES ARE EXACT, not sampled:
+        %   * x >= 0 and y >= 0 at all three vertices, so x*y >= 0 on the triangle; the affine
+        %     minorant 0 is then admissible, the envelope is >= 0 everywhere on it, and
+        %     f*(0,0) = sup(-x*y) = 0, attained at the origin.
+        %   * at s = (0,1) the sup of y - x*y over the triangle is attained on the edge
+        %     y = x/2, where it reads (x/2)(1-x) and is maximal at x = 1/2: f*(0,1) = 1/8 at
+        %     (1/2,1/4). That is NOT a vertex -- x*y is bilinear, but this domain is not a box,
+        %     so the vertex shortcut other tests use does not apply here. This is the value the
+        %     three earlier attempts at the split lost (they returned 0), so it is the
+        %     assertion that distinguishes a correct split from an UNDERSHOOT -- which is worse
+        %     than the minorant it replaces.
+        % COST: about 80 s on a shared machine -- Step 1, Step 2 and the cross-FACE max for one
+        % triangle whose split coordinates carry sqrt(2). That is why it sits in this suite
+        % (normal) rather than in the fast bucket, which is closed-form numerics only.
+            x = sym('x'); y = sym('y');
+            p = plq_1p(domain([0 0; 1 0; 2 1], x, y), symbolicFunction(x*y));
+            p = p.convexEnvelope;
+
+            testCase.verifyGreaterThanOrEqual(size(p.envelope,2), 1, ...
+                'the piece has no convex envelope at all');
+            for k = 1:size(p.envelope,2)
+                W = double([p.envelope(k).d.vx(:), p.envelope(k).d.vy(:)]);
+                e = matlabFunction(p.envelope(k).f.f, 'Vars', [x y]);
+                G = cplqAdapterTest.samplePolygon(W, 40);
+                v = e(G(:,1), G(:,2));
+                fin = isfinite(v);            % A.3's rational face has a removable pole
+                G = G(fin,:); v = v(fin);
+                testCase.verifyGreaterThan(numel(v), 0, sprintf('face %d evaluates nowhere', k));
+                testCase.verifyLessThanOrEqual(max(v - G(:,1).*G(:,2)), 1e-7, sprintf( ...
+                    'face %d: the envelope must be a MINORANT of x*y', k));
+                testCase.verifyGreaterThanOrEqual(min(v), -1e-7, sprintf( ...
+                    ['face %d: x*y >= 0 on this triangle, so the ENVELOPE is >= 0 -- ' ...
+                     'below it is a minorant that is not tight'], k));
+            end
+
+            p = p.conjugate;
+            p = p.maximumConjugate;
+
+            got00 = evalFunctionNDomain(p.maxConjugate, [0 0]);
+            testCase.verifyFalse(isnan(got00), 'f* does not cover (0,0)');
+            testCase.verifyEqual(got00, 0, 'AbsTol', 1e-6, ...
+                'f*(0,0) = sup(-x*y) = 0, and anything above it is the A.4 OVERSHOOT');
+
+            got01 = evalFunctionNDomain(p.maxConjugate, [0 1]);
+            testCase.verifyFalse(isnan(got01), 'f* does not cover (0,1)');
+            testCase.verifyEqual(got01, 0.125, 'AbsTol', 1e-6, ...
+                'f*(0,1) = 1/8 at (1/2,1/4); 0 here is the UNDERSHOOT the split used to cause');
+
+            % And no hole anywhere else: f* of a BOUNDED domain is finite at every dual point,
+            % and it must never fall BELOW a value the domain actually attains.
+            V = [0 0; 1 0; 2 1];
+            S = [1 1; -1 0.5; 0.5 -0.5; 2 -1; -2 -2; 0.25 0.25];
+            for i = 1:size(S,1)
+                g = evalFunctionNDomain(p.maxConjugate, S(i,:));
+                testCase.verifyFalse(isnan(g), sprintf('f* does not cover (%g,%g)', ...
+                    S(i,1), S(i,2)));
+                lower = max(S(i,1)*V(:,1) + S(i,2)*V(:,2) - V(:,1).*V(:,2));
+                testCase.verifyGreaterThanOrEqual(g, lower - 1e-6, sprintf( ...
+                    'f*(%g,%g) is below the value attained at a vertex', S(i,1), S(i,2)));
+            end
+        end
     end
 
     methods (Static)

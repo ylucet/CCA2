@@ -570,6 +570,55 @@ classdef plq_1p
 
             nCE = obj.d.nE;  %size(etaE,1)
 
+            % [COAP] A.4/A.5 ON A PIECE THAT DID NOT COME THROUGH triangulate. cPLQ's closed
+            % form for TWO convex edges touches x*y along both of them and is a valid convex
+            % MINORANT, but A.4 shows it is tight only over the sub-region containing their
+            % common vertex; for THREE convex edges there is no closed form at all and the
+            % dispatch below falls off the end, leaving an EMPTY envelope. plq.triangulate
+            % already splits the DOMAIN for exactly that reason (appendTriangle ->
+            % splitTightTriangleSym, on by default since 2026-08-18), so a piece built through
+            % the pipeline never arrives here needing it -- but a piece constructed DIRECTLY
+            % does, which is how plq_1piece's fixtures and testMaxMultiRegion/testPCE2 build
+            % theirs, and a piece is entitled to its own envelope either way.
+            %
+            % MEASURED on {(0,0),(1,0),(2,1)} with f = x*y: the unsplit form dips to -0.0429
+            % inside the triangle, where x*y >= 0 everywhere, so the true envelope's minimum is
+            % 0 and f*(0,0) came back 0.0429.
+            %
+            % SAME GEOMETRY, ONE IMPLEMENTATION. The sub-triangles come from
+            % splitTightTriangleSym -- the exact symbolic split the domain route already uses,
+            % with its measurements and its refusals -- rather than a second copy of the cevian
+            % construction. Each sub-triangle goes back through this routine so it classifies
+            % its OWN convex edges instead of inheriting the parent's: A.4 gives one
+            % two-convex-edge half on which the closed form IS tight (its curvature test then
+            % declines to split it again, which is what terminates the recursion) plus a
+            % one-convex-edge half that takes the nCE == 1 branch. A refusal returns the
+            % triangle unsplit, which is exactly the old behaviour.
+            %
+            % WHAT MADE THIS POSSIBLE ONLY NOW. A multi-face envelope is what Steps 2 and 3 then
+            % see, and both had to be able to read one: conjugateFunction now dispatches each
+            % face on that FACE's geometry rather than the piece's, and the cross-face max can
+            % split a RATIONAL pair (region.clearedDifference). Without the second, the split
+            % traded the overshoot above for an UNDERSHOOT -- see DECISIONS.md, 2026-08-19
+            % (night, later) and 2026-08-20.
+            % CCA2_NO_A45_SPLIT opts out here too. It exists so the old behaviour can be
+            % measured against the new one, and an opt-out that the domain route honours and
+            % this one does not would compare neither.
+            if nCE >= 2 && obj.isBilinear && isempty(getenv('CCA2_NO_A45_SPLIT'))
+                Vp = [obj.d.polygon.vx(:), obj.d.polygon.vy(:)];
+                sub = splitTightTriangleSym(Vp);
+                if numel(sub) >= 2
+                    for k = 1:numel(sub)
+                        pk = plq_1p(domain(sub{k}, x, y), obj.f);
+                        pk = convexEnvelope1(pk, x, y);
+                        obj.envelope = [obj.envelope, pk.envelope];
+                    end
+                    obj.lCE = true;
+                    return
+                end
+            end
+
+
 
             if nCE == 0
               % HISTORY: this was a closed form in the vertex COORDINATES alone --
@@ -762,9 +811,39 @@ classdef plq_1p
         end
 
         function obj = conjugateFunction (obj,i)
-            
-            nCE = obj.d.nE;
+
             vars = obj.pieceVars;
+            % THE FACE'S OWN GEOMETRY, when it has any. This routine reads the face's REGION
+            % from `obj.envelope(i).d` but took its convex-edge count, slopes and far vertex
+            % from the PIECE's domain `obj.d`. For a single envelope face over the whole piece
+            % those are the same object and the shortcut is invisible -- which is why it
+            % survived.
+            %
+            % It stops being the same object the moment Step 1 produces a genuine MULTI-FACE
+            % envelope, which [COAP] A.4's split does: face 2 lives on a sub-triangle with its
+            % own edges, its own nCE and its own far vertex. Dispatching it on the parent's nCE
+            % conjugates it against the wrong geometry, and the piece comes back covering only
+            % what face 1 spans. MEASURED 2026-08-19: with the split added and this line
+            % unchanged, f*(0,1) on {(0,0),(1,0),(2,1)} came back 0 against a true 0.125 -- the
+            % sup over face 1 alone.
+            %
+            % `obj.envelope(i).d` is a region, which carries no nE/mE/cE/V, so the face's domain
+            % is rebuilt from its vertices -- and ONLY when it actually differs from the
+            % piece's, so every existing single-face input keeps the exact object it had. The
+            % per-vertex COORDINATES below are read from the face's region directly rather than
+            % from `fd`, since `domain` is free to reorder what it is given and the loops index
+            % the face's own vertex list.
+            fd = obj.d;
+            try
+                if numel(obj.envelope) >= i && ~isempty(obj.envelope(i).d) && ...
+                        ~isequal(obj.envelope(i).d.vx, obj.d.polygon.vx)
+                    fd = domain([obj.envelope(i).d.vx(:), obj.envelope(i).d.vy(:)], ...
+                                vars(1), vars(2));
+                end
+            catch
+                fd = obj.d;
+            end
+            nCE = fd.nE;
             s1 = sym('s_1');
             s2 = sym('s_2');
             dualVars = [s1,s2];
@@ -896,11 +975,11 @@ classdef plq_1p
             end
             
             if nCE == 1
-                
-              m =  obj.d.mE(1);
-              q =  obj.d.cE(1);
-              x1 = obj.d.polygon.vx(obj.d.V(1))  ;
-              y1 = obj.d.polygon.vy(obj.d.V(1))  ;
+
+              m =  fd.mE(1);
+              q =  fd.cE(1);
+              x1 = fd.polygon.vx(fd.V(1))  ;
+              y1 = fd.polygon.vy(fd.V(1))  ;
 
               a = -1;
               b = -2*m;
@@ -931,12 +1010,17 @@ classdef plq_1p
               
               %expr = obj.envelope(i).conjugateExprVerticesT1 (dualVars, undV )
 
-                x1 = obj.d.polygon.vx(1);  
-                x2 = obj.d.polygon.vx(2);  
-                x3 = obj.d.polygon.vx(3);  
-                y1 = obj.d.polygon.vy(1);  
-                y2 = obj.d.polygon.vy(2);  
-                y3 = obj.d.polygon.vy(3);  
+                % THE FACE'S three vertices, not the piece's: a, b, c below are the affine
+                % interpolant of x*y through them, which is what the conjugate's vertex cells
+                % subtract. co f = f at every EXTREME point of a compact convex domain, so on
+                % the face's own triangle that interpolant is the envelope's value at its
+                % vertices -- on the parent's triangle it is not.
+                x1 = obj.envelope(i).d.vx(1);
+                x2 = obj.envelope(i).d.vx(2);
+                x3 = obj.envelope(i).d.vx(3);
+                y1 = obj.envelope(i).d.vy(1);
+                y2 = obj.envelope(i).d.vy(2);
+                y3 = obj.envelope(i).d.vy(3);
                 a = ((x1*y1*y2 - x1*y1*y3 - x2*y1*y2 + x2*y2*y3 + x3*y1*y3 - x3*y2*y3))/((x1*y2 - x2*y1 - x1*y3 + x3*y1 + x2*y3 - x3*y2));
                 b = ((x1*x2*y2 - x1*x2*y1 + x1*x3*y1 - x1*x3*y3 - x2*x3*y2 + x2*x3*y3))/((x1*y2 - x2*y1 - x1*y3 + x3*y1 + x2*y3 - x3*y2));
                 c = ((x1*x2*y1*y3 - x1*x3*y1*y2 - x1*x2*y2*y3 + x2*x3*y1*y2 + x1*x3*y2*y3 - x2*x3*y1*y3))/((x1*y2 - x2*y1 - x1*y3 + x3*y1 + x2*y3 - x3*y2));
@@ -947,8 +1031,8 @@ classdef plq_1p
                       else    
                         e0 = j+1;
                       end  
-                      x1 = obj.d.polygon.vx(j);   % same as obj.envelope(i).d.vx(1) for triangles
-                      y1 = obj.d.polygon.vy(j);  
+                      x1 = obj.envelope(i).d.vx(j);   % the FACE's vertex j -- see the note above
+                      y1 = obj.envelope(i).d.vy(j);
                   
                       conjf = symbolicFunction(s1 * x1 + s2 * y1  - (a*x1+b*y1+c));
                       conjd = region([subdE(e0,1:2),-subdE(e0,3)], dualVars);
@@ -972,8 +1056,8 @@ classdef plq_1p
 
 
 
-                      x1 = obj.d.polygon.vx(j);   % same as obj.envelope(i).d.vx(1) for triangles
-                      y1 = obj.d.polygon.vy(j);  
+                      x1 = obj.envelope(i).d.vx(j);   % the FACE's vertex j -- see the note above
+                      y1 = obj.envelope(i).d.vy(j);
                         
                       conjf = symbolicFunction(s1 * x1 + s2 * y1  - (a*x1+b*y1+c));
                       conjd = region(subdV(j,:), dualVars);
@@ -1016,8 +1100,8 @@ classdef plq_1p
                x = obj.d.polygon.vars(1);
                y = obj.d.polygon.vars(2);
                for j = 1:obj.envelope(i).d.nv
-                 x1 = obj.d.polygon.vx(j); 
-                 y1 = obj.d.polygon.vy(j);  
+                 x1 = obj.envelope(i).d.vx(j);      % the FACE's vertex j, not the piece's
+                 y1 = obj.envelope(i).d.vy(j);
                  % change this for direct computation
                  conjf = symbolicFunction(s1 * x1 + s2 * y1)  - obj.envelope(i).f.subsF([x,y],[x1,y1]);
                  %subdV(j,:)

@@ -813,6 +813,17 @@ has no rational-envelope branch at all.** The split therefore belongs in the DOM
 `conjEnvelopeViaCPLQ`, which already hands rational faces to cPLQ one piece at a time. `TODO.md`
 has the plan and its cost.
 
+**AMENDED 2026-08-20 — the obstacle was the DISPATCH, not the rational faces.**
+`conjugateFunction` took its `nCE`, slopes and far vertex from the PIECE, and its per-vertex
+COORDINATES from the piece's polygon, so a rational A.3 face was read by the `nCE == 2` branch's
+`coeffs(...)`. It now dispatches each face on that FACE's own geometry, and the cross-face max can
+split a RATIONAL pair (`region.clearedDifference`). `plq_1p.convexEnvelope1` therefore splits at
+the ENVELOPE level too, by calling `splitTightTriangleSym` — the same construction the domain route
+uses — for a piece that did not come through `triangulate`. Measured on `{(0,0),(1,0),(2,1)}`
+carrying `x·y`: envelope `≥ 0` (was −0.0429), `f*(0,0) = 0` (was 0.0429), `f*(0,1) = 0.125` (was 0),
+about 80 s; pinned by `cplqAdapterTest/twoConvexEdgeTriangleEnvelopeIsTightNotAMinorant`. The DOMAIN
+split remains the route for a piece that DOES come through `triangulate`, and the cheaper one.
+
 The wiring half of the story, which stands and is ready to re-land once Step 2 is fixed: there are
 two Step 1 implementations in this repository:
 

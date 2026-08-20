@@ -25,6 +25,48 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-20 (later still) — the A.4 split is LANDED, at the ENVELOPE level, by reusing the split the domain route already had
+
+The item filed as Blocked below is closed. `plq_1p.convexEnvelope1` now splits a piece whose
+triangle needs it and installs the sub-triangles' envelopes as several FACES, so a piece built
+DIRECTLY -- not through `triangulate` -- gets the envelope rather than a minorant.
+
+**Measured, `{(0,0),(1,0),(2,1)}` with `f = x*y`, pinned by
+`cplqAdapterTest/twoConvexEdgeTriangleEnvelopeIsTightNotAMinorant`:**
+
+    envelope       >= 0 on the whole triangle   (was dipping to -0.0429)
+    f*(0,0)        0                            (was 0.0429, the OVERSHOOT)
+    f*(0,1)        0.125                        (was 0, the UNDERSHOOT of attempts 1-3)
+    cost           about 80 s
+
+**Four things had to be true at once, which is why three earlier attempts each failed differently:**
+
+1. The cross-face max must be able to split a RATIONAL pair -- 2026-08-20, above.
+2. `conjugateFunction` must dispatch each face on that FACE's geometry. The reverted attempt did
+   half of this (`nCE`, `mE`, `cE`, `V` from a rebuilt face domain) and left the per-vertex
+   COORDINATES reading `obj.d.polygon.vx(j)` -- the PARENT's triangle -- in three places, including
+   the affine interpolant `a,b,c` the vertex cells subtract. With the rational max in place that
+   attempt gets as far as `f*(0,0) = 0` and `f*(0,1) = 0.125` and is then WRONG at `s = (-2,-2)`:
+   -1.9289 where the sup over the domain is 0, attained at the origin. Reading the face's own
+   vertices is the rest of the fix.
+3. `region.signEverywhere` and `region.getVertices` -- the two defects above.
+4. **The geometry must not be a second implementation.** The attempt carried its own `a4Split`,
+   `twoEdgeQuad` and `triFromVertices`. `splitTightTriangleSym` is the same construction, already
+   measured, already refusing what it cannot certify, and already recursive through A.5 -- so the
+   branch calls THAT and sends each sub-triangle back through `convexEnvelope1`, which classifies
+   its own convex edges instead of inheriting the parent's. Also 13x faster on this fixture (81 s
+   against 1041 s), and it fixes `nCE == 3` on the same path, where the dispatch used to fall off
+   the end and leave an EMPTY envelope.
+
+**One claim in `splitTightTriangleSym`'s header is now struck** and amended in place: it said an
+envelope-level split "cannot work" because A.4/A.5's faces are rational. The obstacle was the
+DISPATCH, not the faces. The DOMAIN split stays the route for a piece that comes through
+`triangulate` -- it is cheaper, and it is what makes the sub-triangle's `nCE` its own.
+
+**Still open, and NOT closed by this:** `testMaxMultiRegion/testPCE2` builds its fixture with
+`plq_1piece`, whose envelope comes from the eta/`solveC` route rather than from this branch. That
+red is the plq_1piece path, so it is T6's (the migration), not this item's.
+
 ## 2026-08-20 (later) — two `region` defects the A.4 split exposed, and one refuted diagnosis
 
 Landing the A.4 split (below) stopped raising `NotAPolynomial` and started raising
@@ -109,7 +151,7 @@ set as well -- so clearing first also DECIDES cases that used to split, which co
 strictness, and hence `x + y - 1` on the unit simplex (zero on a whole facet) is a refusal, not a
 sign. Four tests in `regionTest`, fast bucket, red before the change.
 
-## 2026-08-19 (night, later) — the A.4 split is BLOCKED behind a KNOWN defect: maximumP cannot max two RATIONAL conjugates
+## ~~2026-08-19 (night, later) — the A.4 split is BLOCKED behind a KNOWN defect: maximumP cannot max two RATIONAL conjugates~~ (CLOSED 2026-08-20, see above)
 
 Three genuine attempts at landing the A.4 cevian split in `plq_1p`. The failure moved each time
 and the third attempt located it in something that was already written down elsewhere. Recording

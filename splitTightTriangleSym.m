@@ -17,10 +17,17 @@ function ts = splitTightTriangleSym(V)
 % too-small envelope gives a too-large conjugate. A three-convex-edge triangle has no such form at
 % all, which is where that routine falls off the end and leaves an EMPTY envelope.
 %
-% WHY THE SPLIT IS A DOMAIN SPLIT. Installing A.4/A.5's faces as several ENVELOPE faces of one
-% piece cannot work: those faces are RATIONAL, and plq_1p.conjugateFunction reads its envelope with
-% coeffs() and dispatches on the PIECE's nCE, so it raises symbolic:coeffs:NotAPolynomial. Splitting
-% the DOMAIN leaves every sub-piece on a path Step 2 already has -- A.4 yields one two-convex-edge
+% WHY THE SPLIT IS A DOMAIN SPLIT -- and one claim that USED to be here is now false. It said an
+% envelope-level split "cannot work: those faces are RATIONAL, and plq_1p.conjugateFunction reads
+% its envelope with coeffs() and dispatches on the PIECE's nCE, so it raises
+% symbolic:coeffs:NotAPolynomial". The obstacle was the DISPATCH, not the faces: conjugateFunction
+% took nCE from the piece, so a rational A.3 face was read by the nCE == 2 branch. Since 2026-08-20
+% it dispatches each face on that FACE's own geometry and the cross-face max can split a RATIONAL
+% pair, so plq_1p.convexEnvelope1 calls THIS routine for a piece that did not come through
+% triangulate and installs the sub-triangles' envelopes as several faces.
+%
+% The domain split remains the route for a piece that DOES come through triangulate, and it is the
+% cheaper one: splitting the DOMAIN leaves every sub-piece on a path Step 2 already has -- A.4 yields one two-convex-edge
 % sub-triangle, on which its own form IS tight, plus one one-convex-edge sub-triangle whose A.3
 % rational envelope cPLQ's nCE == 1 branch derives analytically; A.5 yields two two-convex-edge
 % ones, which recurse into A.4. And it is sound for Step 3 because a sup over a union is the max of
