@@ -25,6 +25,55 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-20 (after T2b) — VERIFIED INDEPENDENTLY: a vertex of `f*` can have degree 4 with Galois group S4, so NO tower of square roots is enough
+
+A parallel session left an untracked `CONJ_FIELD_PROOF.md` in the working tree claiming this. It
+is not taken on trust and it is not the source of what follows: `.claude/s4VertexCheck.m` takes
+only the INPUT from it and recomputes everything.
+
+**The input.** Three triangles fanned from `(4,0)` inside `conv{(24,10),(-16,10),(4,-20)}`, each
+carrying a POSITIVE DEFINITE rational quadratic — so every piece is convex and every piece's
+conjugate is its interior-critical branch near the point of interest.
+
+**Recomputed here, from `q*(s) = (s-beta)'Q^{-1}(s-beta)/2 - gamma` alone:**
+
+    g1 = 2*s1^2 + s1*s2 + s2^2/2 + 4*s1 - 2*s2
+    g2 = 2*s1^2 +         s2^2/2 + 2*s1 + 2*s2
+    g3 = s1^2/2 - s1*s2 + s2^2          -   s2 + 3
+
+matching that document's three exactly. Eliminating `s2` from `g1-g2` and `g1-g3` gives
+
+    (3/2)*s1^4 - 12*s1^3 + 5*s1^2 + 80*s1 - 48      = (1/2) * (3t^4 - 24t^3 + 10t^2 + 160t - 96)
+
+— the same quartic up to a constant. `factor` returns it unchanged, so it is IRREDUCIBLE over Q;
+its resolvent cubic `9t^3 - 30t^2 - 2688t - 11008` factors no further; and the discriminant
+`32853221376` has square root `181254.576...`, not an integer. Irreducible quartic + irreducible
+resolvent + non-square discriminant is the standard certificate for **Galois group S4, order 24**.
+24 is not a power of 2, so the point lies in NO iterated quadratic extension of Q.
+
+**And it is a genuine vertex, not an artefact.** At the root `s1 = 0.608050881512364`, with
+`s2 = 0.358525944978488`, all three branches agree to the last digit
+(`g_k(p) = 2.736875828608988`), and each piece's argmax `Q_k^{-1}(p - beta_k)` is strictly INSIDE
+its own triangle — barycentric `[0.739 0.121 0.140]`, `[0.764 0.129 0.107]`, `[0.674 0.188 0.138]`.
+So three full-dimensional faces of `f*` meet there.
+
+**What it costs and what it does not.**
+
+* It does NOT overturn T2b (the multiquadratic type, committed the same day). The A.4/A.5 cevian
+  feet are degree-2 and PRIMAL — `sqrt(30)/12 - sqrt(15)/6 + 5/4` is a vertex of a sub-triangle of
+  the DOMAIN, and that is measured and unavoidable. The multiquadratic field is necessary.
+* It does mean the multiquadratic field is NOT SUFFICIENT for the vertices of `f*`, and that no
+  enlargement by square roots ever will be. The mechanism is plain once seen: a vertex where three
+  faces meet is a base point of a pencil of two rational CONICS, and two conics meet in degree 4.
+* The structural half is the useful part, and it is the other document's, not this entry's:
+  face functions and edge conics of `f*` are claimed to be RATIONAL always, with only the vertex
+  LIST irrational. That claim is not verified here.
+
+**The design choice this forces** — recorded as open, since it is not one measurement away:
+(a) exact real-algebraic arithmetic to degree 4; (b) store regions in H-form and never write a
+vertex coordinate down, deciding predicates by resultants/Sturm instead; (c) keep the
+multiquadratic type and refuse the degree-4 cases BY NAME, in `SUPPORT_MATRIX.md`'s discipline.
+
 ## 2026-08-20 (last) — T1 is REFUTED AS STATED: one quadratic extension is not enough. A SINGLE triangle needs two.
 
 T1 decided the sym-free number type is `Q(sqrt(d))` -- one squarefree `d`, with mixing two of them
