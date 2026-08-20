@@ -25,6 +25,45 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 (night) — plq_1p's A.4 branch computes a MINORANT, not the envelope. Diagnosed exactly; the fix is started and not finished.
+
+Chasing T6's failures found a defect that has nothing to do with T6: **`testPCE2` fails under BOTH
+per-piece classes**, so it is not a migration regression but a wrong answer that no test could see
+until this session's assertions existed.
+
+**The defect.** `plq_1p.convexEnvelope1`'s `nCE == 2` branch applies [COAP] Appendix A.4's single
+quadratic over the WHOLE triangle. `convEnvCPLQ.splitTwoConvexEdges` has carried the fix for that
+since the 2026 sessions and its header states the reason: the single quadratic touches `u1*u2`
+along both convex edges and is a valid convex MINORANT, but it is tight only over a sub-region
+containing the two edges' common vertex. This branch never got the fix.
+
+**Measured, on the triangle {(0,0),(1,0),(2,1)} with f = x*y:**
+
+    unsplit A.4 envelope dips to -0.0429 inside the domain
+    but f >= 0 there, so the true envelope's minimum is 0
+    hence f*(0,0) = 0.0429 where the definition gives 0
+
+The paper's own A.4.3 example has the same defect (`q1(0.474343,0) = -0.042780` for a true 0),
+which is what `convEnvCPLQ`'s header already records. So this is the KNOWN A.4 gap, still present
+on the symbolic per-piece path.
+
+**The fix, and how far it got.** The cevian is forced, not chosen: the line through one convex
+edge's far vertex with slope `-sqrt(mh*mw)`, met with the other convex edge -- the unique direction
+along which the single quadratic and the A.3 formula agree in value AND gradient. Implemented
+symbolically (so the foot stays an exact surd rather than a double), with `twoEdgeQuad`,
+`oneEdgeRational` and `a4Split` factored out and the sub-triangles built through `domain` so they
+get the same half-plane orientation rule as every other region.
+
+**It half-works, which is why it is not committed.** The overshoot is GONE -- `f*(0,0)` is now 0 --
+but a new UNDERSHOOT appears: `f*(0,1) = 0` where the sup over the triangle is 0.125, attained at
+(0.5, 0.25) on the edge `y = x/2`. So the two faces do not yet cover what they should; the likely
+causes are the choice of which far vertex anchors the A.3 face, or the vertex order of the second
+sub-triangle. **Reverted to the committed baseline** rather than leaving a half-correct envelope
+in place: the attempt is kept verbatim at `.claude/a4split_attempt.m.txt`.
+
+**Status: one known-failing test, cause identified.** `testMaxMultiRegion/testPCE2` fails on `main`
+and did so before today; what is new is that it now SAYS so instead of printing and passing.
+
 ## 2026-08-19 (night) — T6 REFUTED: plq_1p and plq_1piece are NOT interchangeable, so deleting the old class is not free
 
 T6 was listed as the cheap win on the way to a sym-free CCA2: `plq_1piece.m` carries 75
@@ -33,8 +72,15 @@ live constructor calls are the 18 fixtures in `testMaxMultiRegion`. Move those o
 75 calls leave the surface without porting anything.
 
 **Tried, and reverted.** The API gap is one method (`biconjugateP`, ~20 lines, ported cleanly).
-The BEHAVIOUR gap is not. With the fixtures swapped, four of six short tests that pass under
-`plq_1piece` fail under `plq_1p`:
+The BEHAVIOUR gap is not.
+
+> **CORRECTION, same evening.** The line below originally read "four of six short tests that pass
+> under `plq_1piece` fail under `plq_1p`". That was measured on only two of the four. Baselined
+> properly afterwards: `testConjugate`, `testFractional` and `testConvex` pass under `plq_1piece`
+> and fail under `plq_1p` -- THREE regressions -- while **`testPCE2` fails under BOTH** and is a
+> pre-existing defect the new assertions exposed, not a swap regression. See the entry above it.
+
+With the fixtures swapped:
 
     testPCE0        pass
     testBiconjugate pass
