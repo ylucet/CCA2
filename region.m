@@ -1587,21 +1587,50 @@ classdef region
                   index = 2;
                   return
               end
+              % SECOND ATTEMPT, WITH THE DENOMINATORS CLEARED. isAlways is asked about the
+              % RATIONAL difference above, and it settles far fewer rational questions than
+              % polynomial ones -- the engine has to reason about the denominator's zero set as
+              % well. Where the cell certifies the denominator's sign, clearedDifference hands
+              % back a POLYNOMIAL with the same sign as f1 - f2 on this cell, and the same
+              % question asked of it is both cheaper and more often decidable. Sound in the same
+              % way as above: the test is global (sufficient, not necessary), and a global sign
+              % for sign(D)*N is a sign for f1 - f2 on the cell, where D's sign is certified.
+              cleared = false;
+              if ~(f1.isPolynomial && f2.isPolynomial)
+                  [cleared, gpf] = obj.clearedDifference(f1, f2);
+                  if cleared
+                      gp = gpf.f;
+                      gvp = symvar(gp);
+                      if ~isempty(gvp)
+                          rvp = sym('maxArrayReal_%d', [1 numel(gvp)], 'real');
+                          gp = subs(gp, gvp, rvp);
+                      end
+                      if isAlways(gp >= 0, 'Unknown', 'false')
+                          fmax = f1;
+                          index = 1;
+                          return
+                      elseif isAlways(gp <= 0, 'Unknown', 'false')
+                          fmax = f2;
+                          index = 2;
+                          return
+                      end
+                  end
+              end
+
               % REFUSE ONLY WHERE THE REFUSAL CAN BE ACTED ON. Saying "neither dominates" makes
               % the caller split on f1 = f2, and a region's constraints must be POLYNOMIAL:
               % splitmax3 hands f1 - f2 straight to region(), whose normalize1 raises
-              % symbolic:coeffs:NotAPolynomial on a rational one. Every second-pass conjugate is
-              % rational, so on the biconjugate path that error is the common case, not a corner
-              % -- which is why this branch checks first.
+              % symbolic:coeffs:NotAPolynomial on a rational one.
               %
-              % KNOWN HOLE, deliberately left: for a RATIONAL pair whose sign this test cannot
-              % settle, the vertex comparison below still decides, and on an all-vertices-tied
-              % cell that means "f2 wins" for no better reason than the order of the operands.
-              % That is the same unsound shape the probing had, now confined to the one case
-              % where the sound answer cannot be represented. Closing it needs splitmax3 to clear
-              % denominators (sound only where both are provably nonzero on the cell) -- see
-              % biconjugateTest's failure-site comment.
-              if f1.isPolynomial && f2.isPolynomial
+              % THE HOLE THAT USED TO BE HERE (closed 2026-08-20): for a RATIONAL pair the
+              % refusal was skipped outright, so the vertex comparison below decided, and on an
+              % all-vertices-tied cell that meant "f2 wins" for no better reason than the order
+              % of the operands -- the same unsound shape the probing had. It cost the A.4
+              % cevian split its 0.125 at s = (0,1) (DECISIONS 2026-08-19, night, later). Now the
+              % refusal also applies whenever clearedDifference can REPRESENT the split, which is
+              % the exact condition the restriction was standing in for. A rational pair whose
+              % denominator sign this cell cannot certify still falls through, unchanged.
+              if (f1.isPolynomial && f2.isPolynomial) || cleared
                   l = false;
                   fmax = 0;
                   index = 0;
@@ -1693,6 +1722,20 @@ classdef region
           f = f1-f2;
            vars = f.getVars;
           ineq = f;
+          % CLEAR THE DENOMINATORS when the difference is rational. Every constraint this
+          % returns is handed straight to region() by maximumP/maxEqDom, and region.normalize1
+          % raises symbolic:coeffs:NotAPolynomial on a rational one -- so before this, a
+          % rational pair reaching here could not be split at all. clearedDifference returns a
+          % polynomial with the SAME SIGN as f1 - f2 everywhere on this region, which is exactly
+          % what both the orientation test below and the returned constraints need; it refuses
+          % unless the denominator's sign is certified on the region, and a refusal leaves the
+          % rational difference in place, as before.
+          if ~f.isPolynomial
+              [clearedOk, fPoly] = obj.clearedDifference(f1, f2);
+              if clearedOk
+                  ineq = fPoly;
+              end
+          end
           for i = 1:size(fv1,2)
               if isAlways(fv1(i).f >= fv2(i).f)   % correct but slow
               %if (double(fv1(i).f) >= double(fv2(i).f))
@@ -2500,6 +2543,164 @@ classdef region
             end
             tf = true;
             why = 'ok';
+        end
+
+
+        function [s, why] = signOnRegion (objP, expr)
+        % A SOUND sign for `expr` over the whole of objP: +1 if it is strictly POSITIVE
+        % everywhere on objP, -1 if strictly NEGATIVE, and 0 for "cannot certify" -- which is a
+        % refusal in the same sense as certifiesNonPositive's, never a "no".
+        %
+        % WHY IT EXISTS. clearedDifference multiplies an inequality through by a denominator,
+        % and multiplying by a quantity that VANISHES or CHANGES SIGN on the cell produces a
+        % constraint describing a different set. The certificate needed there is exactly
+        % "strictly one sign on this region", and it has to be strict: a denominator touching
+        % zero on a facet is a pole of the function being compared, not a removable case.
+        %
+        % A PRODUCT IS DECIDED FACTOR BY FACTOR, which is the shape that actually arrives: the
+        % difference of two rational conjugates has denominator q1*q2, and each q is affine on
+        % the paths this file sees. Factoring first is what makes the affine LP enough.
+        %
+        % Anything left that is not affine is refused rather than approximated. certifiesNonPositive
+        % proves h <= 0 and not h < 0, so it cannot supply the STRICT statement this needs.
+            s = 0;
+            why = 'unknown';
+            e = sym(expr);
+            try
+                e = expand(e);
+            catch
+                why = 'unexpandable';
+                return
+            end
+            vars = objP.vars;
+
+            % A CONSTANT, including the zero expression -- which is a refusal, since zero has no
+            % sign and clearing by it is exactly the unsound case.
+            if ~any(has(e, vars))
+                try
+                    v = double(e);
+                catch
+                    why = 'unreadableConstant';
+                    return
+                end
+                if ~isfinite(v) || v == 0
+                    why = 'zeroOrUnreadableConstant';
+                    return
+                end
+                s = sign(v);
+                why = 'constant';
+                return
+            end
+
+            % A PRODUCT: the sign is the product of the factors' signs, and one undecided
+            % factor makes the whole thing undecided. factor() returns the irreducible factors
+            % (with multiplicity) and a leading constant, so each recursive call is on a
+            % strictly simpler expression and the recursion terminates.
+            fac = sym.empty;
+            try
+                fac = factor(e);
+            catch
+                fac = sym.empty;
+            end
+            if numel(fac) > 1
+                s = 1;
+                for k = 1:numel(fac)
+                    sk = objP.signOnRegion(fac(k));
+                    if sk == 0
+                        s = 0;
+                        why = 'factorUndecided';
+                        return
+                    end
+                    s = s * sk;
+                end
+                why = 'product';
+                return
+            end
+
+            % ONE IRREDUCIBLE FACTOR. Affine only: the LP is the certificate.
+            J = jacobian(e, vars);
+            if any(has(J, vars))
+                why = 'notAffine';
+                return
+            end
+            try
+                c  = double(J);
+                c0 = double(subs(e, vars, [0 0]));
+            catch
+                why = 'unreadableAffineParts';
+                return
+            end
+            if any(~isfinite([c(:); c0]))
+                why = 'unreadableAffineParts';
+                return
+            end
+            tol = 1.0d-9 * max(1, max(abs([c(:); c0])));
+
+            % STRICT both ways, and an unbounded or undecided LP is a refusal. An EMPTY region
+            % (st == -1) is refused too: the statement is vacuously true there, but a caller
+            % clearing a denominator on an empty cell has nothing to gain and the vacuous
+            % answer would hide a bad input.
+            [vmax, st] = objP.maxAffineOverRegion(c(:).');
+            if st == 0 && vmax + c0 < -tol
+                s = -1;
+                why = 'negativeOnTheRegion';
+                return
+            end
+            [vmaxNeg, st2] = objP.maxAffineOverRegion(-c(:).');
+            if st2 == 0 && -vmaxNeg + c0 > tol
+                s = 1;
+                why = 'positiveOnTheRegion';
+                return
+            end
+            why = 'notSignDefinite';
+        end
+
+        function [ok, ineq, why] = clearedDifference (objP, f1, f2)
+        % A POLYNOMIAL with the SAME SIGN as f1 - f2 at every point of objP, or a refusal.
+        %
+        % THE DEFECT THIS CLOSES (DECISIONS 2026-08-19 night, later; the failure-site comment in
+        % biconjugateTest). Deciding max(f1,f2) on a cell ends either in "one of them dominates"
+        % or in a SPLIT along f1 = f2, and a region's constraints must be POLYNOMIAL --
+        % region.normalize1 raises symbolic:coeffs:NotAPolynomial on a rational one. Every
+        % second-pass conjugate is rational, so on the biconjugate path the split could not be
+        % represented at all: maxArray's refusal was restricted to a polynomial pair, and the
+        % vertex comparison then picked f2 for no better reason than operand order. That is what
+        % lost the 0.125 at s = (0,1) on the A.4 cevian split.
+        %
+        % THE ARITHMETIC. With f1 - f2 = N/D, the sets {f1 >= f2} and {sign(D)*N >= 0} are the
+        % SAME set wherever D has a constant strict sign -- so on a cell where signOnRegion
+        % certifies D, sign(D)*N is a polynomial standing in for the rational difference, with
+        % the same sign at every point, vertices included. Where D is not certified this
+        % refuses, and the caller keeps today's behaviour: refusing costs a cell, clearing by a
+        % sign-changing denominator would cost a wrong answer.
+            ok = false;
+            why = 'unknown';
+            d = f1 - f2;
+            ineq = d;
+            if d.isPolynomial
+                ok = true;
+                why = 'alreadyPolynomial';
+                return
+            end
+            try
+                [N, D] = numden(simplifyFraction(d.f));
+            catch
+                why = 'unreadableFraction';
+                return
+            end
+            [s, whyD] = objP.signOnRegion(D);
+            if s == 0
+                why = 'denominatorSignUnknown';
+                return
+            end
+            cand = symbolicFunction(expand(s * N));
+            if ~cand.isPolynomial
+                why = 'numeratorNotPolynomial';   % numden should make this unreachable
+                return
+            end
+            ineq = cand;
+            ok = true;
+            why = ['cleared:' whyD];
         end
 
         function [l, why] = unionIsExact (objA, objB, ia, ib)

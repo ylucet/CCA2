@@ -496,5 +496,110 @@ classdef regionTest < matlab.unittest.TestCase
             testCase.verifyEqual(D(abs(D) < 0.5), zeros(2,1), ...
                 'a zero component must be exactly zero, not 6e-17');
         end
+
+        function signOnRegionDecidesAffineFactorsAndRefusesASignChange(testCase)
+        % FAST. The certificate the rational cross-face max rests on: a denominator may be
+        % cleared only where its sign is CONSTANT on the cell, and "unknown" must never be read
+        % as "positive". Products are decided factor by factor, which is the shape that actually
+        % arrives -- the difference of two rational conjugates has denominator q1*q2.
+            x = sym('x'); y = sym('y');
+            r = region([-x, -y, x+y-1], [x y]);              % the unit simplex
+
+            testCase.verifyEqual(r.signOnRegion(x + y + 1),  1);   % >= 1 on the simplex
+            testCase.verifyEqual(r.signOnRegion(2 - x - y), 1);    % >= 1
+            testCase.verifyEqual(r.signOnRegion(x + y - 2), -1);
+            testCase.verifyEqual(r.signOnRegion((x+y+1)*(x+y-2)), -1, ...
+                'a product is the product of its factors'' signs');
+            testCase.verifyEqual(r.signOnRegion(sym(-3)), -1);
+
+            % REFUSALS. x - y changes sign on the simplex; x + y - 1 VANISHES on a whole facet,
+            % and touching zero is exactly what clearing a denominator may not do.
+            testCase.verifyEqual(r.signOnRegion(x - y), 0);
+            testCase.verifyEqual(r.signOnRegion(x + y - 1), 0);
+            testCase.verifyEqual(r.signOnRegion(x*y - y*x + 0), 0, 'the zero expression');
+        end
+
+        function maxArrayRefusesATiedRationalPairItCanSplit(testCase)
+        % THE DEFECT (DECISIONS 2026-08-19 night, later; biconjugateTest lines 246-251). On a
+        % cell where every VERTEX ties, maxArray refuses to guess -- but the refusal was
+        % restricted to a POLYNOMIAL pair, because splitting on f1 = f2 needs a polynomial
+        % constraint. Every second-pass conjugate is rational, so on the biconjugate path the
+        % refusal never applied and the vertex comparison picked f2 for no better reason than
+        % operand order. Here f1 wins on half the simplex and f2 on the other half, so ANY
+        % single winner is wrong.
+            x = sym('x'); y = sym('y');
+            r = region([-x, -y, x+y-1], [x y]);
+            f2 = symbolicFunction(x^2, x+y+1);
+            f1 = symbolicFunction(x^2 + x*y*(x-y), x+y+1);     % f1 - f2 = x*y*(x-y)/(x+y+1)
+
+            testCase.verifyFalse(f1.isPolynomial);
+            testCase.verifyFalse(f2.isPolynomial);
+            for v = [0 0; 1 0; 0 1]'
+                testCase.verifyEqual(double(subs(f1.f - f2.f, [x y], v')), 0, 'AbsTol', 1e-14, ...
+                    'the fixture must TIE at every vertex');
+            end
+
+            [l, ~, ~] = r.maxArray(f1, f2);
+            testCase.verifyFalse(l, ...
+                'neither dominates on the simplex, so maxArray must refuse and let the caller split');
+        end
+
+        function splitmax3ClearsDenominatorsSoTheSplitIsRepresentable(testCase)
+        % The other half of the same defect: once maxArray refuses, the caller splits on
+        % f1 = f2, and region() takes only POLYNOMIAL constraints -- normalize1 raises
+        % symbolic:coeffs:NotAPolynomial on a rational one. Clearing a denominator whose sign is
+        % certified turns the split into the polynomial {x*y*(x-y) >= 0} / {<= 0}, and the
+        % ORIENTATION must still be right: the first half is where f1 wins.
+            x = sym('x'); y = sym('y');
+            r = region([-x, -y, x+y-1], [x y]);
+            f2 = symbolicFunction(x^2, x+y+1);
+            f1 = symbolicFunction(x^2 + x*y*(x-y), x+y+1);
+
+            ineqs = r.splitmax3(f1, f2);
+            testCase.verifyTrue(ineqs(1).isPolynomial);
+            testCase.verifyTrue(ineqs(2).isPolynomial);
+
+            % region() must accept them -- this is the raise the defect note names.
+            keep = sym.empty;
+            for k = 1:size(r.ineqs,2), keep(k) = r.ineqs(k).f; end
+            d1 = region([keep, ineqs(1).f], [x y]);
+            d2 = region([keep, ineqs(2).f], [x y]);
+            testCase.verifyNotEmpty(d1);
+            testCase.verifyNotEmpty(d2);
+
+            % The halves carry f1 and f2 in that order (maximumP's convention), so the first
+            % half must be exactly where f1 - f2 >= 0.
+            pF1 = [0.5 0.1];        % x > y: f1 wins
+            pF2 = [0.1 0.5];        % x < y: f2 wins
+            testCase.verifyGreaterThan(double(subs(f1.f - f2.f, [x y], pF1)), 0);
+            testCase.verifyLessThan   (double(subs(f1.f - f2.f, [x y], pF2)), 0);
+            testCase.verifyLessThanOrEqual(double(subs(ineqs(1).f, [x y], pF1)), 0, ...
+                'the f1 half must admit a point where f1 wins');
+            testCase.verifyGreaterThan(double(subs(ineqs(1).f, [x y], pF2)), 0, ...
+                'and must exclude a point where f2 wins');
+            testCase.verifyLessThanOrEqual(double(subs(ineqs(2).f, [x y], pF2)), 0);
+            testCase.verifyGreaterThan(double(subs(ineqs(2).f, [x y], pF1)), 0);
+        end
+
+        function clearedDifferenceRefusesWhenTheDenominatorChangesSign(testCase)
+        % SOUNDNESS. Clearing p1/q1 - p2/q2 to p1*q2 - p2*q1 flips the inequality wherever the
+        % denominator does, so a denominator that is not sign-definite on the cell must be a
+        % REFUSAL, not a silent multiplication. Refusing leaves today's behaviour in place; it
+        % never produces a wrong split.
+            x = sym('x'); y = sym('y');
+            r = region([-x, -y, x+y-1], [x y]);
+            f1 = symbolicFunction(x^2, x-y);                 % pole ON the simplex
+            f2 = symbolicFunction(sym(0));
+            [ok, ~, why] = r.clearedDifference(f1, f2);
+            testCase.verifyFalse(ok);
+            testCase.verifyEqual(why, 'denominatorSignUnknown');
+
+            % ... and a polynomial pair needs no clearing at all.
+            [ok2, ineq2, why2] = r.clearedDifference(symbolicFunction(x^2), symbolicFunction(y));
+            testCase.verifyTrue(ok2);
+            testCase.verifyEqual(why2, 'alreadyPolynomial');
+            testCase.verifyEqual(simplify(ineq2.f - (x^2 - y)), sym(0));
+        end
+
     end
 end

@@ -25,6 +25,42 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-20 — the cross-face max HANDLES A RATIONAL PAIR now: clear the denominator where the cell certifies its sign
+
+The blocker recorded below (2026-08-19, night, later) is closed. `region.maxArray` refused to
+guess only for a POLYNOMIAL pair, because the refusal makes the caller split on `f1 = f2` and a
+region's constraints must be polynomial -- `region.normalize1` raises
+`symbolic:coeffs:NotAPolynomial` on a rational one. Every second-pass conjugate is rational, so on
+the biconjugate path the refusal never applied: the vertex comparison decided, and on an
+all-vertices-tied cell that means "f2 wins" for no better reason than operand order.
+
+**The arithmetic, and it is one line.** With `f1 - f2 = N/D`, the sets `{f1 >= f2}` and
+`{sign(D)*N >= 0}` are the SAME set wherever `D` has a constant strict sign. So on a cell that can
+certify `D`'s sign, `sign(D)*N` is a POLYNOMIAL standing in for the rational difference, with the
+same sign at every point of the cell, vertices included -- which is exactly what both the
+orientation test in `splitmax3` and the constraints it returns need.
+
+**Three pieces, all in `region.m`:**
+
+* `signOnRegion(expr)` -- +1 / -1 / 0, where 0 is a REFUSAL in the same standing as
+  `certifiesNonPositive`'s. A PRODUCT is decided factor by factor, which is the shape that
+  actually arrives (`D = q1*q2` for two rational conjugates); each affine factor is decided by the
+  LP over the region, STRICTLY both ways. Anything non-affine left after factoring is refused --
+  `certifiesNonPositive` proves `h <= 0`, not `h < 0`, so it cannot supply the strict statement.
+* `clearedDifference(f1,f2)` -- the polynomial, or a refusal with a reason.
+* `maxArray` gains a SECOND sign attempt on the cleared polynomial before it refuses, and extends
+  its refusal to any pair `clearedDifference` can represent; `splitmax3` splits on the cleared
+  polynomial. A rational pair whose denominator the cell cannot certify falls through exactly as
+  before.
+
+**Why the second attempt is worth having on its own:** `isAlways` settles far fewer questions about
+a rational difference than about a polynomial one -- it has to reason about the denominator's zero
+set as well -- so clearing first also DECIDES cases that used to split, which costs cells.
+
+**Refusing costs a cell; clearing by a sign-changing denominator costs a wrong answer.** Hence the
+strictness, and hence `x + y - 1` on the unit simplex (zero on a whole facet) is a refusal, not a
+sign. Four tests in `regionTest`, fast bucket, red before the change.
+
 ## 2026-08-19 (night, later) — the A.4 split is BLOCKED behind a KNOWN defect: maximumP cannot max two RATIONAL conjugates
 
 Three genuine attempts at landing the A.4 cevian split in `plq_1p`. The failure moved each time
