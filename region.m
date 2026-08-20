@@ -1413,7 +1413,13 @@ classdef region
                       try
                           cand = subs(m0, vars, pt);
                           cd = double(cand);
-                          if isfinite(cd) || isinf(cd)
+                          % REAL, not merely convertible. `isfinite` is TRUE for a complex number,
+                          % so an earlier version of this guard let one through -- and the caller
+                          % does `atan2(double(mp), 1)`, which rejects a complex argument. That
+                          % moved the crash from `double()` to `atan2`, two lines apart, with the
+                          % same root cause: this routine must return something the caller can
+                          % treat as a slope. A complex root of the tangent equation is not one.
+                          if isreal(cd) && isfinite(cd)
                               mv = cand;
                           end
                       catch
