@@ -25,6 +25,61 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 (night, later) — the A.4 split is BLOCKED behind a KNOWN defect: maximumP cannot max two RATIONAL conjugates
+
+Three genuine attempts at landing the A.4 cevian split in `plq_1p`. The failure moved each time
+and the third attempt located it in something that was already written down elsewhere. Recording
+under Blocked rather than attacking it a fourth time.
+
+**Attempt 1 -- guessed anchor.** Passed the A.3 formula an anchor vertex and edge derived from the
+PARENT triangle. Overshoot at `s = (0,0)` fixed (0.0429 -> 0); undershoot appeared at `s = (0,1)`
+(0 against a true 0.125).
+
+**Attempt 2 -- self-classifying sub-triangle.** Built the second sub-triangle as a piece and sent
+it back through `convexEnvelope1`, so `domain` decides its own convex edges and far vertex instead
+of the parent guessing. Same undershoot. Ruled the anchor out.
+
+**Attempt 3 -- dispatch on the FACE's domain.** Found a real second defect on the way:
+`conjugateFunction` reads the face's REGION from `obj.envelope(i).d` but took its convex-edge
+count, slopes and far vertex from the PIECE's domain `obj.d`. For one envelope face those are the
+same object, which is why it survived; for a genuine two-face envelope face 2 is dispatched on the
+wrong geometry entirely. Fixed by rebuilding the face's `domain` from its own vertices, and only
+when it differs. **Same undershoot.**
+
+**What attempt 3's instrumentation shows, and it is conclusive:**
+
+    parent nE = 2, nV = 0
+    envelope faces = 2
+      face 1  quadratic with sqrt(2) coefficients, over {P, A, R}
+      face 2  y^2/(y - x/2 + 1/2)   -- RATIONAL, over {A, R, B}
+    conjugate cells = 11,  conjfia = [1 6 12]      <- BOTH blocks populated, 5 cells and 6 cells
+
+So the split is right, both faces are built, both are conjugated, and both blocks reach
+`maximumConjugate`. What loses the answer is the MAX ACROSS them -- and that is a defect already
+recorded in `biconjugateTest.m` (lines 246-251):
+
+> `splitmax3` hands `f1 - f2` straight to `region()`, whose `normalize1` raises
+> `symbolic:coeffs:NotAPolynomial` on a rational one. Every second-pass conjugate is rational, so
+> the old vertex verdict stands: on an all-vertices-tied cell it picks f2 for no better reason
+> than operand order.
+
+Face 1's conjugate is quadratic and face 2's is rational, so their max is exactly the pair
+`region.maxArray` cannot decide. It picks one, and the cells carrying the 0.125 at `s = (0,1)` are
+the ones dropped.
+
+**Therefore the A.4 fix is not a `plq_1p` change at all -- it is blocked on teaching the
+cross-face max to handle a RATIONAL pair** (clear denominators where both are provably nonzero on
+the cell, which is the fix `biconjugateTest` itself proposes). Until then, adding the split
+replaces an OVERSHOOT with an UNDERSHOOT, and an undershoot is worse: a minorant is at least a
+valid convex underestimator, while a conjugate below the sup is not a conjugate of anything.
+
+**Reverted, and the fuller attempt is kept at `.claude/a4split_attempt.m.txt`** -- it contains the
+working cevian geometry (`a4Split`, `twoEdgeQuad`, `triFromVertices`) and the face-domain dispatch
+fix, both of which are correct and reusable the moment the rational max works.
+
+**Left in place: one known-failing test**, `testMaxMultiRegion/testPCE2`, which fails on `main` and
+did before today. It is now the executable statement of this gap.
+
 ## 2026-08-19 (night) — plq_1p's A.4 branch computes a MINORANT, not the envelope. Diagnosed exactly; the fix is started and not finished.
 
 Chasing T6's failures found a defect that has nothing to do with T6: **`testPCE2` fails under BOTH

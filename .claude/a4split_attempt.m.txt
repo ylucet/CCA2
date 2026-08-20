@@ -326,81 +326,84 @@ classdef plq_1p
     methods (Static)
         function f = twoEdgeQuad(x, y, mh, mw, qh, qw)
         % [COAP] A.4's single quadratic: the convex function touching u1*u2 along both convex
-        % edges. Kept as its own routine because the split branch needs it TWICE -- once as the
-        % face over the sub-triangle containing P, and once (implicitly) as the thing the cevian
-        % is derived to meet smoothly.
+        % edges. Factored out of the nCE == 2 branch because the split needs it as one of the two
+        % faces, and because the cevian is DERIVED from it (see a4Split).
             r = mh + mw + 2*sqrt(mh*mw);
             f = symbolicFunction( (mh*mw)/r*x^2 + (2*sqrt(mh*mw))/r*x*y + 1/r*y^2 ...
                                 + (mh*qw + mw*qh)/r*x - (qh + qw)/r*y + (qh*qw)/r );
         end
 
-        function f = oneEdgeRational(x, y, m, q, x1, y1)
-        % [COAP] A.3 eq.16, the ONE-convex-edge envelope: a quadratic over a linear form, anchored
-        % at the far vertex (x1,y1) and using the convex edge y = m*x + q. Same expression the
-        % nCE == 1 branch builds inline; factored out so the A.4 split can reuse it for its
-        % second sub-triangle, which IS an ordinary one-convex-edge case.
-            f = symbolicFunction( (-m*y1)*x^2 + q*x*y + x1*y^2 ...
-                                + (-q*y1 + m*x1*y1)*x + (-q*x1 - x1*y1)*y + q*x1*y1, ...
-                                (-m)*x + y + (-y1 + m*x1) );
-        end
-
-        function [ok, triP, triA, anchor, mA, qA] = a4Split(d, mh, mw, qh, qw)
-        % The A.4 cevian, in the SYMBOLIC representation. Returns the two sub-triangles as
-        % regions, plus the anchor vertex and convex edge the second one's A.3 formula needs.
+        function [ok, triQ, triR] = a4Split(d, mh, mw, qh, qw)
+        % The A.4 cevian in the SYMBOLIC representation. triQ is the sub-triangle that keeps the
+        % single quadratic (it contains P, where the two convex edges meet); triR is the remaining
+        % ONE-convex-edge sub-triangle. ok = false means no split is required or none is
+        % admissible -- the caller keeps the unsplit minorant, which is sound.
         %
-        % Geometry, from convEnvCPLQ.splitTwoConvexEdges: the two convex edges meet at P; each has
-        % a FAR vertex (its own endpoint that is not P). Take the far vertex of one edge, draw the
-        % line of slope -sqrt(mh*mw) through it, and meet it with the OTHER convex edge. Of the two
-        % candidates exactly one lands strictly inside its target edge; the other falls outside and
-        % is rejected here rather than clamped.
-        %
-        % EXACT THROUGHOUT. The foot carries sqrt(mh*mw) and stays a surd -- snapping it to a
-        % rational is the attempt DECISIONS.md records as failing (vertex denominators do not bound
-        % downstream ones), and a double is what made a shared facet invisible to merge.
-            ok = false; triP = []; triA = []; anchor = []; mA = []; qA = [];
+        % Same geometry as convEnvCPLQ.splitTwoConvexEdges, including its selection rule and its
+        % measure-zero early exit, but carried out on exact symbolic coordinates so the foot stays
+        % a surd. Snapping it to a rational is the attempt DECISIONS.md records as failing (vertex
+        % denominators do not bound downstream ones), and a double is what made a shared facet
+        % invisible to merge.
+            ok = false; triQ = []; triR = [];
             vx = d.polygon.vx; vy = d.polygon.vy; vars = d.polygon.vars;
-            e1 = d.E(1,:); e2 = d.E(2,:);
-            shared = intersect(e1, e2);
-            if numel(shared) ~= 1, return, end          % not two edges meeting at one vertex
-            iP = shared;
-            i1 = setdiff(e1, iP);                        % far vertex of convex edge 1
-            i2 = setdiff(e2, iP);                        % far vertex of convex edge 2
-            if numel(i1) ~= 1 || numel(i2) ~= 1, return, end
+            if d.polygon.nv ~= 3 || size(d.E,1) < 2, return, end
+            e1 = d.E(1,1:2); e2 = d.E(2,1:2);
+            iP = intersect(e1, e2);
+            if numel(iP) ~= 1, return, end
+            iA = setdiff(e1, iP);          % far vertex of the edge carrying (mh, qh)
+            iB = setdiff(e2, iP);          % far vertex of the edge carrying (mw, qw)
+            if numel(iA) ~= 1 || numel(iB) ~= 1, return, end
+            P = [vx(iP) vy(iP)]; A = [vx(iA) vy(iA)]; B = [vx(iB) vy(iB)];
 
-            sl = -sqrt(mh*mw);                           % the FORCED cevian slope
-            % Candidate A: from edge 1's far vertex into edge 2 (slope mw, intercept qw).
-            % Candidate B: from edge 2's far vertex into edge 1 (slope mh, intercept qh).
-            cand = { {i1, i2, mw, qw, mh, qh}, {i2, i1, mh, qh, mw, qw} };
-            for c = 1:2
-                iFar = cand{c}{1}; iOther = cand{c}{2};
-                mT = cand{c}{3}; qT = cand{c}{4};        % target edge (the one being met)
-                mK = cand{c}{5}; qK = cand{c}{6};        % the edge iFar sits on
-                if isAlways(mT - sl == 0, 'Unknown', 'false'), continue, end
-                % (y - yFar) = sl*(x - xFar)  meets  y = mT*x + qT
-                xF = (vy(iFar) - sl*vx(iFar) - qT) / (mT - sl);
-                yF = mT*xF + qT;
-                % strictly inside the target edge, whose endpoints are iP and iOther
-                lo = min(double(vx(iP)), double(vx(iOther)));
-                hi = max(double(vx(iP)), double(vx(iOther)));
-                xFd = double(xF);
-                if ~(xFd > lo + 1e-12 && xFd < hi - 1e-12), continue, end
-                % sub-triangle keeping the quadratic: P, the far vertex we drew from, the foot
-                % Built through `domain`, which is what turns three vertices into the half-plane
-                % constraints a functionNDomain's region needs (domain.getAllEdges), and which
-                % orients each of them by testing the centroid. Doing it by hand here would be a
-                % second, divergent copy of that rule.
-                try
-                    triP = domain([vx(iP) vy(iP); vx(iFar) vy(iFar); xF yF], ...
-                                  vars(1), vars(2)).polygon;
-                    triA = domain([xF yF; vx(iOther) vy(iOther); vx(iFar) vy(iFar)], ...
-                                  vars(1), vars(2)).polygon;
-                catch
-                    triP = []; triA = []; continue
+            % MEASURE-ZERO EARLY EXIT, taken straight from convEnvCPLQ: when q1 has no curvature
+            % along the WEAK edge A-B it already touches the chord everywhere and no split is
+            % needed. Both candidate cevians degenerate in exactly that case, so testing the
+            % curvature is also the cheap way to avoid a division by (mT - slope) = 0.
+            r = mh + mw + 2*sqrt(mh*mw);
+            c2 = [(mh*mw)/r, (2*sqrt(mh*mw))/r, 1/r];        % the x^2, xy, y^2 coefficients
+            dxAB = B(1) - A(1); dyAB = B(2) - A(2);
+            curv = c2(1)*dxAB^2 + c2(2)*dxAB*dyAB + c2(3)*dyAB^2;
+            if isAlways(curv == 0, 'Unknown', 'false'), return, end
+
+            slope = -sqrt(mh*mw);          % forced tangency direction; see the caller's note
+            % candidate 1: from A into edge P-B; candidate 2: from B into edge P-A
+            cands = { {A, mw, qw, P, B, iP, iA, iB}, {B, mh, qh, P, A, iP, iB, iA} };
+            for k = 1:2
+                anc = cands{k}{1}; mT = cands{k}{2}; qT = cands{k}{3};
+                Pp = cands{k}{4}; oth = cands{k}{5};
+                if isAlways(mT - slope == 0, 'Unknown', 'false'), continue, end
+                xR = (anc(2) - slope*anc(1) - qT) / (mT - slope);
+                yR = mT*xR + qT;
+                % R's fractional position along the target edge, measured on whichever coordinate
+                % spans further -- the same rule convEnvCPLQ.tangentCevian uses, and the reason a
+                % near-axis-parallel edge does not divide by something tiny.
+                if abs(double(oth(1) - Pp(1))) > abs(double(oth(2) - Pp(2)))
+                    t = (xR - Pp(1)) / (oth(1) - Pp(1));
+                else
+                    t = (yR - Pp(2)) / (oth(2) - Pp(2));
                 end
-                anchor = [vx(iFar), vy(iFar)];
-                mA = mK; qA = qK;
+                td = double(t);
+                if ~(td > 1e-9 && td < 1 - 1e-9), continue, end
+                % T1 keeps the quadratic: P, the anchor we drew from, and the foot.
+                % T2 is the one-convex-edge remainder: the anchor, the foot, and the other far
+                % vertex -- the same two faces convEnvCPLQ names {P,A,R} and {A,R,B}.
+                triQ = plq_1p.triFromVertices([Pp; anc; [xR yR]], vars);
+                triR = plq_1p.triFromVertices([anc; [xR yR]; oth], vars);
+                if isempty(triQ) || isempty(triR), triQ = []; triR = []; continue, end
                 ok = true;
                 return
+            end
+        end
+
+        function pg = triFromVertices(V, vars)
+        % Three vertices to a region, via `domain` -- which is what turns them into oriented
+        % half-plane constraints (domain.getAllEdges tests the centroid). Building them by hand
+        % here would be a second copy of that rule, free to drift from it.
+            pg = [];
+            try
+                pg = domain(V, vars(1), vars(2)).polygon;
+            catch
+                pg = [];
             end
         end
 
@@ -700,47 +703,52 @@ classdef plq_1p
             end
 
             if nCE == 2
-                % [COAP] APPENDIX A.4, WITH THE SPLIT. The single quadratic below touches u1*u2
-                % along BOTH convex edges and is a valid convex minorant -- but it is NOT the
-                % envelope over the WHOLE triangle, only over a sub-region containing the two
-                % convex edges' common vertex P. `convEnvCPLQ.splitTwoConvexEdges` has carried
-                % that fix since the 2026 sessions; this branch never got it.
+                % [COAP] APPENDIX A.4, WITH THE SPLIT. `q1` below is the single quadratic that
+                % touches u1*u2 along BOTH convex edges. It is a valid convex MINORANT but NOT the
+                % envelope over the whole triangle -- only over the sub-region containing the two
+                % edges' common vertex P. `convEnvCPLQ.splitTwoConvexEdges` has carried that fix
+                % since the 2026 sessions; this branch did not, and the consequence is a wrong
+                % ANSWER rather than a loose one.
                 %
-                % MEASURED 2026-08-19, and it is a wrong ANSWER, not an inefficiency: on the
-                % triangle {(0,0),(1,0),(2,1)} with f = x*y the unsplit formula dips to -0.0429
-                % inside the domain, where f >= 0 everywhere and the true envelope's minimum is
-                % 0. `f*(0,0)` therefore came back 0.0429 instead of 0. The paper's own A.4.3
-                % example has the same defect (q1(0.474343,0) = -0.042780 for a true 0), which is
-                % what convEnvCPLQ's header records.
+                % MEASURED 2026-08-19 on {(0,0),(1,0),(2,1)} with f = x*y: the unsplit envelope
+                % dips to -0.0429 inside the domain where f >= 0 everywhere, so the true
+                % envelope's minimum is 0 and `f*(0,0)` came back 0.0429 instead of 0. The paper's
+                % own A.4.3 example has the same defect (q1(0.474343,0) = -0.042780 for a true 0).
                 %
-                % THE CEVIAN IS FORCED, not chosen: the line through ONE convex edge's far vertex
-                % with slope `-sqrt(m_h*m_w)`, met with the OTHER convex edge. That is the unique
-                % direction along which the single quadratic and the A.3 formula agree in VALUE
-                % AND GRADIENT, so the two faces meet C1. The slope depends only on the two edge
-                % slopes -- the affine part cancels out of the derivation exactly. Full derivation
-                % in convEnvCPLQ.splitTwoConvexEdges; this is the same geometry in the symbolic
-                % representation, so the foot stays an exact surd instead of a double.
+                % THE CEVIAN IS FORCED: through one convex edge's far vertex with slope
+                % `-sqrt(mh*mw)`, met with the OTHER convex edge -- the unique direction along
+                % which q1 and the A.3 formula agree in VALUE AND GRADIENT, so the two faces meet
+                % C1. It depends only on the two slopes; the affine part cancels exactly. Of the
+                % two candidates exactly one lands strictly inside its target edge.
                 %
-                % THE SUB-TRIANGLE CONTAINING P KEEPS THE QUADRATIC; the other one is an ordinary
-                % ONE-CONVEX-EDGE case and takes the A.3 formula anchored at its own far vertex.
+                % THE SECOND SUB-TRIANGLE CLASSIFIES ITSELF. It is an ordinary ONE-convex-edge
+                % case, so it is built as a piece and sent back through this same routine rather
+                % than having the A.3 formula applied with an anchor guessed from the parent. That
+                % guess is what the first attempt at this fix got wrong: it produced the right
+                % vertex set and the wrong anchor, which removed the overshoot at s = (0,0) and
+                % introduced an undershoot at s = (0,1). `domain` already computes each triangle's
+                % own convex edges and its own far vertex (`d.V`), so recursion cannot disagree
+                % with the nCE == 1 branch about which is which.
                 mh = obj.d.mE(1); mw = obj.d.mE(2);
                 qh = obj.d.cE(1); qw = obj.d.cE(2);
-
                 q1 = plq_1p.twoEdgeQuad(x, y, mh, mw, qh, qw);
 
-                [okSplit, triP, triA, anchor, mA, qA] = plq_1p.a4Split(obj.d, mh, mw, qh, qw);
+                [okSplit, triQ, triR] = plq_1p.a4Split(obj.d, mh, mw, qh, qw);
                 if ~okSplit
-                    % No admissible cevian (the candidate foot falls outside its target edge, or
-                    % the geometry is degenerate). The unsplit quadratic is still a valid convex
-                    % MINORANT, so returning it is sound where returning nothing is not -- and it
-                    % is what this branch did unconditionally before.
+                    % No split needed or none admissible. The measure-zero case is real and is
+                    % NOT a failure: when q1 is already affine along the weak edge (mh*mw == 1,
+                    % e.g. the mirror-symmetric triangle) it touches the chord everywhere and the
+                    % single quadratic IS the envelope -- both candidate cevians degenerate to
+                    % parallel-at-infinity in exactly that case. Anything else that lands here
+                    % keeps the minorant, which is sound though possibly loose, and is what this
+                    % branch returned unconditionally before.
                     obj.envelope = [obj.envelope, functionNDomain(q1, obj.d.polygon)];
                     obj.lCE = true;
                     return
                 end
-                fA = plq_1p.oneEdgeRational(x, y, mA, qA, anchor(1), anchor(2));
-                obj.envelope = [obj.envelope, functionNDomain(q1, triP), ...
-                                              functionNDomain(fA, triA)];
+                sub = plq_1p(domain([triR.vx(:), triR.vy(:)], x, y), obj.f);
+                sub = convexEnvelope1(sub, x, y);
+                obj.envelope = [obj.envelope, functionNDomain(q1, triQ), sub.envelope];
                 obj.lCE = true;
                 return
             end
@@ -861,8 +869,34 @@ classdef plq_1p
 
         function obj = conjugateFunction (obj,i)
             
-            nCE = obj.d.nE;
             vars = obj.pieceVars;
+            % THE FACE'S OWN GEOMETRY, when it has any. This routine reads the face's REGION from
+            % `obj.envelope(i).d` but took its convex-edge count, slopes and far vertex from the
+            % PIECE's domain `obj.d`. For a single envelope face over the whole piece those are
+            % the same object and the shortcut is invisible -- which is why it survived.
+            %
+            % It stops being the same object the moment Step 1 produces a genuine MULTI-FACE
+            % envelope, which [COAP] A.4's split does: face 2 lives on a sub-triangle with its own
+            % edges, its own nCE and its own far vertex. Dispatching it on the parent's nCE
+            % conjugates it against the wrong geometry, and the piece comes back covering only
+            % what face 1 spans. MEASURED 2026-08-19: with the A.4 split added and this line
+            % unchanged, f*(0,1) on {(0,0),(1,0),(2,1)} came back 0 against a true 0.125 -- the
+            % sup over face 1 alone.
+            %
+            % `obj.envelope(i).d` is a region, which carries no nE/mE/cE/V, so the face's domain
+            % is rebuilt from its vertices -- and ONLY when it actually differs from the piece's,
+            % so every existing single-face input keeps the exact object it had.
+            fd = obj.d;
+            try
+                if numel(obj.envelope) >= i && ~isempty(obj.envelope(i).d) && ...
+                        ~isequal(obj.envelope(i).d.vx, obj.d.polygon.vx)
+                    fd = domain([obj.envelope(i).d.vx(:), obj.envelope(i).d.vy(:)], ...
+                                vars(1), vars(2));
+                end
+            catch
+                fd = obj.d;
+            end
+            nCE = fd.nE;
             s1 = sym('s_1');
             s2 = sym('s_2');
             dualVars = [s1,s2];
@@ -995,10 +1029,10 @@ classdef plq_1p
             
             if nCE == 1
                 
-              m =  obj.d.mE(1);
-              q =  obj.d.cE(1);
-              x1 = obj.d.polygon.vx(obj.d.V(1))  ;
-              y1 = obj.d.polygon.vy(obj.d.V(1))  ;
+              m =  fd.mE(1);
+              q =  fd.cE(1);
+              x1 = fd.polygon.vx(fd.V(1))  ;
+              y1 = fd.polygon.vy(fd.V(1))  ;
 
               a = -1;
               b = -2*m;
