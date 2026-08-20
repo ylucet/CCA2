@@ -25,6 +25,43 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-19 (night) — T6 REFUTED: plq_1p and plq_1piece are NOT interchangeable, so deleting the old class is not free
+
+T6 was listed as the cheap win on the way to a sym-free CCA2: `plq_1piece.m` carries 75
+symbolic-engine calls, is an older parallel implementation of the same per-piece API, and its only
+live constructor calls are the 18 fixtures in `testMaxMultiRegion`. Move those onto `plq_1p` and
+75 calls leave the surface without porting anything.
+
+**Tried, and reverted.** The API gap is one method (`biconjugateP`, ~20 lines, ported cleanly).
+The BEHAVIOUR gap is not. With the fixtures swapped, four of six short tests that pass under
+`plq_1piece` fail under `plq_1p`:
+
+    testPCE0        pass
+    testBiconjugate pass
+    testConvex      FAIL  the convex envelope EXCEEDS f by 12.92 on the domain
+    testConjugate   FAIL  f*(1,0) = 0.25, sampled sup over the domain is 2
+    testPCE2        FAIL  f*(0,0) = 0.0429, sup over the domain is 0
+    testFractional  FAIL  symbolic:coeffs:NotAPolynomial in plq_1p.conjugateFunction
+
+Two of these are not "different but defensible" -- an envelope ABOVE `f` and a conjugate BELOW the
+sup are both violations of the definition. Note `testConvex` uses `PRect3`, a four-vertex domain
+put through `convexEnvelope` WITHOUT triangulating first; `plq_1p` appears to require the
+per-triangle input its own `triangulate` produces, where `plq_1piece` tolerated the polygon.
+`testFractional` fails differently again: it hand-builds a RATIONAL envelope face, and
+`plq_1p.conjugateFunction` calls `coeffs` on it, which refuses a non-polynomial.
+
+**Why this was invisible until today.** Those four tests had NO ASSERTIONS until this session --
+they ran the pipeline, printed, and returned. Under the old regime the swap would have looked
+free, because every one of them "passed". The numeric checks added a few hours earlier are what
+turned an invisible behaviour change into four specific, located failures. That is the clearest
+return on that work so far.
+
+**What it means for the port.** T6 is not a deletion, it is a MIGRATION with real defects to fix
+first -- either `plq_1p` gains the polygon and rational-face handling `plq_1piece` has, or those
+fixtures move to the triangulated form and `testFractional` gets a polynomial envelope. Until
+then `plq_1piece`'s 75 symbolic calls stay, and a sym-free CCA2 must either port them or land
+this migration properly. Reverted to green; nothing is left half-swapped.
+
 ## 2026-08-19 (night) — T1/T2: the number type for a sym-free CCA2 is Q(sqrt(d)), and it is built and tested
 
 T8 (below) established that rationals alone cannot carry this pipeline. T1 is therefore decided
