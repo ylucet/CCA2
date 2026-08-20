@@ -601,5 +601,62 @@ classdef regionTest < matlab.unittest.TestCase
             testCase.verifyEqual(simplify(ineq2.f - (x^2 - y)), sym(0));
         end
 
+
+        function signEverywhereProvesAPerfectSquareInExpandedForm(testCase)
+        % THE DEFECT, measured on the A.4 split. Two conjugate cells that meet TANGENTIALLY have
+        % a perfect-square difference -- here f1 - f2 = ((s1+s2) - 1)^2/4, an edge cell's
+        % quadratic against the affine cell it touches along s1 + s2 = 1. maxArray asked
+        % isAlways about that difference as simplifyFraction leaves it, which is EXPANDED, and
+        % MuPAD does not complete the square:
+        %     isAlways((s1*s2)/2 - s2/2 - s1/2 + s1^2/4 + s2^2/4 + 1/4 >= 0)   UNKNOWN
+        %     isAlways(((s1+s2) - 1)^2/4 >= 0)                                  TRUE
+        % Same function, opposite verdicts. The undecided answer makes the caller SPLIT the cell
+        % on f1 = f2 -- and that split boundary is `-(s1+s2-1)^2 <= 0`, which is VACUOUS. That
+        % is how the constraint in aDegenerateConicPairStillYieldsItsVertex below came to exist.
+        %
+        % A cell that must not be split, split anyway, is also the Step 3 cost problem: every
+        % undecided comparison is a cell that never merges back.
+            s1 = sym('s_1'); s2 = sym('s_2');
+            sq = (s1*s2)/2 - s2/2 - s1/2 + s1^2/4 + s2^2/4 + 1/4;   % = ((s1+s2)-1)^2/4
+            testCase.verifyEqual(double(subs(sq, [s1 s2], [0.4 0.2])), 0.04, 'AbsTol', 1e-12, ...
+                'the fixture must be the square, and strictly positive off the line');
+
+            testCase.verifyEqual(region.signEverywhere(sq),  1);
+            testCase.verifyEqual(region.signEverywhere(-sq), -1);
+
+            % REFUSALS. An indefinite difference has no sign -- this one is maxArray's own
+            % recorded example, the 4-cone fan's s2^2/4 - s1^2/2, which changes sign inside the
+            % quadrant and must NOT be decided.
+            testCase.verifyEqual(region.signEverywhere(s2^2/4 - s1^2/2), 0);
+            testCase.verifyEqual(region.signEverywhere(s1 + s2), 0);
+
+            % And the variables are treated as REAL: over the complex numbers -s1^2 <= 0 is not
+            % true, and a version of this test that omitted the substitution decided nothing.
+            testCase.verifyEqual(region.signEverywhere(-s1^2), -1);
+        end
+
+        function aDegenerateConicPairStillYieldsItsVertex(testCase)
+        % REGRESSION, from the A.4 split. A line meets the degenerate conic -(s1+s2-1)^2 = 0 in a
+        % DOUBLE root, so region.lineMeetsConicSym's radical is an unevaluated form of sqrt(0):
+        %     t1 = 3 - 2*sqrt(2) - 2*((sqrt(2)-3/2)^2 - (sqrt(2)-2)^2 - sqrt(2) + 7/4)^(1/2)
+        % Its VALUE is 3 - 2*sqrt(2) = 0.1715728752538099, and `double` reads it without
+        % complaint -- but `simplify` raises symbolic:kernel:DivisionByZero on it, and
+        % getVertices called simplify on the way to STORING the coordinate. The whole region
+        % constructor then failed, from inside maximumP, with nothing pointing at the cause.
+        %
+        % simplify NORMALISES a coordinate here; it does not decide whether the vertex exists.
+            s1 = sym('s_1'); s2 = sym('s_2');
+            r = region([s1 + s2/2 + sqrt(sym(2)) - 2, -(s1+s2-1)^2], [s1 s2]);
+            testCase.verifyNotEmpty(r);
+            testCase.verifyGreaterThanOrEqual(r.nv, 1, 'the intersection point is a vertex');
+            hit = false;
+            for k = 1:r.nv
+                if abs(double(r.vx(k)) - (3 - 2*sqrt(2))) < 1e-12 && ...
+                   abs(double(r.vy(k)) - (2*sqrt(2) - 2)) < 1e-12
+                    hit = true;
+                end
+            end
+            testCase.verifyTrue(hit, 'the vertex at (3-2*sqrt(2), 2*sqrt(2)-2) must survive');
+        end
     end
 end

@@ -330,6 +330,55 @@ classdef region
              end
          end
 
+         function sg = signEverywhere (expr)
+         % +1 if `expr` is >= 0 EVERYWHERE, -1 if <= 0 everywhere, 0 for "cannot prove" -- a
+         % refusal, never a "no". Both answers are sufficient conditions, so a sign that only
+         % holds on some region comes back 0.
+         %
+         % TWO THINGS THE CALLERS KEPT GETTING WRONG, both measured, which is why this is one
+         % routine rather than four inline isAlways calls:
+         %
+         % 1. THE VARIABLES MUST BE REAL. A bare sym('s_1') is COMPLEX to the symbolic engine,
+         %    and over the complex numbers -s_1^2/2 <= 0 is simply not true -- so isAlways could
+         %    not decide the sign of any quadratic, which is precisely the case that matters,
+         %    and every comparison fell through to an unnecessary split. (Observed: a 4-cone fan
+         %    then produced the vacuous constraint -s_1^2 <= 0 as a split boundary and crashed
+         %    downstream in removeTangent.) Substituting fresh real symbols asks the question
+         %    that was meant without touching global assumptions.
+         %
+         % 2. THE FORM MATTERS, so an undecided answer is retried on the SIMPLIFIED expression.
+         %    MuPAD does not complete the square: with g = f1 - f2 as simplifyFraction leaves it,
+         %        isAlways((s1*s2)/2 - s2/2 - s1/2 + s1^2/4 + s2^2/4 + 1/4 >= 0)   UNKNOWN
+         %        isAlways(((s1+s2) - 1)^2/4 >= 0)                                  TRUE
+         %    and those are the same function. A tangency between two conjugate cells is exactly
+         %    a perfect-square difference, so this is the common shape, not a curiosity. The
+         %    simplify runs only on the path that would otherwise SPLIT a cell, which costs more.
+             sg = 0;
+             g = expr;
+             gv = symvar(g);
+             if ~isempty(gv)
+                 rv = sym('maxArrayReal_%d', [1 numel(gv)], 'real');
+                 g = subs(g, gv, rv);
+             end
+             for attempt = 1:2
+                 if attempt == 2
+                     try
+                         g = simplify(g);
+                     catch
+                         return                      % nothing further to ask
+                     end
+                 end
+                 if isAlways(g >= 0, 'Unknown', 'false')
+                     sg = 1;
+                     return
+                 end
+                 if isAlways(g <= 0, 'Unknown', 'false')
+                     sg = -1;
+                     return
+                 end
+             end
+         end
+
          function tf = clearlyNonzero (v)
          % Is this symbolic value safely nonzero to divide by? Numeric first, and anything not
          % comfortably away from zero -- or not numerically evaluable -- answers FALSE, so the
@@ -1564,25 +1613,17 @@ classdef region
 
           l = true;
           if all(abs(double(sv1 - sv2))< 1.0d-14)
+              % ASK THE SIGN OF f1 - f2 EVERYWHERE. region.signEverywhere carries the two
+              % things this test kept getting wrong -- real variables, and retrying on the
+              % simplified form -- and its answer is sufficient, not necessary: a difference
+              % that is sign-definite only on obj comes back undecided, which is safe.
               g = simplifyFraction(f1.f - f2.f);
-              % The variables MUST be re-declared REAL before asking. A bare sym('s_1') is
-              % COMPLEX to the symbolic engine, and over the complex numbers -s_1^2/2 <= 0 is
-              % simply not true -- so isAlways cannot decide the sign of any quadratic
-              % difference, which is precisely the case that matters here, and every comparison
-              % would fall through to an unnecessary split. (Observed: the 4-cone fan then
-              % produced the vacuous constraint -s_1^2 <= 0 as a split boundary and crashed
-              % downstream in removeTangent.) Substituting fresh real symbols asks the question
-              % that was actually meant without touching global assumptions.
-              gv = symvar(g);
-              if ~isempty(gv)
-                  rv = sym('maxArrayReal_%d', [1 numel(gv)], 'real');
-                  g = subs(g, gv, rv);
-              end
-              if isAlways(g >= 0, 'Unknown', 'false')
+              sg = region.signEverywhere(g);
+              if sg > 0
                   fmax = f1;
                   index = 1;
                   return
-              elseif isAlways(g <= 0, 'Unknown', 'false')
+              elseif sg < 0
                   fmax = f2;
                   index = 2;
                   return
@@ -1599,17 +1640,12 @@ classdef region
               if ~(f1.isPolynomial && f2.isPolynomial)
                   [cleared, gpf] = obj.clearedDifference(f1, f2);
                   if cleared
-                      gp = gpf.f;
-                      gvp = symvar(gp);
-                      if ~isempty(gvp)
-                          rvp = sym('maxArrayReal_%d', [1 numel(gvp)], 'real');
-                          gp = subs(gp, gvp, rvp);
-                      end
-                      if isAlways(gp >= 0, 'Unknown', 'false')
+                      sg = region.signEverywhere(gpf.f);
+                      if sg > 0
                           fmax = f1;
                           index = 1;
                           return
-                      elseif isAlways(gp <= 0, 'Unknown', 'false')
+                      elseif sg < 0
                           fmax = f2;
                           index = 2;
                           return
@@ -4266,9 +4302,33 @@ classdef region
                        %isAlways(subs ([obj.ineqs(i).f],obj.vars,[s.t1(k),s.t2(k)])<=0)
                        %double(subs ([obj.ineqs(i).f],obj.vars,[s.t1(k),s.t2(k)]))
                   
+                          % simplify() NORMALISES a coordinate; it does not decide whether the
+                          % vertex exists, and it must not be allowed to. MuPAD raises
+                          % symbolic:kernel:DivisionByZero out of simplify on an expression whose
+                          % VALUE is a perfectly good number -- measured on the A.4 split, where
+                          % a line meets the degenerate conic -(s1+s2-1)^2 in a DOUBLE root and
+                          % the closed form's radical is an unevaluated form of sqrt(0):
+                          %     t1 = 3 - 2*sqrt(2) - 2*((sqrt(2)-3/2)^2 - (sqrt(2)-2)^2 - sqrt(2)
+                          %          + 7/4)^(1/2)          = 0.1715728752538099
+                          % The failure then surfaces from inside region() with nothing pointing
+                          % here -- the same shape as the pole in slopeAtVertex.
+                          %
+                          % Keeping the UNSIMPLIFIED expression is exact: it is the same number,
+                          % just not in normal form, and every consumer substitutes or converts
+                          % it rather than pattern-matching it. Dropping the vertex instead would
+                          % lose a real corner of the region, which is the one outcome worse than
+                          % an ugly coordinate.
                           obj.nv=obj.nv+1;
-                          obj.vx(obj.nv) = simplify(s.t1(k));
-                          obj.vy(obj.nv) = simplify(s.t2(k));
+                          try
+                              obj.vx(obj.nv) = simplify(s.t1(k));
+                          catch
+                              obj.vx(obj.nv) = s.t1(k);
+                          end
+                          try
+                              obj.vy(obj.nv) = simplify(s.t2(k));
+                          catch
+                              obj.vy(obj.nv) = s.t2(k);
+                          end
                         
                     end
                end 

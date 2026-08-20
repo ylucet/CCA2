@@ -25,6 +25,54 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-20 (later) — two `region` defects the A.4 split exposed, and one refuted diagnosis
+
+Landing the A.4 split (below) stopped raising `NotAPolynomial` and started raising
+`symbolic:kernel:DivisionByZero` out of `region.getVertices`, from inside `maximumP`. Two
+independent defects, each now a fast unit test, and both are on the ordinary path — the split only
+made them REACHABLE, it did not create them.
+
+### 1. `isAlways` does not complete the square, so a tangency was read as undecided
+
+Two conjugate cells that meet TANGENTIALLY have a perfect-square difference. Measured, on the
+cells this split produces:
+
+    isAlways((s1*s2)/2 - s2/2 - s1/2 + s1^2/4 + s2^2/4 + 1/4 >= 0)    UNKNOWN
+    isAlways(((s1+s2) - 1)^2/4 >= 0)                                  TRUE
+
+Same function; `simplifyFraction` leaves the first form, and `maxArray` asked about that. The
+undecided answer makes the caller SPLIT a cell that must not be split, and on a cell whose vertices
+all lie on the tangency line every vertex ties, so the vertex comparison then returned **f2, the
+smaller one** — a wrong value, not a loose one.
+
+`region.signEverywhere` now carries both things this test kept getting wrong — REAL variables (the
+existing reason, recorded in `maxArray`'s header) and a retry on the SIMPLIFIED form — as one
+routine used for the raw difference and for the cleared polynomial. The `simplify` runs only where
+the alternative is splitting a cell, which costs more.
+
+### 2. `simplify` was deciding whether a vertex EXISTS
+
+The split boundary that same refusal emitted is `-(s1+s2-1)^2 <= 0`, which is VACUOUS -- and a line
+meets that degenerate conic in a DOUBLE root, so `lineMeetsConicSym`'s radical is an unevaluated
+form of `sqrt(0)`:
+
+    t1 = 3 - 2*sqrt(2) - 2*((sqrt(2)-3/2)^2 - (sqrt(2)-2)^2 - sqrt(2) + 7/4)^(1/2)
+       = 0.1715728752538099            <- `double` reads it; `simplify` RAISES on it
+
+`getVertices` called `simplify` on the way to STORING the coordinate, so the whole `region`
+constructor failed. Keeping the unsimplified expression when `simplify` raises is exact — same
+number, not in normal form — and dropping the vertex instead would lose a real corner of the
+region. `simplify` normalises a coordinate here; it does not decide whether the vertex exists.
+
+### The diagnosis that was WRONG, and cost a run to refute
+
+The first reading was "the candidate is INFINITE and `isreal(double(Inf))` is true, so a parallel
+pair the `isAlways(dt == 0)` test could not prove parallel slips through" — the same shape as this
+session's `slopeAtVertex` pole. Instrumented (`fprintf` on every non-finite candidate): **nothing
+printed**. The candidate is finite, real, and correct; only `simplify` fails on it. Recorded
+because that diagnosis is the plausible one and will suggest itself again — the guard it implies
+(`isfinite` alongside `isreal`) is harmless but would have fixed nothing here.
+
 ## 2026-08-20 — the cross-face max HANDLES A RATIONAL PAIR now: clear the denominator where the cell certifies its sign
 
 The blocker recorded below (2026-08-19, night, later) is closed. `region.maxArray` refused to
