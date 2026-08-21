@@ -14,7 +14,7 @@ _2026-08-21. Read-only session alongside the port session; its own
 
 - Branch `main` @ `a548da8` — "The conjugate of a rational-data PLQ needs
   degree-4 algebraic vertices, not Q(sqrt d)"
-- Pushed: pending (user not yet asked)
+- Pushed: yes — 2 commits, `4f39478..d42a2f9`, 2026-08-21
 - Tests: none run — no `.m` file was touched this session
 - Known reds: unchanged; nothing here affects them
 
