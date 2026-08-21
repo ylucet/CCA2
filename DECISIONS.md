@@ -25,6 +25,54 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-20 (evaluation) — MEASURED: a mesh conjugate is competitive as a SCIP nonlinear constraint, and the only thing that ruins it is linear scanning
+
+The Row 7 decision (H-form plus filtered predicates) was about to be taken with no number for the
+thing the target application actually pays: SCIP calls a nonlinear constraint's value-and-gradient
+millions of times per solve. Written in C rather than estimated, because MATLAB's scalar-loop
+timings do not transfer to a solver's inner loop: `.claude/evalbench.c`, `gcc -O2 -march=native`,
+minimum of three runs on the shared machine, value AND gradient on every call.
+
+    baseline: a 20-node expression tree walked with a forward-mode gradient      44 ns
+      -- the honest comparison: what SCIP already pays for an ordinary small nonlinear constraint
+
+    A  linear scan over cells        9 / 81 / 1024 cells        38 / 130 / 1670 ns
+    B  uniform bucket, O(1)          9 ... 1024 cells           24 ...    27 ns
+    E  slab, two binary searches     9 ... 1024 cells           15 ...    26 ns
+    F  cached cell + bucket, COHERENT queries (random walk, step 1e-3)         11.5 ns
+    C  no mesh, max of per-piece closed-form sups   3 / 6 / 24 pieces   105 / 215 / 822 ns
+
+**The answer is yes, with one condition.** An indexed mesh evaluates FASTER than SCIP's own walk
+over a small expression, and the cost is flat in the cell count — so the measured cell counts (11
+for the A.4 fixture, 41 for a pentagon, 60-86 for the quadrilateral) do not matter. A LINEAR SCAN
+does matter: 130 ns at 81 cells is three times the baseline and it grows without bound.
+
+**Read E with its caveat, which is why the recommendation is B+F and not E.** The synthetic mesh is
+a grid of axis-aligned boxes, so the slab method's two binary searches are compares against stored
+doubles and it never evaluates a cell predicate at all. On a real conic arrangement the y-search
+inside a slab compares against ARCS, so each of its ~log2(N) steps costs a conic evaluation. The
+bucket's flat ~25 ns is the transferable number, it is O(N) to build against sorting plus per-slab
+arc lists, and F shows the last-cell cache is worth more than either: SCIP's queries move in small
+steps, so the previous cell usually still holds and confirming it is four predicates.
+
+**C is worth keeping even though it loses.** `f*(s) = max_k sup_{x in T_k} <s,x> - q_k(x)` with each
+sup in closed form (interior critical point when the objective is concave and it is feasible, else
+the three edges as 1-D quadratics), and the argmax IS the gradient by Danskin. It needs no
+arrangement, no point location and no exact arithmetic, so it is both a differential oracle for the
+mesh and a usable fallback before Row 7 exists.
+
+**What the measurement settles about the architecture:** nothing on the evaluation path is exact or
+symbolic. The exact kernel — degree-4 vertices included — is a BUILD-time cost, and the finished
+mesh compiles once into flat double arrays. So the algebraic-number question and the SCIP
+performance question are independent, and neither constrains the other.
+
+Also recorded because they are consequences of convexity that a future session would otherwise
+re-derive: the gradient at any point is a global linear underestimator, the max over a box is
+attained at a corner (four evaluations), and the box minimum is the global minimum when it is
+inside — so bound propagation, usually the expensive part, is nearly free. The gradient JUMPS
+across cell boundaries while the value does not; either side is a valid subgradient, so separation
+stays correct, but a smooth-NLP heuristic will feel it.
+
 ## 2026-08-20 (after T2b) — VERIFIED INDEPENDENTLY: a vertex of `f*` can have degree 4 with Galois group S4, so NO tower of square roots is enough
 
 A parallel session left an untracked `CONJ_FIELD_PROOF.md` in the working tree claiming this. It

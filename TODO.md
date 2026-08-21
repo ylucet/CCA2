@@ -1,5 +1,87 @@
 # TODO
 
+## 2026-08-20 — THE SYM-FREE PORT, RE-PLANNED. Read this section first.
+
+The plan changed on 2026-08-20 because two things were measured, both in `DECISIONS.md` under that
+date: one quadratic extension is not enough (a single A.5 triangle needs `sqrt(15)` and `sqrt(30)`
+in ONE coordinate), and no tower of square roots is enough either (an `f*` vertex can have degree 4
+with Galois group S4). Order matters below; each item says what decides it.
+
+Terminology used throughout: **Row 7** is the recommendation of `CONJ_FIELD_PROOF.md` section 8.2 —
+store the mesh in **H-form** (faces as sign conditions on rational conics, edges as rational conics,
+a vertex named by the PAIR OF CONICS it solves rather than by coordinates) and run every predicate
+through an interval **filter** first, dropping to the exact kernel only when the interval straddles
+zero. That file is UNTRACKED at the time of writing — another session left it in the tree — so this
+section states what it needs rather than pointing at it.
+
+- [ ] **T3 — `symbolicFunction`'s payload becomes a coefficient vector, over RATIONALS.**
+      The face and conic layers need no extension field at all (that document's Theorem 1: face
+      functions and edge conics of `f*` are always rational), so `Rat`/int64 covers them and
+      `exactQ` is not load-bearing there. This is where the engine calls actually are — live
+      counts, non-comment: `subs` 72 in `region.m`, 68 in `plq_1piece.m`, 21 in `plq_1p.m`;
+      `coeffs` 18 + 10; `simplify`/`simplifyFraction` 11 + 18 + 10; `hessian`/`gradient`/`dfdx`
+      about 45. Every one becomes arithmetic on coefficients.
+
+- [ ] **Vertex layer — a degree-<= 4 real algebraic kernel**: a rational quartic plus an isolating
+      interval, sign of a rational polynomial at it, and comparison by resultant or Sturm sequence.
+      `exactQ` is now multiquadratic and still NOT enough: of twelve continuous three-piece
+      configurations the vertex quartic is irreducible over Q in ten of them, and the S4 case is
+      proved reachable. Bounded work, because the degree is capped at 4 for both `conj` and the
+      envelope.
+
+- [ ] **Interim, until the kernel lands — DETECTED refusal.** Factor the vertex quartic and refuse
+      by name when it does not split into rational or quadratic factors. That turns a reachable
+      wrong answer into one nameable `SUPPORT_MATRIX.md` GAP, which is the discipline this project
+      already has for unreachable branches.
+
+- [ ] **Row 7 itself — H-form storage plus filtered predicates.** Biggest rewrite: V-form is baked
+      into `RatPar`'s `V/E/F/P`, `eval`, `createP`, `orderEdges`, plotting, and every test that
+      names a vertex. Plotting and user output still need coordinates, but then as an OUTPUT
+      convenience, not the stored truth. The filter must be certified (a real error bound, not a
+      tuned tolerance) with a terminating exact fallback, or it is the refuted double-plus-tolerance
+      design wearing a disguise.
+
+- [ ] **When Row 7 lands, INDEX the mesh for evaluation — do not linear-scan.**
+      Measured (`.claude/evalbench.c`, gcc -O2 -march=native, min of three runs, value AND gradient
+      every call; the caveats are in `DECISIONS.md`):
+
+          baseline: 20-node expression tree, forward-mode gradient      44 ns
+          linear scan          9 / 81 / 1024 cells             38 / 130 / 1670 ns
+          uniform bucket       9 ... 1024 cells                24 ...    27 ns
+          slab, two binary searches                            15 ...    26 ns
+          cached cell + bucket, COHERENT queries                        11.5 ns
+          no mesh, per-piece closed-form sup   3 / 6 / 24 pieces  105 / 215 / 822 ns
+
+      Take the **uniform bucket plus a last-cell cache**: flat in the cell count, O(N) to build,
+      and SCIP's queries move in small steps so the previous cell usually still holds. Skip the
+      slab method — its 15-26 ns is measured on a grid of axis-aligned boxes, which flatters it,
+      and on a real conic arrangement each of its ~log2(N) steps costs a conic evaluation. Keep
+      unbounded cells in a separate short list, tested only when the point is outside the global
+      bounding box. The index is pure preprocessing, microseconds to build.
+
+- [ ] **T6 — delete `plq_1piece`** (57 live engine calls, 13 of them `solve`). RE-RUN THE FIXTURE
+      SWAP FIRST: of the three regressions recorded on 2026-08-19, one may already be gone, since
+      `testPCE2`'s domain is the triangle A.4 now gets right. The other two are specific —
+      `testFractional` needs `conjugateFunction` to dispatch on the envelope's KIND (a rational
+      face to the A.3 branch) and not only on its domain, and `testConvex` feeds a four-vertex
+      polygon to a routine that wants triangles.
+
+- [ ] **T4 / T5 — the remaining global sign questions and `solve()` sites.** `signEverywhere`,
+      `impliedBy`/`holdsOn`, `certifiesNonPositive` are the only `isAlways` uses that ask about a
+      FUNCTION rather than a number; degree <= 2 has a closed-form PSD/minimum test and half of it
+      is already written. Live `solve`: 6 in `region.m` (most measured dead), 3 in
+      `functionNDomain.m`, 5 in `symbolicFunction.m`.
+
+**Facts about the SCIP side worth keeping, so they are not re-derived:** `f*` is convex, so the
+gradient at any point is already a global linear underestimator, the max over a box is attained at
+one of four corners, and the min is the global min when it is inside — the interval evaluation that
+usually dominates propagation is nearly free. Evaluation is pure double precision: the exact kernel
+is a BUILD-time cost and the finished mesh compiles to flat arrays, so the degree-4 vertex question
+never reaches the solver. The gradient jumps across cell boundaries; the value does not, and either
+side is a valid subgradient, so separation stays correct but an Ipopt-based heuristic will feel it.
+Building the mesh is minutes to an hour, so it must be once-per-constraint preprocessing, never
+reached from a node.
+
 ## 2026-08-13 -- the far-field defect, worked steps 1-6 of the plan
 
 **Where it stands (updated 2026-08-13, end of the second pass).** `maxQuaParTest` **25 pass / 1 fail**; fast bucket 200 pass / 1 fail. The one red is `arcVsArcRefusesAnUnboundedTwoArcSplit` (first item below). `sweepMaxQuaParCurvedSplit(20260802,200)` went 30 -> 59 assembled of 142 sampled, with 0 of 1031 result vertices, 571 midpoints and 3540 interior points wrong. What the whole defect turned out to be is one sentence, and it is recorded in `SUPPORT_MATRIX.md` 4.1: **a curved edge is a bounded ARC and its conic is not**, so the point-location rule admits far-away points on a parabola's concave side; `QuaPar.chordCuts` derives the missing constraint. Original note follows.
