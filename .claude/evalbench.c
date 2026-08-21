@@ -88,6 +88,51 @@ static double eval_bucket(double x, double y, double *gx, double *gy, int cand) 
     return face_at(C->q, x, y, gx, gy);
 }
 
+/* ---------------------------------------------- strategy E: the slab method (Dobkin-Lipton)
+ * Every vertex of the subdivision is projected to the x-axis; the sorted projections cut the
+ * plane into SLABS whose interiors contain no vertex, so inside one slab the edges crossing it
+ * never cross each other and are totally ordered in y. Query = binary search x for the slab,
+ * then binary search y among that slab's ordered edges. O(log N) against the bucket's O(1).
+ * On this box mesh the two searches ARE the two coordinate searches, which is the cheapest the
+ * method can ever be -- a real conic arrangement pays more per comparison, because "which side
+ * of this arc" is a conic evaluation rather than a compare against a stored number. */
+static double *slabx, *slaby;
+
+static void build_slabs(void) {
+    slabx = malloc(sizeof(double) * (GRID + 1));
+    slaby = malloc(sizeof(double) * (GRID + 1));
+    for (int i = 0; i <= GRID; i++) { slabx[i] = (double)i / GRID; slaby[i] = (double)i / GRID; }
+}
+
+static double eval_slab(double x, double y, double *gx, double *gy) {
+    int lo = 0, hi = GRID;
+    while (hi - lo > 1) { int mid = (lo + hi) >> 1; if (x < slabx[mid]) hi = mid; else lo = mid; }
+    int i = lo;
+    lo = 0; hi = GRID;
+    while (hi - lo > 1) { int mid = (lo + hi) >> 1; if (y < slaby[mid]) hi = mid; else lo = mid; }
+    int j = lo;
+    const cell *C = &mesh[i * GRID + j];
+    return face_at(C->q, x, y, gx, gy);
+}
+
+/* ------------------------------------------- strategy F: cached cell first, bucket as fallback
+ * SCIP's queries are COHERENT -- line searches, warm-started LPs, a node's children -- so the
+ * previous cell is usually still the right one. Test it first (4 predicates) and fall back to
+ * the bucket when it misses. Driven with a random WALK rather than uniform points, which is the
+ * query pattern this is for. */
+static int lastcell = 0;
+
+static double eval_cached(double x, double y, double *gx, double *gy) {
+    const cell *C = &mesh[lastcell];
+    if (conic_at(&C->g[0], x, y) <= 0 && conic_at(&C->g[1], x, y) <= 0 &&
+        conic_at(&C->g[2], x, y) <= 0 && conic_at(&C->g[3], x, y) <= 0)
+        return face_at(C->q, x, y, gx, gy);
+    int i = (int)(x * GRID); if (i < 0) i = 0; if (i >= GRID) i = GRID - 1;
+    int j = (int)(y * GRID); if (j < 0) j = 0; if (j >= GRID) j = GRID - 1;
+    lastcell = i * GRID + j;
+    return face_at(mesh[lastcell].q, x, y, gx, gy);
+}
+
 /* ------------------------------------------------------- strategy C: no mesh, per-piece sup */
 typedef struct { double V[3][2]; double Q[3]; double be[2]; double ga; } piece;  /* Q = [q11 q12 q22] */
 static piece *pieces;
@@ -258,6 +303,38 @@ int main(void) {
         TIMEIT(buf, eval_bucket(X, Y, &gx, &gy, 1), 5000000L);
         snprintf(buf, sizeof buf, "B  bucket + 3 candidates, %4d cells", NCELL);
         TIMEIT(buf, eval_bucket(X, Y, &gx, &gy, 3), 5000000L);
+        free(mesh);
+    }
+
+    printf("\n--- slab method: two binary searches (O(log N)) instead of one bucket index\n");
+    for (int i = 0; i < 5; i++) {
+        build_mesh(gs[i]); build_slabs();
+        snprintf(buf, sizeof buf, "E  slab / binary search, %4d cells", NCELL);
+        TIMEIT(buf, eval_slab(X, Y, &gx, &gy), 5000000L);
+        free(slabx); free(slaby); free(mesh);
+    }
+
+    printf("\n--- coherent queries (a random walk of step 1e-3): test the last cell first\n");
+    for (int i = 3; i < 5; i++) {
+        build_mesh(gs[i]);
+        double bestt = 1e30;
+        long NIT = 5000000L;
+        for (int r = 0; r < REPS; r++) {
+            rs = 88172645463325252ULL; lastcell = 0;
+            double X = 0.5, Y = 0.5, acc = 0, t0 = now_s();
+            for (long it = 0; it < NIT; it++) {
+                X += 1e-3 * (rnd() - 0.5); Y += 1e-3 * (rnd() - 0.5);
+                if (X < 0) X = 0; if (X > 0.999999) X = 0.999999;
+                if (Y < 0) Y = 0; if (Y > 0.999999) Y = 0.999999;
+                double gx, gy;
+                acc += eval_cached(X, Y, &gx, &gy) + gx + gy;
+            }
+            double el = now_s() - t0;
+            if (el < bestt) bestt = el;
+            if (acc == 12345.6789) printf("");
+        }
+        snprintf(buf, sizeof buf, "F  cached cell + bucket, %4d cells", NCELL);
+        printf("%-34s %8.1f ns/eval\n", buf, 1e9 * bestt / NIT);
         free(mesh);
     }
 
