@@ -10,7 +10,7 @@ _2026-08-21_
 ## State
 
 - Branch `main` @ `a59dc4e` — "Write the re-planned port down"
-- Pushed: pending
+- Pushed: yes — 12 commits, `ea6e647..48e7c14`, 2026-08-21
 - Tests (2026-08-20): fast 249/0 · normal 12/0 · slow 88/0 (−j 3) · verylong NOT run
 - Known reds: `testMaxMultiRegion/testPCE2` — `plq_1piece`'s envelope route, not
   `plq_1p`'s; T6 territory, see DECISIONS 2026-08-19 (night)
