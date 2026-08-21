@@ -28,7 +28,9 @@ much commoner than the other:
   the *ordinary* vertex. A two-level tower (a nested radical) can.
 * when the three pieces meeting at the vertex are **pairwise non-adjacent**, the group is S4 and
   **no** tower of any depth can hold it (section 4). That needs at least four pieces in the input,
-  and the three cannot be a chain.
+  and the three cannot be a chain. (That bound is for the S4 *field* result only. The separate
+  *shape* finding — that an edge of `f*` can be an elliptical arc, 7.4b — needs just two
+  non-adjacent pieces, so **three** pieces suffice for it: `doc/QuaConExample.md` §2.)
 
 `exactQ` is therefore the right idea in the wrong coordinate system *and* one level short of even
 the common case. Section 8 lists the data structure options and what each one buys.
@@ -265,8 +267,10 @@ This is exactly what the search saw. Of twelve feasible three-piece continuous c
 (fan of three triangles, pieces 1-2 and 2-3 adjacent), ten had an irreducible quartic and **all
 ten** had a reducible resolvent cubic. None is a counterexample; they are Theorem 3 in action.
 
-**So a counterexample needs three pairwise NON-adjacent pieces**, which needs at least four pieces
-in the subdivision.
+**So an S4 counterexample needs three pairwise NON-adjacent pieces**, which needs at least four
+pieces in the subdivision. Two non-adjacent pieces — three in total — are already enough for the
+weaker *shape* statement of 7.4b, since that needs one non-degenerate edge rather than a triple
+point (`doc/QuaConExample.md` §2).
 
 ---
 
@@ -604,6 +608,17 @@ Not part of the field question, but it surfaced while checking the closure argum
 second and independent finding about the same example. **Traced against the exact oracle, not
 inferred from the conic algebra.**
 
+> **ANSWERED — the theorem is at fault, not the example.** This subsection closed by asking
+> whether the construction violates an unidentified hypothesis of the `QuaPar` structure theorem,
+> or whether the theorem's cross-piece step needs a condition. It is the second.
+> `doc/QuaConExample.md` §1 locates the break: [JOGO] Theorem 6's proof assumes the two functions
+> compared in the maximum always include a linear one *"because the pieces compared are adjacent
+> in the primal"*, and Step 3b assumes the same — but Step 3b iterates over **all** pieces of `f`,
+> so once there are three or more, some compared pair is non-adjacent and both functions can be
+> elliptic quadratics. The adjacent case is sound and is exactly Theorem 3 above, so the theorem's
+> conclusion holds for every comparison its proof actually covers. [COAP] inherits the gap in its
+> route; its conclusion is not refuted. Section 4 therefore stands as written.
+
 For a boundary between two faces of `f*`, the conic `{g_i = g_j}` has quadratic part
 `(H_i - H_j)/2`, so its discriminant is `B^2 - 4AC = -det(H_i - H_j)`. For the three faces meeting
 at `p`:
@@ -653,11 +668,25 @@ first**, not the arithmetic.
 rational quadratics; they never assume the subdivision is parabolic. Sections 4 and 5 stand either
 way.
 
-### 7.5 The minimum piece count is not established
+### 7.5 The minimum piece count — THREE for the shape result, open for S4
 
-Five pieces is what the search produced, not a proven minimum. Four should be enough in principle:
-a central triangle with three triangles glued to its edges gives three pairwise non-adjacent
-outer pieces. Not attempted.
+Five pieces is what the search produced. This subsection guessed four and reasoned that three
+*pairwise* non-adjacent pieces are needed; **that reasoning was too strong**, because it conflated
+the two results.
+
+* **Shape result** (an edge of `f*` that is not a parabola or a line, 7.4b): needs one
+  non-degenerate edge, i.e. just **two** non-adjacent pieces — so **three pieces suffice**.
+  `doc/QuaConExample.md` §2 exhibits it: delete pieces 4 and 5 of 4.1, leaving the triangle
+  `(0,0), (60,10), (-5,10)` cut by the two cevians to `(15,10)` and `(5,10)`. All three Hessians
+  positive definite, pieces 1 and 3 separated by piece 2, and `{g_1 = g_3}` is the ellipse
+
+      93 s1^2 + 38 s1 s2 - 6 s1 + 39 s2^2 - 482 s2 - 1003 = 0,   disc -13064,  3x3 det -8650208
+
+  with pieces 1 and 3 tying at `s* = (-17/62 + sqrt(612030)/186, 3/2)` and piece 2 strictly below.
+  Every number there is rational or the square root of one — the degree-4 quartic plays no part.
+* **S4 field result** (section 4): does need a triple point, hence three pairwise non-adjacent
+  pieces, hence at least four in the subdivision. Whether four is achievable — a central triangle
+  with three glued to its edges — is **still not attempted**.
 
 ### 7.6 Iterating
 

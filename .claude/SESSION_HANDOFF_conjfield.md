@@ -5,10 +5,8 @@ _2026-08-21. Read-only session alongside the port session; its own
 
 ## Blocked
 
-- **QuaPar shape of `f*`** — needs Yves. In the §4 example the non-adjacent-pair
-  edges are two ellipses and a hyperbola, traced against the exact oracle; that
-  contradicts the QuaPar theorem and `clipArcByConic.m`. Evidence and the two
-  possible readings: `CONJ_FIELD_PROOF.md` §7.4b.
+Nothing. The QuaPar-shape question is answered: the theorem is at fault, not the
+example — `doc/QuaConExample.md` §1, folded into `CONJ_FIELD_PROOF.md` §7.4b.
 
 ## State
 
@@ -20,11 +18,11 @@ _2026-08-21. Read-only session alongside the port session; its own
 
 ## Next
 
-1. Adjudicate §7.4b. If the input is legitimate, §4 stands and the QuaPar claim
-   needs a condition; if not, §4 needs re-examination first.
-2. Fold the decided parts into `DECISIONS.md` — deliberately not edited here.
-   Candidates: degree-4 vertices, Theorem 3, `exactQ` one level short.
-3. Vertex-layer type: degree-4 real algebraic kernel (§8 option 5), then H-form.
+1. Fold the decided parts into `DECISIONS.md` — deliberately not edited here.
+   Candidates: degree-4 vertices, Theorem 3, [JOGO] Thm 6 gap, exactQ one short.
+2. Vertex-layer type: degree-4 real algebraic kernel (§8 option 5), then H-form.
+3. Open: the S4 minimum piece count (§7.5, four not attempted) and whether ONE
+   indefinite piece suffices (§7.4).
 
 ## Files
 
