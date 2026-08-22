@@ -18,6 +18,29 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 — Stage 1 has `dom f* = ℝ²`, so the `⊤` cell is EMPTY until Phase 7
+
+- **Tried:** nothing ruled out; this records a finding that makes one conjunct of
+  the main theorem weaker than it looked.
+- **What was found:** `QuaPol.conj_ne_top` is provable outright at Stage 1. Every
+  piece is a convex hull of a finite set, hence compact, so each per-piece
+  supremum is a real number, and there are finitely many pieces. Therefore the
+  conjugate is **finite everywhere** and `dom f* = ℝ²`.
+- **Consequence:** `PROJECT_PLAN.md` §0.5 treats `cell ∅` as "the distinguished
+  `+∞` cell". At Stage 1 it is simply **empty**, and so is `{s | f* s = ⊤}`; the
+  fifth conjunct of `conj_isQuaCon` is currently the equality of two empty sets.
+  It is not wrong, and it costs nothing to carry, but it is **not yet
+  load-bearing** and should not be quoted as evidence that the `+∞` region is
+  handled. It becomes substantive only in Phase 7, when unbounded pieces make
+  `dom f*` a proper subset of the plane.
+- **Also simplified:** `selection` no longer needs a `conj f s ≠ ⊤` hypothesis,
+  since that is now automatic. The version in `Selection.lean` is unconditional.
+- **Before retrying, fix:** n/a. The `EReal` machinery stays, because Phase 7
+  needs it; only the claim about what the fifth conjunct currently *proves* is
+  narrowed.
+- **Evidence:** `QuaConProof/Selection.lean` (`conj_ne_top`),
+  `QuaConProof/QuaCon.lean` (`cell_empty_eq`, `dom_conj_eq_univ`).
+
 ## 2026-08-22 — a piece's quadratic is a `Quad`, not a separate `(Q, β, γ)`
 
 - **Tried:** `PROJECT_PLAN.md` §0.2 as written, where `QuaPiece` carries a

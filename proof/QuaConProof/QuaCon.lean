@@ -1,7 +1,7 @@
 /-
 Copyright (c) 2026 Yves Lucet. All rights reserved.
 -/
-import QuaConProof.Candidates
+import QuaConProof.Selection
 
 /-!
 # The main theorem: the conjugate of a `QuaPol` is a `QuaCon`
@@ -18,10 +18,12 @@ Five of the six conjuncts are consequences of how the cells are *defined* — by
 activity pattern — and are proved outright in `Candidates.lean`. The whole
 mathematical content sits in one lemma:
 
-> `selection` : wherever `f*` is finite, some candidate quadratic attains it.
+> `selection` : some candidate quadratic attains `f*` at every point.
 
-That is Lemma 1 + Theorem 1 of `../CONJ_FIELD_PROOF.md`. It is the only `sorry`
-in this development, and `SORRY_LEDGER.md` carries it with its plan reference.
+`selection` is now **proved**, in `Selection.lean`, from the per-piece core
+lemma `exists_branch_eq_max` — the case analysis S3–S9 for a single piece, which
+is the one remaining `sorry` in the development. `SORRY_LEDGER.md` carries it
+with its plan reference.
 
 Note what `selection` is **not**. It is *not* `f* = max over cand f`, which is
 false: an edge branch overshoots the true supremum whenever its stationary point
@@ -31,10 +33,8 @@ construction needs and what the informal Theorem 1 actually asserts.
 
 ## Main results
 
-* `QuaPol.conj_ne_bot` — the conjugate is never `⊥`. Proved: a `QuaPol` has at
-  least one piece with at least one vertex, so `f` is finite somewhere.
-* `selection` — the key lemma. **`sorry`.**
 * `cell_empty_eq` — the empty-activity cell is exactly where `f*` is `⊤`.
+* `dom_conj_eq_univ` — at Stage 1 the conjugate is finite everywhere.
 * `conj_isQuaCon` — the theorem.
 -/
 
@@ -89,59 +89,33 @@ theorem conj_ne_bot (f : QuaPol) (s : Plane) : f.conj s ≠ ⊥ := by
 
 end QuaPol
 
-/-! ### The selection lemma -/
-
-/-- **Selection.** Wherever the conjugate is finite, some candidate quadratic
-attains it.
-
-This is `PROJECT_PLAN.md` §0.6, and Lemma 1 + Theorem 1 of
-`../CONJ_FIELD_PROOF.md`. The route, in nine steps:
-
-* **S1** the supremum over the finite union of pieces splits as a finite maximum
-  of per-piece suprema;
-* **S2** each per-piece supremum is attained, since `QuaPiece.T` is compact and
-  `psi` is continuous;
-* **S3** by Carathéodory the maximiser lies in `convexHull` of an affinely
-  independent `W` of at most three vertices; take `W` of minimal cardinality, so
-  that all barycentric coordinates are strictly positive
-  (`Caratheodory.minCardFinsetOfMemConvexHull` gives exactly this);
-* **S4** the maximiser still maximises over `conv W`;
-* **S5** first-order condition on the direction space of `affineSpan W`;
-* **S6** `|W| = 1` gives `vertexBranch`;
-* **S7** `|W| = 2` gives `edgeBranch` when the curvature is positive, and
-  `vertexBranch` when it vanishes;
-* **S8** `|W| = 3` gives `interiorBranch` when the Hessian is nonsingular, and
-  otherwise descends to a proper face along `ker H`;
-* **S9** induction on `|W|`.
-
-S8 is the step most likely to be harder than planned; `TODO.md` sequences it
-first for that reason. -/
-theorem selection (f : QuaPol) (s : Plane) (hs : f.conj s ≠ ⊤) :
-    ∃ q ∈ cand f, ((q.eval s : ℝ) : EReal) = f.conj s := by
-  sorry
-
 /-! ### The cells, completed -/
 
 /-- **The empty-activity cell is exactly where the conjugate is `⊤`.**
 
-One direction is immediate — a real number is never `⊤`, so nothing can be active
-there. The other is `selection`, together with `QuaPol.conj_ne_bot` to rule out
-the value `⊥`. -/
+At Stage 1 both sides are empty: `QuaPol.conj_ne_top` says the conjugate is
+finite everywhere, because every piece is compact, and `selection` says some
+candidate is always active. The conjunct becomes substantive only in Phase 7,
+when unbounded pieces make `dom f*` a proper subset. -/
 theorem cell_empty_eq (f : QuaPol) : cell f ∅ = {s : Plane | f.conj s = ⊤} := by
-  ext s
-  rw [mem_cell_iff, Set.mem_ofPred_eq]
-  constructor
-  · intro hact
-    by_contra htop
-    obtain ⟨q, hq, hqs⟩ := selection f s htop
-    have : q ∈ active f s := mem_active_iff.2 ⟨hq, hqs⟩
-    rw [hact] at this
-    exact absurd this (Finset.notMem_empty q)
-  · intro htop
-    refine Finset.eq_empty_of_forall_notMem fun q hq => ?_
-    have := (mem_active_iff.1 hq).2
-    rw [htop] at this
-    exact EReal.coe_ne_top _ this
+  have hR : {s : Plane | f.conj s = ⊤} = (∅ : Set Plane) := by
+    ext s
+    simp only [Set.mem_ofPred_eq, Set.mem_empty_iff_false, iff_false]
+    exact conj_ne_top f s
+  have hL : cell f ∅ = (∅ : Set Plane) := by
+    ext s
+    simp only [mem_cell_iff, Set.mem_empty_iff_false, iff_false]
+    intro hact
+    obtain ⟨q, hq, hqs⟩ := selection f s
+    have hmem : q ∈ active f s := mem_active_iff.2 ⟨hq, hqs⟩
+    rw [hact] at hmem
+    exact Finset.notMem_empty q hmem
+  rw [hL, hR]
+
+/-- Restated for the record: **at Stage 1 the conjugate is finite everywhere**, so
+its domain is the whole plane and no cell carries `+∞`. -/
+theorem dom_conj_eq_univ (f : QuaPol) : {s : Plane | f.conj s ≠ ⊤} = Set.univ :=
+  Set.eq_univ_of_forall fun s => conj_ne_top f s
 
 /-! ### The theorem -/
 

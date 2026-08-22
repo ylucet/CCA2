@@ -18,31 +18,27 @@ skill) read this section to decide whether there is more work to do.
 
 ## Next up
 
-**Phase 4 — the selection lemma. This is the project.** Everything else in
-`conj_isQuaCon` is proved; `selection` is the single `sorry` and the only thing
-between here and a complete theorem. `SORRY_LEDGER.md` carries the full entry.
+**Phase 4 - one lemma left: `exists_branch_eq_max`.** S1, S2 and S8's core are
+proved; `selection` and the whole outer structure are proved from it. What
+remains is the barycentric bookkeeping inside a single piece. `SORRY_LEDGER.md`
+has the full entry, including which supporting lemmas are already in hand.
 
-Order matters: S8 first, because it is the step most likely to fail, and nothing
-should be built on top of it until it is known to work.
-
-- [ ] **S8** `|W| = 3`, singular Hessian: `∇q(x*) = s` and `H` singular, so `psi`
-      is constant along `ker H`; barycentric coordinates are affine in the
-      parameter, so at the largest admissible step one coordinate vanishes and the
-      maximum is also attained on a proper face. Contradicts minimality of `W`,
-      descending to `|W| ≤ 2`. Write standalone, with its own example.
-- [ ] **S2** attainment: `QuaPiece.isCompact_T` is already proved; combine with
-      `IsCompact.exists_isMaxOn` and continuity of `psi` (polynomial, so `fun_prop`)
-- [ ] **S3** minimal Carathéodory subset — `Caratheodory.minCardFinsetOfMemConvexHull`
-      and `affineIndependent_minCardFinsetOfMemConvexHull` are already in mathlib
-      and give exactly this; derive strict positivity of the barycentric coordinates
-- [ ] **S1** the supremum over the finite union of pieces splits as a finite max
-- [ ] **S5** first-order condition on the direction space of `affineSpan ℝ W`
-- [ ] **S6** `|W| = 1` → `vertexBranch`; **S7** `|W| = 2` → `edgeBranch` when
-      `0 < edgeCurv`, `vertexBranch` when it vanishes. The three `*_eval`
-      identities these need are already proved.
-- [ ] **S9** assemble by induction on `|W|`; `selection` `sorry`-free
-- [ ] then `#print axioms conj_isQuaCon` must come back clean, and
-      `SORRY_LEDGER.md` must go to zero
+- [ ] **S3a** minimal Caratheodory subset => strictly positive barycentric
+      coordinates. `Caratheodory.minCardFinsetOfMemConvexHull` gives the subset;
+      the content is turning card-minimality into positivity (if a coordinate is
+      zero, the point lies in the hull of the smaller set)
+- [ ] **S3b** affine independence in the plane => `W.card <= 3`
+- [ ] **S5** positive coordinates => `x +- t*d` stays in `conv W` for small `t`,
+      for `d` in the direction space; then `psi_along_dir` and
+      `eq_zero_of_forall_small` (both proved) give the first-order condition
+- [ ] **S6/S7** `W.card = 1` and `= 2`. The branch identities they need are
+      proved; S7 also needs `alpha >= 0` from the second-order part of
+      `psi_along_dir`
+- [ ] **S8 descent** barycentric coordinates are affine in the parameter, so the
+      first zero gives a maximiser on a proper face. The mathematics is proved
+      (`psi_const_along_kernel`); this is the bookkeeping around it
+- [ ] **S9** strong induction on `W.card`, then `exists_branch_eq_max` sorry-free
+- [ ] then `#print axioms conj_isQuaCon` clean and `SORRY_LEDGER.md` at zero
 
 **Phase 2 remainder — the conic normal forms.** Self-contained; nothing is
 blocked on it. `disc` and `det3` are currently invariants with computed values,
@@ -66,6 +62,22 @@ What remains is the harder statement:
       not blocked by anything external.)
 
 ## Done recently
+
+- [x] 2026-08-22 - **S8's core proved**, the step flagged as most likely to sink
+      the plan: `psi_along_dir` (the exact second-order expansion, no remainder),
+      `exists_kernel_of_hessDet_eq_zero`, `psi_const_along_kernel`,
+      `exists_dir_psi_const`. Sliding along the kernel of a singular Hessian at a
+      stationary point costs nothing, so the three-vertex singular case reduces to
+      a smaller face and needs no candidate of its own.
+- [x] 2026-08-22 - **S1 and S2 proved**: `exists_isMaxOn_piece` (extreme value
+      theorem on the compact piece), `exists_piece_eq_eval`, `exists_maximiser`.
+- [x] 2026-08-22 - **`conj_ne_top`**: at Stage 1 the conjugate is finite
+      everywhere, so `dom f* = R^2` and `selection` needs no hypothesis. See
+      `DECISIONS.md` - it also means the fifth conjunct of the main theorem is
+      currently the equality of two empty sets, and is not yet load-bearing.
+- [x] 2026-08-22 - `eq_zero_of_forall_small`, the scalar first-order condition.
+- [x] 2026-08-22 - the single `sorry` moved from the top-level `selection` down to
+      the precise per-piece statement `exists_branch_eq_max`.
 
 - [x] 2026-08-22 — **Phase 3 complete.** `QuaPol.lean`, `Candidates.lean`,
       `QuaCon.lean`. `conj_isQuaCon` is stated in full and proved modulo the

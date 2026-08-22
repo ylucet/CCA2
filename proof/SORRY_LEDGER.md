@@ -22,46 +22,51 @@ Every `sorry` in the Lean sources, with what it needs and what depends on it.
 
 ## Count
 
-**1 sorry.** Verified 2026-08-22:
+**1 sorry**, on the per-piece core lemma. Verified 2026-08-22:
 
-    $ grep -rn "sorry" QuaConProof/*.lean | grep -v "^\S*:[0-9]*: *--"
-    QuaConProof/QuaCon.lean:121:  sorry          (plus two prose mentions in docstrings)
+    $ grep -rn "  sorry$" QuaConProof/*.lean
+    QuaConProof/Selection.lean:342:  sorry
 
     $ #print axioms QuaConProof.conj_isQuaCon
     [propext, sorryAx, Classical.choice, Quot.sound]
 
-    $ #print axioms   (the other 13 top-level results)
-    [propext, Classical.choice, Quot.sound]        -- clean
-
-Exactly two declarations depend on `sorryAx`, and both do so through
-`selection` alone: `conj_isQuaCon` and `cell_empty_eq`. Everything else in the
-development — `conj_ne_bot`, `conj_pt`, all three branch identities, and the
-five structural cell theorems — is `sorry`-free.
+Exactly three declarations depend on `sorryAx` — `exists_branch_eq_max`,
+`selection`, and through them `cell_empty_eq` and `conj_isQuaCon`. Everything
+else is clean, including all of S1, S2 and S8's core.
 
 ## Open
 
-### `QuaConProof/QuaCon.lean` — `selection`
+### `QuaConProof/Selection.lean` — `exists_branch_eq_max`
 
-- **Statement:** `∀ f s, f.conj s ≠ ⊤ → ∃ q ∈ cand f, (q.eval s : EReal) = f.conj s`.
-  Wherever the conjugate is finite, some candidate quadratic attains it.
-- **Needs:** the nine-step route in `PROJECT_PLAN.md` §0.6, restated in the
-  declaration's own docstring. In mathlib terms:
-  - S1 splitting the supremum over the finite union of pieces — `Finset` lattice
-    lemmas plus `iSup` manipulation;
-  - S2 attainment — `QuaPiece.isCompact_T` (already proved) with
-    `IsCompact.exists_isMaxOn`, and continuity of `psi`, which is polynomial;
-  - S3 the minimal Carathéodory subset — `Caratheodory.minCardFinsetOfMemConvexHull`
-    and `affineIndependent_minCardFinsetOfMemConvexHull` are **already in mathlib**
-    and give precisely the minimal affinely independent `W`, which was the step
-    most feared at planning time;
-  - S5–S9 the first-order condition and the case split on `|W|`, landing on
-    `vertexBranch`, `edgeBranch` and `interiorBranch`. The three
-    `*_eval` identities those cases must produce are already proved.
-- **Blocks:** `cell_empty_eq`, and through it `conj_isQuaCon`. Nothing else.
-- **Plan reference:** `PROJECT_PLAN.md` §0.6, steps S1–S9; Phase 4 of the roadmap.
-- **Risk:** **high**, concentrated in S8 (`|W| = 3` with a singular Hessian,
-  descending to a proper face along `ker H`). `TODO.md` sequences S8 first so that
-  the riskiest step is attempted before anything is built on top of it.
+- **Statement:** if `x` maximises `ψ = ⟨s,·⟩ - q` over one piece `p`, then some
+  branch `b ∈ p.branches` satisfies `b.eval s = ψ(x)`. This is S3–S9 of
+  `PROJECT_PLAN.md` §0.6 for a **single piece**; the multi-piece assembly
+  (`selection`) is proved from it.
+- **Needs:** the barycentric bookkeeping, and only that. Specifically:
+  - **S3** `Caratheodory.minCardFinsetOfMemConvexHull` (mathlib) gives a minimal
+    affinely independent `W ⊆ verts` with `x ∈ convexHull ↑W`. Minimality must be
+    converted into "every barycentric coordinate of `x` is strictly positive",
+    and affine independence in the plane into `W.card ≤ 3`.
+  - **S5** from positive coordinates, `x ± t·d` stays in the simplex for small
+    `t`; then `psi_along_dir` and `eq_zero_of_forall_small` — **both proved** —
+    give `⟨s - ∇q(x), d⟩ = 0`.
+  - **S8** the descent: barycentric coordinates are affine in the parameter, so
+    the first zero gives a maximiser on a proper face. The mathematical content
+    (`ψ` is constant along `ker H`) is **proved**: `psi_const_along_kernel`,
+    `exists_dir_psi_const`.
+  - **S9** strong induction on `W.card`.
+- **Already in hand, all `sorry`-free:** `psi_along_dir`, `eq_zero_of_forall_small`,
+  `vertexBranch_eval`, `edgeBranch_eval`, `psi_le_edgeBranch`,
+  `interiorBranch_eval`, `gradAt_interiorPoint`, `exists_kernel_of_hessDet_eq_zero`,
+  `psi_const_along_kernel`, `exists_isMaxOn_piece` (S2), `exists_piece_eq_eval`,
+  `conj_ne_top`, `exists_maximiser` (S1).
+- **Blocks:** `selection`, `cell_empty_eq`, `conj_isQuaCon`. Nothing else.
+- **Plan reference:** `PROJECT_PLAN.md` §0.6, steps S3–S9; Phase 4.
+- **Risk:** **medium**, down from high. The step feared most at planning time was
+  S8, and its mathematical content is now proved; what is left there is affine
+  bookkeeping rather than a possible dead end. The remaining risk is volume, not
+  depth: mathlib's barycentric API for `convexHull` of a `Finset` is the part not
+  yet exercised.
 
 Template for a future entry:
 

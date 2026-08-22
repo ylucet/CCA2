@@ -42,12 +42,17 @@ _Last updated: 2026-08-22_
   Each formula was differential-tested against direct numerical optimisation
   *before* being written into Lean.
 
+- OK **Phase 4 partly done.** `QuaConProof/Selection.lean`. S1, S2 and the
+  mathematical core of S8 are proved, and `selection` itself is proved from a
+  single per-piece lemma.
+
 ## In flight
 
 - Nothing mid-edit. The tree is green and committed, with **exactly one `sorry`**:
-  `selection` in `QuaConProof/QuaCon.lean`. `#print axioms` confirms only
-  `conj_isQuaCon` and `cell_empty_eq` depend on `sorryAx`, both through that one
-  lemma; the other 13 top-level results are clean.
+  `exists_branch_eq_max` in `QuaConProof/Selection.lean` - the case analysis
+  S3-S9 for a single piece. `#print axioms` confirms only it, `selection`,
+  `cell_empty_eq` and `conj_isQuaCon` depend on `sorryAx`; every other top-level
+  result is clean.
 
 ## Blocked / open questions
 
@@ -65,20 +70,21 @@ _Last updated: 2026-08-22_
    entries on the Lean code — the second one says precisely what `Conic.lean`
    does and does not prove, and is the thing most likely to be over-read.
 2. `lake build` to confirm the tree is still green (should be instant from cache).
-3. Then **Phase 4, step S8** — the singular-Hessian descent. It is the riskiest
-   step in the project and `TODO.md` puts it first deliberately: nothing should be
-   built on top of it until it is known to work. Read `SORRY_LEDGER.md`'s
-   `selection` entry first; it lists which mathlib lemmas are expected to do the
-   work, and notes that `Caratheodory.minCardFinsetOfMemConvexHull` already
-   supplies the minimal affinely independent subset that S3 needs — the step that
-   looked most likely to sink the plan.
+3. Then the remaining bookkeeping in `exists_branch_eq_max`, starting with S3a:
+   turning card-minimality of the Caratheodory subset into strict positivity of
+   the barycentric coordinates. Read `SORRY_LEDGER.md`'s entry first - it lists
+   every supporting lemma already proved, so the work is genuinely only the
+   barycentric part.
 
 ## Risk register
 
-- **S8 of the selection lemma** (`|W| = 3` with singular `Q`, descending to a
-  proper face along `ker Q` via barycentric coordinates) is the single step most
-  likely to be harder than planned. `TODO.md` sequences it first inside Phase 4
-  for that reason.
+- ~~**S8 of the selection lemma**~~ - **retired 2026-08-22.** Its mathematical
+  content is proved (`psi_const_along_kernel`): at a stationary point of a
+  singular quadratic, `psi` is constant along the kernel, so sliding to a proper
+  face costs nothing. What remains of S8 is bookkeeping, not a possible dead end.
+- **Remaining risk is volume, not depth.** The one open lemma needs mathlib's
+  barycentric API for `convexHull` of a `Finset`, which this development has not
+  yet exercised.
 - **Definitional risk.** A wrong definition of `conj`, `QuaPol.eval` or `cand`
   gives a true theorem about the wrong object, and the kernel will not notice.
   The mitigation is the sanity `example`s required by `CLAUDE.md` → Verification,
