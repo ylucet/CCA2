@@ -18,6 +18,44 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 — "looks straight" is not "is a line": both are decided by det3, and the figure's two suspect edges are genuine hyperbolas
+
+- **Tried:** reading the edge type off `doc/QuaCon.svg` row 3 by eye. The
+  `U1|U6` and `U1|U2` boundaries are drawn essentially straight, which suggests
+  they are lines — and since a line is a degenerate conic, that would have been a
+  legal reading.
+- **Why it failed:** it conflates a *metric* property (small curvature over a
+  short arc) with an *algebraic* one (the conic factors into linear pieces).
+  Recomputed from the primal data in exact rational arithmetic, both are
+  **non-degenerate**:
+
+  | edge | equation | `B^2-4AC` | `det3` | verdict |
+  |---|---|---|---|---|
+  | `U1\|U6` = `I3\|I5` | `2731 s1^2 - 4598 s1 s2 - 2189 s2^2 - 107420 s1 - 9988 s2 + 421996 = 0` | `+45054240` | `+260148962304` | genuine hyperbola |
+  | `U1\|U2` = `E1-2\|I5` | `5969 s1^2 + 5390 s1 s2 - 847 s2^2 + 67532 s1 - 22748 s2 - 353236 = 0` | `+49275072` | `-2474882726976` | genuine hyperbola |
+
+  Both are irreducible over `Qbar` (`sympy.factor_list(..., extension=True)`
+  returns one factor), so neither is a line pair. They render straight because the
+  *active* arc sits far out on the hyperbola where it hugs an asymptote:
+  `|arc - centre| / transverse semi-axis` is `14.8` and `2.3`, radius of curvature
+  over chord length is `169` and `11`, and the maximum sagitta is `0.13%` and
+  `0.86%` of the chord — about `0.3` and `0.9` points on a `425`-point-wide panel,
+  i.e. under one line width.
+- **Before retrying, fix:** nothing to retry; this fixes a **specification**
+  point. `IsConic`'s classification in `PROJECT_PLAN.md` §0.7 must be decided by
+  `det3` (and `B^2-4AC` for the type), never by any notion of how the curve looks
+  or how small its curvature is. Degeneracy is not a limiting case of curvature:
+  the same figure contains nine genuinely degenerate pairs with `det3 = 0`
+  exactly — five line pairs (`U2|U4`, `U2|U5`, `U3|U7`, `U4|U5`, `U6|U7`) and four
+  with `B^2-4AC = 0` as well (`U1|U5`, `U2|U3`, `U3|U4`, `U4|U7`), the
+  adjacent-piece case of the informal Theorem 3.
+- **Evidence:** all 21 pairs of the seven faces classified exactly — 7 hyperbolas,
+  5 ellipses, 5 line pairs, 4 parallel/repeated lines, and **no parabola**. The
+  face quadratics were taken from `../doc/QuaCon.svg` row 3 and independently
+  re-derived from the primal `(Q_k, beta_k, T_k)` data; the per-piece constrained
+  sup was checked against dense sampling of each triangle to `~1e-4` (grid
+  effect), and the arc points lie on their conics to `<= 1e-10`.
+
 ## 2026-08-21 — nested git repo in `proof/` reverted; subtree rejected; one CCA2 history
 
 - **Tried:** `git init` inside `proof/`, making it a second, remote-less git

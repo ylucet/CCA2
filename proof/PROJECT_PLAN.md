@@ -227,10 +227,32 @@ structure. `DECISIONS.md` records why, and what it would take to add.
 - [ ] conic containment; `conj_isQuaCon` `sorry`-free
 - [ ] `#print axioms conj_isQuaCon` clean
 
-# Phase 6 — The ellipse witness
+# Phase 6 — The witnesses that the theorem is not vacuous
 - [ ] formalize the three-piece example of `../doc/QuaConExample.md` §2
 - [ ] check in Lean that its `{g₁ = g₃}` really has `Δ < 0` (`norm_num`)
 - [ ] this is what shows the theorem is not vacuous, and that `QuaPar` is too narrow
+- [ ] add the two `det₃ ≠ 0` witnesses below: they are the reason `IsConic`'s
+      classification must be decided algebraically and not by appearance
+
+Concrete `norm_num` targets, all from the five-piece example's `f*` (faces `U₁..U₇`
+of `../doc/QuaCon.svg` row 3, re-derived from the primal data — `DECISIONS.md`,
+2026-08-22). Every one of these is a pure integer arithmetic check:
+
+| pair | `Δ = B² - 4AC` | `det₃` | must classify as |
+|---|---|---|---|
+| `U₁\|U₆` | `+45054240` | `+260148962304` | hyperbola, **non**-degenerate |
+| `U₁\|U₂` | `+49275072` | `-2474882726976` | hyperbola, **non**-degenerate |
+| `U₃\|U₆` | `-13064` | `-8650208` | ellipse, non-degenerate |
+| `U₂\|U₄` | `+14140` | `0` | **degenerate**: crossing line pair |
+| `U₁\|U₅` | `0` | `0` | **degenerate**: parallel/repeated lines |
+
+The first two are the trap: both render as straight segments in the figure, and
+both are genuine hyperbolas. A classification predicate that got these wrong would
+still typecheck, so they belong in the sanity `example`s that `CLAUDE.md` →
+Verification point 3 requires. The full 21-pair census is 7 hyperbolas, 5 ellipses,
+5 line pairs, 4 parallel/repeated lines, and **no parabola** — so a parabola
+witness has to come from panel (3b), the indefinite piece `q = x₁x₂` on
+`(0,0),(1,1),(2,0)`, whose conjugate has the parabolic edge `¼(s₁+s₂)² = 2s₁`.
 
 # Phase 7 — Stage 2, unbounded pieces
 - [ ] extend `QuaPiece` with a recession cone (vertices plus rays)
