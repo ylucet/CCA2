@@ -28,10 +28,33 @@ vertex set, hence compact. Coefficients real. `Q` arbitrary -- indefinite and
 singular Hessians included. No continuity or consistency hypothesis on the input.
 Unbounded pieces are Phase 7 and are *not* covered.
 
+## Also done: which conics arise
+
+`Shapes.lean` answers "given a `QuaPol`, which conic arises" as a set of
+**structural theorems**. The type of a tie conic is decided by the *ranks* of the
+two branches' quadratic parts, and that holds across pieces:
+
+    vertex, vertex     disc = 0, quadratic part zero  -> a line
+    vertex, edge       disc = 0                       -> parabolic
+    edge, edge         disc = cross^2/(a1 a2) >= 0    -> NEVER an ellipse
+    interior, vertex   disc = -1/hessDet              -> elliptic iff definite
+    interior, *        unconstrained
+
+**Headline (`not_flat_of_disc_neg`): an elliptical tie conic requires an interior
+branch.** That is the [JOGO] Theorem 6 gap as a theorem. Theorem 3 of
+`../CONJ_FIELD_PROOF.md` is also proved, and needed **no** continuity hypothesis:
+its hypothesis is the algebraic factorisation `q2 - q1 = l*m`.
+
+`Rational.lean` carries a computable classifier over `ℚ` (justified by
+CONJ_FIELD_PROOF Theorem 1: edge conics stay rational) with a bridge lemma to the
+real `Quad.kind`, plus a census that reproduces `../doc/QuaConExample.md`: 7
+branches per piece and 23 after dedup (3.1), all ten curved edges of 3.3, and
+`det3 = 0` on the four adjacent pairs.
+
 ## Completed
 
 - OK Target statement agreed and written down -- `PROJECT_PLAN.md` Phase 0.
-- OK Phases 1-5 complete. Seven Lean files, ~2100 lines.
+- OK Phases 1-5 complete, plus the shape classification. Nine Lean files.
   - `Quad.lean` quadratics as coefficient vectors; `Conic.lean` `IsConic`, `disc`,
     `det3`, and the witnesses; `QuaPol.lean` the input class and `conj`;
     `Bary.lean` barycentric bookkeeping and plane geometry; `Candidates.lean` the
@@ -43,6 +66,11 @@ Unbounded pieces are Phase 7 and are *not* covered.
 ## In flight
 
 - Nothing. The tree is green, committed, and `sorry`-free.
+- **One axiom caveat:** two census counts in `Rational.lean`
+  (`census_sevenPerPiece`, `census_twentyThree`) use `native_decide` and so rest
+  on the Lean compiler, carrying an extra axiom. They are validation checks only;
+  `conj_isQuaCon` and all of `Shapes.lean` remain kernel-clean. `SORRY_LEDGER.md`
+  has the audit.
 
 ## Blocked / open questions
 
@@ -62,7 +90,7 @@ Unbounded pieces are Phase 7 and are *not* covered.
 1. Read `PROJECT_PLAN.md` Phase 0 -- it is still the specification of what was
    proved, and the deviations from it are all in `DECISIONS.md`.
 2. `lake build` to confirm green (instant from cache).
-3. Then **ask Yves which of the three extensions to take**, if any. `TODO.md`
+3. Then **ask Yves which extension to take**, if any. `TODO.md`
    lists them: Phase 7 (unbounded pieces -- the one that generalises the theorem),
    the conic normal forms (the one that makes "ellipse" a proved classification),
    or a `QuaPol` witness (the one that makes the `QuaPar`-is-too-narrow claim a

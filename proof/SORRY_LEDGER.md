@@ -23,6 +23,25 @@ The main theorem `conj_isQuaCon` is therefore proved outright, for the Stage 1
 input class (bounded pieces, `PROJECT_PLAN.md` 0.2). Phase 7, unbounded pieces,
 is a separate and not-yet-started extension; nothing below is sorried pending it.
 
+## Axiom audit
+
+Everything is `propext`, `Classical.choice`, `Quot.sound` -- **except two
+validation counts**, which use `native_decide` and therefore rest on the Lean
+compiler rather than the kernel:
+
+    QuaConProof.Census.census_sevenPerPiece     + native_decide axiom
+    QuaConProof.Census.census_twentyThree       + native_decide axiom
+
+Both are census checks in `Rational.lean`, not part of any theorem. Nothing in
+`Shapes.lean`, `QuaCon.lean` or anywhere upstream depends on them, and
+
+    #print axioms QuaConProof.conj_isQuaCon
+    [propext, Classical.choice, Quot.sound]
+
+still holds. The rest of the census -- the ten curved edges of `3.3`, the four
+adjacent-pair degeneracies, the `I1` reproduction and the parabola witness -- is
+kernel-checked by `norm_num`. See `DECISIONS.md`, 2026-08-22.
+
 ## Open
 
 _(none)_

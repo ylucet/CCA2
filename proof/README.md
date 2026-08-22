@@ -28,6 +28,11 @@ for the Stage 1 input class (bounded pieces; real coefficients; indefinite and
 singular Hessians allowed; no continuity hypothesis on the input). Unbounded
 pieces are a separate extension, Phase 7. See `CURRENT_STATE.md`.
 
+`Shapes.lean` then answers **which** conic arises. The headline is
+`not_flat_of_disc_neg`: an elliptical tie conic requires an interior branch —
+which is exactly the gap in [JOGO] Theorem 6, whose proof assumes one of the two
+compared functions is always linear.
+
 ## Layout
 
     README.md          — this file
@@ -46,6 +51,8 @@ pieces are a separate extension, Phase 7. See `CURRENT_STATE.md`.
       Candidates.lean  — the three branches, and the cells
       Selection.lean   — the selection lemma
       QuaCon.lean      — the theorem
+      Shapes.lean      — WHICH conic arises, from the ranks of the two branches
+      Rational.lean    — a computable classifier over ℚ, and the census
     lakefile.toml      — Lake project, mathlib v4.33.0
 
 ## Getting started

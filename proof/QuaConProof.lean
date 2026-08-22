@@ -5,3 +5,5 @@ import QuaConProof.Bary
 import QuaConProof.Candidates
 import QuaConProof.Selection
 import QuaConProof.QuaCon
+import QuaConProof.Shapes
+import QuaConProof.Rational

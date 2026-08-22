@@ -30,6 +30,12 @@ projects, and the right next one depends on what the result is for.
       Frank-Wolfe style attainment result, and `dom f*` becoming a proper subset
       so the fifth conjunct stops being the equality of two empty sets
       (`DECISIONS.md`, 2026-08-22). Largest of the three.
+- [ ] **Realisation.** `Shapes.lean` classifies tie conics of *branch pairs*.
+      Whether a given conic is actually an **edge** -- a cell of positive length --
+      is the regularity question the main theorem does not address. This is the
+      honest gap between "an ellipse is in the candidate list" and "f* has an
+      elliptical edge", and it is what would make the QuaPar-is-too-narrow claim
+      a theorem rather than a trace.
 - [ ] **Phase 2 remainder -- conic normal forms.** `disc` and `det3` are proved
       invariants with computed values, but there is still no theorem saying
       `disc < 0` makes a set an ellipse. Needs `Quad.rotate` and
@@ -50,6 +56,17 @@ projects, and the right next one depends on what the result is for.
 - [ ] Nothing is blocked.
 
 ## Done recently
+
+- [x] 2026-08-22 -- **`Shapes.lean`: which conic arises.** Type is decided by the
+      ranks of the two branches' quadratic parts, across pieces. Headline:
+      `not_flat_of_disc_neg`, an elliptical tie conic requires an interior branch
+      -- the [JOGO] Theorem 6 gap as a theorem. Plus Theorem 3, which needed no
+      continuity hypothesis after all.
+- [x] 2026-08-22 -- **`Rational.lean`: computable classifier over ℚ** with the
+      `kind_toQuad` bridge, and a census reproducing `doc/QuaConExample.md` 3.1
+      (7 per piece, 23 after dedup), all ten curved edges of 3.3, and the four
+      adjacent-pair degeneracies. Mostly kernel-checked; two counts use
+      `native_decide` and are audited in `SORRY_LEDGER.md`.
 
 - [x] 2026-08-22 -- **`conj_isQuaCon` PROVED.** `lake build` green, zero `sorry`,
       `#print axioms` lists only `propext`, `Classical.choice`, `Quot.sound`.

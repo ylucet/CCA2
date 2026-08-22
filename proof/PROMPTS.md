@@ -128,3 +128,22 @@ Two route changes from `PROJECT_PLAN.md` Phase 0, both in `DECISIONS.md`:
 
 The final 200-line induction compiled on the first attempt, which is a fact about
 the infrastructure being right rather than about the induction being easy.
+
+## Prompt 6 -- 2026-08-22
+
+> next match specific shapes, given a quapol, decide which conic arise. question?
+
+Answered with four questions; chosen: structural theorems as the deliverable, a
+rational classifier, both validations, seven-way `ConicKind`.
+
+The concern raised in the question -- that the adjacency theorem would need a
+continuity hypothesis `QuaPol` does not carry -- **dissolved on reading the
+source**. Theorem 3's hypothesis is algebraic (`q2 - q1 = l*m`); continuity is
+only what produces the factorisation. No hypothesis had to be added.
+
+The real finding is that **conic type is decided by rank, and degeneracy is not**.
+Type depends only on the two quadratic parts, so it is a cross-piece fact; the
+`det3` statements are same-piece. A consistency check caught the distinction:
+`doc/QuaConExample.md` 3.3 lists `I4|V3` as a genuine ellipse, which contradicted
+the same-piece `det3 = 0` theorem until the branches turned out to come from
+pieces 4 and 1.

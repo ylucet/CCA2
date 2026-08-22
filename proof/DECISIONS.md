@@ -18,6 +18,71 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 -- which conics arise: type is decided by RANK, degeneracy is not
+
+- **Question:** given a `QuaPol`, decide which conics arise.
+- **What was proved** (`QuaConProof/Shapes.lean`). The discriminant of a tie set
+  depends only on the two quadratic *parts*, and those are fixed by which kind of
+  branch each side is: vertex branches have rank 0, edge branches rank 1 and
+  positive semidefinite, interior branches rank 2. Hence, **across pieces**:
+
+  | pair | `disc` of the difference |
+  |---|---|
+  | vertex, vertex | `0`, quadratic part vanishes: a line |
+  | vertex, edge | `0`: parabolic |
+  | edge, edge | `cross(d1,d2)^2 / (a1*a2) >= 0`: **never an ellipse** |
+  | interior, vertex | `-1 / hessDet`: elliptic iff the Hessian is definite |
+  | interior, edge / interior, interior | unconstrained |
+
+- **The headline, `not_flat_of_disc_neg`:** an elliptical tie conic requires an
+  **interior branch**. That is the [JOGO] Theorem 6 gap stated as a theorem: its
+  proof assumes "when we compare two functions we always get one of them as
+  linear", which is exactly the flat-versus-flat case, and under that assumption
+  `disc_nonneg_of_flat` makes the subdivision genuinely parabolic. The assumption
+  fails at Step 3b, where non-adjacent pieces contribute two interior branches.
+- **Theorem 3 needed NO continuity hypothesis.** Its hypothesis is algebraic --
+  `q2 - q1` factors as a product of two affine forms -- and continuity across a
+  shared edge is merely what *produces* that factorisation. So `QuaPol` did not
+  have to grow a hypothesis, which had been the concern when the option was
+  offered. `det3_interiorBranch_sub_of_factorisation`.
+- **Degeneracy is NOT determined by the quadratic parts**, so those theorems are
+  same-piece-specific. Interior against a vertex branch of the *same* piece has
+  `det3 = 0`, hence a single point -- which is why `doc/QuaConExample.md` 3.3
+  finds three pairs that "touch at a single point and are not edges". A check
+  during the work caught this: 3.3 also lists `I4|V3` as a genuine ellipse, which
+  looked like a contradiction until the branches turned out to come from pieces 4
+  and 1. The doc is right and the theorem is correctly scoped.
+- **Before retrying, fix:** these are statements about *pairs of branches*, not
+  about *realised edges*. Whether a given tie conic actually appears as a cell of
+  positive length is the regularity question the main theorem does not address.
+  Do not quote these as "f* has an elliptical edge" without that step.
+- **Evidence:** `QuaConProof/Shapes.lean`; every formula symbolically verified in
+  a scratch script before being written into Lean.
+
+## 2026-08-22 -- the census: kernel-checked where possible, `native_decide` twice
+
+- **Tried:** validating the rational classifier entirely by `decide`, so that
+  every census check is kernel-checked.
+- **Why it failed:** `decide` gets stuck reducing `Rat` equality in the kernel --
+  it stops at `ctorIdx.beq` after unfolding the `DecidableEq` instances. The
+  numbers involved (`det3` around `10^12`) are not the problem; the instance
+  chain is.
+- **What replaced it:** `norm_num` with the definitions unfolded, which produces
+  an ordinary kernel proof. That covers the ten curved edges of 3.3, the four
+  adjacent-pair `det3 = 0` instances, the `I1` reproduction and the parabola
+  witness -- all `#print axioms` clean.
+- **The two exceptions**, `census_sevenPerPiece` and `census_twentyThree`, run a
+  whole `List` computation and use `native_decide`, so they carry an extra
+  `native_decide` axiom and rest on the Lean **compiler**. That is confined to
+  those two declarations; `conj_isQuaCon` and everything in `Shapes.lean` remain
+  clean, and the audit in `SORRY_LEDGER.md` lists exactly which declarations are
+  affected.
+- **Before retrying, fix:** if the two counts ever need to be kernel-checked,
+  the route is a `Finset`-free reformulation with `Decidable` instances that
+  reduce, or `decide +kernel`. Not worth it for a validation check.
+- **Evidence:** `QuaConProof/Rational.lean`; the same three counts were computed
+  independently in a scratch script in exact rational arithmetic first.
+
 ## 2026-08-22 -- Caratheodory NOT used; induction on the face plus the scalar cross product
 
 - **Tried:** the plan's S3, which routes through
