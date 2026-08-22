@@ -17,7 +17,16 @@ project proves the `QuaCon` claim rather than measuring it.
 
 ## Status
 
-Planning / scaffolding. No Lean code yet. See `CURRENT_STATE.md`.
+**Proved.** `conj_isQuaCon` is complete and `sorry`-free:
+
+    $ lake build
+    Build completed successfully.
+    $ #print axioms QuaConProof.conj_isQuaCon
+    [propext, Classical.choice, Quot.sound]
+
+for the Stage 1 input class (bounded pieces; real coefficients; indefinite and
+singular Hessians allowed; no continuity hypothesis on the input). Unbounded
+pieces are a separate extension, Phase 7. See `CURRENT_STATE.md`.
 
 ## Layout
 
@@ -29,8 +38,15 @@ Planning / scaffolding. No Lean code yet. See `CURRENT_STATE.md`.
     DECISIONS.md       — dead ends and rejected approaches, append-only
     PROMPTS.md         — prompt history and outcomes
     SORRY_LEDGER.md    — every remaining `sorry`, what it needs, who depends on it
-    QuaConProof/       — the Lean library (not created yet)
-    lakefile.toml      — Lake project (not created yet)
+    QuaConProof/       — the Lean library
+      Quad.lean        — quadratics as coefficient vectors
+      Conic.lean       — IsConic, disc, det3, and the classification witnesses
+      QuaPol.lean      — the input class and the conjugate
+      Bary.lean        — barycentric bookkeeping and plane geometry
+      Candidates.lean  — the three branches, and the cells
+      Selection.lean   — the selection lemma
+      QuaCon.lean      — the theorem
+    lakefile.toml      — Lake project, mathlib v4.33.0
 
 ## Getting started
 

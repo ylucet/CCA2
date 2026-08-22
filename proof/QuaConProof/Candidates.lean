@@ -244,6 +244,18 @@ lemma vertexBranch_mem_branches {p : QuaPiece} {v : Plane} (hv : v ∈ p.verts) 
   simp only [branches, Finset.mem_union, Finset.mem_image]
   exact Or.inl (Or.inl ⟨v, hv, rfl⟩)
 
+lemma edgeBranch_mem_branches {p : QuaPiece} {v w : Plane} (hv : v ∈ p.verts)
+    (hw : w ∈ p.verts) (hcurv : 0 < edgeCurv p.q v w) :
+    edgeBranch p.q v w ∈ p.branches := by
+  refine Finset.mem_union.2 (Or.inl (Finset.mem_union.2 (Or.inr ?_)))
+  refine Finset.mem_image.2 ⟨(v, w), ?_, rfl⟩
+  exact Finset.mem_filter.2 ⟨Finset.mem_product.2 ⟨hv, hw⟩, hcurv⟩
+
+lemma interiorBranch_mem_branches {p : QuaPiece} (h : p.q.hessDet ≠ 0) :
+    interiorBranch p.q ∈ p.branches := by
+  refine Finset.mem_union.2 (Or.inr ?_)
+  simp only [interiorPart, if_neg h, Finset.mem_singleton]
+
 end QuaPiece
 
 /-- The **candidate family** of a `QuaPol`: every branch of every piece,

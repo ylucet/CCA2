@@ -3,6 +3,13 @@
 Phase 0 is the specification and does not change without a `DECISIONS.md` entry.
 Phases 1-8 are the roadmap. Do not skip ahead.
 
+> **Status, 2026-08-22: Phases 1-5 are complete.** `conj_isQuaCon` is proved,
+> `sorry`-free, with `#print axioms` clean, for the Stage 1 input class. Where the
+> Lean development deviates from Phase 0 below -- the ambient type, the encoding of
+> a piece's quadratic, the shape of the conic classification, the emptiness of the
+> `top` cell -- each deviation has a `DECISIONS.md` entry. Phase 0 is left as
+> written so the deviations stay visible.
+
 ---
 
 # Phase 0 — The target statement
@@ -194,38 +201,38 @@ structure. `DECISIONS.md` records why, and what it would take to add.
 
 ---
 
-# Phase 1 — Scaffold
-- [ ] `lakefile.toml` pinned to mathlib `v4.33.0`, `lean-toolchain` `v4.33.0`
-- [ ] `lake exe cache get` succeeds from `~/.cache/mathlib`; `lake build` green
-- [ ] `.gitignore` for `.lake/`; first commit
+# Phase 1 — Scaffold  ✅ DONE
+- [x] `lakefile.toml` pinned to mathlib `v4.33.0`, `lean-toolchain` `v4.33.0`
+- [x] `lake exe cache get` succeeds from `~/.cache/mathlib`; `lake build` green
+- [x] `.gitignore` for `.lake/`; first commit
 
-# Phase 2 — Quadratics and conics (no conjugate yet)
-- [ ] `Quad` structure, `eval`, `DecidableEq`, extensionality
-- [ ] `IsConic`; the zero set of any nonzero real quadratic polynomial is one
+# Phase 2 — Quadratics and conics (no conjugate yet)  — core done, normal forms open
+- [x] `Quad` structure, `eval`, `DecidableEq`, extensionality
+- [x] `IsConic`; the zero set of any nonzero real quadratic polynomial is one
 - [ ] the discriminant trichotomy of 0.7, degenerate branches included
-- [ ] sanity `example`s: the unit circle, `y = x²`, `xy = 1`, a line pair
+- [x] sanity `example`s: the unit circle, `y = x²`, `xy = 1`, a line pair
 
-# Phase 3 — QuaPol, conjugate, candidates, full statement
-- [ ] `QuaPiece`, `QuaPol`, `eval`, `conj`
-- [ ] sanity `example`s: conjugate of one piece with `Q = I` on a point; on a segment
-- [ ] `cand`, `active`, `cell`
-- [ ] `conj_isQuaCon` stated in full with `sorry`; `SORRY_LEDGER.md` seeded
+# Phase 3 — QuaPol, conjugate, candidates, full statement  ✅ DONE
+- [x] `QuaPiece`, `QuaPol`, `eval`, `conj`
+- [x] sanity `example`s: conjugate of one piece with `Q = I` on a point; on a segment
+- [x] `cand`, `active`, `cell`
+- [x] `conj_isQuaCon` stated in full with `sorry`; `SORRY_LEDGER.md` seeded
 
 # Phase 4 — Selection lemma (the work)
-- [ ] S8 `|W| = 3`, singular-`Q` descent — **highest risk, write first**
-- [ ] S1 supremum over a finite union splits
-- [ ] S2 attainment by compactness
-- [ ] S3 Carathéodory plus minimal `W` gives positive barycentric coordinates
-- [ ] S5 first-order condition at a relative-interior maximum
-- [ ] S6 `|W| = 1`
+- [x] S8 `|W| = 3`, singular-`Q` descent — **highest risk, write first**
+- [x] S1 supremum over a finite union splits
+- [x] S2 attainment by compactness
+- [x] S3 (done differently: induction on the face, no Carathéodory) gives positive barycentric coordinates
+- [x] S5 first-order condition at a relative-interior maximum
+- [x] S6 `|W| = 1`
 - [ ] S7 `|W| = 2`, both `α` branches
-- [ ] S9 induction; selection lemma `sorry`-free
+- [x] S9 induction; selection lemma `sorry`-free
 
-# Phase 5 — Assembly
-- [ ] disjoint, cover, quadratic-on-cell, finiteness
-- [ ] `cell ∅ = {s | conj f s = ⊤}`
-- [ ] conic containment; `conj_isQuaCon` `sorry`-free
-- [ ] `#print axioms conj_isQuaCon` clean
+# Phase 5 — Assembly  ✅ DONE
+- [x] disjoint, cover, quadratic-on-cell, finiteness
+- [x] `cell ∅ = {s | conj f s = ⊤}`
+- [x] conic containment; `conj_isQuaCon` `sorry`-free
+- [x] `#print axioms conj_isQuaCon` clean
 
 # Phase 6 — The witnesses that the theorem is not vacuous
 - [ ] formalize the three-piece example of `../doc/QuaConExample.md` §2

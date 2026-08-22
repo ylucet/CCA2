@@ -103,3 +103,28 @@ in `DECISIONS.md`:
   identities. The first run reported a mismatch on the edge branch; it was the
   oracle's fault (a clipped grid), which is exactly the sort of thing the second,
   properly-oracled run is for.
+
+## Prompt 5 -- 2026-08-22
+
+> continue  ...  continue till end of proof
+
+**The proof was finished.** `conj_isQuaCon` is `sorry`-free with clean axioms.
+
+Order of attack, which mattered: S8 first, because it was the step most likely to
+be a dead end. Its mathematical content -- at a stationary point of a singular
+quadratic, `psi` is constant along `ker H` -- turned out to be three short lemmas
+on top of one exact identity (`psi_along_dir`). With that de-risked, S1 and S2
+followed from compactness, and the remaining work was the barycentric bookkeeping,
+which is what the ledger had predicted ("medium risk, volume not depth").
+
+Two route changes from `PROJECT_PLAN.md` Phase 0, both in `DECISIONS.md`:
+
+* **Caratheodory was not used.** Strong induction on the face, with the case split
+  driven by the scalar cross product instead of `AffineIndependent` / `Collinear`.
+  That removed a slice of mathlib API and made every case concrete.
+* **`conj_ne_top`** made `selection` unconditional, and revealed that the fifth
+  conjunct of the theorem is currently vacuous at Stage 1 -- flagged rather than
+  quietly enjoyed.
+
+The final 200-line induction compiled on the first attempt, which is a fact about
+the infrastructure being right rather than about the induction being easy.

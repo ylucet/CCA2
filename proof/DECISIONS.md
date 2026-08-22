@@ -18,6 +18,66 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 -- Caratheodory NOT used; induction on the face plus the scalar cross product
+
+- **Tried:** the plan's S3, which routes through
+  `Caratheodory.minCardFinsetOfMemConvexHull` to get a minimal *affinely
+  independent* subset carrying the maximiser, and then cases on its cardinality
+  being 1, 2 or 3.
+- **Why it was dropped:** not refuted, but two frictions showed up on contact.
+  Getting `W.card <= 3` out of `AffineIndependent` in the plane needs a
+  finrank argument, and turning card-minimality into strict positivity of the
+  barycentric weights needs the same erase-lemma that the direct induction needs
+  anyway. So Caratheodory was buying only the affine independence.
+- **What replaced it:** strong induction on `W.card` directly, with the case split
+  driven by the **scalar cross product** `cross a b = a.1*b.2 - a.2*b.1` rather
+  than by `AffineIndependent` / `Collinear`:
+  - a vanishing weight drops a vertex (`mem_convexHull_erase`) -- this is the
+    induction step, and it also means "all weights positive" may be assumed;
+  - with all weights positive, `cross (w-v) (u-v) = 0` for every `u` says the face
+    lies on a line, and then the maximiser is on that line
+    (`cross_eq_zero_of_forall`, `exists_smul_of_cross_eq_zero`) and the edge or
+    vertex branch applies;
+  - otherwise some `u` gives `cross (w-v) (u-v) != 0`, two independent first-order
+    conditions, and hence `grad q(x) = s`
+    (`eq_zero_of_dot_eq_zero_of_cross_ne_zero`).
+  No affine-space API is used anywhere, and the whole of `Bary.lean` is 282 lines.
+- **Before retrying, fix:** only if the development is generalised past two
+  dimensions, where the cross product stops being a scalar and Caratheodory
+  becomes the right tool again.
+- **Evidence:** `QuaConProof/Bary.lean`, `QuaConProof/Selection.lean`
+  (`branch_aux`). `PROJECT_PLAN.md` Phase 4's S3 line is ticked with the deviation
+  noted.
+
+## 2026-08-22 -- the proof is complete; what it does and does not say
+
+- **Tried:** nothing ruled out. This entry exists so that a later reader does not
+  over-read the result, which is the failure mode this project has been most at
+  risk of.
+- **What is proved:** `conj_isQuaCon`, `sorry`-free, `#print axioms` clean. For a
+  `QuaPol` whose pieces are convex hulls of finite vertex sets: the cells defined
+  by activity pattern are pairwise disjoint and cover the plane, `f*` is one fixed
+  quadratic on each, only finitely many are nonempty, `cell 0` is exactly where
+  `f*` is `+inf`, and every cell with two distinct active quadratics lies inside a
+  conic. Plus `active_nonempty`: at every point of the plane some candidate is
+  active, which is the substance -- `f*` really is one of finitely many explicit
+  quadratics everywhere.
+- **What it does NOT say**, all three deliberate:
+  1. **Nothing about regularity.** No dimension, no connectedness, no arcs, no
+     face-to-face CW structure. A "cell" here is an activity level set and could a
+     priori be disconnected or lower-dimensional. This was the agreed level; see
+     the 2026-08-21 entry.
+  2. **`IsConic` is containment, and the classification is by invariants.**
+     `disc` and `det3` are proved invariants with computed values; there is still
+     no theorem saying `disc < 0` makes a set an ellipse. So the theorem's
+     "lies inside a conic" is exact, but "line / parabola / ellipse / hyperbola" is
+     currently a statement about two numbers, not a proved normal form.
+  3. **Bounded pieces only.** Stage 1. And because every piece is compact, the
+     conjugate is finite everywhere, so conjunct five is currently the equality of
+     two empty sets.
+- **Before retrying, fix:** n/a. Each of the three is a `TODO.md` item.
+- **Evidence:** `SORRY_LEDGER.md`; `CURRENT_STATE.md` "Blocked / open questions".
+
 ## 2026-08-22 — Stage 1 has `dom f* = ℝ²`, so the `⊤` cell is EMPTY until Phase 7
 
 - **Tried:** nothing ruled out; this records a finding that makes one conjunct of

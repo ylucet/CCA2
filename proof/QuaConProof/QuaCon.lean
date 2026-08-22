@@ -20,10 +20,12 @@ mathematical content sits in one lemma:
 
 > `selection` : some candidate quadratic attains `f*` at every point.
 
-`selection` is now **proved**, in `Selection.lean`, from the per-piece core
-lemma `exists_branch_eq_max` — the case analysis S3–S9 for a single piece, which
-is the one remaining `sorry` in the development. `SORRY_LEDGER.md` carries it
-with its plan reference.
+`selection` is **proved**, in `Selection.lean`, from the per-piece core lemma
+`exists_branch_eq_max` — the case analysis S3-S9 for a single piece.
+
+**The development is complete.** `lake build` is green, there are no `sorry`s,
+and `#print axioms conj_isQuaCon` lists only `propext`, `Classical.choice` and
+`Quot.sound`.
 
 Note what `selection` is **not**. It is *not* `f* = max over cand f`, which is
 false: an edge branch overshoots the true supremum whenever its stationary point
@@ -35,6 +37,8 @@ construction needs and what the informal Theorem 1 actually asserts.
 
 * `cell_empty_eq` — the empty-activity cell is exactly where `f*` is `⊤`.
 * `dom_conj_eq_univ` — at Stage 1 the conjugate is finite everywhere.
+* `active_nonempty` — at every point some candidate quadratic is active. This is
+  the substance: `f*` really is one of finitely many quadratics at each point.
 * `conj_isQuaCon` — the theorem.
 -/
 
@@ -116,6 +120,16 @@ theorem cell_empty_eq (f : QuaPol) : cell f ∅ = {s : Plane | f.conj s = ⊤} :
 its domain is the whole plane and no cell carries `+∞`. -/
 theorem dom_conj_eq_univ (f : QuaPol) : {s : Plane | f.conj s ≠ ⊤} = Set.univ :=
   Set.eq_univ_of_forall fun s => conj_ne_top f s
+
+/-- **At every point of the plane some candidate quadratic is active.**
+
+The bite of the theorem, stated separately because the six conjuncts of
+`conj_isQuaCon` are each about *cells* and this one is about *points*: there is a
+finite list of quadratics, computed from the input, and at every `s` the
+conjugate equals one of them. -/
+theorem active_nonempty (f : QuaPol) (s : Plane) : (active f s).Nonempty := by
+  obtain ⟨q, hq, hqs⟩ := selection f s
+  exact ⟨q, mem_active_iff.2 ⟨hq, hqs⟩⟩
 
 /-! ### The theorem -/
 
