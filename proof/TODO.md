@@ -18,42 +18,47 @@ skill) read this section to decide whether there is more work to do.
 
 ## Next up
 
-Phase 2 — quadratics and conics. **Definitions and structure are done and green;
-the geometric classification is not.** See `DECISIONS.md`, 2026-08-22, second
-entry, for exactly where the line falls.
+**Phase 4 — the selection lemma. This is the project.** Everything else in
+`conj_isQuaCon` is proved; `selection` is the single `sorry` and the only thing
+between here and a complete theorem. `SORRY_LEDGER.md` carries the full entry.
 
-- [ ] `Quad.rotate` — precomposition with a rotation, and `disc`/`det3`
-      invariance under it. Needs `sin²+cos²=1` threaded through a coefficient
-      identity; `linear_combination` with that identity is the thing to try first
-- [ ] the normal-form theorems: `disc < 0 ∧ det3 ≠ 0 ∧ (a+c)*det3 < 0` ⇒ the zero
-      set is a translated, rotated `x²/A² + y²/B² = 1`; likewise parabola and
-      hyperbola, and the degenerate branches
-- [ ] `ConicKind` and `Quad.kind`, once the normal forms exist to give them
-      meaning — defining the predicate before the theorem would just be a
-      restatement of `disc`/`det3`
+Order matters: S8 first, because it is the step most likely to fail, and nothing
+should be built on top of it until it is known to work.
 
-Phase 3 — the statement, sorried
+- [ ] **S8** `|W| = 3`, singular Hessian: `∇q(x*) = s` and `H` singular, so `psi`
+      is constant along `ker H`; barycentric coordinates are affine in the
+      parameter, so at the largest admissible step one coordinate vanishes and the
+      maximum is also attained on a proper face. Contradicts minimality of `W`,
+      descending to `|W| ≤ 2`. Write standalone, with its own example.
+- [ ] **S2** attainment: `QuaPiece.isCompact_T` is already proved; combine with
+      `IsCompact.exists_isMaxOn` and continuity of `psi` (polynomial, so `fun_prop`)
+- [ ] **S3** minimal Carathéodory subset — `Caratheodory.minCardFinsetOfMemConvexHull`
+      and `affineIndependent_minCardFinsetOfMemConvexHull` are already in mathlib
+      and give exactly this; derive strict positivity of the barycentric coordinates
+- [ ] **S1** the supremum over the finite union of pieces splits as a finite max
+- [ ] **S5** first-order condition on the direction space of `affineSpan ℝ W`
+- [ ] **S6** `|W| = 1` → `vertexBranch`; **S7** `|W| = 2` → `edgeBranch` when
+      `0 < edgeCurv`, `vertexBranch` when it vanishes. The three `*_eval`
+      identities these need are already proved.
+- [ ] **S9** assemble by induction on `|W|`; `selection` `sorry`-free
+- [ ] then `#print axioms conj_isQuaCon` must come back clean, and
+      `SORRY_LEDGER.md` must go to zero
 
-- [ ] `QuaConProof/QuaPol.lean` — `QuaPiece`, `QuaPol`, `eval`, `conj`.
-      Pairing is `dot s x = s.1*x.1 + s.2*x.2` on `ℝ × ℝ`; no `InnerProductSpace`
-- [ ] two sanity `example`s pinning `conj` against hand computation (one piece
-      that is a single point; one piece that is a segment with `Q = I`)
-- [ ] `QuaConProof/Candidates.lean` — `cand`, `active`, `cell`
-- [ ] `QuaConProof/QuaCon.lean` — `conj_isQuaCon` stated in full, proof `sorry`
-- [ ] seed `SORRY_LEDGER.md` from that state
+**Phase 2 remainder — the conic normal forms.** Self-contained; nothing is
+blocked on it. `disc` and `det3` are currently invariants with computed values,
+not a proved geometric classification.
 
-Phase 4 — the selection lemma, highest-risk step first
+- [ ] `Quad.rotate` and `disc`/`det3` invariance under it (needs `sin²+cos²=1`
+      threaded through a coefficient identity)
+- [ ] the normal-form theorems, then `ConicKind` / `Quad.kind`
 
-- [ ] S8 `|W| = 3` singular-`Q` descent, standalone, with its own example
-- [ ] S1 supremum over a finite union splits into a finite max of suprema
-- [ ] S2 per-piece attainment by compactness of `convexHull ↑verts`
-- [ ] S3 Carathéodory + minimal `W` ⇒ strictly positive barycentric coordinates
-- [ ] S5 first-order condition at a relative-interior maximum
-- [ ] S6 `|W| = 1`; S7 `|W| = 2` both `α` branches
-- [ ] S9 strong induction on `|W|`; selection lemma `sorry`-free
+**Phase 6 — witnesses.** The five integer classification targets in
+`PROJECT_PLAN.md` Phase 6 are already in `Conic.lean`, including the parabola.
+What remains is the harder statement:
 
-Phases 5-8 are in `PROJECT_PLAN.md` and are not expanded here until Phase 4 is
-under way.
+- [ ] exhibit a concrete `QuaPol` whose conjugate genuinely has a non-degenerate
+      elliptical edge, i.e. connect `U3U6` back to an actual `QuaPol` rather than
+      carrying it as a bare coefficient vector
 
 ## Blocked
 
@@ -61,6 +66,17 @@ under way.
       not blocked by anything external.)
 
 ## Done recently
+
+- [x] 2026-08-22 — **Phase 3 complete.** `QuaPol.lean`, `Candidates.lean`,
+      `QuaCon.lean`. `conj_isQuaCon` is stated in full and proved modulo the
+      single `selection` sorry; the other five conjuncts are proved outright.
+- [x] 2026-08-22 — the three candidate branch formulas differential-tested
+      against direct optimisation before being written into Lean, then proved in
+      Lean as identities (`vertexBranch_eval`, `edgeBranch_eval`,
+      `interiorBranch_eval`), plus `psi_le_edgeBranch` for maximality along the
+      line and `gradAt_interiorPoint` for the stationarity of the interior point.
+- [x] 2026-08-22 — `QuaPol.conj_pt`: the conjugate of a one-point piece computed
+      from the definition, the main guard against a mis-stated `conj`.
 
 - [x] 2026-08-22 — **Phase 1 complete.** Lake project on mathlib `v4.33.0`,
       manifest pinned to the same revisions as `AI/lean` so `lake exe cache get`

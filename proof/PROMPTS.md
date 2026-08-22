@@ -65,3 +65,41 @@ its reason are recorded in `CLAUDE.md`).
 files. Yves pushed back: there is only one CCA2 repository. The nested repo was
 removed and `proof/` is now committed inside CCA2. `git subtree` was considered
 and rejected — see `DECISIONS.md`, 2026-08-21.
+
+## Prompt 3 — 2026-08-22
+
+> before you do, read CCA2/doc/QuaCon.svg QuaConExample.md. One source of
+> confusion is that lines are degenerate conics. The picture shows a hyperbola
+> boundary between U1|U6 and U1|U2. However, those appear to be lines. Write the
+> equation for both of those boundaries. Are they degenerate or not?
+
+Answered: both are genuine, **non-degenerate** hyperbolas. `det3` is nonzero in
+exact integer arithmetic and both are irreducible over the algebraic closure.
+They render straight because the active arc sits far out on the hyperbola where
+it hugs an asymptote — sagitta `0.13%` and `0.86%` of the chord, under one line
+width as drawn. Recorded in `DECISIONS.md` and turned into Lean sanity examples.
+
+The lasting consequence is a **specification** point, not a fact about this
+example: degeneracy is decided by `det3`, never by curvature or appearance. Both
+edges are now in `Conic.lean` as witnesses, so a classification predicate that
+confused the two notions could not pass.
+
+## Prompt 4 — 2026-08-22
+
+> go ahead and start the proof in lean  ...  do 1-4
+
+Phases 1–3 delivered: Lake project, `Quad.lean`, `Conic.lean`, `QuaPol.lean`,
+`Candidates.lean`, `QuaCon.lean`. `conj_isQuaCon` stated in full, one `sorry`.
+
+Three things were done differently from `PROJECT_PLAN.md` Phase 0, each recorded
+in `DECISIONS.md`:
+
+* the plane is `ℝ × ℝ`, not `EuclideanSpace ℝ (Fin 2)` — no inner product is used
+  anywhere, and `ring` closes the coefficient identities directly;
+* a piece's quadratic is a `Quad`, not a separate `(Q, β, γ)` — symmetry of the
+  Hessian becomes structural instead of a carried hypothesis;
+* the branch formulas were differential-tested against direct optimisation in
+  a scratch script *before* being written into Lean, and then proved in Lean as
+  identities. The first run reported a mismatch on the edge branch; it was the
+  oracle's fault (a clipped grid), which is exactly the sort of thing the second,
+  properly-oracled run is for.

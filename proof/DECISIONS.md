@@ -18,6 +18,49 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 — a piece's quadratic is a `Quad`, not a separate `(Q, β, γ)`
+
+- **Tried:** `PROJECT_PLAN.md` §0.2 as written, where `QuaPiece` carries a
+  self-adjoint operator `Q : E →L[ℝ] E` with a proof field `Q_symm`, a vector
+  `beta` and a scalar `gamma`.
+- **Why it failed:** not refuted, but it duplicates `Quad` and makes symmetry a
+  *carried hypothesis* rather than a structural fact. Reusing `Quad` — the same
+  six-coefficient record already used for the conjugate's face functions — makes
+  the Hessian `[[2a, b], [b, 2c]]` symmetric by construction, with no proof field
+  to thread through every lemma, and lets the piece side and the dual side share
+  one algebra (`Quad.eval`, `ring`).
+- **Consequence, and it is a good one:** `vertexBranch`, `edgeBranch` and
+  `interiorBranch` all map `Quad → Quad`, so the statement "the conjugate is
+  built from quadratics" is typed rather than narrated.
+- **Before retrying, fix:** only if the development ever generalises past two
+  dimensions, where a coefficient record stops being convenient. Nothing in the
+  current plan needs that.
+- **Evidence:** `QuaConProof/QuaPol.lean`, `QuaConProof/Candidates.lean`.
+
+## 2026-08-22 — the branch formulas were oracled BEFORE being written into Lean
+
+- **Tried:** writing the three candidate-branch coefficient formulas
+  (`PROJECT_PLAN.md` §0.4) straight into Lean from the algebra.
+- **Why that is not enough on its own:** a wrong formula still typechecks. The
+  kernel would then certify a true theorem about the wrong candidate family — the
+  exact "definitional risk" in `CURRENT_STATE.md`. So each formula was first
+  differential-tested in a scratch script against direct numerical optimisation of
+  `ψ(x) = ⟨s,x⟩ - q(x)` over the relevant set, on thousands of random instances.
+- **What the oracle caught:** the first edge-branch run reported a mismatch of
+  `1.1e-1`. The formula was right; the *oracle* was wrong, because its grid was
+  clipped to `t ∈ [-60, 60]` and the stationary point `t* = L/α` escapes that
+  range. Re-oracled against `ψ(t*)` directly, and separately against
+  `ψ(t) ≤ branch` for random `t`, the agreement is `5.8e-11`. The same run
+  confirmed that for `α < 0` the restriction of `ψ` to the line is unbounded above
+  in 1008 of 1008 instances, which is why `edgePairs` keeps only `0 < edgeCurv`.
+- **Before retrying, fix:** keep doing this for every formula that enters a
+  definition rather than a theorem. Definitions are where the kernel cannot help.
+  Note the failure mode observed here: a red from a hand-built oracle is at least
+  as likely to be the oracle's fault as the formula's, so diagnose before editing.
+- **Evidence:** the formulas are now Lean identities —
+  `vertexBranch_eval`, `edgeBranch_eval`, `interiorBranch_eval`,
+  `psi_le_edgeBranch`, `gradAt_interiorPoint`, all `sorry`-free.
+
 ## 2026-08-22 — the plane is `ℝ × ℝ`, not `EuclideanSpace ℝ (Fin 2)`
 
 - **Tried:** `PROJECT_PLAN.md` §0.1 as written, which fixes

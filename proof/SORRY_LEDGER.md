@@ -22,25 +22,48 @@ Every `sorry` in the Lean sources, with what it needs and what depends on it.
 
 ## Count
 
-**0 sorries.** Verified 2026-08-22:
+**1 sorry.** Verified 2026-08-22:
 
-    $ grep -rn "sorry" QuaConProof/ *.lean | grep -v "^\s*--" | wc -l
-    0
+    $ grep -rn "sorry" QuaConProof/*.lean | grep -v "^\S*:[0-9]*: *--"
+    QuaConProof/QuaCon.lean:121:  sorry          (plus two prose mentions in docstrings)
 
-    $ #print axioms  (on all eight top-level results)
-    [propext, Classical.choice, Quot.sound]     -- no sorryAx, no project axioms
+    $ #print axioms QuaConProof.conj_isQuaCon
+    [propext, sorryAx, Classical.choice, Quot.sound]
 
-This is not yet the finish line: `Quad.lean` and `Conic.lean` are complete, but
-`QuaPol.lean`, `Candidates.lean` and `QuaCon.lean` do not exist. The first
-entries appear at the end of Phase 3, when `conj_isQuaCon` is stated in full with
-its proof sorried. What is currently unproved is *unwritten*, not sorried — see
-`DECISIONS.md`, 2026-08-22, for the boundary.
+    $ #print axioms   (the other 13 top-level results)
+    [propext, Classical.choice, Quot.sound]        -- clean
+
+Exactly two declarations depend on `sorryAx`, and both do so through
+`selection` alone: `conj_isQuaCon` and `cell_empty_eq`. Everything else in the
+development — `conj_ne_bot`, `conj_pt`, all three branch identities, and the
+five structural cell theorems — is `sorry`-free.
 
 ## Open
 
-_(none yet)_
+### `QuaConProof/QuaCon.lean` — `selection`
 
-Template for an entry:
+- **Statement:** `∀ f s, f.conj s ≠ ⊤ → ∃ q ∈ cand f, (q.eval s : EReal) = f.conj s`.
+  Wherever the conjugate is finite, some candidate quadratic attains it.
+- **Needs:** the nine-step route in `PROJECT_PLAN.md` §0.6, restated in the
+  declaration's own docstring. In mathlib terms:
+  - S1 splitting the supremum over the finite union of pieces — `Finset` lattice
+    lemmas plus `iSup` manipulation;
+  - S2 attainment — `QuaPiece.isCompact_T` (already proved) with
+    `IsCompact.exists_isMaxOn`, and continuity of `psi`, which is polynomial;
+  - S3 the minimal Carathéodory subset — `Caratheodory.minCardFinsetOfMemConvexHull`
+    and `affineIndependent_minCardFinsetOfMemConvexHull` are **already in mathlib**
+    and give precisely the minimal affinely independent `W`, which was the step
+    most feared at planning time;
+  - S5–S9 the first-order condition and the case split on `|W|`, landing on
+    `vertexBranch`, `edgeBranch` and `interiorBranch`. The three
+    `*_eval` identities those cases must produce are already proved.
+- **Blocks:** `cell_empty_eq`, and through it `conj_isQuaCon`. Nothing else.
+- **Plan reference:** `PROJECT_PLAN.md` §0.6, steps S1–S9; Phase 4 of the roadmap.
+- **Risk:** **high**, concentrated in S8 (`|W| = 3` with a singular Hessian,
+  descending to a proper face along `ker H`). `TODO.md` sequences S8 first so that
+  the riskiest step is attempted before anything is built on top of it.
+
+Template for a future entry:
 
     ### `QuaConProof/File.lean` — `theorem_name`
 

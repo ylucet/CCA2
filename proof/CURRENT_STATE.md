@@ -30,13 +30,24 @@ _Last updated: 2026-08-22_
   `lake-manifest.json` was seeded from `AI/lean` so the pinned revisions match the
   local cache: `lake exe cache get` decompressed 8689 files and downloaded
   nothing. `lake build` is green with no warnings.
-- ✓ **Phase 2 core done, 0 `sorry`, axioms clean.** `QuaConProof/Quad.lean` and
-  `QuaConProof/Conic.lean`. See `TODO.md` for the three Phase 2 items that remain
-  (rotation invariance and the normal-form theorems).
+- ✓ **Phase 2 core done.** `QuaConProof/Quad.lean` and `QuaConProof/Conic.lean`.
+  See `TODO.md` for the Phase 2 items that remain (rotation invariance and the
+  normal-form theorems); they are self-contained and block nothing.
+- ✓ **Phase 3 done.** `QuaConProof/QuaPol.lean`, `Candidates.lean`, `QuaCon.lean`.
+  **`conj_isQuaCon` is stated in full and proved except for one lemma.** Five of
+  its six conjuncts are proved outright; the sixth (`cell ∅ = {f* = ⊤}`) is the
+  selection lemma.
+- ✓ The three candidate branches are defined and each is proved to be `ψ` at its
+  stationary point — kernel-checked identities, so no sign error can survive.
+  Each formula was differential-tested against direct numerical optimisation
+  *before* being written into Lean.
 
 ## In flight
 
-- Nothing mid-edit. The tree is green and committed.
+- Nothing mid-edit. The tree is green and committed, with **exactly one `sorry`**:
+  `selection` in `QuaConProof/QuaCon.lean`. `#print axioms` confirms only
+  `conj_isQuaCon` and `cell_empty_eq` depend on `sorryAx`, both through that one
+  lemma; the other 13 top-level results are clean.
 
 ## Blocked / open questions
 
@@ -54,12 +65,13 @@ _Last updated: 2026-08-22_
    entries on the Lean code — the second one says precisely what `Conic.lean`
    does and does not prove, and is the thing most likely to be over-read.
 2. `lake build` to confirm the tree is still green (should be instant from cache).
-3. Then **Phase 3**, not the rest of Phase 2. Writing `QuaPol.lean` +
-   `Candidates.lean` + the sorried `conj_isQuaCon` gets the real statement on
-   screen and is what the whole project is measured against; the conic normal
-   forms are self-contained and can follow at any time. `TODO.md` is ordered
-   Phase 2 remainder first only because it is the same subject matter — if forced
-   to choose, do Phase 3.
+3. Then **Phase 4, step S8** — the singular-Hessian descent. It is the riskiest
+   step in the project and `TODO.md` puts it first deliberately: nothing should be
+   built on top of it until it is known to work. Read `SORRY_LEDGER.md`'s
+   `selection` entry first; it lists which mathlib lemmas are expected to do the
+   work, and notes that `Caratheodory.minCardFinsetOfMemConvexHull` already
+   supplies the minimal affinely independent subset that S3 needs — the step that
+   looked most likely to sink the plan.
 
 ## Risk register
 
