@@ -18,6 +18,52 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 — the plane is `ℝ × ℝ`, not `EuclideanSpace ℝ (Fin 2)`
+
+- **Tried:** `PROJECT_PLAN.md` §0.1 as written, which fixes
+  `E := EuclideanSpace ℝ (Fin 2)` because mathlib carries an `InnerProductSpace`
+  instance on it.
+- **Why it failed:** not refuted, but the reason for it evaporated on contact.
+  Nothing in `Quad.lean` or `Conic.lean` uses an inner product at all, and the
+  conjugate needs only the pairing `⟪s, x⟫ = s.1*x.1 + s.2*x.2`, which is a
+  two-line definition on `ℝ × ℝ`. Against that, `EuclideanSpace ℝ (Fin 2)` is
+  `PiLp 2 fun _ : Fin 2 => ℝ`, so every coefficient manipulation goes through
+  `Fin 2` indexing and `PiLp` coercions, and `ring` cannot see through them.
+  `ℝ × ℝ` gives `s.1`/`s.2` directly and `ring` closes the coefficient identities
+  outright — `det3_translate`, a genuinely messy polynomial identity, is one
+  `simp only [...]; ring`.
+- **What is not lost:** `ℝ × ℝ` is a `NormedAddCommGroup` and `NormedSpace ℝ`, so
+  `convexHull`, compactness of the hull of a finite set, continuity, and
+  Carathéodory all apply unchanged — those are the mathlib facts the selection
+  lemma (§0.6) actually needs. The sup norm rather than the Euclidean norm gives
+  the same topology, and no step of the plan depends on which norm it is.
+- **Before retrying, fix:** switch only if a later phase genuinely needs
+  orthogonality (a rotation normal form for the conic trichotomy might). Even
+  then the cheaper move is a local `dot` definition plus the two-by-two rotation
+  written out, not a change of the ambient type.
+- **Evidence:** `QuaConProof/Quad.lean`, `QuaConProof/Conic.lean`; `lake build`
+  green, `#print axioms` clean on all eight top-level results, 0 `sorry`.
+
+## 2026-08-22 — first Lean code: what is proved, and what "classification" does NOT yet mean
+
+- **Tried:** nothing ruled out; this entry exists to stop a later session from
+  over-reading `Conic.lean`.
+- **What is actually proved:** `IsConic` is defined, a conic is never the whole
+  plane (`IsConic.ne_univ`, resting on `Quad.eq_zero_of_eval_eq_zero`), the
+  equality locus of two distinct coefficient vectors is a conic
+  (`isConic_eqLocus` — the lemma the main theorem consumes), and `disc`/`det3`
+  are defined, pinned against the textbook `3×3` determinant, and shown invariant
+  under translation and covariant under scaling.
+- **What is NOT proved:** the *geometric* trichotomy of `PROJECT_PLAN.md` §0.7 —
+  that `disc < 0` with `det3 ≠ 0` makes the zero set an ellipse *in the sense of a
+  normal form*, and so on. Right now `disc` and `det3` are invariants with
+  computed values, not yet a proved classification. Getting there needs a
+  rotation to diagonalise the quadratic part, which needs `sin² + cos² = 1`
+  threaded through a messy coefficient identity. That is the next real piece of
+  work in Phase 2 and it is deliberately not started.
+- **Before retrying, fix:** n/a. Sequenced, not blocked.
+- **Evidence:** `TODO.md` Phase 2, remaining items.
+
 ## 2026-08-22 — "looks straight" is not "is a line": both are decided by det3, and the figure's two suspect edges are genuine hyperbolas
 
 - **Tried:** reading the edge type off `doc/QuaCon.svg` row 3 by eye. The
@@ -32,7 +78,14 @@ Newest entries at the top.
   | edge | equation | `B^2-4AC` | `det3` | verdict |
   |---|---|---|---|---|
   | `U1\|U6` = `I3\|I5` | `2731 s1^2 - 4598 s1 s2 - 2189 s2^2 - 107420 s1 - 9988 s2 + 421996 = 0` | `+45054240` | `+260148962304` | genuine hyperbola |
-  | `U1\|U2` = `E1-2\|I5` | `5969 s1^2 + 5390 s1 s2 - 847 s2^2 + 67532 s1 - 22748 s2 - 353236 = 0` | `+49275072` | `-2474882726976` | genuine hyperbola |
+  | `U1\|U2` = `E1-2\|I5` | `5969 s1^2 + 5390 s1 s2 - 847 s2^2 + 67532 s1 - 22748 s2 - 353236 = 0` | `+49275072` | `+2474882726976` | genuine hyperbola |
+
+  (Sign convention: `det3` is cubic in the coefficients, so it flips when the
+  whole equation is multiplied by `-1`, while `disc` is quadratic and does not.
+  Only the **vanishing** of `det3` is scale-invariant, and that is all the
+  degeneracy test uses. The values above are for the equations exactly as
+  written. The one criterion that does read the sign is real-versus-empty ellipse,
+  where the scale-invariant form is `(a+c)*det3 < 0`.)
 
   Both are irreducible over `Qbar` (`sympy.factor_list(..., extension=True)`
   returns one factor), so neither is a line pair. They render straight because the

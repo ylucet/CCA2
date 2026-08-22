@@ -4,7 +4,7 @@ _Update this file at the end of every session so the next session (or a
 different machine) can regain context in one read. Read this right after
 `README.md` and `CLAUDE.md` at the start of a session._
 
-_Last updated: 2026-08-21_
+_Last updated: 2026-08-22_
 
 ## Completed
 
@@ -26,9 +26,17 @@ _Last updated: 2026-08-21_
   An unrelated empty mathlib scaffold exists at `AI/lean` (`ConicGluing`) — it is
   a template with nothing in it, and is **not** used by this project.
 
+- ✓ **Phase 1 done.** Lake project on Lean `v4.33.0` / mathlib `v4.33.0`.
+  `lake-manifest.json` was seeded from `AI/lean` so the pinned revisions match the
+  local cache: `lake exe cache get` decompressed 8689 files and downloaded
+  nothing. `lake build` is green with no warnings.
+- ✓ **Phase 2 core done, 0 `sorry`, axioms clean.** `QuaConProof/Quad.lean` and
+  `QuaConProof/Conic.lean`. See `TODO.md` for the three Phase 2 items that remain
+  (rotation invariance and the normal-form theorems).
+
 ## In flight
 
-- Nothing. No Lean code has been written yet.
+- Nothing mid-edit. The tree is green and committed.
 
 ## Blocked / open questions
 
@@ -42,12 +50,16 @@ _Last updated: 2026-08-21_
 
 ## Next session should start with
 
-1. Read `PROJECT_PLAN.md` Phase 0 in full.
-2. Phase 1 of `TODO.md` — scaffold the Lake project, confirm `lake exe cache get`
-   hits the local cache rather than rebuilding mathlib from source, get
-   `lake build` green, and commit.
-3. Then Phase 2 (`Quad.lean`, `Conic.lean`), which is completely independent of
-   the hard part and gives a green, `sorry`-free first result.
+1. Read `PROJECT_PLAN.md` Phase 0 in full, then `DECISIONS.md`'s two 2026-08-22
+   entries on the Lean code — the second one says precisely what `Conic.lean`
+   does and does not prove, and is the thing most likely to be over-read.
+2. `lake build` to confirm the tree is still green (should be instant from cache).
+3. Then **Phase 3**, not the rest of Phase 2. Writing `QuaPol.lean` +
+   `Candidates.lean` + the sorried `conj_isQuaCon` gets the real statement on
+   screen and is what the whole project is measured against; the conic normal
+   forms are self-contained and can follow at any time. `TODO.md` is ordered
+   Phase 2 remainder first only because it is the same subject matter — if forced
+   to choose, do Phase 3.
 
 ## Risk register
 
@@ -58,4 +70,11 @@ _Last updated: 2026-08-21_
 - **Definitional risk.** A wrong definition of `conj`, `QuaPol.eval` or `cand`
   gives a true theorem about the wrong object, and the kernel will not notice.
   The mitigation is the sanity `example`s required by `CLAUDE.md` → Verification,
-  point 3, and the Phase 6 ellipse witness.
+  point 3. `Conic.lean` already carries eleven of them, including the four conic
+  types, the degenerate cases, and the two edges that look straight but are
+  hyperbolas. Every numeric witness written into Lean was computed independently
+  first — the parabola one against brute-force maximisation over the triangle —
+  rather than copied from the figure it illustrates.
+- **Over-reading `Conic.lean`.** `disc` and `det3` are currently *invariants with
+  computed values*, not a proved geometric classification. Nothing yet says that
+  `disc < 0` makes a set an ellipse. `DECISIONS.md` 2026-08-22 spells this out.

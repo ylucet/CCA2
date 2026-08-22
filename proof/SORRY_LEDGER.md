@@ -22,9 +22,19 @@ Every `sorry` in the Lean sources, with what it needs and what depends on it.
 
 ## Count
 
-**0 sorries — because there is no Lean code yet.** The first entries appear at
-the end of Phase 3, when `conj_isQuaCon` is stated in full with its proof
-sorried.
+**0 sorries.** Verified 2026-08-22:
+
+    $ grep -rn "sorry" QuaConProof/ *.lean | grep -v "^\s*--" | wc -l
+    0
+
+    $ #print axioms  (on all eight top-level results)
+    [propext, Classical.choice, Quot.sound]     -- no sorryAx, no project axioms
+
+This is not yet the finish line: `Quad.lean` and `Conic.lean` are complete, but
+`QuaPol.lean`, `Candidates.lean` and `QuaCon.lean` do not exist. The first
+entries appear at the end of Phase 3, when `conj_isQuaCon` is stated in full with
+its proof sorried. What is currently unproved is *unwritten*, not sorried — see
+`DECISIONS.md`, 2026-08-22, for the boundary.
 
 ## Open
 

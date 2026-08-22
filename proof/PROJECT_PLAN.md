@@ -241,10 +241,16 @@ of `../doc/QuaCon.svg` row 3, re-derived from the primal data — `DECISIONS.md`
 | pair | `Δ = B² - 4AC` | `det₃` | must classify as |
 |---|---|---|---|
 | `U₁\|U₆` | `+45054240` | `+260148962304` | hyperbola, **non**-degenerate |
-| `U₁\|U₂` | `+49275072` | `-2474882726976` | hyperbola, **non**-degenerate |
+| `U₁\|U₂` | `+49275072` | `+2474882726976` | hyperbola, **non**-degenerate |
 | `U₃\|U₆` | `-13064` | `-8650208` | ellipse, non-degenerate |
 | `U₂\|U₄` | `+14140` | `0` | **degenerate**: crossing line pair |
+| `U₃\|U₆` (again) | `-13064` | `-8650208`, and `(a+c)·det₃ < 0` | a **real** ellipse, not an empty one |
 | `U₁\|U₅` | `0` | `0` | **degenerate**: parallel/repeated lines |
+
+`det₃` is cubic in the coefficients, so its sign depends on the overall sign
+chosen for the equation; only its **vanishing** is an invariant, and that is what
+the degeneracy test uses. The single criterion that reads a sign is real-versus-
+empty ellipse, in the scale-invariant form `(a+c)·det₃ < 0`.
 
 The first two are the trap: both render as straight segments in the figure, and
 both are genuine hyperbolas. A classification predicate that got these wrong would

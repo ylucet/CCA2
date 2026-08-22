@@ -18,25 +18,24 @@ skill) read this section to decide whether there is more work to do.
 
 ## Next up
 
-Phase 1 — scaffold
+Phase 2 — quadratics and conics. **Definitions and structure are done and green;
+the geometric classification is not.** See `DECISIONS.md`, 2026-08-22, second
+entry, for exactly where the line falls.
 
-- [ ] `lean-toolchain` = `leanprover/lean4:v4.33.0`; `lakefile.toml` requiring
-      mathlib at `rev = "v4.33.0"` (matches `~/.cache/mathlib`, so the cache hits)
-- [ ] `lake exe cache get` then `lake build` — green, from cache, no source build
-- [ ] `.gitignore` with `.lake/`; `git init` inside `proof/`; first commit
-
-Phase 2 — quadratics and conics, self-contained and independent of everything else
-
-- [ ] `QuaConProof/Quad.lean` — `Quad E` (self-adjoint `Q`, `beta`, `gamma`),
-      `eval`, `DecidableEq`, `ext`
-- [ ] `QuaConProof/Conic.lean` — `IsConic`; the zero set of a nonzero real
-      bivariate quadratic is a conic
-- [ ] discriminant trichotomy `b² - 4ac < / = / > 0`, degenerate branches named
-- [ ] sanity `example`s: unit circle, `y = x²`, `xy = 1`, a crossing line pair
+- [ ] `Quad.rotate` — precomposition with a rotation, and `disc`/`det3`
+      invariance under it. Needs `sin²+cos²=1` threaded through a coefficient
+      identity; `linear_combination` with that identity is the thing to try first
+- [ ] the normal-form theorems: `disc < 0 ∧ det3 ≠ 0 ∧ (a+c)*det3 < 0` ⇒ the zero
+      set is a translated, rotated `x²/A² + y²/B² = 1`; likewise parabola and
+      hyperbola, and the degenerate branches
+- [ ] `ConicKind` and `Quad.kind`, once the normal forms exist to give them
+      meaning — defining the predicate before the theorem would just be a
+      restatement of `disc`/`det3`
 
 Phase 3 — the statement, sorried
 
-- [ ] `QuaConProof/QuaPol.lean` — `QuaPiece`, `QuaPol`, `eval`, `conj`
+- [ ] `QuaConProof/QuaPol.lean` — `QuaPiece`, `QuaPol`, `eval`, `conj`.
+      Pairing is `dot s x = s.1*x.1 + s.2*x.2` on `ℝ × ℝ`; no `InnerProductSpace`
 - [ ] two sanity `example`s pinning `conj` against hand computation (one piece
       that is a single point; one piece that is a segment with `Q = I`)
 - [ ] `QuaConProof/Candidates.lean` — `cand`, `active`, `cell`
@@ -62,6 +61,20 @@ under way.
       not blocked by anything external.)
 
 ## Done recently
+
+- [x] 2026-08-22 — **Phase 1 complete.** Lake project on mathlib `v4.33.0`,
+      manifest pinned to the same revisions as `AI/lean` so `lake exe cache get`
+      hit the local cache (8689 files, nothing downloaded). `lake build` green.
+- [x] 2026-08-22 — **Phase 2 core complete, 0 `sorry`.** `Quad.lean` and
+      `Conic.lean`: coefficient vectors, `eval`, the everywhere-vanishing lemma,
+      translation, `IsConic`, `IsConic.ne_univ`, `isConic_eqLocus`, `disc`,
+      `det3` pinned against the `3×3` determinant, invariance under translation
+      and covariance under scaling. `#print axioms` clean on all eight top-level
+      results.
+- [x] 2026-08-22 — sanity witnesses for all four conic types plus the degenerate
+      cases, including the two edges that *look* straight and are hyperbolas, and
+      a parabola witness verified independently against brute-force maximisation
+      before being written into Lean.
 
 - [x] 2026-08-21 — target statement agreed with Yves and written down as
       `PROJECT_PLAN.md` Phase 0: full geometric subdivision, activity-pattern
