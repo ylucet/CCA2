@@ -9,9 +9,9 @@ _2026-08-23_
 
 ## State
 
-- Branch `main` @ `db7d13b` — "The convex envelope is not rational"
-- Pushed: pending — 12 commits `da2c5b9..db7d13b`, 10 of them `proof/` from
-  another session
+- Branch `main`, this session's work @ `db7d13b` — "The convex envelope is
+  not rational". A parallel `proof/` session also commits to `main`.
+- Pushed: yes — `origin/main` 2026-08-23
 - Tests (2026-08-20): fast 249/0 · normal 12/0 · slow 88/0 · verylong NOT run.
   Nothing run since — no VPN, and no `.m` file changed this session.
 - Known reds: `testMaxMultiRegion/testPCE2` — `plq_1piece`'s envelope route
