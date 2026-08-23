@@ -9,7 +9,7 @@ Nothing.
 ## State
 
 - Branch `main` @ `cee185a` — "the QuaPar question, closed"
-- Pushed: pending — 10 commits, `da2c5b9..cee185a`, awaiting confirmation
+- Pushed: yes — `da2c5b9..122bade`, 2026-08-23 (incl. 2 from the MATLAB session)
 - Verification: `lake build` green 2026-08-23 · **0 sorry** · `#print axioms
   conj_isQuaCon` = `[propext, Classical.choice, Quot.sound]`
 - Known reds: none. 12 files in `QuaConProof/`.
