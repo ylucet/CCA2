@@ -18,6 +18,43 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 -- realisation: the documents' elliptical edge has NO rational point (7-adic obstruction)
+
+- **Tried:** witnessing the elliptical edge of `../doc/QuaConExample.md` 7.5's
+  three-piece example by exhibiting a rational point on it and checking a
+  certificate. That would have turned "an ellipse is in the candidate list" into
+  "an ellipse is met" by pure computation.
+- **Why it failed, and this is a theorem not a search failure:** that ellipse,
+  `93 s1^2 + 38 s1 s2 + 39 s2^2 - 6 s1 - 482 s2 - 1003 = 0`, has **no rational
+  point at all**. Homogenised and reduced mod `49` it has no primitive zero, so
+  there is no `7`-adic point and hence no rational one. (Consistent with the tie
+  point being `(-17/62 + sqrt(612030)/186, 3/2)`, and with sympy's ternary
+  quadratic solver returning nothing, and with a brute search over denominators
+  up to 200 finding nothing.)
+- **Consequence:** realising *that* edge cannot be done by a computation. It needs
+  an intermediate-value argument -- continuity of the branches plus openness of
+  the certificate conditions -- which is a genuinely analytic proof.
+- **What replaced it:** a purpose-built example whose tie conic is a **circle
+  through the origin**, hence rationally parametrised.
+  `QuaConProof/Witness.lean`: `q1 = x1^2 + x2^2` and `q2 = 2x1^2 + 2x2^2 + 8x2 + 8`
+  on two disjoint triangles. Their interior branches differ by
+  `(s1^2 + s2^2 + 16 s2)/8`, the circle `s1^2 + (s2+8)^2 = 64`, with
+  `disc = -1/16` and `det3 = -1/2`: a non-degenerate ellipse. The slope-`1/n`
+  parametrisation gives `s_n = (-16n/(n^2+1), -16/(n^2+1))`, and for `n >= 12`
+  both maximisers lie genuinely inside their own pieces.
+- **Result:** `ellipse_realised` -- infinitely many points of the plane have two
+  interior branches simultaneously active, and all of them lie on one
+  non-degenerate ellipse. Both branches are *attained*, not overshooting.
+- **What is still NOT claimed:** that a single `cell` is infinite. The set proved
+  infinite is `{s | both active}`, which is a union of cells; the activity pattern
+  could in principle differ between the witnesses. Proving one cell is an arc
+  still needs the connectedness the main theorem does not address.
+- **Before retrying, fix:** to realise the documents' own example, do the IVT
+  argument. To strengthen this one to a single arc, prove the activity set is
+  locally constant.
+- **Evidence:** `QuaConProof/Witness.lean`, `#print axioms` clean; the obstruction
+  and the construction were both checked in scratch scripts first.
+
 ## 2026-08-22 -- which conics arise: type is decided by RANK, degeneracy is not
 
 - **Question:** given a `QuaPol`, decide which conics arise.

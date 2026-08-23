@@ -51,10 +51,27 @@ real `Quad.kind`, plus a census that reproduces `../doc/QuaConExample.md`: 7
 branches per piece and 23 after dedup (3.1), all ten curved edges of 3.3, and
 `det3 = 0` on the four adjacent pairs.
 
+## Also done: realisation
+
+`Realization.lean` gives the certificate machinery for pinning `f*` at a point,
+and `Witness.lean` uses it for **`ellipse_realised`**: an explicit two-piece
+`QuaPol` with **infinitely many** points where two interior branches are both
+active, all lying on **one non-degenerate ellipse**, and with both maximisers
+genuinely inside their own pieces (so both branches are attained, not
+overshooting).
+
+The documents' own elliptical edge could not be used: that conic has **no
+rational point at all**, by a 7-adic obstruction, so no computational certificate
+exists for it. The witness is a purpose-built example whose tie conic is a circle
+through the origin, hence rationally parametrised.
+
+Still not claimed: that a **single cell** is infinite. The set proved infinite is
+a union of cells. See `DECISIONS.md`, 2026-08-22.
+
 ## Completed
 
 - OK Target statement agreed and written down -- `PROJECT_PLAN.md` Phase 0.
-- OK Phases 1-5 complete, plus the shape classification. Nine Lean files.
+- OK Phases 1-5 complete, plus shape classification and realisation. Eleven Lean files.
   - `Quad.lean` quadratics as coefficient vectors; `Conic.lean` `IsConic`, `disc`,
     `det3`, and the witnesses; `QuaPol.lean` the input class and `conj`;
     `Bary.lean` barycentric bookkeeping and plane geometry; `Candidates.lean` the

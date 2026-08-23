@@ -30,12 +30,13 @@ projects, and the right next one depends on what the result is for.
       Frank-Wolfe style attainment result, and `dom f*` becoming a proper subset
       so the fifth conjunct stops being the equality of two empty sets
       (`DECISIONS.md`, 2026-08-22). Largest of the three.
-- [ ] **Realisation.** `Shapes.lean` classifies tie conics of *branch pairs*.
-      Whether a given conic is actually an **edge** -- a cell of positive length --
-      is the regularity question the main theorem does not address. This is the
-      honest gap between "an ellipse is in the candidate list" and "f* has an
-      elliptical edge", and it is what would make the QuaPar-is-too-narrow claim
-      a theorem rather than a trace.
+- [ ] **Realisation, the remaining half.** `Witness.lean` proves infinitely many
+      points have two interior branches active, all on one non-degenerate ellipse.
+      What is still open is that a **single cell** is infinite (the set proved
+      infinite is a union of cells), which needs the activity pattern to be
+      locally constant. Separately, realising the *documents'* elliptical edge
+      cannot be done by computation at all -- that conic has no rational point,
+      by a 7-adic obstruction -- so it needs an intermediate-value argument.
 - [ ] **Phase 2 remainder -- conic normal forms.** `disc` and `det3` are proved
       invariants with computed values, but there is still no theorem saying
       `disc < 0` makes a set an ellipse. Needs `Quad.rotate` and
@@ -56,6 +57,16 @@ projects, and the right next one depends on what the result is for.
 - [ ] Nothing is blocked.
 
 ## Done recently
+
+- [x] 2026-08-22 -- **`Realization.lean`**: the certificate machinery. `le_conj`,
+      `conj_le` (which needs attainment, so `exists_maximiser` earns its keep),
+      and for convex pieces `psi_le_interiorBranch` -- the interior branch bounds
+      its piece *everywhere*, with no side condition.
+- [x] 2026-08-22 -- **`Witness.lean`: `ellipse_realised`.** An explicit two-piece
+      `QuaPol` with infinitely many points where two interior branches are both
+      active, all on one non-degenerate ellipse, with both maximisers genuinely
+      inside their pieces. Needed a purpose-built example: the documents' own
+      elliptical edge has **no rational point** (7-adic obstruction).
 
 - [x] 2026-08-22 -- **`Shapes.lean`: which conic arises.** Type is decided by the
       ranks of the two branches' quadratic parts, across pieces. Headline:

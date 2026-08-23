@@ -33,6 +33,10 @@ pieces are a separate extension, Phase 7. See `CURRENT_STATE.md`.
 which is exactly the gap in [JOGO] Theorem 6, whose proof assumes one of the two
 compared functions is always linear.
 
+`Witness.lean` then closes the loop: an explicit two-piece `QuaPol` with
+**infinitely many** points where two interior branches are simultaneously active,
+all on **one non-degenerate ellipse**.
+
 ## Layout
 
     README.md          — this file
@@ -53,6 +57,8 @@ compared functions is always linear.
       QuaCon.lean      — the theorem
       Shapes.lean      — WHICH conic arises, from the ranks of the two branches
       Rational.lean    — a computable classifier over ℚ, and the census
+      Realization.lean — certificates pinning f* at a point
+      Witness.lean     — a realised, non-degenerate elliptical edge
     lakefile.toml      — Lake project, mathlib v4.33.0
 
 ## Getting started

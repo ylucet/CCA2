@@ -147,3 +147,31 @@ Type depends only on the two quadratic parts, so it is a cross-piece fact; the
 `doc/QuaConExample.md` 3.3 lists `I4|V3` as a genuine ellipse, which contradicted
 the same-piece `det3 = 0` theorem until the branches turned out to come from
 pieces 4 and 1.
+
+## Prompt 7 -- 2026-08-22
+
+> clarify: is the proof tackling any quapol function with rational coefficients
+> or just 1 example? are all cases considered?
+
+Answered: `conj_isQuaCon (f : QuaPol)` has one binder and no hypotheses, over
+REAL coefficients; only the census is a single example. The question exposed a
+real weakness though -- the census's ellipse and hyperbola witnesses were
+*transcribed* coefficient vectors, so they tested the classifier but not the
+pipeline. Now derived from the primal `(Q_k, beta_k)` data.
+
+## Prompt 8 -- 2026-08-22
+
+> continue
+
+Closed the realisation gap that the previous answer had named as the top item.
+
+The documents' own elliptical edge turned out to be **unusable** for a
+computational witness: that conic has no rational point at all, which is a
+theorem (no primitive zero mod 49, a 7-adic obstruction) rather than a failed
+search. So the witness is a purpose-built example whose tie conic is a circle
+through the origin and therefore rationally parametrised.
+
+`ellipse_realised`: infinitely many points, two interior branches active at each,
+all on one non-degenerate ellipse, both maximisers genuinely inside their pieces.
+What is still open -- that a single *cell* is infinite -- is recorded rather than
+glossed.
