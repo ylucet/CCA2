@@ -107,3 +107,10 @@ Before attacking a lemma that looks like one that has been attacked before, skim
 
 End: update `CURRENT_STATE.md`, `TODO.md` and `SORRY_LEDGER.md`, log the session
 in `PROMPTS.md`, and write a `DECISIONS.md` entry for anything ruled out.
+
+## Session Handoff
+
+This project keeps its own, separate from CCA2's at `../.claude/`, which
+belongs to the MATLAB work.
+
+@.claude/SESSION_HANDOFF.md
