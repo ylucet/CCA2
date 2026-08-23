@@ -51,6 +51,18 @@ real `Quad.kind`, plus a census that reproduces `../doc/QuaConExample.md`: 7
 branches per piece and 23 after dedup (3.1), all ten curved edges of 3.3, and
 `det3 = 0` on the four adjacent pairs.
 
+## The QuaPar question is closed
+
+**`exists_not_hasParabolicEdges`**: there is a `QuaPol` whose conjugate does not
+admit a parabolic subdivision, so no `QuaPar` can store it. The offending edge is
+a non-degenerate **ellipse** (`exists_elliptical_edge`), met at infinitely many
+points -- `IsEdgePair` requires infinitude precisely so the refutation cannot be
+answered with "that is only a tangency".
+
+What [JOGO] Theorem 6's argument *does* establish is isolated as
+`disc_eq_zero_of_vertexBranch_flat`: a vertex branch against any flat branch is
+parabolic. `QuaPar.lean`'s docstring has the complete legality table.
+
 ## Also done: realisation
 
 `Realization.lean` gives the certificate machinery for pinning `f*` at a point,
@@ -71,7 +83,8 @@ a union of cells. See `DECISIONS.md`, 2026-08-22.
 ## Completed
 
 - OK Target statement agreed and written down -- `PROJECT_PLAN.md` Phase 0.
-- OK Phases 1-5 complete, plus shape classification and realisation. Eleven Lean files.
+- OK Phases 1-5 complete, plus shape classification, realisation and the
+  QuaPar refutation. Twelve Lean files.
   - `Quad.lean` quadratics as coefficient vectors; `Conic.lean` `IsConic`, `disc`,
     `det3`, and the witnesses; `QuaPol.lean` the input class and `conj`;
     `Bary.lean` barycentric bookkeeping and plane geometry; `Candidates.lean` the

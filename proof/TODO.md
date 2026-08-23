@@ -43,11 +43,8 @@ projects, and the right next one depends on what the result is for.
       `sin^2+cos^2 = 1` threaded through a coefficient identity. Self-contained,
       and the only thing that would let the write-up say "ellipse" as a *proved*
       classification rather than as a discriminant sign.
-- [ ] **Phase 6 -- a `QuaPol` witness.** `Conic.lean` carries the five integer
-      classification targets including both traps and the parabola, but as bare
-      coefficient vectors. Connecting `U3U6` back to an actual `QuaPol` whose
-      conjugate has that edge would make the "`QuaPar` is too narrow" claim a
-      theorem about the pipeline rather than about a hand-copied conic.
+- [x] ~~**Phase 6 -- a `QuaPol` witness.**~~ Done: `QuaPar.lean`,
+      `exists_not_hasParabolicEdges`.
 - [ ] **Phase 8 -- write-up.** `PROOF_NOTES.md` mapping each Lean lemma to its
       counterpart in `../CONJ_FIELD_PROOF.md`; then decide with Yves whether this
       becomes a paper or a note inside CCA2.
@@ -57,6 +54,13 @@ projects, and the right next one depends on what the result is for.
 - [ ] Nothing is blocked.
 
 ## Done recently
+
+- [x] 2026-08-22 -- **`QuaPar.lean`: the question the project exists for, closed.**
+      `exists_not_hasParabolicEdges` -- the conjugate's subdivision need not be
+      parabolic, so no `QuaPar` can store it. `IsEdgePair` requires infinitely
+      many common points so the refutation cannot be dismissed as a tangency.
+      `disc_eq_zero_of_vertexBranch_flat` isolates what [JOGO]'s argument does
+      establish, and the module docstring carries the complete legality table.
 
 - [x] 2026-08-22 -- **`Realization.lean`**: the certificate machinery. `le_conj`,
       `conj_le` (which needs attainment, so `exists_maximiser` earns its keep),

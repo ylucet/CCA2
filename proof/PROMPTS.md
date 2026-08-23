@@ -175,3 +175,24 @@ through the origin and therefore rationally parametrised.
 all on one non-degenerate ellipse, both maximisers genuinely inside their pieces.
 What is still open -- that a single *cell* is infinite -- is recorded rather than
 glossed.
+
+## Prompt 9 -- 2026-08-22
+
+> what's next?  ...  continue
+
+Did the recommended item: the `QuaPar` refutation as one named theorem,
+`QuaConProof/QuaPar.lean`.
+
+Two things came out sharper than expected while writing it.
+
+* **Vertex against interior is NEVER parabolic** -- `disc = -1/hessDet`. So a
+  single convex piece already produces a non-parabolic tie conic, with no need
+  for two interior branches. But by `det3_interiorBranch_sub_vertexBranch_self`
+  a same-piece pair of that kind is degenerate, hence a single point, and a
+  critic could fairly say a point is not an edge. That is why `IsEdgePair`
+  requires **infinitely many** common points: it makes the refutation
+  unanswerable in that way, at the cost of needing `Witness.ellipse_realised`.
+* The sound core of [JOGO] Theorem 6 is exactly
+  `disc_eq_zero_of_vertexBranch_flat`: a vertex branch against any flat branch.
+  Stating what the argument *does* prove alongside what it does not seemed worth
+  more than the refutation alone.

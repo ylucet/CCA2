@@ -18,6 +18,32 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-22 -- the QuaPar question, closed: the subdivision need NOT be parabolic
+
+- **Question:** CCA2's `QuaPar` requires `b^2 - 4ac = 0` of every edge conic, and
+  [JOGO] Theorem 6 asserts the conjugate always admits such a subdivision. Does it?
+- **Answer: no.** `exists_not_hasParabolicEdges`. For the two-piece `QuaPol` of
+  `Witness.lean`, two interior branches are simultaneously active at infinitely
+  many points and their tie conic is a non-degenerate ellipse, `disc = -1/16`.
+- **`IsEdgePair` demands INFINITELY many common points**, deliberately. A weaker
+  definition would have been refuted more cheaply but unfairly: a *same-piece*
+  interior-versus-vertex pair always has `disc = -1/hessDet != 0` yet is a
+  degenerate conic, i.e. a single point, and a critic could rightly say a point is
+  not an edge. `../doc/QuaConExample.md` 3.3 records exactly three such tangencies.
+  Requiring infinitude rules them out, so the refutation cannot be answered that
+  way.
+- **What [JOGO]'s argument DOES establish**, isolated as
+  `disc_eq_zero_of_vertexBranch_flat`: a vertex branch against any flat branch --
+  vertex or edge -- has `disc = 0`. That is what "when we compare two functions we
+  always get one of them as linear" delivers, and within that case the conclusion
+  is correct. The complete legality table is in `QuaPar.lean`'s module docstring;
+  the two failures are vertex-versus-interior (never parabolic) and interior-
+  versus-interior (unconstrained, and the one that gives a genuine ellipse).
+- **Before retrying, fix:** n/a. The remaining sharpening would be to show a
+  single *cell* is infinite rather than the union of cells that `IsEdgePair` uses;
+  that needs the activity pattern to be locally constant and is in `TODO.md`.
+- **Evidence:** `QuaConProof/QuaPar.lean`, `#print axioms` clean.
+
 ## 2026-08-22 -- realisation: the documents' elliptical edge has NO rational point (7-adic obstruction)
 
 - **Tried:** witnessing the elliptical edge of `../doc/QuaConExample.md` 7.5's

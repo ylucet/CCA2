@@ -35,7 +35,10 @@ compared functions is always linear.
 
 `Witness.lean` then closes the loop: an explicit two-piece `QuaPol` with
 **infinitely many** points where two interior branches are simultaneously active,
-all on **one non-degenerate ellipse**.
+all on **one non-degenerate ellipse**; and `QuaPar.lean` turns that into
+`exists_not_hasParabolicEdges` — **the conjugate's subdivision need not be
+parabolic**, so no `QuaPar` can store it. That is the question the project
+exists to answer.
 
 ## Layout
 
@@ -59,6 +62,7 @@ all on **one non-degenerate ellipse**.
       Rational.lean    — a computable classifier over ℚ, and the census
       Realization.lean — certificates pinning f* at a point
       Witness.lean     — a realised, non-degenerate elliptical edge
+      QuaPar.lean      — the refutation: the subdivision need not be parabolic
     lakefile.toml      — Lake project, mathlib v4.33.0
 
 ## Getting started

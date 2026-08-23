@@ -8,4 +8,5 @@ import QuaConProof.QuaCon
 import QuaConProof.Shapes
 import QuaConProof.Realization
 import QuaConProof.Witness
+import QuaConProof.QuaPar
 import QuaConProof.Rational
