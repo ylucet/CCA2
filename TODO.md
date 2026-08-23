@@ -82,6 +82,47 @@ side is a valid subgradient, so separation stays correct but an Ipopt-based heur
 Building the mesh is minutes to an hour, so it must be once-per-constraint preprocessing, never
 reached from a node.
 
+## 2026-08-23 — RETURN TYPES: `QuaCon` for `conj`, `AlgCon` for `biconj`
+
+Why the current types cannot hold the answers is `DECISIONS.md` 2026-08-23 (envelope face type) and
+2026-08-21 (`f*`'s elliptical edge). Both axes of the `RatPar` lattice grow by one level ABOVE the
+present top, so nothing existing changes behaviour:
+
+      subdivision:   Pol  <  Par  <  Con        `Con` drops b^2 - 4ac = 0
+      function:      Qua  <  Rat  <  Alg        `Alg` = root of a rational quartic in z
+
+- [ ] **`Con` first** — a new trait plus one relaxation in `RatPar`'s `set.Ec` validator. Cheapest
+      item here, and the elliptical edge already forces it. `QuaPar` becomes a real specialization
+      instead of a type that cannot hold the values `conj` produces.
+
+- [ ] **`QuaCon` = the return of `conj`.** Rational faces `f` and edge conics `Ec` as int64
+      `[a b c d e f | den]`, primitive and sign-normalized so equality is bitwise (the
+      `4 - 2 sqrt 2`-as-two-doubles failure is what canonical integers prevent). Vertices become
+      NAMES: `Vname(nv,3) = [edgeA edgeB rootIdx]`, the point where two edge conics meet, `rootIdx`
+      canonical among the real intersections. `Vx` (double) and `Vbox` (rational isolating box) are
+      CACHES — rebuildable, deleting them changes runtime only. This is Row 7; it is the expensive
+      item, because `V`, `eval`, `createP`, `orderEdges`, plotting and every vertex-naming test read
+      coordinates today. Do it on `QuaCon` alone; the four legacy types keep coordinate `V`.
+
+- [ ] **`AlgCon` = the return of `biconj`, stored as a DECORATION of the `QuaCon`, not standalone.**
+      Forced, not stylistic: an affine cell is `<p,x> - f*(p)` with `p` a dual vertex of degree <= 4,
+      so its coefficients are irrational unless the cell NAMES the dual vertex. Payload:
+      `src` (the `QuaCon`), `fkind` in {QUAD, RAT, RULED, AFFINE}, `fref` (dual cell pointer plus
+      which adjacent face plays `i`), `fdeg` in {1,2,4}, `froot`; and `Ekind` in {CONIC, RULING}
+      because the extreme rulings join two degree-<=4 points and their supporting line is rational
+      only over `Q(p)`. `f`/`den` stay as caches for the QUAD and RAT faces.
+
+- [ ] **`RatPol.m`'s header is now wrong** — "quadratic over linear on a polyhedral subdivision,
+      proven not to need a square root" holds for ONE piece. Fix the comment when `AlgCon` lands;
+      `RatPol` becomes `fkind = RAT, fdeg = 1`.
+
+Evaluation stays pure double: locate the cell (uniform bucket + last-cell cache, the measured
+choice), then dispatch on `fdeg` — coefficients, one square root, or one quartic. `grad f** = s` is
+free and the Hessian is the rank-one closed form. The degree-<=4 exact kernel is a BUILD-time service
+behind the interval filter and never reaches `eval` or SCIP.
+
+---
+
 ## 2026-08-13 -- the far-field defect, worked steps 1-6 of the plan
 
 **Where it stands (updated 2026-08-13, end of the second pass).** `maxQuaParTest` **25 pass / 1 fail**; fast bucket 200 pass / 1 fail. The one red is `arcVsArcRefusesAnUnboundedTwoArcSplit` (first item below). `sweepMaxQuaParCurvedSplit(20260802,200)` went 30 -> 59 assembled of 142 sampled, with 0 of 1031 result vertices, 571 midpoints and 3540 interior points wrong. What the whole defect turned out to be is one sentence, and it is recorded in `SUPPORT_MATRIX.md` 4.1: **a curved edge is a bounded ARC and its conic is not**, so the point-location rule admits far-away points on a parabola's concave side; `QuaPar.chordCuts` derives the missing constraint. Original note follows.

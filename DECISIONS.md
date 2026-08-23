@@ -25,6 +25,77 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-23 — the BICONJUGATE's face type is NOT rational: degree 1, 2 or 4; and `f**` is NOT C1
+
+Three questions closed on the envelope side. `CONJ_FIELD_PROOF.md` §5.1 had computed ONE degree-4
+ruled cell and left the general face type open; `RatPol.m`'s header still claims quadratic-over-linear
+on a polyhedral subdivision, citing [COAP] Step 4 and [JOGO] Prop. 1.
+
+**The ruled-cell face is ALGEBRAIC of degree <= 4, not rational.** On a 2-cell of `f**` coming from a
+1-cell of `f*`, `f**(x) = <s,x> - f*(s)` with `s` solving TWO CONICS: the arc `C(s) = g_i - g_j = 0`
+(fixed, rational) and the incidence
+
+      Delta(s;x) = det[ x - grad g_i(s) ,  grad g_j(s) - grad g_i(s) ] = 0
+
+whose coefficients are AFFINE in `x` (and which is symmetric in `i,j`: the two versions differ by
+`det[u,u] = 0`). So `deg_{Q(x)}(z)` divides 4; and when the Galois group of the four intersections is
+`S4` or `A4`, the only subgroups containing a point stabiliser are the stabiliser and the whole group,
+so **degree 2 is impossible generically — it is 4 or 1**. Implicit form `Psi(x1,x2,z)`: degree 4 in
+`z`, total degree <= 8 (Macaulay count on three ternary quadrics). Do NOT store `Psi`; it is far larger
+than the parametrisation, can pick up extraneous factors, and discards the root selection.
+
+`RatPol` is the case `H_i = 0` AND `H_j` rank 1 — a vertex branch against an edge branch, i.e. ONE
+piece. There `Delta` degenerates to a LINE lying along the parabola's axis and meets the arc ONCE,
+which is why the single-piece answer is rational and not a square root.
+
+**Degree 2 IS reachable, and from two ADJACENT pieces.** Verified instance, integer data:
+
+      f = x^2 - y^2  on T1 = [-1,1]x[0,3]        f = x^2 + y^2  on T2 = [-4,4]x[-3,0]
+      continuous: both equal x^2 on the shared edge [-1,1]x{0}
+
+`Q1 = diag(2,-2)` is indefinite, so `T1` has no interior branch. `f*` has a genuine edge where `T1`'s
+VERTEX branch at `v = (1,3)` (`f(v) = -8`, rank 0) meets `T2`'s INTERIOR branch `|s|^2/4` (rank 2), on
+the circle `(s1-2)^2 + (s2-6)^2 = 72` — central, non-degenerate. On the ruled cell
+
+      f**(x) = 2x1 + 6x2 - 28 + 6 sqrt(2) sqrt( (x1-1)^2 + (x2-3)^2 )
+      Psi    = (z - 2x1 - 6x2 + 28)^2 - 72[ (x1-1)^2 + (x2-3)^2 ]        degree 2 in z, irreducible
+
+Checked against `sup_s <x,s> - f*(s)` at 9 points of the cell: max error `3.6e-15`; on the arc both
+pieces attain `f*` to the last digit against a brute-force grid; `grad f** = s` exactly; the rank-one
+Hessian formula below matches the analytic Hessian to `1.3e-15` at 12 points.
+
+**Theorem 3 does NOT forbid this.** Its identity carries `det Q_i det Q_j` and is about the two
+INTERIOR branches of an adjacent pair. A vertex-branch/interior-branch pair is outside its scope, so
+the adjacency degeneracy never reaches it. Consequence: degree-2 faces are cheap — two adjacent pieces
+— while degree-4 faces still need non-adjacent pieces.
+
+**`f**` is NOT C1, and the gradient does NOT extend across the kink.** `|x1| + x2^2` is a legal convex
+`QuaPol`: `f* = s2^2/4` on the strip `|s1| <= 1`, ONE 2-cell whose Hessian `diag(0,1/2)` is RANK 1, so
+its image under `grad` is the LINE `x1 = 0` and `d f**(0,x2) = [-1,1] x {2x2}`. The kinks of `f**` are
+exactly the images of the RANK-DEFICIENT dual faces — rank 1 gives a curve, rank 0 a point. That set is
+lower-dimensional, which does NOT imply the gradient is continuous across it; an earlier claim in this
+session that it did was wrong. The same example's two half-planes come from BOUNDARY edges of
+`dom f*`, whose rulings are RAYS rather than segments; the value there is quadratic.
+
+**The parametrisation, which is what should be stored.** With `g_k = 1/2 s'H_k s + a_k's + c_k`,
+`H(lam) = (1-lam)H_i + lam H_j` and likewise `a, c`:
+
+      x(s,lam) = (1-lam) grad g_i(s) + lam grad g_j(s) = grad g_lam(s)
+      z(s,lam) = <s,x> - f*(s) = 1/2 s'H(lam)s - c(lam)          (g_i = g_j on the arc)
+      grad f**(x) = s          Hess f**(x) = (Ju)(Ju)' / ( u' adj H(lam) u ),  u = grad g_j - grad g_i
+
+Rank one with kernel `u`, PSD automatically (`H(lam)` is a convex combination of PSD matrices and the
+2x2 adjugate of a PSD matrix is PSD), blowing up only where rulings converge — the corners of `f**`.
+Plotting needs only the FORWARD map: sweep `s` along the arc and `lam` across `[0,1]`; no root-finding.
+
+**Consequence for the return type.** `RatPol` stops being `biconj`'s return type and becomes the
+degenerate single-piece case. Structure proposal: `TODO.md`, the `QuaCon` / `AlgCon` section.
+
+Derived and checked this session with an independent numeric oracle; nothing was run in MATLAB (no
+VPN). Both instances above are fully specified, so they re-check in MATLAB directly.
+
+---
+
 ## 2026-08-20 (evaluation) — MEASURED: a mesh conjugate is competitive as a SCIP nonlinear constraint, and the only thing that ruins it is linear scanning
 
 The Row 7 decision (H-form plus filtered predicates) was about to be taken with no number for the
