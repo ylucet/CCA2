@@ -304,6 +304,43 @@ theorem census_adjacentPairsCrossingLines :
     norm_num [RatQuad.kind, RatQuad.disc, RatQuad.det3, ratInteriorBranch,
       RatQuad.hessDet, RatQuad.ext_iff, q1, q2, q3, q4, q5]
 
+/-! #### Check 4b — the ellipse and hyperbola, DERIVED rather than transcribed
+
+Check 3 transcribes §3.3's published coefficient vectors and classifies them.
+That checks the classifier, but not the pipeline: the coefficients were copied in.
+These three instead compute the tie conic **from the primal data
+`(Qₖ, βₖ, γₖ)`** and classify the result, so they establish that these particular
+pieces really do produce an ellipse and a hyperbola.
+
+The discriminants come out `-71/2254`, `-2/77` and `+265/42504`, matching
+`../CONJ_FIELD_PROOF.md` §7.4b exactly.
+
+Pieces 1 and 3 are **non-adjacent** (piece 2 separates them), and both Hessians
+are positive definite, so both branches are interior: this is precisely the
+configuration `not_flat_of_disc_neg` says an ellipse requires, and precisely the
+one [JOGO] Theorem 6's proof does not cover. -/
+
+theorem census_ellipse_from_pieces_1_3 :
+    RatQuad.kind (ratInteriorBranch q1 - ratInteriorBranch q3) = .ellipse := by
+  norm_num [RatQuad.kind, RatQuad.disc, RatQuad.det3, ratInteriorBranch,
+    RatQuad.hessDet, RatQuad.ext_iff, q1, q3]
+
+theorem census_ellipse_from_pieces_1_5 :
+    RatQuad.kind (ratInteriorBranch q1 - ratInteriorBranch q5) = .ellipse := by
+  norm_num [RatQuad.kind, RatQuad.disc, RatQuad.det3, ratInteriorBranch,
+    RatQuad.hessDet, RatQuad.ext_iff, q1, q5]
+
+theorem census_hyperbola_from_pieces_3_5 :
+    RatQuad.kind (ratInteriorBranch q3 - ratInteriorBranch q5) = .hyperbola := by
+  norm_num [RatQuad.kind, RatQuad.disc, RatQuad.det3, ratInteriorBranch,
+    RatQuad.hessDet, RatQuad.ext_iff, q3, q5]
+
+/-- Both Hessians of pieces 1 and 3 are positive definite, so both branches are
+genuinely interior branches and `not_flat_of_disc_neg` is not vacuous here. -/
+theorem census_pieces_1_3_positiveDefinite :
+    0 < q1.hessDet ∧ 0 < q1.a ∧ 0 < q3.hessDet ∧ 0 < q3.a := by
+  norm_num [RatQuad.hessDet, q1, q3]
+
 /-! #### Check 5 — the parabola witness of panel (3b)
 
 `q = x₁x₂` on `(0,0), (1,1), (2,0)` — an indefinite piece. Its edge branch along
