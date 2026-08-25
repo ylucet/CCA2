@@ -1,6 +1,6 @@
 # Session Handoff
 
-_2026-08-23_
+_2026-08-24_
 
 ## Blocked
 
@@ -8,28 +8,41 @@ Nothing.
 
 ## State
 
-- Branch `main` @ `cee185a` — "the QuaPar question, closed"
-- Pushed: yes — `da2c5b9..122bade`, 2026-08-23 (incl. 2 from the MATLAB session)
-- Verification: `lake build` green 2026-08-23 · **0 sorry** · `#print axioms
-  conj_isQuaCon` = `[propext, Classical.choice, Quot.sound]`
-- Known reds: none. 12 files in `QuaConProof/`.
+- Branch `main` @ `f807af0` — "Phase 7 done: Frank-Wolfe, and conj_isQuaCon
+  loses its boundedness hypothesis"
+- Pushed: **no** — four commits ahead of `origin/main`, needs `git push`
+- Verification: `lake build` green 2026-08-24, no warnings · **0 sorry** ·
+  `#print axioms conj_isQuaCon` = `[propext, Classical.choice, Quot.sound]`
+- Known reds: none. 13 files in `QuaConProof/`.
 - Two `native_decide` counts in `Rational.lean` carry an extra axiom — audited
   in `SORRY_LEDGER.md`, nothing upstream depends on them.
 
+## What changed this session
+
+**Phase 7 is done.** `conj_isQuaCon` no longer assumes bounded pieces.
+`QuaPiece` carries `rays : Finset Plane`, `T = convexHull verts + coneHull rays`;
+`IsDirRep` in `Bary.lean` runs one induction over vertex and ray supports at
+once; `FrankWolfe.lean` proves attainment for a quadratic bounded above on
+`conv V + cone R`. Only `conj_ne_top` and `dom_conj_eq_univ` keep `f.Bounded`,
+and they are false without it.
+
 ## Next
 
-All optional; the stated objective is met. Ask Yves which, if any.
+All optional. Ask Yves which, if any.
 
-1. **Phase 7, unbounded pieces** — the one real generality gap vs Rockafellar
-   10.20. Needs recession cones + Frank–Wolfe attainment. Largest.
-2. **Write-up** — `PROOF_NOTES.md` mapping Lean lemmas to `../CONJ_FIELD_PROOF.md`;
+1. **Write-up** — `PROOF_NOTES.md` mapping Lean lemmas to `../CONJ_FIELD_PROOF.md`;
    then decide paper vs CCA2 note. Do this first if it is heading anywhere.
-3. Polish: conic normal forms, or single-cell-arc. See `TODO.md`.
+2. **Conic normal forms** — the only thing that would let the write-up say
+   "ellipse" as a proved classification rather than a discriminant sign.
+3. **Realisation, remaining half** — that a *single* cell is infinite.
 
 ## Files
 
-- `TODO.md` — the four open items, costed
-- `DECISIONS.md` — 19 entries; read before re-attempting anything
+- `TODO.md` — the three open items, costed
+- `DECISIONS.md` — 21 entries; read before re-attempting anything. The two new
+  ones say why the H-representation/Farkas route to Frank-Wolfe is still shut,
+  and why the curvature dichotomy must be over `conv R`, not the generators
 - `SORRY_LEDGER.md` — zero, plus the axiom audit
-- `QuaConProof/QuaCon.lean` — `conj_isQuaCon`, the objective
-- `QuaConProof/QuaPar.lean` — `exists_not_hasParabolicEdges`, the payoff
+- `QuaConProof/FrankWolfe.lean` — Phase 7's real content
+- `QuaConProof/QuaCon.lean` — `conj_isQuaCon`, plus `Sanity.rayPol`, the
+  unbounded witness whose `⊤` cell is inhabited

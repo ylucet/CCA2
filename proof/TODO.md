@@ -18,9 +18,10 @@ skill) read this section to decide whether there is more work to do.
 
 ## Next up
 
-**The objective is met.** `conj_isQuaCon` is proved, `sorry`-free, with clean
-axioms, for the Stage 1 input class. Everything below is optional extension, and
-none of it is required by `CLAUDE.md`'s statement of the objective.
+**The objective is met, and Phase 7 has generalised it.** `conj_isQuaCon` is
+proved, `sorry`-free, with clean axioms, for pieces that may be **unbounded** --
+no hypothesis beyond "`f` is a `QuaPol`". Everything below is optional, and none
+of it is required by `CLAUDE.md`'s statement of the objective.
 
 **Decide with Yves before starting any of it.** These are three different
 projects, and the right next one depends on what the result is for.
@@ -71,9 +72,10 @@ projects, and the right next one depends on what the result is for.
       establish, and the module docstring carries the complete legality table.
 
 - [x] 2026-08-22 -- **`Realization.lean`**: the certificate machinery. `le_conj`,
-      `conj_le` (which needs attainment, so `exists_maximiser` earns its keep),
-      and for convex pieces `psi_le_interiorBranch` -- the interior branch bounds
-      its piece *everywhere*, with no side condition.
+      `conj_le`, and for convex pieces `psi_le_interiorBranch` -- the interior
+      branch bounds its piece *everywhere*, with no side condition. (2026-08-24:
+      `le_conj` moved to `Selection.lean`, and `conj_le` was reproved without
+      attainment so that it survives unbounded pieces.)
 - [x] 2026-08-22 -- **`Witness.lean`: `ellipse_realised`.** An explicit two-piece
       `QuaPol` with infinitely many points where two interior branches are both
       active, all on one non-degenerate ellipse, with both maximisers genuinely
