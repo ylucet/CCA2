@@ -1,5 +1,6 @@
 import QuaConProof.Quad
 import QuaConProof.Conic
+import QuaConProof.Ellipse
 import QuaConProof.QuaPol
 import QuaConProof.Bary
 import QuaConProof.Candidates

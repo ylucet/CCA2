@@ -66,10 +66,17 @@ function g = conjCPLQ(obj, idx, route)
     % again through cPLQ's own machinery, which handles a curved domain. So conj keeps returning
     % the mesh and biconj asks for the symbolic form on purpose.
     if nargin < 3 || isempty(route), route = 'auto'; end
-    if ~ismember(lower(route), {'auto','symbolic'})
-        error('PLQ:conjCPLQ:route', 'route must be ''auto'' or ''symbolic''; got ''%s''.', route);
+    if ~ismember(lower(route), {'auto','symbolic','numeric'})
+        error('PLQ:conjCPLQ:route', ...
+            'route must be ''auto'', ''symbolic'' or ''numeric''; got ''%s''.', route);
     end
     forceSymbolic = strcmpi(route, 'symbolic');
+    % 'numeric' REFUSES to fall back. It exists because "conj is sym-free except as a fallback" is
+    % a claim that has to be testable: with 'auto' a numeric refusal is swallowed and the answer
+    % still comes back, so a regression that pushes a case onto the symbolic path is invisible in
+    % the values. Under 'numeric' the refusal is rethrown with its own identifier, which is what
+    % lets a test pin the ROUTE and a measurement (checkConjSymFree) name the reason.
+    forceNumeric = strcmpi(route, 'numeric');
     obj.assertOperable();   % degree<=2 (cubic rejected; cubic is for isConvex only)
 
     % ---- STEP 0: NORMALISE the subdivision ---------------------------------------------------
@@ -134,6 +141,7 @@ function g = conjCPLQ(obj, idx, route)
             g = conjBoundedPolygon(obj);
             return
         catch ME
+            if forceNumeric, rethrow(ME); end
             if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented') && ...
                ~strncmp(ME.identifier, 'maxQuaPar:', 10) && ...
                ~strcmp(ME.identifier, 'PLQ:conjCPLQ:notImplemented') && ...
@@ -142,7 +150,15 @@ function g = conjCPLQ(obj, idx, route)
             end
             % Step 2 or Step 3 cannot take some triangle of this domain; Case C's symbolic
             % pipeline can, so fall through to it rather than failing.
+            recordFallback(ME.identifier);
         end
+    end
+    recordFallback('unbounded-or-not-attempted');
+    if forceNumeric
+        error('PLQ:conjCPLQ:numericRouteDeclined', ...
+            ['route=''numeric'' was requested but the numeric path does not cover this input ' ...
+             '(nf=%d, nv=%d, bounded=%d). The symbolic Case C would have answered it.'], ...
+            obj.nf, obj.nv, obj.isDomBounded);
     end
 
     % ---- Case C: general bounded domain (nf>1 and/or a non-triangular face) -------------
@@ -170,6 +186,21 @@ function g = conjCPLQ(obj, idx, route)
     % comes back 1.125 where the truth is 2.
     assertStep3MatchesPieces(p, obj);
     g = QuaParCPLQ(p.maxConjugate);
+end
+
+% ================================================================================================
+function recordFallback(why)
+% objective: record WHY this call is about to use the symbolic Case C, so the rate and the reasons
+%            can be measured rather than guessed.
+%
+% This exists because "conj is sym-free except as a fallback" is a claim about a RATE, and a rate
+% has to be counted. Off unless the caller asks: set the global to an empty cell and it fills with
+% one identifier per fallback. Costs one global read on a path that is already about to start
+% MuPAD, so it is free where it matters.
+    global CCA2_CONJ_FALLBACK %#ok<GVMIS>
+    if iscell(CCA2_CONJ_FALLBACK)
+        CCA2_CONJ_FALLBACK{end+1} = why;
+    end
 end
 
 % ================================================================================================

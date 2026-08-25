@@ -2285,3 +2285,30 @@ never a tolerance.
    squarefree reduction above, and polishing each candidate with 2D Newton on the pair BEFORE the
    acceptance test rather than after it. Correctness does not depend on the squarefree step (it is
    wrapped so that an overflow there falls back to the unreduced polynomial); accuracy does.
+
+## 2026-08-24 — a test's `syms x y real` poisons the WHOLE MATLAB process, and the fast bucket shares one
+
+Found while adding `ratQTest`. Recorded because the symptom points nowhere near the cause and the
+next person to write a symbolic cross-check in a test will hit it.
+
+**What happened.** `ratQTest` cross-checks `ratQ.diffConic` against the Symbolic Toolbox and opened
+with `syms x y real`. Four tests in `regionTest` then failed with
+
+    Unable to convert expression containing symbolic variables into double array.
+
+They pass when `regionTest` is run alone, and fail when `ratQTest` runs first in the same MATLAB.
+The fast bucket runs its whole bucket in ONE process deliberately (`.claude/suite.sh`: 26 MATLAB
+startups is minutes of pure overhead), so adding one suite made four unrelated tests red.
+
+**Why.** `syms x y real` does two things, and the second is not scoped to the function: it creates
+the variables in the caller's workspace, AND it attaches a `real` ASSUMPTION to the symbols named
+`x` and `y` in the shared MuPAD session. `region.m` builds its own `sym('x')` / `sym('y')`, which
+are the same symbols, and the stray assumption changes what its expressions evaluate to.
+
+**The rule.** In a test that needs symbols, use UNIQUELY NAMED ones and no assumptions --
+`x = sym('ratQTest_x')` -- rather than `syms`. A name no production file uses cannot collide, and
+without an assumption there is nothing to leak. `assume(x,'clear')` in a teardown would also work
+and is strictly worse: it has to run, and a test that errors early does not reach it.
+
+**Not a reason to give the suite its own process.** One process per suite is what the slow bucket
+does and it costs ~8 s of startup each; the fix here is one line in the offending test.

@@ -179,7 +179,15 @@ classdef ratQTest < matlab.unittest.TestCase
         % Differential test against the Symbolic Toolbox: the canonical integer conic must define
         % the same curve as sym's own simplification of g1 - g2.
             rng(20260824);
-            syms x y real
+            % NOT `syms x y real`. That declares an ASSUMPTION on the symbols named x and y, and
+            % the assumption lives in the shared MuPAD session for the rest of the process -- not
+            % in this function. `region.m` builds its own sym('x')/sym('y') and, with a stray
+            % `real` assumption attached, four of regionTest's tests then failed with "Unable to
+            % convert expression containing symbolic variables into double array". Measured: they
+            % pass alone, fail when this suite runs first in the same MATLAB, and the fast bucket
+            % runs the whole bucket in ONE process on purpose. Uniquely named symbols with no
+            % assumptions cannot collide.
+            x = sym('ratQTest_x');  y = sym('ratQTest_y');
             for k = 1:25
                 a = randi([-6 6], 1, 6); b = randi([-6 6], 1, 6);
                 g1 = ratQTest.face(a(1), a(2), a(3), a(4), a(5), a(6));
