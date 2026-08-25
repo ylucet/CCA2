@@ -4,7 +4,7 @@ Every `sorry` in the Lean sources, with what it needs and what depends on it.
 
 ## Count
 
-**ZERO.** Verified 2026-08-22:
+**ZERO.** Verified 2026-08-24:
 
     $ grep -rnE "^\s*sorry\s*$|:= sorry" QuaConProof/*.lean | wc -l
     0
@@ -19,9 +19,12 @@ Every `sorry` in the Lean sources, with what it needs and what depends on it.
 No `sorryAx`. No project axioms. The three listed are Lean's own, and are exactly
 what `CLAUDE.md` -> Verification, point 2 permits.
 
-The main theorem `conj_isQuaCon` is therefore proved outright, for the Stage 1
-input class (bounded pieces, `PROJECT_PLAN.md` 0.2). Phase 7, unbounded pieces,
-is a separate and not-yet-started extension; nothing below is sorried pending it.
+The main theorem `conj_isQuaCon` is therefore proved outright, and since
+2026-08-24 it carries **no boundedness hypothesis**: pieces may have recession
+directions. What Phase 7 added is `FrankWolfe.lean`, whose
+`exists_isMaxOn_of_bddAbove` supplies the attainment that compactness used to
+give for free. `conj_ne_top` and `dom_conj_eq_univ` keep the `Bounded`
+hypothesis, because they are false without it -- that is the point.
 
 ## Axiom audit
 

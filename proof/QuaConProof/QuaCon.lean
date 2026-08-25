@@ -1,7 +1,7 @@
 /-
 Copyright (c) 2026 Yves Lucet. All rights reserved.
 -/
-import QuaConProof.Selection
+import QuaConProof.FrankWolfe
 
 /-!
 # The main theorem: the conjugate of a `QuaPol` is a `QuaCon`
@@ -46,75 +46,33 @@ namespace QuaConProof
 
 open scoped Classical
 
-namespace QuaPol
-
-/-- A `QuaPol` never takes the value `⊥`: every piece contributes either a real
-number or `⊤`, and a finite infimum of such is one of them. -/
-lemma eval_ne_bot (f : QuaPol) (x : Plane) : f.eval x ≠ ⊥ := by
-  rw [eval]
-  induction f.pieces using Finset.induction_on with
-  | empty => simp
-  | insert p s _ ih =>
-      rw [Finset.inf_insert]
-      have hp : (if x ∈ p.T then ((p.q.eval x : ℝ) : EReal) else ⊤) ≠ ⊥ := by
-        split <;> simp [EReal.coe_ne_bot]
-      rcases le_total (if x ∈ p.T then ((p.q.eval x : ℝ) : EReal) else ⊤)
-          (s.inf fun p => if x ∈ p.T then ((p.q.eval x : ℝ) : EReal) else ⊤) with h | h
-      · rw [inf_eq_left.2 h]; exact hp
-      · rw [inf_eq_right.2 h]; exact ih
-
-/-- On a piece, `f` is finite: neither `⊤` nor `⊥`. -/
-lemma eval_ne_top_of_mem {f : QuaPol} {x : Plane} {p : QuaPiece} (hp : p ∈ f.pieces)
-    (hx : x ∈ p.T) : f.eval x ≠ ⊤ := by
-  intro h
-  have hle := eval_le_of_mem hp hx
-  rw [h] at hle
-  exact EReal.coe_ne_top _ (top_le_iff.1 hle)
-
-/-- **The conjugate is never `⊥`.**
-
-A `QuaPol` has at least one piece, and that piece at least one vertex, so `f` is
-finite there; the supremum defining `f*` therefore has at least one real term.
-This is what lets `cell ∅` be characterised as `{f* = ⊤}` rather than as
-`{f* ∉ ℝ}`. -/
-theorem conj_ne_bot (f : QuaPol) (s : Plane) : f.conj s ≠ ⊥ := by
-  obtain ⟨p, hp⟩ := f.pieces_nonempty
-  obtain ⟨v, hv⟩ := p.verts_nonempty
-  have hmem : v ∈ p.T := p.subset_T hv
-  have hcoe : ((f.eval v).toReal : EReal) = f.eval v :=
-    EReal.coe_toReal (eval_ne_top_of_mem hp hmem) (eval_ne_bot f v)
-  have hle : ((dot s v - (f.eval v).toReal : ℝ) : EReal) ≤ f.conj s := by
-    rw [conj_def]
-    refine le_iSup_of_le v ?_
-    rw [EReal.coe_sub, hcoe]
-  intro hbot
-  rw [hbot, le_bot_iff] at hle
-  exact EReal.coe_ne_bot _ hle
-
-end QuaPol
-
 /-! ### The cells, completed -/
 
 /-- **The empty-activity cell is exactly where the conjugate is `⊤`.**
 
-At Stage 1 both sides are empty: `QuaPol.conj_ne_top` says the conjugate is
-finite everywhere, because every piece is compact, and `selection` says some
-candidate is always active. The conjunct becomes substantive only in Phase 7,
-when unbounded pieces make `dom f*` a proper subset. -/
-theorem cell_empty_eq {f : QuaPol} (hb : f.Bounded) : cell f ∅ = {s : Plane | f.conj s = ⊤} := by
-  have hR : {s : Plane | f.conj s = ⊤} = (∅ : Set Plane) := by
-    ext s
-    simp only [Set.mem_ofPred_eq, Set.mem_empty_iff_false, iff_false]
-    exact conj_ne_top hb s
-  have hL : cell f ∅ = (∅ : Set Plane) := by
-    ext s
-    simp only [mem_cell_iff, Set.mem_empty_iff_false, iff_false]
-    intro hact
-    obtain ⟨q, hq, hqs⟩ := selection (attained_of_bounded hb s)
+Both inclusions are now substantive. Where `f*` is finite, Frank-Wolfe gives a
+maximiser on every piece (`attained_of_conj_ne_top`) and `selection` then names
+an active candidate, so the cell is not the empty one; and where `f*` is `⊤` no
+candidate can be active, since candidates take real values.
+
+At Stage 1 both sides are empty, because `conj_ne_top` says the conjugate is
+finite everywhere. With unbounded pieces the `⊤` region can be a genuine
+half-plane, and this conjunct is what describes it. -/
+theorem cell_empty_eq (f : QuaPol) : cell f ∅ = {s : Plane | f.conj s = ⊤} := by
+  ext s
+  simp only [mem_cell_iff, Set.mem_ofPred_eq]
+  constructor
+  · intro hact
+    by_contra htop
+    obtain ⟨q, hq, hqs⟩ := selection (attained_of_conj_ne_top htop)
     have hmem : q ∈ active f s := mem_active_iff.2 ⟨hq, hqs⟩
     rw [hact] at hmem
     exact Finset.notMem_empty q hmem
-  rw [hL, hR]
+  · intro htop
+    refine Finset.eq_empty_iff_forall_notMem.2 fun q hq => ?_
+    have he := (mem_active_iff.1 hq).2
+    rw [htop] at he
+    exact EReal.coe_ne_top _ he
 
 /-- Restated for the record: **at Stage 1 the conjugate is finite everywhere**, so
 its domain is the whole plane and no cell carries `+∞`. -/
@@ -122,15 +80,15 @@ theorem dom_conj_eq_univ {f : QuaPol} (hb : f.Bounded) :
     {s : Plane | f.conj s ≠ ⊤} = Set.univ :=
   Set.eq_univ_of_forall fun s => conj_ne_top hb s
 
-/-- **At every point of the plane some candidate quadratic is active.**
+/-- **Wherever the conjugate is finite, some candidate quadratic is active.**
 
 The bite of the theorem, stated separately because the six conjuncts of
 `conj_isQuaCon` are each about *cells* and this one is about *points*: there is a
-finite list of quadratics, computed from the input, and at every `s` the
-conjugate equals one of them. -/
-theorem active_nonempty {f : QuaPol} (hb : f.Bounded) (s : Plane) :
+finite list of quadratics, computed from the input, and at every `s` of
+`dom f*` the conjugate equals one of them. -/
+theorem active_nonempty {f : QuaPol} {s : Plane} (h : f.conj s ≠ ⊤) :
     (active f s).Nonempty := by
-  obtain ⟨q, hq, hqs⟩ := selection (attained_of_bounded hb s)
+  obtain ⟨q, hq, hqs⟩ := selection (attained_of_conj_ne_top h)
   exact ⟨q, mem_active_iff.2 ⟨hq, hqs⟩⟩
 
 /-! ### The theorem -/
@@ -146,7 +104,7 @@ one of the degenerate cases, as `Conic.lean` classifies them.
 What this deliberately does **not** claim, per the agreed regularity level: any
 statement about dimension, connectedness, arcs, or a face-to-face CW structure.
 See `DECISIONS.md`, 2026-08-21. -/
-theorem conj_isQuaCon {f : QuaPol} (hb : f.Bounded) :
+theorem conj_isQuaCon (f : QuaPol) :
     -- cells are pairwise disjoint
     (∀ S T : Finset Quad, S ≠ T → Disjoint (cell f S) (cell f T))
     -- and cover the plane
@@ -164,7 +122,66 @@ theorem conj_isQuaCon {f : QuaPol} (hb : f.Bounded) :
         ∧ IsConic {s : Plane | q₁.eval s = q₂.eval s}) := by
   refine ⟨fun S T h => cell_disjoint f h, iUnion_cell_eq_univ f,
     fun S q hq s hs => conj_eq_of_mem_cell hq hs, finite_nonempty_cells f,
-    cell_empty_eq hb, fun S q₁ q₂ h₁ h₂ hne =>
+    cell_empty_eq f, fun S q₁ q₂ h₁ h₂ hne =>
       ⟨cell_subset_eqLocus h₁ h₂, isConic_eqLocus hne⟩⟩
+
+/-! ### Sanity: the `⊤` cell is not vacuous
+
+`CLAUDE.md` -> Verification, point 3, for the Phase 7 definitions. At Stage 1 the
+fifth conjunct of `conj_isQuaCon` was the equality of two empty sets. With a
+recession direction it describes a genuine region, and here is one.
+
+The piece is the nonnegative `s₁`-axis carrying the zero quadratic. Its conjugate
+is `+∞` at `(1,0)`, because `⟨(1,0), (t,0)⟩ = t` is unbounded on the piece. A
+`coneHull` that had collapsed to `{0}`, or a `T` that had dropped its rays, would
+make this false. -/
+
+namespace Sanity
+
+/-- One piece: the nonnegative `s₁`-axis, carrying the zero quadratic. -/
+noncomputable def rayPiece : QuaPiece :=
+  ⟨{0}, Finset.singleton_nonempty _, {(1, 0)}, 0⟩
+
+/-- The `QuaPol` with that single piece. -/
+noncomputable def rayPol : QuaPol := ⟨{rayPiece}, Finset.singleton_nonempty _⟩
+
+lemma mem_rayPiece {t : ℝ} (ht : 0 ≤ t) : ((t, 0) : Plane) ∈ rayPiece.T := by
+  refine ⟨0, subset_convexHull ℝ _ (by simp [rayPiece]), t • ((1, 0) : Plane),
+    smul_mem_coneHull (mem_coneHull_of_mem (show ((1, 0) : Plane) ∈ rayPiece.rays by
+      simp [rayPiece])) ht, ?_⟩
+  simp
+
+lemma eval_rayPol {t : ℝ} (ht : 0 ≤ t) : rayPol.eval (t, 0) = 0 := by
+  have hm := mem_rayPiece ht
+  simp only [rayPol, QuaPol.eval, Finset.inf_singleton]
+  rw [if_pos hm]
+  simp [rayPiece]
+
+/-- **The conjugate really is `⊤` there.** -/
+theorem conj_rayPol_eq_top : rayPol.conj (1, 0) = ⊤ := by
+  by_contra hne
+  have hbot := QuaPol.conj_ne_bot rayPol (1, 0)
+  set c : ℝ := (rayPol.conj (1, 0)).toReal with hc
+  have hcoe : rayPol.conj (1, 0) = (c : EReal) := (EReal.coe_toReal hne hbot).symm
+  have hle : ((|c| + 1 : ℝ) : EReal) ≤ rayPol.conj (1, 0) := by
+    rw [QuaPol.conj_def]
+    refine le_iSup_of_le ((|c| + 1, 0) : Plane) ?_
+    rw [eval_rayPol (by positivity)]
+    simp [dot]
+  rw [hcoe, EReal.coe_le_coe_iff] at hle
+  linarith [le_abs_self c]
+
+/-- **So the empty-activity cell is inhabited**, and the fifth conjunct of
+`conj_isQuaCon` is carrying weight rather than comparing two empty sets. -/
+theorem cell_empty_rayPol_nonempty : (cell rayPol ∅).Nonempty :=
+  ⟨(1, 0), by rw [cell_empty_eq]; exact conj_rayPol_eq_top⟩
+
+/-- and `rayPol` is genuinely outside Stage 1. -/
+theorem rayPol_not_bounded : ¬ rayPol.Bounded := by
+  intro hb
+  have := hb rayPiece (by simp [rayPol])
+  simp [rayPiece] at this
+
+end Sanity
 
 end QuaConProof

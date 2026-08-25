@@ -25,11 +25,9 @@ none of it is required by `CLAUDE.md`'s statement of the objective.
 **Decide with Yves before starting any of it.** These are three different
 projects, and the right next one depends on what the result is for.
 
-- [ ] **Phase 7 -- unbounded pieces.** The one that makes the theorem cover
-      Rockafellar-Wets 10.20 in full. Needs a recession cone on `QuaPiece`, a
-      Frank-Wolfe style attainment result, and `dom f*` becoming a proper subset
-      so the fifth conjunct stops being the equality of two empty sets
-      (`DECISIONS.md`, 2026-08-22). Largest of the three.
+- [x] ~~**Phase 7 -- unbounded pieces.**~~ Done 2026-08-24: `QuaPiece` carries
+      rays, `FrankWolfe.lean` supplies attainment, and `conj_isQuaCon` no longer
+      has a boundedness hypothesis.
 - [ ] **Realisation, the remaining half.** `Witness.lean` proves infinitely many
       points have two interior branches active, all on one non-degenerate ellipse.
       What is still open is that a **single cell** is infinite (the set proved
@@ -54,6 +52,16 @@ projects, and the right next one depends on what the result is for.
 - [ ] Nothing is blocked.
 
 ## Done recently
+
+- [x] 2026-08-24 -- **Phase 7: unbounded pieces.** `QuaPiece` gained
+      `rays : Finset Plane`, with `T = convexHull verts + coneHull rays`. The
+      face induction covers ray supports through `IsDirRep`, the candidate list
+      gained the vertex-and-ray edge branches, and `FrankWolfe.lean` proves that
+      a quadratic bounded above on `conv V + cone R` attains its supremum -- by
+      induction on the ray count, with the curvature dichotomy taken over
+      `conv R` rather than over the generators. `conj_isQuaCon` is now
+      hypothesis-free and its `top`-cell conjunct is load-bearing, witnessed by
+      `Sanity.cell_empty_rayPol_nonempty`.
 
 - [x] 2026-08-22 -- **`QuaPar.lean`: the question the project exists for, closed.**
       `exists_not_hasParabolicEdges` -- the conjugate's subdivision need not be

@@ -4,7 +4,7 @@ _Update this file at the end of every session so the next session (or a
 different machine) can regain context in one read. Read this right after
 `README.md` and `CLAUDE.md` at the start of a session._
 
-_Last updated: 2026-08-22_
+_Last updated: 2026-08-24_
 
 ## The objective is met
 
@@ -23,10 +23,15 @@ That is `CLAUDE.md` -> Verification points 1 and 2 satisfied. Point 3, the sanit
 `example`s, is satisfied by nineteen of them across `Quad.lean`, `Conic.lean`,
 `QuaPol.lean`, `Candidates.lean` and `Selection.lean`.
 
-**Scope of what is proved.** Stage 1: every piece is the convex hull of a finite
-vertex set, hence compact. Coefficients real. `Q` arbitrary -- indefinite and
-singular Hessians included. No continuity or consistency hypothesis on the input.
-Unbounded pieces are Phase 7 and are *not* covered.
+**Scope of what is proved.** Every piece is `conv V + cone R` for finite `V`
+(nonempty) and finite `R` -- so **unbounded pieces are covered** as of 2026-08-24.
+Coefficients real. `Q` arbitrary: indefinite and singular Hessians included. No
+continuity or consistency hypothesis on the input, no adjacency between pieces,
+no general position.
+
+`conj_isQuaCon` takes **no** hypothesis beyond "`f` is a `QuaPol`". What still
+carries `f.Bounded` is `conj_ne_top` and `dom_conj_eq_univ`, and rightly so:
+they are false for unbounded pieces, which is the whole point of Phase 7.
 
 ## Also done: which conics arise
 
@@ -93,6 +98,25 @@ a union of cells. See `DECISIONS.md`, 2026-08-22.
 - OK Eleven decisions recorded in `DECISIONS.md`, several of which changed the
   proof route before code was written.
 
+## Phase 7: unbounded pieces -- done
+
+`QuaPiece` carries `rays : Finset Plane` and its underlying set is
+`convexHull verts + coneHull rays`. Three things had to be built:
+
+1. **The weight calculus** (`Bary.lean`). `IsDirRep W S gam nu d` records a
+   direction by how it moves the weights -- vertex weights by a vector summing to
+   zero, ray weights freely. One `foc_soc`, one `mem_T_of_perturb`, one
+   `exists_descent_gen`, serving both kinds of step.
+2. **The face induction** (`Selection.lean`). `branch_aux` now inducts on
+   `W.card + S.card`, with three reductions (a vanishing vertex weight, a
+   vanishing ray weight, a zero recession direction) and the same three
+   outcomes. A maximiser on the line `v + R r` gives `edgeBranch q v (v + r)`, so
+   `edgeCandidates` gained the vertex-and-ray family.
+3. **Frank-Wolfe** (`FrankWolfe.lean`). Bounded above implies attained, by
+   induction on the ray count, with the dichotomy taken over `conv R` rather than
+   over the generators -- see `DECISIONS.md`, 2026-08-24, for why the generator
+   test would be unsound.
+
 ## In flight
 
 - Nothing. The tree is green, committed, and `sorry`-free.
@@ -105,11 +129,11 @@ a union of cells. See `DECISIONS.md`, 2026-08-22.
 ## Blocked / open questions
 
 - None.
-- **One caveat to carry forward, not a gap:** at Stage 1 the conjugate is finite
-  everywhere (`conj_ne_top`), so the fifth conjunct of `conj_isQuaCon`,
-  `cell 0 = {f* = top}`, is currently the equality of two *empty* sets. It is not
-  wrong and costs nothing, but it is not load-bearing until Phase 7. See
-  `DECISIONS.md`, 2026-08-22.
+- ~~At Stage 1 the fifth conjunct compares two empty sets.~~ **Closed
+  2026-08-24.** With recession directions the `top` region is genuine, and
+  `Sanity.cell_empty_rayPol_nonempty` exhibits a one-piece `QuaPol` -- the
+  nonnegative `s1`-axis carrying the zero quadratic -- whose empty-activity cell
+  is inhabited. The conjunct is load-bearing now.
 - **What is deliberately not claimed:** nothing about dimension, connectedness,
   arcs, or a face-to-face CW structure; and `disc`/`det3` are proved invariants
   with computed values, not yet a proved *geometric* classification (no theorem
@@ -120,11 +144,10 @@ a union of cells. See `DECISIONS.md`, 2026-08-22.
 1. Read `PROJECT_PLAN.md` Phase 0 -- it is still the specification of what was
    proved, and the deviations from it are all in `DECISIONS.md`.
 2. `lake build` to confirm green (instant from cache).
-3. Then **ask Yves which extension to take**, if any. `TODO.md`
-   lists them: Phase 7 (unbounded pieces -- the one that generalises the theorem),
-   the conic normal forms (the one that makes "ellipse" a proved classification),
-   or a `QuaPol` witness (the one that makes the `QuaPar`-is-too-narrow claim a
-   theorem about the pipeline). They are three different projects.
+3. Then **ask Yves which extension to take**, if any. `TODO.md` lists what is
+   left: the write-up (`PROOF_NOTES.md`), the conic normal forms (the one that
+   makes "ellipse" a proved classification rather than a discriminant sign), and
+   the remaining half of realisation (that a *single* cell is infinite).
 
 ## Risk register
 

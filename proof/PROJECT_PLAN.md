@@ -267,11 +267,11 @@ Verification point 3 requires. The full 21-pair census is 7 hyperbolas, 5 ellips
 witness has to come from panel (3b), the indefinite piece `q = x₁x₂` on
 `(0,0),(1,1),(2,0)`, whose conjugate has the parabolic edge `¼(s₁+s₂)² = 2s₁`.
 
-# Phase 7 — Stage 2, unbounded pieces
-- [ ] extend `QuaPiece` with a recession cone (vertices plus rays)
-- [ ] Frank–Wolfe style attainment, or a direct argument for quadratics
-- [ ] `dom (conj f)` proper; the `⊤` cell becomes nonempty
-- [ ] re-prove selection in the extended setting
+# Phase 7 — Stage 2, unbounded pieces — **DONE** 2026-08-24
+- [x] extend `QuaPiece` with a recession cone (vertices plus rays)
+- [x] Frank–Wolfe style attainment, or a direct argument for quadratics
+- [x] `dom (conj f)` proper; the `⊤` cell becomes nonempty
+- [x] re-prove selection in the extended setting
 
 # Phase 8 — Write-up
 - [ ] `PROOF_NOTES.md` mapping each Lean lemma to its informal counterpart

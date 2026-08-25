@@ -18,6 +18,62 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-24 — Frank–Wolfe proved in V-representation; H-representation still not needed
+
+- **Tried first, on paper:** the textbook route to Frank–Wolfe — H-representation
+  plus Farkas, induction on the active constraints. Rejected for the same reason
+  as 2026-08-21: mathlib `v4.33.0` has no polyhedra, no Farkas, no recession
+  cones (`find Mathlib -iname '*olyhedr*' -o -iname '*arkas*'` returns nothing).
+- **Also tried, on paper:** induction on the rays with the split
+  `T = T' + cone{r}`. It fails on the `α_r > 0` branch: the inner maximum over
+  `t ≥ 0` is a *piecewise* quadratic in the remaining variables, split by the
+  hyperplane `L(y,r) = 0`, and intersecting a V-represented polyhedron with a
+  half-space needs a vertex-enumeration lemma — a sub-project of its own.
+- **What worked:** do the dichotomy on `Δ = conv R`, not on the generators, and
+  induct on `R.card`.
+  - Some `δ ∈ Δ` has `α(δ) ≤ 0`. Then `α(δ) < 0` is impossible (`ψ` would be
+    unbounded along `x + ℝ₊δ`), so `α(δ) = 0`; finiteness then forces the slope
+    along `δ` to be `≤ 0` everywhere, so pushing *back* along `δ` never lowers
+    `ψ`, and pushing back until a ray weight vanishes lands in
+    `conv V + cone (R \ {r})`. Induction.
+  - Otherwise `α > 0` on all of `Δ`, which is compact, so `α ≥ m > 0` there and
+    `ψ(c + λδ) ≤ P + λB - λ²m/2` uniformly. Beyond an explicit `λ₀` nothing can
+    be optimal, so the supremum is attained on the compact truncation
+    `conv V + [0,λ₀]·Δ`.
+- **Why the dichotomy must be over `Δ` and not over `R`:** curvature is not
+  preserved by conic combination. With `H = diag(1,-1)`, the rays `(1, 0.1)` and
+  `(-1, 0.1)` both have `α > 0`, yet their sum `(0, 0.2)` has `α < 0`, so `ψ` is
+  unbounded along a direction no generator reveals. A test on the generators
+  would have been unsound, and silently so.
+- **Consequence:** `conj_isQuaCon` now has **no** boundedness hypothesis, and its
+  fifth conjunct is load-bearing — `Sanity.cell_empty_rayPol_nonempty` exhibits a
+  one-piece `QuaPol` whose `⊤` cell is inhabited. The 2026-08-22 entry recording
+  that the conjunct compared two empty sets is superseded for the general input
+  class; it still describes what happens when `f.Bounded` holds.
+- **Before retrying, fix:** n/a. If mathlib ever gains polyhedra, the H-side
+  statement could be *added*, but nothing here would need reproving.
+- **Evidence:** `QuaConProof/FrankWolfe.lean`; `lake build` green, 0 sorry,
+  `#print axioms conj_isQuaCon` = [propext, Classical.choice, Quot.sound].
+
+## 2026-08-24 — one induction for vertices and rays, via `IsDirRep`
+
+- **Tried:** duplicating the selection lemma's face induction — one version
+  stepping along `w - v` for vertices, one stepping along a recession direction.
+- **Why it failed:** not refuted, but the two bodies differ only in which weight
+  family the step touches, and the middle of the argument (first- and
+  second-order conditions, the independence test, the kernel slide) is identical.
+  Two copies would have to be kept in step forever.
+- **What replaced it:** `IsDirRep W S gam nu d` in `Bary.lean` — a direction
+  recorded by how it changes the weights, with vertex changes summing to zero and
+  ray changes free. `isDirRep_vert_sub` and `isDirRep_ray` are the two
+  generators; `foc_soc`, `mem_T_of_perturb` and `exists_descent_gen` are stated
+  once, for the record. `branch_aux` inducts on `W.card + S.card`.
+- **A trap worth recording:** a ray may be the **zero vector**, which would make
+  the "pick a nonzero direction" step false. It is a third reduction in the
+  induction (drop it — it contributes nothing), alongside a vanishing vertex
+  weight and a vanishing ray weight.
+- **Evidence:** `QuaConProof/Selection.lean`, `QuaConProof/Bary.lean`.
+
 ## 2026-08-22 -- the QuaPar question, closed: the subdivision need NOT be parabolic
 
 - **Question:** CCA2's `QuaPar` requires `b^2 - 4ac = 0` of every edge conic, and

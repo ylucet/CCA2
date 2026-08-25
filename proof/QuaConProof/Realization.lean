@@ -46,18 +46,6 @@ open scoped Classical
 
 /-! ### The two bounds -/
 
-/-- **Lower bound.** Every admissible point of every piece bounds `f*` below.
-This is the easy half: each such point is one term of the supremum. -/
-theorem le_conj {f : QuaPol} {p : QuaPiece} (hp : p ∈ f.pieces) {x : Plane}
-    (hx : x ∈ p.T) (s : Plane) : ((psi p.q s x : ℝ) : EReal) ≤ f.conj s := by
-  rw [QuaPol.conj_def]
-  refine le_iSup_of_le x ?_
-  have hle : f.eval x ≤ ((p.q.eval x : ℝ) : EReal) := QuaPol.eval_le_of_mem hp hx
-  calc ((psi p.q s x : ℝ) : EReal)
-      = ((dot s x : ℝ) : EReal) - ((p.q.eval x : ℝ) : EReal) := by
-        rw [← EReal.coe_sub]; rfl
-    _ ≤ ((dot s x : ℝ) : EReal) - f.eval x := EReal.sub_le_sub le_rfl hle
-
 /-- **Upper bound.** A bound valid on every point of every piece bounds `f*`.
 
 The supremum defining `f*` ranges over all of the plane, not just over the

@@ -175,6 +175,76 @@ def QuaPol.Attained (f : QuaPol) (s : Plane) : Prop :=
 theorem attained_of_bounded {f : QuaPol} (hb : f.Bounded) (s : Plane) : f.Attained s :=
   fun p hp => exists_isMaxOn_piece (hb p hp) s
 
+/-! ### The conjugate is never `⊥`, and every piece bounds it below
+
+These live here rather than with the rest of the certificate machinery because
+`FrankWolfe.lean` needs them, and it sits below `QuaCon.lean`. -/
+
+section ConjBounds
+
+open scoped Classical
+
+namespace QuaPol
+
+/-- A `QuaPol` never takes the value `⊥`: every piece contributes either a real
+number or `⊤`, and a finite infimum of such is one of them. -/
+lemma eval_ne_bot (f : QuaPol) (x : Plane) : f.eval x ≠ ⊥ := by
+  rw [eval]
+  induction f.pieces using Finset.induction_on with
+  | empty => simp
+  | insert p s _ ih =>
+      rw [Finset.inf_insert]
+      have hp : (if x ∈ p.T then ((p.q.eval x : ℝ) : EReal) else ⊤) ≠ ⊥ := by
+        split <;> simp [EReal.coe_ne_bot]
+      rcases le_total (if x ∈ p.T then ((p.q.eval x : ℝ) : EReal) else ⊤)
+          (s.inf fun p => if x ∈ p.T then ((p.q.eval x : ℝ) : EReal) else ⊤) with h | h
+      · rw [inf_eq_left.2 h]; exact hp
+      · rw [inf_eq_right.2 h]; exact ih
+
+/-- On a piece, `f` is finite: neither `⊤` nor `⊥`. -/
+lemma eval_ne_top_of_mem {f : QuaPol} {x : Plane} {p : QuaPiece} (hp : p ∈ f.pieces)
+    (hx : x ∈ p.T) : f.eval x ≠ ⊤ := by
+  intro h
+  have hle := eval_le_of_mem hp hx
+  rw [h] at hle
+  exact EReal.coe_ne_top _ (top_le_iff.1 hle)
+
+/-- **The conjugate is never `⊥`.**
+
+A `QuaPol` has at least one piece, and that piece at least one vertex, so `f` is
+finite there; the supremum defining `f*` therefore has at least one real term.
+This is what lets `cell ∅` be characterised as `{f* = ⊤}` rather than as
+`{f* ∉ ℝ}`. -/
+theorem conj_ne_bot (f : QuaPol) (s : Plane) : f.conj s ≠ ⊥ := by
+  obtain ⟨p, hp⟩ := f.pieces_nonempty
+  obtain ⟨v, hv⟩ := p.verts_nonempty
+  have hmem : v ∈ p.T := p.subset_T hv
+  have hcoe : ((f.eval v).toReal : EReal) = f.eval v :=
+    EReal.coe_toReal (eval_ne_top_of_mem hp hmem) (eval_ne_bot f v)
+  have hle : ((dot s v - (f.eval v).toReal : ℝ) : EReal) ≤ f.conj s := by
+    rw [conj_def]
+    refine le_iSup_of_le v ?_
+    rw [EReal.coe_sub, hcoe]
+  intro hbot
+  rw [hbot, le_bot_iff] at hle
+  exact EReal.coe_ne_bot _ hle
+
+end QuaPol
+
+/-- **Lower bound.** Every admissible point of every piece bounds `f*` below.
+This is the easy half: each such point is one term of the supremum. -/
+theorem le_conj {f : QuaPol} {p : QuaPiece} (hp : p ∈ f.pieces) {x : Plane}
+    (hx : x ∈ p.T) (s : Plane) : ((psi p.q s x : ℝ) : EReal) ≤ f.conj s := by
+  rw [QuaPol.conj_def]
+  refine le_iSup_of_le x ?_
+  have hle : f.eval x ≤ ((p.q.eval x : ℝ) : EReal) := QuaPol.eval_le_of_mem hp hx
+  calc ((psi p.q s x : ℝ) : EReal)
+      = ((dot s x : ℝ) : EReal) - ((p.q.eval x : ℝ) : EReal) := by
+        rw [← EReal.coe_sub]; rfl
+    _ ≤ ((dot s x : ℝ) : EReal) - f.eval x := EReal.sub_le_sub le_rfl hle
+
+end ConjBounds
+
 /-! ### S1: the infimum over pieces is attained, and the conjugate is finite -/
 
 /-- A finite infimum in `EReal` that is not `⊤` is attained. -/
