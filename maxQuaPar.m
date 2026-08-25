@@ -3046,6 +3046,27 @@ function newPieces = splitCell(cell, f1row, f2row, polyK, polyL, kSrc, lSrc)
     end
 end
 
+function splitDeclined(why, gg, cand, cell, cons)
+% Record WHY splitUnboundedAtOneCrossing gave up, under MAXQP_ASSERT like the other diagnostics.
+%
+% Every decline here sends the cell to the caller's TANGENCY branch, which reads a winner off the
+% centroid of the finite vertices -- meaningless for a cone, and the source of `TODO.md` G10's
+% wrong answers. Returning [] in silence meant that every investigation of one of those started by
+% re-instrumenting this function, three times so far. The reason is cheap; keep it.
+    global MAXQP_ASSERT %#ok<GVMIS>
+    if isempty(MAXQP_ASSERT) || MAXQP_ASSERT < 1, return, end
+    fprintf('SPLIT DECLINED: %s%s', why, newline);
+    fprintf('   |grad| at the crossing = %.3e, cell nv=%d, dirIn=%s dirOut=%s%s', ...
+        norm(gg), size(cell.V,1), mat2str(cell.dirIn, 4), mat2str(cell.dirOut, 4), newline);
+    for ci = 1:size(cand,1)
+        for sgn = [1 -1]
+            w = sgn*cand(ci,:);
+            fprintf('   candidate %s: max(n.w) over the cell''s constraints = %+.3e%s', ...
+                mat2str(w, 4), max(cons(:,1:2)*w'), newline);
+        end
+    end
+end
+
 function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2row)
 % Split an unbounded polyhedral cell whose splitting curve meets the boundary at ONE finite point
 % and escapes to infinity. Returns [] when that is not what is happening (a genuine tangency), so
@@ -3085,7 +3106,10 @@ function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2ro
         cand = d0 / norm(d0);
     else
         cand = nullDirectionsOf([diffRow(5), diffRow(6); diffRow(6), diffRow(7)]);
-        if isempty(cand), return, end
+        if isempty(cand)
+            splitDeclined('the quadratic part has no real null direction', gg, [], cell, []);
+            return
+        end
     end
 
     cons = polyConstraints(cell);
@@ -3094,14 +3118,40 @@ function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2ro
         for sgn = [1 -1]
             w = sgn*cand(ci,:);
             if all(cons(:,1:2)*w' <= 1e-9*max(1, max(abs(cons(:,1:2)), [], 'all')))
-                % ...and it must not simply run along one of the cell's own rays, which would cut
-                % off nothing.
-                if norm(w - cell.dirIn) > 1e-7 && norm(w - cell.dirOut) > 1e-7, d = w; break, end
+                % ...and it must not simply run along one of the cell's own RAY EDGES, which would
+                % cut off nothing.
+                %
+                % PARALLEL IS NOT THE SAME AS ALONG, and this test used to conflate them: it
+                % rejected w whenever it merely POINTED the same way as dirIn or dirOut. For a
+                % HALF-STRIP (dirIn == dirOut) the escaping branch is parallel to both rays by
+                % construction, so every candidate was rejected and the cell was reported as a
+                % tangency -- which sends it to the caller's centroid guess, `TODO.md` G10.
+                %
+                % A cut from X along w cuts off nothing only when the whole ray {X + t*w} already
+                % lies in the boundary, i.e. when X sits ON that ray edge and w is that ray's
+                % direction. From any other boundary point the same direction slices the cell in
+                % two -- a half-strip cut parallel to its rays is two half-strips, not one.
+                %
+                % MEASURED on conjSymFreeTest's A.5 triangle {(5/2,3/2),(0,0),(1/2,1)} with x*y:
+                % the cell is nv=2 with dirIn = dirOut = [0.5145 -0.8575], the tangent branch is
+                % that same direction (|grad| = 1.7e-01, so this is not the singular-point case),
+                % and its recession test passes at -5.6e-17 while the opposite sense fails at
+                % +1.5e-01. One genuine split, refused on a name collision.
+                nvC = size(cell.V,1);
+                alongRayEdge = (hit.edge == 1     && norm(w - cell.dirIn)  <= 1e-7) || ...
+                               (hit.edge == nvC+1 && norm(w - cell.dirOut) <= 1e-7);
+                if ~alongRayEdge, d = w; break, end
             end
         end
         if ~isempty(d), break, end
     end
-    if isempty(d), return, end                % no sense of any branch recedes the cell: a tangency
+    if isempty(d)
+        % No sense of any branch recedes the cell -- read as a genuine tangency, and the caller's
+        % tangency branch then has to guess a winner. That guess is `TODO.md` G10, so when it goes
+        % wrong this is the decline that produced it: say so rather than returning [] in silence.
+        splitDeclined('no sense of any branch direction recedes the cell', gg, cand, cell, cons);
+        return
+    end
 
     % The escaping edge must be STRAIGHT: an unbounded parabolic edge is not representable.
     [Ad, Bd, ~] = quadAlongRay(diffRow, X, d);

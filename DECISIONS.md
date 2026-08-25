@@ -2810,3 +2810,36 @@ the curve can enter through the boundary once and leave through the RECESSION CO
 one finite crossing and genuinely splits into two unbounded parts, each with its own winner.
 `splitUnboundedAtOneCrossing` exists for exactly that and declined on both fixtures. Make it
 succeed and neither cell needs a winner read off a centroid, and neither needs the backstop.
+
+## 2026-08-25 (G10, second pass) — `splitUnboundedAtOneCrossing` conflated PARALLEL with ALONG, and declined a real split
+
+- **Where the guess comes from.** `splitCell`'s tangency branch reads an unbounded cell's winner
+  off the centroid of its finite vertices, which is the G10 wrong answer. It is reached only when
+  `splitUnboundedAtOneCrossing` returns `[]`, so the question is not "how do we guess better" but
+  "why did the split decline".
+- **Measured, on `conjSymFreeTest`'s A.5 triangle {(5/2,3/2),(0,0),(1/2,1)} with `x*y`:**
+
+        cell nv=2, dirIn = dirOut = [0.5145 -0.8575]      (a HALF-STRIP)
+        |grad| at the crossing = 1.727e-01                 (not the singular-point case)
+        candidate [ 0.5145 -0.8575]: max(n.w) = -5.551e-17  -> recedes the cell
+        candidate [-0.5145  0.8575]: max(n.w) = +1.524e-01  -> does not
+
+  The good candidate was then thrown away by `norm(w - dirIn) > 1e-7 && norm(w - dirOut) > 1e-7`,
+  whose comment is "must not run along one of the cell's own rays, which would cut off nothing".
+- **That test conflates PARALLEL with ALONG.** For a half-strip the escaping branch is parallel to
+  both rays by construction, so EVERY candidate is rejected and the cell is reported as a tangency.
+  A cut actually cuts off nothing only when the whole ray `{X + t w}` already lies in the boundary,
+  i.e. when the crossing X sits ON that ray edge and w is that ray's direction. From any other
+  boundary point the same direction slices the cell in two: a half-strip cut parallel to its rays
+  is two half-strips. The test now asks that instead, using `hit.edge`.
+- **Result.** The A.5 triangle splits and stays exact (3.552714e-15 against the closed-form
+  bilinear sup over the whole probe grid, unchanged). fast 303/0/0.
+- **What it does NOT fix, stated rather than glossed.** G4's own cell still assembles wrongly. With
+  the definition checks off the numeric route now returns `Inf` at some probe points where it used
+  to return a finite over-estimate -- the assembled mesh has a HOLE, so the split path has its own
+  gap for this cell shape. Both are wrong and both are refused in production (`foldDroppedACell`,
+  2.3 s), so nothing regressed that a caller can see; but the next step for G10 is that hole, not
+  another winner heuristic.
+- **`splitDeclined` now records the reason** under `MAXQP_ASSERT`. Every decline here ends in the
+  centroid guess, and three separate investigations of that guess have begun by re-instrumenting
+  this function.

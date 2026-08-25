@@ -180,8 +180,17 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       **Go upstream instead:** that branch is reached only when `splitCell` found ONE boundary
       crossing, and for an unbounded cell that is not a tangency -- the curve leaves through the
       RECESSION CONE, so the cell has one finite crossing and two parts.
-      `splitUnboundedAtOneCrossing` is meant to catch exactly that and declines on both fixtures.
-      Make it succeed and no cell needs a winner read off a centroid.
+      `splitUnboundedAtOneCrossing` declined, and HALF OF THAT IS NOW FIXED: its
+      "must not run along one of the cell's own rays" test conflated PARALLEL with ALONG, so
+      for a HALF-STRIP (dirIn == dirOut) -- where the escaping branch is parallel to both rays
+      by construction -- every candidate was rejected. It now asks whether the crossing sits ON
+      that ray edge, which is when a cut really would cut off nothing. The A.5 triangle splits
+      and stays exact to 3.6e-15; `splitDeclined` records the reason under `MAXQP_ASSERT`.
+      **What is left is a HOLE.** G4's own cell splits now and assembles WRONG: with the
+      definition checks off the numeric route returns `Inf` at some probe points where it used
+      to return a finite over-estimate, so the assembled mesh does not cover. Production is
+      unaffected (`foldDroppedACell` refuses in 2.3 s either way). Chase the hole -- the split
+      halves' ray propagation or their half-edge pairing -- not another winner heuristic.
 
 - [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
