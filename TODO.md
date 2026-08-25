@@ -26,15 +26,21 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
 
 ### The gaps that remain, in the order they should be closed
 
-- [ ] **G1 -- the assembly is consistent per face PAIR, not globally.** `maxQuaPar` can now SPLIT a
-      cell whose arc is cut twice, or whose arc carries a neighbour's vertex in its interior
-      (`bulgeSplit` / the passthrough split, 2026-08-24), and `maxQuaParTest` is green with it. The
-      two fixtures that used it then die two stages later in `assemblePieces`: one side of a shared
-      boundary carries the edge as CURVED and the other as STRAIGHT, so `matchHalfEdges` cannot
-      pair them. **Do not re-attack the refusal; attack the matching.** The shape of the answer is
-      a global pass that collects, per CONIC, every `u` at which any piece needs a split, and
-      applies all of them to every piece carrying that conic -- consistency by construction rather
-      than per pair. `DECISIONS.md` 2026-08-24 has the geometry and why the split itself is sound.
+- [ ] **G1 -- a missing LENS in the overlay.** `maxQuaPar` can now SPLIT a cell whose arc is cut
+      twice, or whose arc carries a neighbour's vertex in its interior (`bulgeSplit` / the
+      passthrough split, 2026-08-24), and `maxQuaParTest` is green with it. The two fixtures that
+      needed it then die two stages later in `assemblePieces`, and the piece dump says why:
+
+          piece 1 src[1 1] carries g2's parabola from (0,0) to (1,1);
+          its would-be neighbours are STRAIGHT edges through (0.5,0.5),
+          which is not on that parabola.
+
+      The two operands each have a boundary between the SAME two dual points -- g1's straight, g2's
+      curved -- so a LENS lies between them, and the arrangement does not contain that cell. The
+      orphaned arc is looking for a partner that was never built. **Do not re-attack the refusal
+      and do not chase the matching**: build the lens when a cell's straight edge and the other
+      operand's arc share both endpoints. `DECISIONS.md` 2026-08-24 (later) has the dump;
+      `SUPPORT_MATRIX.md` 4.1 records the same family of defect from 2026-08-13.
       Closing this removes the LAST measured fallback of the bounded family.
 
 - [ ] **G2 -- an AFFINE face over an UNBOUNDED polygon.** `max(0,x,y)` is the canonical example and
