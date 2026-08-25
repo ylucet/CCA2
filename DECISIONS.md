@@ -2442,3 +2442,37 @@ asserting the cell COUNT as well as the values, because 4-vs-5 is the defect) an
 `aFourConeFanFoldsExactlyAgainstItsOwnPieces`.
 
 **The cross-check stays.** It cost nothing, it is what caught this, and it is one-sided.
+
+## 2026-08-24 (later) — G1 is a LENS, not a matching bug: two operands' boundaries share endpoints but not the curve
+
+Sharpening the earlier G1 entry with what the piece dump actually shows, so the next attempt does
+not start from the error message.
+
+**The symptom.** `f = x^2+y^2` on one triangle of the unit square and `f = xy` on the other. The
+numeric route dies in `assemblePieces`:
+
+    a boundary edge of piece 1 src [1 1] has no matching neighbour:
+    (1,1)->(0,0), curved=1.  Closest candidate: piece 4 src [2 4] (0,0)->(0.5,0.5) curved=0
+
+**What the pieces show.** Piece 1 is `V = [(2,0); (1,1); (0,0)]` with `curveAfter = 2`, so its arc
+IS the edge `(1,1)->(0,0)` -- g2's parabola `(x+y)^2/4 = x`. The pieces offered as neighbours,
+4 and 5, are `[(0,0),(0.5,0.5)]` and `[(0.5,0.5),(1,1)]`, both STRAIGHT, both `src [2 4]`. And
+`(0.5,0.5)` is **not on the parabola**: `(0.5+0.5)^2/4 = 0.25`, not `0.5`.
+
+**So this is not a matching bug.** The two operands each have a boundary running between the SAME
+two dual points `(0,0)` and `(1,1)` -- g1's is the straight diagonal, g2's is the parabola --
+and they are different curves. Between them lies a LENS, and the arrangement has to contain it. The
+orphan is the arc looking for a partner that was never built: what sits on its far side is g1's
+chord, one cell further out.
+
+**Why the arc-split work does not close this.** That work makes ONE cell's arc divisible; this needs
+the OVERLAY of the two operands' boundaries to be complete, which is a different property. The
+"consistent per pair rather than globally" phrasing in the earlier entry is right in outcome and
+wrong in cause -- the missing thing is a cell, not an alignment.
+
+**Where to start.** `SUPPORT_MATRIX.md` 4.1 already lists "half-edges and boundary walks identifying
+an edge by its endpoints alone, which four arcs between the same two points make ambiguous" among
+the defects fixed on 2026-08-13. This is the same family and it is not fully closed: a chord and an
+arc with the same endpoints are two edges, and the lens between them is a face. Build the lens
+explicitly when `clipByFace` produces a cell whose straight edge and the other operand's arc share
+both endpoints, rather than letting one of them stand for both.
