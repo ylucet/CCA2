@@ -85,10 +85,15 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       A crash rather than a wrong answer, so it is the less dangerous of the two, but it is an
       unguarded index and not a refusal by name.
 
-- [ ] **G6 -- the vertex lower bound as a universal check.** `f*(s) >= <s,v> - f(v)` for every
-      vertex `v` of `dom f` is one line, valid for EVERY route including the single-piece one that
-      has no max-of-pieces identity to test against, and it would have caught G4. MEASURE how many
-      existing fixtures violate it before wiring it as a refusal.
+- [ ] **G6 -- the EDGE lower bound as a universal check. MEASURED, and it is sharp.** Along each
+      edge of `dom f` the objective `<s,x> - q(x)` is a quadratic in the segment parameter, so its
+      maximum is closed form, and `f*` must be at least that. On the 24-case random sweep it fires
+      on **exactly** case 21 (G4, at -2.742e-02) and on nothing else -- every other case sits at
+      ~1e-15. The VERTEX-only version of the same idea catches NOTHING (0 of 24, including case
+      21, because that sup is not attained at a vertex), so build the edge one.
+      It is cheaper than the fold cross-check already in `conjPolygonalDomain` and, unlike it,
+      covers the SINGLE-PIECE route. `DECISIONS.md` 2026-08-25 (later) has the numbers and the one
+      case it still cannot see.
 
 - [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
       (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded

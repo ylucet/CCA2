@@ -2539,3 +2539,38 @@ value anywhere in the family.
 one, which has no "max of pieces" identity to test against. A conjugate that dips below the max of
 those affine minorants is definitely wrong. Before wiring it as a refusal, MEASURE how many existing
 fixtures violate it: a check that reroutes half the suite to the symbolic path is not an improvement.
+
+## 2026-08-25 (later) — the VERTEX bound catches nothing; the EDGE bound catches exactly the defect
+
+G6 was proposed as `f*(s) >= <s,v> - f(v)` at every vertex of `dom f` -- a one-line, always-valid
+lower bound that would work on every route including the single-piece one, which has no
+"max of pieces" identity to check against. **Measured before building it, and the proposal as
+stated is useless:**
+
+    vertex bound, 24 random cases:   0 violate    (worst -8.9e-16, machine noise -- including
+                                                   case 21, the known 2.7e-2 minorant)
+
+The reason is immediate once seen: case 21's sup is not attained at a vertex, so the vertex bound
+is slack exactly where the answer is wrong.
+
+**The EDGE bound is the right strengthening, and it is just as cheap.** Along the segment
+`v_i + t(v_j - v_i)`, the objective `<s,x> - q(x)` is a QUADRATIC in `t`, so its maximum over
+`t in [0,1]` is one closed-form expression -- two endpoint values plus, when the quadratic is
+concave, the interior stationary point. It is a valid lower bound on `f*` for the same reason a
+vertex is: the sup over the domain is at least the sup over any subset. Measured on the same 24:
+
+    vertex + edge bound:             1 violates   -- case 21, at exactly -2.742e-02,
+                                                     and every other case at ~1e-15
+
+So it is SHARP on this family: it fires on the one known wrong answer and on nothing else. That is
+the property a check has to have before it is wired as a refusal -- one that reroutes correct
+answers to the symbolic path is not an improvement.
+
+**Cost.** One quadratic per edge per probe point, no iteration, no engine. Cheaper than the fold
+cross-check already in `conjPolygonalDomain`, and unlike that one it covers the SINGLE-PIECE route.
+
+**What it still cannot see.** A sup attained strictly inside the domain. For a CONCAVE or
+INDEFINITE piece the maximiser of `<s,x> - q(x)` is on the boundary, so the bound is tight there;
+for a CONVEX piece it can be interior -- but that is the route `conjConvexPolygon` handles in
+closed form and which the random sweep found exact in every case. Note the limit rather than
+claiming the check is complete.
