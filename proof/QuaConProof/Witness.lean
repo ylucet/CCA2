@@ -112,8 +112,11 @@ noncomputable def V2 : Finset Plane := {(-2, -4), (2, -4), (0, -3/2)}
 lemma V1_nonempty : V1.Nonempty := ⟨(-1, -1), by simp [V1]⟩
 lemma V2_nonempty : V2.Nonempty := ⟨(-2, -4), by simp [V2]⟩
 
-noncomputable def p1 : QuaPiece := ⟨V1, V1_nonempty, q1⟩
-noncomputable def p2 : QuaPiece := ⟨V2, V2_nonempty, q2⟩
+noncomputable def p1 : QuaPiece := ⟨V1, V1_nonempty, ∅, q1⟩
+noncomputable def p2 : QuaPiece := ⟨V2, V2_nonempty, ∅, q2⟩
+
+@[simp] lemma p1_rays : p1.rays = ∅ := rfl
+@[simp] lemma p2_rays : p2.rays = ∅ := rfl
 
 /-- The two-piece `QuaPol`. Its pieces are disjoint, hence non-adjacent. -/
 noncomputable def f : QuaPol := ⟨{p1, p2}, ⟨p1, by simp⟩⟩
@@ -186,6 +189,7 @@ The barycentric weights over `(-1,-1), (1,-1), (0,2)` are
 `(D+4+12n)/(3D)`, `(D+4-12n)/(3D)`, `(D-8)/(3D)` with `D = n²+1`; the middle one
 is `(n² - 12n + 5)/(3D)`, which is where `n ≥ 12` is needed. -/
 theorem interiorPoint_q1_mem (k : ℕ) : interiorPoint q1 (sw k) ∈ p1.T := by
+  rw [QuaPiece.T_of_rays_empty p1_rays]
   have hd := sw_den_pos k
   set n : ℝ := (k : ℝ) + 12 with hn
   have hk0 : (0 : ℝ) ≤ (k : ℝ) := Nat.cast_nonneg k
@@ -204,6 +208,11 @@ theorem interiorPoint_q1_mem (k : ℕ) : interiorPoint q1 (sw k) ∈ p1.T := by
     constructor <;> (field_simp; ring)
 
 /-! ### The certificate, and the conclusion -/
+
+/-- The witness is a Stage 1 `QuaPol`: neither piece has a recession direction. -/
+lemma bounded : f.Bounded := by
+  intro p hp
+  rcases mem_pieces_iff.1 hp with rfl | rfl <;> rfl
 
 lemma convex_pieces : ∀ p ∈ f.pieces, 0 < p.q.a ∧ 0 < p.q.hessDet := by
   intro p hp

@@ -101,16 +101,16 @@ At Stage 1 both sides are empty: `QuaPol.conj_ne_top` says the conjugate is
 finite everywhere, because every piece is compact, and `selection` says some
 candidate is always active. The conjunct becomes substantive only in Phase 7,
 when unbounded pieces make `dom f*` a proper subset. -/
-theorem cell_empty_eq (f : QuaPol) : cell f ∅ = {s : Plane | f.conj s = ⊤} := by
+theorem cell_empty_eq {f : QuaPol} (hb : f.Bounded) : cell f ∅ = {s : Plane | f.conj s = ⊤} := by
   have hR : {s : Plane | f.conj s = ⊤} = (∅ : Set Plane) := by
     ext s
     simp only [Set.mem_ofPred_eq, Set.mem_empty_iff_false, iff_false]
-    exact conj_ne_top f s
+    exact conj_ne_top hb s
   have hL : cell f ∅ = (∅ : Set Plane) := by
     ext s
     simp only [mem_cell_iff, Set.mem_empty_iff_false, iff_false]
     intro hact
-    obtain ⟨q, hq, hqs⟩ := selection f s
+    obtain ⟨q, hq, hqs⟩ := selection hb s
     have hmem : q ∈ active f s := mem_active_iff.2 ⟨hq, hqs⟩
     rw [hact] at hmem
     exact Finset.notMem_empty q hmem
@@ -118,8 +118,9 @@ theorem cell_empty_eq (f : QuaPol) : cell f ∅ = {s : Plane | f.conj s = ⊤} :
 
 /-- Restated for the record: **at Stage 1 the conjugate is finite everywhere**, so
 its domain is the whole plane and no cell carries `+∞`. -/
-theorem dom_conj_eq_univ (f : QuaPol) : {s : Plane | f.conj s ≠ ⊤} = Set.univ :=
-  Set.eq_univ_of_forall fun s => conj_ne_top f s
+theorem dom_conj_eq_univ {f : QuaPol} (hb : f.Bounded) :
+    {s : Plane | f.conj s ≠ ⊤} = Set.univ :=
+  Set.eq_univ_of_forall fun s => conj_ne_top hb s
 
 /-- **At every point of the plane some candidate quadratic is active.**
 
@@ -127,8 +128,9 @@ The bite of the theorem, stated separately because the six conjuncts of
 `conj_isQuaCon` are each about *cells* and this one is about *points*: there is a
 finite list of quadratics, computed from the input, and at every `s` the
 conjugate equals one of them. -/
-theorem active_nonempty (f : QuaPol) (s : Plane) : (active f s).Nonempty := by
-  obtain ⟨q, hq, hqs⟩ := selection f s
+theorem active_nonempty {f : QuaPol} (hb : f.Bounded) (s : Plane) :
+    (active f s).Nonempty := by
+  obtain ⟨q, hq, hqs⟩ := selection hb s
   exact ⟨q, mem_active_iff.2 ⟨hq, hqs⟩⟩
 
 /-! ### The theorem -/
@@ -144,7 +146,7 @@ one of the degenerate cases, as `Conic.lean` classifies them.
 What this deliberately does **not** claim, per the agreed regularity level: any
 statement about dimension, connectedness, arcs, or a face-to-face CW structure.
 See `DECISIONS.md`, 2026-08-21. -/
-theorem conj_isQuaCon (f : QuaPol) :
+theorem conj_isQuaCon {f : QuaPol} (hb : f.Bounded) :
     -- cells are pairwise disjoint
     (∀ S T : Finset Quad, S ≠ T → Disjoint (cell f S) (cell f T))
     -- and cover the plane
@@ -162,7 +164,7 @@ theorem conj_isQuaCon (f : QuaPol) :
         ∧ IsConic {s : Plane | q₁.eval s = q₂.eval s}) := by
   refine ⟨fun S T h => cell_disjoint f h, iUnion_cell_eq_univ f,
     fun S q hq s hs => conj_eq_of_mem_cell hq hs, finite_nonempty_cells f,
-    cell_empty_eq f, fun S q₁ q₂ h₁ h₂ hne =>
+    cell_empty_eq hb, fun S q₁ q₂ h₁ h₂ hne =>
       ⟨cell_subset_eqLocus h₁ h₂, isConic_eqLocus hne⟩⟩
 
 end QuaConProof

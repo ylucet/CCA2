@@ -158,10 +158,22 @@ lemma continuous_psi (q : Quad) (s : Plane) : Continuous (psi q s) := by
   unfold psi dot Quad.eval
   fun_prop
 
-/-- **S2.** The supremum of `psi` over a piece is attained. -/
-theorem exists_isMaxOn_piece (p : QuaPiece) (s : Plane) :
+/-- **S2.** On a piece with no recession directions the supremum of `psi` is
+attained, by compactness. With rays this needs a real theorem — see
+`QuaPol.Attained` below. -/
+theorem exists_isMaxOn_piece {p : QuaPiece} (hr : p.rays = ∅) (s : Plane) :
     ∃ x ∈ p.T, IsMaxOn (psi p.q s) p.T x :=
-  p.isCompact_T.exists_isMaxOn p.T_nonempty (continuous_psi p.q s).continuousOn
+  (QuaPiece.isCompact_T hr).exists_isMaxOn p.T_nonempty (continuous_psi p.q s).continuousOn
+
+/-- **Attainment at `s`**: every piece's objective attains its supremum. This is
+the hypothesis every step below actually consumes; boundedness of the pieces is
+only one way to get it (`attained_of_bounded`), and Phase 7 supplies the other. -/
+def QuaPol.Attained (f : QuaPol) (s : Plane) : Prop :=
+  ∀ p ∈ f.pieces, ∃ x ∈ p.T, IsMaxOn (psi p.q s) p.T x
+
+/-- Bounded pieces are compact, so their suprema are attained. -/
+theorem attained_of_bounded {f : QuaPol} (hb : f.Bounded) (s : Plane) : f.Attained s :=
+  fun p hp => exists_isMaxOn_piece (hb p hp) s
 
 /-! ### S1: the infimum over pieces is attained, and the conjugate is finite -/
 
@@ -196,11 +208,13 @@ empty — it only becomes real once unbounded pieces are admitted (Phase 7).
 
 This is stronger than the plan anticipated, and it makes `selection` hold
 unconditionally. -/
-theorem conj_ne_top (f : QuaPol) (s : Plane) : f.conj s ≠ ⊤ := by
-  have hmax : ∀ p : QuaPiece, ∃ Mp : ℝ, ∀ x ∈ p.T, psi p.q s x ≤ Mp := by
+theorem conj_ne_top {f : QuaPol} (hb : f.Bounded) (s : Plane) : f.conj s ≠ ⊤ := by
+  have hmax : ∀ p : QuaPiece, ∃ Mp : ℝ, p ∈ f.pieces → ∀ x ∈ p.T, psi p.q s x ≤ Mp := by
     intro p
-    obtain ⟨x, _, hxmax⟩ := exists_isMaxOn_piece p s
-    exact ⟨psi p.q s x, fun y hy => hxmax hy⟩
+    by_cases hp : p ∈ f.pieces
+    · obtain ⟨x, _, hxmax⟩ := exists_isMaxOn_piece (hb p hp) s
+      exact ⟨psi p.q s x, fun _ y hy => hxmax hy⟩
+    · exact ⟨0, fun h => absurd h hp⟩
   choose Mp hMp using hmax
   set M : ℝ := f.pieces.sup' f.pieces_nonempty Mp with hM
   have hbound : ∀ x : Plane, ((dot s x : ℝ) : EReal) - f.eval x ≤ ((M : ℝ) : EReal) := by
@@ -210,7 +224,7 @@ theorem conj_ne_top (f : QuaPol) (s : Plane) : f.conj s ≠ ⊤ := by
     · obtain ⟨p, hp, hxT, hev⟩ := exists_piece_eq_eval hx
       rw [hev, ← EReal.coe_sub]
       exact EReal.coe_le_coe_iff.2
-        (le_trans (hMp p x hxT) (Finset.le_sup' Mp hp))
+        (le_trans (hMp p hp x hxT) (Finset.le_sup' Mp hp))
   intro htop
   have hle := iSup_le hbound
   rw [← QuaPol.conj_def, htop, top_le_iff] at hle
@@ -218,21 +232,26 @@ theorem conj_ne_top (f : QuaPol) (s : Plane) : f.conj s ≠ ⊤ := by
 
 /-- **S1 + S2 combined.** The conjugate is attained: some piece and some point of
 that piece realise it, and that point maximises `psi` over the piece. -/
-theorem exists_maximiser (f : QuaPol) (s : Plane) :
+theorem exists_maximiser {f : QuaPol} {s : Plane} (hA : f.Attained s) :
     ∃ p ∈ f.pieces, ∃ x ∈ p.T, IsMaxOn (psi p.q s) p.T x ∧
       ((psi p.q s x : ℝ) : EReal) = f.conj s := by
   -- pick a maximiser on each piece, then the best piece
-  have hmax : ∀ p : QuaPiece, ∃ x, x ∈ p.T ∧ IsMaxOn (psi p.q s) p.T x := by
-    intro p; obtain ⟨x, hx, hxm⟩ := exists_isMaxOn_piece p s; exact ⟨x, hx, hxm⟩
-  choose xm hxmT hxmMax using hmax
+  have hmax : ∀ p : QuaPiece, ∃ x, p ∈ f.pieces → x ∈ p.T ∧ IsMaxOn (psi p.q s) p.T x := by
+    intro p
+    by_cases hp : p ∈ f.pieces
+    · obtain ⟨x, hx, hxm⟩ := hA p hp; exact ⟨x, fun _ => ⟨hx, hxm⟩⟩
+    · exact ⟨0, fun h => absurd h hp⟩
+  choose xm hxm using hmax
+  have hxmT : ∀ p ∈ f.pieces, xm p ∈ p.T := fun p hp => (hxm p hp).1
+  have hxmMax : ∀ p ∈ f.pieces, IsMaxOn (psi p.q s) p.T (xm p) := fun p hp => (hxm p hp).2
   obtain ⟨p, hp, hpsup⟩ :=
     Finset.exists_mem_eq_sup' f.pieces_nonempty (fun p => psi p.q s (xm p))
-  refine ⟨p, hp, xm p, hxmT p, hxmMax p, le_antisymm ?_ ?_⟩
+  refine ⟨p, hp, xm p, hxmT p hp, hxmMax p hp, le_antisymm ?_ ?_⟩
   · -- `psi ≤ f*`: the value is attained, at `xm p` on the piece `p`
     rw [QuaPol.conj_def]
     refine le_iSup_of_le (xm p) ?_
     have hle : f.eval (xm p) ≤ ((p.q.eval (xm p) : ℝ) : EReal) :=
-      QuaPol.eval_le_of_mem hp (hxmT p)
+      QuaPol.eval_le_of_mem hp (hxmT p hp)
     calc ((psi p.q s (xm p) : ℝ) : EReal)
         = ((dot s (xm p) : ℝ) : EReal) - ((p.q.eval (xm p) : ℝ) : EReal) := by
           rw [← EReal.coe_sub]; rfl
@@ -245,7 +264,7 @@ theorem exists_maximiser (f : QuaPol) (s : Plane) :
     · rw [hy, EReal.sub_top]; exact bot_le
     · obtain ⟨p', hp', hyT, hev⟩ := exists_piece_eq_eval hy
       rw [hev, ← EReal.coe_sub]
-      refine EReal.coe_le_coe_iff.2 (le_trans (hxmMax p' hyT) ?_)
+      refine EReal.coe_le_coe_iff.2 (le_trans (hxmMax p' hp' hyT) ?_)
       rw [← hpsup]
       exact Finset.le_sup' (fun p => psi p.q s (xm p)) hp'
 
@@ -335,7 +354,7 @@ theorem foc_soc {p : QuaPiece} {s x : Plane} {W : Finset Plane} {lam : Plane →
   set ε : ℝ := min (lam v) (lam w) with hε
   have hε0 : 0 < ε := lt_min (hpos v hv) (hpos w hw)
   have hsub : convexHull ℝ (↑W : Set Plane) ⊆ p.T :=
-    convexHull_mono (Finset.coe_subset.2 hWV)
+    fun z hz => p.convexHull_subset_T (convexHull_mono (Finset.coe_subset.2 hWV) hz)
   have key : ∀ t : ℝ, |t| < ε → t * A - t ^ 2 * B / 2 ≤ 0 := by
     intro t ht
     have htv : t ≤ lam v := le_trans (le_abs_self t) (le_of_lt (lt_of_lt_of_le ht (min_le_left _ _)))
@@ -525,20 +544,21 @@ does not, the conditions force `∇q(x) = s`, giving `interiorBranch` when the
 Hessian is nonsingular and, when it is singular, a slide along `ker H` onto a
 proper face at no cost to the value (`psi_const_along_kernel`, `exists_descent`).
 A single vertex is the base case. -/
-theorem exists_branch_eq_max (p : QuaPiece) (s : Plane) {x : Plane} (hx : x ∈ p.T)
-    (hmax : IsMaxOn (psi p.q s) p.T x) :
+theorem exists_branch_eq_max {p : QuaPiece} (hr : p.rays = ∅) (s : Plane) {x : Plane}
+    (hx : x ∈ p.T) (hmax : IsMaxOn (psi p.q s) p.T x) :
     ∃ b ∈ p.branches, b.eval s = psi p.q s x :=
-  branch_aux p s p.verts.card p.verts x rfl (fun _ hz => hz) p.verts_nonempty hx hmax
+  branch_aux p s p.verts.card p.verts x rfl (fun _ hz => hz) p.verts_nonempty
+    (by rwa [QuaPiece.T_of_rays_empty hr] at hx) hmax
 
 /-- **Selection.** Some candidate quadratic attains the conjugate at every point.
 
-At Stage 1 this is unconditional: `conj_ne_top` shows the conjugate is finite
-everywhere, because every piece is compact. -/
-theorem selection (f : QuaPol) (s : Plane) :
+For bounded pieces this is unconditional: `conj_ne_top` shows the conjugate is
+finite everywhere, because every piece is compact. -/
+theorem selection {f : QuaPol} (hb : f.Bounded) (s : Plane) :
     ∃ q ∈ cand f, ((q.eval s : ℝ) : EReal) = f.conj s := by
-  obtain ⟨p, hp, x, hxT, hxmax, hval⟩ := exists_maximiser f s
-  obtain ⟨b, hb, hbe⟩ := exists_branch_eq_max p s hxT hxmax
-  exact ⟨b, mem_cand hp hb, by rw [hbe]; exact hval⟩
+  obtain ⟨p, hp, x, hxT, hxmax, hval⟩ := exists_maximiser (attained_of_bounded hb s)
+  obtain ⟨b, hb', hbe⟩ := exists_branch_eq_max (hb p hp) s hxT hxmax
+  exact ⟨b, mem_cand hp hb', by rw [hbe]; exact hval⟩
 
 /-! ### Sanity checks for S8 -/
 

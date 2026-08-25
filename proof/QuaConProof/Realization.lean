@@ -61,13 +61,18 @@ theorem le_conj {f : QuaPol} {p : QuaPiece} (hp : p ∈ f.pieces) {x : Plane}
 /-- **Upper bound.** A bound valid on every point of every piece bounds `f*`.
 
 The supremum defining `f*` ranges over all of the plane, not just over the
-pieces, so this is not immediate — it uses `exists_maximiser`, i.e. that the
-supremum is attained at a point of a piece. -/
+pieces, so this is not immediate. It needs no attainment, though: off the pieces
+`f` is `⊤` and the term is `⊥`, and on them `exists_piece_eq_eval` names a piece
+realising the value. That is what keeps this usable when pieces are unbounded. -/
 theorem conj_le {f : QuaPol} {s : Plane} {M : ℝ}
     (h : ∀ p ∈ f.pieces, ∀ x ∈ p.T, psi p.q s x ≤ M) : f.conj s ≤ (M : EReal) := by
-  obtain ⟨p, hp, x, hxT, _, hval⟩ := exists_maximiser f s
-  rw [← hval]
-  exact_mod_cast h p hp x hxT
+  rw [QuaPol.conj_def]
+  refine iSup_le fun x => ?_
+  by_cases hx : f.eval x = ⊤
+  · rw [hx, EReal.sub_top]; exact bot_le
+  · obtain ⟨p, hp, hxT, hev⟩ := exists_piece_eq_eval hx
+    rw [hev, ← EReal.coe_sub]
+    exact EReal.coe_le_coe_iff.2 (h p hp x hxT)
 
 /-- **The certificate.** A point of a piece that beats every point of every piece
 pins the conjugate exactly. -/
