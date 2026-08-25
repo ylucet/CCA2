@@ -47,14 +47,6 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C3 -- row 5 of Theorem 4: a vertex of `f*` gives an affine 2-cell.** (S)
-      Corollary of C2 with three active candidates: `f**` is affine on the
-      triangle of the three maximisers, with gradient `s`. Include the sharpness
-      half -- the cell is *exactly* that hull -- if it comes cheaply; if not,
-      state the containment and note the gap.
-- [ ] **C4 -- row 4 of Theorem 4: an arc of `f*` gives a ruled 2-cell.** (S/M)
-      Corollary of C2 with two active candidates: `f**` is affine along each
-      ruling `[x_i(s), x_j(s)]`, with value `<s,x> - f*(s)`.
 - [ ] **C5 -- rows 1 to 3: a 2-cell of `f*`, by the rank of its Hessian.** (L)
       Where exactly one candidate `g` is active, the maximiser should be unique
       and equal to the point where `grad g(s)` sends `s`; then
@@ -103,6 +95,16 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+
+
+- [x] 2026-08-24 -- **C3, C4: rows 4 and 5 of Theorem 4.** `Biconj.lean`.
+      `biconj_affine_on_segment` (the ruled cell) and
+      `biconj_affine_on_triangle` (the affine cell over a vertex of `f*`), both
+      corollaries of C2. Plus the three bridges from an *active candidate* to a
+      *maximiser*: unconditional for a vertex branch, and conditional on the
+      stationary point lying in the piece for the other two -- which is the edge
+      branch overshoot of `DECISIONS.md` 2026-08-21 showing up again.
 
 - [x] 2026-08-24 -- **C2: the key lemma.** `Biconj.lean`,
       `biconj_eq_affineMinorant_on_hull`: wherever `f*(s)` is finite, `f**`

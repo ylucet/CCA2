@@ -30,6 +30,13 @@ guardrails require.
 
 ## What changed
 
+- **C3, C4 done.** Rows 4 and 5 of Theorem 4's table, both immediate from C2.
+  Recorded honestly: the corners of those cells are the *maximisers*, not the
+  active candidates, and the bridge between them is unconditional only for
+  vertex branches -- an active edge branch can have its stationary point outside
+  its own segment. Also hit git index contention with the MATLAB session for the
+  first time; a retry loop handled it.
+
 - **C2 done** -- the key lemma of Track C.
   `biconj_eq_affineMinorant_on_hull`: where `f*(s)` is finite, `f**` equals the
   affine minorant `A_s` on the convex hull of `maxSet f s`, with `s` as

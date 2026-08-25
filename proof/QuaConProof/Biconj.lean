@@ -213,6 +213,75 @@ theorem biconj_subgradient {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤)
   rw [hrw]
   exact affineMinorant_le_biconj hs z
 
+/-! ### Rows 4 and 5 of Theorem 4
+
+`TODO.md` items C3 and C4. Both are corollaries of the key lemma: a 1-cell of
+`f*` (two branches active) gives a **ruled** 2-cell of `f**` on which `f**` is
+affine along each ruling, and a 0-cell (three active) gives a 2-cell on which
+`f**` is **affine outright**. In both cases the value is `⟨s,x⟩ - f*(s)` and the
+gradient is `s`.
+
+## Getting from an active candidate to a maximiser
+
+The corners of those cells are the *maximisers*, not the active candidates, and
+the two are not the same thing: an edge branch can be active while its stationary
+point lies outside its own segment, in which case it is not attained there
+(`DECISIONS.md`, 2026-08-21 — this is exactly why `selection` is not
+`f* = max over cand`). The three bridge lemmas below say when an active candidate
+does deliver a maximiser. For a **vertex** branch there is no side condition, the
+vertex always lies in its piece; for the other two the stationary point must. -/
+
+/-- An active vertex branch always contributes its vertex to `maxSet`. -/
+lemma mem_maxSet_of_vertexBranch_active {f : QuaPol} {p : QuaPiece} {v s : Plane}
+    (hp : p ∈ f.pieces) (hv : v ∈ p.verts)
+    (hact : (((vertexBranch p.q v).eval s : ℝ) : EReal) = f.conj s) :
+    v ∈ maxSet f s :=
+  ⟨p, hp, p.subset_T hv, by rwa [vertexBranch_eval] at hact⟩
+
+/-- An active edge branch contributes its stationary point, when that point lies
+in the piece. -/
+lemma mem_maxSet_of_edgeBranch_active {f : QuaPol} {p : QuaPiece} {v w s : Plane}
+    (hp : p ∈ f.pieces) (hcurv : edgeCurv p.q v w ≠ 0)
+    (hin : edgePoint p.q v w s ∈ p.T)
+    (hact : (((edgeBranch p.q v w).eval s : ℝ) : EReal) = f.conj s) :
+    edgePoint p.q v w s ∈ maxSet f s :=
+  ⟨p, hp, hin, by rwa [edgeBranch_eval p.q v w s hcurv] at hact⟩
+
+/-- An active interior branch contributes its stationary point, when that point
+lies in the piece. -/
+lemma mem_maxSet_of_interiorBranch_active {f : QuaPol} {p : QuaPiece} {s : Plane}
+    (hp : p ∈ f.pieces) (hdet : p.q.hessDet ≠ 0)
+    (hin : interiorPoint p.q s ∈ p.T)
+    (hact : (((interiorBranch p.q).eval s : ℝ) : EReal) = f.conj s) :
+    interiorPoint p.q s ∈ maxSet f s :=
+  ⟨p, hp, hin, by rwa [interiorBranch_eval p.q s hdet] at hact⟩
+
+/-- **Row 4 of Theorem 4: the ruled cell.** Two maximisers at `s` give a segment
+on which `f**` is affine — a ruling — with value `⟨s,x⟩ - f*(s)`. -/
+theorem biconj_affine_on_segment {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤)
+    {x₁ x₂ : Plane} (h₁ : x₁ ∈ maxSet f s) (h₂ : x₂ ∈ maxSet f s)
+    {x : Plane} (hx : x ∈ segment ℝ x₁ x₂) :
+    f.biconj x = ((f.affineMinorant s x : ℝ) : EReal) := by
+  refine biconj_eq_affineMinorant_on_hull hs ?_
+  refine convexHull_mono (s := ({x₁, x₂} : Set Plane)) ?_ ?_
+  · rintro z (rfl | rfl)
+    · exact h₁
+    · exact h₂
+  · rwa [convexHull_pair]
+
+/-- **Row 5 of Theorem 4: the affine cell over a vertex of `f*`.** Three
+maximisers at `s` give a triangle on which `f**` is affine. -/
+theorem biconj_affine_on_triangle {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤)
+    {x₁ x₂ x₃ : Plane} (h₁ : x₁ ∈ maxSet f s) (h₂ : x₂ ∈ maxSet f s)
+    (h₃ : x₃ ∈ maxSet f s)
+    {x : Plane} (hx : x ∈ convexHull ℝ ({x₁, x₂, x₃} : Set Plane)) :
+    f.biconj x = ((f.affineMinorant s x : ℝ) : EReal) := by
+  refine biconj_eq_affineMinorant_on_hull hs (convexHull_mono ?_ hx)
+  rintro z (rfl | rfl | rfl)
+  · exact h₁
+  · exact h₂
+  · exact h₃
+
 end QuaPol
 
 end QuaConProof
