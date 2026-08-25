@@ -241,8 +241,11 @@ largest functional gap.
 | Single **bounded triangle**, Step 1 envelope has **one** face | **OK** (numeric; fast) | `QuaPar` | — |
 | …envelope split with a **rational** face, 2-face split | **OK** (falls back to cPLQ's Step 2/3; slow, ~100 s) | `QuaParCPLQ` | — |
 | …envelope split with a **rational** face, 4-face split | **OK** (2026-07-29; symbolic, ~27 min) | `QuaParCPLQ` | — |
-| General **bounded** domain (multi-face and/or non-triangular) | **OK** (symbolic; slow) | `QuaParCPLQ` | — |
-| **Unbounded** multi-face domain, faces whose convex envelope is **affine** | **OK** (2026-07-31; symbolic) | `QuaParCPLQ` | — |
+| General **bounded** domain (multi-face and/or non-triangular) | **OK** — numeric when every face is convex or the fold succeeds, symbolic otherwise | `QuaPol`/`QuaPar`, else `QuaParCPLQ` | — |
+| Any face carrying a **positive definite** quadratic, bounded or not | **OK** (2026-08-24, numeric, 0.01–0.1 s) — `conjConvexPolygon` takes the face WHOLE: no triangulation, any number of facets, and the result is POLYHEDRAL (`QuaPol`), so nothing curved reaches Step 3 from it | `QuaPol` | — |
+| **Unbounded** multi-face domain, faces carrying **convex quadratics** | **OK** (2026-08-24, NUMERIC) — the `isDomBounded` gate on the numeric route is gone; a recession direction changes one branch of `conjConvexPolygon` and nothing else | `QuaPar` (meshed) | — |
+| **Unbounded** multi-face domain, faces whose convex envelope is **affine** | **OK** (2026-07-31; still symbolic) — the conjugate of an affine piece over an unbounded polygon is a SUPPORT function, so it is `+inf` off a cone, and `maxQuaPar` refuses an operand that is not finite everywhere. `max(0,x,y)` is the canonical case; `TODO.md` G2 | `QuaParCPLQ` | `maxQuaPar:notFullDomain` |
+| **Unbounded** face carrying a **non-convex** quadratic | **GAP** — the fan-triangulation route needs bounded triangles; `TODO.md` G3 | — | `PLQ:conjCPLQ:notImplemented` |
 | **Unbounded** multi-face domain, a face with a **curved convex** envelope | **GAP** | — | `plq_1p:conjugateFunction:unboundedNonAffine` |
 | Step 3 with a **non-triangular** envelope piece | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:161` |
 | Cubic (`PLC`) input | **N/R** — cubic is for `isConvex` only | — | `assertOperable`; `quaPolToPlq:cubic` |
@@ -457,18 +460,44 @@ before that date predate the arc-vs-arc work and were off by ~1400 lines.
 | An **unbounded** piece whose vertices all lie ON `{f1=f2}` | **OK** (2026-08-14) — `splitCell`'s unbounded "rest" piece can have exactly the two crossing points as its vertices, and then neither they nor their centroid can decide the winner; it was coming out of floating-point noise. Read in the piece's **recession cone** instead, sharing `assignSideFromCone`'s probe | — |
 | An unbounded piece that genuinely **straddles** `{f1=f2}` | **INV**, backstop — the assigned winner must still hold at infinity along each of the piece's own rays, tested exactly via the leading coefficient. Fires on no current fixture; kept because a genuine straddle is otherwise silent | `maxQuaPar:notImplemented` — `maxQuaPar.m:3472` |
 | Split curve meets an unbounded cell once and escapes as a **parabola** | **GAP** (defensive) — an unbounded curved edge | `maxQuaPar.m:2650`, `maxQuaPar.m:2904` |
-| Clip line cutting one arc **twice** (arc bulging across) | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar.m:1970` |
+| Clip line cutting one arc **twice** (arc bulging across) | **OK** (2026-08-24) — `clipPolyHalfPlane` cuts the cell along the line through the arc's own stationary point PARALLEL TO THE PARABOLA'S AXIS, which meets the conic exactly once, so each half has one sub-arc and the clip line crosses each at most once. Was a GAP claimed to need "curveAfter becoming a set"; it does not. See §4.4 | — |
 | Curved cut crossing a cell's own arc twice | **GAP** (defensive) | `maxQuaPar.m:1361` |
 | Curved cut that **separates** an unbounded cell | **N/R** — each component would need the cutting conic running to infinity | `maxQuaPar.m:1494` |
 | Curved corner cut leaving an unbounded survivor with two arcs / one ray | **GAP** (defensive) | `maxQuaPar.m:1668`, `maxQuaPar.m:1678` |
 | Two-arc lens cut `A→M→B` that leaves the cell | **GAP** — the two arcs join corners on opposite parabola branches, so the polyline exits; needs a different subdivision | `maxQuaPar.m:1751` |
-| Face vertex inside the **open interior of an arc** (arc must be split) | **GAP** (defensive; 0 occurrences observed) | `maxQuaPar.m:1077` |
+| Face vertex inside the **open interior of an arc** (arc must be split) | **OK** (2026-08-24) — the same axis-parallel cut, applied at that vertex. NO LONGER "0 occurrences observed": it fires on every indefinite quadratic over a polygon, which is how it was found | — |
 | Curved **ray** edge | **N/R** — `QuaPar` has no unbounded curved edge | `maxQuaPar.m:839` |
 | Face with more than one curved edge | **N/R** — one `Ec` slot per piece | `maxQuaPar.m:903` |
 | Input not finite everywhere | **N/R** — Step 3 combines full-domain conjugates | `maxQuaPar:notFullDomain` — `maxQuaPar.m:848` |
 | Difference of the two candidate quadratics is an irreducible ellipse/hyperbola | **N/R** | `maxQuaPar:notDegenerate` — `maxQuaPar.m:2510` |
-| `maxQuaPar:internal` (11 sites) | **INV** | assembly-topology invariants |
+| Clipping a cell whose arc bulges, reached BELOW `clipPolyHalfPlane` | **INV** (2026-08-24) — the caller subdivides first, so `clipPolyHalfPlaneCurved` is only ever entered on a cell where the at-most-one-crossing invariant holds. Kept because it is the invariant every branch of that routine assumes | `maxQuaPar:internal` |
+| Assembly after an arc split: one side CURVED, the other STRAIGHT | **GAP**, and it is the live one — `matchHalfEdges` pairs curved with curved, and the subdivision is currently consistent per face PAIR rather than globally. This is what still sends an indefinite quadratic over a POLYGON to the symbolic fallback. `DECISIONS.md` 2026-08-24 has the design | `maxQuaPar:internal` — `assemblePieces` |
+| `maxQuaPar:internal` (other sites) | **INV** | assembly-topology invariants |
 | `maxQuaPar:pieceInvariant` (`maxQuaPar.m:335`) | **INV**, opt-in | the three exact piece invariants; off unless `MAXQP_ASSERT` is set — see §4.2 |
+
+### 4.4 The axis-parallel split — why the two arc guards above became OK (2026-08-24)
+
+Both guards refused the same thing for the same stated reason: the result would be "bounded by two
+separate arcs, neither of which is representable as one QuaPar face", and lifting it "means
+generalizing a piece to carry several arcs (curveAfter becoming a set)". **It does not.** One arc
+per face is an invariant maintained by SUBDIVIDING, exactly as `splitCell` already does, and there
+is a canonical cut:
+
+> Cut the cell along the line through the split point **parallel to the parabola's axis**. Such a
+> line meets the conic EXACTLY ONCE -- which is precisely what `parabolaArcFrame`'s own header says
+> makes `u` a global monotone parameter -- so it divides the arc into two sub-arcs, one per half,
+> and creates no second arc. Both halves carry the same face function, so the FUNCTION is unchanged
+> and only the subdivision is finer.
+
+For the bulge case the cut point is forced rather than chosen: along the arc `nrm*x'-c` is the
+quadratic `A2 u^2 + A1 u + A0` (`lineCoeffs`), so it has ONE stationary point `u* = -A1/(2 A2)` --
+the quantity `arcBulgesAcross` already computes to DETECT the case -- and each sub-arc lies on one
+side of it, hence is monotone. The recursion is one level deep by construction: clipping a half by
+the split line itself restricts to `u - u*`, which is affine.
+
+`maxQuaParTest` 29/0 and `addQuaParTest` 4/0 with the split in. What it does NOT yet close is the
+assembly row above: the split is applied per face PAIR, so two pieces sharing an arc can disagree
+about where it is divided.
 
 ### 4.1 Arc-vs-arc, measured 2026-08-13
 

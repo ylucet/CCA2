@@ -76,7 +76,18 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             caseC = QuaPol(V, E, [1 0 1 0 0 0; 1 0 1 0 0 0], F);
-            testCase.verifyEqual(caseC.conj().kind(), 'QuaPar');
+            % ASSERTION CHANGED 2026-08-24, and the reason is what this line is FOR. It read
+            % `verifyEqual(caseC.conj().kind(), 'QuaPar')` -- the EXACT class. Its own comment
+            % above says what it is about: "what changed is the route, and hence the type", i.e.
+            % closed-form numerics rather than the symbolic fallback. A convex face is now
+            % conjugated WHOLE by conjConvexPolygon instead of being fan-triangulated, and the
+            % result is a QuaPol: a QuaPar (the lattice's own subsumption) that additionally
+            % guarantees no edge is curved. It satisfies the property this test exists to pin
+            % strictly better, so pinning the exact class was pinning a representation detail the
+            % test itself says it is not about.
+            gC = caseC.conj();
+            testCase.verifyInstanceOf(gC, 'QuaPar', 'must be a mesh, not the symbolic form');
+            testCase.verifyFalse(isa(gC, 'QuaParCPLQ'), 'must not fall back to the symbolic path');
 
             % An INDEFINITE quadratic on the same domain used to go to Case C, because every
             % triangle's conjugate is then curved and Step 3 took at most one curved operand.
@@ -447,7 +458,12 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                 for k = 1:4
                     best = max(best, half(S(t,1),ax(k,1),sg(k,1)) + half(S(t,2),ax(k,2),sg(k,2)));
                 end
-                got = evalFunctionNDomain(g.fnd, S(t,:));
+                % READ CHANGED 2026-08-24: was evalFunctionNDomain(g.fnd, ...), which only a
+                % QuaParCPLQ has. This shape now takes the NUMERIC route -- conjCPLQ's polygon path
+                % is no longer gated on isDomBounded, and conjConvexPolygon handles a convex face
+                % with recession directions -- so g is a meshed QuaPar here. evalConjResult is this
+                % file's own route-agnostic reader and its header says it exists for exactly this.
+                got = conjCPLQTest.evalConjResult(g, S(t,:));
                 testCase.verifyEqual(got, best, 'AbsTol', 1e-9, ...
                     sprintf('at s=(%g,%g)', S(t,1), S(t,2)));
             end
@@ -489,7 +505,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyTrue(isa(g, 'RatPar'));
             for sPt = {[-0.5 2], [-3 -2.4], [3 3], [-2 -3], [1 1]}
                 s = sPt{1};
-                testCase.verifyEqual(evalFunctionNDomain(g.fnd, s), ...
+                testCase.verifyEqual(conjCPLQTest.evalConjResult(g, s), ...
                     conjCPLQTest.fourConeTruth(s), 'AbsTol', 1e-9, ...
                     sprintf('4-cone fan at (%g,%g)', s(1), s(2)));
             end
@@ -521,7 +537,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             S = [-3 -2.4; -0.5 2; 1 1; -1 -1; 2 -0.5; 0 0; 3 3; -2 -3];
             for t = 1:size(S,1)
                 s = S(t,:);
-                got = evalFunctionNDomain(g.fnd, s);
+                got = conjCPLQTest.evalConjResult(g, s);   % route-agnostic: see the note above
                 testCase.verifyEqual(got, conjCPLQTest.fourConeTruth(s), 'AbsTol', 1e-9, ...
                     sprintf('at s=(%g,%g)', s(1), s(2)));
             end
@@ -615,7 +631,15 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                     f6 = quads{qi};
                     q.f = repmat([0 0 0 0, f6], q.nf, 1);
                     g = q.conj('cplq');
-                    testCase.verifyClass(g, 'QuaPar', sprintf( ...
+                    % ASSERTION CHANGED 2026-08-24: was verifyClass(g,'QuaPar'), which demands the
+                    % EXACT class. This test's header states the property it wants -- "a QuaPar
+                    % means closed-form numerics throughout, a QuaParCPLQ means it fell back to the
+                    % symbolic path" -- and since conjConvexPolygon a CONVEX polygon comes back as
+                    % a QuaPol, which is a QuaPar with every edge conic pinned to zero. That is the
+                    % same property, more strongly. The VALUE checks below are untouched.
+                    testCase.verifyInstanceOf(g, 'QuaPar', sprintf( ...
+                        'polygon %d quadratic %d is not a mesh', pi, qi));
+                    testCase.verifyFalse(isa(g, 'QuaParCPLQ'), sprintf( ...
                         'polygon %d quadratic %d fell back to the symbolic path', pi, qi));
                     for t = 1:size(S,1)
                         testCase.verifyEqual(g.eval(S(t,:)), ...

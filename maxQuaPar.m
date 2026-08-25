@@ -976,11 +976,18 @@ function cells = clipByFace(polyK, polyL)
         cutX1 = polyL.V(mod(polyL.curveAfter, nvL)+1,:);
     end
 
-    cell = polyK;
+    % The straight clips carry a LIST of cells, not one. A clip whose line cuts a cell's arc twice
+    % subdivides rather than refusing (bulgeSplit), so one cell in can be two cells out, and every
+    % later clip has to be applied to each of them.
+    work = {polyK};
     cons = polyConstraints(polyL);
     for i = 1:size(cons,1)
-        cell = clipPolyHalfPlane(cell, cons(i,1:2), cons(i,3));
-        if isempty(cell), cells = {}; return; end
+        nxt = {};
+        for t = 1:numel(work)
+            nxt = [nxt, clipPolyHalfPlane(work{t}, cons(i,1:2), cons(i,3))]; %#ok<AGROW>
+        end
+        work = nxt;
+        if isempty(work), cells = {}; return; end
     end
     % Two consecutive real vertices of polyL (or polyK) can be exactly collinear with a third --
     % e.g. this pipeline's own faces sometimes have 3 real vertices on one straight line -- in
@@ -991,22 +998,29 @@ function cells = clipByFace(polyK, polyL)
     % silently spans TWO different neighbours, so assemblePieces can never find a match for either
     % sub-portion (see maxQuaPar.m header HISTORY). Explicitly re-insert any polyK/polyL vertex
     % that lies in the open interior of one of cell's own edges to restore that missing corner.
-    cell = insertPassthroughVertices(cell, [polyK.V; polyL.V]);
-    % A BOUNDED cell normally needs 3 vertices to have positive area -- but a bounded cell with a
-    % curved edge can legitimately be a two-vertex "lens" (one parabola arc plus one straight
-    % chord/cut edge between the same two endpoints), which does.
-    minV = 3;
-    if pieceIsCurved(cell), minV = 2; end
-    if size(cell.V,1) < 1 || (isempty(cell.dirIn) && size(cell.V,1) < minV)
-        cells = {}; return
+    cells = {};
+    for t = 1:numel(work)
+        sub = insertPassthroughVertices(work{t}, [polyK.V; polyL.V]);
+        for u = 1:numel(sub)
+            cell = sub{u};
+            % A BOUNDED cell normally needs 3 vertices to have positive area -- but a bounded cell
+            % with a curved edge can legitimately be a two-vertex "lens" (one parabola arc plus one
+            % straight chord/cut edge between the same two endpoints), which does.
+            minV = 3;
+            if pieceIsCurved(cell), minV = 2; end
+            if size(cell.V,1) < 1 || (isempty(cell.dirIn) && size(cell.V,1) < minV)
+                continue
+            end
+            if isempty(cutConic)
+                cells{end+1} = cell; %#ok<AGROW>
+            else
+                cells = [cells, clipPolyByConic(cell, cutConic, cutX0, cutX1)]; %#ok<AGROW>
+            end
+        end
     end
-    if isempty(cutConic)
-        cells = {cell}; return
-    end
-    cells = clipPolyByConic(cell, cutConic, cutX0, cutX1);
 end
 
-function cell = insertPassthroughVertices(cell, pts)
+function cells = insertPassthroughVertices(cell, pts, depth)
 % Subdivide cell's straight boundary edges (segments, plus the two rays if unbounded) at any point
 % of `pts` that lies in the OPEN interior of an existing edge and isn't already a vertex. See
 % clipByFace's call site for why this is needed.
@@ -1066,7 +1080,9 @@ function cell = insertPassthroughVertices(cell, pts)
 % fires in the supported regime -- see maxQuaPar.m's header VALIDATION note. Lifting it means
 % generalizing a piece to carry several arcs (curveAfter becoming a set), which also breaks
 % clipPolyHalfPlaneCurved's "at most 2 crossings" invariant -- deliberately left out of this step.
-    if isempty(pts), return; end
+    if nargin < 3, depth = 0; end
+    cells = {cell};
+    if isempty(pts), return; end   % nothing to insert: the cell passes through unchanged
     tol = 1e-7;
     tolSnap = 1e-4;
     ciSkip = 0;
@@ -1079,11 +1095,35 @@ function cell = insertPassthroughVertices(cell, pts)
             nv = size(cell.V,1);
             if nv == 0 || any(all(abs(cell.V - p) < tolSnap, 2)), break; end
             if ciSkip ~= 0 && onOpenArc(cell, p, tolSnap)
-                error('maxQuaPar:notImplemented', ...
-                    ['insertPassthroughVertices: a face vertex lies in the open interior of this ' ...
-                     'cell''s parabolic edge, so that arc borders two different neighbours and must ' ...
-                     'be split there into two sub-arcs. A piece carries only one curve slot, so ' ...
-                     'this is not representable yet (see this function''s header).']);
+                % SPLIT, rather than refuse. This used to raise maxQuaPar:notImplemented, on the
+                % argument that lifting it "means generalizing a piece to carry several arcs
+                % (curveAfter becoming a set)". It does not: cutting the cell along the line
+                % through p PARALLEL TO THE PARABOLA'S AXIS gives two faces with one sub-arc each,
+                % because such a line meets the conic exactly once. Both halves carry the same
+                % face function, so the function is unchanged and only the subdivision is finer.
+                %
+                % WHY IT MATTERS. This guard is what stops the numeric route on an indefinite
+                % quadratic over a POLYGON: two indefinite triangles conjugate to two parabolic
+                % QuaPars, and folding them puts one operand's face vertex in the open interior of
+                % the other's arc. Measured on `xy` over conv{(0,0),(2,0),(5/2,1),(1/2,1)}, which
+                % is one of the two fixtures in checkConjSymFree that still fell back to the
+                % symbolic Case C.
+                %
+                % Terminates: after the split p IS a vertex of both halves, so the tolSnap test at
+                % the top of this loop breaks immediately on the recursive call. The depth guard is
+                % a backstop, not the argument.
+                if depth > 8
+                    error('maxQuaPar:internal', ...
+                        ['insertPassthroughVertices recursed past depth 8 splitting arcs; a split ' ...
+                         'is not making p a vertex of its halves.']);
+                end
+                fr = parabolaArcFrame(cell.curveEc, 'maxQuaPar');
+                halves = splitAtArcU(cell, fr.uOf(p));
+                cells = {};
+                for t = 1:numel(halves)
+                    cells = [cells, insertPassthroughVertices(halves{t}, pts, depth+1)]; %#ok<AGROW>
+                end
+                return
             end
             if isempty(cell.dirIn)
                 for i = 1:nv
@@ -1110,6 +1150,7 @@ function cell = insertPassthroughVertices(cell, pts)
             end
         end
     end
+    cells = {cell};      % the loop MUTATES cell, so the result is assigned here and not earlier
 end
 
 function pieces = insertGlobalPassthrough(pieces)
@@ -1141,11 +1182,48 @@ function pieces = insertGlobalPassthrough(pieces)
         pieces(i).V = V; pieces(i).curveAfter = ca;
         if ca == 0, pieces(i).curveEc = []; end
     end
-    allV = [];
-    for i = 1:numel(pieces), allV = [allV; pieces(i).V]; end %#ok<AGROW>
-    for i = 1:numel(pieces)
-        pieces(i) = insertPassthroughVertices(pieces(i), allV);
+    % ITERATED TO A FIXED POINT, and that is not belt-and-braces. A piece can now come back SPLIT:
+    % since 2026-08-24 a passthrough point in the open interior of an arc subdivides the cell
+    % instead of raising. The split introduces NEW vertices, which were not in the point set this
+    % round was computed from -- so it can create exactly the T-junctions this pass exists to
+    % remove. One round is therefore not enough by construction, and recomputing the point set
+    % until nothing splits is what makes the subdivision consistent rather than merely finer.
+    %
+    % The geometry is copied back onto a COPY OF THE ORIGINAL PIECE rather than used as-is, because
+    % the split goes through clipPolyHalfPlane, whose finishCurved builds a fresh struct carrying
+    % only the seven geometry fields -- it drops `src` and every other per-piece tag, and assembly
+    % reads those. Copying an explicit field list is deliberate: taking fieldnames(sub{t}) would
+    % silently keep a stale value for any geometry field the clip path happened not to set.
+    GEOM = {'V','dirIn','dirOut','dirInSign','dirOutSign','curveAfter','curveEc'};
+    for round = 1:6
+        allV = [];
+        for i = 1:numel(pieces), allV = [allV; pieces(i).V]; end %#ok<AGROW>
+        out = pieces; out(:) = [];
+        for i = 1:numel(pieces)
+            sub = insertPassthroughVertices(pieces(i), allV);
+            for t = 1:numel(sub)
+                q = pieces(i);
+                for k = 1:numel(GEOM)
+                    if isfield(sub{t}, GEOM{k}), q.(GEOM{k}) = sub{t}.(GEOM{k}); end
+                end
+                out(end+1) = q; %#ok<AGROW>
+            end
+        end
+        settled = (numel(out) == numel(pieces));
+        if settled
+            for i = 1:numel(out)
+                if ~isequal(out(i).V, pieces(i).V), settled = false; break, end
+            end
+        end
+        pieces = out;
+        if settled, return, end
     end
+    % Six rounds without settling means the splits are chasing each other rather than converging;
+    % that is a defect in the split, not a case to accept quietly with a half-consistent mesh.
+    error('maxQuaPar:internal', ...
+        ['insertGlobalPassthrough did not reach a fixed point in 6 rounds (%d pieces). Each round ' ...
+         'must either split nothing or strictly refine, so this means a split is re-creating the ' ...
+         'junction it was meant to remove.'], numel(pieces));
 end
 
 function cell = insertVertexAt(cell, i, p)
@@ -1294,8 +1372,10 @@ function s = newRaySign(role)
     end
 end
 
-function poly2 = clipPolyHalfPlane(poly, nrm, c)
+function polys = clipPolyHalfPlane(poly, nrm, c)
 % Clip poly by the half-plane {nrm*x'<=c}, dispatching on whether poly carries a parabolic edge.
+% Returns a LIST of 0, 1 or 2 cells -- two when the clip line cuts the cell's arc TWICE, which is
+% the case that used to raise maxQuaPar:notImplemented. See bulgeSplit below.
 %
 % The two paths are kept SEPARATE deliberately. clipPolyHalfPlaneStraight below is the original,
 % purely polyhedral implementation, left byte-identical: its own HISTORY comment documents several
@@ -1306,12 +1386,78 @@ function poly2 = clipPolyHalfPlane(poly, nrm, c)
 % cell's arc entirely, the result is plain polyhedral again and subsequent clips go back through
 % the straight path.
     if pieceIsCurved(poly)
+        nv0 = size(poly.V,1);
+        iA = poly.curveAfter; iB = mod(iA, nv0) + 1;
+        if arcBulgesAcross(poly.curveEc, poly.V(iA,:), poly.V(iB,:), nrm, c)
+            polys = bulgeSplit(poly, nrm, c);
+            return
+        end
         poly2 = clipPolyHalfPlaneCurved(poly, nrm, c);
         poly2 = fixArcTag(poly2);
+        polys = wrapPoly(poly2);
         return
     end
     poly2 = clipPolyHalfPlaneStraight(poly, nrm, c);
     if ~isempty(poly2), poly2.curveAfter = 0; poly2.curveEc = []; end
+    polys = wrapPoly(poly2);
+end
+
+function cs = wrapPoly(p)
+    if isempty(p), cs = {}; else, cs = {p}; end
+end
+
+function polys = bulgeSplit(poly, nrm, c)
+% objective: clip a cell whose ARC the clip line cuts TWICE, by first SUBDIVIDING the cell so that
+%   neither half's arc is cut twice, then clipping each half normally.
+%
+% WHY IT USED TO BE REFUSED, AND WHY THAT IS NOT NECESSARY. A face bounded on one side by a
+% parabola is not convex, so the straight path's invariant -- at most 2 boundary crossings, on 2
+% distinct edges -- can genuinely fail: the arc leaves the half-plane and comes back between its
+% own endpoints. The result is then either disconnected or a single region carrying TWO separate
+% arcs, and QuaPar's one-conic-slot-per-edge holds neither. The refusal was correct about the
+% REPRESENTATION and wrong to stop there: one arc per face is an invariant maintained by
+% SUBDIVIDING, which is exactly what splitCell already does for the same reason.
+%
+% THE SPLIT LINE, and it is forced rather than chosen. Along the arc, nrm*x'-c is the quadratic
+% A2*u^2+A1*u+A0 in the frame parameter u (parabolaArcFrame.lineCoeffs), so it has ONE stationary
+% point, u* = -A1/(2*A2) -- the very quantity arcBulgesAcross already computes to detect the case.
+% Cut at u = u*:
+%
+%   * The cut line {uDir*x' = u*} is parallel to the parabola's own AXIS, so it meets the conic
+%     EXACTLY ONCE (that is what makes u a global monotone parameter -- parabolaArcFrame's header).
+%     So it splits the arc into two sub-arcs and creates no second one.
+%   * Each sub-arc lies on one side of the unique stationary point, so nrm*x'-c is MONOTONE along
+%     it, and the original clip line therefore crosses each sub-arc at most once.
+%
+% So the recursion is one level deep by construction, not by luck: clipping either half by the
+% split line itself cannot bulge (the restriction is u - u*, linear, so A2 = 0 and
+% arcBulgesAcross returns false immediately).
+    fr = parabolaArcFrame(poly.curveEc, 'maxQuaPar');
+    A  = fr.lineCoeffs(nrm, c);
+    if abs(A(1)) <= 1e-12*(1+abs(A(2))+abs(A(3)))
+        error('maxQuaPar:internal', ...
+            'bulgeSplit was reached with an arc on which the clip function is affine.');
+    end
+    halves = splitAtArcU(poly, -A(2)/(2*A(1)));
+    polys = {};
+    for t = 1:numel(halves)
+        polys = [polys, clipPolyHalfPlane(halves{t}, nrm, c)]; %#ok<AGROW>
+    end
+end
+
+function halves = splitAtArcU(poly, ustar)
+% objective: cut a cell in two at the point of its arc with frame parameter ustar, keeping ONE ARC
+%   PER FACE. The primitive both bulgeSplit and insertPassthroughVertices need.
+%
+% The cut line is {uDir*x' = ustar}, which is parallel to the parabola's own AXIS and therefore
+% meets the conic EXACTLY ONCE -- parabolaArcFrame's header states that as the reason u is a
+% global monotone parameter. So the arc is divided into two sub-arcs, one per half, and no half
+% acquires a second curve. Both halves carry the same face function, so the FUNCTION is unchanged;
+% only the subdivision is finer, which is what a subdivision is allowed to be.
+    fr = parabolaArcFrame(poly.curveEc, 'maxQuaPar');
+    uD = fr.uDir;
+    halves = [clipPolyHalfPlane(poly,  uD,  ustar), ...
+              clipPolyHalfPlane(poly, -uD, -ustar)];
 end
 
 function p = fixArcTag(p)
@@ -2013,11 +2159,13 @@ function poly2 = clipPolyHalfPlaneCurved(poly, nrm, c)
     if unbounded, cE = ci + 1; else, cE = ci; end
 
     if arcBulgesAcross(poly.curveEc, X0, X1, nrm, c)
-        error('maxQuaPar:notImplemented', ...
-            ['clipPolyHalfPlaneCurved: the clip line cuts this cell''s parabolic edge TWICE (both ' ...
-             'arc endpoints on the same side, the arc bulging across in between). The clipped cell ' ...
-             'is then either disconnected or bounded by two separate arcs, neither of which is ' ...
-             'representable as a single QuaPar face.']);
+        % NOW AN INTERNAL INVARIANT, not a gap. clipPolyHalfPlane tests for the bulge BEFORE
+        % dispatching here and subdivides the cell (bulgeSplit) so that neither half's arc is cut
+        % twice, so this routine is only ever reached on a cell where the invariant below holds.
+        % Kept as an assertion because it is the invariant every branch of this function assumes.
+        error('maxQuaPar:internal', ...
+            ['clipPolyHalfPlaneCurved was reached with the clip line cutting this cell''s arc ' ...
+             'TWICE. clipPolyHalfPlane is supposed to have subdivided the cell first.']);
     end
 
     if unbounded

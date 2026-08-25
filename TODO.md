@@ -1,6 +1,92 @@
 # TODO
 
-## 2026-08-20 — THE SYM-FREE PORT, RE-PLANNED. Read this section first.
+## 2026-08-24 — SYM-FREE `conj`: what is left, measured. READ THIS FIRST.
+
+The premise changed on 2026-08-24, and it changes the whole plan below: **vertices are stored as
+INTERSECTIONS OF CONICS with floating-point coordinates, not exactly.** By
+`CONJ_FIELD_PROOF.md` Theorem 1 the face functions and the edge conics are always rational, so the
+only thing that ever needed an extension field was the vertex layer -- and naming a vertex by the
+pair of conics it solves removes the need for one entirely.
+
+**Two items below are CANCELLED by that premise, not deferred**: the degree-<=4 real algebraic
+kernel, and the interim "factor the vertex quartic and refuse" gap. `exactQ` is likewise not on the
+path to anything; it is referenced by nothing but its own test.
+
+### What was measured, and it is the thing to know
+
+The numeric conjugate path was **already 100% sym-free** before this work: `conjCPLQ`,
+`conjPieceCPLQ`, `convEnvCPLQ`, `maxQuaPar`, `clipArcByConic` and `mergeSameQuadFaces` contain
+**zero** `sym`/`subs`/`simplify`/`solve`/`isAlways`/`coeffs` between them, counting non-comment
+lines. Every symbolic call on the conj route is behind ONE dispatch -- the fallback to Case C. So
+the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall back**, and
+`checkConjSymFree` measures that set with the reason for each.
+
+    2026-08-24 baseline, 16 fixtures:   SYMBOLIC 2 of 16, both maxQuaPar:notImplemented
+    after conjConvexPolygon landed:     the unbounded CONVEX family joined the numeric route
+
+### The gaps that remain, in the order they should be closed
+
+- [ ] **G1 -- the assembly is consistent per face PAIR, not globally.** `maxQuaPar` can now SPLIT a
+      cell whose arc is cut twice, or whose arc carries a neighbour's vertex in its interior
+      (`bulgeSplit` / the passthrough split, 2026-08-24), and `maxQuaParTest` is green with it. The
+      two fixtures that used it then die two stages later in `assemblePieces`: one side of a shared
+      boundary carries the edge as CURVED and the other as STRAIGHT, so `matchHalfEdges` cannot
+      pair them. **Do not re-attack the refusal; attack the matching.** The shape of the answer is
+      a global pass that collects, per CONIC, every `u` at which any piece needs a split, and
+      applies all of them to every piece carrying that conic -- consistency by construction rather
+      than per pair. `DECISIONS.md` 2026-08-24 has the geometry and why the split itself is sound.
+      Closing this removes the LAST measured fallback of the bounded family.
+
+- [ ] **G2 -- an AFFINE face over an UNBOUNDED polygon.** `max(0,x,y)` is the canonical example and
+      it still falls back. Two things are missing and they are separable:
+      1. the construction: `(L'x + c + I_P)*` is the support function `sigma_P(s-L) - c`, which for
+         `P = conv(W) + cone(d1,d2)` is `max_i <s-L, w_i> - c` restricted to the polar cone
+         `{t : <t,d1> <= 0, <t,d2> <= 0}` -- a QuaPol with affine faces and an INDICATOR domain;
+      2. `maxQuaPar.assertFullDomain` refuses any operand that is not finite everywhere, and every
+         piece of this family is `+inf` off a cone.
+      **Worth pricing a third route first.** For an input whose pieces are ALL affine, `f*` is the
+      max of finitely many affine functions restricted to one polyhedron -- the upper envelope of
+      planes, i.e. a 3-D hull computation -- so a direct `conjAffinePLQ` would cover every
+      piecewise-LINEAR input in one construction and never enter `maxQuaPar` at all. That is a new
+      operator rather than a gap fix, which is why it is not started.
+
+- [ ] **G2b -- `maxQuaPar` DROPS a cell on some unbounded folds.** Found 2026-08-24 and it is the
+      one silent wrong answer in the session: a 4-cone fan assembled to 4 cells and returned 2.0 at
+      `s=(-2,-3)` where the definition sup is 4.5. Reproducer:
+      `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`'s fixture in its `F = [3 2;2 1;1 4;4 3]`
+      orientation; `PARTITION OVERLAP` fires on it. A cross-check now catches this and falls back
+      (`DECISIONS.md` 2026-08-24), so it cannot reach a caller -- but the drop itself is unfixed,
+      and every input it hits pays the symbolic path.
+
+- [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
+      (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded
+      indefinite piece; `convEnvUnbounded`/`fanUnboundedFace` are the symbolic side's answer and
+      are the only remaining symbolic helpers reachable from a conj-shaped input.
+
+- [ ] **G4 -- `QuaCon` storage (H-form).** Now optional rather than blocking, and that is the
+      premise's doing. `Conic`/`RatCon` landed 2026-08-24 so the LATTICE can hold an elliptical
+      edge; `ratQ` and `conicMeet` are the exact coefficient layer and the vertex-naming primitive
+      it would use. Build it when a `conj` result actually needs a non-parabolic edge -- i.e. when
+      G1 lands and a three-piece input with two non-adjacent pieces reaches Step 3.
+
+### Tools built on 2026-08-24, so they are not rebuilt
+
+- `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
+  any change to the dispatch.
+- `conjCPLQ(q, [], 'numeric')` -- refuses to fall back, so a test can pin the ROUTE. `conjSymFreeTest`
+  does exactly that, including for the two gaps above (a gap test going GREEN is good news: promote
+  it and delete the entry here).
+- `conjConvexPolygon.m` -- a convex quadratic over ANY convex polygon, bounded or not, closed form,
+  no triangulation, returns a QuaPol.
+- `conjPolygonalDomain`'s fold cross-check -- the assembled Step 3 result is verified against
+  `max_k (q_k + I_P_k)*`, the identity it was built from, and DECLINES on a disagreement so the
+  caller falls back. One-sided by construction: it can miss a defect, it cannot invent one.
+- `ratQ.m` / `conicMeet.m` -- exact rational coefficient arithmetic, and conic-conic intersection
+  through an exact integer quartic.
+
+---
+
+## 2026-08-20 — THE SYM-FREE PORT, RE-PLANNED (superseded above, kept for its measurements)
 
 The plan changed on 2026-08-20 because two things were measured, both in `DECISIONS.md` under that
 date: one quadratic extension is not enough (a single A.5 triangle needs `sqrt(15)` and `sqrt(30)`
@@ -22,14 +108,14 @@ section states what it needs rather than pointing at it.
       `coeffs` 18 + 10; `simplify`/`simplifyFraction` 11 + 18 + 10; `hessian`/`gradient`/`dfdx`
       about 45. Every one becomes arithmetic on coefficients.
 
-- [ ] **Vertex layer — a degree-<= 4 real algebraic kernel**: a rational quartic plus an isolating
+- [x] **CANCELLED 2026-08-24 by the H-form premise — a degree-<= 4 real algebraic kernel**: a rational quartic plus an isolating
       interval, sign of a rational polynomial at it, and comparison by resultant or Sturm sequence.
       `exactQ` is now multiquadratic and still NOT enough: of twelve continuous three-piece
       configurations the vertex quartic is irreducible over Q in ten of them, and the S4 case is
       proved reachable. Bounded work, because the degree is capped at 4 for both `conj` and the
       envelope.
 
-- [ ] **Interim, until the kernel lands — DETECTED refusal.** Factor the vertex quartic and refuse
+- [x] **CANCELLED 2026-08-24 with the kernel above — DETECTED refusal.** Factor the vertex quartic and refuse
       by name when it does not split into rational or quadratic factors. That turns a reachable
       wrong answer into one nameable `SUPPORT_MATRIX.md` GAP, which is the discipline this project
       already has for unreachable branches.
@@ -91,7 +177,8 @@ present top, so nothing existing changes behaviour:
       subdivision:   Pol  <  Par  <  Con        `Con` drops b^2 - 4ac = 0
       function:      Qua  <  Rat  <  Alg        `Alg` = root of a rational quartic in z
 
-- [ ] **`Con` first** — a new trait plus one relaxation in `RatPar`'s `set.Ec` validator. Cheapest
+- [x] **DONE 2026-08-24 (as `Conic`; `CON` is a Windows device name)** — a new trait plus a new
+      data-holding parent `RatCon`. Cheapest
       item here, and the elliptical edge already forces it. `QuaPar` becomes a real specialization
       instead of a type that cannot hold the values `conj` produces.
 

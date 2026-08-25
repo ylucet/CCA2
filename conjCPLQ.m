@@ -136,9 +136,13 @@ function g = conjCPLQ(obj, idx, route)
     % all come back exact -- 4.4e-16 against an EXACT QP reference, not a sampled one. (A
     % sampled reference reported ~3e-5 on the convex cases; refining it 160 -> 320 -> 640 drove
     % that to 1e-6, which is how it was identified as the reference's error, not CCA2's.)
-    if obj.isDomBounded && ~forceSymbolic
+    % The isDomBounded gate came off on 2026-08-24. It was there because everything below this
+    % point needed a bounded TRIANGLE; conjConvexPolygon needs neither, so an unbounded domain
+    % whose faces carry CONVEX quadratics now has a numeric route. An unbounded face carrying a
+    % non-convex one still declines and still falls through to Case C, by name.
+    if ~forceSymbolic
         try
-            g = conjBoundedPolygon(obj);
+            g = conjPolygonalDomain(obj);
             return
         catch ME
             if forceNumeric, rethrow(ME); end
@@ -246,42 +250,201 @@ function g = conjSingleTriangle(obj)
 end
 
 % ================================================================================================
-function g = conjBoundedPolygon(obj)
-% Case B2: fan-triangulate every face of a BOUNDED domain, conjugate each triangle through
-% Case B's own closed-form path, and combine with Step 3's numeric max.
+function g = conjPolygonalDomain(obj)
+% Case B2: conjugate every face of the domain by the cheapest closed form that fits it, and
+% combine with Step 3's numeric max. Bounded or unbounded.
 %
-% Sound for the same reason Case C's triangulate step is: the triangles COVER the domain, and a
-% sup over a union is the max of the sups, so f* = max_k (q_k + I_T_k)*. No envelope of the
-% polygon is needed or computed -- each triangle's conjugate is taken directly, which is also
-% why a fan (a cover, not a minimal triangulation) is enough.
+% Sound because a sup over a union is the max of the sups: f* = max_k (q_k + I_{P_k})*. That holds
+% for any COVER, which is also why a fan triangulation -- a cover, not a minimal triangulation --
+% is enough where one is still used.
 %
-% Any per-triangle result that is not a mesh QuaPar is refused rather than worked around: it
-% means that triangle itself fell back to cPLQ's symbolic Step 2/3, and mixing the two
-% representations inside Step 3 is exactly the confusion this branch exists to avoid. The caller
-% then routes the whole domain to Case C, which is what happened before this branch existed.
+% TWO ROUTES PER FACE, and the first is the one that matters:
+%
+%   * a CONVEX (positive definite) face goes to conjConvexPolygon WHOLE. No triangulation, any
+%     number of facets, bounded or not, and the answer is a QuaPol -- polyhedral, so nothing
+%     curved reaches Step 3 from it. ALGORITHM.md: "a convex piece never needed a triangle;
+%     splitting it only forces Step 3 to glue back together what was never broken."
+%   * anything else is fan-triangulated and each triangle goes through Case B's own path, exactly
+%     as before. That path needs BOUNDED triangles, so a non-convex UNBOUNDED face declines here
+%     and the caller routes the whole domain to Case C.
+%
+% Any per-piece result that is not a mesh is refused rather than worked around: it means that
+% piece's own Step 2 fell back to cPLQ's symbolic form, and mixing the two representations inside
+% Step 3 is the confusion this branch exists to avoid.
     E3 = [1 2 1; 2 3 1; 3 1 1]; F3 = [1 0; 1 0; 1 0];
     gs = {};
     for i = 1:obj.nf
+        [Lf, Qf, Cf] = QuaPol.matrixForm(obj.f(i,:));
+        f6 = obj.f(i, 5:10);
+        isConvexFace = isempty(Cf) && all(eig((Qf+Qf.')/2) > sqrt(eps)*max(1, norm(Qf)));
+        if isConvexFace
+            [W, dF, dL] = faceBoundary(obj, i);
+            gs{end+1} = toQuaPar(conjConvexPolygon(W, dF, dL, Qf, Lf, obj.f(i,end))); %#ok<AGROW>
+            continue
+        end
         tris = faceTrianglesCCW(obj, i);
-        f6   = obj.f(i, 5:10);
         for t = 1:numel(tris)
             gt = conjSingleTriangle(QuaPol(tris{t}, E3, f6, F3));
             if ~(isa(gt, 'QuaPar') || isa(gt, 'QuaPol') || isa(gt, 'RatPol'))
                 error('PLQ:conjCPLQ:notImplemented', ...
                     ['triangle %d of face %d conjugated to a %s (its own Step 2 fell back to ' ...
-                     'the symbolic path), which Step 3''s numeric max cannot take.'], ...
+                     'the symbolic path), which Step 3 numeric max cannot take.'], ...
                     t, i, class(gt));
             end
             gs{end+1} = toQuaPar(gt); %#ok<AGROW>
         end
     end
     if isempty(gs)
-        error('PLQ:conjCPLQ:notImplemented', 'no bounded face to conjugate.');
+        error('PLQ:conjCPLQ:notImplemented', 'no face to conjugate.');
     end
     g = gs{1};
     for k = 2:numel(gs)
         g = maxQuaPar(g, gs{k});
     end
+    assertFoldMatchesPieces(g, gs, obj);
+end
+
+function assertFoldMatchesPieces(g, gs, obj)
+% objective: verify the assembled Step 3 result against the identity it was built from --
+%   f* = max_k (q_k + I_{P_k})* -- and DECLINE if they disagree, so the caller falls back.
+%
+% WHY THIS IS NOT OPTIONAL, measured. Removing the isDomBounded gate let a 4-cone fan through the
+% numeric route, and at s = (-2,-3) it returned 2.0 where the definition sup is 4.5: the fold had
+% dropped the cell carrying face 4's strip, leaving 4 cells for what needs many more. Every probe
+% point of the OTHER orientation of the same fixture was exact, which is precisely the signature of
+% a dropped region -- right almost everywhere, wrong on a set, and silent. `conjCPLQ` already
+% applies this same cross-check to Case C (`assertStep3MatchesPieces`) for the same reason; the
+% numeric route had no equivalent and now has one.
+%
+% THE ORACLE IS AN IDENTITY, NOT A SAMPLE OF THE TRUTH. `gs` are the per-face conjugates that were
+% folded, so their pointwise max IS f* exactly -- no reference implementation, no quadrature, no
+% tolerance on the mathematics. Only the SAMPLING is incomplete, which makes this a one-sided
+% check: it can miss a defect, it cannot invent one.
+%
+% WHERE IT SAMPLES. A dropped cell is a REGION, so a spread of directions and magnitudes finds it;
+% the result's own vertices are added because a cell boundary is where a drop shows first, and the
+% dual points of the input's vertices because those are where f*'s own cells meet.
+    if numel(gs) < 2, return, end
+    S = probePoints(g, obj);
+    for i = 1:size(S,1)
+        s = S(i,:);
+        best = -inf;
+        for k = 1:numel(gs)
+            v = gs{k}.eval(s);
+            if isfinite(v), best = max(best, v); end
+        end
+        if ~isfinite(best), continue, end
+        got = g.eval(s);
+        tol = 1e-7 * (1 + abs(best));
+        if ~isfinite(got) || abs(got - best) > tol
+            % A maxQuaPar: identifier on purpose -- it is what conjCPLQ's own fallback catch tests,
+            % so a disagreement routes the whole domain to the symbolic Case C instead of returning
+            % a number nobody checked.
+            error('maxQuaPar:assemblyDisagreesWithPieces', ...
+                ['the assembled Step 3 result is %.10g at (%.6g,%.6g) but the max of the pieces ' ...
+                 'it was built from is %.10g. f* = max_k (q_k + I_P_k)* is an identity, so the ' ...
+                 'assembly has dropped or over-extended a cell.'], got, s(1), s(2), best);
+        end
+    end
+end
+
+function S = probePoints(g, obj)
+% objective: points at which to check the fold. Directions x magnitudes, plus the structural points
+%   where a dropped cell shows up first.
+    R = [0.25 1 3 10];
+    th = (0:15) * (2*pi/16);
+    S = zeros(0,2);
+    for r = R
+        S = [S; r*[cos(th).' sin(th).']]; %#ok<AGROW>
+    end
+    S = [S; 0 0];
+    if ~isempty(g.V), S = [S; g.V]; end
+    for i = 1:obj.nf                       % the dual points of the input's own vertices
+        [L, Q, C] = QuaPol.matrixForm(obj.f(i,:));
+        if ~isempty(C), continue, end
+        for v = 1:size(obj.V,1)
+            S = [S; (Q*obj.V(v,:).' + L).']; %#ok<AGROW>
+        end
+    end
+    S = unique(round(S, 10), 'rows');
+end
+
+function [W, dF, dL] = faceBoundary(obj, i)
+% objective: face i's boundary as a CCW vertex list plus, when it is unbounded, the two recession
+%            directions -- the input conjConvexPolygon takes.
+%
+% Built from the EDGE INCIDENCE rather than from obj.P{i}. That list is documented clockwise and
+% starting from a particular ray, and re-deriving the convention here is exactly the kind of
+% off-by-one that produces a well-formed mesh on the wrong side. A convex face's boundary is a
+% chain, so walking the incidence is unambiguous, and the orientation is then MEASURED.
+    ej = find(any(obj.F == i, 2));
+    if isempty(ej)
+        error('PLQ:conjCPLQ:notImplemented', 'face %d has no edges.', i);
+    end
+    isR = obj.E(ej,3) == 0;
+    rays = ej(isR); segs = ej(~isR);
+    if ~ismember(numel(rays), [0 2])
+        error('PLQ:conjCPLQ:notImplemented', ...
+            'face %d has %d rays; a convex face has 0 or 2.', i, numel(rays));
+    end
+
+    if isempty(rays)
+        iVs = unique([obj.E(segs,1); obj.E(segs,2)], 'stable');
+        W = obj.V(iVs,:);
+        ctr = mean(W, 1);
+        [~, ord] = sort(atan2(W(:,2)-ctr(2), W(:,1)-ctr(1)));   % convex face: angle order IS CCW
+        W = W(ord,:);
+        dF = []; dL = [];
+        return
+    end
+
+    % Unbounded: the two rays' BASE vertices are the ends of the vertex chain; walk the segments
+    % between them.
+    ends = obj.E(rays,1);
+    W = obj.V(chainOrder(obj, segs, ends(1), ends(2)), :);
+    dF = obj.V(obj.E(rays(1),2),:) - obj.V(obj.E(rays(1),1),:);
+    dL = obj.V(obj.E(rays(2),2),:) - obj.V(obj.E(rays(2),1),:);
+    dF = dF / norm(dF);  dL = dL / norm(dL);
+    if orientedArea(W, dF, dL) < 0
+        W = flipud(W);  tmp = dF; dF = dL; dL = tmp;
+    end
+end
+
+function iVs = chainOrder(obj, segs, vStart, vEnd)
+% objective: the vertices of a chain of segment edges, from vStart to vEnd.
+    iVs = vStart;
+    used = false(numel(segs),1);
+    cur = vStart;
+    guard = 0;
+    while cur ~= vEnd
+        guard = guard + 1;
+        if guard > numel(segs) + 2
+            error('PLQ:conjCPLQ:notImplemented', 'the boundary chain does not terminate.');
+        end
+        nxt = 0;
+        for t = 1:numel(segs)
+            if used(t), continue, end
+            e = obj.E(segs(t),1:2);
+            if e(1) == cur, nxt = e(2); used(t) = true; break
+            elseif e(2) == cur, nxt = e(1); used(t) = true; break
+            end
+        end
+        if nxt == 0
+            error('PLQ:conjCPLQ:notImplemented', ...
+                'the boundary chain of an unbounded face is not connected.');
+        end
+        iVs(end+1) = nxt; %#ok<AGROW>
+        cur = nxt;
+    end
+end
+
+function a = orientedArea(W, dF, dL)
+% objective: the sign that says whether the walk [in along dF] -> W -> [out along dL] runs
+%   counter-clockwise. Closing the unbounded set with two far points is enough: for a convex set
+%   and R past every vertex, the sign of the closed polygon signed area is the set orientation.
+    R = 1e3 * (1 + max(abs(W(:))));
+    Q = [W(1,:) + R*dF; W; W(end,:) + R*dL];
+    a = signedArea(Q);
 end
 
 function tris = faceTrianglesCCW(obj, i)
@@ -292,7 +455,9 @@ function tris = faceTrianglesCCW(obj, i)
     ej = find(any(obj.F == i, 2));
     if any(obj.E(ej,3) == 0)
         error('PLQ:conjCPLQ:notImplemented', ...
-            'the numeric polygon path needs bounded faces (face %d is unbounded).', i);
+            ['the fan-triangulation route needs a BOUNDED face (face %d is unbounded). A convex ' ...
+             'unbounded face does not come here at all -- conjConvexPolygon takes it whole -- so ' ...
+             'reaching this means the face is unbounded AND not positive definite.'], i);
     end
     W = obj.V(faceVertexIndices(obj, i), :);
     if signedArea(W) < 0, W = flipud(W); end

@@ -87,7 +87,31 @@ function F = fixtures()
     F(end+1) = mk('C?: two DIFFERENT quadratics on a square', twoTriTwoF(S, [2 0 2 0 0 0], [0 1 0 0 0 0]));
 
     % ---- unbounded ------------------------------------------------------------------------------
-    F(end+1) = mk('U: max(0,x,y) as three wedges',       threeWedges());
+    F(end+1) = mk('U: 4 convex quadratic wedges (unbounded)', fourConvexWedges());
+    F(end+1) = mk('U: max(0,x,y) as three AFFINE wedges',     maxZeroXY());
+end
+
+function q = fourConvexWedges()
+% Four unbounded faces round the origin, each carrying a CONVEX quadratic. Taken from
+% conjCPLQTest/multiFaceUnboundedConvexFacesConjugateExactly, which is the test that pins the
+% values; here it is the ROUTE that is being measured.
+    V = [0 0; -1 0; 0 1; 1 0; 0 -1];
+    E = [1 2 0; 1 3 0; 1 4 0; 1 5 0];
+    f = [1 0 1 0 0 0; 1 0 2 0 0 0; 2 0 2 0 0 0; 2 0 1 0 0 0];
+    Fa = [1 2; 2 3; 3 4; 4 1];
+    q = QuaPol(V, E, f, Fa);
+end
+
+function q = maxZeroXY()
+% max(0, x, y) as three unbounded wedges: convex, its own biconjugate, and every face AFFINE.
+% Included because an affine unbounded face is a DIFFERENT gap from a convex quadratic one --
+% conjConvexPolygon needs a positive definite A, and the conjugate of an affine function over an
+% unbounded polygon is a support function, i.e. an INDICATOR, not a quadratic.
+    V = [0 0; 0 -1; -1 0; 1 1];
+    E = [1 2 0; 1 3 0; 1 4 0];
+    Fa = [2 1; 1 3; 3 2];
+    f = [0 0 0 0 0 0; 0 0 0 1 0 0; 0 0 0 0 1 0];
+    q = QuaPol(V, E, f, Fa);
 end
 
 function s = mk(name, q), s = struct('name', name, 'q', q); end
@@ -118,18 +142,3 @@ function q = twoTriTwoF(V, fa, fb)
     q = QuaPol(V, E, [fa; fb], F);
 end
 
-function q = threeWedges()
-% max(0, x, y) as three unbounded wedges round the origin -- convex, and its own biconjugate.
-    P = QuaPol.examples();
-    q = [];
-    for i = 1:numel(P)
-        if isa(P{i}, 'QuaPol') && P{i}.nf == 3 && ~P{i}.isDomBounded
-            q = P{i}; return
-        end
-    end
-    if isempty(q)
-        V = [0 0; 1 0; 0 1];
-        E = [1 2 0; 1 3 0; 1 2 0];
-        q = QuaPol([0 0 0 0 0 0]);   % fall back to something harmless if the example moved
-    end
-end

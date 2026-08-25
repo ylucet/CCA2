@@ -2312,3 +2312,91 @@ and is strictly worse: it has to run, and a test that errors early does not reac
 
 **Not a reason to give the suite its own process.** One process per suite is what the slow bucket
 does and it costs ~8 s of startup each; the fix here is one line in the offending test.
+
+## 2026-08-24 — the arc-bulge refusal in maxQuaPar is LIFTABLE, and the remaining blocker is ASSEMBLY, not representation
+
+Worked most of the way; the item is scope-reduced rather than closed, and this entry exists so the
+next attempt starts from the design instead of from the symptom.
+
+**The claim that was wrong.** Two routines refused the same configuration -- a straight clip line
+cutting a cell's parabolic edge TWICE, both arc endpoints on the same side -- on the grounds that
+the result "is either disconnected or bounded by two separate arcs, neither of which is
+representable as one QuaPar face". `insertPassthroughVertices` refused the sibling case (a
+neighbour's vertex in the open interior of an arc) with the same reasoning, adding that lifting it
+"means generalizing a piece to carry several arcs (curveAfter becoming a set)".
+
+**It does not.** One arc per face is an invariant maintained by SUBDIVIDING, exactly as `splitCell`
+already does for its own reason, and there is a canonical cut that always works:
+
+> Cut the cell along the line through the split point PARALLEL TO THE PARABOLA'S AXIS.
+> Such a line meets the conic EXACTLY ONCE -- that is precisely what `parabolaArcFrame`'s header
+> already states makes `u` a global monotone parameter -- so it divides the arc into two sub-arcs,
+> one per half, and creates no second arc anywhere. Both halves carry the same face function, so
+> the FUNCTION is unchanged and only the subdivision is finer.
+
+For the bulge case the cut point is forced, not chosen: along the arc, `nrm*x'-c` is the quadratic
+`A2 u^2 + A1 u + A0` (`parabolaArcFrame.lineCoeffs`), so it has ONE stationary point
+`u* = -A1/(2 A2)` -- the quantity `arcBulgesAcross` already computes to DETECT the case. Each
+sub-arc lies on one side of it, so `nrm*x'-c` is monotone along each and the clip line crosses each
+at most once. The recursion is therefore one level deep by construction: clipping either half by
+the split line itself restricts to `u - u*`, which is affine, so `arcBulgesAcross` returns false.
+
+**Implemented and green.** `clipPolyHalfPlane` returns a LIST, `bulgeSplit`/`splitAtArcU` do the
+cut, `clipByFace` carries the list through, and `insertPassthroughVertices` splits instead of
+raising. `maxQuaParTest` 29/0 and `addQuaParTest` 4/0 with it in.
+
+**What still fails, and it is a DIFFERENT problem.** Both fixtures that used to hit the refusal now
+get two stages further and die in `assemblePieces`:
+
+    a boundary edge of piece 1 src [1 1] has no matching neighbour:
+    (1.000000,1.000000)->(0.000000,0.000000), curved=1.
+    Closest candidate: piece 4 src [2 4] (0.000000,0.000000)->(0.500000,0.500000) curved=0
+
+So one side of a shared boundary carries the edge as CURVED and the other as STRAIGHT, and
+`matchHalfEdges` pairs curved with curved. That is not a representation limit -- it is the
+subdivision being inconsistent across the shared arc, which is the thing `insertGlobalPassthrough`
+exists to fix and evidently does not yet fix for this case. **Do not re-attack the refusal; attack
+the matching.** The likely shape of the answer is a global pass that collects, per CONIC, every
+`u` at which any piece needs a split, and applies all of them to every piece carrying that conic --
+so the subdivision is consistent by construction rather than per-pair.
+
+**Behaviour is unchanged for callers.** `maxQuaPar:internal` still starts with `maxQuaPar:`, which
+is what `conjCPLQ`'s fallback catch tests, so under `route='auto'` these inputs still fall through
+to the symbolic Case C exactly as before. The change is kept because the primitives are correct and
+tested and the blocker is now named; it does not by itself remove a fallback.
+
+## 2026-08-24 — the numeric Step 3 can DROP a cell on an unbounded fold, and the fix is a cross-check, not a narrower gate
+
+The most important finding of the session, because the failure is silent.
+
+**What happened.** Removing `conjCPLQ`'s `isDomBounded` gate let a 4-cone fan take the numeric
+route. At `s = (-2,-3)` it returned **2.0** where the definition sup is **4.5**. The assembled
+result had **4** cells for a fold of four 4-cell conjugates: the cell carrying one face's strip
+had been dropped. Every probe point of the OTHER orientation of the same fixture was exact -- which
+is the signature of a dropped REGION rather than an arithmetic error: right almost everywhere,
+wrong on a set, and silent.
+
+It was caught by `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`, whose closed-form truth is
+independent of the pipeline. Two other tests in the same file failed only because they read the
+result with `evalFunctionNDomain(g.fnd, ...)`, which a meshed result does not have -- a ROUTE
+expectation, not a value one, and the file's own `evalConjResult` exists for exactly that.
+
+**The fix is a verification, not a restriction.** `f* = max_k (q_k + I_{P_k})*` is an IDENTITY, and
+the per-face conjugates that were folded are still in hand, so their pointwise max is f* exactly --
+no reference implementation, no quadrature, no tolerance on the mathematics. `conjPolygonalDomain`
+now checks the assembled result against that max at a spread of directions and magnitudes, at the
+result's own vertices, and at the dual points of the input's vertices; on a disagreement it raises
+a `maxQuaPar:`-prefixed error, which is what `conjCPLQ`'s fallback catch tests, so the domain routes
+to the symbolic Case C instead of returning a number nobody checked.
+
+The check is ONE-SIDED and is documented as such: sampling can miss a defect, it cannot invent one.
+
+**Why not simply put the gate back.** The gate refused an entire shape family -- every unbounded
+domain -- to avoid a defect that affects some of them. With the cross-check, the ones that assemble
+correctly are answered in 0.01-0.1 s and the ones that do not fall back exactly as before. That is
+strictly better than the gate, and it also now protects the BOUNDED path, which had no such check.
+
+**What it does not do.** It does not fix the drop. `maxQuaPar`'s unbounded fold losing a cell is a
+real defect with a reproducer (`conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`'s fixture, the
+`F = [3 2;2 1;1 4;4 3]` orientation), and `PARTITION OVERLAP` diagnostics fire on it. That is the
+next thing to fix, and it is separate from the arc-split work above.
