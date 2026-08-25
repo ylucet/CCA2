@@ -9,12 +9,14 @@ _2026-08-24_
 
 ## State
 
-- Branch `overnight/2026-08-24`, an unmerged fast-forward off `main`. **Read
-  `MORNING.md` first** — it is the report for that run. A parallel `proof/`
-  session commits to `main`.
+- Branch `main`. **Read `MORNING.md` first** — it is the report for the overnight
+  run, and its first section explains why the branch that run created was a
+  mistake and has been folded back in. A parallel `proof/` session also commits
+  to `main`; do not stage its files.
 - Pushed: no. The overnight run never pushes.
-- Tests (2026-08-24, on the branch): fast **296 / 0**, slow **88 / 0** (identical
-  to its pre-change baseline), verylong NOT run.
+- Tests (2026-08-24): fast **298 / 0**, slow **88 / 0** (identical to its
+  pre-change baseline). `verylong` was started at the end of the run — check
+  `MORNING.md` for whether it landed.
 - Known reds: none.
 
 ## What changed, in one line
@@ -26,13 +28,15 @@ inputs that fall back to the symbolic Case C. Measured with `checkConjSymFree`:
 
 ## Next
 
-1. **G2b** — `maxQuaPar` DROPS a cell on some unbounded folds. The one silent
-   wrong answer of the session; a cross-check catches it and falls back, so it
-   cannot reach a caller, but it is unfixed. Reproducer in `TODO.md`.
-2. **G1** — the arc split works; the pieces then fail to pair up in
-   `assemblePieces`. Attack the MATCHING, not the refusal.
-3. **G2** — an affine face over an unbounded polygon (`max(0,x,y)`).
-4. `bash .claude/suite.sh --verylong` before the next tag.
+1. **G1 — build the missing LENS.** Two operands can have boundaries between the
+   SAME two dual points, one straight and one curved; the arrangement is missing
+   the cell between them, and the orphaned arc in `assemblePieces` is looking for
+   a partner that was never built. Do NOT chase the matching. This is the last
+   fallback of the bounded family.
+2. **G2** — an affine face over an unbounded polygon (`max(0,x,y)`). `TODO.md`
+   prices a direct route for all-affine input that never enters `maxQuaPar`.
+3. G2b is **DONE**: the silent wrong answer on unbounded folds is fixed (the
+   split direction at a line pair's singular point).
 
 ## Files
 

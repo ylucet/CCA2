@@ -20,6 +20,8 @@ slow-bucket run mid-flight with a bogus syntax error.
 
 Task: steps 1–8 of the sym-free `conj` plan. `biconj` untouched throughout.
 
+---
+
 ## The finding that re-shaped the plan
 
 **The numeric conjugate path was already 100% sym-free before this run started.**
@@ -34,84 +36,98 @@ So the job was never "rewrite Step 3 without the symbolic engine". It was
 
     baseline, 16 fixtures:  SYMBOLIC 2 of 16, both maxQuaPar, 86–112 s each
                             (the numeric route answers in 0.01–1 s)
-    end of run, 17:         SYMBOLIC 3 of 17 — the same two, plus max(0,x,y),
-                            which the baseline family did not contain because
-                            its unbounded fixture was malformed. The unbounded
-                            CONVEX family went from "no numeric route at all"
-                            to 0.16 s.
+    end of run, 17:         SYMBOLIC 3 of 17 — the same two (G1), plus
+                            max(0,x,y) (G2), which the baseline family did not
+                            contain because its unbounded fixture was malformed.
+
+That "3 of 17" understates the change, so read it with the two lines that matter:
+
+* the unbounded CONVEX family went from **no numeric route at all** to 0.16 s;
+* and it was returning **wrong values** when the gate came off, which is the
+  next section.
+
+## The one that nearly got away — and it is now fixed
+
+Opening the unbounded route exposed a **silent wrong answer**: a 4-cone fan
+returned `2.0` at `s = (-2,-3)` where the definition sup is `4.5`. The assembly
+had dropped a cell, and every probe of the same fixture in its other orientation
+was exact — the signature of a dropped *region*: right almost everywhere, wrong
+on a set, silent. An existing test whose truth is a closed form caught it.
+
+Two things were done, and both are worth keeping:
+
+1. **A cross-check, so the numeric route cannot return an unchecked number.**
+   `f* = max_k (q_k + I_P_k)*` is an identity and the per-face conjugates are
+   still in hand, so their pointwise max *is* f\* exactly. The fold is compared
+   against it and DECLINES on a disagreement, routing that input to the symbolic
+   fallback. One-sided by construction: it can miss a defect, it cannot invent
+   one. It protects the bounded path too, which had none.
+2. **The defect itself, traced to one line.** The minimal reproducer is two
+   functions of one variable:
+
+       h1 = max(s1,0)^2/2   (two cells, split by the s2-axis)
+       h2 = max(s2,0)^2/2   (two cells, split by the s1-axis)
+
+   Their max must split the first quadrant along `s2 = s1` — 5 cells. It gave 4.
+   `{h1=h2}` is `s1²=s2²`, a **pair of lines crossing at the origin**, which is
+   the cone's apex and its only vertex. `splitUnboundedAtOneCrossing` took the
+   branch direction as the perpendicular to the gradient — and the gradient
+   *vanishes* at a line pair's crossing point. It gave up; the caller's tangency
+   branch then read the winner at the cell's centroid, which for a cone **is**
+   that apex, lying on the curve. The winner came out of the sign of a computed
+   zero. Where the gradient vanishes the branches are the **null directions of
+   the quadratic part**, available in closed form from its eigen-decomposition —
+   that is the fix. A cone whose apex is that singular point is the dual of any
+   *wedge* face, so every 4-cone conjugate hit it. The fan now assembles to 8
+   cells with error 0 against the definition sup.
 
 ## What changed
 
-1. **`Conic` level of the lattice** — `Conic.m`, `RatCon.m`, and `RatPar.m`
-   reduced to the `Par` marker. The subdivision axis is now `Pol < Par < Conic`;
-   every existing type is unchanged. `Par.m`'s claim that non-parabolic edges
-   never arise is corrected in place: it holds for every comparison
-   [COAP]/[JOGO] Theorem 6's proof covers, and fails in general.
-   The file is `Conic.m`, not `Con.m`: `CON` is a Windows device name, and a
-   plain read of `Con.m` hangs on the console.
+1. **`Conic` level of the lattice** — `Conic.m`, `RatCon.m`, `RatPar.m` reduced
+   to the `Par` marker. The subdivision axis is `Pol < Par < Conic`; every
+   existing type is unchanged. `Par.m`'s claim that non-parabolic edges never
+   arise is corrected in place. The file is `Conic.m` because `CON` is a Windows
+   device name and a plain read of `Con.m` hangs on the console.
 2. **`ratQ.m`** — exact rational arithmetic on coefficient vectors, two canonical
-   forms because a face function has a scale and a conic does not. Integer-valued
-   doubles with a 2^53 guard, not int64 (which saturates silently). 17 tests.
+   forms because a face has a scale and a conic does not. 17 tests.
 3. **`conicMeet.m`** — two conics intersected through their exact integer
-   Sylvester resultant; the certificate is exact, only its root is floating
-   point. 12 tests.
-4. **`conjConvexPolygon.m`** — the main piece. The conjugate of a CONVEX
-   quadratic over ANY convex polygon, bounded or not, in closed form, with no
-   triangulation and no curved edge; returns a `QuaPol`. 10 tests, against closed
-   forms and a refined definition-sup.
-5. **`conjCPLQ` rewired** — convex faces go through (4) whole, and the
-   `isDomBounded` gate that sent every unbounded domain to the symbolic path is
-   gone. Plus `route='numeric'` (refuses to fall back, so a test can pin the
-   ROUTE) and a `CCA2_CONJ_FALLBACK` global that records why.
-6. **A cross-check that makes the numeric route SAFE** — see "the one that
-   nearly got away" below. This is the most important change of the night.
+   Sylvester resultant; only the root is floating point. 12 tests.
+4. **`conjConvexPolygon.m`** — a CONVEX quadratic over ANY convex polygon,
+   bounded or not, closed form, no triangulation, returns a `QuaPol`. 10 tests.
+5. **`conjCPLQ` rewired** — convex faces go through (4) whole; the `isDomBounded`
+   gate is gone; `route='numeric'` refuses to fall back so a test can pin the
+   ROUTE; `CCA2_CONJ_FALLBACK` records why.
+6. **The fold cross-check** and **the singular-point fix**, above.
 7. **`maxQuaPar` arc splits** — a clip line cutting a cell's parabola twice, and
    a neighbour's vertex inside an arc, both used to raise `notImplemented`. They
-   now SUBDIVIDE, by cutting along the line through the split point parallel to
-   the parabola's axis, which meets the conic exactly once. Two documented GAPs
-   became OK; `maxQuaParTest` 29/0.
-8. **`conjSymFreeTest.m`** — pins which ROUTE each shape takes, including the
-   remaining fallbacks, so a regression onto the symbolic path is visible.
-9. **Retired** — `exactQ` is off the plan (nothing but its own test uses it);
-   `TODO.md` marks the degree-≤4 algebraic kernel and the "detected refusal"
-   item CANCELLED by the H-form premise rather than deferred.
-
-## The one that nearly got away
-
-Opening the unbounded route exposed a **silent wrong answer**: on a 4-cone fan
-the numeric fold returned `2.0` at `s = (-2,-3)` where the definition sup is
-`4.5`. The assembly had dropped a cell — 4 cells for a fold that needs many more
-— and every probe point of the same fixture in its other orientation was exact,
-which is what a dropped *region* looks like: right almost everywhere, wrong on a
-set, and silent. It was caught by an existing test whose truth is a closed form.
-
-The fix is a **verification, not a narrower gate**. `f* = max_k (q_k + I_P_k)*`
-is an identity and the per-face conjugates are still in hand, so their pointwise
-max *is* f\* exactly. The fold is now checked against it and DECLINES on a
-disagreement, which routes that input to the symbolic fallback. Inputs that
-assemble correctly keep the 0.01–0.1 s numeric answer; the rest are as slow as
-they were before, and none is wrong. The check is one-sided by construction: it
-can miss a defect, it cannot invent one. It now protects the bounded path too,
-which had none.
+   now subdivide along the line through the split point parallel to the
+   parabola's axis, which meets the conic exactly once. Two more documented GAPs
+   became OK.
+8. **`conjSymFreeTest.m`** pins which route each shape takes, fallbacks included.
+9. **Retired** — `exactQ` is off the plan; the degree-≤4 algebraic kernel and the
+   "detected refusal" item are marked CANCELLED by the H-form premise.
 
 ## What is broken
 
-Nothing red. Four things are **narrowed or named, not closed** — each pinned by a
-test or a reproducer, and listed in `TODO.md` as G1–G3:
+Nothing red: **fast 298/0, slow 88/0** (the slow bucket identical to its
+pre-change baseline). The `verylong` bucket was started at the end of the run;
+if this line still says so, it had not finished when the run ended — its result
+is the one number this report does not contain.
 
-- **G1** — an indefinite quadratic over a multi-piece POLYGON still falls back.
-  The arc split in (7) works and is tested, but the pieces then fail to pair up
-  in `assemblePieces`: the subdivision is consistent per face PAIR, not globally.
-  Iterating the global pass to a fixed point was tried and did not fix it.
-  Attack the MATCHING, not the refusal — `DECISIONS.md` has the design.
-- **G2** — an AFFINE face over an UNBOUNDED polygon (`max(0,x,y)`). Its
-  conjugate is a support function, `+inf` off a cone, and `maxQuaPar` refuses an
-  operand that is not finite everywhere. `TODO.md` prices a third route that
-  would cover every piecewise-LINEAR input in one construction.
-- **G2b** — `maxQuaPar` drops a cell on some unbounded folds. This is the defect
-  the cross-check catches; it is contained, not fixed, and every input it hits
-  pays the symbolic path. Reproducer named in `TODO.md`.
-- **G3** — a non-convex face over an unbounded polygon; declines by name.
+Two gaps remain, both named in `TODO.md` and pinned by tests that will go green
+when they are fixed:
+
+- **G1 — a missing LENS.** An indefinite quadratic over a multi-piece polygon.
+  The piece dump is unambiguous: piece 1's arc is g2's parabola from `(0,0)` to
+  `(1,1)`, and its would-be neighbours are straight edges through `(0.5,0.5)`,
+  which is not on that parabola. The two operands each have a boundary between
+  the same two dual points — one straight, one curved — so a lens lies between
+  them and the arrangement does not contain that cell. Build the lens; do not
+  chase the matching.
+- **G2 — an AFFINE face over an UNBOUNDED polygon** (`max(0,x,y)`). Its
+  conjugate is a support function, `+inf` off a cone. `TODO.md` prices a route
+  that would cover every piecewise-LINEAR input in one construction and never
+  enter `maxQuaPar`; it is a new operator, so it was not started.
 
 One bounded limit found and pinned rather than fixed: the exact integer layer
 cannot express a near-tangency closer than about 1e-3 (the resultant wants
@@ -121,20 +137,20 @@ cannot express a near-tangency closer than about 1e-3 (the resultant wants
 
 Nothing blocking. Two notes:
 
-- **Three tests in `conjCPLQTest` were changed**, and each change is justified in
-  a comment at the site. Two asserted an EXACT return class (`QuaPar`) where the
-  result is now a `QuaPol` — a `QuaPar` with every edge conic pinned to zero,
-  which satisfies the property those tests state they are about ("closed-form
-  numerics, not the symbolic fallback") strictly better. Three read the result
-  via `g.fnd`, which only the symbolic form has, and now use the file's own
+- **Three tests in `conjCPLQTest` were changed**, each justified at the site. Two
+  asserted an EXACT return class (`QuaPar`) where the result is now a `QuaPol` —
+  a `QuaPar` with every edge conic pinned to zero, which satisfies the property
+  those tests state they are about strictly better. Three read the result via
+  `g.fnd`, which only the symbolic form has, and now use the file's own
   route-agnostic `evalConjResult`. **No value assertion was weakened.**
-- `conjCPLQTest` got slower (38 s → 154 s) because the fixture that exposed G2b
-  now takes the symbolic fallback. That is the honest cost of the cross-check.
+- `conjCPLQTest` got slower (38 s → 179 s) because the two G1 fixtures take the
+  symbolic fallback. That is the honest cost of the cross-check.
 
 ## Where I stopped
 
-Everything is committed on `main` at `25b18ac`; this run's commits are the ones
-whose subjects begin `feat:`/`chore:` and mention `conj`, `ratQ`, `conicMeet` or
-`Conic` (the interleaved ones are the proof session's). The next item is **G2b** (a wrong answer, contained but not fixed), then
-**G1**. `DECISIONS.md` 2026-08-24 has four entries written so that each starts
-from the design rather than from the symptom.
+All of it is committed on `main`. `DECISIONS.md` has six entries dated
+2026-08-24, each written so the next attempt starts from the design rather than
+the symptom; `SUPPORT_MATRIX.md` §1.2 and §4 are refreshed and §§4.4–4.5 are new;
+`TODO.md` opens with the measured gap list.
+
+Next: **G1** (the lens), then **G2**.
