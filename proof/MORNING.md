@@ -30,6 +30,12 @@ guardrails require.
 
 ## What changed
 
+- **A6 done** (`Witness.exists_infinite_cell`). One activity pattern containing
+  both interior branches has an **infinite cell**, sitting inside the
+  non-degenerate ellipse. The plan expected a local-constancy argument; a
+  pigeonhole on `(cand f).powerset` does it in a dozen lines instead, and needs
+  no topology at all. Compiled first try.
+
 - **A5 done** (`QuaConProof/Ellipse.lean`, new file). `disc < 0` plus
   `a*det3 < 0` now *proves* the zero set is an ellipse, with the imaginary and
   point cases separated. Deviation from the plan, and it made the item much

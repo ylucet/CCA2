@@ -268,6 +268,66 @@ theorem ellipse_realised :
   · intro s hs
     exact mem_eqLocus_of_active hs.1 hs.2
 
+/-! ### A single cell is infinite
+
+`TODO.md` item A6. `ellipse_realised` proves that the set where both interior
+branches are active is infinite, but that set is a **union of cells**: two of its
+points may have different activity patterns, so it does not by itself exhibit one
+infinite cell.
+
+The gap closes by **counting**, not by a limit argument. Every `sₙ` has an
+activity pattern, every pattern is a subset of the finite set `cand f`, and there
+are infinitely many `sₙ`. So some pattern recurs infinitely often, and its cell
+contains infinitely many distinct `sₙ`. No continuity, no local constancy, no
+topology — which is why this is a dozen lines rather than the analytic argument
+the plan expected. -/
+
+/-- **A single cell of `f*` is infinite, and it is an arc of the ellipse.**
+
+There is one activity pattern `S` containing both interior branches whose cell is
+infinite; being multi-active, that cell lies inside the tie conic, which
+`tie_isEllipse` shows is a non-degenerate ellipse. -/
+theorem exists_infinite_cell :
+    ∃ S : Finset Quad, interiorBranch q1 ∈ S ∧ interiorBranch q2 ∈ S ∧
+      (cell f S).Infinite ∧
+      cell f S ⊆ {s : Plane | (interiorBranch q1).eval s = (interiorBranch q2).eval s} := by
+  classical
+  -- the activity pattern of `sₙ`, valued in a *finite* type
+  set P : Finset (Finset Quad) := (cand f).powerset with hP
+  set g : ℕ → {T : Finset Quad // T ∈ P} := fun k =>
+    ⟨active f (sw k), by rw [hP, Finset.mem_powerset]; exact active_subset_cand f (sw k)⟩
+    with hg
+  obtain ⟨y, hy⟩ := Finite.exists_infinite_fiber g
+  have hfib : (g ⁻¹' {y}).Infinite := Set.infinite_coe_iff.1 hy
+  -- every index in the fibre lands in the cell of `y`
+  have hmem : ∀ k ∈ g ⁻¹' {y}, sw k ∈ cell f (y : Finset Quad) := by
+    intro k hk
+    have : g k = y := hk
+    exact congrArg Subtype.val this
+  obtain ⟨k₀, hk₀⟩ := hfib.nonempty
+  have hact₀ : active f (sw k₀) = (y : Finset Quad) := hmem k₀ hk₀
+  refine ⟨(y : Finset Quad), ?_, ?_, ?_, ?_⟩
+  · rw [← hact₀]; exact (both_active k₀).1
+  · rw [← hact₀]; exact (both_active k₀).2
+  · refine Set.Infinite.mono (s := sw '' (g ⁻¹' {y})) ?_ ?_
+    · rintro _ ⟨k, hk, rfl⟩
+      exact hmem k hk
+    · exact hfib.image (Set.injOn_of_injective sw_injective)
+  · refine cell_subset_eqLocus ?_ ?_
+    · rw [← hact₀]; exact (both_active k₀).1
+    · rw [← hact₀]; exact (both_active k₀).2
+
+/-- and that infinite cell really does sit on a non-degenerate ellipse. -/
+theorem exists_infinite_cell_on_ellipse :
+    ∃ S : Finset Quad, (cell f S).Infinite ∧
+      cell f S ⊆ {s : Plane | (interiorBranch q1 - interiorBranch q2).eval s = 0} ∧
+      (interiorBranch q1 - interiorBranch q2).kind = ConicKind.ellipse := by
+  obtain ⟨S, _, _, hinf, hsub⟩ := exists_infinite_cell
+  refine ⟨S, hinf, fun s hs => ?_, tie_isEllipse⟩
+  have := hsub hs
+  simp only [Set.mem_ofPred_eq, Quad.eval_sub] at this ⊢
+  linarith
+
 end Witness
 
 end QuaConProof

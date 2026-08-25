@@ -34,18 +34,6 @@ a session, XL more than one session.
 
 ### A. Finish the real case
 
-- [ ] **A6 -- a single cell is infinite.** (L) `Witness.ellipse_realised` proves
-      infinitely many points carry two active interior branches on one ellipse,
-      but that set is a **union** of cells. To get one infinite *cell*, show the
-      activity pattern is locally constant along the arc -- the two interior
-      branches are active at every `s_n`, and no third candidate can join on a
-      neighbourhood, because the other candidates are strictly below there.
-      *Route worth trying first:* rather than a topological argument, show the
-      activity set is literally the same finite set at every `s_n` -- compute
-      `active f (sw k)` for the witness and prove it independent of `k`. That
-      turns a limit argument into an algebraic one and would close the item
-      outright.
-
 ### B. Rational coefficients
 
 Yves chose the **parallel `RatQuaPol` structure** over a predicate on the real
@@ -155,6 +143,13 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **A6: a single cell is infinite.** `Witness.lean`,
+      `exists_infinite_cell`. Closed by **counting**, not by a limit argument:
+      every `s_n` has an activity pattern, every pattern is a subset of the
+      finite `cand f`, and there are infinitely many `s_n`, so some pattern
+      recurs infinitely often and its cell is infinite. No continuity, no local
+      constancy, no topology.
 
 - [x] 2026-08-24 -- **A5: `disc < 0` really means ellipse.** `Ellipse.lean`.
       `IsEllipse` (the unit level set of a positive definite form in Cholesky
