@@ -26,6 +26,8 @@ _2026-08-25_
 
 ## Files
 - `TODO.md` — opens with the measured gap list G1–G7.
-- `MORNING.md` — the overnight run's report; `proof/MORNING.md` is the other's.
+- `MORNING.md` — the overnight run's report. The Lean proof moved OUT of this repo on
+  2026-08-25: it is now `AI/CCA2proof`, an independent repository, and its `MORNING.md`
+  went with it.
 - `DECISIONS.md` — nine entries dated 2026-08-24/25; read the headings.
 - `checkConjSymFree.m` — the symbolic-fallback rate, with reasons.

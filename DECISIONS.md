@@ -2674,3 +2674,21 @@ minorant. That is the intended trade and the defect itself is still open.
   the incident; this run's `MORNING.md` opens with it. A third symptom of the same cause: editing
   `.claude/suite.sh` while a `bash` process was executing it killed a slow-bucket run mid-flight
   with a bogus syntax error.
+
+## 2026-08-25 (split) — the Lean proof is its own repository; the shared-working-tree problem is gone
+
+- **Closes** the entry above (`REFUTED: branching to isolate one unattended run from another in the
+  SAME working tree`). That entry ends at "stay on `main` and accept interleaved history", which is
+  a way of living with the collision rather than removing it. Removing it is cheaper: the two
+  sessions were only ever entangled because the Lean formalisation sat at `proof/` INSIDE this
+  repository, so a `proof/` session and a MATLAB session shared one HEAD, one index and one
+  `git add -A`.
+- **Done:** `proof/` moved verbatim to `AI/CCA2proof` and given its own repo (initial commit
+  `e629247`, the same 32 tracked files, `.lake/` still ignored). This repository keeps the
+  pre-split history of `proof/`; the new one starts fresh. No history was rewritten here.
+- **What this changes in practice:** two sessions, two working trees, two HEADs -- so neither the
+  branch tangle, the cross-session `git add -A` sweep, nor a stale-looking `main` can recur between
+  MATLAB work and proof work. The commit-on-`main` preference still stands inside EACH repo.
+- **What it does not change:** references to `proof/...` in this file and in `MORNING.md` are the
+  historical record of when the two lived together and are left as written. Only the live pointer
+  in `.claude/SESSION_HANDOFF.md` was repointed.
