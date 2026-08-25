@@ -30,6 +30,15 @@ guardrails require.
 
 ## What changed
 
+- **A5 done** (`QuaConProof/Ellipse.lean`, new file). `disc < 0` plus
+  `a*det3 < 0` now *proves* the zero set is an ellipse, with the imaginary and
+  point cases separated. Deviation from the plan, and it made the item much
+  shorter: no `Quad.rotate`, no `sin^2+cos^2=1`. Completing the square twice
+  gives a shear rather than a rotation, and `IsEllipse` is stated as "unit level
+  set of a positive definite form in Cholesky position" -- the affine image of a
+  circle -- so a shear is enough. The sign work all funnels through one identity,
+  `q(centre) * disc = -det3`.
+
 - **A4 done** (`QuaConProof/Biconj.lean`, new file). `biconj`, the affine
   minorant `A_s`, `A_s <= f`, `A_s <= f**`, `f** <= f`, and real-valued
   Fenchel-Young. Compiled first try. Note for the record: `f**` really can be

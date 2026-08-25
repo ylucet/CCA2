@@ -34,16 +34,6 @@ a session, XL more than one session.
 
 ### A. Finish the real case
 
-- [ ] **A5 -- conic normal forms: `disc < 0` really means ellipse.** (L) `disc`
-      and `det3` are proved invariants with computed values, but no theorem yet
-      says the zero set *is* an ellipse. Needs `Quad.rotate` (rotation by an
-      angle, with `sin^2 + cos^2 = 1` threaded through the coefficient identity),
-      `Quad.translate`, and then: `disc < 0` and `det3 != 0` imply the zero set is
-      either empty or an ellipse in normal form. Self-contained; nothing else on
-      this list depends on it.
-      *Suggested order:* `rotate` and its `disc`/`det3` invariance first (that
-      alone is a green commit), then the choice of angle killing the `b`
-      coefficient, then translation killing `d` and `e`, then the normal form.
 - [ ] **A6 -- a single cell is infinite.** (L) `Witness.ellipse_realised` proves
       infinitely many points carry two active interior branches on one ellipse,
       but that set is a **union** of cells. To get one infinite *cell*, show the
@@ -165,6 +155,15 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **A5: `disc < 0` really means ellipse.** `Ellipse.lean`.
+      `IsEllipse` (the unit level set of a positive definite form in Cholesky
+      position), the completed square at the centre, and the three cases:
+      `a*det3 < 0` ellipse, `det3 = 0` the single centre point, `a*det3 > 0`
+      empty. No rotation was needed -- completing the square twice gives a
+      *shear* to normal form, and an ellipse is the affine image of a circle,
+      not only the rotated one. `U3U6_isEllipse` upgrades the documents' own
+      elliptical edge from "elliptic and non-degenerate" to a proved ellipse.
 
 - [x] 2026-08-24 -- **A4: Fenchel-Young and the biconjugate.** `Biconj.lean`.
       `biconj f x = sup_s (<s,x> - f*(s))`, the affine minorant
