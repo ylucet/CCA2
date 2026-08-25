@@ -1,6 +1,6 @@
 # Session Handoff
 
-_2026-08-23_
+_2026-08-24_
 
 ## Blocked
 
@@ -9,24 +9,35 @@ _2026-08-23_
 
 ## State
 
-- Branch `main`, this session's work @ `db7d13b` — "The convex envelope is
-  not rational". A parallel `proof/` session also commits to `main`.
-- Pushed: yes — `origin/main` 2026-08-23
-- Tests (2026-08-20): fast 249/0 · normal 12/0 · slow 88/0 · verylong NOT run.
-  Nothing run since — no VPN, and no `.m` file changed this session.
-- Known reds: `testMaxMultiRegion/testPCE2` — `plq_1piece`'s envelope route
+- Branch `overnight/2026-08-24`, an unmerged fast-forward off `main`. **Read
+  `MORNING.md` first** — it is the report for that run. A parallel `proof/`
+  session commits to `main`.
+- Pushed: no. The overnight run never pushes.
+- Tests (2026-08-24, on the branch): fast **296 / 0**, slow **88 / 0** (identical
+  to its pre-change baseline), verylong NOT run.
+- Known reds: none.
+
+## What changed, in one line
+
+`conj`'s numeric path was ALREADY sym-free; the work was shrinking the set of
+inputs that fall back to the symbolic Case C. Measured with `checkConjSymFree`:
+3 of 17 fixtures still fall back, and the unbounded CONVEX family moved from
+"no numeric route at all" to 0.16 s.
 
 ## Next
 
-1. **`Con` trait** — relax `RatPar`'s `set.Ec`; cheapest item, and `f*`'s
-   elliptical edge already forces it.
-2. **T3** — `symbolicFunction`'s payload to a rational coefficient vector;
-   order and counts in `TODO.md` top section.
-3. `bash .claude/suite.sh --verylong` before the next tag (~73 min).
+1. **G2b** — `maxQuaPar` DROPS a cell on some unbounded folds. The one silent
+   wrong answer of the session; a cross-check catches it and falls back, so it
+   cannot reach a caller, but it is unfixed. Reproducer in `TODO.md`.
+2. **G1** — the arc split works; the pieces then fail to pair up in
+   `assemblePieces`. Attack the MATCHING, not the refusal.
+3. **G2** — an affine face over an unbounded polygon (`max(0,x,y)`).
+4. `bash .claude/suite.sh --verylong` before the next tag.
 
 ## Files
 
-- `DECISIONS.md` 2026-08-23 — envelope face degree 1/2/4; `f**` is not C1
-- `TODO.md` 2026-08-23 — `QuaCon`/`AlgCon` return types, in order
-- `proof/` — another session's Lean proof of `conj_isQuaCon`, 0 sorry
-- `RatPol.m` header — now wrong, it describes the one-piece case only
+- `MORNING.md` — the overnight report; the gap list is `TODO.md` G1–G3.
+- `DECISIONS.md` 2026-08-24 — four entries: the precision budget, the `syms`
+  assumption leak, the arc-split geometry, the dropped cell.
+- `SUPPORT_MATRIX.md` §1.2 and §4 refreshed; §4.4 is new.
+- `proof/` — another session's Lean proof; do not stage its files.

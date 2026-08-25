@@ -20,6 +20,11 @@ So the job was never "rewrite Step 3 without the symbolic engine". It was
 
     baseline, 16 fixtures:  SYMBOLIC 2 of 16, both maxQuaPar, 86–112 s each
                             (the numeric route answers in 0.01–1 s)
+    end of run, 17:         SYMBOLIC 3 of 17 — the same two, plus max(0,x,y),
+                            which the baseline family did not contain because
+                            its unbounded fixture was malformed. The unbounded
+                            CONVEX family went from "no numeric route at all"
+                            to 0.16 s.
 
 ## What changed
 
