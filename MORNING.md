@@ -117,16 +117,17 @@ is the one number this report does not contain.
 Two gaps remain, both named in `TODO.md` and pinned by tests that will go green
 when they are fixed:
 
-- **G1 — the two sides of one boundary disagree about its GEOMETRY.** An
-  indefinite quadratic over a multi-piece polygon. The piece dump is
-  unambiguous: piece 1's arc is g2's parabola from `(0,0)` to `(1,1)`, and its
-  would-be neighbours are straight edges through `(0.5,0.5)`, which is not on
-  that parabola. That much is established, and it rules out a matching tolerance
-  or an ordering. The leading *hypothesis* — that a LENS between g1's straight
-  diagonal and g2's arc is missing from the arrangement — is written up in
-  `DECISIONS.md` with its evidence and with the reason the probe used tonight is
-  not good enough to settle it. **Measure the coverage before building
-  anything.**
+- **G1 — a CELL is missing, and `clipByFace` is where.** An indefinite quadratic
+  over a multi-piece polygon. Measured with each operand's own point location,
+  captured alongside the pieces so the numbering cannot drift: every point of the
+  lens between g1's straight diagonal and g2's arc lies in **g1 face 4 and g2
+  face 2**, and the fold produces **no piece with src [4 2]** — while the control
+  point one step away, in `[1 2]`, is there. So `clipByFace` returned nothing for
+  a pair whose intersection is not empty, and the orphaned arc in
+  `assemblePieces` is the symptom rather than the defect. `polyConstraints`
+  already skips a curved edge's chord, so the candidates are the operand SWAP at
+  the top of `clipByFace`, `clipPolyByConic`, and the three reduction passes.
+  **Instrument that one pair.**
 - **G2 — an AFFINE face over an UNBOUNDED polygon** (`max(0,x,y)`). Its
   conjugate is a support function, `+inf` off a cone. `TODO.md` prices a route
   that would cover every piecewise-LINEAR input in one construction and never
