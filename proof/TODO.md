@@ -47,20 +47,22 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C7 residue -- `conv f` is lower semicontinuous, for bounded pieces.** (L)
-      This closes the `>=` half of the convex-hull formula, and it is **not** a
-      separation problem -- `DECISIONS.md` 2026-08-24 corrects the earlier note.
-      mathlib already has the separation layer
-      (`ConvexOn.exists_affine_le_of_lt` in `Mathlib/Analysis/Convex/Approximation.lean`),
-      and with `affine_le_biconj` the argument is three lines *given* lsc. So the
-      whole item is: prove `conv f` lsc.
-      *Route, worked out:* `epi (conv f) = convexHull (union of graph_p) +
-      ({0} x [0,inf))`, where `graph_p = (fun x => (x, q_p x)) '' T_p` is compact
-      for a bounded piece. Convex hull of a compact set is compact; compact plus
-      closed is closed; a closed epigraph is lsc.
-      *Settle first:* mathlib has `Set.Finite.isCompact_convexHull`, but I could
-      not find "convex hull of a **compact** set is compact" nor "compact + closed
-      is closed". Find them or prove them; that is the only real unknown.
+- [ ] **C7 residue -- the `>=` half, for CONVEX pieces.** (L) Two findings from
+      2026-08-24 reshape this item, both in `DECISIONS.md`:
+      * the general one-point-per-piece formula is **false** -- witness
+        `Sanity.convRepVal_gt_biconj`, a concave quadratic on a segment -- so the
+        statement must assume the pieces' quadratics are convex, as
+        `../CONJ_FIELD_PROOF.md` §5.1 itself does;
+      * with that hypothesis there are **no unknowns left**. mathlib supplies the
+        separation layer (`ConvexOn.exists_affine_le_of_lt`) and
+        `IsClosed.mul_left_of_isCompact` for "compact + closed is closed"; and
+        because each `epi_k = graph_k + ({0} x [0,inf))` is convex, the convex
+        hull of the finite union is the continuous image of
+        `simplex x prod graph_k`, hence compact -- so the general "convex hull of
+        a compact set is compact", which mathlib does **not** have, is not needed.
+      *Plan:* define the convex-piece class; prove `epi (conv f)` closed by that
+      route; conclude `conv f` lsc; then `affine_le_biconj` plus
+      `exists_affine_le_of_lt` gives `conv f <= f**` in three lines.
 - [ ] **C6 residue -- covering.** (XL) "Every point of `dom f**` lies in one of
       the cells" needs `f**` to have a subgradient at that point, which for a
       closed proper convex function holds only on the **relative interior** of the

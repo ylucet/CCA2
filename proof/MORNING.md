@@ -30,6 +30,20 @@ guardrails require.
 
 ## What changed
 
+- **A second refutation, and it is the most useful thing the night found.** The
+  convex-hull formula of `../CONJ_FIELD_PROOF.md` §5.1 is **false** for this
+  development's input class: `Sanity.convRepVal_gt_biconj` is a concave quadratic
+  on a segment where the infimum is `0` and `f**` is at most `-1`. §5.1 derives
+  the formula from "each piece's epigraph is convex", which needs the pieces'
+  quadratics to be convex, and this project allows indefinite ones. So the `<=`
+  half I proved is the whole truth in general, and the `>=` half belongs to the
+  convex-piece case.
+  With that hypothesis the remaining work has **no unknowns**: mathlib has the
+  separation layer and `IsClosed.mul_left_of_isCompact`, and convexity of each
+  piece's epigraph makes the relevant convex hull a continuous image of a
+  compact set, so the missing "convex hull of a compact set is compact" is not
+  needed after all. `TODO.md` carries the plan.
+
 - **Second pass on the two residues, and it changed what they are.** Landed
   `isClosed_epigraph_conj` and `isClosed_epigraph_biconj` -- the epigraphs are
   closed and convex, which is the object every separation argument needs. Then

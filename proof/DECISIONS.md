@@ -18,6 +18,35 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-24 — §5.1's convex-hull formula needs CONVEX pieces; without them the `≥` half is false
+
+- **Tried:** proving `f**(x) = inf { Σ λ_k q_k(z_k) : Σ λ_k z_k = x, z_k ∈ T_k }`
+  (`../CONJ_FIELD_PROOF.md` §5.1) for the input class of this development, which
+  allows indefinite and singular Hessians.
+- **Why it fails, and it is a refutation:** §5.1 derives the formula from "each
+  `epi(q_k + ι_{T_k})` is **convex**". That holds when the pieces' quadratics are
+  convex, and this development does not assume it. `Sanity.convRepVal_gt_biconj`
+  is the witness: one piece, the segment from `(-1,0)` to `(1,0)` carrying the
+  **concave** `q = -x₁²`. With a single piece every representation of the origin
+  is forced (`λ = 1`, `z = 0`), so the infimum is `q(0) = 0`; but the origin is
+  the midpoint of the two endpoints, where `f = -1`, so `f**(0) ≤ -1` by
+  convexity. The infimum is strictly above `f**`.
+- **Consequence for the formula.** `biconj_le_convRepVal`, the `≤` half, is
+  unconditional and stays. The `≥` half belongs to the **convex-piece** case, and
+  in general the right statement needs Carathéodory over the union of the
+  epigraphs — several points from one piece, not one point per piece.
+- **And that is good news for the remaining work**, because with convex pieces
+  every `epi(q_k + ι_{T_k})` is convex *and* is `graph_k + ({0} × [0,∞))` with
+  `graph_k` compact, so the convex hull of the finite union is the continuous
+  image of `simplex × ∏ graph_k` — compact, with no need for the general "convex
+  hull of a compact set is compact", which mathlib does **not** have. Compact plus
+  closed is closed is `IsClosed.mul_left_of_isCompact`
+  (`Mathlib/Topology/Algebra/Group/Pointwise.lean`, additive version by
+  `to_additive`). Both unknowns of the previous entry are therefore settled.
+- **Before retrying, fix:** state the `≥` half only for convex pieces. Do not
+  look for a proof of the general one-point-per-piece formula; it is false.
+- **Evidence:** `QuaConProof/Biconj.lean`, `Sanity.convRepVal_gt_biconj`.
+
 ## 2026-08-24 — what mathlib has for separation, and what the two open items really need
 
 - **Tried:** closing the two residues of Track C — the covering half of C6 ("every

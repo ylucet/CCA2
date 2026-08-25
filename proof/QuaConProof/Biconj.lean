@@ -653,4 +653,88 @@ theorem exists_oneActive_manyMaximisers :
 end Sanity
 
 
+/-! #### The `≥` half is FALSE without convex pieces
+
+`../CONJ_FIELD_PROOF.md` §5.1 derives the formula from "each `epi(q_k + ι_{T_k})`
+is **convex**", which holds when the pieces' quadratics are convex. This
+development allows indefinite and singular Hessians, and there the one-point-per-
+piece formula fails — the infimum is strictly above `f**`.
+
+The witness is one piece: the segment from `(-1,0)` to `(1,0)` carrying
+`q = -x₁²`, a concave quadratic. With a single piece every representation of the
+origin is forced (`λ = 1`, `z = 0`), so the infimum is `q(0) = 0`. But `f**` at
+the origin is at most `-1`, because the origin is the midpoint of the two
+endpoints and `f = -1` at both.
+
+So `biconj_le_convRepVal` is the whole truth in general, and the reverse
+inequality belongs to the convex-piece case. -/
+
+namespace Sanity
+
+/-- `-x₁²`, concave. -/
+def qConc : Quad := ⟨-1, 0, 0, 0, 0, 0⟩
+
+noncomputable def segPiece : QuaPiece :=
+  ⟨{(-1, 0), (1, 0)}, ⟨(-1, 0), by simp⟩, ∅, qConc⟩
+
+noncomputable def segPol : QuaPol := ⟨{segPiece}, Finset.singleton_nonempty _⟩
+
+lemma mem_segPiece_left : ((-1, 0) : Plane) ∈ segPiece.T :=
+  segPiece.subset_T (by simp [segPiece])
+
+lemma mem_segPiece_right : ((1, 0) : Plane) ∈ segPiece.T :=
+  segPiece.subset_T (by simp [segPiece])
+
+/-- `f` is `-1` at both endpoints. -/
+lemma eval_segPol_endpoint {v : Plane} (hv : v ∈ segPiece.verts) (hq : qConc.eval v = -1) :
+    segPol.eval v ≤ ((-1 : ℝ) : EReal) := by
+  have := QuaPol.eval_le_of_mem (f := segPol) (p := segPiece) (by simp [segPol])
+    (segPiece.subset_T hv)
+  simpa [segPiece, hq] using this
+
+/-- **`f**` at the origin is at most `-1`**, by convexity: the origin is the
+midpoint of the two endpoints. -/
+theorem biconj_segPol_origin_le : segPol.biconj ((0, 0) : Plane) ≤ ((-1 : ℝ) : EReal) := by
+  have hl : segPol.biconj ((-1, 0) : Plane) ≤ ((-1 : ℝ) : EReal) :=
+    le_trans (QuaPol.biconj_le_eval _ _)
+      (eval_segPol_endpoint (by simp [segPiece]) (by norm_num [qConc, Quad.eval]))
+  have hr : segPol.biconj ((1, 0) : Plane) ≤ ((-1 : ℝ) : EReal) :=
+    le_trans (QuaPol.biconj_le_eval _ _)
+      (eval_segPol_endpoint (by simp [segPiece]) (by norm_num [qConc, Quad.eval]))
+  have hmid : ((1 / 2 : ℝ) • ((-1, 0) : Plane) + (1 / 2 : ℝ) • ((1, 0) : Plane))
+      = ((0, 0) : Plane) := by
+    simp [Prod.ext_iff]
+  have := QuaPol.biconj_le_of_combo segPol (x₁ := ((-1, 0) : Plane)) (x₂ := ((1, 0) : Plane))
+    (a := 1 / 2) (b := 1 / 2) (t₁ := -1) (t₂ := -1) (by norm_num) (by norm_num) (by norm_num)
+    hl hr
+  rw [hmid] at this
+  refine le_trans this (le_of_eq ?_)
+  norm_num
+
+/-- **Every representation of the origin reports `0`.** With one piece the weight
+and the point are forced. -/
+theorem convRepVal_segPol {lam : QuaPiece → ℝ} {z : QuaPiece → Plane}
+    (h : QuaPol.IsConvRep segPol ((0, 0) : Plane) lam z) :
+    QuaPol.convRepVal segPol lam z = 0 := by
+  obtain ⟨-, h1, -, hx⟩ := h
+  have hlam : lam segPiece = 1 := by simpa [segPol] using h1
+  have hz : z segPiece = ((0, 0) : Plane) := by
+    have hx' : lam segPiece • z segPiece = ((0, 0) : Plane) := by simpa [segPol] using hx
+    rwa [hlam, one_smul] at hx'
+  have hpieces : segPol.pieces = {segPiece} := rfl
+  rw [QuaPol.convRepVal, hpieces, Finset.sum_singleton, hlam, hz]
+  norm_num [segPiece, qConc, Quad.eval]
+
+/-- **The refutation.** For this `QuaPol` the convex-combination infimum is `0`
+while `f**` is at most `-1`, so the `≥` half of `../CONJ_FIELD_PROOF.md` §5.1
+does not hold once the pieces are allowed to be non-convex. -/
+theorem convRepVal_gt_biconj {lam : QuaPiece → ℝ} {z : QuaPiece → Plane}
+    (h : QuaPol.IsConvRep segPol ((0, 0) : Plane) lam z) :
+    segPol.biconj ((0, 0) : Plane) < ((QuaPol.convRepVal segPol lam z : ℝ) : EReal) := by
+  rw [convRepVal_segPol h]
+  refine lt_of_le_of_lt biconj_segPol_origin_le ?_
+  exact_mod_cast (by norm_num : (-1 : ℝ) < 0)
+
+end Sanity
+
 end QuaConProof
