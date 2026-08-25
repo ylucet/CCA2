@@ -47,17 +47,6 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C2 -- KEY LEMMA: `f**` is affine on the hull of the maximisers.** (M/L)
-      Define `maxSet f s := {x | exists p in f.pieces, x in p.T and
-      psi p.q s x = f*(s)}`, the points attaining the conjugate at `s`. Then for
-      every `s` with `f*(s)` finite, `f**` equals the affine function
-      `A_s(x) = <s,x> - f*(s)` on `convexHull (maxSet f s)`.
-      *Proof, and it is short:* `A_s <= f` everywhere by Fenchel-Young, hence
-      `A_s <= f**`. At a maximiser `x` in piece `p`,
-      `A_s(x) = q_p(x) >= f(x) >= f**(x) >= A_s(x)`, so all four are equal. `f**`
-      is convex (C1) and agrees with the affine `A_s` at every point of
-      `maxSet`, so `f** <= A_s` on the hull; with the reverse inequality, equal.
-      This is `../CONJ_FIELD_PROOF.md` section 5, written there for a triangle.
 - [ ] **C3 -- row 5 of Theorem 4: a vertex of `f*` gives an affine 2-cell.** (S)
       Corollary of C2 with three active candidates: `f**` is affine on the
       triangle of the three maximisers, with gradient `s`. Include the sharpness
@@ -114,6 +103,12 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **C2: the key lemma.** `Biconj.lean`,
+      `biconj_eq_affineMinorant_on_hull`: wherever `f*(s)` is finite, `f**`
+      equals the affine `A_s` on the whole convex hull of the maximiser set, and
+      `s` is a subgradient there. Rows 4 and 5 of Theorem 4's table are
+      corollaries. Compiled first try.
 
 - [x] 2026-08-24 -- **C1: `f**` is convex and lsc.** The shared lemma did fall
       out: `supAffine g z = sup_y (<y,z> - g y)` in `Convexity.lean` carries

@@ -30,6 +30,14 @@ guardrails require.
 
 ## What changed
 
+- **C2 done** -- the key lemma of Track C.
+  `biconj_eq_affineMinorant_on_hull`: where `f*(s)` is finite, `f**` equals the
+  affine minorant `A_s` on the convex hull of `maxSet f s`, with `s` as
+  subgradient. The convexity step needed no `AffineMap` machinery: the set where
+  `f**` lies below `A_s` is convex directly from `biconj_le_of_combo` plus the
+  fact that `A_s` respects convex combinations, so `convexHull_min` finishes it.
+  Compiled first try.
+
 - **C1 done**, and it paid for itself. `Convexity.lean` was refactored around
   `supAffine g z = sup_y (<y,z> - g y)`: convexity, convex domain and lower
   semicontinuity are proved once there, and `f*` and `f**` are both instances.

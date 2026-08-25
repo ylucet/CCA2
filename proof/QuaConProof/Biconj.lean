@@ -131,6 +131,88 @@ theorem fenchel_young {f : QuaPol} {s x : Plane} (hs : f.conj s ≠ ⊤) (hx : f
   rw [hE, EReal.coe_le_coe_iff, affineMinorant] at h
   linarith
 
+/-! ### The key lemma: `f**` is affine on the hull of the maximisers
+
+`TODO.md` item C2, and `../CONJ_FIELD_PROOF.md` §5, where it is written for a
+triangle. Everything in Theorem 4's table except the 2-cell rows is a corollary
+of this one statement.
+
+Fix `s` with `f*(s)` finite and let `maxSet f s` be the points of the pieces at
+which the supremum defining `f*(s)` is attained. Then `f**` **equals** the affine
+function `A_s` on the whole convex hull of that set.
+
+The proof is short and worth reading. `A_s ≤ f` everywhere by Fenchel–Young, so
+`A_s ≤ f**`. At a maximiser `x` in piece `p`,
+
+    A_s(x) = q_p(x) ≥ f(x) ≥ f**(x) ≥ A_s(x)
+
+so all four agree there. `f**` is convex and `A_s` is affine, so `f** ≤ A_s`
+propagates from the maximisers to their hull; with the reverse inequality, they
+are equal. -/
+
+/-- The points at which the supremum defining `f*(s)` is attained. Empty when
+`f*(s) = ⊤`, since `psi` is real-valued. -/
+def maxSet (f : QuaPol) (s : Plane) : Set Plane :=
+  {x | ∃ p ∈ f.pieces, x ∈ p.T ∧ ((psi p.q s x : ℝ) : EReal) = f.conj s}
+
+/-- Where `f*` is finite the maximiser set is nonempty — that is Frank–Wolfe. -/
+theorem maxSet_nonempty {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤) :
+    (maxSet f s).Nonempty := by
+  obtain ⟨p, hp, x, hxT, _, hval⟩ := exists_maximiser (attained_of_conj_ne_top hs)
+  exact ⟨x, p, hp, hxT, hval⟩
+
+/-- The affine minorant is affine: it respects convex combinations. -/
+lemma affineMinorant_combo (f : QuaPol) (s : Plane) {a b : ℝ} (hab : a + b = 1)
+    (x₁ x₂ : Plane) :
+    f.affineMinorant s (a • x₁ + b • x₂)
+      = a * f.affineMinorant s x₁ + b * f.affineMinorant s x₂ := by
+  simp only [affineMinorant, dot_combo_right]
+  linear_combination ((f.conj s).toReal) * hab
+
+/-- **At a maximiser, `f**` already equals the affine minorant.** -/
+theorem biconj_eq_affineMinorant_of_mem_maxSet {f : QuaPol} {s : Plane}
+    (hs : f.conj s ≠ ⊤) {x : Plane} (hx : x ∈ maxSet f s) :
+    f.biconj x = ((f.affineMinorant s x : ℝ) : EReal) := by
+  obtain ⟨p, hp, hxT, hval⟩ := hx
+  -- the piece's quadratic at `x` *is* the affine minorant there
+  have hq : p.q.eval x = f.affineMinorant s x := by
+    have hC : f.conj s = (((f.conj s).toReal : ℝ) : EReal) :=
+      (EReal.coe_toReal hs (conj_ne_bot f s)).symm
+    rw [hC, EReal.coe_eq_coe_iff] at hval
+    simp only [affineMinorant, ← hval, psi]
+    ring
+  refine le_antisymm ?_ (affineMinorant_le_biconj hs x)
+  calc f.biconj x ≤ f.eval x := biconj_le_eval f x
+    _ ≤ ((p.q.eval x : ℝ) : EReal) := eval_le_of_mem hp hxT
+    _ = ((f.affineMinorant s x : ℝ) : EReal) := by rw [hq]
+
+/-- **The key lemma.** On the convex hull of the maximisers, `f**` is the affine
+function `A_s`. -/
+theorem biconj_eq_affineMinorant_on_hull {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤)
+    {x : Plane} (hx : x ∈ convexHull ℝ (maxSet f s)) :
+    f.biconj x = ((f.affineMinorant s x : ℝ) : EReal) := by
+  refine le_antisymm ?_ (affineMinorant_le_biconj hs x)
+  -- the set where `f**` lies below the affine function is convex and contains
+  -- every maximiser, so it contains their hull
+  refine convexHull_min (t := {z : Plane | f.biconj z ≤ ((f.affineMinorant s z : ℝ) : EReal)})
+    (fun z hz => le_of_eq (biconj_eq_affineMinorant_of_mem_maxSet hs hz)) ?_ hx
+  intro x₁ h₁ x₂ h₂ a b ha hb hab
+  show f.biconj (a • x₁ + b • x₂) ≤ ((f.affineMinorant s (a • x₁ + b • x₂) : ℝ) : EReal)
+  rw [affineMinorant_combo f s hab]
+  exact biconj_le_of_combo f ha hb hab h₁ h₂
+
+/-- **and `s` is a subgradient of `f**` there.** That is what "`f**` is affine
+with gradient `s` on this cell" means without differentiating. -/
+theorem biconj_subgradient {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤)
+    {x : Plane} (hx : x ∈ convexHull ℝ (maxSet f s)) (z : Plane) :
+    f.biconj x + ((dot s z - dot s x : ℝ) : EReal) ≤ f.biconj z := by
+  rw [biconj_eq_affineMinorant_on_hull hs hx, ← EReal.coe_add]
+  have hrw : f.affineMinorant s x + (dot s z - dot s x) = f.affineMinorant s z := by
+    simp only [affineMinorant]
+    ring
+  rw [hrw]
+  exact affineMinorant_le_biconj hs z
+
 end QuaPol
 
 end QuaConProof
