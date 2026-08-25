@@ -471,9 +471,40 @@ before that date predate the arc-vs-arc work and were off by ~1400 lines.
 | Input not finite everywhere | **N/R** — Step 3 combines full-domain conjugates | `maxQuaPar:notFullDomain` — `maxQuaPar.m:848` |
 | Difference of the two candidate quadratics is an irreducible ellipse/hyperbola | **N/R** | `maxQuaPar:notDegenerate` — `maxQuaPar.m:2510` |
 | Clipping a cell whose arc bulges, reached BELOW `clipPolyHalfPlane` | **INV** (2026-08-24) — the caller subdivides first, so `clipPolyHalfPlaneCurved` is only ever entered on a cell where the at-most-one-crossing invariant holds. Kept because it is the invariant every branch of that routine assumes | `maxQuaPar:internal` |
+| Split curve meeting an unbounded cell only at the SINGULAR POINT of a line pair | **OK** (2026-08-24) -- the gradient vanishes there, so the branch direction comes from the NULL DIRECTIONS of the quadratic part instead of from the tangent. Was a SILENT WRONG ANSWER: the caller's tangency branch then read the winner at the cell's centroid, which for a cone IS that point. See section 4.5 | -- |
 | Assembly after an arc split: one side CURVED, the other STRAIGHT | **GAP**, and it is the live one — `matchHalfEdges` pairs curved with curved, and the subdivision is currently consistent per face PAIR rather than globally. This is what still sends an indefinite quadratic over a POLYGON to the symbolic fallback. `DECISIONS.md` 2026-08-24 has the design | `maxQuaPar:internal` — `assemblePieces` |
 | `maxQuaPar:internal` (other sites) | **INV** | assembly-topology invariants |
 | `maxQuaPar:pieceInvariant` (`maxQuaPar.m:335`) | **INV**, opt-in | the three exact piece invariants; off unless `MAXQP_ASSERT` is set — see §4.2 |
+
+### 4.5 The split direction at a line pair's SINGULAR POINT (2026-08-24)
+
+The smallest wrong answer this file has produced, and the shape is not exotic.
+
+    h1 = max(s1,0)^2/2      two cells, split by the s2-axis
+    h2 = max(s2,0)^2/2      two cells, split by the s1-axis
+
+`max(h1,h2)` must split the FIRST QUADRANT along `s2 = s1`, giving 5 cells. It gave **4**, with the
+whole quadrant carrying `h1`, so `max(h1,h2)(2,3)` came back `2.0` against a truth of `4.5`.
+
+`{h1 = h2}` is `s1^2 = s2^2` -- a degenerate conic, and a PAIR OF LINES crossing at the origin,
+which is the quadrant cone's apex and its only vertex. `decideWinner` correctly refused (the two
+rays give opposite asymptotic signs). `splitCell` found ONE boundary crossing, at the apex, and
+`splitUnboundedAtOneCrossing` took the branch direction as the perpendicular to the GRADIENT --
+which vanishes at a line pair's crossing point. It returned "no branch here", and the tangency
+branch below it resolved the winner at the cell's CENTROID, which for a cone is that same apex,
+lying exactly on the curve.
+
+Where the gradient vanishes, `diffRow(X + t d) = (t^2/2) d'Qd`, so the branches through `X` are the
+NULL DIRECTIONS of `Q` -- available in closed form from its eigen-decomposition
+(`d = sqrt(-l2) u1 +- sqrt(l1) u2`), with no root-finding and no case analysis. Both are put
+through the existing recession test.
+
+**A cone whose apex is that singular point is the dual of any WEDGE face**, so every 4-cone
+conjugate hit this. It is why unbounded input had to be gated away from the numeric route at all;
+the 4-cone fan now assembles to 8 cells with error 0 against the definition sup.
+
+Pinned by `maxQuaParTest/twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT` (asserting the cell COUNT
+as well as the values, because 4-vs-5 is the defect) and `aFourConeFanFoldsExactlyAgainstItsOwnPieces`.
 
 ### 4.4 The axis-parallel split — why the two arc guards above became OK (2026-08-24)
 

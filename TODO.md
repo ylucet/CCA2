@@ -50,13 +50,20 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       piecewise-LINEAR input in one construction and never enter `maxQuaPar` at all. That is a new
       operator rather than a gap fix, which is why it is not started.
 
-- [ ] **G2b -- `maxQuaPar` DROPS a cell on some unbounded folds.** Found 2026-08-24 and it is the
+- [x] **G2b -- DONE 2026-08-24. `maxQuaPar` dropped a cell on some unbounded folds.** Found 2026-08-24 and it is the
       one silent wrong answer in the session: a 4-cone fan assembled to 4 cells and returned 2.0 at
       `s=(-2,-3)` where the definition sup is 4.5. Reproducer:
       `conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`'s fixture in its `F = [3 2;2 1;1 4;4 3]`
       orientation; `PARTITION OVERLAP` fires on it. A cross-check now catches this and falls back
-      (`DECISIONS.md` 2026-08-24), so it cannot reach a caller -- but the drop itself is unfixed,
-      and every input it hits pays the symbolic path.
+      **Fixed the same night.** The cause was one line: at the SINGULAR POINT of a degenerate
+      conic (a pair of lines crossing) the gradient vanishes, and
+      `splitUnboundedAtOneCrossing` took its branch direction as the perpendicular to that
+      gradient. It bailed, and the caller's tangency branch then read the winner at the cell's
+      centroid -- which for a cone IS that same point, on the curve. The branches are now taken
+      from the NULL DIRECTIONS of the quadratic part. `DECISIONS.md` 2026-08-24 (last) and
+      `SUPPORT_MATRIX.md` section 4.5 have it; the two-line reproducer is
+      `maxQuaParTest/twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT`. The cross-check that caught
+      it stays.
 
 - [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
       (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded

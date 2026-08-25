@@ -910,6 +910,86 @@ classdef maxQuaParTest < matlab.unittest.TestCase
             testCase.verifyEqual(regLeft, g1.F(j,1), ...
                 'the face on the left of the directed curved edge should be F(j,1)');
         end
+
+        function twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT(testCase)
+        % THE MINIMAL REPRODUCER of a silent wrong answer that stood until 2026-08-24, and the
+        % smallest input in this file: two functions of ONE variable each, two cells apiece.
+        %
+        %       h1 = max(s1,0)^2/2      split by the s2-axis
+        %       h2 = max(s2,0)^2/2      split by the s1-axis
+        %
+        % Their max must split the FIRST QUADRANT along s2 = s1 -- h1 wins below it, h2 above --
+        % so the result has 5 cells, not 4. What happened instead: 4 cells, with the whole first
+        % quadrant carrying h1, and max(h1,h2)(2,3) = 2.0 against a truth of 4.5.
+        %
+        % WHY IT WAS SILENT, because the mechanism generalises. {h1 = h2} is the degenerate conic
+        % s1^2 = s2^2, a PAIR of lines crossing at the origin -- which is the quadrant's own apex,
+        % and the only vertex it has. splitCell therefore found ONE boundary crossing, at that
+        % apex; splitUnboundedAtOneCrossing took the branch direction from the tangent, which is
+        % perpendicular to the gradient, and the gradient VANISHES at a line pair's crossing
+        % point; it returned "no branch here", and the caller's tangency fallback then resolved the
+        % winner at the cell's centroid -- which for a cone IS the apex, sitting exactly ON the
+        % curve. The winner came out of the sign of a computed zero.
+        %
+        % The fix takes the two branch directions from the null directions of the quadratic part
+        % (see nullDirectionsOf), which is what they are when the gradient vanishes.
+        %
+        % THIS SHAPE IS NOT EXOTIC: it is the dual of any function with wedge faces, so every
+        % 4-cone conjugate hit it. It is why unbounded input had to be gated away from the numeric
+        % route before 2026-08-24.
+            h1 = QuaPar([0 0; 0 1; 0 -1], [1 2 0; 1 3 0], ...
+                        [1 0 0 0 0 0; 0 0 0 0 0 0], [2 1; 1 2]);
+            h2 = QuaPar([0 0; 1 0; -1 0], [1 2 0; 1 3 0], ...
+                        [0 0 1 0 0 0; 0 0 0 0 0 0], [1 2; 2 1]);
+            r1 = @(s) 0.5*max(s(1),0)^2;
+            r2 = @(s) 0.5*max(s(2),0)^2;
+
+            % The operands first: a test of the fold must not pass because its inputs are wrong.
+            S = [-4 1; 2 3; 3 2; -1 -1; 3 -2; 0.5 0.5; 1 1; 5 1; 1 5];
+            for i = 1:size(S,1)
+                testCase.verifyEqual(h1.eval(S(i,:)), r1(S(i,:)), 'AbsTol', 1e-12);
+                testCase.verifyEqual(h2.eval(S(i,:)), r2(S(i,:)), 'AbsTol', 1e-12);
+            end
+
+            m = maxQuaPar(h1, h2);
+            testCase.verifyEqual(m.nf, 5, ...
+                ['the first quadrant must SPLIT along s2 = s1; 4 cells means it was handed whole ' ...
+                 'to one operand']);
+            for i = 1:size(S,1)
+                s = S(i,:);
+                testCase.verifyEqual(m.eval(s), max(r1(s), r2(s)), 'AbsTol', 1e-9, ...
+                    sprintf('at s = (%g,%g)', s(1), s(2)));
+            end
+            % (2,3) and (3,2) are the two that matter: they sit on opposite sides of the split.
+            testCase.verifyEqual(m.eval([2 3]), 4.5, 'AbsTol', 1e-12);
+            testCase.verifyEqual(m.eval([3 2]), 4.5, 'AbsTol', 1e-12);
+        end
+
+        function aFourConeFanFoldsExactlyAgainstItsOwnPieces(testCase)
+        % The shape the reproducer above generalises to, and the one that actually reaches the
+        % pipeline: four convex quadratics on the four quadrants, conjugated per face and folded.
+        % Every fold in the chain is checked against the identity f* = max_k (q_k + I_P_k)*, which
+        % is what the assembled result is supposed to be.
+            A = {[1 0; 0 1], [1 0; 0 2], [2 0; 0 2], [2 0; 0 1]};
+            W = {{[0 0], [0 1], [1 0]}, {[0 0], [-1 0], [0 1]}, ...
+                 {[0 0], [0 -1], [-1 0]}, {[0 0], [1 0], [0 -1]}};
+            g = cell(1,4);
+            for k = 1:4
+                g{k} = toQuaPar(conjConvexPolygon(W{k}{1}, W{k}{2}, W{k}{3}, A{k}, [0;0], 0));
+            end
+            S = [-2 -3; -3 -2.4; 1 1; -1 -1; 2 -0.5; -0.5 2; 3 3; -4 1; 1 -4; -1 4; 4 -1];
+            m = g{1};
+            for k = 2:4
+                m = maxQuaPar(m, g{k});
+                for i = 1:size(S,1)
+                    s = S(i,:);
+                    ref = -inf;
+                    for j = 1:k, ref = max(ref, g{j}.eval(s)); end
+                    testCase.verifyEqual(m.eval(s), ref, 'AbsTol', 1e-9, ...
+                        sprintf('after folding %d operands, at s = (%g,%g)', k, s(1), s(2)));
+                end
+            end
+        end
     end
 
     methods (Static)

@@ -3030,20 +3030,50 @@ function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2ro
     X = hit.pt;
     gg = [diffRow(5)*X(1) + diffRow(6)*X(2) + diffRow(8), ...
           diffRow(6)*X(1) + diffRow(7)*X(2) + diffRow(9)];
-    if norm(gg) < 1e-12, return, end          % singular point of the conic: no single branch here
-    d0 = [-gg(2), gg(1)]; d0 = d0/norm(d0);   % tangent to {diffRow=0} at X
+
+    % CANDIDATE BRANCH DIRECTIONS THROUGH X. Away from the conic's singular point there is one
+    % branch and its direction is the tangent, perpendicular to the gradient. AT the singular
+    % point the gradient VANISHES and there are TWO branches -- and returning [] there, which this
+    % routine used to do, is a WRONG-ANSWER bug rather than a conservative one: the caller then
+    % falls into its tangency branch, which resolves the winner at the cell's centroid, and for a
+    % CONE whose apex is that singular point the centroid IS the apex, which lies ON the curve. The
+    % winner then comes out of the sign of a computed zero.
+    %
+    % MEASURED, and the reproducer is two lines of data: h1 = max(s1,0)^2/2 and h2 = max(s2,0)^2/2,
+    % each a two-cell mesh split by one axis. Their max should split the first quadrant along
+    % s2 = s1; instead maxQuaPar returned 4 cells with the whole first quadrant carrying h1, so
+    % f*(2,3) came back 2.0 where the truth is 4.5. This is what sends every 4-cone dual -- the
+    % conjugate of anything with wedge faces -- to a wrong answer, and it is why unbounded input
+    % had to be gated off before conjConvexPolygon existed.
+    %
+    % At the singular point diffRow(X) = 0 and grad diffRow(X) = 0, so
+    %       diffRow(X + t*d) = (t^2/2) * d' * Q * d,
+    % and the branches through X are EXACTLY the null directions of the quadratic part Q. Q is
+    % indefinite or semidefinite there (the conic is a real line pair, checked by the caller), so
+    % the null directions come off its eigen-decomposition in closed form, with no root-finding
+    % and no case analysis on which coefficient happens to vanish.
+    if norm(gg) >= 1e-12
+        d0 = [-gg(2), gg(1)];
+        cand = d0 / norm(d0);
+    else
+        cand = nullDirectionsOf([diffRow(5), diffRow(6); diffRow(6), diffRow(7)]);
+        if isempty(cand), return, end
+    end
 
     cons = polyConstraints(cell);
     d = [];
-    for s = [1 -1]
-        w = s*d0;
-        if all(cons(:,1:2)*w' <= 1e-9*max(1, max(abs(cons(:,1:2)), [], 'all')))
-            % ...and it must not simply run along one of the cell's own rays, which would cut off
-            % nothing.
-            if norm(w - cell.dirIn) > 1e-7 && norm(w - cell.dirOut) > 1e-7, d = w; break, end
+    for ci = 1:size(cand,1)
+        for sgn = [1 -1]
+            w = sgn*cand(ci,:);
+            if all(cons(:,1:2)*w' <= 1e-9*max(1, max(abs(cons(:,1:2)), [], 'all')))
+                % ...and it must not simply run along one of the cell's own rays, which would cut
+                % off nothing.
+                if norm(w - cell.dirIn) > 1e-7 && norm(w - cell.dirOut) > 1e-7, d = w; break, end
+            end
         end
+        if ~isempty(d), break, end
     end
-    if isempty(d), return, end                % neither sense recedes the cell: a real tangency
+    if isempty(d), return, end                % no sense of any branch recedes the cell: a tangency
 
     % The escaping edge must be STRAIGHT: an unbounded parabolic edge is not representable.
     [Ad, Bd, ~] = quadAlongRay(diffRow, X, d);
@@ -3079,6 +3109,34 @@ function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2ro
     pieceA = assignSideFromCone(pieceA, diffRow, f1row, f2row);
     pieceB = assignSideFromCone(pieceB, diffRow, f1row, f2row);
     newPieces = [pieceA, pieceB];
+end
+
+function D = nullDirectionsOf(Q)
+% objective: the unit directions d with d'*Q*d = 0, for a symmetric 2x2 Q -- the branches of a
+%   degenerate conic through its own singular point.
+% [output] D : 0, 1 or 2 rows. Empty when Q is definite (no real branch); one row when Q is
+%   semidefinite (a DOUBLE line, one branch); two when Q is indefinite.
+%
+% Closed form from the eigen-decomposition, which is what makes it free of case analysis on which
+% coefficient vanishes: with Q = l1*u1*u1' + l2*u2*u2' and l1 >= 0 >= l2,
+%       d = sqrt(-l2)*u1 +- sqrt(l1)*u2   satisfies   d'Qd = -l2*l1 + l1*l2 = 0.
+    [U, Lam] = eig((Q + Q.')/2);
+    lam = diag(Lam);
+    [~, i1] = max(lam); i2 = 3 - i1;
+    l1 = lam(i1); l2 = lam(i2);
+    sc = max(1, max(abs(lam)));
+    if l1 <= 1e-12*sc && l2 <= -1e-12*sc, D = zeros(0,2); return, end   % negative definite
+    if l2 >= -1e-12*sc && l1 >= 1e-12*sc, D = zeros(0,2); return, end   % positive definite
+    u1 = U(:,i1).'; u2 = U(:,i2).';
+    if abs(l1) <= 1e-12*sc
+        D = u1 / norm(u1); return                    % l1 = 0: the double line along u1
+    end
+    if abs(l2) <= 1e-12*sc
+        D = u2 / norm(u2); return                    % l2 = 0: the double line along u2
+    end
+    a = sqrt(-l2); b = sqrt(l1);
+    D = [a*u1 + b*u2; a*u1 - b*u2];
+    D = D ./ vecnorm(D, 2, 2);
 end
 
 function piece = assignSideFromCone(piece, diffRow, f1row, f2row)

@@ -2400,3 +2400,45 @@ strictly better than the gate, and it also now protects the BOUNDED path, which 
 real defect with a reproducer (`conjCPLQTest/step3UnboundedAssemblyMatchesTheTruth`'s fixture, the
 `F = [3 2;2 1;1 4;4 3]` orientation), and `PARTITION OVERLAP` diagnostics fire on it. That is the
 next thing to fix, and it is separate from the arc-split work above.
+
+## 2026-08-24 (last) — G2b FIXED: the split direction at a line pair's SINGULAR POINT
+
+The dropped-cell defect recorded above is closed, and the cause is one line.
+
+**The minimal reproducer is two functions of one variable each.**
+
+    h1 = max(s1,0)^2/2      as two cells split by the s2-axis
+    h2 = max(s2,0)^2/2      as two cells split by the s1-axis
+
+Their max must split the FIRST QUADRANT along `s2 = s1` -- h1 wins below it, h2 above -- so the
+result has 5 cells. `maxQuaPar` returned **4**, with the whole first quadrant carrying h1, and
+`max(h1,h2)(2,3) = 2.0` against a truth of `4.5`. Confirmed pre-existing by running the same
+input against `maxQuaPar.m` as of `8ea857b`.
+
+**The chain, traced rather than guessed.** `{h1 = h2}` is `s1^2 = s2^2`: a degenerate conic, and a
+PAIR of lines crossing at the origin -- which is the quadrant cone's apex and its only vertex.
+`decideWinner` correctly refused to decide (the two rays give opposite asymptotic signs).
+`splitCell` then found ONE boundary crossing, at that apex, and handed it to
+`splitUnboundedAtOneCrossing`, which takes the branch direction as the perpendicular to the
+GRADIENT of the difference -- and the gradient VANISHES at a line pair's crossing point. It
+returned "no branch here"; the caller's tangency branch then resolved the winner at the cell's
+centroid, which for a cone IS the apex, sitting exactly ON the curve. The winner came out of the
+sign of a computed zero.
+
+**The fix.** Where the gradient vanishes, `diffRow(X + t d) = (t^2/2) d' Q d`, so the branches
+through `X` are exactly the NULL DIRECTIONS of the quadratic part `Q`. Those come off `Q`'s
+eigen-decomposition in closed form -- `d = sqrt(-l2) u1 +- sqrt(l1) u2` -- with no root-finding and
+no case analysis on which coefficient happens to vanish (`nullDirectionsOf`). Both candidates are
+then put through the existing recession test, which picks the one that actually cuts the cone.
+
+**Why it mattered so much.** A cone whose apex is the singular point is the dual of any face that
+is a WEDGE, so every 4-cone conjugate hit it. It is the reason `conjCPLQ` had to gate unbounded
+input away from the numeric route at all, and with it fixed the 4-cone fan assembles exactly
+against the definition sup (8 cells, error 0 at every probe point) instead of returning 2.0 where
+the truth is 4.5.
+
+Pinned by `maxQuaParTest/twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT` (the two-line reproducer,
+asserting the cell COUNT as well as the values, because 4-vs-5 is the defect) and
+`aFourConeFanFoldsExactlyAgainstItsOwnPieces`.
+
+**The cross-check stays.** It cost nothing, it is what caught this, and it is one-sided.
