@@ -1,50 +1,31 @@
 # Session Handoff
 
-_2026-08-24_
+_2026-08-25_
 
 ## Blocked
-
-- **Phase C1 per-term cost target** — EXTERNAL, needs Yves. Box terms are 0.01 s,
-  so the old 40–60 s figure is stale.
+- Phase C1 per-term cost target — EXTERNAL, needs Yves. Box terms are 0.01 s;
+  the 40–60 s figure is stale.
 
 ## State
-
-- Branch `main`. **Read `MORNING.md` first** — it is the report for the overnight
-  run, and its first section explains why the branch that run created was a
-  mistake and has been folded back in. A parallel `proof/` session also commits
-  to `main`; do not stage its files.
-- Pushed: no. The overnight run never pushes.
-- Tests (2026-08-25): fast **303 / 0**, slow **88 / 0**, verylong
-  **26 pass / 7 fail / 1 timeout** — and that verylong figure is IDENTICAL to a
-  pristine `b9243d3`, so its reds are all pre-existing (`testPCE2` among them).
-- Known reds: the seven pre-existing verylong ones. Nothing this run caused.
-- One tooling hazard: `--verylong -j N` RACES on `plqStage`'s shared cache and
-  can produce a spurious red. Re-run a suspicious test at `-j 1` before believing
-  it. `TODO.md` G7 has the three-line fix.
-
-## What changed, in one line
-
-`conj`'s numeric path was ALREADY sym-free; the work was shrinking the set of
-inputs that fall back to the symbolic Case C. Measured with `checkConjSymFree`:
-3 of 17 fixtures still fall back, and the unbounded CONVEX family moved from
-"no numeric route at all" to 0.16 s.
+- Branch `main` @ `cd66cc2` — "docs: REFUTED -- branching cannot isolate
+  two runs that share a working tree"
+- Pushed: yes — `origin/main`. Every other branch deleted; all were merged.
+- Tests (2026-08-25): fast 303/0 · slow 88/0 · verylong 26 pass / 7 fail /
+  1 timeout, that last figure IDENTICAL to a pristine `b9243d3`.
+- Known reds: the seven verylong ones, all pre-existing (`testPCE2` among them).
+- Hazard: `--verylong -j N` races on `plqStage`'s cache and can fake a red.
+  Re-run a suspect at `-j 1`. `TODO.md` G7 has the fix.
 
 ## Next
-
-1. **G1 — build the missing LENS.** Two operands can have boundaries between the
-   SAME two dual points, one straight and one curved; the arrangement is missing
-   the cell between them, and the orphaned arc in `assemblePieces` is looking for
-   a partner that was never built. Do NOT chase the matching. This is the last
-   fallback of the bounded family.
-2. **G2** — an affine face over an unbounded polygon (`max(0,x,y)`). `TODO.md`
-   prices a direct route for all-affine input that never enters `maxQuaPar`.
-3. G2b is **DONE**: the silent wrong answer on unbounded folds is fixed (the
-   split direction at a line pair's singular point).
+1. G1 — `clipByFace` returns nothing for a face pair whose intersection is not
+   empty (measured: g1 face 4 × g2 face 2). Last bounded fallback.
+2. G2 — affine face over an unbounded polygon (`max(0,x,y)`); `TODO.md` prices
+   an all-affine route that never enters `maxQuaPar`.
+3. G4 — `conj` of `xy` on some triangles computes a MINORANT. It now raises
+   instead of returning it, so the refusal is the safety net, not the fix.
 
 ## Files
-
-- `MORNING.md` — the overnight report; the gap list is `TODO.md` G1–G3.
-- `DECISIONS.md` 2026-08-24 — four entries: the precision budget, the `syms`
-  assumption leak, the arc-split geometry, the dropped cell.
-- `SUPPORT_MATRIX.md` §1.2 and §4 refreshed; §4.4 is new.
-- `proof/` — another session's Lean proof; do not stage its files.
+- `TODO.md` — opens with the measured gap list G1–G7.
+- `MORNING.md` — the overnight run's report; `proof/MORNING.md` is the other's.
+- `DECISIONS.md` — nine entries dated 2026-08-24/25; read the headings.
+- `checkConjSymFree.m` — the symbolic-fallback rate, with reasons.
