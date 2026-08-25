@@ -2497,3 +2497,45 @@ the defects fixed on 2026-08-13. This is the same family and it is not fully clo
 arc with the same endpoints are two different edges. If the coverage measurement confirms a hole,
 the fix is to build that face when `clipByFace` produces a cell whose straight edge and the other
 operand's arc share both endpoints, rather than letting one stand for both.
+
+## 2026-08-25 — a RANDOMIZED definition check finds two PRE-EXISTING defects the fixtures missed
+
+`checkConjAgainstDefinition` runs `conj` on random convex polygons carrying a random convex,
+indefinite, concave or affine quadratic, and compares against `sup_{x in P} <s,x> - q(x)` computed
+by a scan plus a pattern search. 24 cases, seed 20260824.
+
+**Twenty-two of twenty-four are EXACT** -- `worst = +0.000e+00`, or `2e-16` on two convex cases.
+That covers every sign class on 3-, 4- and 5-gons, and it is the broadest evidence this project has
+that `conj` is right rather than merely green on the shapes someone thought to write down.
+
+**Two are not, and BOTH ARE PRE-EXISTING.** Re-run against a pristine snapshot of `b9243d3` -- the
+tree as it stood before any of 2026-08-24's work -- they reproduce with the same magnitude to every
+digit printed:
+
+    case 21  3-gon, indefinite xy   conj is 2.742e-02 BELOW the sup      (a MINORANT)
+    case 17  5-gon, indefinite xy   MATLAB:badsubscript                  (a crash)
+
+    W21 = [0.6057047151 0.9300751811; -0.3353947472 0.5251524293; -1.082499617 0.08448609744]
+    f21 = [0 1 0 -0.7177913413 -0.6075645347 -0.6781835233]
+
+    W17 = [0.9180323951 0.1778978365; 1.189169914 0.308421002; 0.407632005 1.314428266;
+           -1.091935477 -0.4741970304; -0.8285840095 -0.5854877405]
+    f17 = [0 1 0 1.03766872 0.8199895741 -0.2736502742]
+
+Both are `xy` on a polygon with a general affine part, i.e. the A.3/A.4/A.5 machinery, which the
+2026-08-24 work did not touch. Case 21 is a single TRIANGLE, so it has no cross-piece max and no
+fold: the minorant comes out of the per-piece closed form itself. That is the same SHAPE of defect
+as `DECISIONS.md` 2026-08-19's "`plq_1p`'s A.4 branch computes a MINORANT, not the envelope",
+recorded there for the symbolic path.
+
+**The other half of the differential is the good news.** Every other number is identical between the
+two trees, and the five CONVEX cases changed exactly as intended -- `QuaPar` became `QuaPol` and
+they got 2-3x faster (1.51 -> 0.40 s, 1.32 -> 0.27 s, 0.69 -> 0.32 s, 0.67 -> 0.20 s,
+0.57 -> 0.23 s). So the night's changes altered the representation and the route, and altered no
+value anywhere in the family.
+
+**A cheap check that would have caught case 21, not yet built.** For any vertex `v` of `dom f`,
+`f*(s) >= <s,v> - f(v)` -- a one-line lower bound, valid for every route including the single-piece
+one, which has no "max of pieces" identity to test against. A conjugate that dips below the max of
+those affine minorants is definitely wrong. Before wiring it as a refusal, MEASURE how many existing
+fixtures violate it: a check that reroutes half the suite to the symbolic path is not an improvement.

@@ -74,6 +74,22 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `maxQuaParTest/twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT`. The cross-check that caught
       it stays.
 
+- [ ] **G4 -- `conj` of `xy` on SOME triangles returns a MINORANT.** Pre-existing (reproduced on a
+      pristine `b9243d3`), found by `checkConjAgainstDefinition(24)` case 21: the answer is
+      `2.742e-02` BELOW the definition sup. A single triangle, so there is no fold and no
+      cross-piece max -- the per-piece closed form itself is short. Same SHAPE as `DECISIONS.md`
+      2026-08-19's A.4 minorant, recorded there for the symbolic path. Fixture in
+      `DECISIONS.md` 2026-08-25.
+
+- [ ] **G5 -- `MATLAB:badsubscript` on SOME indefinite 5-gons.** Pre-existing, same sweep, case 17.
+      A crash rather than a wrong answer, so it is the less dangerous of the two, but it is an
+      unguarded index and not a refusal by name.
+
+- [ ] **G6 -- the vertex lower bound as a universal check.** `f*(s) >= <s,v> - f(v)` for every
+      vertex `v` of `dom f` is one line, valid for EVERY route including the single-piece one that
+      has no max-of-pieces identity to test against, and it would have caught G4. MEASURE how many
+      existing fixtures violate it before wiring it as a refusal.
+
 - [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
       (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded
       indefinite piece; `convEnvUnbounded`/`fanUnboundedFace` are the symbolic side's answer and
@@ -94,6 +110,11 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
   it and delete the entry here).
 - `conjConvexPolygon.m` -- a convex quadratic over ANY convex polygon, bounded or not, closed form,
   no triangulation, returns a QuaPol.
+- `checkConjAgainstDefinition.m` -- randomized `conj`-vs-definition sweep over random polygons and
+  all four sign classes. 22 of 24 exact; the two that are not are G4 and G5, both pre-existing.
+  Slow by design (the reference is a scan plus a pattern search per probe), so it is a CHECK, not a
+  bucket member. Run it after any change to the conjugate, and against a snapshot of the old tree
+  when something fails -- that is what established G4/G5 were not introduced on 2026-08-24.
 - `conjPolygonalDomain`'s fold cross-check -- the assembled Step 3 result is verified against
   `max_k (q_k + I_P_k)*`, the identity it was built from, and DECLINES on a disagreement so the
   caller falls back. One-sided by construction: it can miss a defect, it cannot invent one.
