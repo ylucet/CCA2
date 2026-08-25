@@ -1,8 +1,22 @@
 # Morning report — 2026-08-24 overnight run
 
-Branch: `overnight/2026-08-24` (it fast-forwards onto `main`). It ran on a branch
-despite the standing "commit on main" preference because a parallel `proof/`
-session is committing to `main` tonight.
+Branch: **`main`** — and the branch this run started on was a mistake worth
+recording. It created `overnight/2026-08-24` to isolate itself from the parallel
+`proof/` session, but the two sessions share one working tree and therefore one
+HEAD: branching did not isolate this run, it **moved the other session onto this
+run's branch**. Both runs' commits are on it. It has been fast-forwarded back
+into `main` (a pointer move, no history rewritten, nothing lost) and both
+sessions are on `main` again, which is also the standing preference. The branch
+pointer is kept.
+
+The real fix, which `proof/MORNING.md` reaches independently: two unattended runs
+in one repository need **separate git worktrees**, not separate folders.
+
+The same shared tree produced two other incidents, both resolved: a `git add -A`
+here swept two of the proof session's in-progress files into a commit (un-tracked
+one commit later, files on disk untouched, and they re-added them properly), and
+editing `.claude/suite.sh` while a `bash` process was executing it killed one
+slow-bucket run mid-flight with a bogus syntax error.
 
 Task: steps 1–8 of the sym-free `conj` plan. `biconj` untouched throughout.
 
@@ -119,7 +133,8 @@ Nothing blocking. Two notes:
 
 ## Where I stopped
 
-Everything is committed on the branch; `git log --oneline main..HEAD` is the
-list. The next item is **G2b** (a wrong answer, contained but not fixed), then
+Everything is committed on `main` at `25b18ac`; this run's commits are the ones
+whose subjects begin `feat:`/`chore:` and mention `conj`, `ratQ`, `conicMeet` or
+`Conic` (the interleaved ones are the proof session's). The next item is **G2b** (a wrong answer, contained but not fixed), then
 **G1**. `DECISIONS.md` 2026-08-24 has four entries written so that each starts
 from the design rather than from the symptom.
