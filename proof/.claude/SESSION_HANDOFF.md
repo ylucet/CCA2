@@ -1,48 +1,41 @@
 # Session Handoff
 
-_2026-08-24_
+_2026-08-24, after the overnight run_
 
 ## Blocked
 
-Nothing.
+- **Rows 1 to 3 of Theorem 4, as statements about cells.** Needs face-to-face
+  regularity, deliberately not claimed since 2026-08-21. A decision only Yves can
+  make. `TODO.md` -> Blocked.
 
 ## State
 
-- Branch `main` @ `f807af0` — "Phase 7 done: Frank-Wolfe, and conj_isQuaCon
-  loses its boundedness hypothesis"
-- Pushed: **no** — four commits ahead of `origin/main`, needs `git push`
-- Verification: `lake build` green 2026-08-24, no warnings · **0 sorry** ·
-  `#print axioms conj_isQuaCon` = `[propext, Classical.choice, Quot.sound]`
-- Known reds: none. 13 files in `QuaConProof/`.
-- Two `native_decide` counts in `Rational.lean` carry an extra axiom — audited
-  in `SORRY_LEDGER.md`, nothing upstream depends on them.
+- Branch **`overnight/2026-08-24`** — shared with the MATLAB session in `CCA2/`,
+  which had already checked it out. One working tree means one `HEAD`, so this
+  run did *not* create a branch of its own; every commit stages only `proof/`.
+  `git log --oneline -- proof/` separates the two projects.
+- Pushed: `origin/main` at `64043b5` (Phase 7). Everything after that is local.
+- Verification: `lake build` green 2026-08-24, **no warnings**, **0 sorry**,
+  `#print axioms` clean on every headline result. 17 files, 6101 lines.
+- Known reds: none.
 
-## What changed this session
+## What changed
 
-**Phase 7 is done.** `conj_isQuaCon` no longer assumes bounded pieces.
-`QuaPiece` carries `rays : Finset Plane`, `T = convexHull verts + coneHull rays`;
-`IsDirRep` in `Bary.lean` runs one induction over vertex and ray supports at
-once; `FrankWolfe.lean` proves attainment for a quadratic bounded above on
-`conv V + cone R`. Only `conj_ne_top` and `dom_conj_eq_univ` keep `f.Bounded`,
-and they are false without it.
+The three-track programme, all seventeen items. See `MORNING.md` for the run's
+own report and `CURRENT_STATE.md` for the narrative.
 
 ## Next
 
-All optional. Ask Yves which, if any.
-
-1. **Write-up** — `PROOF_NOTES.md` mapping Lean lemmas to `../CONJ_FIELD_PROOF.md`;
-   then decide paper vs CCA2 note. Do this first if it is heading anywhere.
-2. **Conic normal forms** — the only thing that would let the write-up say
-   "ellipse" as a proved classification rather than a discriminant sign.
-3. **Realisation, remaining half** — that a *single* cell is infinite.
+1. **C7 residue** — `conv f` lsc for convex pieces. Fully scoped, no unknowns;
+   `TODO.md` carries the plan and the mathlib entry points.
+2. **C6 residue** — covering, which needs `intrinsicInterior`.
+3. Then, and only then, Phase 8 (the write-up).
 
 ## Files
 
-- `TODO.md` — the three open items, costed
-- `DECISIONS.md` — 21 entries; read before re-attempting anything. The two new
-  ones say why the H-representation/Farkas route to Frank-Wolfe is still shut,
-  and why the curvature dichotomy must be over `conv R`, not the generators
-- `SORRY_LEDGER.md` — zero, plus the axiom audit
-- `QuaConProof/FrankWolfe.lean` — Phase 7's real content
-- `QuaConProof/QuaCon.lean` — `conj_isQuaCon`, plus `Sanity.rayPol`, the
-  unbounded witness whose `⊤` cell is inhabited
+- `MORNING.md` — the overnight report, including two questions for Yves
+- `TODO.md` — three open items, each with its route
+- `DECISIONS.md` — 25 entries; the last four are from this run, two of them
+  refutations that reshape what can be claimed
+- `QuaConProof/Biconj.lean` — Track C, and both counterexamples
+- `QuaConProof/Ellipse.lean`, `Convexity.lean`, `RatInput.lean` — the new files

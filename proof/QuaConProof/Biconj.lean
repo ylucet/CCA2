@@ -538,6 +538,19 @@ theorem biconj_le_convRepVal {f : QuaPol} {x : Plane} {lam : QuaPiece → ℝ}
   have := biconj_le_sum h0 h1 hb
   rwa [hx] at this
 
+/-- The convex-combination value function of `../CONJ_FIELD_PROOF.md` §5.1, as a
+function: the infimum of `convRepVal` over all representations of `x`. An empty
+infimum is `⊤`, which is the right value at a point no convex combination
+reaches. -/
+noncomputable def convf (f : QuaPol) (x : Plane) : EReal :=
+  ⨅ w : {w : (QuaPiece → ℝ) × (QuaPiece → Plane) // IsConvRep f x w.1 w.2},
+    ((convRepVal f w.1.1 w.1.2 : ℝ) : EReal)
+
+/-- **`f** ≤ conv f`**, packaged. The reverse holds for convex pieces and is
+false without them — `Sanity.convRepVal_gt_biconj` below. -/
+theorem biconj_le_convf (f : QuaPol) (x : Plane) : f.biconj x ≤ f.convf x :=
+  le_iInf fun w => biconj_le_convRepVal w.2
+
 /-- Taking the combination concentrated on one piece recovers `f** ≤ q_p` there,
 which is the `|supp λ| = 1` row of `../CONJ_FIELD_PROOF.md` §5.1. -/
 theorem biconj_le_piece {f : QuaPol} {p : QuaPiece} (hp : p ∈ f.pieces) {x : Plane}
@@ -703,7 +716,7 @@ theorem biconj_segPol_origin_le : segPol.biconj ((0, 0) : Plane) ≤ ((-1 : ℝ)
       (eval_segPol_endpoint (by simp [segPiece]) (by norm_num [qConc, Quad.eval]))
   have hmid : ((1 / 2 : ℝ) • ((-1, 0) : Plane) + (1 / 2 : ℝ) • ((1, 0) : Plane))
       = ((0, 0) : Plane) := by
-    simp [Prod.ext_iff]
+    simp
   have := QuaPol.biconj_le_of_combo segPol (x₁ := ((-1, 0) : Plane)) (x₂ := ((1, 0) : Plane))
     (a := 1 / 2) (b := 1 / 2) (t₁ := -1) (t₂ := -1) (by norm_num) (by norm_num) (by norm_num)
     hl hr

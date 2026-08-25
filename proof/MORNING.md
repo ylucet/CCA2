@@ -30,6 +30,10 @@ guardrails require.
 
 ## What changed
 
+- **`convf` defined** and `biconj_le_convf` packages the `<=` half as a statement
+  about functions, so the next session has something to state the converse
+  against.
+
 - **A second refutation, and it is the most useful thing the night found.** The
   convex-hull formula of `../CONJ_FIELD_PROOF.md` §5.1 is **false** for this
   development's input class: `Sanity.convRepVal_gt_biconj` is a concave quadratic
@@ -170,7 +174,20 @@ guardrails require.
 
 ## Where I stopped
 
-Run started. Preflight done: `lake build` green at `9cbf484`, 0 sorry,
-`#print axioms conj_isQuaCon` clean. Working the `TODO.md` programme top to
-bottom — A (finish the real case), B (rational coefficients), C (biconjugate
-shape), 17 items.
+**All seventeen planned items are done or honestly scope-reduced**, in 16 green
+commits. Sixteen loop iterations, well under the cap. `lake build` is green with
+**no warnings** and **0 sorry**, and `#print axioms` is clean on every headline
+result. 17 files, 6101 lines.
+
+Three items remain, none of them vague, all in `TODO.md`:
+
+1. **C7 residue** — `conv f` is lsc for convex pieces. Fully scoped after
+   tonight's two findings; there are no unknowns left, only work.
+2. **C6 residue** — covering `dom f**`, which needs `intrinsicInterior`.
+3. **C5 residue (Blocked)** — the cell-level form of Theorem 4's rows 1 to 3,
+   waiting on your decision about regularity.
+
+I stopped rather than starting the C7 build because it is a third pass on the
+same item in one night and a ~300-line build with a new hypothesis class; the
+ladder says come back to it on a later pass, and an unfinished file is the one
+outcome an unattended run should not leave. Everything on disk is green.

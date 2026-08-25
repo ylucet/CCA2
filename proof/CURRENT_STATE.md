@@ -4,7 +4,7 @@ _Update this file at the end of every session so the next session (or a
 different machine) can regain context in one read. Read this right after
 `README.md` and `CLAUDE.md` at the start of a session._
 
-_Last updated: 2026-08-24_
+_Last updated: 2026-08-24 (overnight run)_
 
 ## The objective is met
 
@@ -97,6 +97,59 @@ a union of cells. See `DECISIONS.md`, 2026-08-22.
     `QuaCon.lean` the theorem.
 - OK Eleven decisions recorded in `DECISIONS.md`, several of which changed the
   proof route before code was written.
+
+## The 2026-08-24 overnight run: Tracks A, B and C
+
+Seventeen planned items, all done or honestly scope-reduced, in seventeen files
+and 6100 lines. Four new files.
+
+**A -- the real case is finished.** `Convexity.lean`: `f*` is convex, lower
+semicontinuous, and has a convex domain, all through one `supAffine` lemma that
+`f**` reuses. `Biconj.lean`: Fenchel-Young and `f** <= f`. `Ellipse.lean`:
+`disc < 0` with `a*det3 < 0` now **proves** the zero set is an ellipse, with the
+point and imaginary cases separated -- no rotation needed, completing the square
+twice gives a shear and an ellipse is the affine image of a circle.
+`Witness.exists_infinite_cell`: a single cell of `f*` is infinite, by pigeonhole
+on the finitely many activity patterns rather than by a limit argument.
+
+**B -- rational coefficients are proved, not cited.** `RatInput.lean`:
+`RatQuaPiece`/`RatQuaPol` mirror the real classes over `Q`; the three branch
+formulas commute with the embedding, unconditionally, because `x/0 = 0` on both
+sides; `isRat_of_mem_cand` is `../CONJ_FIELD_PROOF.md` Theorem 1 and
+`isRat_tie_conic` its corollary. `Rational.lean` no longer quotes Theorem 1 as an
+assumption.
+
+**C -- the biconjugate has a shape.** The key lemma is
+`biconj_eq_affineMinorant_on_hull`: where `f*(s)` is finite, `f**` is the affine
+`A_s` on the whole hull of the maximisers, with `s` a subgradient. Rows 4 and 5 of
+Theorem 4 are corollaries; rows 1 to 3 are stated by the rank of the attained
+branch. `f**` equals `f` at every maximiser, and dominates every affine minorant
+of `f`. Both epigraphs are closed and convex.
+
+**Two refutations, and they matter more than the theorems.**
+
+1. "Exactly one active candidate implies a unique maximiser" is **false**
+   (`Sanity.exists_oneActive_manyMaximisers`). Rows 1 to 3 cannot be indexed by
+   the activity pattern.
+2. The convex-hull formula of section 5.1 is **false** for this input class
+   (`Sanity.convRepVal_gt_biconj`) -- it needs the pieces' quadratics to be
+   convex, which section 5.1 assumes and this project does not. The `<=` half is
+   unconditional and proved.
+
+## What is left, precisely
+
+Three items, all in `TODO.md`, none of them vague:
+
+* **C7 residue** -- `conv f` is lsc for convex pieces, which closes the `>=` half.
+  No unknowns remain: mathlib has the separation layer
+  (`ConvexOn.exists_affine_le_of_lt`) and `IsClosed.mul_left_of_isCompact`, and
+  convexity of each piece's epigraph avoids needing "convex hull of a compact set
+  is compact", which mathlib lacks.
+* **C6 residue** -- covering `dom f**` by the cells. Needs subgradient existence,
+  hence `intrinsicInterior`.
+* **C5 residue (Blocked)** -- rows 1 to 3 as statements about *cells*, which needs
+  the face-to-face regularity deliberately not claimed since 2026-08-21. That is
+  Yves's call.
 
 ## Phase 7: unbounded pieces -- done
 
