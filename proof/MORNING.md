@@ -22,6 +22,17 @@ my write boundary. They are untouched.
 **`CCA2/MORNING.md` is the other run's report.** This file, `proof/MORNING.md`,
 is mine.
 
+**One cross-session incident, resolved.** At 22:14 the MATLAB run committed with
+`git add -A` and swept two of my in-progress files (`QuaConProof.lean`,
+`QuaConProof/Ellipse.lean`) into its commit; it noticed and un-tracked them one
+commit later (`968b62a`), leaving the files on disk untouched. My next commit
+re-added them properly. **Nothing was lost** — all 17 Lean files are tracked,
+`git status` on `proof/` is clean, and the build is green — but the history has a
+small wobble around `8ea857b..968b62a`, and it is the second symptom of two
+unattended runs sharing one working tree. If both projects are to run overnight
+again, they need separate worktrees (`git worktree add`), not just separate
+folders.
+
 **Pushed before starting, on request.** `origin/main` moved `b9243d3..64043b5`,
 publishing Phase 7. Note that `main` did *not* contain the later plan commit
 `86243b1` — it had been left behind when the MATLAB session branched — so that
