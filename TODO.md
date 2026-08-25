@@ -35,12 +35,13 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
           its would-be neighbours are STRAIGHT edges through (0.5,0.5),
           which is not on that parabola.
 
-      The two operands each have a boundary between the SAME two dual points -- g1's straight, g2's
-      curved -- so a LENS lies between them, and the arrangement does not contain that cell. The
-      orphaned arc is looking for a partner that was never built. **Do not re-attack the refusal
-      and do not chase the matching**: build the lens when a cell's straight edge and the other
-      operand's arc share both endpoints. `DECISIONS.md` 2026-08-24 (later) has the dump;
-      `SUPPORT_MATRIX.md` 4.1 records the same family of defect from 2026-08-13.
+      So the two sides of that boundary disagree about its GEOMETRY -- that much is established, and
+      it rules out a matching tolerance or an ordering. The leading HYPOTHESIS is that the two
+      operands each have a boundary between the same two dual points, g1's straight and g2's
+      curved, so a LENS lies between them that the arrangement lacks. **Measure that before
+      building anything**: `DECISIONS.md` 2026-08-24 (later) says how, and why the probe used on
+      the night is not good enough to settle it. `SUPPORT_MATRIX.md` 4.1 records the same family
+      of defect from 2026-08-13.
       Closing this removes the LAST measured fallback of the bounded family.
 
 - [ ] **G2 -- an AFFINE face over an UNBOUNDED polygon.** `max(0,x,y)` is the canonical example and

@@ -2459,20 +2459,32 @@ IS the edge `(1,1)->(0,0)` -- g2's parabola `(x+y)^2/4 = x`. The pieces offered 
 4 and 5, are `[(0,0),(0.5,0.5)]` and `[(0.5,0.5),(1,1)]`, both STRAIGHT, both `src [2 4]`. And
 `(0.5,0.5)` is **not on the parabola**: `(0.5+0.5)^2/4 = 0.25`, not `0.5`.
 
-**So this is not a matching bug.** The two operands each have a boundary running between the SAME
-two dual points `(0,0)` and `(1,1)` -- g1's is the straight diagonal, g2's is the parabola --
-and they are different curves. Between them lies a LENS, and the arrangement has to contain it. The
-orphan is the arc looking for a partner that was never built: what sits on its far side is g1's
-chord, one cell further out.
+**What that establishes, and what it does not.** ESTABLISHED: the two sides of that boundary
+disagree about its GEOMETRY -- one carries the parabola, the other a straight edge through a point
+that is not on the parabola. So it is not a matching tolerance and not an ordering; the edges are
+different curves.
+
+NOT established: that a whole cell is missing. The leading hypothesis is that the two operands each
+have a boundary between the SAME two dual points -- g1's straight, g2's curved -- so a LENS lies
+between them and the arrangement lacks it. A containment probe over the suspected lens returned
+"in no piece", which supports that; **but the probe is not trustworthy** -- written to test the
+chord it misclassifies exactly this region, and rewritten to test the arc it then excluded a point
+that IS in piece 1. It is reported here as a hypothesis with its evidence, not as a finding,
+because this file already records two occasions on which a plausible geometric diagnosis of a
+maxQuaPar symptom was refuted by measuring.
+
+**Measure first.** Before building anything, settle whether a cell is missing: take the pieces from
+`MAXQP_CAPTURE`, and for a grid over the region use each piece's OWN containment rule (the one
+`eval`/`facePoly` use, arcs included) rather than a hand-rolled one.
 
 **Why the arc-split work does not close this.** That work makes ONE cell's arc divisible; this needs
 the OVERLAY of the two operands' boundaries to be complete, which is a different property. The
 "consistent per pair rather than globally" phrasing in the earlier entry is right in outcome and
 wrong in cause -- the missing thing is a cell, not an alignment.
 
-**Where to start.** `SUPPORT_MATRIX.md` 4.1 already lists "half-edges and boundary walks identifying
+**Where to look.** `SUPPORT_MATRIX.md` 4.1 already lists "half-edges and boundary walks identifying
 an edge by its endpoints alone, which four arcs between the same two points make ambiguous" among
 the defects fixed on 2026-08-13. This is the same family and it is not fully closed: a chord and an
-arc with the same endpoints are two edges, and the lens between them is a face. Build the lens
-explicitly when `clipByFace` produces a cell whose straight edge and the other operand's arc share
-both endpoints, rather than letting one of them stand for both.
+arc with the same endpoints are two different edges. If the coverage measurement confirms a hole,
+the fix is to build that face when `clipByFace` produces a cell whose straight edge and the other
+operand's arc share both endpoints, rather than letting one stand for both.
