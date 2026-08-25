@@ -2645,3 +2645,21 @@ interior and the bound is genuinely slack, pinned as an inequality plus a witnes
 
 **The consequence for G4.** `conj` of `xy` over some triangles now RAISES where it used to return a
 minorant. That is the intended trade and the defect itself is still open.
+
+## 2026-08-25 — REFUTED: branching to isolate one unattended run from another in the SAME working tree
+
+- **Tried:** the overnight run created `overnight/2026-08-24` so its work would be separable from a
+  parallel `proof/` session committing to `main`.
+- **Why it failed:** two sessions in one repository share one working tree and therefore ONE HEAD.
+  Branching did not isolate this run -- it silently MOVED the other session onto this run's branch,
+  and both runs' commits landed there. It also made a `git add -A` here sweep two of that session's
+  in-progress files into a commit, and it left `main` looking stale while all the work sat
+  elsewhere.
+- **Before retrying:** `Do not retry.` Branching cannot isolate sessions that share a checkout. Use
+  `git worktree add` -- separate checkouts, separate HEADs, one repository -- or run one session at
+  a time. The standing preference to commit on `main` is right for this repo, and the branch was
+  folded back into it by fast-forward with nothing lost.
+- **Evidence:** `proof/MORNING.md` reaches the same conclusion independently from the other side of
+  the incident; this run's `MORNING.md` opens with it. A third symptom of the same cause: editing
+  `.claude/suite.sh` while a `bash` process was executing it killed a slow-bucket run mid-flight
+  with a bogus syntax error.
