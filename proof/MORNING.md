@@ -30,6 +30,13 @@ guardrails require.
 
 ## What changed
 
+- **C6 done, scope-reduced.** Two real theorems: `f**` equals `f` **at every
+  maximiser** (so the cells C2 produces have their corners on the graph of `f`),
+  and `f**` dominates every affine minorant of `f` -- which characterises it as
+  the supremum of those, with no Fenchel-Moreau needed. The covering and
+  disjointness halves went back to the bottom of Next up with a note on what
+  they need (`intrinsicInterior`, and the regularity that is Blocked).
+
 - **C5 done, scope-reduced, and it produced a refutation.** The risk the item
   flagged is real and now machine-checked: exactly one active candidate does
   **not** force a unique maximiser. The zero quadratic on the nonnegative
@@ -109,6 +116,11 @@ guardrails require.
   1 to 3. Its pointwise content is proved; the step from there to "a 2-cell maps
   to a 2-cell" needs face-to-face regularity, which the project has deliberately
   not claimed since 2026-08-21.
+- Also scope-reduced, and back at the bottom of Next up rather than parked: the
+  covering and disjointness halves of C6. Covering needs subdifferentiability of
+  `f**`, which holds only on the relative interior of the domain, so the honest
+  target uses `intrinsicInterior` -- machinery this development has never
+  touched.
 
 ## Needs a decision
 

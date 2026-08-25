@@ -399,6 +399,87 @@ sweeps out is the single point `v`. -/
 theorem vertexBranch_maximiser_const (q : Quad) (v : Plane) (s : Plane) :
     (vertexBranch q v).eval s = psi q s v := vertexBranch_eval q v s
 
+/-! ### Assembly: the contact set, and `f**` as the affine envelope
+
+`TODO.md` item C6, **scope-reduced** — see the note at the end for what is not
+here and why.
+
+Two statements assemble the pieces.
+
+* **The contact set.** At a maximiser, `f**` does not merely equal the affine
+  minorant, it equals `f` itself. So the maximisers are exactly the points of the
+  graph of `f` that survive convexification, and every cell of `f**` produced by
+  C2 has its *corners* on the graph of `f` while its interior generally lies
+  strictly below.
+* **`f**` is the affine envelope.** Every affine minorant of `f` is a minorant of
+  `f**`, and `f**` is by construction the supremum of the ones coming from
+  `dom f*`. That is the characterisation "`f**` is the largest closed convex
+  minorant", in the only form that does not need Fenchel–Moreau. -/
+
+/-- **The contact set.** `f**` agrees with `f` at every maximiser.
+
+`A_s(x) = q_p(x) ≥ f(x) ≥ f**(x) = A_s(x)`, so the outer two are equal. -/
+theorem biconj_eq_eval_of_mem_maxSet {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤)
+    {x : Plane} (hx : x ∈ maxSet f s) : f.biconj x = f.eval x := by
+  obtain ⟨p, hp, hxT, hval⟩ := hx
+  have hq : p.q.eval x = f.affineMinorant s x := by
+    have hC : f.conj s = (((f.conj s).toReal : ℝ) : EReal) :=
+      (EReal.coe_toReal hs (conj_ne_bot f s)).symm
+    rw [hC, EReal.coe_eq_coe_iff] at hval
+    simp only [affineMinorant, ← hval, psi]
+    ring
+  have hAx : f.biconj x = ((f.affineMinorant s x : ℝ) : EReal) :=
+    biconj_eq_affineMinorant_of_mem_maxSet hs ⟨p, hp, hxT, hval⟩
+  refine le_antisymm (biconj_le_eval f x) ?_
+  calc f.eval x ≤ ((p.q.eval x : ℝ) : EReal) := eval_le_of_mem hp hxT
+    _ = ((f.affineMinorant s x : ℝ) : EReal) := by rw [hq]
+    _ = f.biconj x := hAx.symm
+
+/-- An affine function below `f` has its intercept above `f*`. -/
+lemma conj_le_of_affine_le {f : QuaPol} {s : Plane} {c : ℝ}
+    (h : ∀ y : Plane, ((dot s y - c : ℝ) : EReal) ≤ f.eval y) : f.conj s ≤ (c : EReal) := by
+  rw [conj_def]
+  refine iSup_le fun y => ?_
+  by_cases hy : f.eval y = ⊤
+  · rw [hy, EReal.sub_top]
+    exact bot_le
+  · have hE : f.eval y = (((f.eval y).toReal : ℝ) : EReal) :=
+      (EReal.coe_toReal hy (eval_ne_bot f y)).symm
+    have hle := h y
+    rw [hE, EReal.coe_le_coe_iff] at hle
+    rw [hE, ← EReal.coe_sub, EReal.coe_le_coe_iff]
+    linarith
+
+/-- **`f**` dominates every affine minorant of `f`.**
+
+With `affineMinorant_le_biconj`, which says each `A_s` for `s ∈ dom f*` is such a
+minorant, this characterises `f**` as the pointwise supremum of the affine
+functions below `f`. -/
+theorem affine_le_biconj {f : QuaPol} {s : Plane} {c : ℝ}
+    (h : ∀ y : Plane, ((dot s y - c : ℝ) : EReal) ≤ f.eval y) (x : Plane) :
+    ((dot s x - c : ℝ) : EReal) ≤ f.biconj x := by
+  have hc : f.conj s ≤ (c : EReal) := conj_le_of_affine_le h
+  have hs : f.conj s ≠ ⊤ := by
+    intro htop
+    rw [htop, top_le_iff] at hc
+    exact EReal.coe_ne_top c hc
+  refine le_trans ?_ (affineMinorant_le_biconj hs x)
+  have hcr : (f.conj s).toReal ≤ c := by
+    rw [← EReal.coe_toReal hs (conj_ne_bot f s), EReal.coe_le_coe_iff] at hc
+    exact hc
+  rw [EReal.coe_le_coe_iff, affineMinorant]
+  linarith
+
+/-- **The cells produced by C2 cover the maximisers, and carry an affine `f**`
+with corners on the graph of `f`.** This is the assembly, in the form the
+development can actually state. -/
+theorem exists_affine_cell {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤) :
+    (maxSet f s).Nonempty ∧
+      (∀ x ∈ convexHull ℝ (maxSet f s), f.biconj x = ((f.affineMinorant s x : ℝ) : EReal)) ∧
+      (∀ x ∈ maxSet f s, f.biconj x = f.eval x) :=
+  ⟨maxSet_nonempty hs, fun _ hx => biconj_eq_affineMinorant_on_hull hs hx,
+    fun _ hx => biconj_eq_eval_of_mem_maxSet hs hx⟩
+
 end QuaPol
 
 /-! #### The risk C5 flagged, and it is real

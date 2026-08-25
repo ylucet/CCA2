@@ -47,12 +47,6 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C6 -- assembly: the subdivision of `f**`.** (XL) The sets
-      `R(C) = union over s in relint C of convexHull (maxSet f s)` cover
-      `dom f**` and meet only on their boundaries, so they *are* the subdivision.
-      Expect this to be the item that gets scope-reduced; the honest partial
-      result is "every point of `dom f**` lies in some `R(C)`", which is already
-      most of the value.
 - [ ] **C7 -- the convex-hull formula of section 5.1.** (L) `f**(x) =
       inf { sum_k lam_k q_k(z_k) : sum_k lam_k z_k = x, z_k in T_k, lam in the
       simplex }`. An independent route to the same object -- it does not mention
@@ -62,6 +56,21 @@ table except the 2-cell rows is a corollary of it.
       recession directions that needs care, so **do the bounded case first** and
       quarantine the unbounded one.
 
+- [ ] **C6 residue -- covering and disjointness.** (XL, second pass) What C6
+      landed: the contact set (`f** = f` at every maximiser), `f**` as the
+      supremum of the affine functions below `f` (`affine_le_biconj`), and
+      `exists_affine_cell`. What is missing from "the `R(C)` **are** the
+      subdivision of `f**`":
+      * **covering** -- every `x` of `dom f**` lies in some `R(C)`. This needs
+        `f**` to be subdifferentiable at `x`, which for a closed proper convex
+        function fails at boundary points of the domain (Rockafellar 23.4 gives
+        it only on the relative interior). So the honest target is covering of
+        `relint (dom f**)`, and that needs relative interiors, which mathlib has
+        (`intrinsicInterior`) but this development has never used.
+      * **disjointness** of the relative interiors, which needs the regularity in
+        the Blocked section.
+      Come back to this after a pass that introduces `intrinsicInterior`; it is
+      the natural companion to the C5 residue.
 ## Blocked
 
 - [ ] **C5 residue -- rows 1 to 3 as statements about cells.** The pointwise
@@ -88,6 +97,15 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **C6: the contact set, and `f**` as the affine envelope.**
+      Scope-reduced. `biconj_eq_eval_of_mem_maxSet` -- at a maximiser `f**`
+      equals `f` itself, so every cell C2 produces has its corners on the graph
+      of `f` while its interior lies below. `affine_le_biconj` -- every affine
+      minorant of `f` is a minorant of `f**`, which with
+      `affineMinorant_le_biconj` characterises `f**` as the supremum of the
+      affine functions below `f`, without Fenchel-Moreau. The covering and
+      disjointness halves are back at the bottom of **Next up**.
 
 - [x] 2026-08-24 -- **C5: rows 1 to 3, scope-reduced, and one refutation.**
       The risk the item flagged is real: "exactly one active candidate implies a
