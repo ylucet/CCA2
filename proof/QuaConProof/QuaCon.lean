@@ -110,7 +110,7 @@ theorem cell_empty_eq {f : QuaPol} (hb : f.Bounded) : cell f ∅ = {s : Plane | 
     ext s
     simp only [mem_cell_iff, Set.mem_empty_iff_false, iff_false]
     intro hact
-    obtain ⟨q, hq, hqs⟩ := selection hb s
+    obtain ⟨q, hq, hqs⟩ := selection (attained_of_bounded hb s)
     have hmem : q ∈ active f s := mem_active_iff.2 ⟨hq, hqs⟩
     rw [hact] at hmem
     exact Finset.notMem_empty q hmem
@@ -130,7 +130,7 @@ finite list of quadratics, computed from the input, and at every `s` the
 conjugate equals one of them. -/
 theorem active_nonempty {f : QuaPol} (hb : f.Bounded) (s : Plane) :
     (active f s).Nonempty := by
-  obtain ⟨q, hq, hqs⟩ := selection hb s
+  obtain ⟨q, hq, hqs⟩ := selection (attained_of_bounded hb s)
   exact ⟨q, mem_active_iff.2 ⟨hq, hqs⟩⟩
 
 /-! ### The theorem -/

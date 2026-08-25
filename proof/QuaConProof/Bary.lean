@@ -371,6 +371,28 @@ lemma mem_T_of_weights {p : QuaPiece} {W S : Finset Plane} {lam mu : Plane → �
     · rw [← Finset.sum_subset hSR (fun z _ hz => by simp [hz])]
       exact Finset.sum_congr rfl fun z hz => by simp [hz]
 
+/-- The perturbed vertex weights are still normalised. -/
+lemma perturb_sum_eq_one {W S : Finset Plane} {lam gam nu : Plane → ℝ} {d : Plane}
+    (h1 : (∑ v ∈ W, lam v) = 1) (hrep : IsDirRep W S gam nu d) (t : ℝ) :
+    (∑ v ∈ W, (lam v + t * gam v)) = 1 := by
+  rw [Finset.sum_add_distrib, h1, ← Finset.mul_sum, hrep.1, mul_zero, add_zero]
+
+/-- The perturbed weights present the perturbed point. -/
+lemma perturb_combo {W S : Finset Plane} {lam mu gam nu : Plane → ℝ} {x d : Plane}
+    (hx : (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x)
+    (hrep : IsDirRep W S gam nu d) (t : ℝ) :
+    (∑ v ∈ W, (lam v + t * gam v) • v) + (∑ r ∈ S, (mu r + t * nu r) • r) = x + t • d := by
+  have hv : (∑ v ∈ W, (lam v + t * gam v) • v)
+      = (∑ v ∈ W, lam v • v) + t • (∑ v ∈ W, gam v • v) := by
+    rw [Finset.smul_sum, ← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun v _ => by rw [← mul_smul]; module
+  have hr : (∑ r ∈ S, (mu r + t * nu r) • r)
+      = (∑ r ∈ S, mu r • r) + t • (∑ r ∈ S, nu r • r) := by
+    rw [Finset.smul_sum, ← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun r _ => by rw [← mul_smul]; module
+  rw [hv, hr, ← hx, ← hrep.2, smul_add]
+  abel
+
 /-- **Stepping along a direction.** If the perturbed weights stay nonnegative,
 the perturbed point stays in the piece. -/
 lemma mem_T_of_perturb {p : QuaPiece} {W S : Finset Plane} {lam mu gam nu : Plane → ℝ}
@@ -381,18 +403,8 @@ lemma mem_T_of_perturb {p : QuaPiece} {W S : Finset Plane} {lam mu gam nu : Plan
     (hrep : IsDirRep W S gam nu d)
     (hl : ∀ v ∈ W, 0 ≤ lam v + t * gam v) (hm : ∀ r ∈ S, 0 ≤ mu r + t * nu r) :
     x + t • d ∈ p.T := by
-  refine mem_T_of_weights hWV hSR hl ?_ hm ?_
-  · rw [Finset.sum_add_distrib, h1, ← Finset.mul_sum, hrep.1, mul_zero, add_zero]
-  · have hv : (∑ v ∈ W, (lam v + t * gam v) • v)
-        = (∑ v ∈ W, lam v • v) + t • (∑ v ∈ W, gam v • v) := by
-      rw [Finset.smul_sum, ← Finset.sum_add_distrib]
-      exact Finset.sum_congr rfl fun v _ => by rw [← mul_smul]; module
-    have hr : (∑ r ∈ S, (mu r + t * nu r) • r)
-        = (∑ r ∈ S, mu r • r) + t • (∑ r ∈ S, nu r • r) := by
-      rw [Finset.smul_sum, ← Finset.sum_add_distrib]
-      exact Finset.sum_congr rfl fun r _ => by rw [← mul_smul]; module
-    rw [hv, hr, ← hx, ← hrep.2, smul_add]
-    abel
+  exact mem_T_of_weights hWV hSR hl (perturb_sum_eq_one h1 hrep t) hm
+    (perturb_combo hx hrep t)
 
 /-- **Two-sided room to move.** With every weight strictly positive there is a
 neighbourhood of `0` in which the step may be taken in either direction. This is
@@ -551,5 +563,64 @@ lemma exists_descent_gen {W S : Finset Plane} {lam mu gam nu : Plane → ℝ}
     rcases h3 with ⟨v₀, hv₀, he⟩ | ⟨r₀, hr₀, he⟩
     · exact Or.inl ⟨v₀, hv₀, by linarith [he]⟩
     · exact Or.inr ⟨r₀, hr₀, by linarith [he]⟩
+
+/-! ### Linearity of the cross product, and collinear supports -/
+
+lemma cross_add_right (a u v : Plane) : cross a (u + v) = cross a u + cross a v := by
+  simp only [cross, Prod.fst_add, Prod.snd_add]; ring
+
+lemma cross_smul_right (a : Plane) (c : ℝ) (u : Plane) :
+    cross a (c • u) = c * cross a u := by
+  simp only [cross, Prod.smul_fst, Prod.smul_snd, smul_eq_mul]; ring
+
+lemma cross_weighted_sum (a : Plane) (A : Finset Plane) (c : Plane → ℝ) (g : Plane → Plane) :
+    cross a (∑ z ∈ A, c z • g z) = ∑ z ∈ A, c z * cross a (g z) := by
+  classical
+  induction A using Finset.induction_on with
+  | empty => simp [cross]
+  | insert z A hz ih =>
+      rw [Finset.sum_insert hz, Finset.sum_insert hz, cross_add_right, cross_smul_right, ih]
+
+/-- **A support parallel to `d` puts the point on a line.** If every vertex of
+the support lies on the line through `v₀` with direction `d`, and every ray of
+the support is parallel to `d`, then so is `x - v₀`. -/
+lemma cross_eq_zero_of_support {W S : Finset Plane} {lam mu : Plane → ℝ} {x v₀ d : Plane}
+    (h1 : (∑ v ∈ W, lam v) = 1)
+    (hx : (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x)
+    (hW : ∀ u ∈ W, cross d (u - v₀) = 0) (hS : ∀ r ∈ S, cross d r = 0) :
+    cross d (x - v₀) = 0 := by
+  have hsplit : (∑ v ∈ W, lam v • (v - v₀)) = (∑ v ∈ W, lam v • v) - v₀ := by
+    have hz : ∀ v : Plane, lam v • (v - v₀) = lam v • v - lam v • v₀ := fun v => by module
+    simp only [hz]
+    rw [Finset.sum_sub_distrib, ← Finset.sum_smul, h1, one_smul]
+  have hxv : x - v₀ = (∑ v ∈ W, lam v • (v - v₀)) + (∑ r ∈ S, mu r • r) := by
+    rw [hsplit, ← hx]; abel
+  rw [hxv, cross_add_right, cross_weighted_sum d W lam (fun u => u - v₀),
+    cross_weighted_sum d S mu (fun r => r),
+    Finset.sum_eq_zero (fun u hu => by rw [hW u hu, mul_zero]),
+    Finset.sum_eq_zero (fun r hr => by rw [hS r hr, mul_zero]), add_zero]
+
+/-! ### Erasing a vanishing weight -/
+
+/-- A vertex of weight zero may be dropped from the support, and the support
+stays nonempty: a one-vertex support has weight one. -/
+lemma erase_vert_data {W S : Finset Plane} {lam mu : Plane → ℝ} {x v₀ : Plane}
+    (hv₀ : v₀ ∈ W) (h0 : ∀ v ∈ W, 0 ≤ lam v) (h1 : (∑ v ∈ W, lam v) = 1)
+    (hzero : lam v₀ = 0)
+    (hx : (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x) :
+    (W.erase v₀).Nonempty ∧ (∀ v ∈ W.erase v₀, 0 ≤ lam v) ∧
+      (∑ v ∈ W.erase v₀, lam v) = 1 ∧
+      (∑ v ∈ W.erase v₀, lam v • v) + (∑ r ∈ S, mu r • r) = x := by
+  classical
+  refine ⟨?_, fun v hv => h0 v (Finset.mem_of_mem_erase hv), ?_, ?_⟩
+  · rcases Finset.eq_empty_or_nonempty (W.erase v₀) with he | he
+    · exfalso
+      rcases (Finset.erase_eq_empty_iff W v₀).1 he with hW | hW
+      · rw [hW] at hv₀; exact absurd hv₀ (Finset.notMem_empty v₀)
+      · rw [hW, Finset.sum_singleton, hzero] at h1
+        exact zero_ne_one h1
+    · exact he
+  · rw [Finset.sum_erase _ hzero]; exact h1
+  · rw [Finset.sum_erase _ (by rw [hzero, zero_smul])]; exact hx
 
 end QuaConProof

@@ -259,23 +259,34 @@ lemma vertexBranch_mem_branches {p : QuaPiece} {v : Plane} (hv : v ∈ p.verts) 
   simp only [branches, Finset.mem_union, Finset.mem_image]
   exact Or.inl (Or.inl ⟨v, hv, rfl⟩)
 
+lemma mem_edgeCandidates_vert {p : QuaPiece} {v w : Plane} (hv : v ∈ p.verts)
+    (hw : w ∈ p.verts) : (v, w) ∈ p.edgeCandidates :=
+  Finset.mem_union.2 (Or.inl (Finset.mem_product.2 ⟨hv, hw⟩))
+
+lemma mem_edgeCandidates_ray {p : QuaPiece} {v r : Plane} (hv : v ∈ p.verts)
+    (hr : r ∈ p.rays) : (v, v + r) ∈ p.edgeCandidates :=
+  Finset.mem_union.2 (Or.inr (Finset.mem_image.2
+    ⟨(v, r), Finset.mem_product.2 ⟨hv, hr⟩, rfl⟩))
+
+/-- The edge branch of any admissible pair with positive curvature is a
+candidate. Both families of `edgeCandidates` go through this one lemma. -/
+lemma edgeBranch_mem_branches_of_cand {p : QuaPiece} {v w : Plane}
+    (h : (v, w) ∈ p.edgeCandidates) (hcurv : 0 < edgeCurv p.q v w) :
+    edgeBranch p.q v w ∈ p.branches :=
+  Finset.mem_union.2 (Or.inl (Finset.mem_union.2 (Or.inr
+    (Finset.mem_image.2 ⟨(v, w), Finset.mem_filter.2 ⟨h, hcurv⟩, rfl⟩))))
+
 lemma edgeBranch_mem_branches {p : QuaPiece} {v w : Plane} (hv : v ∈ p.verts)
     (hw : w ∈ p.verts) (hcurv : 0 < edgeCurv p.q v w) :
-    edgeBranch p.q v w ∈ p.branches := by
-  refine Finset.mem_union.2 (Or.inl (Finset.mem_union.2 (Or.inr ?_)))
-  refine Finset.mem_image.2 ⟨(v, w), ?_, rfl⟩
-  exact Finset.mem_filter.2
-    ⟨Finset.mem_union.2 (Or.inl (Finset.mem_product.2 ⟨hv, hw⟩)), hcurv⟩
+    edgeBranch p.q v w ∈ p.branches :=
+  edgeBranch_mem_branches_of_cand (mem_edgeCandidates_vert hv hw) hcurv
 
 /-- **Phase 7.** The edge branch taken from a vertex along a recession
 direction is a candidate too. -/
 lemma edgeBranch_ray_mem_branches {p : QuaPiece} {v r : Plane} (hv : v ∈ p.verts)
     (hr : r ∈ p.rays) (hcurv : 0 < edgeCurv p.q v (v + r)) :
-    edgeBranch p.q v (v + r) ∈ p.branches := by
-  refine Finset.mem_union.2 (Or.inl (Finset.mem_union.2 (Or.inr ?_)))
-  refine Finset.mem_image.2 ⟨(v, v + r), ?_, rfl⟩
-  refine Finset.mem_filter.2 ⟨Finset.mem_union.2 (Or.inr ?_), hcurv⟩
-  exact Finset.mem_image.2 ⟨(v, r), Finset.mem_product.2 ⟨hv, hr⟩, rfl⟩
+    edgeBranch p.q v (v + r) ∈ p.branches :=
+  edgeBranch_mem_branches_of_cand (mem_edgeCandidates_ray hv hr) hcurv
 
 lemma interiorBranch_mem_branches {p : QuaPiece} (h : p.q.hessDet ≠ 0) :
     interiorBranch p.q ∈ p.branches := by

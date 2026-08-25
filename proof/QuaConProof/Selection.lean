@@ -337,36 +337,36 @@ theorem interiorPoint_unique {q : Quad} {s y : Plane} (hD : q.hessDet ≠ 0)
 
 /-! ### S5 and S7: the first- and second-order conditions -/
 
-/-- **The first- and second-order conditions at an interior weight.**
+/-- **The first- and second-order conditions along a two-sided direction.**
 
-If all weights are positive and `v ≠ w` are vertices, then stepping along
-`w - v` is possible in both directions, so the linear term of `psi_along_dir`
-must vanish and its quadratic term must be nonnegative. -/
-theorem foc_soc {p : QuaPiece} {s x : Plane} {W : Finset Plane} {lam : Plane → ℝ}
-    (hWV : W ⊆ p.verts)
-    (h0 : ∀ u ∈ W, 0 ≤ lam u) (h1 : (∑ u ∈ W, lam u) = 1) (h2 : (∑ u ∈ W, lam u • u) = x)
-    (hpos : ∀ u ∈ W, 0 < lam u)
-    (hmax : IsMaxOn (psi p.q s) p.T x)
-    {v w : Plane} (hv : v ∈ W) (hw : w ∈ W) (hvw : v ≠ w) :
-    dot s (w - v) - dot (p.q.gradAt x) (w - v) = 0 ∧ 0 ≤ p.q.alongCurv (w - v) := by
-  set A : ℝ := dot s (w - v) - dot (p.q.gradAt x) (w - v) with hA
-  set B : ℝ := p.q.alongCurv (w - v) with hB
-  set ε : ℝ := min (lam v) (lam w) with hε
-  have hε0 : 0 < ε := lt_min (hpos v hv) (hpos w hw)
-  have hsub : convexHull ℝ (↑W : Set Plane) ⊆ p.T :=
-    fun z hz => p.convexHull_subset_T (convexHull_mono (Finset.coe_subset.2 hWV) hz)
+If every weight of `x` is strictly positive then the step along `d` may be taken
+in both directions, so the linear term of `psi_along_dir` must vanish and its
+quadratic term must be nonnegative.
+
+The direction is given by its weight representation, so this one statement
+covers a step towards another vertex and a step along a recession direction. -/
+theorem foc_soc {p : QuaPiece} {s x d : Plane} {W S : Finset Plane}
+    {lam mu gam nu : Plane → ℝ}
+    (hWV : W ⊆ p.verts) (hSR : S ⊆ p.rays)
+    (h1 : (∑ v ∈ W, lam v) = 1)
+    (hx : (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x)
+    (hpos : ∀ v ∈ W, 0 < lam v) (hmupos : ∀ r ∈ S, 0 < mu r)
+    (hrep : IsDirRep W S gam nu d)
+    (hmax : IsMaxOn (psi p.q s) p.T x) :
+    dot s d - dot (p.q.gradAt x) d = 0 ∧ 0 ≤ p.q.alongCurv d := by
+  obtain ⟨ε, hε, hstep⟩ := exists_perturb_radius gam nu hpos hmupos
+  set A : ℝ := dot s d - dot (p.q.gradAt x) d with hA
+  set B : ℝ := p.q.alongCurv d with hB
   have key : ∀ t : ℝ, |t| < ε → t * A - t ^ 2 * B / 2 ≤ 0 := by
     intro t ht
-    have htv : t ≤ lam v := le_trans (le_abs_self t) (le_of_lt (lt_of_lt_of_le ht (min_le_left _ _)))
-    have htw : -t ≤ lam w := le_trans (neg_le_abs t) (le_of_lt (lt_of_lt_of_le ht (min_le_right _ _)))
-    have hmem : x + t • (w - v) ∈ p.T :=
-      hsub (mem_convexHull_perturb h0 h1 h2 hv hw hvw htv htw)
-    have hle : psi p.q s (x + t • (w - v)) ≤ psi p.q s x := hmax hmem
+    obtain ⟨hl, hm⟩ := hstep t ht
+    have hmem : x + t • d ∈ p.T := mem_T_of_perturb hWV hSR h1 hx hrep hl hm
+    have hle : psi p.q s (x + t • d) ≤ psi p.q s x := hmax hmem
     rw [psi_along_dir] at hle
     linarith
-  refine ⟨eq_zero_of_forall_small hε0 key, ?_⟩
+  refine ⟨eq_zero_of_forall_small hε key, ?_⟩
   have h2' := key (ε / 2) (by rw [abs_of_pos (by linarith)]; linarith)
-  rw [eq_zero_of_forall_small hε0 key] at h2'
+  rw [eq_zero_of_forall_small hε key] at h2'
   by_contra hBneg
   push Not at hBneg
   have hpos2 : 0 < (ε / 2) ^ 2 := by positivity
@@ -379,186 +379,228 @@ The case analysis S3-S9 for a **single piece**, and the multi-piece assembly on
 top of it. Both are proved; nothing in this development is `sorry`ed. -/
 
 private theorem branch_aux (p : QuaPiece) (s : Plane) :
-    ∀ n : ℕ, ∀ (W : Finset Plane) (x : Plane), W.card = n → W ⊆ p.verts → W.Nonempty →
-      x ∈ convexHull ℝ (↑W : Set Plane) → IsMaxOn (psi p.q s) p.T x →
+    ∀ n : ℕ, ∀ (W S : Finset Plane) (lam mu : Plane → ℝ) (x : Plane),
+      W.card + S.card = n → W ⊆ p.verts → S ⊆ p.rays → W.Nonempty →
+      (∀ v ∈ W, 0 ≤ lam v) → (∑ v ∈ W, lam v) = 1 → (∀ r ∈ S, 0 ≤ mu r) →
+      (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x →
+      IsMaxOn (psi p.q s) p.T x →
       ∃ b ∈ p.branches, b.eval s = psi p.q s x := by
   intro n
   induction n using Nat.strong_induction_on with
   | _ n ih =>
-    intro W x hcard hWV hWne hxW hmax
-    obtain ⟨lam, h0, h1, h2⟩ := exists_weights hxW
-    by_cases hzero : ∃ v ∈ W, lam v = 0
-    · -- **A weight vanishes**: the point already lies in the hull of a smaller set.
-      obtain ⟨v₀, hv₀W, hv₀0⟩ := hzero
-      have hxe : x ∈ convexHull ℝ (↑(W.erase v₀) : Set Plane) :=
-        mem_convexHull_erase h0 h1 h2 hv₀0
-      have hlt : (W.erase v₀).card < n := by
-        rw [← hcard]; exact Finset.card_erase_lt_of_mem hv₀W
-      have hnee : (W.erase v₀).Nonempty := by
-        rcases Finset.eq_empty_or_nonempty (W.erase v₀) with he | he
-        · rw [he] at hxe; simp at hxe
-        · exact he
-      exact ih _ hlt (W.erase v₀) x rfl
-        (fun u hu => hWV (Finset.mem_of_mem_erase hu)) hnee hxe hmax
-    · -- **Every weight is positive**: `x` is in the relative interior of the face.
-      push Not at hzero
-      have hpos : ∀ u ∈ W, 0 < lam u := fun u hu =>
-        lt_of_le_of_ne (h0 u hu) (Ne.symm (hzero u hu))
-      by_cases h2pt : ∃ v ∈ W, ∃ w ∈ W, v ≠ w
-      · obtain ⟨v, hv, w, hw, hvw⟩ := h2pt
-        have hDne : (w - v) ≠ 0 := sub_ne_zero.2 (Ne.symm hvw)
-        obtain ⟨hfoc, hsoc⟩ := foc_soc hWV h0 h1 h2 hpos hmax hv hw hvw
-        by_cases hcol : ∀ u ∈ W, cross (w - v) (u - v) = 0
-        · -- **S7: the face lies on a line.** Edge branch, or vertex branch if flat.
-          have hxline : cross (w - v) (x - v) = 0 := cross_eq_zero_of_forall h1 h2 hcol
-          obtain ⟨t, htx⟩ := exists_smul_of_cross_eq_zero hDne hxline
-          have hxv : x = v + t • (w - v) := by rw [← htx]; abel
-          have hgrad : p.q.gradAt x = p.q.gradAt v + t • p.q.hessApply (w - v) := by
-            rw [hxv]; exact Quad.gradAt_add_smul _ _ _ _
-          have hslope : edgeSlope p.q v w s = t * edgeCurv p.q v w := by
-            have hd : dot (p.q.gradAt x) (w - v)
-                = dot (p.q.gradAt v) (w - v) + t * p.q.alongCurv (w - v) := by
-              rw [hgrad, Quad.alongCurv_eq_dot_hessApply]
-              simp only [dot, Prod.fst_add, Prod.snd_add, Prod.smul_fst, Prod.smul_snd,
-                smul_eq_mul]
-              ring
-            simp only [edgeSlope, edgeCurv]
-            rw [hd] at hfoc
-            linarith
-          rcases lt_trichotomy (edgeCurv p.q v w) 0 with hlt0 | heq0 | hgt0
-          · exact absurd hsoc (not_le.2 hlt0)
-          · -- flat along the line: the value is already the vertex value at `v`
-            refine ⟨vertexBranch p.q v, QuaPiece.vertexBranch_mem_branches (hWV hv), ?_⟩
-            rw [vertexBranch_eval, hxv, psi_along_line, hslope, heq0]
-            ring
-          · -- a genuine edge branch, and the pair is kept by `edgePairs`
-            have hcoef : edgeSlope p.q v w s / edgeCurv p.q v w = t := by
-              rw [hslope]; field_simp
-            have hep : edgePoint p.q v w s = x := by rw [edgePoint, hcoef, hxv]
-            refine ⟨edgeBranch p.q v w,
-              QuaPiece.edgeBranch_mem_branches (hWV hv) (hWV hw) hgt0, ?_⟩
-            rw [edgeBranch_eval p.q v w s (ne_of_gt hgt0), hep]
-        · -- **The face is two-dimensional**: the conditions pin `∇q(x) = s`.
-          push Not at hcol
-          obtain ⟨u, huW, hu0⟩ := hcol
-          have huv : v ≠ u := by
-            intro h
-            rw [← h] at hu0
-            exact hu0 (by simp [cross])
-          obtain ⟨hfoc2, -⟩ := foc_soc hWV h0 h1 h2 hpos hmax hv huW huv
-          have hr : s - p.q.gradAt x = 0 := by
-            refine eq_zero_of_dot_eq_zero_of_cross_ne_zero ?_ ?_ hu0
-            · rw [dot_sub_left]; exact hfoc
-            · rw [dot_sub_left]; exact hfoc2
-          have hstat : p.q.gradAt x = s := (sub_eq_zero.1 hr).symm
-          by_cases hdet : p.q.hessDet = 0
-          · -- **S8: singular Hessian.** Slide along the kernel onto a proper face.
-            obtain ⟨d, hd0, hdk⟩ := exists_kernel_of_hessDet_eq_zero hdet
-            have hwu : w ≠ u := by
-              intro h
-              rw [h] at hu0
-              exact hu0 (cross_self _)
-            obtain ⟨b₁, b₂, hb⟩ := exists_combo_of_cross_ne_zero hu0 d
-            classical
-            set gam : Plane → ℝ :=
-              fun z => if z = v then -(b₁ + b₂) else if z = w then b₁ else if z = u then b₂ else 0
-              with hgamdef
-            have hgv : gam v = -(b₁ + b₂) := by simp [hgamdef]
-            have hgw : gam w = b₁ := by simp [hgamdef, Ne.symm hvw]
-            have hgu : gam u = b₂ := by simp [hgamdef, Ne.symm huv, Ne.symm hwu]
-            have hgo : ∀ z, z ≠ v → z ≠ w → z ≠ u → gam z = 0 := by
-              intro z hzv hzw hzu; simp [hgamdef, hzv, hzw, hzu]
-            have hsub3 : ({v, w, u} : Finset Plane) ⊆ W := by
-              intro z hz
-              simp only [Finset.mem_insert, Finset.mem_singleton] at hz
-              rcases hz with rfl | rfl | rfl <;> assumption
-            have hsum3 : ∀ (M : Type) (_ : AddCommMonoid M) (g : Plane → M),
-                (∀ z, z ≠ v → z ≠ w → z ≠ u → g z = 0) →
-                (∑ z ∈ W, g z) = g v + g w + g u := by
-              intro M _ g hg
-              rw [← Finset.sum_subset hsub3 (fun z _ hz => by
-                simp only [Finset.mem_insert, Finset.mem_singleton, not_or] at hz
-                exact hg z hz.1 hz.2.1 hz.2.2)]
-              rw [Finset.sum_insert (by simp [hvw, huv]), Finset.sum_insert (by simp [hwu]),
-                Finset.sum_singleton, add_assoc]
-            have hgsum : (∑ z ∈ W, gam z) = 0 := by
-              rw [hsum3 ℝ inferInstance gam hgo, hgv, hgw, hgu]; ring
-            have hgd : (∑ z ∈ W, gam z • z) = d := by
-              rw [hsum3 Plane inferInstance (fun z => gam z • z)
-                (fun z a b c => by rw [hgo z a b c, zero_smul]), hgv, hgw, hgu, hb]
-              module
-            have hb12 : gam w ≠ 0 ∨ gam u ≠ 0 := by
-              rw [hgw, hgu]
-              by_contra hc
-              push Not at hc
-              rw [hc.1, hc.2] at hb
-              simp only [zero_smul, add_zero] at hb
-              exact hd0 hb
-            have hgne : ∃ z ∈ W, gam z ≠ 0 := by
-              rcases hb12 with h | h
-              · exact ⟨w, hw, h⟩
-              · exact ⟨u, huW, h⟩
-            obtain ⟨t₀, v₀, hv₀W, hymem⟩ := exists_descent hpos h1 h2 hgsum hgd hgne
-            have hpsiy : psi p.q s (x + t₀ • d) = psi p.q s x :=
-              psi_const_along_kernel hstat hdk t₀
-            have hmaxy : IsMaxOn (psi p.q s) p.T (x + t₀ • d) := by
-              intro z hz
-              show psi p.q s z ≤ psi p.q s (x + t₀ • d)
-              rw [hpsiy]
-              exact hmax hz
-            have hlt : (W.erase v₀).card < n := by
-              rw [← hcard]; exact Finset.card_erase_lt_of_mem hv₀W
-            have hnee : (W.erase v₀).Nonempty := by
-              by_cases hvv : v₀ = v
-              · exact ⟨w, Finset.mem_erase.2 ⟨by rw [hvv]; exact Ne.symm hvw, hw⟩⟩
-              · exact ⟨v, Finset.mem_erase.2 ⟨fun h => hvv h.symm, hv⟩⟩
-            obtain ⟨b, hbmem, hbe⟩ := ih _ hlt (W.erase v₀) (x + t₀ • d) rfl
-              (fun z hz => hWV (Finset.mem_of_mem_erase hz)) hnee hymem hmaxy
-            exact ⟨b, hbmem, by rw [hbe, hpsiy]⟩
-          · -- **nonsingular Hessian**: the interior branch, by uniqueness of the
-            -- stationary point
-            refine ⟨interiorBranch p.q, QuaPiece.interiorBranch_mem_branches hdet, ?_⟩
-            rw [interiorBranch_eval p.q s hdet, ← interiorPoint_unique hdet hstat]
-      · -- **S6: a single vertex.**
-        push Not at h2pt
+    intro W S lam mu x hcard hWV hSR hWne h0 h1 hm0 hx hmax
+    -- **A vertex weight vanishes**: drop that vertex from the support.
+    by_cases hz : ∃ v₀ ∈ W, lam v₀ = 0
+    · obtain ⟨v₀, hv₀, hzero⟩ := hz
+      obtain ⟨hne', h0', h1', hx'⟩ := erase_vert_data hv₀ h0 h1 hzero hx
+      refine ih ((W.erase v₀).card + S.card) ?_ (W.erase v₀) S lam mu x rfl
+        (fun z hz' => hWV (Finset.mem_of_mem_erase hz')) hSR hne' h0' h1' hm0 hx' hmax
+      rw [← hcard]
+      exact Nat.add_lt_add_right (Finset.card_erase_lt_of_mem hv₀) _
+    -- **A ray weight vanishes**: drop that ray.
+    by_cases hz2 : ∃ r₀ ∈ S, mu r₀ = 0
+    · obtain ⟨r₀, hr₀, hzero⟩ := hz2
+      refine ih (W.card + (S.erase r₀).card) ?_ W (S.erase r₀) lam mu x rfl hWV
+        (fun z hz' => hSR (Finset.mem_of_mem_erase hz')) hWne h0 h1
+        (fun z hz' => hm0 z (Finset.mem_of_mem_erase hz')) ?_ hmax
+      · rw [← hcard]
+        exact Nat.add_lt_add_left (Finset.card_erase_lt_of_mem hr₀) _
+      · rw [Finset.sum_erase _ (by rw [hzero, zero_smul])]; exact hx
+    -- **A zero recession direction**: it contributes nothing, so drop it.
+    by_cases hz3 : (0 : Plane) ∈ S
+    · refine ih (W.card + (S.erase 0).card) ?_ W (S.erase 0) lam mu x rfl hWV
+        (fun z hz' => hSR (Finset.mem_of_mem_erase hz')) hWne h0 h1
+        (fun z hz' => hm0 z (Finset.mem_of_mem_erase hz')) ?_ hmax
+      · rw [← hcard]
+        exact Nat.add_lt_add_left (Finset.card_erase_lt_of_mem hz3) _
+      · rw [Finset.sum_erase _ (by simp)]; exact hx
+    -- **Every weight is positive and every ray nonzero.**
+    push Not at hz hz2
+    have hpos : ∀ v ∈ W, 0 < lam v := fun v hv => lt_of_le_of_ne (h0 v hv) (Ne.symm (hz v hv))
+    have hmupos : ∀ r ∈ S, 0 < mu r := fun r hr => lt_of_le_of_ne (hm0 r hr) (Ne.symm (hz2 r hr))
+    -- Either the support offers a direction, or it is a single vertex.
+    have hcase : (∃ (v₀ w₀ : Plane) (gam₁ nu₁ : Plane → ℝ),
+          v₀ ∈ W ∧ (v₀, w₀) ∈ p.edgeCandidates ∧ w₀ - v₀ ≠ 0 ∧
+            IsDirRep W S gam₁ nu₁ (w₀ - v₀))
+        ∨ (∃ v, W = {v} ∧ S = ∅) := by
+      rcases Finset.eq_empty_or_nonempty S with hSe | hSne
+      · by_cases h2pt : ∃ v ∈ W, ∃ w ∈ W, v ≠ w
+        · obtain ⟨v, hv, w, hw, hvw⟩ := h2pt
+          exact Or.inl ⟨v, w, _, _, hv, QuaPiece.mem_edgeCandidates_vert (hWV hv) (hWV hw),
+            sub_ne_zero.2 (Ne.symm hvw), isDirRep_vert_sub hv hw⟩
+        · push Not at h2pt
+          obtain ⟨v, hv⟩ := hWne
+          exact Or.inr ⟨v, Finset.eq_singleton_iff_unique_mem.2
+            ⟨hv, fun u hu => h2pt u hu v hv⟩, hSe⟩
+      · obtain ⟨r₀, hr₀⟩ := hSne
         obtain ⟨v, hv⟩ := hWne
-        have hWeq : W = {v} :=
-          Finset.eq_singleton_iff_unique_mem.2 ⟨hv, fun u hu => h2pt u hu v hv⟩
-        subst hWeq
-        rw [Finset.sum_singleton] at h1 h2
-        have hxv : x = v := by rw [← h2, h1, one_smul]
-        refine ⟨vertexBranch p.q v, QuaPiece.vertexBranch_mem_branches (hWV hv), ?_⟩
-        rw [vertexBranch_eval, hxv]
+        have hr0ne : r₀ ≠ 0 := fun h => hz3 (h ▸ hr₀)
+        refine Or.inl ⟨v, v + r₀, fun _ => 0, fun z => if z = r₀ then (1 : ℝ) else 0, hv,
+          QuaPiece.mem_edgeCandidates_ray (hWV hv) (hSR hr₀), ?_, ?_⟩
+        · rw [add_sub_cancel_left]; exact hr0ne
+        · rw [add_sub_cancel_left]; exact isDirRep_ray hr₀
+    rcases hcase with ⟨v₀, w₀, gam₁, nu₁, hv₀, hcand, hd₁ne, hrep₁⟩ | ⟨v, hWeq, hSeq⟩
+    · -- **There is a direction.** Read off its first- and second-order conditions.
+      obtain ⟨hfoc₁, hsoc₁⟩ := foc_soc hWV hSR h1 hx hpos hmupos hrep₁ hmax
+      -- Is the whole support parallel to it?
+      have hsplit2 : ((∀ u ∈ W, cross (w₀ - v₀) (u - v₀) = 0) ∧
+            (∀ r ∈ S, cross (w₀ - v₀) r = 0))
+          ∨ ∃ (d₂ : Plane) (gam₂ nu₂ : Plane → ℝ),
+              cross (w₀ - v₀) d₂ ≠ 0 ∧ IsDirRep W S gam₂ nu₂ d₂ := by
+        by_cases hW2 : ∀ u ∈ W, cross (w₀ - v₀) (u - v₀) = 0
+        · by_cases hS2 : ∀ r ∈ S, cross (w₀ - v₀) r = 0
+          · exact Or.inl ⟨hW2, hS2⟩
+          · push Not at hS2
+            obtain ⟨r₁, hr₁, hcr⟩ := hS2
+            exact Or.inr ⟨r₁, _, _, hcr, isDirRep_ray hr₁⟩
+        · push Not at hW2
+          obtain ⟨u, hu, hcu⟩ := hW2
+          exact Or.inr ⟨u - v₀, _, _, hcu, isDirRep_vert_sub hv₀ hu⟩
+      rcases hsplit2 with ⟨hW2, hS2⟩ | ⟨d₂, gam₂, nu₂, hcross, hrep₂⟩
+      · -- **S7: the face lies on a line.** Edge branch, or vertex branch if flat.
+        have hxline : cross (w₀ - v₀) (x - v₀) = 0 := cross_eq_zero_of_support h1 hx hW2 hS2
+        obtain ⟨t, htx⟩ := exists_smul_of_cross_eq_zero hd₁ne hxline
+        have hxv : x = v₀ + t • (w₀ - v₀) := by rw [← htx]; abel
+        have hgrad : p.q.gradAt x = p.q.gradAt v₀ + t • p.q.hessApply (w₀ - v₀) := by
+          rw [hxv]; exact Quad.gradAt_add_smul _ _ _ _
+        have hslope : edgeSlope p.q v₀ w₀ s = t * edgeCurv p.q v₀ w₀ := by
+          have hd : dot (p.q.gradAt x) (w₀ - v₀)
+              = dot (p.q.gradAt v₀) (w₀ - v₀) + t * p.q.alongCurv (w₀ - v₀) := by
+            rw [hgrad, Quad.alongCurv_eq_dot_hessApply]
+            simp only [dot, Prod.fst_add, Prod.snd_add, Prod.smul_fst, Prod.smul_snd,
+              smul_eq_mul]
+            ring
+          simp only [edgeSlope, edgeCurv]
+          rw [hd] at hfoc₁
+          linarith
+        rcases lt_trichotomy (edgeCurv p.q v₀ w₀) 0 with hlt0 | heq0 | hgt0
+        · exact absurd hsoc₁ (not_le.2 hlt0)
+        · refine ⟨vertexBranch p.q v₀, QuaPiece.vertexBranch_mem_branches (hWV hv₀), ?_⟩
+          rw [vertexBranch_eval, hxv, psi_along_line, hslope, heq0]
+          ring
+        · have hcoef : edgeSlope p.q v₀ w₀ s / edgeCurv p.q v₀ w₀ = t := by
+            rw [hslope]; field_simp
+          have hep : edgePoint p.q v₀ w₀ s = x := by rw [edgePoint, hcoef, hxv]
+          refine ⟨edgeBranch p.q v₀ w₀,
+            QuaPiece.edgeBranch_mem_branches_of_cand hcand hgt0, ?_⟩
+          rw [edgeBranch_eval p.q v₀ w₀ s (ne_of_gt hgt0), hep]
+      · -- **The face is two-dimensional**: the conditions pin `∇q(x) = s`.
+        obtain ⟨hfoc₂, -⟩ := foc_soc hWV hSR h1 hx hpos hmupos hrep₂ hmax
+        have hr0 : s - p.q.gradAt x = 0 :=
+          eq_zero_of_dot_eq_zero_of_cross_ne_zero (by rw [dot_sub_left]; exact hfoc₁)
+            (by rw [dot_sub_left]; exact hfoc₂) hcross
+        have hstat : p.q.gradAt x = s := (sub_eq_zero.1 hr0).symm
+        by_cases hdet : p.q.hessDet = 0
+        · -- **S8: singular Hessian.** Slide along the kernel onto a proper face.
+          obtain ⟨d, hd0, hdk⟩ := exists_kernel_of_hessDet_eq_zero hdet
+          obtain ⟨b₁, b₂, hb⟩ := exists_combo_of_cross_ne_zero hcross d
+          have hrepd : IsDirRep W S (fun z => b₁ * gam₁ z + b₂ * gam₂ z)
+              (fun z => b₁ * nu₁ z + b₂ * nu₂ z) d := by
+            have hcomb := (hrep₁.smul b₁).add (hrep₂.smul b₂)
+            rwa [← hb] at hcomb
+          have hne : (∃ v ∈ W, b₁ * gam₁ v + b₂ * gam₂ v ≠ 0)
+              ∨ (∃ r ∈ S, b₁ * nu₁ r + b₂ * nu₂ r ≠ 0) := by
+            by_contra hc
+            push Not at hc
+            have hzW : ∀ v ∈ W, (b₁ * gam₁ v + b₂ * gam₂ v) • v = (0 : Plane) := by
+              intro v hv
+              rw [hc.1 v hv, zero_smul]
+            have hzS : ∀ r ∈ S, (b₁ * nu₁ r + b₂ * nu₂ r) • r = (0 : Plane) := by
+              intro r hr
+              rw [hc.2 r hr, zero_smul]
+            refine hd0 ?_
+            rw [← hrepd.2, Finset.sum_eq_zero hzW, Finset.sum_eq_zero hzS, add_zero]
+          obtain ⟨t₀, hl, hm, hzero⟩ :=
+            exists_descent_gen (lam := lam) (mu := mu)
+              (gam := fun z => b₁ * gam₁ z + b₂ * gam₂ z)
+              (nu := fun z => b₁ * nu₁ z + b₂ * nu₂ z) hpos hmupos hne
+          have hymem : x + t₀ • d ∈ p.T := mem_T_of_perturb hWV hSR h1 hx hrepd hl hm
+          have hpsiy : psi p.q s (x + t₀ • d) = psi p.q s x :=
+            psi_const_along_kernel hstat hdk t₀
+          have hmaxy : IsMaxOn (psi p.q s) p.T (x + t₀ • d) := by
+            intro z hz'
+            show psi p.q s z ≤ psi p.q s (x + t₀ • d)
+            rw [hpsiy]
+            exact hmax hz'
+          have h1' : (∑ v ∈ W, (lam v + t₀ * (b₁ * gam₁ v + b₂ * gam₂ v))) = 1 :=
+            perturb_sum_eq_one h1 hrepd t₀
+          have hx' : (∑ v ∈ W, (lam v + t₀ * (b₁ * gam₁ v + b₂ * gam₂ v)) • v)
+              + (∑ r ∈ S, (mu r + t₀ * (b₁ * nu₁ r + b₂ * nu₂ r)) • r) = x + t₀ • d :=
+            perturb_combo hx hrepd t₀
+          rcases hzero with ⟨v₁, hv₁, hz₁⟩ | ⟨r₁, hr₁, hz₁⟩
+          · obtain ⟨hne', h0'', h1'', hx''⟩ :=
+              erase_vert_data (lam := fun z => lam z + t₀ * (b₁ * gam₁ z + b₂ * gam₂ z))
+                (mu := fun z => mu z + t₀ * (b₁ * nu₁ z + b₂ * nu₂ z))
+                hv₁ hl h1' hz₁ hx'
+            have hlt : (W.erase v₁).card + S.card < n := by
+              rw [← hcard]
+              exact Nat.add_lt_add_right (Finset.card_erase_lt_of_mem hv₁) _
+            obtain ⟨b, hbmem, hbe⟩ :=
+              ih ((W.erase v₁).card + S.card) hlt
+                (W.erase v₁) S _ _ (x + t₀ • d) rfl
+                (fun z hz' => hWV (Finset.mem_of_mem_erase hz')) hSR hne' h0'' h1'' hm hx''
+                hmaxy
+            exact ⟨b, hbmem, by rw [hbe, hpsiy]⟩
+          · have hlt : W.card + (S.erase r₁).card < n := by
+              rw [← hcard]
+              exact Nat.add_lt_add_left (Finset.card_erase_lt_of_mem hr₁) _
+            obtain ⟨b, hbmem, hbe⟩ :=
+              ih (W.card + (S.erase r₁).card) hlt
+                W (S.erase r₁) _ _ (x + t₀ • d) rfl hWV
+                (fun z hz' => hSR (Finset.mem_of_mem_erase hz')) hWne hl h1'
+                (fun z hz' => hm z (Finset.mem_of_mem_erase hz'))
+                (by rw [Finset.sum_erase _ (by rw [hz₁, zero_smul])]; exact hx') hmaxy
+            exact ⟨b, hbmem, by rw [hbe, hpsiy]⟩
+        · -- **nonsingular Hessian**: the interior branch, by uniqueness of the
+          -- stationary point
+          refine ⟨interiorBranch p.q, QuaPiece.interiorBranch_mem_branches hdet, ?_⟩
+          rw [interiorBranch_eval p.q s hdet, ← interiorPoint_unique hdet hstat]
+    · -- **S6: a single vertex, no rays.**
+      have h1' : lam v = 1 := by rw [hWeq, Finset.sum_singleton] at h1; exact h1
+      have hxv : x = v := by
+        rw [hWeq, hSeq, Finset.sum_singleton, Finset.sum_empty, add_zero, h1', one_smul] at hx
+        exact hx.symm
+      have hvV : v ∈ p.verts := hWV (by rw [hWeq]; exact Finset.mem_singleton_self v)
+      exact ⟨vertexBranch p.q v, QuaPiece.vertexBranch_mem_branches hvV,
+        by rw [vertexBranch_eval, hxv]⟩
 
 /-- **The core of the selection lemma (S3-S9), for one piece.**
 
 If `x` maximises `ψ` over the piece, then one of the piece's candidate branches
 takes the value `ψ(x)` at `s`.
 
-The proof is a strong induction on the number of vertices of the face carrying
-`x`. If a barycentric weight vanishes, the face shrinks. Otherwise `x` is in the
-relative interior, so one may step both ways along any `w - v` and read off the
-first- and second-order conditions (`foc_soc`). If the face lies on a line the
-value is an `edgeBranch`, or a `vertexBranch` when the curvature vanishes; if it
-does not, the conditions force `∇q(x) = s`, giving `interiorBranch` when the
-Hessian is nonsingular and, when it is singular, a slide along `ker H` onto a
-proper face at no cost to the value (`psi_const_along_kernel`, `exists_descent`).
-A single vertex is the base case. -/
-theorem exists_branch_eq_max {p : QuaPiece} (hr : p.rays = ∅) (s : Plane) {x : Plane}
-    (hx : x ∈ p.T) (hmax : IsMaxOn (psi p.q s) p.T x) :
-    ∃ b ∈ p.branches, b.eval s = psi p.q s x :=
-  branch_aux p s p.verts.card p.verts x rfl (fun _ hz => hz) p.verts_nonempty
-    (by rwa [QuaPiece.T_of_rays_empty hr] at hx) hmax
+The proof is a strong induction on the size of the support of `x` — the number
+of vertices carrying a positive weight, plus the number of recession directions
+carrying a positive weight. A vanishing weight, or a zero recession direction,
+shrinks the support. Otherwise `x` may be stepped in both directions along every
+difference of two support vertices and along every support ray, so the first-
+and second-order conditions hold there (`foc_soc`). If all of those directions
+are parallel, `x` lies on a line through a vertex and the value is an
+`edgeBranch` — of a vertex pair or of a vertex-and-ray pair, indifferently — or a
+`vertexBranch` when the curvature vanishes. If they are not, the conditions force
+`∇q(x) = s`, giving `interiorBranch` when the Hessian is nonsingular and, when it
+is singular, a slide along `ker H` onto a proper face at no cost to the value
+(`psi_const_along_kernel`, `exists_descent_gen`). A single vertex with no rays is
+the base case. -/
+theorem exists_branch_eq_max {p : QuaPiece} (s : Plane) {x : Plane} (hx : x ∈ p.T)
+    (hmax : IsMaxOn (psi p.q s) p.T x) :
+    ∃ b ∈ p.branches, b.eval s = psi p.q s x := by
+  obtain ⟨c, hc, k, ⟨mu, hmu0, hmusum⟩, hck⟩ := hx
+  obtain ⟨lam, h0, h1, h2⟩ := exists_weights hc
+  exact branch_aux p s (p.verts.card + p.rays.card) p.verts p.rays lam mu x rfl
+    (fun _ hz => hz) (fun _ hz => hz) p.verts_nonempty h0 h1 hmu0
+    (by rw [h2, hmusum]; exact hck) hmax
 
-/-- **Selection.** Some candidate quadratic attains the conjugate at every point.
+/-- **Selection.** Some candidate quadratic attains the conjugate, wherever every
+piece attains its own supremum.
 
-For bounded pieces this is unconditional: `conj_ne_top` shows the conjugate is
-finite everywhere, because every piece is compact. -/
-theorem selection {f : QuaPol} (hb : f.Bounded) (s : Plane) :
+For bounded pieces that is automatic (`attained_of_bounded`); with recession
+directions it is the content of Phase 7. -/
+theorem selection {f : QuaPol} {s : Plane} (hA : f.Attained s) :
     ∃ q ∈ cand f, ((q.eval s : ℝ) : EReal) = f.conj s := by
-  obtain ⟨p, hp, x, hxT, hxmax, hval⟩ := exists_maximiser (attained_of_bounded hb s)
-  obtain ⟨b, hb', hbe⟩ := exists_branch_eq_max (hb p hp) s hxT hxmax
-  exact ⟨b, mem_cand hp hb', by rw [hbe]; exact hval⟩
+  obtain ⟨p, hp, x, hxT, hxmax, hval⟩ := exists_maximiser hA
+  obtain ⟨b, hb, hbe⟩ := exists_branch_eq_max s hxT hxmax
+  exact ⟨b, mem_cand hp hb, by rw [hbe]; exact hval⟩
 
 /-! ### Sanity checks for S8 -/
 
