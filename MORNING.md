@@ -109,10 +109,21 @@ Two things were done, and both are worth keeping:
 
 ## What is broken
 
-Nothing red: **fast 298/0, slow 88/0** (the slow bucket identical to its
-pre-change baseline). The `verylong` bucket was started at the end of the run;
-if this line still says so, it had not finished when the run ended — its result
-is the one number this report does not contain.
+Nothing red that this run caused. **fast 298/0, slow 88/0** (the slow bucket
+identical to its pre-change baseline), and the `verylong` daily gate was run
+three times to settle it:
+
+    baseline b9243d3, -j 2, uncontended     26 pass / 7 fail / 1 timeout
+    current tree,     -j 2, uncontended     26 pass / 7 fail / 1 timeout   <- identical
+    current tree,     -j 2, contended       25 pass / 8 fail / 1 timeout   <- one extra
+
+So **the night's work changed `verylong` not at all**; its seven failures and its
+timeout are pre-existing (`testMaxMultiRegion/testPCE2` among them, which the
+handoff already listed). The eighth appeared only in the contended run, comes
+back as an ERROR rather than a mis-assertion, and passes standalone: it is a race
+on `plqStage`'s shared cache, filed as G7 with the three-line fix. Until that
+lands, **read a `--verylong -j N` red against a `-j 1` re-run of that one test
+before believing it.**
 
 Two gaps remain, both named in `TODO.md` and pinned by tests that will go green
 when they are fixed:

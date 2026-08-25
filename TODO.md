@@ -95,6 +95,14 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       covers the SINGLE-PIECE route. `DECISIONS.md` 2026-08-25 (later) has the numbers and the one
       case it still cannot see.
 
+- [ ] **G7 -- `plqStage`'s cache races under `suite.sh --verylong -j N`.** The job list is per TEST
+      and consecutive tests of a fixture are consecutive STAGES, so with `-j 2` stage 2 can `load`
+      the cache file stage 1 is still writing. A missing cache is safe (it recomputes); a partial
+      one throws. It produced one spurious red in the 2026-08-25 gate. Fix: `save` to a unique
+      temporary name in the same directory then `movefile` onto the real one, and make a failed
+      `load` fall back to recomputing. Verifying it needs a contended `--verylong` run, which is
+      why it was not done unattended. `DECISIONS.md` 2026-08-25 (last).
+
 - [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
       (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded
       indefinite piece; `convEnvUnbounded`/`fanUnboundedFace` are the symbolic side's answer and

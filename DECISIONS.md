@@ -2574,3 +2574,39 @@ INDEFINITE piece the maximiser of `<s,x> - q(x)` is on the boundary, so the boun
 for a CONVEX piece it can be interior -- but that is the route `conjConvexPolygon` handles in
 closed form and which the random sweep found exact in every case. Note the limit rather than
 claiming the check is complete.
+
+## 2026-08-25 (last) — `--verylong -j N` RACES on the stage cache, and it produced a spurious red
+
+The daily gate was run twice on the current tree and once on a pristine snapshot of `b9243d3`, and
+the three results settle both questions the night raised about it.
+
+    baseline b9243d3, -j 2, uncontended     26 pass /  7 fail / 1 timeout
+    current tree,     -j 2, uncontended     26 pass /  7 fail / 1 timeout    <- identical
+    current tree,     -j 2, contended       25 pass /  8 fail / 1 timeout    <- one extra
+
+**So the night's work changed the verylong bucket not at all.** The seven failures and the timeout
+are pre-existing, `testMaxMultiRegion/testPCE2` among them (the handoff already listed it as the
+known red).
+
+**The eighth is a RACE, not a regression.** `testcPLQ/rectConvexEnvelopeUnderestimates` failed only
+in the contended run, comes back `fail=1 incomplete=1` (i.e. it ERRORED rather than mis-asserted),
+and **passes when run alone**. The mechanism is in the tooling, not the mathematics:
+
+* `plqStage` caches each pipeline stage under `.claude/stagecache/`, keyed by (fixture, stage), and
+  `get` LOADS that file when it is fresh;
+* `suite.sh --verylong -j N` runs N MATLAB processes against that ONE directory;
+* the job list is per TEST, and consecutive tests of one fixture are consecutive STAGES -- so with
+  `-j 2`, `rectTriangulates` (stage 1) and `rectConvexEnvelopeUnderestimates` (stage 2) run at the
+  same time. A MISSING cache is safe, because `get` then recomputes; a HALF-WRITTEN one is not,
+  because `load` on a partial `.mat` throws.
+
+The timing fits: stage 1 passed at 28 s and stage 2 errored at 29 s.
+
+**The fix is an atomic write**, and it is three lines: `save` to a unique temporary name in the same
+directory and then `movefile` onto the real one, so a reader sees either the old file or the new one
+and never a partial. A `load` that throws should also fall back to recomputing rather than failing
+the test. NOT DONE HERE: verifying it needs another contended `--verylong` run, and an unverified
+change to a caching layer is exactly what should not be committed unattended.
+
+**Until it is fixed, read a `--verylong -j N` red against a `-j 1` re-run of that one test before
+believing it.** A spurious red in the daily gate costs a morning.
