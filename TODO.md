@@ -165,13 +165,44 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       remaining monolithic block -- each still runs `.maximum` then `.biconjugateF` inline in one
       method, uncached.
 
-- [ ] **G10 -- the `maxQuaPar` accumulated fold, which is what G4 actually is.** Two invariant
-      violations, both raised by `MAXQP_ASSERT = 2` on the G4 fixture and neither fixed: a piece
-      whose declared rays are the NEGATIVE of the direction its constraint region recedes along,
-      and a piece carrying one operand's quadratic where the other is larger by `Inf` along a ray.
-      Pairwise folds are exact; only folding into an accumulated mesh fails. `SUPPORT_MATRIX.md`
-      section 4.6's "assembly after an arc split: one side CURVED, the other STRAIGHT" is the
-      design note for the same area.
+- [ ] **G10 -- the `maxQuaPar` accumulated fold, which is what G4 actually is.** Half closed
+      2026-08-25. `pieceRecessionRays` was deciding a piece's recession cone from floating-point
+      noise -- its two sign tests compare against a mathematical ZERO (`A(d) = d*Q*d'` along a
+      parabola's null direction, `cross(E,d)` along a ray edge) and were exact on doubles lifted
+      with `sym()`. Measured +4.4e-20 vs -2.5e-17 for the SAME direction stored twice, and a
+      half-strip reported receding along the negative of its own declared ray. Both now use a
+      scaled tolerance. That gate is not cosmetic: `reccConeViolation` decides
+      `halfIsProvedWellFormed`, so a false violation refuses a legitimate two-arc ray cut.
+      **What is left is the winner on a straddling unbounded cell**, and the fix is NOT the
+      obvious one -- routing `splitCell`'s single-tangency branch through `assignSide` fixes G4
+      and breaks `conjSymFreeTest`'s A.5 triangle, which is correct to 3.6e-15 today. REFUTED,
+      recorded in `DECISIONS.md` 2026-08-25 (G10); do not retry it.
+      **Go upstream instead:** that branch is reached only when `splitCell` found ONE boundary
+      crossing, and for an unbounded cell that is not a tangency -- the curve leaves through the
+      RECESSION CONE, so the cell has one finite crossing and two parts.
+      `splitUnboundedAtOneCrossing` is meant to catch exactly that and declines on both fixtures.
+      Make it succeed and no cell needs a winner read off a centroid.
+
+- [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
+      45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
+      now reporting as three because the split separates its stages. No regression.
+
+          testcPLQ/rectConjugateMatchesTheSup                     FAIL     86 s
+          testcPLQ/rectMaximumIsTheConjugateOfTheWholeDomain      FAIL   1562 s
+          testcPLQ/rectBiconjugateIsAConvexUnderestimator         TIMEOUT >3600 s
+          testMaxMultiRegion/testMaxBiconjugate                   FAIL   1360 s
+          testMaxMultiRegion/testMax3                             FAIL    557 s
+          testMaxMultiRegion/testPSqroot                          FAIL     75 s
+          testMaxMultiRegion/testOpenconvex                       FAIL    113 s
+          testMaxMultiRegion/pce2{Envelope,Conjugate,Step3}       FAIL  57/83/76 s   (= old testPCE2)
+
+      Take them cheapest first: `testPSqroot` (75 s), `testOpenconvex` (113 s) and
+      `rectConjugateMatchesTheSup` (86 s) are already fast enough to fix directly. `testMax3`,
+      `testMaxBiconjugate` and `rectMaximumIsTheConjugateOfTheWholeDomain` need the stage split the
+      PCE family got. `rectBiconjugateIsAConvexUnderestimator` does not finish at all and is the
+      only one where the first job is to find out where the time goes.
+      **G7 is verified by this run:** `-j 4` shards per test, consecutive stages of a fixture ran
+      concurrently, and no cache error or spurious red appeared.
 
 ### Tools built on 2026-08-24, so they are not rebuilt
 

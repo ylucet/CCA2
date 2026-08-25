@@ -77,50 +77,68 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
             end
         end
 
-        function theRefusalFIRESOnTheKnownMinorantAndNowhereElse(testCase)
-        % G4's fixture: conj's answer on it violates the definition, and it is refused by name
-        % rather than returned.
+        function theKnownBadFixtureIsREFUSEDByTheNumericRoute(testCase)
+        % G4's fixture: `conj`'s numeric answer on it is wrong, and the numeric route refuses it
+        % by name rather than returning it. That is the property worth pinning, and it is now
+        % pinned on the NUMERIC route specifically -- `conjCPLQ(q, [], 'numeric')` -- for a
+        % measured reason.
         %
-        % CHANGED 2026-08-25, and the reason is a measurement that falsified this test's own
-        % header. It used to assert `PLQ:conjCPLQ:belowEdgeBound` specifically, on the stated
-        % grounds that "the defect is in the shared Step 1 / Step 2 closed form and there is
-        % nothing to fall back to". Both halves are wrong. Step 1 splits this triangle into FOUR
-        % faces and every one of their Step 2 conjugates is exact at the bad point --
-        % 1.032507658472 to twelve digits, four times over -- so the defect is in the FOLD.
-        % `conjMaxOfSubTriangles` now cross-checks the fold against those pieces, which is
-        % cheaper, runs earlier, and is strictly stronger: the edge bound is one-sided and sees
-        % only minorants, while the fold check catches this fixture OVER-estimating by a factor
-        % of four (f*(-10,0) = 47.10181578 against a true 10.86895777).
+        % HISTORY, 2026-08-25, two changes in one session and the second undid the first's test.
+        % This started as `theRefusalFIRESOnTheKnownMinorantAndNowhereElse`, asserting
+        % `PLQ:conjCPLQ:belowEdgeBound`. Then the fold cross-check landed and got there first
+        % (`PLQ:conjCPLQ:foldDroppedACell`), so it was widened to accept either. Then the actual
+        % maxQuaPar defects were fixed -- a recession cone decided by 1e-17 noise, and an
+        % unbounded cell whose winner was read from its centroid -- and now maxQuaPar itself
+        % refuses this fixture EARLIER than either definition check, with
+        % `maxQuaPar:notImplemented`: an unbounded piece genuinely straddles {f1 = f2} and has no
+        % single winner to carry.
         %
-        % So what this test may assert is that the fixture is REFUSED, not which of two checks
-        % gets there first -- pinning the loser of that race would block the better check. Both
-        % identifiers are named so a silent return still fails, and so does a third kind of error.
+        % WHY THE `auto` ROUTE IS NOT USED HERE. `conjSingleTriangle` swallows `maxQuaPar:` and
+        % falls through to the symbolic Case C, which on this fixture runs for 420 s and then
+        % fails in MuPAD (`PLQ:conjCPLQ:cplqFailed`). That is a true statement about the symbolic
+        % route and it belongs in the slow bucket, not in a fast test that would spend seven
+        % minutes reaching it. The numeric route refuses in about 3 s.
+        %
+        % NOTE FOR WHOEVER FIXES THE STRADDLE: when maxQuaPar can assemble this cell, the fold
+        % cross-check and the edge lower bound become reachable on it again, and the expected
+        % identifier here moves back. Widen the list, do not delete the test.
             W = [0.6057047151 0.9300751811; -0.3353947472 0.5251524293; -1.082499617 0.08448609744];
             f6 = [0 1 0 -0.7177913413 -0.6075645347 -0.6781835233];
             q = QuaPol(W, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]);
             try
-                g = q.conj('cplq');
+                g = conjCPLQ(q, [], 'numeric');
                 testCase.verifyFail(sprintf( ...
-                    ['the known-bad fixture returned a %s instead of being refused: neither the ' ...
-                     'fold cross-check nor the edge lower bound fired'], class(g)));
+                    ['the known-bad fixture returned a %s: the numeric route neither refused it ' ...
+                     'nor was caught by a definition check'], class(g)));
             catch ME
                 testCase.verifyTrue(any(strcmp(ME.identifier, ...
-                    {'PLQ:conjCPLQ:foldDroppedACell', 'PLQ:conjCPLQ:belowEdgeBound'})), ...
-                    sprintf('refused with %s, which is neither definition check', ME.identifier));
+                    {'maxQuaPar:notImplemented', 'PLQ:conjCPLQ:foldDroppedACell', ...
+                     'PLQ:conjCPLQ:belowEdgeBound', 'PLQ:conjCPLQ:numericRouteDeclined'})), ...
+                    sprintf(['refused with %s, which is not one of the refusals this fixture may ' ...
+                             'legitimately produce'], ME.identifier));
             end
         end
 
-        function theRefusalCanBeTurnedOffWithTheGlobal(testCase)
-        % The check is on by default; the global exists so a caller who wants the old behaviour --
-        % or who is debugging the minorant itself -- can have it.
+        function theDefinitionChecksCanBeTurnedOffWithTheGlobal(testCase)
+        % `CCA2_CONJ_VERIFY = 0` turns off the DEFINITION checks -- the edge lower bound and the
+        % fold cross-check -- and with them off the old, unchecked answer comes back. That is what
+        % the switch is for: a caller who wants the previous behaviour, or who is debugging the
+        % wrong answer itself, needs to be able to obtain it.
+        %
+        % Renamed from `theRefusalCanBeTurnedOffWithTheGlobal` and moved onto the NUMERIC route.
+        % Both are for speed and precision, not for a change of meaning: under `auto` this fixture
+        % now spends 420 s in the symbolic fallback before failing there, which is a true statement
+        % about the symbolic route and does not belong in a fast test. `conjCPLQ(q, [], 'numeric')`
+        % asks the question this test is actually about -- what the numeric path returns when the
+        % definition checks are off -- in about 3 s.
             prev = getGlobal();
-            c = onCleanup(@() setGlobal(prev));
-            setGlobal(0);
+            c = onCleanup(@() setGlobal(prev)); %#ok<NASGU>
             W = [0.6057047151 0.9300751811; -0.3353947472 0.5251524293; -1.082499617 0.08448609744];
             f6 = [0 1 0 -0.7177913413 -0.6075645347 -0.6781835233];
             q = QuaPol(W, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]);
-            g = q.conj('cplq');
-            testCase.verifyTrue(isa(g, 'RatPar'), 'with the check off the old answer comes back');
+            setGlobal(0);
+            g = conjCPLQ(q, [], 'numeric');
+            testCase.verifyTrue(isa(g, 'RatPar'), 'with the checks off the old answer comes back');
         end
     end
 

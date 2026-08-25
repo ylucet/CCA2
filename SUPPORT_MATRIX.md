@@ -237,7 +237,9 @@ largest functional gap.
 | Input | Status | Returns | Guard |
 |---|---|---|---|
 | Full-domain **strictly convex** quadratic (`nv==0, nf==1`) | **OK** | `QuaPol` | — |
-| Full-domain **non-strictly-convex** quadratic | **GAP** | — | `PLQ:conjCPLQ:notImplemented` — `conjCPLQ.m:78` |
+| Full-domain quadratic with a **negative** eigenvalue (indefinite or concave) | **GAP**, and it is a REPRESENTATION gap, not a missing construction: conv f = -inf so f* = +inf everywhere, i.e. dom f* is EMPTY, which no mesh encodes (`nf=0` means dim<2, not empty) | — | `PLQ:conjCPLQ:conjugateHasEmptyDomain` |
+| Full-domain **affine** (Q = 0) | **GAP**, representation: f* is the indicator of the single point L with value -kappa. The mesh has a needle domain (nv=1, ne=0) but `QuaPar.eval` returns +inf on it | — | `PLQ:conjCPLQ:conjugateIsAPoint` |
+| Full-domain **PSD of rank 1** | **GAP**, representation: f* is finite only on the LINE `<s-L,n> = 0`, n spanning null(Q), where `f*(s) = 1/2 (s-L)' pinv(Q) (s-L) - kappa`. QuaPar's dim<2 domain is a SEGMENT or ray between two vertices, not a line | — | `PLQ:conjCPLQ:conjugateIsALine` |
 | Single **bounded triangle**, Step 1 envelope has **one** face | **OK** (numeric; fast) | `QuaPar` | — |
 | …envelope split with a **rational** face, 2-face split | **OK** (falls back to cPLQ's Step 2/3; slow, ~100 s) | `QuaParCPLQ` | — |
 | …envelope split with a **rational** face, 4-face split | **OK** (2026-07-29; symbolic, ~27 min) | `QuaParCPLQ` | — |

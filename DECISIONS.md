@@ -2762,3 +2762,51 @@ minorant. That is the intended trade and the defect itself is still open.
   new identifier is `PLQ:conjCPLQ:foldDroppedACell`.
 - **Still open:** the `maxQuaPar` defect itself. What is closed is the misdiagnosis -- and the
   silence.
+
+## 2026-08-25 (G10) — the accumulated fold: one defect FIXED, one REFUTED fix, and the real cause named
+
+The `maxQuaPar` half of G4. Three things were measured; two of them are now in the code and one is
+a refutation worth more than the attempt.
+
+**FIXED — `pieceRecessionRays` decided the recession cone from floating-point noise.** Its header
+claims "all sign tests are exact (sym over the pieces' rational coefficients)", and that is the
+flaw: the coefficients arrive as DOUBLES and are lifted with `sym()`, so the comparisons are exact
+on numbers whose last bits are rounding. Two of them compare against a mathematical ZERO:
+
+    A(d) = d*Q*d'   is 0 along a parabola's null direction -- which for a half-strip piece is the
+                    direction being tested
+    cross(E,d)      is 0 when d lies along a ray edge -- which for that piece it does
+
+Measured on G4's fixture, on a piece with `nv=2, curveAfter=1, unbounded` whose `dirIn` and
+`dirOut` are the SAME direction stored as two different doubles (they differ in the last bit):
+
+    A(dirIn)  = +4.37e-20     passes `A < 0` outright, and is not `== 0`, so the linear-term
+                              TIE-BREAK -- the branch written for exactly this case -- never ran
+    A(dirOut) = -2.49e-17     rejected by `A < 0`
+    cross(-dirIn, +dirIn) = -5.55e-17   rejected the one direction every real constraint admits
+
+The piece therefore reported receding along the exact NEGATIVE of its own declared ray, and the
+whole decision was made by noise of order 1e-17. Both tests now compare against a tolerance scaled
+by their operands. That widens the TIE case rather than weakening it: the tie is then settled by
+the linear term, measured `|grad.d| = 8.1e-02`, four orders of magnitude clear of the tolerance.
+This is not cosmetic -- `reccConeViolation` gates `halfIsProvedWellFormed`, so a false violation
+makes a legitimate two-arc ray cut get refused.
+
+**REFUTED — routing `splitCell`'s single-tangency branch through `assignSide`.** That branch reads
+an unbounded cell's winner from the CENTROID of its finite vertices, which says nothing about which
+operand wins far out; `assignSide` reads the recession cone instead and applies
+`assertWinnerHoldsAtInfinity`. It fixes G4 -- `f*(-10,0)` stops answering 47.10181578 against a
+true 10.86895777 -- and it BREAKS a case that was right: `conjSymFreeTest`'s A.5 three-convex-edge
+triangle {(5/2,3/2),(0,0),(1/2,1)} carrying `x*y` matches the closed-form bilinear sup to 3.6e-15
+over the whole probe grid under the centroid read, and REFUSES through `assignSide`. Its cell
+straddles {f1=f2} as well, but the straddle never reaches the assembled answer. Trading a correct
+answer for a refusal is not an improvement, so this is reverted, with the measurement kept at the
+site. **Before retrying: do not.** The backstop is right that both cells straddle and wrong that
+both are unusable, so a version of this that merely softens the backstop is the same idea again.
+
+**The real cause, and where the fix belongs.** `splitCell` reaches that branch only when it found
+ONE boundary crossing of the splitting curve. For an UNBOUNDED cell that is not a tangency at all:
+the curve can enter through the boundary once and leave through the RECESSION CONE, so the cell has
+one finite crossing and genuinely splits into two unbounded parts, each with its own winner.
+`splitUnboundedAtOneCrossing` exists for exactly that and declined on both fixtures. Make it
+succeed and neither cell needs a winner read off a centroid, and neither needs the backstop.

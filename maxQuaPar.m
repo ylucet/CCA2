@@ -323,8 +323,15 @@ function assertPiecesWellFormed(pieces, g1, g2)
             m = reccConeViolation(p);
             if ~isempty(m)
                 if isempty(p.dirIn), kind = 'bounded'; else, kind = 'unbounded'; end
-                msgs{end+1} = sprintf('piece %d [src %s, nv=%d, curveAfter=%d, %s]: %s', i, ...
-                    mat2str(p.src), size(p.V,1), p.curveAfter, kind, m); %#ok<AGROW>
+                % The piece's own data goes IN the message. A recession-cone violation is decided
+                % from V, the ray directions and the arc's conic, and without them the report says
+                % which piece is wrong but not why -- which meant every investigation of one began
+                % by re-instrumenting this function to print them.
+                msgs{end+1} = sprintf(['piece %d [src %s, nv=%d, curveAfter=%d, %s]: %s' ...
+                    newline '      V = %s  dirIn = %s  dirOut = %s  curveEc = %s'], i, ...
+                    mat2str(p.src), size(p.V,1), p.curveAfter, kind, m, ...
+                    mat2str(p.V, 17), mat2str(p.dirIn, 17), mat2str(p.dirOut, 17), ...
+                    mat2str(p.curveEc, 17)); %#ok<AGROW>
             end
         end
     end
@@ -2843,6 +2850,27 @@ function newPieces = splitCell(cell, f1row, f2row, polyK, polyL, kSrc, lSrc)
         if arcPos0 == 0
             cellA.curveAfter = 0; cellA.curveEc = [];
         end   % a curved cell keeps its own arc: the cell is returned INTACT, arc included
+        % THE CENTROID CANNOT DECIDE AN UNBOUNDED CELL -- and routing this branch through
+        % assignSide, which can, was TRIED AND REVERTED on 2026-08-25. Both halves are measured
+        % and both matter, so the note stays:
+        %
+        %   * it WORKED on TODO.md G4's fixture. The centroid read gives cell src [6 4] g1 face 6's
+        %     quadratic while g2 face 4 beats it by +Inf along the cell's own ray, and f*(-10,0)
+        %     came back 47.10181578 against a true 10.86895777 -- a 4x over-estimate. Through
+        %     assignSide that cell is refused instead (assertWinnerHoldsAtInfinity), and the
+        %     over-estimate is gone.
+        %   * it BROKE a case that was correct. conjSymFreeTest's A.5 three-convex-edge triangle
+        %     {(5/2,3/2),(0,0),(1/2,1)} carrying x*y answers to 3.6e-15 of the closed-form
+        %     bilinear sup over the whole probe grid under the centroid read, and REFUSES through
+        %     assignSide: its cell straddles {f1=f2} too, but the straddle does not reach the
+        %     assembled answer. Trading a correct answer for a refusal is not an improvement.
+        %
+        % So the backstop is right that both cells straddle and wrong that both are unusable, and
+        % the real fix is upstream: `splitCell` reaches this branch only when it found ONE boundary
+        % crossing, and a cell whose splitting curve leaves through the RECESSION CONE genuinely
+        % has one finite crossing and two parts. splitUnboundedAtOneCrossing is meant to catch
+        % exactly that and declined here. Make it succeed and neither cell needs a winner read off
+        % a centroid. `TODO.md` G10, `DECISIONS.md` 2026-08-25 (G10).
         if QuaPar.evalPoly(diffRow, mean(cell.V,1)) >= 0
             cellA.f = f1row;
         else

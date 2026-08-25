@@ -158,14 +158,39 @@ function rays = pieceRecessionRays(piece)
 end
 
 function tf = recessesAll(d, E, hasArc, Q, cc, V, ca, unb)
+% EXACT ARITHMETIC ON INEXACT DATA IS NOT AN EXACT DECISION, and this routine spent a long time
+% pretending otherwise. Its coefficients arrive as DOUBLES and are then lifted with sym(), so the
+% comparisons below are exact -- on numbers whose last bits are rounding noise. Two of them decide
+% the answer, and both mathematically compare against ZERO:
+%
+%   * A(d) = d*Q*d' is exactly 0 along a parabola's null direction, which for a half-strip piece is
+%     the very direction being tested. Measured on the G4 fixture, the SAME direction stored twice
+%     (dirIn and dirOut differ in the last bit) gave A = +4.4e-20 and A = -2.5e-17: one passed the
+%     `A < 0` test outright, the other was rejected, and because +4.4e-20 is not `== 0` the
+%     linear-term TIE-BREAK below -- the branch written precisely for this case -- never ran.
+%   * cross(E,d) is exactly 0 when d is along a ray edge, which again is this piece. Measured
+%     -5.6e-17, and `< 0` rejected the direction that every actual constraint admits.
+%
+% The result was a half-strip reporting recession along the NEGATIVE of its own declared ray --
+% the whole decision made by noise of order 1e-17. Compare against a tolerance scaled by the
+% operands instead, so "zero" means zero at the precision the data actually carries. That widens
+% the TIE case; it does not weaken it, because the tie is then settled by the linear term, which
+% is bounded away from zero here (measured |grad.d| = 8.1e-02).
+%
+% The header's claim of exactness survives where it is true: the tie-break, the chord side and the
+% veto all compare quantities that are genuinely bounded away from zero.
     tf = false;
+    dd = double(d);
     for m = 1:numel(E)
-        if logical(E{m}(1)*d(2) - E{m}(2)*d(1) < 0), return; end   % cross(E,d) < 0 -> not recessive
+        Em = double(E{m});
+        tolC = 1e-12 * max(1, norm(Em)) * max(1, norm(dd));
+        if logical(E{m}(1)*d(2) - E{m}(2)*d(1) < -tolC), return; end   % cross(E,d) < 0
     end
     if hasArc
         A = d*Q*d.';
-        if logical(A < 0), return; end                            % leading term < 0 -> not recessive
-        if logical(A == 0)
+        tolA = 1e-12 * max(1, norm(double(Q))) * max(1, norm(dd))^2;
+        if logical(A < -tolA), return; end                        % leading term < 0 -> not recessive
+        if logical(abs(A) <= tolA)
             % Tie: along the arc's null direction evalConic is linear in t; recessive iff its slope
             % from an interior point is >= 0. Interior point = a vertex not on the arc (or the arc
             % chord midpoint), stepped slightly inward is unnecessary -- the SLOPE is B = grad.d and

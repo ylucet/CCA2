@@ -105,16 +105,55 @@ function g = conjCPLQ(obj, idx, route)
             g  = QuaPol(f6);
             return
         end
-        % Not strictly convex: the conjugate is an indicator / parabolic object (a QuaPar),
-        % not a full-domain quadratic. Handled by the general pipeline (not yet implemented).
-        error('PLQ:conjCPLQ:notImplemented', ...
-            ['Conjugate of a non-strictly-convex full-domain quadratic yields an indicator ' ...
-             'or parabolic result (QuaPar), which is not implemented yet. See DESIGN.md II.5.1.']);
+        % NOT STRICTLY CONVEX. This used to be one lumped `notImplemented`, and that hid the fact
+        % that it is THREE different objects, only one of which is even the same KIND of gap. The
+        % mathematics is three lines in each case and is written out below; what none of them has
+        % is somewhere to be PUT. A QuaPol/QuaPar face is two-dimensional, and while the mesh does
+        % carry a `dim < 2` domain (nv=1 needle, nv=2/ne=1 segment-or-ray, both with nf=0), QuaPar
+        % `eval` locates a point on such a domain with `belongToEdge`, which is membership of a
+        % SEGMENT between two vertices -- so a whole LINE has no representation and a needle
+        % evaluates to +inf even at its own point. The route that could hold these is cPLQ's
+        % `region`, which takes equality constraints (`functionNDomain.addEq`), i.e. a
+        % QuaParCPLQ -- see `TODO.md` and `RETURN_TYPE.md`.
+        %
+        % Classified rather than implemented, so the next person starts from the answer.
+        evs  = sort(ev);
+        tolE = sqrt(eps) * max(1, norm(Q));
+        if evs(1) < -tolE
+            % A negative eigenvalue: f decreases without bound along that eigendirection, so no
+            % affine function minorises it, conv f = -inf, and f*(s) = +inf for EVERY s. dom f*
+            % is EMPTY -- not a lower-dimensional domain but no domain at all, which the mesh has
+            % no encoding for either (nf=0 already means "dim < 2", not "empty").
+            error('PLQ:conjCPLQ:conjugateHasEmptyDomain', ...
+                ['f has a negative curvature direction (eig(Q) = [%g %g]), so conv f = -inf and ' ...
+                 'f* = +inf everywhere. dom f* is EMPTY, which no QuaPol/QuaPar mesh encodes.'], ...
+                evs(1), evs(2));
+        elseif evs(2) <= tolE
+            % Q = 0: f is AFFINE, f(x) = <L,x> + kappa, and f* is the indicator of the single
+            % point L with value -kappa there. dom f* is a POINT.
+            error('PLQ:conjCPLQ:conjugateIsAPoint', ...
+                ['f is affine (Q = 0), so f* is the indicator of the single point ' ...
+                 's = (%g,%g) with f*(s) = %g there and +inf elsewhere. dom f* is a POINT: the ' ...
+                 'mesh has a needle domain (nv=1, ne=0) but QuaPar.eval returns +inf on it.'], ...
+                L(1), L(2), -kappa);
+        else
+            % Q is PSD of rank 1: along the null direction n of Q, f is affine with slope <L,n>,
+            % so the sup is finite only where <s-L,n> = 0. dom f* is that LINE, and on it
+            % f*(s) = 1/2 (s-L)' pinv(Q) (s-L) - kappa.
+            n = null((Q+Q.')/2);
+            n = n(:,1).' / norm(n(:,1));
+            error('PLQ:conjCPLQ:conjugateIsALine', ...
+                ['Q is positive semidefinite of rank 1 (eig(Q) = [%g %g]), so f* is finite only ' ...
+                 'on the LINE <s - L, n> = 0 with n = (%g,%g), where ' ...
+                 'f*(s) = 1/2 (s-L)'' pinv(Q) (s-L) - %g. dom f* is a line: QuaPar''s dim<2 ' ...
+                 'domain is a SEGMENT or ray between two vertices, not a line.'], ...
+                evs(1), evs(2), n(1), n(2), kappa);
+        end
     end
 
     % ---- Case B: a single bounded-triangle piece -----------------------------------------
     if obj.nf == 1 && obj.nv == 3 && obj.ne == 3 && obj.isDomBounded
-        g = conjSingleTriangle(obj);
+        g = conjSingleTriangle(obj, forceNumeric);
         verifyEdgeBound(g, obj);
         return
     end
@@ -264,7 +303,15 @@ function recordFallback(why)
 end
 
 % ================================================================================================
-function g = conjSingleTriangle(obj)
+function g = conjSingleTriangle(obj, forceNumeric)
+% forceNumeric: rethrow instead of falling through to the symbolic Case C. See the ROUTE note at
+% the top of this file -- `route='numeric'` exists so that "conj is sym-free except as a fallback"
+% is TESTABLE, and this function ignored it, so Case B took the symbolic fallback under every
+% route. Measured 2026-08-25: a `route='numeric'` call on TODO.md G4's triangle spent 420 s in
+% cPLQ before failing there, when the numeric route had already refused it in about 3 s. Callers
+% that are themselves inside the numeric path (conjEnvelopeViaCPLQ's per-triangle loop) pass
+% false, because for them the fallback is the point.
+    if nargin < 2, forceNumeric = false; end
 % Step 2 (+ Step 1/3 when needed) for a single bounded-triangle piece, following the "sidestep"
 % noted in conjPieceCPLQ's header: since f*=(conv f)*, try to conjugate the ORIGINAL piece
 % directly first (conjPieceCPLQ handles affine, PD/rank-1-PSD convex, and indefinite with 0 or 1
@@ -294,6 +341,7 @@ function g = conjSingleTriangle(obj)
         end
         return
     catch ME
+        if forceNumeric, rethrow(ME); end
         if ~strcmp(ME.identifier, 'conjPieceCPLQ:notImplemented') && ...
            ~strncmp(ME.identifier, 'maxQuaPar:', 10)
             rethrow(ME);
@@ -340,7 +388,7 @@ function g = conjPolygonalDomain(obj)
         end
         tris = faceTrianglesCCW(obj, i);
         for t = 1:numel(tris)
-            gt = conjSingleTriangle(QuaPol(tris{t}, E3, f6, F3));
+            gt = conjSingleTriangle(QuaPol(tris{t}, E3, f6, F3), false);
             if ~(isa(gt, 'QuaPar') || isa(gt, 'QuaPol') || isa(gt, 'RatPol'))
                 error('PLQ:conjCPLQ:notImplemented', ...
                     ['triangle %d of face %d conjugated to a %s (its own Step 2 fell back to ' ...

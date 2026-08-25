@@ -164,10 +164,46 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(q.eval(s'), direct, 'AbsTol', 1e-10);
         end
 
-        function indefiniteQuadraticNotImplemented(testCase)
-            % f = xy is indefinite; its conjugate is not a full-domain quadratic (QuaPar, TODO).
-            p = QuaPol([0 1 0 0 0 0]);
-            testCase.verifyError(@() p.conj('cplq'), 'PLQ:conjCPLQ:notImplemented');
+        function fullDomainNonStrictlyConvexIsClassifiedNotLumped(testCase)
+        % A full-domain quadratic that is not strictly convex used to raise ONE
+        % `PLQ:conjCPLQ:notImplemented` for what are three different objects. They are still all
+        % refused -- the mathematics is closed form but none of the three has a representation --
+        % but the refusal now says WHICH, and its message carries the closed form.
+        %
+        % TEST CHANGED 2026-08-25: `indefiniteQuadraticNotImplemented` asserted the generic
+        % identifier on the f = xy row of this table. The input is still refused; the identifier
+        % is now specific, and pinning the generic one would have blocked the classification.
+        %
+        %   Q indefinite   -> conv f = -inf, so f* = +inf everywhere: dom f* is EMPTY
+        %   Q = 0 (affine) -> f* is the indicator of the single point L: dom f* is a POINT
+        %   Q PSD rank 1   -> f* finite only on a LINE through L along range(Q)
+            cases = {
+                [0  1  0  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'f = xy, indefinite'
+                [-2 0 -2  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'concave'
+                [0  0  0  3 -2 5], 'PLQ:conjCPLQ:conjugateIsAPoint',      'affine, Q = 0'
+                [1  0  0  0 0 0], 'PLQ:conjCPLQ:conjugateIsALine',        'PSD rank 1, x^2/2'
+                [1  1  1  2 0 0], 'PLQ:conjCPLQ:conjugateIsALine',        'PSD rank 1, (x+y)^2/2'
+            };
+            for i = 1:size(cases,1)
+                f6 = cases{i,1}; want = cases{i,2}; what = cases{i,3};
+                testCase.verifyError(@() QuaPol(f6).conj('cplq'), want, ...
+                    sprintf('%s should raise %s', what, want));
+            end
+        end
+
+        function theFullDomainRefusalsCarryTheClosedForm(testCase)
+        % The messages are the specification, so they are asserted rather than left to drift: the
+        % affine case must name the point f* is supported on and its value there.
+        % f = 3x - 2y + 5, so f* is the indicator of (3,-2) with value -5.
+            try
+                QuaPol([0 0 0 3 -2 5]).conj('cplq');
+                testCase.verifyFail('an affine full-domain quadratic was not refused');
+            catch ME
+                testCase.verifySubstring(ME.message, '(3,-2)', ...
+                    'the refusal must name the point dom f* reduces to');
+                testCase.verifySubstring(ME.message, '-5', ...
+                    'the refusal must name f* at that point');
+            end
         end
 
         function affineTriangleViaOrchestrator(testCase)
