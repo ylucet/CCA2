@@ -279,4 +279,277 @@ lemma cross_eq_zero_of_forall {W : Finset Plane} {x v D : Plane} {lam : Plane �
   simp only [cross, Prod.fst_sub, Prod.snd_sub] at hu0
   linear_combination lam u * hu0
 
+/-! ### Directions inside a piece: weight representations
+
+Phase 7. A point of a piece is `∑ λ_v v + ∑ μ_r r` over a vertex support `W` and
+a ray support `S`. A *direction* along which the point may be moved is recorded
+the same way, by how it changes those weights: the vertex weights must change by
+a vector summing to zero, since they are normalised; the ray weights may change
+freely, since they are not.
+
+Recording directions this way is what lets one induction cover both kinds. A
+difference of two vertices and a recession direction differ only in which of the
+two weight families they touch, and every lemma below is stated for the record
+rather than for either kind. -/
+
+/-- `gam` and `nu` move the weights of a point of `conv W + cone S` along `d`. -/
+def IsDirRep (W S : Finset Plane) (gam nu : Plane → ℝ) (d : Plane) : Prop :=
+  (∑ v ∈ W, gam v) = 0 ∧ (∑ v ∈ W, gam v • v) + (∑ r ∈ S, nu r • r) = d
+
+namespace IsDirRep
+
+variable {W S : Finset Plane} {gam nu gam' nu' : Plane → ℝ} {d d' : Plane}
+
+lemma add (h : IsDirRep W S gam nu d) (h' : IsDirRep W S gam' nu' d') :
+    IsDirRep W S (fun z => gam z + gam' z) (fun z => nu z + nu' z) (d + d') := by
+  refine ⟨?_, ?_⟩
+  · rw [Finset.sum_add_distrib, h.1, h'.1, add_zero]
+  · have hv : (∑ v ∈ W, (gam v + gam' v) • v)
+        = (∑ v ∈ W, gam v • v) + (∑ v ∈ W, gam' v • v) := by
+      rw [← Finset.sum_add_distrib]
+      exact Finset.sum_congr rfl fun v _ => by module
+    have hr : (∑ r ∈ S, (nu r + nu' r) • r)
+        = (∑ r ∈ S, nu r • r) + (∑ r ∈ S, nu' r • r) := by
+      rw [← Finset.sum_add_distrib]
+      exact Finset.sum_congr rfl fun r _ => by module
+    rw [hv, hr, ← h.2, ← h'.2]
+    abel
+
+lemma smul (h : IsDirRep W S gam nu d) (c : ℝ) :
+    IsDirRep W S (fun z => c * gam z) (fun z => c * nu z) (c • d) := by
+  refine ⟨?_, ?_⟩
+  · rw [← Finset.mul_sum, h.1, mul_zero]
+  · have hv : (∑ v ∈ W, (c * gam v) • v) = c • (∑ v ∈ W, gam v • v) := by
+      rw [Finset.smul_sum]
+      exact Finset.sum_congr rfl fun v _ => by rw [mul_smul]
+    have hr : (∑ r ∈ S, (c * nu r) • r) = c • (∑ r ∈ S, nu r • r) := by
+      rw [Finset.smul_sum]
+      exact Finset.sum_congr rfl fun r _ => by rw [mul_smul]
+    rw [hv, hr, ← h.2, smul_add]
+
+end IsDirRep
+
+/-- A difference of two vertices of the support is a direction. -/
+lemma isDirRep_vert_sub {W S : Finset Plane} {v w : Plane} (hv : v ∈ W) (hw : w ∈ W) :
+    IsDirRep W S (fun z => (if z = w then (1 : ℝ) else 0) - (if z = v then (1 : ℝ) else 0))
+      (fun _ => 0) (w - v) := by
+  classical
+  constructor
+  · rw [Finset.sum_sub_distrib]
+    simp [Finset.sum_ite_eq', hv, hw]
+  · have hexp : ∀ z : Plane,
+        ((if z = w then (1 : ℝ) else 0) - (if z = v then (1 : ℝ) else 0)) • z
+        = (if z = w then (1 : ℝ) else 0) • z - (if z = v then (1 : ℝ) else 0) • z := by
+      intro z; module
+    simp only [hexp]
+    rw [Finset.sum_sub_distrib]
+    simp [ite_smul, Finset.sum_ite_eq', hv, hw]
+
+/-- A recession direction of the support is a direction. -/
+lemma isDirRep_ray {W S : Finset Plane} {r : Plane} (hr : r ∈ S) :
+    IsDirRep W S (fun _ => 0) (fun z => if z = r then (1 : ℝ) else 0) r := by
+  classical
+  refine ⟨by simp, ?_⟩
+  simp [ite_smul, Finset.sum_ite_eq', hr]
+
+/-! ### Membership of a piece, from weights -/
+
+/-- A nonnegative normalised combination of a vertex subset, plus a nonnegative
+combination of a ray subset, lies in the piece. -/
+lemma mem_T_of_weights {p : QuaPiece} {W S : Finset Plane} {lam mu : Plane → ℝ} {x : Plane}
+    (hWV : W ⊆ p.verts) (hSR : S ⊆ p.rays)
+    (h0 : ∀ v ∈ W, 0 ≤ lam v) (h1 : (∑ v ∈ W, lam v) = 1) (hm0 : ∀ r ∈ S, 0 ≤ mu r)
+    (hx : (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x) : x ∈ p.T := by
+  classical
+  refine ⟨∑ v ∈ W, lam v • v, ?_, ∑ r ∈ S, mu r • r, ?_, hx⟩
+  · exact convexHull_mono (Finset.coe_subset.2 hWV) (mem_convexHull_of_weights h0 h1 rfl)
+  · refine ⟨fun z => if z ∈ S then mu z else 0, ?_, ?_⟩
+    · intro z _
+      by_cases hz : z ∈ S
+      · simpa [hz] using hm0 z hz
+      · simp [hz]
+    · rw [← Finset.sum_subset hSR (fun z _ hz => by simp [hz])]
+      exact Finset.sum_congr rfl fun z hz => by simp [hz]
+
+/-- **Stepping along a direction.** If the perturbed weights stay nonnegative,
+the perturbed point stays in the piece. -/
+lemma mem_T_of_perturb {p : QuaPiece} {W S : Finset Plane} {lam mu gam nu : Plane → ℝ}
+    {x d : Plane} {t : ℝ}
+    (hWV : W ⊆ p.verts) (hSR : S ⊆ p.rays)
+    (h1 : (∑ v ∈ W, lam v) = 1)
+    (hx : (∑ v ∈ W, lam v • v) + (∑ r ∈ S, mu r • r) = x)
+    (hrep : IsDirRep W S gam nu d)
+    (hl : ∀ v ∈ W, 0 ≤ lam v + t * gam v) (hm : ∀ r ∈ S, 0 ≤ mu r + t * nu r) :
+    x + t • d ∈ p.T := by
+  refine mem_T_of_weights hWV hSR hl ?_ hm ?_
+  · rw [Finset.sum_add_distrib, h1, ← Finset.mul_sum, hrep.1, mul_zero, add_zero]
+  · have hv : (∑ v ∈ W, (lam v + t * gam v) • v)
+        = (∑ v ∈ W, lam v • v) + t • (∑ v ∈ W, gam v • v) := by
+      rw [Finset.smul_sum, ← Finset.sum_add_distrib]
+      exact Finset.sum_congr rfl fun v _ => by rw [← mul_smul]; module
+    have hr : (∑ r ∈ S, (mu r + t * nu r) • r)
+        = (∑ r ∈ S, mu r • r) + t • (∑ r ∈ S, nu r • r) := by
+      rw [Finset.smul_sum, ← Finset.sum_add_distrib]
+      exact Finset.sum_congr rfl fun r _ => by rw [← mul_smul]; module
+    rw [hv, hr, ← hx, ← hrep.2, smul_add]
+    abel
+
+/-- **Two-sided room to move.** With every weight strictly positive there is a
+neighbourhood of `0` in which the step may be taken in either direction. This is
+what upgrades "`x` is a maximum" to a first-order condition. -/
+lemma exists_perturb_radius {W S : Finset Plane} {lam mu : Plane → ℝ} (gam nu : Plane → ℝ)
+    (hlam : ∀ v ∈ W, 0 < lam v) (hmu : ∀ r ∈ S, 0 < mu r) :
+    ∃ ε > (0 : ℝ), ∀ t : ℝ, |t| < ε →
+      (∀ v ∈ W, 0 ≤ lam v + t * gam v) ∧ (∀ r ∈ S, 0 ≤ mu r + t * nu r) := by
+  classical
+  set A : Finset ℝ :=
+    insert (1 : ℝ) ((W.image fun v => lam v / (|gam v| + 1))
+      ∪ (S.image fun r => mu r / (|nu r| + 1))) with hA
+  have hAne : A.Nonempty := ⟨1, by simp [hA]⟩
+  set ε : ℝ := A.min' hAne with hε
+  have hmem : ε ∈ A := A.min'_mem hAne
+  have hpos : 0 < ε := by
+    rw [hA] at hmem
+    simp only [Finset.mem_insert, Finset.mem_union, Finset.mem_image] at hmem
+    rcases hmem with h | h | h
+    · rw [h]; norm_num
+    · obtain ⟨v, hv, hveq⟩ := h
+      rw [← hveq]; exact div_pos (hlam v hv) (by positivity)
+    · obtain ⟨r, hr, hreq⟩ := h
+      rw [← hreq]; exact div_pos (hmu r hr) (by positivity)
+  refine ⟨ε, hpos, fun t ht => ⟨?_, ?_⟩⟩
+  · intro v hv
+    have hin : lam v / (|gam v| + 1) ∈ A := by
+      rw [hA]
+      simp only [Finset.mem_insert, Finset.mem_union, Finset.mem_image]
+      exact Or.inr (Or.inl ⟨v, hv, rfl⟩)
+    have hle : ε ≤ lam v / (|gam v| + 1) := A.min'_le _ hin
+    have hden : (0 : ℝ) < |gam v| + 1 := by positivity
+    rw [le_div_iff₀ hden] at hle
+    have h1 : |t * gam v| ≤ |t| * (|gam v| + 1) := by
+      rw [abs_mul]
+      exact mul_le_mul_of_nonneg_left (by linarith [le_abs_self (gam v)]) (abs_nonneg t)
+    have h2 : |t| * (|gam v| + 1) < ε * (|gam v| + 1) := mul_lt_mul_of_pos_right ht hden
+    have h3 : |t * gam v| < lam v := by linarith
+    have h4 : -(lam v) < t * gam v := by
+      have := neg_abs_le (t * gam v); linarith
+    linarith
+  · intro r hr
+    have hin : mu r / (|nu r| + 1) ∈ A := by
+      rw [hA]
+      simp only [Finset.mem_insert, Finset.mem_union, Finset.mem_image]
+      exact Or.inr (Or.inr ⟨r, hr, rfl⟩)
+    have hle : ε ≤ mu r / (|nu r| + 1) := A.min'_le _ hin
+    have hden : (0 : ℝ) < |nu r| + 1 := by positivity
+    rw [le_div_iff₀ hden] at hle
+    have h1 : |t * nu r| ≤ |t| * (|nu r| + 1) := by
+      rw [abs_mul]
+      exact mul_le_mul_of_nonneg_left (by linarith [le_abs_self (nu r)]) (abs_nonneg t)
+    have h2 : |t| * (|nu r| + 1) < ε * (|nu r| + 1) := mul_lt_mul_of_pos_right ht hden
+    have h3 : |t * nu r| < mu r := by linarith
+    have h4 : -(mu r) < t * nu r := by
+      have := neg_abs_le (t * nu r); linarith
+    linarith
+
+/-! ### Travelling until a weight first vanishes, with rays -/
+
+/-- **Forward descent.** If some weight is strictly decreasing along the
+direction, travel to the first zero. -/
+lemma exists_descent_fwd {W S : Finset Plane} {lam mu gam nu : Plane → ℝ}
+    (hlam : ∀ v ∈ W, 0 < lam v) (hmu : ∀ r ∈ S, 0 < mu r)
+    (hneg : (∃ v ∈ W, gam v < 0) ∨ (∃ r ∈ S, nu r < 0)) :
+    ∃ t : ℝ, 0 < t ∧ (∀ v ∈ W, 0 ≤ lam v + t * gam v) ∧ (∀ r ∈ S, 0 ≤ mu r + t * nu r) ∧
+      ((∃ v₀ ∈ W, lam v₀ + t * gam v₀ = 0) ∨ (∃ r₀ ∈ S, mu r₀ + t * nu r₀ = 0)) := by
+  classical
+  set A : Finset ℝ :=
+    ((W.filter fun v => gam v < 0).image fun v => lam v / (-gam v))
+      ∪ ((S.filter fun r => nu r < 0).image fun r => mu r / (-nu r)) with hA
+  have hAne : A.Nonempty := by
+    rcases hneg with ⟨v, hv, hvneg⟩ | ⟨r, hr, hrneg⟩
+    · refine ⟨lam v / (-gam v), ?_⟩
+      rw [hA]
+      refine Finset.mem_union_left _ (Finset.mem_image.2 ⟨v, ?_, rfl⟩)
+      exact Finset.mem_filter.2 ⟨hv, hvneg⟩
+    · refine ⟨mu r / (-nu r), ?_⟩
+      rw [hA]
+      refine Finset.mem_union_right _ (Finset.mem_image.2 ⟨r, ?_, rfl⟩)
+      exact Finset.mem_filter.2 ⟨hr, hrneg⟩
+  set t : ℝ := A.min' hAne with ht
+  have hmem : t ∈ A := A.min'_mem hAne
+  have htpos : 0 < t := by
+    rw [hA] at hmem
+    simp only [Finset.mem_union, Finset.mem_image, Finset.mem_filter] at hmem
+    rcases hmem with ⟨v, ⟨hv, hvneg⟩, hveq⟩ | ⟨r, ⟨hr, hrneg⟩, hreq⟩
+    · rw [← hveq]; exact div_pos (hlam v hv) (by linarith)
+    · rw [← hreq]; exact div_pos (hmu r hr) (by linarith)
+  refine ⟨t, htpos, ?_, ?_, ?_⟩
+  · intro v hv
+    by_cases hvneg : gam v < 0
+    · have hin : lam v / (-gam v) ∈ A := by
+        rw [hA]
+        refine Finset.mem_union_left _ (Finset.mem_image.2 ⟨v, ?_, rfl⟩)
+        exact Finset.mem_filter.2 ⟨hv, hvneg⟩
+      have hle : t ≤ lam v / (-gam v) := A.min'_le _ hin
+      rw [le_div_iff₀ (by linarith)] at hle
+      linarith
+    · have : 0 ≤ t * gam v := mul_nonneg htpos.le (not_lt.1 hvneg)
+      linarith [hlam v hv]
+  · intro r hr
+    by_cases hrneg : nu r < 0
+    · have hin : mu r / (-nu r) ∈ A := by
+        rw [hA]
+        refine Finset.mem_union_right _ (Finset.mem_image.2 ⟨r, ?_, rfl⟩)
+        exact Finset.mem_filter.2 ⟨hr, hrneg⟩
+      have hle : t ≤ mu r / (-nu r) := A.min'_le _ hin
+      rw [le_div_iff₀ (by linarith)] at hle
+      linarith
+    · have : 0 ≤ t * nu r := mul_nonneg htpos.le (not_lt.1 hrneg)
+      linarith [hmu r hr]
+  · rw [hA] at hmem
+    simp only [Finset.mem_union, Finset.mem_image, Finset.mem_filter] at hmem
+    rcases hmem with ⟨v, ⟨hv, hvneg⟩, hveq⟩ | ⟨r, ⟨hr, hrneg⟩, hreq⟩
+    · refine Or.inl ⟨v, hv, ?_⟩
+      have hne : (-gam v) ≠ 0 := by linarith
+      have hkey : lam v / (-gam v) * gam v = -lam v := by
+        rw [div_mul_eq_mul_div, div_eq_iff hne]; ring
+      rw [← hveq, hkey]; ring
+    · refine Or.inr ⟨r, hr, ?_⟩
+      have hne : (-nu r) ≠ 0 := by linarith
+      have hkey : mu r / (-nu r) * nu r = -mu r := by
+        rw [div_mul_eq_mul_div, div_eq_iff hne]; ring
+      rw [← hreq, hkey]; ring
+
+/-- **The descent.** A nonzero weight change moves the point onto a proper face,
+in one direction or the other. Which direction is free, and that is exactly what
+the singular case of the selection lemma needs: travelling along the kernel of
+the Hessian costs nothing either way. -/
+lemma exists_descent_gen {W S : Finset Plane} {lam mu gam nu : Plane → ℝ}
+    (hlam : ∀ v ∈ W, 0 < lam v) (hmu : ∀ r ∈ S, 0 < mu r)
+    (hne : (∃ v ∈ W, gam v ≠ 0) ∨ (∃ r ∈ S, nu r ≠ 0)) :
+    ∃ t : ℝ, (∀ v ∈ W, 0 ≤ lam v + t * gam v) ∧ (∀ r ∈ S, 0 ≤ mu r + t * nu r) ∧
+      ((∃ v₀ ∈ W, lam v₀ + t * gam v₀ = 0) ∨ (∃ r₀ ∈ S, mu r₀ + t * nu r₀ = 0)) := by
+  by_cases hneg : (∃ v ∈ W, gam v < 0) ∨ (∃ r ∈ S, nu r < 0)
+  · obtain ⟨t, _, h1, h2, h3⟩ := exists_descent_fwd hlam hmu hneg
+    exact ⟨t, h1, h2, h3⟩
+  · push Not at hneg
+    have hneg' : (∃ v ∈ W, (-gam v) < 0) ∨ (∃ r ∈ S, (-nu r) < 0) := by
+      rcases hne with ⟨v, hv, hvne⟩ | ⟨r, hr, hrne⟩
+      · exact Or.inl ⟨v, hv, by
+          have := hneg.1 v hv; rcases lt_trichotomy (gam v) 0 with h | h | h
+          · exact absurd h (not_lt.2 this)
+          · exact absurd h hvne
+          · linarith⟩
+      · exact Or.inr ⟨r, hr, by
+          have := hneg.2 r hr; rcases lt_trichotomy (nu r) 0 with h | h | h
+          · exact absurd h (not_lt.2 this)
+          · exact absurd h hrne
+          · linarith⟩
+    obtain ⟨t, _, h1, h2, h3⟩ :=
+      exists_descent_fwd (gam := fun z => -gam z) (nu := fun z => -nu z) hlam hmu hneg'
+    refine ⟨-t, fun v hv => by have := h1 v hv; linarith [this], fun r hr => by
+      have := h2 r hr; linarith [this], ?_⟩
+    rcases h3 with ⟨v₀, hv₀, he⟩ | ⟨r₀, hr₀, he⟩
+    · exact Or.inl ⟨v₀, hv₀, by linarith [he]⟩
+    · exact Or.inr ⟨r₀, hr₀, by linarith [he]⟩
+
 end QuaConProof

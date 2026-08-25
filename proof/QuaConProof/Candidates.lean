@@ -110,6 +110,11 @@ def vertexBranch (q : Quad) (v : Plane) : Quad :=
 exactly when this is positive. -/
 def edgeCurv (q : Quad) (v w : Plane) : ℝ := q.alongCurv (w - v)
 
+/-- Along a recession direction the curvature is that of the direction itself. -/
+@[simp] lemma edgeCurv_add (q : Quad) (v r : Plane) :
+    edgeCurv q v (v + r) = q.alongCurv r := by
+  simp only [edgeCurv, add_sub_cancel_left]
+
 /-- The slope of `ψ` at `v` along the line towards `w`. -/
 def edgeSlope (q : Quad) (v w s : Plane) : ℝ := dot s (w - v) - dot (q.gradAt v) (w - v)
 
@@ -221,10 +226,20 @@ theorem interiorBranch_eval (q : Quad) (s : Plane) (hD : q.hessDet ≠ 0) :
 
 namespace QuaPiece
 
-/-- The ordered pairs of vertices along which `q` is strictly concave-down, so
-that the edge branch exists. -/
+/-- The directions along which an edge branch is taken: from a vertex towards
+another vertex, or from a vertex along a recession direction.
+
+The second family is Phase 7. A maximiser whose face is the line `v + ℝr` has
+value `edgeBranch q v (v + r)`, exactly as a maximiser on the line through two
+vertices has value `edgeBranch q v w` — `edgeBranch` depends on `v` and on the
+direction `w - v` only, so one definition serves both. -/
+noncomputable def edgeCandidates (p : QuaPiece) : Finset (Plane × Plane) :=
+  (p.verts ×ˢ p.verts) ∪ (p.verts ×ˢ p.rays).image (fun vr : Plane × Plane => (vr.1, vr.1 + vr.2))
+
+/-- The ordered pairs along which `q` is strictly concave-down, so that the edge
+branch exists. -/
 noncomputable def edgePairs (p : QuaPiece) : Finset (Plane × Plane) :=
-  (p.verts ×ˢ p.verts).filter (fun vw : Plane × Plane => 0 < edgeCurv p.q vw.1 vw.2)
+  (p.edgeCandidates).filter (fun vw : Plane × Plane => 0 < edgeCurv p.q vw.1 vw.2)
 
 /-- The interior branch, when the Hessian is nonsingular; otherwise nothing. -/
 noncomputable def interiorPart (p : QuaPiece) : Finset Quad :=
@@ -249,7 +264,18 @@ lemma edgeBranch_mem_branches {p : QuaPiece} {v w : Plane} (hv : v ∈ p.verts)
     edgeBranch p.q v w ∈ p.branches := by
   refine Finset.mem_union.2 (Or.inl (Finset.mem_union.2 (Or.inr ?_)))
   refine Finset.mem_image.2 ⟨(v, w), ?_, rfl⟩
-  exact Finset.mem_filter.2 ⟨Finset.mem_product.2 ⟨hv, hw⟩, hcurv⟩
+  exact Finset.mem_filter.2
+    ⟨Finset.mem_union.2 (Or.inl (Finset.mem_product.2 ⟨hv, hw⟩)), hcurv⟩
+
+/-- **Phase 7.** The edge branch taken from a vertex along a recession
+direction is a candidate too. -/
+lemma edgeBranch_ray_mem_branches {p : QuaPiece} {v r : Plane} (hv : v ∈ p.verts)
+    (hr : r ∈ p.rays) (hcurv : 0 < edgeCurv p.q v (v + r)) :
+    edgeBranch p.q v (v + r) ∈ p.branches := by
+  refine Finset.mem_union.2 (Or.inl (Finset.mem_union.2 (Or.inr ?_)))
+  refine Finset.mem_image.2 ⟨(v, v + r), ?_, rfl⟩
+  refine Finset.mem_filter.2 ⟨Finset.mem_union.2 (Or.inr ?_), hcurv⟩
+  exact Finset.mem_image.2 ⟨(v, r), Finset.mem_product.2 ⟨hv, hr⟩, rfl⟩
 
 lemma interiorBranch_mem_branches {p : QuaPiece} (h : p.q.hessDet ≠ 0) :
     interiorBranch p.q ∈ p.branches := by
