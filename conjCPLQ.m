@@ -679,10 +679,42 @@ function g = conjMaxOfSubTriangles(env, obj)
 % `obj` is the ORIGINAL piece Step 1 was given -- needed because a split leaves RATIONAL faces
 % that Step 2 cannot conjugate directly; see conjFaceOrOriginal for why the original is an exact
 % substitute for them.
-    g = toQuaPar(conjFaceOrOriginal(env, 1, obj));
+% THE FOLD IS CROSS-CHECKED, for the reason assertFoldMatchesPieces gives at length: f* = max_k
+% (q_k + I_{T_k})* is an IDENTITY, so the per-face conjugates are their own oracle and a fold that
+% disagrees with them has dropped or over-extended a cell. conjPolygonalDomain has had this check
+% since the 4-cone fan incident; this route did not, and that is how G4 stayed silent.
+%
+% MEASURED on the G4 fixture (sweep case 21, a triangle carrying x*y plus an affine part).
+% Step 1 splits it into FOUR faces -- the nCE==3 cevian split, each half re-split -- two of them
+% slivers of area 8.7e-05 against 2.7e-02. Every face's own Step 2 conjugate is EXACT at the bad
+% point (1.032507658472, to 12 digits, four times over), and folding faces 2 and 3 keeps it; the
+% fourth fold returns 1.005089907622. So the defect is not the per-piece closed form -- which is
+% what `TODO.md` recorded -- but the assembly, and this is the check that says so.
+    gs = cell(1, env.nf);
+    for k = 1:env.nf
+        gs{k} = toQuaPar(conjFaceOrOriginal(env, k, obj));
+    end
+    g = gs{1};
     for k = 2:env.nf
-        gk = toQuaPar(conjFaceOrOriginal(env, k, obj));
-        g = maxQuaPar(g, gk);
+        g = maxQuaPar(g, gs{k});
+    end
+    % IT REFUSES, IT DOES NOT FALL BACK -- the same trade G6 made for the edge lower bound, and
+    % for the same measured reason. A `maxQuaPar:` identifier is what conjSingleTriangle's own
+    % catch tests, so raising one here would route this triangle to the symbolic Case C; on the
+    % G4 fixture that did not finish in 25 MINUTES, against 0.4 s for the refusal, and nothing
+    % says Case C's answer on it is the better one. Re-identify so the refusal propagates.
+%
+% UNDER THE SAME SWITCH AS THE EDGE BOUND. `CCA2_CONJ_VERIFY = 0` is the documented escape hatch
+% for "conj checks its answer against the definition and refuses when it is violated", and this is
+% exactly that kind of check, so it must answer to the same global -- otherwise turning the
+% verification off no longer gives back the old answer, which is the one thing the hatch is for.
+    global CCA2_CONJ_VERIFY %#ok<GVMIS>
+    if ~isempty(CCA2_CONJ_VERIFY) && ~CCA2_CONJ_VERIFY, return, end
+    try
+        assertFoldMatchesPieces(g, gs, obj);
+    catch ME
+        if ~strcmp(ME.identifier, 'maxQuaPar:assemblyDisagreesWithPieces'), rethrow(ME); end
+        error('PLQ:conjCPLQ:foldDroppedACell', '%s', ME.message);
     end
 end
 

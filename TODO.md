@@ -74,18 +74,46 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `maxQuaParTest/twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT`. The cross-check that caught
       it stays.
 
-- [ ] **G4 -- `conj` of `xy` on SOME triangles computes a MINORANT.** Since G6 it RAISES
-      (`PLQ:conjCPLQ:belowEdgeBound`) instead of returning it, so it can no longer reach a caller --
-      but the closed form is still short and that is what needs fixing. Pre-existing (reproduced on a
-      pristine `b9243d3`), found by `checkConjAgainstDefinition(24)` case 21: the answer is
-      `2.742e-02` BELOW the definition sup. A single triangle, so there is no fold and no
-      cross-piece max -- the per-piece closed form itself is short. Same SHAPE as `DECISIONS.md`
-      2026-08-19's A.4 minorant, recorded there for the symbolic path. Fixture in
-      `DECISIONS.md` 2026-08-25.
+- [ ] **G4 -- `conj` of `xy` on some triangles is wrong, and it is the FOLD.** RE-MEASURED
+      2026-08-25; the description below it replaced was wrong on both counts, so read this one.
+      Step 1 splits sweep case 21's triangle into **four** faces (the nCE==3 cevian split with each
+      half re-split), two of them slivers of area 8.7e-05 against 2.7e-02. **Every face's own Step 2
+      conjugate is EXACT** at the bad point -- 1.032507658472 to twelve digits, four times over --
+      and folding faces 2 and 3 keeps it; the FOURTH fold returns 1.005089907622. Pairwise folds of
+      any two faces are all exact: only folding a sliver into the ALREADY-ACCUMULATED mesh loses it,
+      which is why every two-operand `maxQuaParTest` passes.
+      **It is also far worse than 2.742e-02**, which was only the worst on a probe grid of radius
+      <= 6: the fold cross-check finds `f*(-10,0) = 47.10181578` against a true 10.86895777, an
+      OVER-estimate by a factor of four. The G6 edge bound is one-sided and cannot see that.
+      **Contained, not fixed.** `conjMaxOfSubTriangles` now cross-checks the fold against its own
+      pieces (the identity `f* = max_k (q_k + I_T_k)*` makes them their own oracle) and refuses by
+      name in 2.5 s as `PLQ:conjCPLQ:foldDroppedACell`, under `CCA2_CONJ_VERIFY` like the edge
+      bound. It REFUSES rather than falling back because Case C did not finish in 25 minutes on it.
+      **What is left is the `maxQuaPar` defect.** With `MAXQP_ASSERT = 2` this input raises two
+      invariant violations, both real: a piece whose declared rays are the NEGATIVE of the direction
+      its constraint region recedes along, and a piece carrying one operand's quadratic where the
+      other is larger by `Inf` along a ray. The second is what produces the wrong value.
+      `DECISIONS.md` 2026-08-25 (G4).
 
-- [ ] **G5 -- `MATLAB:badsubscript` on SOME indefinite 5-gons.** Pre-existing, same sweep, case 17.
-      A crash rather than a wrong answer, so it is the less dangerous of the two, but it is an
-      unguarded index and not a refusal by name.
+- [x] **G5 -- DONE 2026-08-25. `MATLAB:badsubscript`, and it was never 5-gon-specific.** The old
+      entry said "SOME indefinite 5-gons" from sweep case 17; a 40-case re-run found case 29, a
+      **4-gon**, crashing identically, so a fix aimed at 5-gons would have missed half of it.
+      `plq_1p.conjugate`'s FRAME-CHANGE branch copied the z-frame object's ENVELOPE (2 faces) while
+      replacing its `conjfia` -- the per-face block boundaries into `conjugates` -- with the single
+      block `[1 nConj+1]`; `maximumConjugate` sizes its loop from the envelope, so face 2 asked for
+      `conjfia(3)` of a 2-element array. Measured: `envelope faces = 2, numel(conjfia) = 2,
+      nConjugates = 11`. The branch now carries `objT.conjfia`, and `maximumConjugate` takes its
+      block count from `numel(conjfia)-1` -- the two arrays are not interchangeable, and the
+      SEPARABLE branch legitimately returns one block over a multi-face envelope.
+      **What the crash was hiding:** with the index repaired the cross-face symbolic max this input
+      always needed actually runs, and `maximumP` on its two envelope faces did **not finish in 25
+      minutes** -- measured both in the z-frame and after the read-back, with no difference. So case
+      29 goes from a fast wrong crash to a correct computation nobody can wait for; the route that
+      would make it fast is the NUMERIC one, which declines it today with `maxQuaPar:notImplemented`
+      (clipPolyByConic separating an unbounded cell). Pinned by
+      `conjCPLQTest/frameChangedPieceKeepsItsEnvelopeBLOCKS`, which asserts the INVARIANT rather
+      than the value, because a value assertion here is a test nobody can run.
+      `DECISIONS.md` 2026-08-25 (G5).
 
 - [x] **G6 -- DONE 2026-08-25. The EDGE lower bound is a DEFAULT refusal.** Along each
       edge of `dom f` the objective `<s,x> - q(x)` is a quadratic in the segment parameter, so its
@@ -100,13 +128,13 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       It RAISES rather than falling back because the symbolic route returns the same wrong value on
       the known-bad case. `DECISIONS.md` 2026-08-25 (final).
 
-- [ ] **G7 -- `plqStage`'s cache races under `suite.sh --verylong -j N`.** The job list is per TEST
-      and consecutive tests of a fixture are consecutive STAGES, so with `-j 2` stage 2 can `load`
-      the cache file stage 1 is still writing. A missing cache is safe (it recomputes); a partial
-      one throws. It produced one spurious red in the 2026-08-25 gate. Fix: `save` to a unique
-      temporary name in the same directory then `movefile` onto the real one, and make a failed
-      `load` fall back to recomputing. Verifying it needs a contended `--verylong` run, which is
-      why it was not done unattended. `DECISIONS.md` 2026-08-25 (last).
+- [x] **G7 -- DONE 2026-08-25. `plqStage`'s cache raced under `--verylong -j N`.** `save` now
+      writes a unique temporary name in the SAME directory and `movefile`s it onto the real one, so
+      a reader sees either the old file or the complete new one; and `load` is wrapped so an
+      unreadable or half-written cache is treated exactly as a missing one -- it recomputes.
+      NOT verified under contention: that needs the contended `--verylong` run this session was
+      asked not to make. The change is one-directional (it can only turn a throw into a recompute),
+      and the uncontended path is exercised by every staged test.
 
 - [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
       (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded
@@ -118,6 +146,32 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       edge; `ratQ` and `conicMeet` are the exact coefficient layer and the vertex-naming primitive
       it would use. Build it when a `conj` result actually needs a non-parabolic edge -- i.e. when
       G1 lands and a three-piece input with two non-adjacent pieces reaches Step 3.
+
+- [ ] **G8 -- `testPCE2`'s CONVEX ENVELOPE is wrong, one stage before the conjugate.** Found
+      2026-08-25 by splitting `testMaxMultiRegion`'s PCE family by stage: on the triangle
+      {(0,0),(1,0),(2,1)} carrying `x*y`, `pce2EnvelopeUnderestimates` fails in **26 s** --
+      Step 1's envelope does not underestimate `f` / touch it at the vertices. The known red
+      everyone quoted for this fixture was the CONJUGATE one (`f*(0,0) = 0.0429` against a sup of
+      0); `pce2ConjugateMatchesItsOwnSup` reproduces it in **36 s** and reports it as
+      `f*(1,1) = 1.125 BELOW the sampled sup 1.24999381`. Fix the envelope first: a conjugate
+      computed from a wrong envelope is not evidence of anything.
+
+- [ ] **G9 -- SIX of the seven `verylong` reds are still unnamed.** No verylong log was ever kept
+      and only `testMaxMultiRegion/testPCE2` is named anywhere in the repository, so "seven
+      pre-existing failures" has never been a list. Naming them costs one `--verylong -j 1` run.
+      Until that run happens no one can say whether any of the six is a `conj` defect.
+      The PCE family is now split by stage (below), which is what makes each of them cheap to
+      attack once named; `testBiconjugate` through `testBiconjugate8` are NOT split yet and are the
+      remaining monolithic block -- each still runs `.maximum` then `.biconjugateF` inline in one
+      method, uncached.
+
+- [ ] **G10 -- the `maxQuaPar` accumulated fold, which is what G4 actually is.** Two invariant
+      violations, both raised by `MAXQP_ASSERT = 2` on the G4 fixture and neither fixed: a piece
+      whose declared rays are the NEGATIVE of the direction its constraint region recedes along,
+      and a piece carrying one operand's quadratic where the other is larger by `Inf` along a ray.
+      Pairwise folds are exact; only folding into an accumulated mesh fails. `SUPPORT_MATRIX.md`
+      section 4.6's "assembly after an arc split: one side CURVED, the other STRAIGHT" is the
+      design note for the same area.
 
 ### Tools built on 2026-08-24, so they are not rebuilt
 

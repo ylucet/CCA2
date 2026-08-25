@@ -78,16 +78,36 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
         end
 
         function theRefusalFIRESOnTheKnownMinorantAndNowhereElse(testCase)
-        % G4's fixture: conj returns a value BELOW what the boundary of the domain alone already
-        % guarantees, so the answer is a minorant. It is refused by name.
+        % G4's fixture: conj's answer on it violates the definition, and it is refused by name
+        % rather than returned.
         %
-        % It RAISES rather than falling back, and that is measured: on this input the symbolic
-        % route returns the same wrong value to six digits, so the defect is in the shared Step 1 /
-        % Step 2 closed form and there is nothing to fall back to.
+        % CHANGED 2026-08-25, and the reason is a measurement that falsified this test's own
+        % header. It used to assert `PLQ:conjCPLQ:belowEdgeBound` specifically, on the stated
+        % grounds that "the defect is in the shared Step 1 / Step 2 closed form and there is
+        % nothing to fall back to". Both halves are wrong. Step 1 splits this triangle into FOUR
+        % faces and every one of their Step 2 conjugates is exact at the bad point --
+        % 1.032507658472 to twelve digits, four times over -- so the defect is in the FOLD.
+        % `conjMaxOfSubTriangles` now cross-checks the fold against those pieces, which is
+        % cheaper, runs earlier, and is strictly stronger: the edge bound is one-sided and sees
+        % only minorants, while the fold check catches this fixture OVER-estimating by a factor
+        % of four (f*(-10,0) = 47.10181578 against a true 10.86895777).
+        %
+        % So what this test may assert is that the fixture is REFUSED, not which of two checks
+        % gets there first -- pinning the loser of that race would block the better check. Both
+        % identifiers are named so a silent return still fails, and so does a third kind of error.
             W = [0.6057047151 0.9300751811; -0.3353947472 0.5251524293; -1.082499617 0.08448609744];
             f6 = [0 1 0 -0.7177913413 -0.6075645347 -0.6781835233];
             q = QuaPol(W, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]);
-            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:belowEdgeBound');
+            try
+                g = q.conj('cplq');
+                testCase.verifyFail(sprintf( ...
+                    ['the known-bad fixture returned a %s instead of being refused: neither the ' ...
+                     'fold cross-check nor the edge lower bound fired'], class(g)));
+            catch ME
+                testCase.verifyTrue(any(strcmp(ME.identifier, ...
+                    {'PLQ:conjCPLQ:foldDroppedACell', 'PLQ:conjCPLQ:belowEdgeBound'})), ...
+                    sprintf('refused with %s, which is neither definition check', ME.identifier));
+            end
         end
 
         function theRefusalCanBeTurnedOffWithTheGlobal(testCase)

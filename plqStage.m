@@ -45,17 +45,47 @@ classdef plqStage
         function out = get(fixture, stage, computeFcn)
         % The result of `stage` for `fixture`, from cache when fresh, else computed and saved.
         % computeFcn takes no arguments and returns the stage's output.
+        %
+        % CONCURRENCY (G7, 2026-08-25). `suite.sh --verylong -j N` builds its job list PER TEST,
+        % and consecutive tests of a fixture are consecutive STAGES of it, so two jobs can touch
+        % the same cache file at once: one `load`s while the other is part-way through `save`.
+        % A MISSING cache was always safe -- it recomputes -- but a PARTIAL one threw, and that
+        % produced a spurious red in the 2026-08-25 gate.
+        %
+        % Two changes make the file's appearance atomic and its absence harmless:
+        %   * WRITE to a unique temporary name in the SAME directory, then `movefile` onto the
+        %     real one. A rename within a directory is atomic, so a reader sees either the old
+        %     file or the complete new one, never a half-written one. Same directory matters --
+        %     a cross-volume move degrades to copy-then-delete and buys nothing.
+        %   * READ inside try/catch and fall back to recomputing. A cache that cannot be read is
+        %     by definition worth nothing, and recomputing is the behaviour for a cache that is
+        %     absent; a corrupt file left by an older run must not be more fatal than no file.
             f = fullfile(plqStage.cacheDir(), sprintf('%s_%s.mat', fixture, stage));
             if exist(f, 'file')
-                S = load(f);
-                if isfield(S, 'stamp') && S.stamp >= plqStage.sourceStamp()
-                    out = S.out;
-                    return
+                try
+                    S = load(f);
+                    if isfield(S, 'stamp') && S.stamp >= plqStage.sourceStamp()
+                        out = S.out;
+                        return
+                    end
+                catch
+                    % Unreadable or half-written: treat it exactly as a missing cache.
                 end
             end
             out = computeFcn();
             stamp = plqStage.sourceStamp(); %#ok<NASGU>
-            save(f, 'out', 'stamp', '-v7.3');
+            tmp = sprintf('%s.tmp%d_%s', f, feature('getpid'), stage);
+            save(tmp, 'out', 'stamp', '-v7.3');
+            % movefile over an existing target replaces it. If another job won the race and wrote
+            % the same stage first, either file is equally valid -- both were computed from the
+            % same sources under the same stamp -- so the loser silently overwrites the winner.
+            [ok, msg] = movefile(tmp, f, 'f');
+            if ~ok
+                if exist(tmp, 'file'), delete(tmp); end
+                warning('plqStage:cacheWrite', ...
+                    'could not install the %s/%s cache (%s); the value is still correct, the next run just recomputes it.', ...
+                    fixture, stage, msg);
+            end
         end
 
         function clear(fixture)

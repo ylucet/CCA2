@@ -675,6 +675,64 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                 testCase.verifyEqual(g.eval(s), truth, 'AbsTol', 1e-9, sprintf('s=%d', i));
             end
         end
+
+        function frameChangedPieceKeepsItsEnvelopeBLOCKS(testCase)
+        % G5, the `MATLAB:badsubscript` crash. Found by checkConjAgainstDefinition's random sweep
+        % (seed 20260824) as case 29, a 4-gon carrying x*y plus an affine part; case 17, a 5-gon,
+        % crashes the same way. NOT 5-gon-specific, which is what `TODO.md` recorded.
+        %
+        % THE DEFECT, measured. `plq_1p.conjugate` has a FRAME-CHANGE branch: an indefinite
+        % quadratic that is not literally x*y is redone in the z-frame where it is, and the answer
+        % read back. That branch copied the z-frame object's ENVELOPE (2 faces here) but replaced
+        % its `conjfia` -- the per-face block boundaries into `conjugates` -- with the single block
+        % [1 nConj+1]. `maximumConjugate` then loops over `size(envelope,2)` blocks and indexes
+        % `conjfia(i+1)`, so the second face asks for `conjfia(3)` of a 2-element array.
+        %
+        % Observed before the fix, both triangles of case 29:
+        %       envelope faces = 2, numel(conjfia) = 2, nConjugates = 11
+        %
+        % WHY THIS ASSERTS THE INVARIANT AND NOT THE VALUE. The end-to-end value test was written
+        % first and cannot be run: with the index repaired, `maximumConjugate` goes on to take the
+        % cross-face symbolic max this input always needed, and `maximumP` on this fixture's two
+        % envelope faces did not finish in 25 minutes -- measured both in the z-frame (rational
+        % coefficients) and after the read-back (surds), with no difference. So G5's crash was
+        % standing in front of a symbolic max that does not terminate in practical time, and a
+        % value assertion here would be a test nobody can run rather than a check on the defect.
+        %
+        % What IS the defect is the broken invariant, and it is exact, cheap and one stage early:
+        % after `conjugate`, `conjfia` must declare one block per envelope face plus a terminator.
+        % Before the fix this read 2 against 2 faces; it is the mismatch, not the crash, that the
+        % out-of-bounds index is a symptom of. Stage cost: ~40 s, all of it `conjugate`.
+            W = [ 0.21821484235235822 -0.82638242938157225
+                  0.38208834489342713 -1.0607216447629879
+                  1.2127969933300677  -0.6725798784826531
+                  0.20468128742742464 -0.69679526375087664];
+            f6 = [0 1 0 -0.73790021007093154 0.0021521450703039899 1.0552416486837408];
+            n = size(W,1);
+            E = [(1:n)', mod((1:n),n)'+1, ones(n,1)];
+            F = [ones(n,1), zeros(n,1)];
+            q = QuaPol(W, E, f6, F);
+
+            p = quaPolToPlq(q);
+            p = p.triangulate;
+            sawFrame = false;
+            for i = 1:p.nPieces
+                pc = p.pieces(i).convexEnvelope;
+                pc = pc.conjugate;
+                nFaces = size(pc.envelope, 2);
+                if isempty(pc.frame), continue, end
+                sawFrame = true;
+                testCase.verifyEqual(numel(pc.conjfia), nFaces + 1, sprintf( ...
+                    ['piece %d took the frame-change branch and its envelope has %d faces, so ' ...
+                     'conjfia must declare %d block boundaries; it declares %d. maximumConjugate ' ...
+                     'indexes conjfia(i+1) for i up to the face count, which is the G5 ' ...
+                     'MATLAB:badsubscript.'], i, nFaces, nFaces + 1, numel(pc.conjfia)));
+                testCase.verifyEqual(pc.conjfia(end), size(pc.conjugates,2) + 1, sprintf( ...
+                    'piece %d: the last block boundary must be one past the conjugate cells', i));
+            end
+            testCase.verifyTrue(sawFrame, ...
+                'no piece took the frame-change branch: the fixture no longer exercises G5');
+        end
     end
 
     methods (Static)

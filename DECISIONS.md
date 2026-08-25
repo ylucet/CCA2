@@ -2692,3 +2692,73 @@ minorant. That is the intended trade and the defect itself is still open.
 - **What it does not change:** references to `proof/...` in this file and in `MORNING.md` are the
   historical record of when the two lived together and are left as written. Only the live pointer
   in `.claude/SESSION_HANDOFF.md` was repointed.
+
+## 2026-08-25 (G5) — the frame-change branch collapsed the conjugate's BLOCK INDEX, and the crash was standing in front of an intractable symbolic max
+
+- **Found:** `MATLAB:badsubscript` in `plq_1p.maximumConjugate`, on `checkConjAgainstDefinition`
+  (seed 20260824) case 29 and case 17. `TODO.md` recorded it as "SOME indefinite 5-gons"; case 29
+  is a **4-gon**, so the shape class in that note is wrong and a fix aimed at 5-gons would have
+  missed half of it.
+- **The defect.** `conjugate`'s FRAME-CHANGE branch redoes an indefinite non-`x*y` piece in the
+  z-frame and reads the answer back. It copied the z-frame object's ENVELOPE -- two faces on this
+  input -- while replacing its `conjfia`, the per-face block boundaries into `conjugates`, with
+  the single block `[1 nConj+1]`. Measured, both triangles of case 29:
+
+        envelope faces = 2, numel(conjfia) = 2, nConjugates = 11
+
+  `maximumConjugate` sizes its loop from `size(envelope,2)` and indexes `conjfia(i+1)`, so face 2
+  asks for `conjfia(3)` of a 2-element array. The crash is the visible half; the other half is
+  that had it not crashed, the max ACROSS the z-frame's faces would never have been taken and the
+  piece would have returned a minorant.
+- **Fixed, in two places.** The branch carries `objT.conjfia` (`substituteFrame` is a per-cell
+  substitution, so order and count are preserved and objT's boundaries are the right ones), and
+  `maximumConjugate` now takes its block count from `numel(conjfia)-1` rather than from the
+  envelope. The two arrays are NOT interchangeable and only the ordinary path keeps them in step:
+  the SEPARABLE branch legitimately returns the whole conjugate as one block -- a mesh that
+  partitions the dual plane, already maximal -- over an envelope with several faces.
+- **REFUTED, same session: taking the max in the z-frame first.** The argument is sound -- the max
+  commutes with the read-back because `s -> M's - a` is an invertible affine map, and the z-frame
+  coefficients are rational where the substituted ones are surds over forty-digit integers. It
+  makes no difference: neither order finishes in **25 minutes** on case 29, because `maximumP` on
+  this fixture's two envelope faces is itself the intractable step. Do not retry; take the simpler
+  route and leave `conjugate`'s cost where it was (38 s, measured).
+- **What that means.** G5's crash was in front of a symbolic max that does not terminate in
+  practical time, so case 29 goes from a fast wrong CRASH to a correct computation nobody can wait
+  for. The answer for that family is the NUMERIC route, which declines it today with
+  `maxQuaPar:notImplemented` (clipPolyByConic separating an unbounded cell) -- that gap, not this
+  branch, is what would make it fast.
+- **Pinned by** `conjCPLQTest/frameChangedPieceKeepsItsEnvelopeBLOCKS`, which asserts the
+  INVARIANT (one block per envelope face plus a terminator) rather than the value, because a value
+  assertion here is a test nobody can run.
+
+## 2026-08-25 (G4) — the minorant is in the FOLD, not the closed form, and it is 4x, not 2.7e-02
+
+- **`TODO.md` said** "a single triangle, so there is no fold and no cross-piece max -- the
+  per-piece closed form itself is short". **Measured: false on both counts.**
+- **There IS a fold.** Step 1 splits sweep case 21's triangle into **four** faces -- the nCE==3
+  cevian split with each half re-split -- two of them slivers of area 8.7e-05 against 2.7e-02.
+  Every face's own Step 2 conjugate is EXACT at the bad point: 1.032507658472 to twelve digits,
+  four times over, against the closed-form bilinear sup. Folding faces 2 and 3 keeps it; the
+  **fourth fold** returns 1.005089907622. So the assembly is the defect and the closed form is not.
+- **Pairwise is fine, accumulated is not.** `max(face1,face4)`, `max(face1,face2)`,
+  `max(face1,face3)` and `max(face4,face1)` are each exact. Only folding a sliver into the
+  ALREADY-ACCUMULATED mesh loses the value, which is why every earlier two-operand `maxQuaPar`
+  test passed.
+- **It is far worse than the recorded number.** The 2.742e-02 deficit was the worst on a probe grid
+  of radius <= 6. The fold-vs-pieces cross-check finds `f*(-10,0) = 47.10181578` against a true
+  10.86895777 -- an **over-estimate by a factor of four**. The G6 edge lower bound cannot see it:
+  that bound is one-sided and catches minorants only.
+- **With `MAXQP_ASSERT = 2`** the fold raises two invariant violations on this input, both real and
+  neither fixed here: a piece whose declared rays are the NEGATIVE of the direction its constraint
+  region recedes along, and a piece that carries one operand's quadratic where the other is larger
+  by `Inf` along a ray. The second is the winner-domination failure that produces the wrong value.
+- **What landed:** `conjMaxOfSubTriangles` now cross-checks the fold against the pieces it was
+  built from, exactly as `conjPolygonalDomain` has since the 4-cone fan incident. The identity
+  `f* = max_k (q_k + I_{T_k})*` makes the pieces their own oracle, so this needs no reference
+  implementation.
+- **It REFUSES rather than falling back**, and that is the same trade G6 made. A `maxQuaPar:`
+  identifier would route the triangle to the symbolic Case C; measured, that did not finish in 25
+  minutes, against **2.5 s** for the refusal, and nothing says Case C's answer on it is better. The
+  new identifier is `PLQ:conjCPLQ:foldDroppedACell`.
+- **Still open:** the `maxQuaPar` defect itself. What is closed is the misdiagnosis -- and the
+  silence.

@@ -796,9 +796,39 @@ classdef plq_1p
                               symbolicFunction(pvars(1) * pvars(2)));
                 objT = objT.convexEnvelope;
                 objT = objT.conjugate;
+                % TAKE THE CROSS-FACE MAX IN THE Z-FRAME, before reading anything back (G5,
+                % 2026-08-25). This block used to copy objT's multi-face ENVELOPE while replacing
+                % its `conjfia` -- the per-face block boundaries into `conjugates` -- with the
+                % single block [1 nConj+1]. `maximumConjugate` sizes its loop from the envelope,
+                % so the second face asked for `conjfia(3)` of a 2-element array: that is the
+                % `MATLAB:badsubscript` recorded as G5, measured on a 4-gon and a 5-gon carrying
+                % x*y plus an affine part, and it is only the visible half. Had it not crashed,
+                % the max ACROSS the z-frame's faces would never have been taken and the piece
+                % would have returned a minorant.
+                %
+                % CARRY THE BOUNDARIES, do not take the max here. substituteFrame is a per-cell
+                % substitution -- it preserves the order and the count of `conjugates` -- so
+                % objT's own block boundaries are exactly the right ones, and the caller's
+                % `maximumConjugate` then does the max it was always supposed to do.
+                %
+                % Taking the max in the z-frame FIRST was tried, on the argument that it commutes
+                % with the read-back (s -> M's - a is an invertible affine map, so
+                % max_k (h_k o T) = (max_k h_k) o T) and that the z-frame coefficients are
+                % rational where the substituted ones are surds over forty-digit integers.
+                % MEASURED: it makes no difference -- neither order finishes in 25 minutes on the
+                % 4-gon, because `maximumP` on this fixture's two envelope faces is itself the
+                % intractable step. So take the simpler of two equal-cost routes and leave
+                % `conjugate`'s own cost where it was (38 s, measured).
+                %
+                % WHAT THIS MEANS FOR THE INPUT THAT FOUND IT. G5's crash was standing in front
+                % of a symbolic max that does not terminate in practical time, so case 29 goes
+                % from a fast wrong CRASH to a correct computation nobody can wait for. The real
+                % answer for that family is the NUMERIC route, which declines it today with
+                % `maxQuaPar:notImplemented` (clipPolyByConic separating an unbounded cell) --
+                % that gap, not this branch, is what would make it fast.
                 obj.envelope   = objT.envelope;      % kept in the z-frame, for printouts only
                 obj.conjugates = substituteFrame(objT.conjugates, obj.frame);
-                obj.conjfia = [1, size(obj.conjugates,2)+1];
+                obj.conjfia = objT.conjfia;
                 obj.lConj = true;
                 return
             end
@@ -1270,10 +1300,28 @@ classdef plq_1p
     methods % max
 
         function obj = maximumConjugate(obj)
-          for k = obj.conjfia(1):obj.conjfia(2)-1 
+        % CONTRACT. `conjfia` is the block index into `conjugates`: block b is
+        % conjugates(conjfia(b):conjfia(b+1)-1), and this returns the pointwise max over the
+        % blocks. The number of blocks is numel(conjfia)-1.
+        %
+        % NOT size(envelope,2) -- that was G5. They are two different arrays and only the
+        % ordinary path keeps them in step: `conjugate`'s SEPARABLE branch legitimately returns
+        % the whole conjugate as ONE block (a mesh that partitions the dual plane, already
+        % maximal) over an envelope that may have several faces, and its FRAME-CHANGE branch used
+        % to copy a multi-face envelope while collapsing conjfia to one block. Sizing the loop
+        % from the envelope indexed past the end of conjfia on both -- `MATLAB:badsubscript`,
+        % measured on a 4-gon and a 5-gon carrying x*y plus an affine part. Read the count from
+        % the array that defines the blocks.
+          nBlocks = numel(obj.conjfia) - 1;
+          if nBlocks < 1
+              error('plq_1p:maximumConjugate:noBlocks', ...
+                    ['conjfia declares no conjugate blocks (numel=%d); conjugate() has not ' ...
+                     'run on this piece.'], numel(obj.conjfia));
+          end
+          for k = obj.conjfia(1):obj.conjfia(2)-1
              obj.maxConjugate(k) = obj.conjugates(k);
           end
-          for i = 2:size(obj.envelope,2) %size(obj.conjfia,2)-1
+          for i = 2:nBlocks
               obj.maxConjugate = obj.maxConjugate * obj.conjugates(obj.conjfia(i):obj.conjfia(i+1)-1);
               %obj.maxConjugate.printM2
               %obj.maxConjugate.printL

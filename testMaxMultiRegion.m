@@ -146,6 +146,45 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             end
         end
 
+        function F = pce1Fixture()
+        % Was built inline inside testPCE1. A STATIC builder now, because the split tests each
+        % need the same fixture and a property set in one test method is not visible in the next.
+            x = sym('x'); y = sym('y');
+            F = plq(plq_1piece(domain([0,0;1,1;2,0], x, y), symbolicFunction(x*y)));
+        end
+
+        function F = pce2Fixture()
+        % Was built inline inside testPCE2. Same triangle as before: {(0,0),(1,0),(2,1)}.
+            x = sym('x'); y = sym('y');
+            F = plq(plq_1piece(domain([0,0;1,0;2,1], x, y), symbolicFunction(x*y)));
+        end
+
+        function stageEnvelope(tc, F, key)
+        % STAGE 1, per piece: Step 1's convex envelope underestimates f and touches it at the
+        % vertices. Cheapest stage of the pipeline and the first that can be wrong, so a broken
+        % envelope is caught by a test that never runs the conjugate.
+            p = plqStage.get(key, 'ce', @() F.convexEnvelope);
+            for i = 1:p.nPieces
+                plqCheck.envelopeUnderestimates(tc, p.pieces(i), sprintf('%s piece %d', key, i));
+            end
+        end
+
+        function stageConjugate(tc, F, key)
+        % STAGE 2, per piece: the conjugate of q + I_{T_i} is the sup over THAT piece alone.
+        %
+        % `.maxConjugate`, not `.conjugates` -- `conjugate` leaves one cell per ENVELOPE FACE and
+        % those still have to be maxed against each other, so comparing `.conjugates` to the sup
+        % reports every point "uncovered" (testcPLQ's own header records the same trap). This runs
+        % exactly the three calls `plq.maximum` runs per piece, and stops before the cross-piece
+        % max, so a red here is attributable to one piece's Step 1+2 and nothing else.
+            p = plqStage.get(key, 'pconj', @() F.convexEnvelope.conjugate);
+            for i = 1:p.nPieces
+                q = p.pieces(i).maximumConjugate;
+                plqCheck.conjugateMatchesSup(tc, q.maxConjugate, q.f.f, q.d.polygon.vars, q.d, ...
+                    testMaxMultiRegion.dualPoints(), sprintf('%s piece %d f*', key, i));
+            end
+        end
+
         function verifyBiconj(tc, p, orig, name)
         % f** is a convex underestimator of f on the domain.
             for k = 1:orig.nPieces
@@ -176,97 +215,111 @@ classdef testMaxMultiRegion < matlab.unittest.TestCase
             testMaxMultiRegion.verifyBiconj(testCase, p, testCase.PRect, 'PRect');
         end
 
-        function testPCE0 (testCase)
+        % ============================================================================
+        % THE PCE FAMILY, SPLIT BY STAGE (2026-08-25).
+        %
+        % These four were one method each: `.maximum`, then `.biconjugateF`, then a print, with the
+        % assertions bolted on in front of an early `return`. A red arrived as a single exception
+        % at the end of a quarter of an hour and named no stage, so fixing one meant re-running the
+        % whole pipeline after every edit.
+        %
+        % Split along the stages `plq.maximum` itself runs -- per piece convexEnvelope, then
+        % conjugate + maximumConjugate, then the cross-piece max, then biconjugateF -- with each
+        % stage asserting on ITS OWN output and caching it for the next (plqStage). Same fixtures,
+        % same definitions, same tolerances: this is a re-partition of the existing checks, not a
+        % new or weaker set. What it buys is that a broken envelope is now caught by a test that
+        % never runs the conjugate, and a broken biconjugate re-runs neither.
+        %
+        % The per-stage caches are keyed (fixture, stage) and invalidated by any .m edit, so the
+        % first run after a fix costs what it always did and every re-run inside that fix does not.
+        % ============================================================================
 
-            testCase.PCE0_2 = testCase.PCE0_2.maximum;
-            testCase.PCE0_2 = testCase.PCE0_2.biconjugateF;
-            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
-            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
-            % domain; f** must be a convex underestimator of f on it. Placed HERE,
-            % before the print/return block, because several of these tests return
-            % early -- an assertion after that would be dead code that always passes.
-            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE0_2, testCase.PCE0_2, 'PCE0_2');
-            testCase.verifyNotEmpty(testCase.PCE0_2.biconjugate, ...
-                'PCE0_2: biconjugateF produced no cells');
-            testMaxMultiRegion.verifyBiconj(testCase, testCase.PCE0_2, testCase.PCE0_2, 'PCE0_2');
-            testCase.PCE0_2.print;
-             testCase.PCE0_2.printDomainMaple;
-            return
-
-            
-           
-
+        function pce02EnvelopeUnderestimates (testCase)
+            testMaxMultiRegion.stageEnvelope(testCase, testCase.PCE0_2, 'MMR_PCE0_2');
         end
 
-
-        function testPCE3 (testCase)
-
-            testCase.PCE0_3 = testCase.PCE0_3.maximum;
-            testCase.PCE0_3 = testCase.PCE0_3.biconjugateF;
-            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
-            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
-            % domain; f** must be a convex underestimator of f on it. Placed HERE,
-            % before the print/return block, because several of these tests return
-            % early -- an assertion after that would be dead code that always passes.
-            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE0_3, testCase.PCE0_3, 'PCE0_3');
-            testCase.verifyNotEmpty(testCase.PCE0_3.biconjugate, ...
-                'PCE0_3: biconjugateF produced no cells');
-            testMaxMultiRegion.verifyBiconj(testCase, testCase.PCE0_3, testCase.PCE0_3, 'PCE0_3');
-            testCase.PCE0_3.print;
-             testCase.PCE0_3.printDomainMaple;
-            return
-
-            
-           
-
+        function pce02ConjugateMatchesItsOwnSup (testCase)
+            testMaxMultiRegion.stageConjugate(testCase, testCase.PCE0_2, 'MMR_PCE0_2');
         end
 
-
-        function testPCE1 (testCase)
-            d=domain([0,0;1,1;2,0],testCase.x,testCase.y);
-            testCase.PCE1 = plq(plq_1piece(d,symbolicFunction(testCase.x*testCase.y)));
-            % testCase.PCE1 = testCase.PCE1.convexEnvelope;
-             testCase.PCE1 = testCase.PCE1.maximum;
-             testCase.PCE1 = testCase.PCE1.biconjugateF;
-            % VERIFIED, not merely run. Step 3's max across the pieces IS f* of the
-            % union, so it must equal the sup of <s,x> - f(x) over the ORIGINAL
-            % domain; f** must be a convex underestimator of f on it. Placed HERE,
-            % before the print/return block, because several of these tests return
-            % early -- an assertion after that would be dead code that always passes.
-            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE1, testCase.PCE1, 'PCE1');
-            testCase.verifyNotEmpty(testCase.PCE1.biconjugate, ...
-                'PCE1: biconjugateF produced no cells');
-            testMaxMultiRegion.verifyBiconj(testCase, testCase.PCE1, testCase.PCE1, 'PCE1');
-            testCase.PCE1.print;
-            testCase.PCE1.printDomainMaple;
-            return
-
-            
-           
-
+        function pce02Step3MatchesTheSup (testCase)
+            p = plqStage.get('MMR_PCE0_2', 'max', @() testCase.PCE0_2.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'PCE0_2: Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, testCase.PCE0_2, 'PCE0_2');
         end
 
-        function testPCE2 (testCase)
-            d=domain([0,0;1,0;2,1],testCase.x,testCase.y);
-            testCase.PCE1 = plq(plq_1piece(d,symbolicFunction(testCase.x*testCase.y)));
-            % .maximum (which runs convexEnvelope internally) must run before
-            % printDomainMaple -- printDomainMaple's per-piece Mprint reads
-            % maxConjugate unconditionally, which stays empty (and crashes
-            % Mprint) if only convexEnvelope has run. .biconjugateF is left
-            % disabled: it hits a separate, still-open bug
-            % (functionNDomain.addEq errors with an unassigned output when
-            % the biconjugate result is empty for this domain).
-             testCase.PCE1 = testCase.PCE1.maximum;
-            % VERIFIED, not merely run -- see plqCheck. Step 3 only: biconjugateF is
-            % deliberately not called here (see the note above), so there is no f** to check.
-            testMaxMultiRegion.verifyStep3(testCase, testCase.PCE1, testCase.PCE1, 'PCE2 fixture');
-             testCase.PCE1.print;
-            %
-            testCase.PCE1.printDomainMaple;
-            return
+        function pce02BiconjugateIsAConvexUnderestimator (testCase)
+            p = plqStage.get('MMR_PCE0_2', 'biconj', @() ...
+                plqStage.get('MMR_PCE0_2', 'max', @() testCase.PCE0_2.maximum).biconjugateF);
+            testCase.verifyNotEmpty(p.biconjugate, 'PCE0_2: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, p, testCase.PCE0_2, 'PCE0_2');
+        end
 
-            
-           
+        function pce03EnvelopeUnderestimates (testCase)
+            testMaxMultiRegion.stageEnvelope(testCase, testCase.PCE0_3, 'MMR_PCE0_3');
+        end
+
+        function pce03ConjugateMatchesItsOwnSup (testCase)
+            testMaxMultiRegion.stageConjugate(testCase, testCase.PCE0_3, 'MMR_PCE0_3');
+        end
+
+        function pce03Step3MatchesTheSup (testCase)
+            p = plqStage.get('MMR_PCE0_3', 'max', @() testCase.PCE0_3.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'PCE0_3: Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, testCase.PCE0_3, 'PCE0_3');
+        end
+
+        function pce03BiconjugateIsAConvexUnderestimator (testCase)
+            p = plqStage.get('MMR_PCE0_3', 'biconj', @() ...
+                plqStage.get('MMR_PCE0_3', 'max', @() testCase.PCE0_3.maximum).biconjugateF);
+            testCase.verifyNotEmpty(p.biconjugate, 'PCE0_3: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, p, testCase.PCE0_3, 'PCE0_3');
+        end
+
+        function pce1EnvelopeUnderestimates (testCase)
+            testMaxMultiRegion.stageEnvelope(testCase, testMaxMultiRegion.pce1Fixture(), 'MMR_PCE1');
+        end
+
+        function pce1ConjugateMatchesItsOwnSup (testCase)
+            testMaxMultiRegion.stageConjugate(testCase, testMaxMultiRegion.pce1Fixture(), 'MMR_PCE1');
+        end
+
+        function pce1Step3MatchesTheSup (testCase)
+            F = testMaxMultiRegion.pce1Fixture();
+            p = plqStage.get('MMR_PCE1', 'max', @() F.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'PCE1: Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, F, 'PCE1');
+        end
+
+        function pce1BiconjugateIsAConvexUnderestimator (testCase)
+            F = testMaxMultiRegion.pce1Fixture();
+            p = plqStage.get('MMR_PCE1', 'biconj', @() ...
+                plqStage.get('MMR_PCE1', 'max', @() F.maximum).biconjugateF);
+            testCase.verifyNotEmpty(p.biconjugate, 'PCE1: biconjugateF produced no cells');
+            testMaxMultiRegion.verifyBiconj(testCase, p, F, 'PCE1');
+        end
+
+        function pce2EnvelopeUnderestimates (testCase)
+            testMaxMultiRegion.stageEnvelope(testCase, testMaxMultiRegion.pce2Fixture(), 'MMR_PCE2');
+        end
+
+        function pce2ConjugateMatchesItsOwnSup (testCase)
+        % THE ONE KNOWN RED of this suite that anything in the repository names, and the reason
+        % this split was worth doing: `f*(0,0)` came back 0.0429 against a sup of 0 over
+        % {(0,0),(1,0),(2,1)}. The fixture is a SINGLE piece, so the cross-piece max cannot be
+        % implicated -- this test is the whole defect, and it stops before Step 3 and before
+        % biconjugateF, neither of which has anything to do with it.
+            testMaxMultiRegion.stageConjugate(testCase, testMaxMultiRegion.pce2Fixture(), 'MMR_PCE2');
+        end
+
+        function pce2Step3MatchesTheSup (testCase)
+        % biconjugateF is deliberately NOT run for this fixture -- it hits a separate open bug
+        % (functionNDomain.addEq errors with an unassigned output when the biconjugate result is
+        % empty for this domain), which is why there is no pce2Biconjugate* test below.
+            F = testMaxMultiRegion.pce2Fixture();
+            p = plqStage.get('MMR_PCE2', 'max', @() F.maximum);
+            testCase.verifyNotEmpty(p.maxConjugate, 'PCE2: Step 3 produced no cells');
+            testMaxMultiRegion.verifyStep3(testCase, p, F, 'PCE2 fixture');
         end
 
         function testBiconjugate (testCase)
