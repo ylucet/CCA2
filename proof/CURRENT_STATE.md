@@ -144,10 +144,14 @@ a union of cells. See `DECISIONS.md`, 2026-08-22.
 1. Read `PROJECT_PLAN.md` Phase 0 -- it is still the specification of what was
    proved, and the deviations from it are all in `DECISIONS.md`.
 2. `lake build` to confirm green (instant from cache).
-3. Then **ask Yves which extension to take**, if any. `TODO.md` lists what is
-   left: the write-up (`PROOF_NOTES.md`), the conic normal forms (the one that
-   makes "ellipse" a proved classification rather than a discriminant sign), and
-   the remaining half of realisation (that a *single* cell is infinite).
+3. Then work `TODO.md` **top to bottom**. As of 2026-08-24 it carries an agreed
+   three-track programme, in Yves's order: **A** finish the real case
+   (convexity and lsc of `f*`, Fenchel-Young, conic normal forms, one infinite
+   cell), **B** rational coefficients (`RatQuaPol`, Lemma 1, Theorem 1), **C**
+   the shape of the biconjugate (up to the full Theorem 4 subdivision). The
+   write-up is deliberately last and is not on the list. `TODO.md` also has a
+   **Deferred** section -- the degree-at-most-4 bound and the degree-4 ruled face
+   -- which is not to be started unattended.
 
 ## Risk register
 
