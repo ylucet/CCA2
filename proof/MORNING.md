@@ -30,6 +30,13 @@ guardrails require.
 
 ## What changed
 
+- **C7 done, `<=` half.** `biconj_le_convRepVal`: every convex combination of
+  points of the pieces bounds `f**` above, i.e. `f** <= conv f`. The finite
+  Jensen step fell out of `Convex.sum_mem` applied to the epigraph C1 had
+  already proved convex -- no new machinery at all. The `>=` half (that the
+  right-hand side is *closed*, hence equal to `f**` rather than an upper bound)
+  needs Fenchel-Moreau; it is now the last open item.
+
 - **C6 done, scope-reduced.** Two real theorems: `f**` equals `f` **at every
   maximiser** (so the cells C2 produces have their corners on the graph of `f`),
   and `f**` dominates every affine minorant of `f` -- which characterises it as

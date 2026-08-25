@@ -480,6 +480,70 @@ theorem exists_affine_cell {f : QuaPol} {s : Plane} (hs : f.conj s ≠ ⊤) :
   ⟨maxSet_nonempty hs, fun _ hx => biconj_eq_affineMinorant_on_hull hs hx,
     fun _ hx => biconj_eq_eval_of_mem_maxSet hs hx⟩
 
+/-! ### The convex-hull formula
+
+`TODO.md` item C7, and `../CONJ_FIELD_PROOF.md` §5.1:
+
+    f**(x) = inf { Σ λ_k q_k(z_k) : Σ λ_k z_k = x, z_k ∈ T_k, λ in the simplex }
+
+An independent route to the same object — it never mentions `f*` — and therefore
+the best available cross-check on C2 to C6.
+
+**The `≤` half is proved here** and needs nothing new: each `epi(q_k + ι_{T_k})`
+is convex, `f**` lies below each of them, and `f**` is convex, so a convex
+combination of points of the pieces cannot beat it. The finite Jensen step is
+`Convex.sum_mem` applied to the epigraph of `f**`, which `C1` already proved
+convex.
+
+**The `≥` half is not proved.** It is the statement that the right-hand side is
+already closed, so that it *is* `f**` rather than merely an upper bound for it,
+and that needs Fenchel–Moreau or a separation argument — machinery this
+development does not have. For bounded pieces it is true (the infimum is attained
+on a compact simplex times compact pieces); with recession directions it needs
+care. Recorded in `TODO.md`. -/
+
+/-- A representation of `x` as a convex combination of points of the pieces. -/
+def IsConvRep (f : QuaPol) (x : Plane) (lam : QuaPiece → ℝ) (z : QuaPiece → Plane) : Prop :=
+  (∀ p ∈ f.pieces, 0 ≤ lam p) ∧ (∑ p ∈ f.pieces, lam p) = 1 ∧
+    (∀ p ∈ f.pieces, z p ∈ p.T) ∧ (∑ p ∈ f.pieces, lam p • z p) = x
+
+/-- The value such a representation reports: `Σ λ_k q_k(z_k)`. -/
+noncomputable def convRepVal (f : QuaPol) (lam : QuaPiece → ℝ) (z : QuaPiece → Plane) : ℝ :=
+  ∑ p ∈ f.pieces, lam p * p.q.eval (z p)
+
+/-- **Finite Jensen for `f**`, in epigraph form.** -/
+theorem biconj_le_sum {f : QuaPol} {S : Finset QuaPiece} {lam : QuaPiece → ℝ}
+    {z : QuaPiece → Plane} {M : QuaPiece → ℝ}
+    (h0 : ∀ p ∈ S, 0 ≤ lam p) (h1 : (∑ p ∈ S, lam p) = 1)
+    (hb : ∀ p ∈ S, f.biconj (z p) ≤ ((M p : ℝ) : EReal)) :
+    f.biconj (∑ p ∈ S, lam p • z p) ≤ ((∑ p ∈ S, lam p * M p : ℝ) : EReal) := by
+  have hmem := (convex_epigraph_biconj f).sum_mem (t := S) (w := lam)
+    (z := fun p => (z p, M p)) h0 h1 (fun p hp => hb p hp)
+  have hfst : (∑ p ∈ S, lam p • (z p, M p)).1 = ∑ p ∈ S, lam p • z p := by
+    simp only [Prod.fst_sum, Prod.smul_fst]
+  have hsnd : (∑ p ∈ S, lam p • (z p, M p)).2 = ∑ p ∈ S, lam p * M p := by
+    simp only [Prod.snd_sum, Prod.smul_snd, smul_eq_mul]
+  rw [Set.mem_ofPred_eq, hfst, hsnd] at hmem
+  exact hmem
+
+/-- **`f** ≤ conv f`.** Every convex combination of points of the pieces bounds
+`f**` from above. -/
+theorem biconj_le_convRepVal {f : QuaPol} {x : Plane} {lam : QuaPiece → ℝ}
+    {z : QuaPiece → Plane} (h : IsConvRep f x lam z) :
+    f.biconj x ≤ ((convRepVal f lam z : ℝ) : EReal) := by
+  obtain ⟨h0, h1, hz, hx⟩ := h
+  have hb : ∀ p ∈ f.pieces, f.biconj (z p) ≤ ((p.q.eval (z p) : ℝ) : EReal) := by
+    intro p hp
+    exact le_trans (biconj_le_eval f (z p)) (eval_le_of_mem hp (hz p hp))
+  have := biconj_le_sum h0 h1 hb
+  rwa [hx] at this
+
+/-- Taking the combination concentrated on one piece recovers `f** ≤ q_p` there,
+which is the `|supp λ| = 1` row of `../CONJ_FIELD_PROOF.md` §5.1. -/
+theorem biconj_le_piece {f : QuaPol} {p : QuaPiece} (hp : p ∈ f.pieces) {x : Plane}
+    (hx : x ∈ p.T) : f.biconj x ≤ ((p.q.eval x : ℝ) : EReal) :=
+  le_trans (biconj_le_eval f x) (eval_le_of_mem hp hx)
+
 end QuaPol
 
 /-! #### The risk C5 flagged, and it is real

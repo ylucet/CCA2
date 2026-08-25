@@ -47,15 +47,6 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C7 -- the convex-hull formula of section 5.1.** (L) `f**(x) =
-      inf { sum_k lam_k q_k(z_k) : sum_k lam_k z_k = x, z_k in T_k, lam in the
-      simplex }`. An independent route to the same object -- it does not mention
-      `f*` at all -- and therefore the best available cross-check on C2 to C6.
-      For bounded pieces the infimum is attained (compact simplex times compact
-      pieces), which is what makes the formula closed and equal to `f**`; with
-      recession directions that needs care, so **do the bounded case first** and
-      quarantine the unbounded one.
-
 - [ ] **C6 residue -- covering and disjointness.** (XL, second pass) What C6
       landed: the contact set (`f** = f` at every maximiser), `f**` as the
       supremum of the affine functions below `f` (`affine_le_biconj`), and
@@ -71,6 +62,15 @@ table except the 2-cell rows is a corollary of it.
         the Blocked section.
       Come back to this after a pass that introduces `intrinsicInterior`; it is
       the natural companion to the C5 residue.
+- [ ] **C7 residue -- the `>=` half of the convex-hull formula.** (XL) That
+      `inf { sum lam_k q_k(z_k) }` is *already closed*, hence equal to `f**` and
+      not merely an upper bound for it. Needs Fenchel-Moreau, or a separation
+      argument, neither of which this development has. Do the **bounded** case
+      first: there the infimum is attained on a compact simplex times compact
+      pieces, so the function is lsc and the equality follows from
+      `affine_le_biconj` applied to a supporting affine function -- which still
+      needs a supporting hyperplane at a point of the epigraph. Quarantine the
+      unbounded case.
 ## Blocked
 
 - [ ] **C5 residue -- rows 1 to 3 as statements about cells.** The pointwise
@@ -97,6 +97,14 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **C7: the convex-hull formula, `<=` half.**
+      `IsConvRep`, `convRepVal`, and `biconj_le_convRepVal`: every convex
+      combination of points of the pieces bounds `f**` from above. The finite
+      Jensen step is `Convex.sum_mem` applied to the epigraph C1 proved convex,
+      so it needed nothing new. The `>=` half is not proved -- it says the
+      right-hand side is already closed, which needs Fenchel-Moreau or a
+      separation argument; it is now the last item of **Next up**.
 
 - [x] 2026-08-24 -- **C6: the contact set, and `f**` as the affine envelope.**
       Scope-reduced. `biconj_eq_eval_of_mem_maxSet` -- at a maximiser `f**`
