@@ -6,12 +6,19 @@ import QuaConProof.Shapes
 /-!
 # A computable classifier over ℚ, and the census that validates it
 
-`Quad.kind` is noncomputable: deciding `disc < 0` over `ℝ` needs `Classical`. But
-`../CONJ_FIELD_PROOF.md` Theorem 1 says that for **rational** input data the face
-functions and the edge conics of `f*` stay rational — only the *vertices* of the
-subdivision need algebraic numbers of degree up to 4. So the conic *type* is
-genuinely decidable on the real input class, and this file provides the decision
-procedure.
+`Quad.kind` is noncomputable: deciding `disc < 0` over `ℝ` needs `Classical`. For
+**rational** input data, though, the face functions and the tie conics of `f*`
+stay rational — only the *vertices* of the subdivision need algebraic numbers of
+degree up to 4. So the conic *type* is genuinely decidable on the real input
+class, and this file provides the decision procedure.
+
+That rationality used to be quoted here as an assumption, from
+`../CONJ_FIELD_PROOF.md` Lemma 1 and Theorem 1. **It is now a theorem of this
+repository**: `RatInput.lean` proves `isRat_of_mem_cand` — every candidate of a
+`RatQuaPol`'s embedding is the embedding of a `RatQuad` — and `isRat_tie_conic`
+for the differences. So the census below checks a proved statement rather than a
+cited one. What is *not* proved here is the degree bound on the vertices
+(Theorem 2); that is deferred, see `TODO.md`.
 
 ## What is here
 

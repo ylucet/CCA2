@@ -30,6 +30,17 @@ guardrails require.
 
 ## What changed
 
+- **B2, B3, B4 done** (`RatInput.lean`). `../CONJ_FIELD_PROOF.md` Lemma 1 and
+  Theorem 1 are now theorems of this repository: every candidate quadratic of a
+  rational `QuaPol` is the embedding of a rational one, and so is every tie
+  conic. Worth recording: the branch formulas commute with the embedding
+  **unconditionally** -- the edge branch divides by the curvature and the
+  interior branch by the Hessian determinant, but `x/0 = 0` in both `Q` and `R`,
+  so the diagram commutes on the degenerate values too. The nondegeneracy
+  hypotheses are needed to know the branch *means* something, not to know it is
+  rational. `Rational.lean`'s docstring no longer quotes Theorem 1 as an
+  assumption.
+
 - **B1 done** (`QuaConProof/RatInput.lean`, new file). `RatQuaPiece` and
   `RatQuaPol` over `Q`, mirroring the real classes field for field, with the
   embedding `toQuaPol` and four sanity checks that no vertex, ray or coefficient

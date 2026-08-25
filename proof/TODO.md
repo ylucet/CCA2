@@ -41,25 +41,6 @@ development: everything stays computable and decidable, and it extends what
 `Rational.lean` already has (`RatQuad`, `ratVertexBranch`, `ratEdgeBranch`,
 `ratInteriorBranch`, `ratCand`, and the `kind_toQuad` bridge).
 
-- [ ] **B2 -- Lemma 1: the branches commute with the embedding.** (M) For each of
-      the three families,
-      `toQuad (ratXBranch q v ...) = XBranch (toQuad q) (toPlane v) ...`,
-      under the nondegeneracy hypothesis that family needs (`ratEdgeCurv != 0`,
-      `RatQuad.hessDet != 0`). This is `../CONJ_FIELD_PROOF.md` Lemma 1: the
-      branch formulas are built from the piece data by field operations only, so
-      they never leave `Q`. Name Lemma 1 in the docstring.
-- [ ] **B3 -- Theorem 1: `cand` of a rational `QuaPol` is rational.** (S/M)
-      `ratBranches` maps onto `branches` and `ratCand` onto `cand`, so every
-      candidate quadratic of `toQuaPol F` is `toQuad` of a rational one. Corollary
-      -- and this is the half `Shapes.lean` and `QuaPar.lean` actually use --
-      **every tie conic `q1 - q2` has rational coefficients**, since `RatQuad`
-      subtraction commutes with `toQuad`.
-- [ ] **B4 -- retire the standing assumption in `Rational.lean`.** (S) Its
-      module docstring currently says the computable classifier is "justified by
-      CONJ_FIELD_PROOF Theorem 1". After B3 that is a proved lemma in this
-      repository: rewrite the docstring to cite it, and make the census a check
-      of a theorem rather than of an assumption.
-
 ### C. The shape of the biconjugate
 
 Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 4
@@ -138,6 +119,17 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+
+
+
+
+- [x] 2026-08-24 -- **B2, B3, B4: Lemma 1 and Theorem 1 proved.** `RatInput.lean`.
+      The three branch formulas commute with the embedding (and need **no**
+      nondegeneracy hypothesis, since `x/0 = 0` on both sides);
+      `isRat_of_mem_cand` is Theorem 1 -- every candidate of a rational input is
+      rational -- and `isRat_tie_conic` is the corollary the shape results use.
+      `Rational.lean`'s docstring now cites the theorem instead of assuming it.
 
 - [x] 2026-08-24 -- **B1: `RatQuaPiece`, `RatQuaPol`, and the embedding.**
       `RatInput.lean`. Mirrors `QuaPiece`/`QuaPol` field for field over `Q`,
