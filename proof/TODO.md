@@ -47,18 +47,6 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C5 -- rows 1 to 3: a 2-cell of `f*`, by the rank of its Hessian.** (L)
-      Where exactly one candidate `g` is active, the maximiser should be unique
-      and equal to the point where `grad g(s)` sends `s`; then
-      `f**(grad g(s)) = <s, grad g(s)> - g(s)`, the Legendre transform. The image
-      of the cell is a 2-cell, a segment or a single point according as
-      `Hess g` has rank 2, 1 or 0 -- that is, according as `g` is an interior,
-      edge or vertex branch, which `Shapes.lean` already ties to the rank.
-      *Risk to check first:* "exactly one active candidate implies a unique
-      maximiser" is **not** obvious and may be false in degenerate cases. Test it
-      before building on it; if it fails, weaken to "the maximiser set is a
-      single point when the active branch is the interior branch of a
-      nonsingular piece" and record the boundary.
 - [ ] **C6 -- assembly: the subdivision of `f**`.** (XL) The sets
       `R(C) = union over s in relint C of convexHull (maxSet f s)` cover
       `dom f**` and meet only on their boundaries, so they *are* the subdivision.
@@ -76,7 +64,12 @@ table except the 2-cell rows is a corollary of it.
 
 ## Blocked
 
-- [ ] Nothing is blocked.
+- [ ] **C5 residue -- rows 1 to 3 as statements about cells.** The pointwise
+      content is proved (see Done recently). Turning it into "a 2-cell of `f*`
+      maps to a 2-cell of `f**`" needs the cells to be two-dimensional, i.e. the
+      face-to-face regularity that `DECISIONS.md` 2026-08-21 deliberately does
+      **not** claim. Whether to take that on is a decision only Yves can make,
+      so this is parked rather than attempted.
 
 ## Deferred -- do not start these unattended
 
@@ -95,6 +88,16 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **C5: rows 1 to 3, scope-reduced, and one refutation.**
+      The risk the item flagged is real: "exactly one active candidate implies a
+      unique maximiser" is **false**, machine-checked
+      (`Sanity.exists_oneActive_manyMaximisers`). Rows 1 to 3 are therefore
+      indexed by the branch attained: `interiorPoint_combo` (affine in `s`),
+      `maxOn_unique_of_posDef` (unique in a positive definite piece),
+      `edgePoint_mem_line` (row 2), and the constant vertex maximiser (row 3).
+      Plus `convexHull_maxSet_subset_subgradSet`, the subdifferential
+      correspondence C6 needs. The cell-level form is in **Blocked**.
 
 
 

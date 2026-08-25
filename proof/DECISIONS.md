@@ -18,6 +18,38 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-24 — "one active candidate implies a unique maximiser" is FALSE
+
+- **Tried:** indexing rows 1 to 3 of `../CONJ_FIELD_PROOF.md` Theorem 4 by the
+  *activity pattern* — the reading that a cell of `f*` carrying a single face
+  function has a single-point subdifferential, so that `f**`'s cell there is the
+  affine image of it. `TODO.md` C5 flagged the step as unproved and said to test
+  it first.
+- **Why it failed, and it is a refutation, not a search failure:** the piece
+  `Sanity.rayPol` — the nonnegative `s1`-axis carrying the **zero** quadratic —
+  has exactly one candidate at `s = 0`. Its single vertex gives the zero vertex
+  branch; the zero quadratic has no direction of positive curvature, so the
+  edge-branch filter is empty; its Hessian is singular, so there is no interior
+  branch. That one candidate is active. And **every** point of the axis is a
+  maximiser, so `maxSet` is a ray, not a point. Machine-checked as
+  `Sanity.exists_oneActive_manyMaximisers` in `Biconj.lean`.
+- **What replaced it:** rows 1 to 3 are indexed by **which branch is attained**
+  and the rank of its quadratic part, which is what Theorem 4's table actually
+  says. Interior branch: the maximiser is `interiorPoint q s`, affine in `s`
+  (`interiorPoint_combo`), and unique inside a positive definite piece
+  (`maxOn_unique_of_posDef`, by strict concavity). Edge branch: the maximiser
+  lies on the fixed line `v + R(w-v)` for every `s` (`edgePoint_mem_line`).
+  Vertex branch: the maximiser is the constant `v`.
+- **What is left, and it is a decision not a difficulty:** rows 1 to 3 as
+  statements about *cells* need those cells to be two-dimensional, which is the
+  face-to-face regularity this project deliberately does not claim
+  (`DECISIONS.md`, 2026-08-21). Whether to take that on is Yves's call; until
+  then the pointwise statements above are the honest form.
+- **Before retrying, fix:** do not weaken the hypothesis to "the cell is a
+  singleton activity pattern". The counterexample kills every version of that.
+- **Evidence:** `QuaConProof/Biconj.lean`, `Sanity.cand_rayPol`,
+  `Sanity.maxSet_rayPol_not_subsingleton`.
+
 ## 2026-08-24 — Frank–Wolfe proved in V-representation; H-representation still not needed
 
 - **Tried first, on paper:** the textbook route to Frank–Wolfe — H-representation

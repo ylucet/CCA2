@@ -30,6 +30,13 @@ guardrails require.
 
 ## What changed
 
+- **C5 done, scope-reduced, and it produced a refutation.** The risk the item
+  flagged is real and now machine-checked: exactly one active candidate does
+  **not** force a unique maximiser. The zero quadratic on the nonnegative
+  `s1`-axis has one candidate and a whole ray of maximisers. Rows 1 to 3 are
+  therefore indexed by the branch attained, not by the activity pattern -- which
+  is what Theorem 4's table says anyway. `DECISIONS.md` entry written.
+
 - **C3, C4 done.** Rows 4 and 5 of Theorem 4's table, both immediate from C2.
   Recorded honestly: the corners of those cells are the *maximisers*, not the
   active candidates, and the bridge between them is unconditional only for
@@ -98,11 +105,25 @@ guardrails require.
 
 ## What is broken
 
-_(nothing yet)_
+- Nothing is red. One item is parked: the **cell-level** form of Theorem 4's rows
+  1 to 3. Its pointwise content is proved; the step from there to "a 2-cell maps
+  to a 2-cell" needs face-to-face regularity, which the project has deliberately
+  not claimed since 2026-08-21.
 
 ## Needs a decision
 
-_(nothing yet)_
+- **Should the project claim face-to-face regularity of the subdivision?**
+  `DECISIONS.md` 2026-08-21 declined it deliberately, and nothing since has
+  needed it — until Theorem 4's rows 1 to 3, which cannot be stated about
+  *cells* without it. Options: (a) leave it, and state rows 1 to 3 pointwise as
+  they now are — my choice, and what is committed; (b) add regularity as a
+  hypothesis on the input class, which is cheap but narrows the theorem;
+  (c) prove it, which is a project of its own. I took (a) because it is the
+  reversible one.
+- **Git contention.** This repository is shared with the MATLAB overnight run in
+  `CCA2/`, and both sessions commit to the same branch and index. I hit a
+  `index.lock` collision once; a retry loop handles it. Worth knowing before the
+  next time two runs are started together.
 
 ## Where I stopped
 

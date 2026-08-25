@@ -138,39 +138,6 @@ make this false. -/
 
 namespace Sanity
 
-/-- One piece: the nonnegative `s₁`-axis, carrying the zero quadratic. -/
-noncomputable def rayPiece : QuaPiece :=
-  ⟨{0}, Finset.singleton_nonempty _, {(1, 0)}, 0⟩
-
-/-- The `QuaPol` with that single piece. -/
-noncomputable def rayPol : QuaPol := ⟨{rayPiece}, Finset.singleton_nonempty _⟩
-
-lemma mem_rayPiece {t : ℝ} (ht : 0 ≤ t) : ((t, 0) : Plane) ∈ rayPiece.T := by
-  refine ⟨0, subset_convexHull ℝ _ (by simp [rayPiece]), t • ((1, 0) : Plane),
-    smul_mem_coneHull (mem_coneHull_of_mem (show ((1, 0) : Plane) ∈ rayPiece.rays by
-      simp [rayPiece])) ht, ?_⟩
-  simp
-
-lemma eval_rayPol {t : ℝ} (ht : 0 ≤ t) : rayPol.eval (t, 0) = 0 := by
-  have hm := mem_rayPiece ht
-  simp only [rayPol, QuaPol.eval, Finset.inf_singleton]
-  rw [if_pos hm]
-  simp [rayPiece]
-
-/-- **The conjugate really is `⊤` there.** -/
-theorem conj_rayPol_eq_top : rayPol.conj (1, 0) = ⊤ := by
-  by_contra hne
-  have hbot := QuaPol.conj_ne_bot rayPol (1, 0)
-  set c : ℝ := (rayPol.conj (1, 0)).toReal with hc
-  have hcoe : rayPol.conj (1, 0) = (c : EReal) := (EReal.coe_toReal hne hbot).symm
-  have hle : ((|c| + 1 : ℝ) : EReal) ≤ rayPol.conj (1, 0) := by
-    rw [QuaPol.conj_def]
-    refine le_iSup_of_le ((|c| + 1, 0) : Plane) ?_
-    rw [eval_rayPol (by positivity)]
-    simp [dot]
-  rw [hcoe, EReal.coe_le_coe_iff] at hle
-  linarith [le_abs_self c]
-
 /-- **So the empty-activity cell is inhabited**, and the fifth conjunct of
 `conj_isQuaCon` is carrying weight rather than comparing two empty sets. -/
 theorem cell_empty_rayPol_nonempty : (cell rayPol ∅).Nonempty :=
