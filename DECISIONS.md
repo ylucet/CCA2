@@ -2843,3 +2843,28 @@ succeed and neither cell needs a winner read off a centroid, and neither needs t
 - **`splitDeclined` now records the reason** under `MAXQP_ASSERT`. Every decline here ends in the
   centroid guess, and three separate investigations of that guess have begun by re-instrumenting
   this function.
+
+## 2026-08-25 (B4/G3) — an unbounded non-convex face is TWO cases, and neither is "not implemented"
+
+- **What the entry said:** "a non-convex face over an UNBOUNDED polygon declines by name today (the
+  fan-triangulation route needs a BOUNDED face)". True of the NUMERIC route, and read ever since as
+  though the case were unimplemented. Measured, it is two different things:
+- **Envelope FINITE -> already answered, exactly.** `x*y` on the first quadrant is bounded below on
+  its own recession cone, so conv f is finite. Case C returns the right function in ~14 s:
+
+        f*(s) = sup_{x,y >= 0} s1 x + s2 y - x y  =  0 for s <= 0, +inf otherwise
+
+  i.e. the INDICATOR of the third quadrant, checked at ten dual points against that closed form.
+  So this half is a symbolic FALLBACK -- a cost, on the list with G1 and G2 -- and what it wants is
+  a numeric route, not a construction.
+- **Envelope -inf -> correctly refused.** `x^2 - y^2` on the same quadrant runs to -inf along the
+  y-axis, which lies IN the recession cone, so conv f = -inf and f* = +inf everywhere.
+  `convEnvUnbounded:minusInfinity` says exactly that, and it is the RIGHT answer: what blocks it is
+  having nowhere to put an EMPTY domain, the same representation blocker as Case A's
+  `conjugateHasEmptyDomain`. Not a missing construction.
+- **The general rule**, worth having written down: for an unbounded face, conv f is finite iff f is
+  bounded below on the face's recession cone; otherwise f* is +inf everywhere and dom f* is empty.
+  That single test separates the two halves above and should be what any future numeric route
+  dispatches on.
+- Both halves are pinned by tests in `conjCPLQTest`; `SUPPORT_MATRIX.md` now carries them as two
+  rows instead of one GAP.

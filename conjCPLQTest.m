@@ -712,6 +712,51 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             end
         end
 
+        function unboundedNonConvexFaceWithAFiniteEnvelopeIsANSWERED(testCase)
+        % `TODO.md` G3 / B4 says an unbounded face carrying a non-convex quadratic is a GAP, and
+        % `SUPPORT_MATRIX.md` had it as one. MEASURED 2026-08-25: that is the NUMERIC route's
+        % decline, and it is not the whole story -- the symbolic route answers this family, and
+        % answers it EXACTLY. Pinned here so the classification cannot drift back.
+        %
+        % f = x*y on the first quadrant. On the recession cone {x,y >= 0} f is bounded below by 0,
+        % so conv f is finite and f* is a genuine function:
+        %       f*(s) = sup_{x,y >= 0} s1 x + s2 y - x y
+        % Taking y = 0 gives s1 x, which runs to +inf when s1 > 0, and symmetrically for s2; for
+        % s <= 0 the interior critical point (x,y) = (s2,s1) is infeasible and the sup is attained
+        % at the origin. So f* is the INDICATOR of the third quadrant: 0 there, +inf elsewhere.
+        %
+        % Cost ~14 s, symbolic -- this suite's bucket.
+            q = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 1 0 0 0 0], [1 0; 0 1]);
+            g = q.conj('cplq');
+            inside  = [-1 -1; -3 -2; -0.5 -0.25; 0 0; -5 0; 0 -5];
+            outside = [1 1; 2 -1; -1 2; 0.5 0.5];
+            for i = 1:size(inside,1)
+                s = inside(i,:);
+                testCase.verifyEqual(conjCPLQTest.evalConjResult(g, s), 0, 'AbsTol', 1e-9, ...
+                    sprintf('f*(%g,%g) must be 0 on the third quadrant', s(1), s(2)));
+            end
+            for i = 1:size(outside,1)
+                s = outside(i,:);
+                v = conjCPLQTest.evalConjResult(g, s);
+                testCase.verifyTrue(isnan(v) || isinf(v), sprintf( ...
+                    'f*(%g,%g) must be +inf off the third quadrant, got %g', s(1), s(2), v));
+            end
+        end
+
+        function unboundedNonConvexFaceUNBOUNDEDBelowIsRefusedByName(testCase)
+        % The other half of B4, and it is not the same gap. f = x^2 - y^2 on the first quadrant
+        % runs to -inf along the y-axis, which is IN the recession cone, so conv f = -inf and
+        % f* = +inf everywhere: dom f* is EMPTY.
+        %
+        % That is the right answer and it is refused rather than returned, for the same reason as
+        % `PLQ:conjCPLQ:conjugateHasEmptyDomain` in Case A -- no mesh encodes an empty domain
+        % (nf = 0 means dim < 2, not empty). What this test pins is that the refusal is BY NAME and
+        % identifies the cause, rather than a generic notImplemented that would read as "we have
+        % not got to it yet".
+            q = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [1 0 -1 0 0 0], [1 0; 0 1]);
+            testCase.verifyError(@() q.conj('cplq'), 'convEnvUnbounded:minusInfinity');
+        end
+
         function frameChangedPieceKeepsItsEnvelopeBLOCKS(testCase)
         % G5, the `MATLAB:badsubscript` crash. Found by checkConjAgainstDefinition's random sweep
         % (seed 20260824) as case 29, a 4-gon carrying x*y plus an affine part; case 17, a 5-gon,

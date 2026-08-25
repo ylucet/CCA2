@@ -136,10 +136,24 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       asked not to make. The change is one-directional (it can only turn a throw into a recompute),
       and the uncontended path is exercised by every staged test.
 
-- [ ] **G3 -- a non-convex face over an UNBOUNDED polygon.** Declines by name today
-      (`the fan-triangulation route needs a BOUNDED face`). Needs Step 1 or Step 2 for an unbounded
-      indefinite piece; `convEnvUnbounded`/`fanUnboundedFace` are the symbolic side's answer and
-      are the only remaining symbolic helpers reachable from a conj-shaped input.
+- [x] **G3 -- RECLASSIFIED 2026-08-25, and it was two things, neither of them what this said.**
+      The old entry read "Declines by name today (`the fan-triangulation route needs a BOUNDED
+      face`)" as though the case were unimplemented. That is the NUMERIC route's decline. Measured:
+
+      1. **Envelope FINITE -> already answered, exactly.** `x*y` on the first quadrant is bounded
+         below on its own recession cone, so conv f is finite and Case C returns the right function
+         in ~14 s: f* is the INDICATOR of the third quadrant, 0 there and +inf elsewhere, checked
+         against the closed form at ten dual points. So this half is a **symbolic fallback**, i.e.
+         a cost, not a gap -- it belongs on the fallback list with G1 and G2, and what it needs is
+         a numeric route.
+      2. **Envelope -inf -> correctly refused.** `x^2 - y^2` on the same quadrant runs to -inf
+         along the y-axis, which is IN the recession cone, so conv f = -inf and f* = +inf
+         everywhere: dom f* is EMPTY. `convEnvUnbounded:minusInfinity` says exactly that. It is the
+         RIGHT answer, blocked only by having nowhere to put it -- the same representation blocker
+         as Case A's `conjugateHasEmptyDomain`, not a missing construction.
+
+      Both are pinned by tests in `conjCPLQTest`. What remains under this heading is the numeric
+      route for (1), which is a performance item.
 
 - [ ] **G4 -- `QuaCon` storage (H-form).** Now optional rather than blocking, and that is the
       premise's doing. `Conic`/`RatCon` landed 2026-08-24 so the LATTICE can hold an elliptical
