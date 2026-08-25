@@ -2459,30 +2459,39 @@ IS the edge `(1,1)->(0,0)` -- g2's parabola `(x+y)^2/4 = x`. The pieces offered 
 4 and 5, are `[(0,0),(0.5,0.5)]` and `[(0.5,0.5),(1,1)]`, both STRAIGHT, both `src [2 4]`. And
 `(0.5,0.5)` is **not on the parabola**: `(0.5+0.5)^2/4 = 0.25`, not `0.5`.
 
-**What that establishes, and what it does not.** ESTABLISHED: the two sides of that boundary
-disagree about its GEOMETRY -- one carries the parabola, the other a straight edge through a point
-that is not on the parabola. So it is not a matching tolerance and not an ordering; the edges are
-different curves.
+**A CELL IS MISSING, and this is measured rather than argued.** A hand-rolled containment test was
+tried first and is not trustworthy -- written against the chord it misclassifies exactly this
+region, and rewritten against the arc it excluded a point that IS in piece 1. The test that settles
+it uses each operand's OWN point location, captured in the same session as the pieces so the face
+numbering cannot drift:
 
-NOT established: that a whole cell is missing. The leading hypothesis is that the two operands each
-have a boundary between the SAME two dual points -- g1's straight, g2's curved -- so a LENS lies
-between them and the arrangement lacks it. A containment probe over the suspected lens returned
-"in no piece", which supports that; **but the probe is not trustworthy** -- written to test the
-chord it misclassifies exactly this region, and rewritten to test the arc it then excluded a point
-that IS in piece 1. It is reported here as a hypothesis with its evidence, not as a finding,
-because this file already records two occasions on which a plausible geometric diagnosis of a
-maxQuaPar symptom was refuted by measuring.
+    g1 nf=7  g2 nf=6
+    srcs produced (15): [1 1;1 2;1 6;2 4;3 2;3 5;3 6;4 5;5 1;5 3;5 4;5 6;5 7;6 4;6 7]
 
-**Measure first.** Before building anything, settle whether a cell is missing: take the pieces from
-`MAXQP_CAPTURE`, and for a grid over the region use each piece's OWN containment rule (the one
-`eval`/`facePoly` use, arcs included) rather than a hand-rolled one.
+      (0.20,0.40) g1 face 4, g2 face 2 -> src present: 0
+      (0.30,0.50) g1 face 4, g2 face 2 -> src present: 0
+      (0.15,0.30) g1 face 4, g2 face 2 -> src present: 0
+      (0.45,0.55) g1 face 4, g2 face 2 -> src present: 0
+      (0.60,0.40) g1 face 1, g2 face 2 -> src present: 1     <- control, below the diagonal
+
+Every point of the lens lies in g1's face 4 and g2's face 2, and the fold produced **no piece with
+src [4 2]** -- while the control point one step away, in [1 2], is there. So
+`clipByFace(g1.face4, g2.face2)` returned nothing for a pair whose intersection is not empty. The
+orphaned arc in `assemblePieces` is the SYMPTOM; the missing cell is the defect.
+
+**Where it is NOT.** `polyConstraints` already skips a curved edge's chord, and says why in its own
+comment -- so the lens is not being clipped away by the chord half-plane. The remaining candidates,
+in order: the operand SWAP at the top of `clipByFace` (which of the two carries the arc decides
+whether it becomes the cell's own arc or the cutting conic); `clipPolyByConic`; and the three
+reduction passes `dropDegeneratePieces` / `dedupPieces` / `dropSubsumedPieces`, any of which could
+discard a thin sliver. Instrument `clipByFace` for that ONE pair rather than reading it.
 
 **Why the arc-split work does not close this.** That work makes ONE cell's arc divisible; this needs
 the OVERLAY of the two operands' boundaries to be complete, which is a different property. The
 "consistent per pair rather than globally" phrasing in the earlier entry is right in outcome and
 wrong in cause -- the missing thing is a cell, not an alignment.
 
-**Where to look.** `SUPPORT_MATRIX.md` 4.1 already lists "half-edges and boundary walks identifying
+**Related, and worth reading first.** `SUPPORT_MATRIX.md` 4.1 already lists "half-edges and boundary walks identifying
 an edge by its endpoints alone, which four arcs between the same two points make ambiguous" among
 the defects fixed on 2026-08-13. This is the same family and it is not fully closed: a chord and an
 arc with the same endpoints are two different edges. If the coverage measurement confirms a hole,

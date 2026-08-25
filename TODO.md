@@ -35,13 +35,15 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
           its would-be neighbours are STRAIGHT edges through (0.5,0.5),
           which is not on that parabola.
 
-      So the two sides of that boundary disagree about its GEOMETRY -- that much is established, and
-      it rules out a matching tolerance or an ordering. The leading HYPOTHESIS is that the two
-      operands each have a boundary between the same two dual points, g1's straight and g2's
-      curved, so a LENS lies between them that the arrangement lacks. **Measure that before
-      building anything**: `DECISIONS.md` 2026-08-24 (later) says how, and why the probe used on
-      the night is not good enough to settle it. `SUPPORT_MATRIX.md` 4.1 records the same family
-      of defect from 2026-08-13.
+      MEASURED with each operand's own point location: every point of the lens between g1's straight
+      diagonal and g2's arc lies in **g1 face 4 and g2 face 2**, and the fold produces **no piece
+      with src [4 2]** -- while the control point one step away, in [1 2], is there. So
+      `clipByFace` returned nothing for a pair whose intersection is not empty, and the orphaned
+      arc in `assemblePieces` is the symptom rather than the defect. `polyConstraints` already
+      skips a curved edge's chord, so the candidates are the operand SWAP at the top of
+      `clipByFace`, `clipPolyByConic`, and the three reduction passes. **Instrument that one pair.**
+      `DECISIONS.md` 2026-08-24 (later) has the numbers; `SUPPORT_MATRIX.md` 4.1 records the same
+      family of defect from 2026-08-13.
       Closing this removes the LAST measured fallback of the bounded family.
 
 - [ ] **G2 -- an AFFINE face over an UNBOUNDED polygon.** `max(0,x,y)` is the canonical example and
