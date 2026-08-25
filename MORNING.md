@@ -117,13 +117,16 @@ is the one number this report does not contain.
 Two gaps remain, both named in `TODO.md` and pinned by tests that will go green
 when they are fixed:
 
-- **G1 — a missing LENS.** An indefinite quadratic over a multi-piece polygon.
-  The piece dump is unambiguous: piece 1's arc is g2's parabola from `(0,0)` to
-  `(1,1)`, and its would-be neighbours are straight edges through `(0.5,0.5)`,
-  which is not on that parabola. The two operands each have a boundary between
-  the same two dual points — one straight, one curved — so a lens lies between
-  them and the arrangement does not contain that cell. Build the lens; do not
-  chase the matching.
+- **G1 — the two sides of one boundary disagree about its GEOMETRY.** An
+  indefinite quadratic over a multi-piece polygon. The piece dump is
+  unambiguous: piece 1's arc is g2's parabola from `(0,0)` to `(1,1)`, and its
+  would-be neighbours are straight edges through `(0.5,0.5)`, which is not on
+  that parabola. That much is established, and it rules out a matching tolerance
+  or an ordering. The leading *hypothesis* — that a LENS between g1's straight
+  diagonal and g2's arc is missing from the arrangement — is written up in
+  `DECISIONS.md` with its evidence and with the reason the probe used tonight is
+  not good enough to settle it. **Measure the coverage before building
+  anything.**
 - **G2 — an AFFINE face over an UNBOUNDED polygon** (`max(0,x,y)`). Its
   conjugate is a support function, `+inf` off a cone. `TODO.md` prices a route
   that would cover every piecewise-LINEAR input in one construction and never
