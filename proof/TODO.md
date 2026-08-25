@@ -34,24 +34,6 @@ a session, XL more than one session.
 
 ### A. Finish the real case
 
-- [ ] **A1 -- `f*` is convex.** (M) `f*(s) = sup_x (<s,x> - f(x))` is a pointwise
-      supremum of functions **affine in `s`**, so it is convex. State it in
-      `EReal` as: for `a, b >= 0` with `a + b = 1`,
-      `f*(a . s1 + b . s2) <= a * f*(s1) + b * f*(s2)`. That right-hand side is
-      well defined because `QuaPol.conj_ne_bot` rules out `bot`, so no
-      `top + bot` can arise -- say so in the docstring, it is the reason the
-      statement is clean. Route: `iSup_le`, then bound each term using that
-      `x` is *shared* between the two suprema.
-      *Fallback if `EReal` scalar arithmetic fights back:* state and prove it for
-      the real-valued restriction to `dom f*`, and record the `EReal` version as
-      scope-reduced.
-- [ ] **A2 -- `f*` is lower semicontinuous.** (M) A pointwise supremum of
-      continuous functions is lsc; `lowerSemicontinuous_iSup` should apply once
-      each term is shown lsc (the `top` terms are the constant `bot`, which is
-      lsc). Needed for A4 and for all of Track C.
-- [ ] **A3 -- `dom f*` is convex.** (S) Immediate from A1. Also record
-      `cell f empty` as the complement of a convex set, which sharpens the fifth
-      conjunct of `conj_isQuaCon` beyond "it is inhabited".
 - [ ] **A4 -- Fenchel-Young, and `f** <= f`.** (S/M) Define
       `QuaPol.biconj f x := iSup_s ((<s,x> : EReal) - f.conj s)`. Prove
       `<s,x> <= f(x) + f*(s)` for all `x, s` -- immediate from the definition of
@@ -188,6 +170,14 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+
+
+- [x] 2026-08-24 -- **A1, A2, A3: `f*` is convex, lsc, and has a convex domain.**
+      `Convexity.lean`. Convexity is stated in epigraph form (`conj_le_of_combo`,
+      `convex_epigraph_conj`) so that every arithmetic step stays in `R`;
+      `convex_dom_conj` says the `top` region is the complement of a convex set,
+      which sharpens the fifth conjunct of `conj_isQuaCon`.
 
 - [x] 2026-08-24 -- **Phase 7: unbounded pieces.** `QuaPiece` gained
       `rays : Finset Plane`, with `T = convexHull verts + coneHull rays`. The

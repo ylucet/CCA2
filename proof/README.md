@@ -24,9 +24,10 @@ project proves the `QuaCon` claim rather than measuring it.
     $ #print axioms QuaConProof.conj_isQuaCon
     [propext, Classical.choice, Quot.sound]
 
-for the Stage 1 input class (bounded pieces; real coefficients; indefinite and
-singular Hessians allowed; no continuity hypothesis on the input). Unbounded
-pieces are a separate extension, Phase 7. See `CURRENT_STATE.md`.
+with **no hypothesis** beyond "`f` is a `QuaPol`": real coefficients; indefinite
+and singular Hessians allowed; no continuity hypothesis on the input; and, since
+Phase 7 landed on 2026-08-24, pieces that may be **unbounded** (`conv V` plus a
+recession cone `cone R`). See `CURRENT_STATE.md`.
 
 `Shapes.lean` then answers **which** conic arises. The headline is
 `not_flat_of_disc_neg`: an elliptical tie conic requires an interior branch —
