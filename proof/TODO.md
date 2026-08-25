@@ -34,11 +34,6 @@ a session, XL more than one session.
 
 ### A. Finish the real case
 
-- [ ] **A4 -- Fenchel-Young, and `f** <= f`.** (S/M) Define
-      `QuaPol.biconj f x := iSup_s ((<s,x> : EReal) - f.conj s)`. Prove
-      `<s,x> <= f(x) + f*(s)` for all `x, s` -- immediate from the definition of
-      the supremum -- and deduce `f.biconj x <= f.eval x`. This is the definition
-      Track C is built on, so land it here rather than in C.
 - [ ] **A5 -- conic normal forms: `disc < 0` really means ellipse.** (L) `disc`
       and `det3` are proved invariants with computed values, but no theorem yet
       says the zero set *is* an ellipse. Needs `Quad.rotate` (rotation by an
@@ -170,6 +165,13 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **A4: Fenchel-Young and the biconjugate.** `Biconj.lean`.
+      `biconj f x = sup_s (<s,x> - f*(s))`, the affine minorant
+      `A_s(x) = <s,x> - f*(s)` with `A_s <= f` and `A_s <= f**`, and
+      `biconj_le_eval : f** <= f`. Everything is routed through `A_s` rather than
+      through `<s,x> <= f(x) + f*(s)`, so no `EReal` addition of two possibly
+      infinite terms ever appears.
 
 
 

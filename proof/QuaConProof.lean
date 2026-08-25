@@ -6,6 +6,7 @@ import QuaConProof.Candidates
 import QuaConProof.Selection
 import QuaConProof.FrankWolfe
 import QuaConProof.Convexity
+import QuaConProof.Biconj
 import QuaConProof.QuaCon
 import QuaConProof.Shapes
 import QuaConProof.Realization

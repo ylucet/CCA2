@@ -30,6 +30,12 @@ guardrails require.
 
 ## What changed
 
+- **A4 done** (`QuaConProof/Biconj.lean`, new file). `biconj`, the affine
+  minorant `A_s`, `A_s <= f`, `A_s <= f**`, `f** <= f`, and real-valued
+  Fenchel-Young. Compiled first try. Note for the record: `f**` really can be
+  `bot` (one unbounded piece with a concave quadratic gives `f* = top`
+  everywhere), so there is no `biconj_ne_bot` to match `conj_ne_bot`.
+
 - **A1, A2, A3 done** (`QuaConProof/Convexity.lean`, new file). `f*` is convex,
   lower semicontinuous, and `dom f*` is convex. Convexity is stated as an
   epigraph inequality rather than `f*(as1+bs2) <= a f*(s1) + b f*(s2)`, which
