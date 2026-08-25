@@ -30,6 +30,13 @@ guardrails require.
 
 ## What changed
 
+- **C1 done**, and it paid for itself. `Convexity.lean` was refactored around
+  `supAffine g z = sup_y (<y,z> - g y)`: convexity, convex domain and lower
+  semicontinuity are proved once there, and `f*` and `f**` are both instances.
+  The `f**` versions are four one-line corollaries. Also dropped a `!= bot`
+  hypothesis from the domain statement -- `bot` is bounded by `0` like anything
+  else -- which matters because `f**` genuinely can be `bot`.
+
 - **B2, B3, B4 done** (`RatInput.lean`). `../CONJ_FIELD_PROOF.md` Lemma 1 and
   Theorem 1 are now theorems of this repository: every candidate quadratic of a
   rational `QuaPol` is the embedding of a rational one, and so is every tie

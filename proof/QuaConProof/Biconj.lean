@@ -34,6 +34,8 @@ match `conj_ne_bot`.
 * `affineMinorant_le_eval`, `affineMinorant_le_biconj` — the two halves of
   Fenchel–Young in the form Track C consumes.
 * `biconj_le_eval` — `f** ≤ f`.
+* `convex_epigraph_biconj`, `convex_dom_biconj`, `lowerSemicontinuous_biconj` —
+  `f**` is convex and lsc, by the `supAffine` lemmas of `Convexity.lean`.
 -/
 
 namespace QuaConProof
@@ -89,6 +91,35 @@ theorem biconj_le_eval (f : QuaPol) (x : Plane) : f.biconj x ≤ f.eval x := by
       (EReal.coe_toReal hs (conj_ne_bot f s)).symm
     have := affineMinorant_le_eval hs x
     rwa [affineMinorant, EReal.coe_sub, ← hC] at this
+
+/-! ### `f**` is convex and lower semicontinuous
+
+`TODO.md` item C1. Both statements come straight from `Convexity.lean`: `f**` is
+`supAffine f.conj`, and `conj_ne_bot` supplies the one hypothesis those lemmas
+need. Nothing is reproved. -/
+
+/-- `f**` is a supremum of affine functions, by definition. -/
+lemma biconj_eq_supAffine (f : QuaPol) : f.biconj = supAffine f.conj := rfl
+
+/-- **The epigraph inequality for `f**`.** -/
+theorem biconj_le_of_combo (f : QuaPol) {x₁ x₂ : Plane} {a b t₁ t₂ : ℝ}
+    (ha : 0 ≤ a) (hb : 0 ≤ b) (hab : a + b = 1)
+    (h₁ : f.biconj x₁ ≤ (t₁ : EReal)) (h₂ : f.biconj x₂ ≤ (t₂ : EReal)) :
+    f.biconj (a • x₁ + b • x₂) ≤ ((a * t₁ + b * t₂ : ℝ) : EReal) :=
+  supAffine_le_of_combo (conj_ne_bot f) ha hb hab h₁ h₂
+
+/-- **The epigraph of `f**` is convex.** -/
+theorem convex_epigraph_biconj (f : QuaPol) :
+    Convex ℝ {p : Plane × ℝ | f.biconj p.1 ≤ ((p.2 : ℝ) : EReal)} :=
+  convex_epigraph_supAffine (conj_ne_bot f)
+
+/-- **The domain of `f**` is convex.** -/
+theorem convex_dom_biconj (f : QuaPol) : Convex ℝ {x : Plane | f.biconj x ≠ ⊤} :=
+  convex_dom_supAffine (conj_ne_bot f)
+
+/-- **`f**` is lower semicontinuous.** -/
+theorem lowerSemicontinuous_biconj (f : QuaPol) : LowerSemicontinuous f.biconj :=
+  lowerSemicontinuous_supAffine (conj_ne_bot f)
 
 /-- **Fenchel–Young**, in the real-valued form: where both `f` and `f*` are
 finite, `⟨s,x⟩ ≤ f(x) + f*(s)`. -/

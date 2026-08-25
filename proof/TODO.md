@@ -47,11 +47,6 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C1 -- `biconj` is convex and lsc.** (M) With `biconj` defined in A4:
-      it is a supremum of functions affine in `x`, so the A1/A2 arguments
-      transpose verbatim. Keep them as separate lemmas rather than copying the
-      proofs -- if a shared lemma "a sup of affine functions is convex and lsc"
-      falls out, extract it and use it for both `conj` and `biconj`.
 - [ ] **C2 -- KEY LEMMA: `f**` is affine on the hull of the maximisers.** (M/L)
       Define `maxSet f s := {x | exists p in f.pieces, x in p.T and
       psi p.q s x = f*(s)}`, the points attaining the conjugate at `s`. Then for
@@ -119,6 +114,12 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **C1: `f**` is convex and lsc.** The shared lemma did fall
+      out: `supAffine g z = sup_y (<y,z> - g y)` in `Convexity.lean` carries
+      convexity, convex domain and lower semicontinuity once, and both `conj`
+      and `biconj` are instances of it -- `dot` being symmetric is what lets the
+      two orientations share a definition. Nothing is proved twice.
 
 
 
