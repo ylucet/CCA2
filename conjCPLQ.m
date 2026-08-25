@@ -115,6 +115,7 @@ function g = conjCPLQ(obj, idx, route)
     % ---- Case B: a single bounded-triangle piece -----------------------------------------
     if obj.nf == 1 && obj.nv == 3 && obj.ne == 3 && obj.isDomBounded
         g = conjSingleTriangle(obj);
+        verifyEdgeBound(g, obj);
         return
     end
 
@@ -143,6 +144,7 @@ function g = conjCPLQ(obj, idx, route)
     if ~forceSymbolic
         try
             g = conjPolygonalDomain(obj);
+            verifyEdgeBound(g, obj);
             return
         catch ME
             if forceNumeric, rethrow(ME); end
@@ -190,6 +192,60 @@ function g = conjCPLQ(obj, idx, route)
     % comes back 1.125 where the truth is 2.
     assertStep3MatchesPieces(p, obj);
     g = QuaParCPLQ(p.maxConjugate);
+end
+
+% ================================================================================================
+function verifyEdgeBound(g, obj)
+% objective: check the returned conjugate against a lower bound that needs NO second computation --
+%   `f*(s) >= max over the boundary of dom f of [<s,x> - f(x)]`, closed form per edge -- and raise
+%   when it is violated. OPT-IN: set the global CCA2_CONJ_VERIFY.
+%
+% ON BY DEFAULT, and the measurement that justifies that is worth keeping. Set the global
+% CCA2_CONJ_VERIFY to 0 to turn it off.
+%
+%   * over EVERY fast and slow suite with it on: 363 pass, 0 fail -- it flags no correct answer;
+%   * over 24 random polygons and quadratics: it fires on exactly ONE, the case that is genuinely
+%     wrong by 2.7e-2, and on nothing else (every other case sits at ~1e-15).
+%
+% So it converts a class of SILENT wrong answer into a named refusal without touching anything that
+% works, which is the trade this file makes everywhere else.
+%
+% IT RAISES RATHER THAN FALLING BACK, and that is measured too: on the known-bad case the SYMBOLIC
+% route returns the same wrong value to six digits. The defect is in the shared Step 1/Step 2
+% closed form, not in a route, so there is nothing to fall back TO -- and a fallback that silently
+% produced the same minorant would be worse than an error.
+%
+% WHY IT EARNS ITS KEEP. `conjPolygonalDomain`'s fold cross-check needs at least two pieces (it
+% verifies against `max_k (q_k + I_P_k)*`). A SINGLE triangle has no such identity, and that is
+% exactly where G4 lives -- `conj` of `xy` on some triangles returns a MINORANT. This bound is the
+% only check that covers that route.
+    global CCA2_CONJ_VERIFY %#ok<GVMIS>
+    if ~isempty(CCA2_CONJ_VERIFY) && ~CCA2_CONJ_VERIFY, return, end
+    if ~isa(g, 'RatPar') || ~g.isMeshed(), return, end
+    S = edgeBoundProbes(g);
+    lb = conjEdgeLowerBound(obj, S);
+    for i = 1:size(S,1)
+        if ~isfinite(lb(i)), continue, end
+        got = g.eval(S(i,:));
+        if got < lb(i) - 1e-7*(1 + abs(lb(i)))
+            error('PLQ:conjCPLQ:belowEdgeBound', ...
+                ['conj returned %.10g at (%.6g,%.6g), but the boundary of dom f alone already ' ...
+                 'gives %.10g. f*(s) >= <s,x> - f(x) for every x in dom f, so the answer is a ' ...
+                 'MINORANT, not the conjugate.'], got, S(i,1), S(i,2), lb(i));
+        end
+    end
+end
+
+function S = edgeBoundProbes(g)
+% Directions x magnitudes, plus the result's own vertices -- a minorant shows up on a REGION, so a
+% spread finds it, and a cell boundary is where it shows first.
+    R = [0.25 1 3 10];
+    th = (0:15) * (2*pi/16);
+    S = zeros(0,2);
+    for r = R, S = [S; r*[cos(th).' sin(th).']]; end %#ok<AGROW>
+    S = [S; 0 0];
+    if ~isempty(g.V), S = [S; g.V]; end
+    S = unique(round(S, 10), 'rows');
 end
 
 % ================================================================================================

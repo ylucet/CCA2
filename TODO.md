@@ -74,7 +74,9 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `maxQuaParTest/twoHalfPlaneQuadraticsSplitTheirSharedQUADRANT`. The cross-check that caught
       it stays.
 
-- [ ] **G4 -- `conj` of `xy` on SOME triangles returns a MINORANT.** Pre-existing (reproduced on a
+- [ ] **G4 -- `conj` of `xy` on SOME triangles computes a MINORANT.** Since G6 it RAISES
+      (`PLQ:conjCPLQ:belowEdgeBound`) instead of returning it, so it can no longer reach a caller --
+      but the closed form is still short and that is what needs fixing. Pre-existing (reproduced on a
       pristine `b9243d3`), found by `checkConjAgainstDefinition(24)` case 21: the answer is
       `2.742e-02` BELOW the definition sup. A single triangle, so there is no fold and no
       cross-piece max -- the per-piece closed form itself is short. Same SHAPE as `DECISIONS.md`
@@ -85,15 +87,18 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       A crash rather than a wrong answer, so it is the less dangerous of the two, but it is an
       unguarded index and not a refusal by name.
 
-- [ ] **G6 -- the EDGE lower bound as a universal check. MEASURED, and it is sharp.** Along each
+- [x] **G6 -- DONE 2026-08-25. The EDGE lower bound is a DEFAULT refusal.** Along each
       edge of `dom f` the objective `<s,x> - q(x)` is a quadratic in the segment parameter, so its
       maximum is closed form, and `f*` must be at least that. On the 24-case random sweep it fires
       on **exactly** case 21 (G4, at -2.742e-02) and on nothing else -- every other case sits at
       ~1e-15. The VERTEX-only version of the same idea catches NOTHING (0 of 24, including case
       21, because that sup is not attained at a vertex), so build the edge one.
       It is cheaper than the fold cross-check already in `conjPolygonalDomain` and, unlike it,
-      covers the SINGLE-PIECE route. `DECISIONS.md` 2026-08-25 (later) has the numbers and the one
-      case it still cannot see.
+      covers the SINGLE-PIECE route. Built as `conjEdgeLowerBound.m`, raised by `conjCPLQ` as
+      `PLQ:conjCPLQ:belowEdgeBound`, and ON by default (`CCA2_CONJ_VERIFY = 0` turns it off).
+      Gated: fast 303/0, slow 88/0, verylong 26/7/1 -- the last IDENTICAL to a pristine `b9243d3`.
+      It RAISES rather than falling back because the symbolic route returns the same wrong value on
+      the known-bad case. `DECISIONS.md` 2026-08-25 (final).
 
 - [ ] **G7 -- `plqStage`'s cache races under `suite.sh --verylong -j N`.** The job list is per TEST
       and consecutive tests of a fixture are consecutive STAGES, so with `-j 2` stage 2 can `load`

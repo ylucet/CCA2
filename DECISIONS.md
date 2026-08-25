@@ -2610,3 +2610,38 @@ change to a caching layer is exactly what should not be committed unattended.
 
 **Until it is fixed, read a `--verylong -j N` red against a `-j 1` re-run of that one test before
 believing it.** A spurious red in the daily gate costs a morning.
+
+## 2026-08-25 (final) — the EDGE lower bound is now a DEFAULT refusal, and it is fully gated
+
+Built, measured on every bucket, and turned on. `conjEdgeLowerBound(q, S)` returns
+`max over the boundary of dom f of [<s,x> - f(x)]` -- one closed-form quadratic maximisation per
+edge, no iteration, no engine -- and `conjCPLQ` raises `PLQ:conjCPLQ:belowEdgeBound` when the
+conjugate it is about to return falls below it.
+
+**Why it is allowed to be the default.** Three measurements, in the order they were taken:
+
+    24 random polygons + quadratics    fires on exactly 1, the case wrong by 2.7e-2
+    every FAST and SLOW suite, on      363 pass / 0 fail -- flags no correct answer
+    fast / slow / verylong, on         298/0 · 88/0 · 26 pass 7 fail 1 timeout
+                                       -- the verylong figure IDENTICAL to a pristine b9243d3
+
+So it converts a class of silent wrong answer into a named refusal and touches nothing that works.
+
+**Why it RAISES rather than falling back**, which was the one design question worth measuring: on
+the known-bad triangle the SYMBOLIC route returns the same wrong value to six digits
+(2.997553 against a bound of 3.013340). The defect is in the shared Step 1 / Step 2 closed form,
+not in a route, so there is nothing to fall back to -- and a fallback that silently produced the
+same minorant would be worse than an error.
+
+**What it covers that nothing else did.** `conjPolygonalDomain`'s fold cross-check verifies an
+assembled result against `f* = max_k (q_k + I_P_k)*`, which needs at least TWO pieces. A single
+triangle has no such identity, and that is exactly where G4 lives.
+
+**What it cannot see, stated rather than glossed.** A sup attained strictly INSIDE the domain. For
+a concave or indefinite piece the maximiser is on the boundary and the bound is tight -- pinned by
+`conjEdgeLowerBoundTest/theBoundIsTIGHTWhereTheSupIsOnTheBOUNDARY`; for a convex piece it can be
+interior and the bound is genuinely slack, pinned as an inequality plus a witness by
+`theBoundIsVALIDButSLACKWhereTheSupIsINTERIOR`.
+
+**The consequence for G4.** `conj` of `xy` over some triangles now RAISES where it used to return a
+minorant. That is the intended trade and the defect itself is still open.
