@@ -14,3 +14,4 @@ import QuaConProof.Realization
 import QuaConProof.Witness
 import QuaConProof.QuaPar
 import QuaConProof.Rational
+import QuaConProof.RatInput

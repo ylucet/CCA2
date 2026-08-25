@@ -30,6 +30,11 @@ guardrails require.
 
 ## What changed
 
+- **B1 done** (`QuaConProof/RatInput.lean`, new file). `RatQuaPiece` and
+  `RatQuaPol` over `Q`, mirroring the real classes field for field, with the
+  embedding `toQuaPol` and four sanity checks that no vertex, ray or coefficient
+  is lost. `toPlane` is proved injective, which B2 and B3 will need.
+
 - **A6 done** (`Witness.exists_infinite_cell`). One activity pattern containing
   both interior branches has an **infinite cell**, sitting inside the
   non-degenerate ellipse. The plan expected a local-constancy argument; a

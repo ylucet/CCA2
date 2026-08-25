@@ -41,11 +41,6 @@ development: everything stays computable and decidable, and it extends what
 `Rational.lean` already has (`RatQuad`, `ratVertexBranch`, `ratEdgeBranch`,
 `ratInteriorBranch`, `ratCand`, and the `kind_toQuad` bridge).
 
-- [ ] **B1 -- `RatQuaPiece` and `RatQuaPol`.** (S) Vertices, rays and quadratic
-      all over `Q`, mirroring `QuaPiece`/`QuaPol` field for field, plus
-      `toQuaPiece` / `toQuaPol` and `toPlane : Q x Q -> Plane`. Sanity `example`s
-      checking `toQuaPol` against a hand-computed instance, per `CLAUDE.md`
-      Verification point 3.
 - [ ] **B2 -- Lemma 1: the branches commute with the embedding.** (M) For each of
       the three families,
       `toQuad (ratXBranch q v ...) = XBranch (toQuad q) (toPlane v) ...`,
@@ -143,6 +138,12 @@ one costs a night and returns nothing certain.
   before thinking about a paper."
 
 ## Done recently
+
+- [x] 2026-08-24 -- **B1: `RatQuaPiece`, `RatQuaPol`, and the embedding.**
+      `RatInput.lean`. Mirrors `QuaPiece`/`QuaPol` field for field over `Q`,
+      with `toPlane`, `toQuaPiece`, `toQuaPol`, and `bounded_toQuaPol`. The
+      census keeps running on `Rational.lean`'s computable list-based
+      `RatPiece`; this class exists to carry theorems.
 
 - [x] 2026-08-24 -- **A6: a single cell is infinite.** `Witness.lean`,
       `exists_infinite_cell`. Closed by **counting**, not by a limit argument:
