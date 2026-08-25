@@ -2243,3 +2243,45 @@ from the same symptoms is the failure mode this entry exists to prevent.
       reading was a resolution artifact: a 0.0625-spaced grid cannot see a cell of
       area 0.008.
 - **Before retrying, fix:** `Do not retry.` Each was measured, not argued.
+
+## 2026-08-24 — the exact integer layer has a PRECISION BUDGET, and it is the resultant that spends it
+
+Measured while building `conicMeet`, the vertex layer of the sym-free conjugate. Recorded because
+it is the one place the "faces and conics exactly, vertices approximately" design has a real cost,
+and because the number is worth knowing before someone re-derives it.
+
+**The budget.** `ratQ` is exact to 2^53. The Sylvester resultant of two conics is degree 2 in each
+conic's coefficient vector, so a pair of conics with entries of size `M` produces a quartic with
+entries of size about `M^2` -- and `M ~ 1e8` already exceeds the budget. Measured exactly: two
+circles expressing a `1e-4` near-tangency need `M = 1e8` to be written exactly, and the resultant
+reaches `2.3995600239996e17`, which raises `ratQ:overflow`.
+
+**That is the designed outcome, and the alternative is the refuted one.** The only other thing the
+layer could do is round the resultant, whose roots are then a plausible wrong answer -- which is
+precisely the `double`-plus-tolerance design `DECISIONS.md` 2026-08-17 already refuted at a cost of
+Step 3's cell count growing without bound. Raising is the correct behaviour and
+`conicMeetTest/aTighterNearTangencyOVERFLOWSLOUDLYRatherThanReturningAWrongAnswer` pins it.
+
+**What it does and does not bound.** It bounds how NEAR a degeneracy can be expressed exactly, not
+the size of the problem: in the pipeline the conic coefficients are differences of face functions,
+so their size is set by the input data, not by an arbitrarily fine perturbation. If it fires on
+real input the answer is a wider integer type (int64 with checked arithmetic, or a small bignum),
+never a tolerance.
+
+**Two implementation facts that came out of the same measurement, both load-bearing.**
+
+1. **The gcd chain overflows before the resultant does, and content removal fixes it.** The
+   squarefree step divides the quartic by `gcd(p, p')` so that repeated roots become simple. A
+   plain pseudo-remainder sequence squares the leading coefficients at every reduction: on the
+   random sweep a quartic with six-digit entries reached `2.0006503375508298e23` in three steps.
+   Taking the primitive part INSIDE the reduction loop -- not only at the end of each
+   pseudo-remainder -- keeps the whole chain inside 2^53, and it is free because a gcd is
+   unchanged by a constant factor.
+2. **A repeated root is the normal case, not an exotic one, and it silently loses intersections.**
+   `x^2 + 4y^2 = 4` against `x^2 = y^2` has resultant `(5x^2-4)^2`; `xy = 1` against
+   `x^2 + y^2 = 5` has `(x^2-3)^2` after the shear. `roots` returns a double root to about
+   `sqrt(eps)`, so the candidate misses the second conic by ~1e-7 and was REJECTED -- two of four
+   intersections lost, with no error raised. Two changes were needed and both are kept: the exact
+   squarefree reduction above, and polishing each candidate with 2D Newton on the pair BEFORE the
+   acceptance test rather than after it. Correctness does not depend on the squarefree step (it is
+   wrapped so that an overflow there falls back to the unreduced polynomial); accuracy does.
