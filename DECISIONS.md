@@ -2655,10 +2655,21 @@ minorant. That is the intended trade and the defect itself is still open.
   and both runs' commits landed there. It also made a `git add -A` here sweep two of that session's
   in-progress files into a commit, and it left `main` looking stale while all the work sat
   elsewhere.
-- **Before retrying:** `Do not retry.` Branching cannot isolate sessions that share a checkout. Use
-  `git worktree add` -- separate checkouts, separate HEADs, one repository -- or run one session at
-  a time. The standing preference to commit on `main` is right for this repo, and the branch was
-  folded back into it by fast-forward with nothing lost.
+- **Before retrying:** `Do not retry.` Branching cannot isolate sessions that share a checkout.
+  **Stay on `main`** -- which is the standing preference for this repo anyway, and which makes the
+  problem disappear rather than solving it: with both sessions on `main` there is no branch for the
+  other one to be dragged onto, and interleaved linear history in a solo repo is not a defect. The
+  branch was folded back in by fast-forward with nothing lost.
+- **CORRECTED the same day.** This entry first recommended `git worktree add`, and that is WRONG
+  for this setup -- it was generalised from the incident without being checked. Measured:
+  `git worktree add <path> main` fails with `fatal: 'main' is already used by worktree at ...`, so
+  worktrees FORCE two different branches, which is the very thing that caused the tangle and the
+  thing the commit-on-`main` preference exists to avoid. Worktrees earn their keep when you
+  genuinely want different branches checked out at once (`arch/co1d` runs six method-paths that
+  way); that is a different problem from two sessions editing one project.
+- **The other two symptoms had other causes**, and neither is fixed by any branching scheme: the
+  `git add -A` sweep is fixed by staging explicit paths, and the `suite.sh`-edited-mid-run incident
+  was one session editing a file its own `bash` was executing.
 - **Evidence:** `proof/MORNING.md` reaches the same conclusion independently from the other side of
   the incident; this run's `MORNING.md` opens with it. A third symptom of the same cause: editing
   `.claude/suite.sh` while a `bash` process was executing it killed a slow-bucket run mid-flight

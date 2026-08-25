@@ -9,8 +9,12 @@ into `main` (a pointer move, no history rewritten, nothing lost) and both
 sessions are on `main` again, which is also the standing preference. The branch
 pointer is kept.
 
-The real fix, which `proof/MORNING.md` reaches independently: two unattended runs
-in one repository need **separate git worktrees**, not separate folders.
+The real fix is simply **not to branch**: with both sessions on `main` there is no
+branch for the other to be dragged onto, and interleaved linear history in a solo
+repo is not a defect. (`proof/MORNING.md` and an earlier version of this line both
+proposed separate git WORKTREES. That is wrong here and was corrected the same
+day -- git refuses to check out `main` in two worktrees, so they force two
+branches, which is the thing that caused the tangle. `DECISIONS.md` 2026-08-25.)
 
 The same shared tree produced two other incidents, both resolved: a `git add -A`
 here swept two of the proof session's in-progress files into a commit (un-tracked
