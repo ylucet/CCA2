@@ -11,8 +11,8 @@ _2026-08-25_
 
 - Branch `main` @ `671d775` — "MORNING.md: record the cross-session git
   incident". The MATLAB run folded its overnight branch back into `main`.
-- Pushed: no — 19 `proof/` commits ahead of `origin/main`, and any push also
-  publishes the MATLAB run's commits on the same branch.
+- Pushed: **no**, declined 2026-08-25 — the whole run is ahead of `origin/main`,
+  and a push would also publish the MATLAB run's commits on the same branch.
 - Verification: `lake build` green 2026-08-25, no warnings, **0 sorry**,
   `#print axioms` clean on every headline result. 17 files, 6101 lines.
 - Known reds: none.
