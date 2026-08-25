@@ -33,11 +33,31 @@ unattended runs sharing one working tree. If both projects are to run overnight
 again, they need separate worktrees (`git worktree add`), not just separate
 folders.
 
+> **CORRECTED 2026-08-25, by the other session, and the last sentence above is
+> wrong.** Both reports reached "use separate worktrees" independently, and
+> neither checked it. Measured: `git worktree add <path> main` fails with
+> `fatal: 'main' is already used by worktree at ...`, so worktrees FORCE two
+> different branches — which is what caused the tangle in the first place and
+> what this repo's standing "commit on `main`, don't branch" preference exists to
+> avoid. **The fix is simply not to branch:** with both sessions on `main` there
+> is no branch for either to be dragged onto, and interleaved linear history in a
+> solo repo is not a defect. The `git add -A` sweep described above has its own
+> fix — stage explicit paths — and is unaffected by any branching scheme.
+> Worktrees do earn their keep where different branches are genuinely wanted at
+> once (`arch/co1d` runs six method-paths that way); that is a different problem.
+> See `DECISIONS.md` 2026-08-25.
+
 **Pushed before starting, on request.** `origin/main` moved `b9243d3..64043b5`,
 publishing Phase 7. Note that `main` did *not* contain the later plan commit
 `86243b1` — it had been left behind when the MATLAB session branched — so that
 commit and everything tonight sit on `overnight/2026-08-24`, unpushed, as the
 guardrails require.
+
+> **SUPERSEDED 2026-08-25.** `overnight/2026-08-24` was folded into `main` by
+> fast-forward, all 43 commits from both runs were pushed to `origin/main` on
+> request, and every other branch — local and remote — was deleted after
+> verifying each had zero commits not already on `main`. `main` is now the only
+> branch anywhere.
 
 ## What changed
 
