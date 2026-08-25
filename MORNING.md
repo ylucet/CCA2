@@ -104,18 +104,36 @@ Two things were done, and both are worth keeping:
    parabola's axis, which meets the conic exactly once. Two more documented GAPs
    became OK.
 8. **`conjSymFreeTest.m`** pins which route each shape takes, fallbacks included.
-9. **Retired** — `exactQ` is off the plan; the degree-≤4 algebraic kernel and the
+9. **A randomized `conj`-vs-definition sweep** (`checkConjAgainstDefinition`).
+   22 of 24 random polygon/quadratic pairs are EXACT; the two that are not are
+   **pre-existing** — verified by re-running the identical sweep against a
+   pristine `b9243d3`, where they reproduce to every digit. Filed as G4 (a
+   MINORANT, 2.7e-2 low) and G5 (a crash). The other half of that differential is
+   the good news: every other number is identical between the two trees, and the
+   convex cases changed exactly as intended — `QuaPar` became `QuaPol` and they
+   ran 2–3× faster.
+10. **A DEFAULT refusal that covers the single-piece route** —
+   `f*(s) >= max over the boundary of dom f of [<s,x> - f(x)]`, closed form per
+   edge. The fold cross-check needs two pieces; a single triangle has none, and
+   that is exactly where G4 lives. Turned on only after measuring: it fires on
+   exactly the one bad random case, and 363 pass / 0 fail over every fast and
+   slow suite. It RAISES rather than falling back because the symbolic route
+   returns the same wrong value on that case. The VERTEX-only version of the same
+   idea was tried first and catches nothing — that measurement is why it is the
+   edge bound.
+11. **Retired** — `exactQ` is off the plan; the degree-≤4 algebraic kernel and the
    "detected refusal" item are marked CANCELLED by the H-form premise.
 
 ## What is broken
 
-Nothing red that this run caused. **fast 298/0, slow 88/0** (the slow bucket
-identical to its pre-change baseline), and the `verylong` daily gate was run
-three times to settle it:
+Nothing red that this run caused. **fast 303/0, slow 88/0, verylong 26/7/1** —
+and that verylong figure is IDENTICAL to a pristine `b9243d3`. The daily gate was
+run four times to settle it:
 
     baseline b9243d3, -j 2, uncontended     26 pass / 7 fail / 1 timeout
     current tree,     -j 2, uncontended     26 pass / 7 fail / 1 timeout   <- identical
     current tree,     -j 2, contended       25 pass / 8 fail / 1 timeout   <- one extra
+    current tree + the new refusal, -j 2    26 pass / 7 fail / 1 timeout   <- identical again
 
 So **the night's work changed `verylong` not at all**; its seven failures and its
 timeout are pre-existing (`testMaxMultiRegion/testPCE2` among them, which the

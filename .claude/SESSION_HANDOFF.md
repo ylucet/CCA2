@@ -14,10 +14,13 @@ _2026-08-24_
   mistake and has been folded back in. A parallel `proof/` session also commits
   to `main`; do not stage its files.
 - Pushed: no. The overnight run never pushes.
-- Tests (2026-08-24): fast **298 / 0**, slow **88 / 0** (identical to its
-  pre-change baseline). `verylong` was started at the end of the run — check
-  `MORNING.md` for whether it landed.
-- Known reds: none.
+- Tests (2026-08-25): fast **303 / 0**, slow **88 / 0**, verylong
+  **26 pass / 7 fail / 1 timeout** — and that verylong figure is IDENTICAL to a
+  pristine `b9243d3`, so its reds are all pre-existing (`testPCE2` among them).
+- Known reds: the seven pre-existing verylong ones. Nothing this run caused.
+- One tooling hazard: `--verylong -j N` RACES on `plqStage`'s shared cache and
+  can produce a spurious red. Re-run a suspicious test at `-j 1` before believing
+  it. `TODO.md` G7 has the three-line fix.
 
 ## What changed, in one line
 
