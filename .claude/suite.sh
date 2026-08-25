@@ -83,7 +83,7 @@ cd "$CCA2DIR" || exit 1
 FAST_SUITES=(PLQVCTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
              clipArcByHalfPlaneTest conjPieceCPLQTest convEnvCPLQTest exactQTest infConvTest
              lasryLionsTest maxQuaParTest mergeSameQuadFacesTest moreauTest proxAverageTest
-             regionTest testSymbolicFunction)
+             ratQTest regionTest testSymbolicFunction)
 NORMAL_SUITES=(cplqAdapterTest functionNDomainTest testfunctionNDomain)
 # Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
 # wall clock at the suite's whole runtime.
