@@ -30,6 +30,17 @@ guardrails require.
 
 ## What changed
 
+- **Second pass on the two residues, and it changed what they are.** Landed
+  `isClosed_epigraph_conj` and `isClosed_epigraph_biconj` -- the epigraphs are
+  closed and convex, which is the object every separation argument needs. Then
+  went looking for the missing layer and found that **mathlib already has it**:
+  `ConvexOn.exists_affine_le_of_lt` and `sSup_affine_eq`. So C7's `>=` half is
+  *not* blocked on Fenchel-Moreau; the only missing hypothesis is that `conv f`
+  is lower semicontinuous, which for bounded pieces is a compactness argument.
+  Both residues rewritten in `TODO.md` with the route and the one real unknown,
+  and `DECISIONS.md` records the correction so nobody writes "needs
+  Fenchel-Moreau" again.
+
 - **C7 done, `<=` half.** `biconj_le_convRepVal`: every convex combination of
   points of the pieces bounds `f**` above, i.e. `f** <= conv f`. The finite
   Jensen step fell out of `Convex.sum_mem` applied to the epigraph C1 had
@@ -124,10 +135,9 @@ guardrails require.
   to a 2-cell" needs face-to-face regularity, which the project has deliberately
   not claimed since 2026-08-21.
 - Also scope-reduced, and back at the bottom of Next up rather than parked: the
-  covering and disjointness halves of C6. Covering needs subdifferentiability of
-  `f**`, which holds only on the relative interior of the domain, so the honest
-  target uses `intrinsicInterior` -- machinery this development has never
-  touched.
+  covering half of C6 and the `>=` half of C7. Neither is red; both are precisely
+  specified now. C7 needs one lemma (`conv f` is lsc) and mathlib supplies
+  everything else; C6 needs subgradient existence, hence `intrinsicInterior`.
 
 ## Needs a decision
 

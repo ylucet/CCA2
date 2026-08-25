@@ -544,6 +544,29 @@ theorem biconj_le_piece {f : QuaPol} {p : QuaPiece} (hp : p ∈ f.pieces) {x : P
     (hx : x ∈ p.T) : f.biconj x ≤ ((p.q.eval x : ℝ) : EReal) :=
   le_trans (biconj_le_eval f x) (eval_le_of_mem hp hx)
 
+/-! ### The epigraphs are closed and convex
+
+The object every separation argument needs. Convexity is C1; closedness is lower
+semicontinuity, through mathlib's `LowerSemicontinuous.isClosed_epigraph`.
+
+This is the entry point for the two open items of `TODO.md`: mathlib's
+`ConvexOn.exists_affine_le_of_lt` separates a point from exactly such a set. -/
+
+lemma continuous_coe_snd :
+    Continuous (fun p : Plane × ℝ => (p.1, ((p.2 : ℝ) : EReal))) :=
+  continuous_fst.prodMk (continuous_coe_real_ereal.comp continuous_snd)
+
+/-- **The epigraph of `f*` is closed.** -/
+theorem isClosed_epigraph_conj (f : QuaPol) :
+    IsClosed {p : Plane × ℝ | f.conj p.1 ≤ ((p.2 : ℝ) : EReal)} :=
+  ((lowerSemicontinuous_conj f).isClosed_epigraph).preimage continuous_coe_snd
+
+/-- **The epigraph of `f**` is closed.** With `convex_epigraph_biconj` it is a
+closed convex subset of the plane times the line. -/
+theorem isClosed_epigraph_biconj (f : QuaPol) :
+    IsClosed {p : Plane × ℝ | f.biconj p.1 ≤ ((p.2 : ℝ) : EReal)} :=
+  ((lowerSemicontinuous_biconj f).isClosed_epigraph).preimage continuous_coe_snd
+
 end QuaPol
 
 /-! #### The risk C5 flagged, and it is real

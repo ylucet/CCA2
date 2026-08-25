@@ -47,30 +47,27 @@ Yves chose the **full Theorem 4 subdivision** (`../CONJ_FIELD_PROOF.md` Theorem 
 and section 5.1), not just the foundations. The key is C2: everything in the
 table except the 2-cell rows is a corollary of it.
 
-- [ ] **C6 residue -- covering and disjointness.** (XL, second pass) What C6
-      landed: the contact set (`f** = f` at every maximiser), `f**` as the
-      supremum of the affine functions below `f` (`affine_le_biconj`), and
-      `exists_affine_cell`. What is missing from "the `R(C)` **are** the
-      subdivision of `f**`":
-      * **covering** -- every `x` of `dom f**` lies in some `R(C)`. This needs
-        `f**` to be subdifferentiable at `x`, which for a closed proper convex
-        function fails at boundary points of the domain (Rockafellar 23.4 gives
-        it only on the relative interior). So the honest target is covering of
-        `relint (dom f**)`, and that needs relative interiors, which mathlib has
-        (`intrinsicInterior`) but this development has never used.
-      * **disjointness** of the relative interiors, which needs the regularity in
-        the Blocked section.
-      Come back to this after a pass that introduces `intrinsicInterior`; it is
-      the natural companion to the C5 residue.
-- [ ] **C7 residue -- the `>=` half of the convex-hull formula.** (XL) That
-      `inf { sum lam_k q_k(z_k) }` is *already closed*, hence equal to `f**` and
-      not merely an upper bound for it. Needs Fenchel-Moreau, or a separation
-      argument, neither of which this development has. Do the **bounded** case
-      first: there the infimum is attained on a compact simplex times compact
-      pieces, so the function is lsc and the equality follows from
-      `affine_le_biconj` applied to a supporting affine function -- which still
-      needs a supporting hyperplane at a point of the epigraph. Quarantine the
-      unbounded case.
+- [ ] **C7 residue -- `conv f` is lower semicontinuous, for bounded pieces.** (L)
+      This closes the `>=` half of the convex-hull formula, and it is **not** a
+      separation problem -- `DECISIONS.md` 2026-08-24 corrects the earlier note.
+      mathlib already has the separation layer
+      (`ConvexOn.exists_affine_le_of_lt` in `Mathlib/Analysis/Convex/Approximation.lean`),
+      and with `affine_le_biconj` the argument is three lines *given* lsc. So the
+      whole item is: prove `conv f` lsc.
+      *Route, worked out:* `epi (conv f) = convexHull (union of graph_p) +
+      ({0} x [0,inf))`, where `graph_p = (fun x => (x, q_p x)) '' T_p` is compact
+      for a bounded piece. Convex hull of a compact set is compact; compact plus
+      closed is closed; a closed epigraph is lsc.
+      *Settle first:* mathlib has `Set.Finite.isCompact_convexHull`, but I could
+      not find "convex hull of a **compact** set is compact" nor "compact + closed
+      is closed". Find them or prove them; that is the only real unknown.
+- [ ] **C6 residue -- covering.** (XL) "Every point of `dom f**` lies in one of
+      the cells" needs `f**` to have a subgradient at that point, which for a
+      closed proper convex function holds only on the **relative interior** of the
+      domain. `exists_affine_le_of_lt` does not help: it gives an affine minorant
+      strictly below at the point, never one that touches. So this needs
+      `intrinsicInterior`, which this development has never used. Do it after the
+      C7 residue, and with the C5 residue in view -- they want the same layer.
 ## Blocked
 
 - [ ] **C5 residue -- rows 1 to 3 as statements about cells.** The pointwise

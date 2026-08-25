@@ -18,6 +18,49 @@ Newest entries at the top.
 
 ---
 
+## 2026-08-24 — what mathlib has for separation, and what the two open items really need
+
+- **Tried:** closing the two residues of Track C — the covering half of C6 ("every
+  point of `dom f**` lies in one of the cells") and the `≥` half of C7 ("the
+  convex-combination infimum is *already* `f**`, not merely an upper bound").
+  Both were written up as "needs Fenchel–Moreau", which is too vague to act on.
+- **What was found, and it sharpens both:**
+  * mathlib `v4.33.0` has **no** subgradients, **no** Fenchel–Moreau, and no
+    convex-conjugate API at all (`grep -rln "subgradient\|fenchel_moreau"` is
+    empty).
+  * It **does** have `Mathlib/Analysis/Convex/Approximation.lean`:
+    `ConvexOn.exists_affine_le_of_lt` — for a convex, lower-semicontinuous,
+    **real-valued** `φ` on a closed convex set, and any `a < φ x`, a continuous
+    affine `A ≤ φ` with `A x = a` — and `ConvexOn.sSup_affine_eq`, the Bourbaki
+    "convex lsc = upper envelope of affine functions". That is the separation
+    layer, already built.
+  * It also has geometric Hahn–Banach (`Mathlib/Analysis/LocallyConvex/Separation.lean`).
+- **So C7's `≥` half is not blocked on Fenchel–Moreau at all.** With
+  `affine_le_biconj` (proved here) the argument is: for `a < conv f (x)` take the
+  affine `A ≤ conv f ≤ f` from `exists_affine_le_of_lt`; then `A ≤ f**`, so
+  `a ≤ f**(x)`; let `a → conv f (x)`. **The one missing hypothesis is that
+  `conv f` is lower semicontinuous**, and for bounded pieces that is a
+  compactness statement, not a separation one.
+- **The route for that, worked out but not built:** `epi (conv f)` should be
+  `convexHull (⋃_p graph_p) + ({0} × [0,∞))` where
+  `graph_p = (fun x => (x, q_p x)) '' T_p` is compact for a bounded piece. A
+  convex hull of a compact set is compact, and compact + closed is closed, so the
+  epigraph is closed and `conv f` is lsc.
+- **The API gap that stopped it tonight:** mathlib has
+  `Set.Finite.isCompact_convexHull` but I could not locate a general "convex hull
+  of a **compact** set is compact", nor "compact + closed is closed" (`IsCompact.mul`
+  gives compact + compact). Either they are under names I did not find, or they
+  need proving. That is the first thing to settle next time.
+- **C6's covering half is genuinely harder** and is *not* reduced by the above:
+  `exists_affine_le_of_lt` gives an affine minorant with `A x = a < f**(x)`, never
+  one that touches. Touching is subgradient existence, which holds only on the
+  relative interior of the domain, so it needs `intrinsicInterior`.
+- **Before retrying, fix:** do not describe either item as "needs Fenchel–Moreau"
+  again. C7 needs lsc of `conv f`, i.e. compactness; C6 needs subgradient
+  existence, i.e. relative interiors.
+- **Evidence:** `QuaConProof/Biconj.lean` (`affine_le_biconj`,
+  `isClosed_epigraph_biconj`), and the mathlib files named above.
+
 ## 2026-08-24 — "one active candidate implies a unique maximiser" is FALSE
 
 - **Tried:** indexing rows 1 to 3 of `../CONJ_FIELD_PROOF.md` Theorem 4 by the
