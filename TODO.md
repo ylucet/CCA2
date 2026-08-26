@@ -210,20 +210,25 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
       now reporting as three because the split separates its stages. No regression.
 
-          testcPLQ/rectConjugateMatchesTheSup                     FAIL     86 s
-          testcPLQ/rectMaximumIsTheConjugateOfTheWholeDomain      FAIL   1562 s
-          testcPLQ/rectBiconjugateIsAConvexUnderestimator         TIMEOUT >3600 s
-          testMaxMultiRegion/testMaxBiconjugate                   FAIL   1360 s
-          testMaxMultiRegion/testMax3                             FAIL    557 s
-          testMaxMultiRegion/testPSqroot                          FAIL     75 s
-          testMaxMultiRegion/testOpenconvex                       FAIL    113 s
-          testMaxMultiRegion/pce2{Envelope,Conjugate,Step3}       FAIL  57/83/76 s   (= old testPCE2)
+          testcPLQ/rectConjugateMatchesTheSup                     GREEN 2026-08-25 (was FAIL)
+          testcPLQ/rectMaximumIsTheConjugateOfTheWholeDomain      FAIL   1562 s   plq_1p
+          testcPLQ/rectBiconjugateIsAConvexUnderestimator         TIMEOUT >3600 s plq_1p
+          testMaxMultiRegion/testMaxBiconjugate                   FAIL   1360 s   plq_1piece
+          testMaxMultiRegion/testMax3                             FAIL    557 s   plq_1piece
+          testMaxMultiRegion/testPSqroot                          FAIL     75 s   plq_1piece  G13
+          testMaxMultiRegion/testOpenconvex                       FAIL    113 s   plq_1piece  G14
+          testMaxMultiRegion/pce2{Envelope,Conjugate,Step3}       FAIL  57/83/76 s plq_1piece
 
-      Take them cheapest first: `testPSqroot` (75 s), `testOpenconvex` (113 s) and
-      `rectConjugateMatchesTheSup` (86 s) are already fast enough to fix directly. `testMax3`,
-      `testMaxBiconjugate` and `rectMaximumIsTheConjugateOfTheWholeDomain` need the stage split the
-      PCE family got. `rectBiconjugateIsAConvexUnderestimator` does not finish at all and is the
-      only one where the first job is to find out where the time goes.
+      SECOND GATE 2026-08-25, after the plqCheck oracle fix: **36 pass / 8 fail / 1 timeout** in
+      3695 s, against 35/9/1 before. One red fixed, NO new reds -- so the sharper lower bound
+      exposed no hidden minorant anywhere in the two suites.
+
+      **Read G14 before taking any of these.** Every red measured so far belongs to `plq_1piece`,
+      and `conj` is exact on the same inputs -- so they are not `conj` bugs. The two that still
+      matter for `conj` are the two `plq_1p` ones: `rectMaximumIsTheConjugateOfTheWholeDomain`
+      (1562 s, needs the stage split the PCE family got) and
+      `rectBiconjugateIsAConvexUnderestimator`, which does not finish at all and where the first
+      job is to find out where the time goes.
       **G7 is verified by this run:** `-j 4` shards per test, consecutive stages of a fixture ran
       concurrently, and no cache error or spurious red appeared.
 
