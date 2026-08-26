@@ -18,6 +18,11 @@ Branch: `overnight/2026-08-25`
   pieces carry the same quadratic, so Step 0 merges them and the cross-piece max that holes is
   never performed. `conj` on the merged hexagon returns the exact 37.5 there. Split done as well:
   the `max` stage now builds from the cached `conj` stage instead of re-running it.
+- **Item 4 / G2 CLOSED — `conjAffinePLQ`, the all-affine route.** `max(0,x,y)` now conjugates
+  numerically in under a second and never enters `maxQuaPar`; the answer is the indicator of the
+  unit simplex, checked against the closed form. New file + 3 tests, plus a second fixture
+  (`max(0,|x|-1,|y|-1)` -> the L1 ball) that exercises a real 4-cell subdivision. The test that
+  used to pin this as a gap is retargeted onto the new behaviour. **fast 306/0.**
 - Nightly slow gate (started first, per rule 9): **92 pass / 0 fail** over 5 suites.
 
 ## What is broken

@@ -132,20 +132,38 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
             % which would put this whole suite in the wrong bucket to pin a ROUTE.
         end
 
-        function anAFFINEUnboundedFaceStillFallsBack(testCase)
-        % max(0,x,y): convex, its own biconjugate, and every face affine over an unbounded wedge.
-        % A DIFFERENT gap from the one above and from the convex-quadratic one conjConvexPolygon
-        % closed: the conjugate of an affine function over an unbounded polygon is a SUPPORT
-        % FUNCTION, so it is +inf off a cone -- and maxQuaPar refuses an operand that is not finite
-        % everywhere (maxQuaPar:notFullDomain). Closing this needs both a construction and that
-        % refusal lifted, which is why it is listed separately in TODO.md.
+        function anAFFINEUnboundedFaceIsNowNUMERICAndCorrect(testCase)
+        % max(0,x,y): convex, its own biconjugate, every face affine over an unbounded wedge.
+        %
+        % TEST CHANGED 2026-08-25 (overnight), and this is the sentence umbrella CLAUDE.md 8 asks
+        % for. It was `anAFFINEUnboundedFaceStillFallsBack`, and it asserted that this input must
+        % DECLINE on the numeric route -- because the conjugate of an affine function over an
+        % unbounded polygon is a SUPPORT function, +inf off a cone, and `maxQuaPar` refuses an
+        % operand that is not finite everywhere. That was a true statement about a GAP, TODO.md's
+        % G2, and the gap is now closed: `conjAffinePLQ` builds the answer straight from the
+        % definition and never enters `maxQuaPar` at all. A test that pins a gap has to change when
+        % the gap does, or it forbids the fix.
+        %
+        % It now asserts the thing worth having, which the old one could not: the numeric route
+        % SUCCEEDS and the value is right. f*(s) = sup_x <s,x> - max(0,x,y) is the INDICATOR of the
+        % unit simplex -- +inf unless s >= 0 (push along either axis) and unless s1 + s2 <= 1 (push
+        % along (1,1)), and 0 on it, attained at the origin.
             V = [0 0; 0 -1; -1 0; 1 1];
             E = [1 2 0; 1 3 0; 1 4 0];
             F = [2 1; 1 3; 3 2];
             f = [0 0 0 0 0 0; 0 0 0 1 0 0; 0 0 0 0 1 0];
             q = QuaPol(V, E, f, F);
-            testCase.verifyError(@() conjCPLQ(q, [], 'numeric'), ...
-                ?MException, 'an affine unbounded face must decline, not answer');
+            g = conjCPLQ(q, [], 'numeric');
+            testCase.verifyFalse(isa(g, 'QuaParCPLQ'), 'the affine route must not go symbolic');
+            for s = {[0 0], [0.3 0.3], [0.25 0.5], [0.9 0.05]}
+                testCase.verifyEqual(g.eval(s{1}), 0, 'AbsTol', 1e-9, sprintf( ...
+                    'f*(%g,%g) must be 0 on the simplex', s{1}(1), s{1}(2)));
+            end
+            for s = {[0.6 0.6], [-0.1 0.5], [0.5 -0.1], [2 0]}
+                v = g.eval(s{1});
+                testCase.verifyTrue(isinf(v) || isnan(v), sprintf( ...
+                    'f*(%g,%g) must be +inf off the simplex, got %g', s{1}(1), s{1}(2), v));
+            end
         end
 
         function theRouteArgumentItselfIsValidated(testCase)

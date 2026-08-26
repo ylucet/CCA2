@@ -46,18 +46,23 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       family of defect from 2026-08-13.
       Closing this removes the LAST measured fallback of the bounded family.
 
-- [ ] **G2 -- an AFFINE face over an UNBOUNDED polygon.** `max(0,x,y)` is the canonical example and
-      it still falls back. Two things are missing and they are separable:
-      1. the construction: `(L'x + c + I_P)*` is the support function `sigma_P(s-L) - c`, which for
-         `P = conv(W) + cone(d1,d2)` is `max_i <s-L, w_i> - c` restricted to the polar cone
-         `{t : <t,d1> <= 0, <t,d2> <= 0}` -- a QuaPol with affine faces and an INDICATOR domain;
-      2. `maxQuaPar.assertFullDomain` refuses any operand that is not finite everywhere, and every
-         piece of this family is `+inf` off a cone.
-      **Worth pricing a third route first.** For an input whose pieces are ALL affine, `f*` is the
-      max of finitely many affine functions restricted to one polyhedron -- the upper envelope of
-      planes, i.e. a 3-D hull computation -- so a direct `conjAffinePLQ` would cover every
-      piecewise-LINEAR input in one construction and never enter `maxQuaPar` at all. That is a new
-      operator rather than a gap fix, which is why it is not started.
+- [x] **G2 -- DONE 2026-08-25 (overnight). `conjAffinePLQ`, the all-affine route.** `max(0,x,y)`
+      now conjugates NUMERICALLY, in well under a second, and never enters `maxQuaPar`.
+      The construction is three lines of mathematics and is written out in the file: on face i,
+      `f*(s) = max_i [sigma_{P_i}(s - a_i) - b_i]`, so
+        * dom f* is the intersection over every face and every RECESSION direction of the
+          half-planes `<d,s> <= <d,a_i>` -- which is why the answer has a BOUNDED domain although
+          the input does not (`max(0,x,y)`'s three cones give s1>=0, s2>=0, s1+s2<=1: the simplex);
+        * on it f* is the max of the affine functions `<s,w> - <a_i,w> - b_i`, one per (face,
+          vertex), since a linear functional bounded on a polyhedron attains its sup at a vertex.
+      The subdivision is then the ordinary one for a max of affine functions, by half-plane
+      clipping. Wired into `conjPolygonalDomain` ahead of the fan route and guarded: it declines by
+      name when dom f* is unbounded (the case Step 3 already does) and falls through, so it is a
+      strict addition. Pinned by `conjAffinePLQTest` (3 tests, both fixtures against closed forms
+      derived independently -- the simplex, and the L1 ball with a genuine 4-cell subdivision from
+      `max(0,|x|-1,|y|-1)`) and end to end by
+      `conjSymFreeTest/anAFFINEUnboundedFaceIsNowNUMERICAndCorrect`, which replaces the test that
+      used to pin the gap. fast 306/0.
 
 - [x] **G2b -- DONE 2026-08-24. `maxQuaPar` dropped a cell on some unbounded folds.** Found 2026-08-24 and it is the
       one silent wrong answer in the session: a 4-cone fan assembled to 4 cells and returned 2.0 at

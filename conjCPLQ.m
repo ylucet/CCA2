@@ -367,6 +367,31 @@ function g = conjSingleTriangle(obj, forceNumeric)
 end
 
 % ================================================================================================
+function tf = allFacesAffine(obj)
+% Every face carries a function with no quadratic part. The 6-coefficient row is
+% [x^2 xy y^2 x y const], so the first three decide it.
+    tf = true;
+    for i = 1:obj.nf
+        q = obj.f(i, 5:7);
+        if any(abs(q) > sqrt(eps) * max(1, max(abs(obj.f(i, 5:10)))))
+            tf = false; return
+        end
+    end
+end
+
+function faces = affineFaceList(obj)
+% Each face as conjAffinePLQ wants it: the same boundary description conjConvexPolygon takes, plus
+% the affine function's gradient and constant.
+    faces = struct('W', {}, 'dFirst', {}, 'dLast', {}, 'a', {}, 'b', {});
+    for i = 1:obj.nf
+        [W, dF, dL] = faceBoundary(obj, i);
+        f6 = obj.f(i, 5:10);
+        faces(end+1) = struct('W', W, 'dFirst', dF, 'dLast', dL, ...
+                              'a', [f6(4), f6(5)], 'b', f6(6)); %#ok<AGROW>
+    end
+end
+
+% ================================================================================================
 function g = conjPolygonalDomain(obj)
 % Case B2: conjugate every face of the domain by the cheapest closed form that fits it, and
 % combine with Step 3's numeric max. Bounded or unbounded.
@@ -388,6 +413,21 @@ function g = conjPolygonalDomain(obj)
 % Any per-piece result that is not a mesh is refused rather than worked around: it means that
 % piece's own Step 2 fell back to cPLQ's symbolic form, and mixing the two representations inside
 % Step 3 is the confusion this branch exists to avoid.
+    % ALL-AFFINE INPUT GOES TO conjAffinePLQ, WHOLE (TODO.md G2). Every face affine means f* is a
+    % max of SUPPORT functions, each +inf off a cone -- exactly the shape maxQuaPar refuses, which
+    % is why `max(0,x,y)` and its family always went to the symbolic Case C. conjAffinePLQ builds
+    % the answer directly from the definition and never enters Step 3 at all. It declines by name
+    % when dom f* comes out unbounded, which is the case Step 3 can already do, so falling through
+    % on that identifier costs nothing and keeps this a strict addition.
+    if allFacesAffine(obj)
+        try
+            g = conjAffinePLQ(affineFaceList(obj));
+            return
+        catch ME
+            if ~strcmp(ME.identifier, 'PLQ:conjAffinePLQ:unboundedDual'), rethrow(ME); end
+        end
+    end
+
     E3 = [1 2 1; 2 3 1; 3 1 1]; F3 = [1 0; 1 0; 1 0];
     gs = {};
     for i = 1:obj.nf
