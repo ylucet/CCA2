@@ -28,6 +28,10 @@ Branch: `overnight/2026-08-25`
   returns a QuaParCPLQ, exact against the closed form. **fast 307/0.**
 - G2's route also improved `biconj`: `(x*y on a triangle)**` now comes back as a numeric MESH
   instead of cPLQ's symbolic form, same values. One test's accessor updated accordingly.
+- **Item 6 / B3 — one of three closed.** dom f* being a single POINT is a needle, which QuaPar
+  already represents; the block was a missing branch in `QuaPar.eval` that returned +inf on a
+  needle *including at its own vertex*. `conj` of an affine function now returns the answer. The
+  LINE and EMPTY cases stay refused — genuinely the return-type work.
 - Nightly slow gate (started first, per rule 9): **92 pass / 0 fail** over 5 suites.
 
 ## What is broken

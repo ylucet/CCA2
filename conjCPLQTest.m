@@ -175,12 +175,15 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % is now specific, and pinning the generic one would have blocked the classification.
         %
         %   Q indefinite   -> conv f = -inf, so f* = +inf everywhere: dom f* is EMPTY
-        %   Q = 0 (affine) -> f* is the indicator of the single point L: dom f* is a POINT
+        %
+        % The AFFINE case (Q = 0) has LEFT this table, 2026-08-25 (overnight): its dom f* is a
+        % single POINT, and a point IS representable -- a needle, nv=1/ne=0, which QuaPar's
+        % constructor always anticipated and QuaPar.eval now understands. It is answered rather
+        % than refused; see theAffineFullDomainConjugateIsAPointAndIsRETURNED.
         %   Q PSD rank 1   -> f* finite only on a LINE through L along range(Q)
             cases = {
                 [0  1  0  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'f = xy, indefinite'
                 [-2 0 -2  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'concave'
-                [0  0  0  3 -2 5], 'PLQ:conjCPLQ:conjugateIsAPoint',      'affine, Q = 0'
                 [1  0  0  0 0 0], 'PLQ:conjCPLQ:conjugateIsALine',        'PSD rank 1, x^2/2'
                 [1  1  1  2 0 0], 'PLQ:conjCPLQ:conjugateIsALine',        'PSD rank 1, (x+y)^2/2'
             };
@@ -195,14 +198,40 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % The messages are the specification, so they are asserted rather than left to drift: the
         % affine case must name the point f* is supported on and its value there.
         % f = 3x - 2y + 5, so f* is the indicator of (3,-2) with value -5.
+            % Repointed off the AFFINE case 2026-08-25 (overnight), because that one is now an
+            % ANSWER rather than a refusal. f = x^2/2 has Q = diag(1,0), so f* is finite only on
+            % the line <s - L, n> = 0 with n = (0,1).
             try
-                QuaPol([0 0 0 3 -2 5]).conj('cplq');
-                testCase.verifyFail('an affine full-domain quadratic was not refused');
+                QuaPol([1 0 0 0 0 0]).conj('cplq');
+                testCase.verifyFail('a rank-1 PSD full-domain quadratic was not refused');
             catch ME
-                testCase.verifySubstring(ME.message, '(3,-2)', ...
-                    'the refusal must name the point dom f* reduces to');
-                testCase.verifySubstring(ME.message, '-5', ...
-                    'the refusal must name f* at that point');
+                testCase.verifyEqual(ME.identifier, 'PLQ:conjCPLQ:conjugateIsALine');
+                testCase.verifySubstring(ME.message, 'LINE', ...
+                    'the refusal must say what dom f* reduces to');
+                testCase.verifySubstring(ME.message, 'pinv', ...
+                    'the refusal must carry the closed form for f* on that line');
+            end
+        end
+
+        function theAffineFullDomainConjugateIsAPointAndIsRETURNED(testCase)
+        % B3's point case, closed 2026-08-25 (overnight). f = 3x - 2y + 5 is affine on all of R^2,
+        % so f*(s) = sup_x <s - L, x> - kappa is +inf unless s = L = (3,-2), and -kappa = -5 there.
+        % dom f* is a single POINT.
+        %
+        % It used to raise `PLQ:conjCPLQ:conjugateIsAPoint`, and the reason was never the
+        % mathematics -- it was that `QuaPar.eval` returned +inf on a NEEDLE domain (nv=1, ne=0),
+        % including at the needle's own vertex, so the answer had nowhere to live. eval now has
+        % that branch, so the answer is simply returned.
+            g = QuaPol([0 0 0 3 -2 5]).conj('cplq');
+            testCase.verifyEqual(g.kind(), 'QuaPar');
+            testCase.verifyEqual(g.nv, 1, 'dom f* is a single point');
+            testCase.verifyEqual(g.ne, 0, 'a needle has no edges');
+            testCase.verifyEqual(g.eval([3 -2]), -5, 'AbsTol', 1e-12, ...
+                'f* at the point it is supported on');
+            for s = {[3 -1.9], [0 0], [-3 2], [3.001 -2]}
+                v = g.eval(s{1});
+                testCase.verifyTrue(isinf(v), sprintf( ...
+                    'f*(%g,%g) must be +inf off the point, got %g', s{1}(1), s{1}(2), v));
             end
         end
 

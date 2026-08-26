@@ -3124,3 +3124,35 @@ measured to be un-separable on this input.
   conjugates. `rectBiconjugateIsAConvexUnderestimator` was building the same `plqStage` key by a
   DIFFERENT expression, so a cold `max` cost whichever path got there first; both now use the same
   one.
+
+## 2026-08-25 (overnight, B3) — the POINT case is closed; the block was `QuaPar.eval`, not the mathematics
+
+B3 was three refusals for a full-domain quadratic that is not strictly convex, all classified
+earlier today with their closed forms: an EMPTY dom f* (a negative eigenvalue), a POINT (Q = 0,
+f affine), and a LINE (PSD of rank 1). All three were recorded as blocked on the return type.
+
+**One of the three was not.** dom f* being a single point is a NEEDLE -- `nv=1, ne=0, nf=0` -- and
+`QuaPar`'s constructor has always anticipated exactly that shape:
+
+    if ismember([obj.nv,obj.ne],[1,0;2,1],'rows'), obj.nf=0; end   %needle / segment / ray
+
+What was missing was one branch of `QuaPar.eval`. Its first branch handles a full domain, its
+second handles an EDGE CHAIN (`max(F,[],'all')==0`, which needs at least one edge), and a needle
+matches neither: the face loop then runs over an empty `P` and every point comes back `+inf`,
+including the needle's own vertex. Measured directly -- a hand-built needle at (3,-2) carrying -5
+evaluated to `Inf` there.
+
+So the domain existed in the representation and nowhere else. `eval` now has the branch, and
+`conjCPLQ` Case A returns the answer instead of raising: for f = 3x - 2y + 5 it gives -5 at (3,-2)
+and +inf elsewhere, which is the definition.
+
+**The other two stay refused, and for different reasons.** A LINE is not a segment between two
+vertices, which is all the `dim < 2` mesh can express; an EMPTY domain is not `nf=0` (that means
+`dim < 2`, not empty) and has no encoding at all. Those two remain on the return-type work.
+
+**Tests changed**, with the umbrella CLAUDE.md 8 sentence: `fullDomainNonStrictlyConvexIsClassified
+NotLumped`'s table listed the affine row as raising `conjugateIsAPoint`, and
+`theFullDomainRefusalsCarryTheClosedForm` used the affine case to check that a refusal carries its
+closed form. Both pinned a gap that is now an answer, so the affine row leaves the table, the
+message test is repointed at the rank-1 PSD case (still a refusal), and a new test asserts the
+returned needle's value and its +inf elsewhere.

@@ -147,6 +147,20 @@ classdef QuaPar < RatPar & Qua
                 region = ones(size(x,1),1);
                 fVal = QuaPar.evalPoly(obj.f,x);
                 return;
+            elseif obj.nv==1 && obj.ne==0 %needle: a dim-0 domain
+                % A NEEDLE is one point and no edges -- `dom.dim = 0` in createDom, and the
+                % constructor already anticipates [nv,ne] = [1,0]. Without this branch the face
+                % loop below runs over an empty P and every point, including the needle's OWN
+                % vertex, comes back +inf: the domain existed in the representation but nowhere
+                % else. It is what the conjugate of a full-domain AFFINE function needs
+                % (conjCPLQ Case A: f* is the indicator of the single point L), which is how the
+                % gap was found.
+                fVal = Inf * ones(size(x,1),1);
+                tol = 1e-9 * (1 + norm(obj.V(1,:)));
+                on = vecnorm(x - obj.V(1,:), 2, 2) <= tol;
+                if any(on), fVal(on) = QuaPar.evalPoly(obj.f(1,:), x(on,:)); end
+                region = ones(size(x,1),1);
+                return;
             elseif max(obj.F,[],'all')==0 %edge chain   
                 fVal=Inf * ones(size(x,1),1);
                 for i=1:obj.ne%loop on each edge

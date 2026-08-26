@@ -129,13 +129,15 @@ function g = conjCPLQ(obj, idx, route)
                  'f* = +inf everywhere. dom f* is EMPTY, which no QuaPol/QuaPar mesh encodes.'], ...
                 evs(1), evs(2));
         elseif evs(2) <= tolE
-            % Q = 0: f is AFFINE, f(x) = <L,x> + kappa, and f* is the indicator of the single
-            % point L with value -kappa there. dom f* is a POINT.
-            error('PLQ:conjCPLQ:conjugateIsAPoint', ...
-                ['f is affine (Q = 0), so f* is the indicator of the single point ' ...
-                 's = (%g,%g) with f*(s) = %g there and +inf elsewhere. dom f* is a POINT: the ' ...
-                 'mesh has a needle domain (nv=1, ne=0) but QuaPar.eval returns +inf on it.'], ...
-                L(1), L(2), -kappa);
+            % Q = 0: f is AFFINE, f(x) = <L,x> + kappa, so
+            %       f*(s) = sup_x <s - L, x> - kappa
+            % which is +inf unless s = L, and -kappa there. dom f* is a single POINT, and that is
+            % a NEEDLE -- nv=1, ne=0, nf=0, which QuaPar's constructor has always anticipated.
+            % It used to raise `PLQ:conjCPLQ:conjugateIsAPoint` because QuaPar.eval returned +inf
+            % on a needle, including at the needle's own vertex; eval now has that branch, so the
+            % answer can simply be returned. See DECISIONS.md 2026-08-25 (overnight, B3).
+            g = QuaPar(L(:).', zeros(0,3), [0 0 0 0 0 -kappa], zeros(0,2));
+            return
         else
             % Q is PSD of rank 1: along the null direction n of Q, f is affine with slope <L,n>,
             % so the sup is finite only where <s-L,n> = 0. dom f* is that LINE, and on it

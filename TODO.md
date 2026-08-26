@@ -333,6 +333,20 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `testMax3` and `testMaxBiconjugate` are pinned on the CLASS rather than a measurement -- their
       pins say so, and confirming them is part of the migration.
 
+- [ ] **B3 -- two of the three representation gaps remain (one CLOSED 2026-08-25 overnight).**
+      A full-domain quadratic that is not strictly convex gives three different objects:
+        * **POINT** (Q = 0, f affine) -- **DONE.** dom f* is a NEEDLE, `nv=1/ne=0`, which
+          `QuaPar`'s constructor always anticipated; the block was one missing branch in
+          `QuaPar.eval`, which returned +inf on a needle including at its own vertex. `conj` now
+          returns the answer. Pinned by
+          `conjCPLQTest/theAffineFullDomainConjugateIsAPointAndIsRETURNED`.
+        * **LINE** (PSD rank 1) -- still refused: the `dim < 2` mesh expresses a SEGMENT between
+          two vertices, not a line.
+        * **EMPTY** (a negative eigenvalue) -- still refused: `nf = 0` means `dim < 2`, not empty,
+          so there is no encoding at all.
+      Both remaining ones are the return-type work, not mathematics -- the closed forms are in the
+      refusal messages. `DECISIONS.md` 2026-08-25 (overnight, B3).
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
