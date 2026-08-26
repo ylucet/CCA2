@@ -277,17 +277,19 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       FALLBACK, and one that shrinks automatically as the Step 2 fallbacks (G1, G4) close --
       which is why it was scheduled last.
 
-- [ ] **G12 -- `biconjCPLQ`'s curved-mesh escape is a NO-OP for a single triangle.** Measured
-      2026-08-25. `biconjCPLQ` calls `conjCPLQ(..., 'symbolic')` exactly when the numeric first
-      conjugate `isMeshed && hasCurvedEdge`, because the second conjugation cannot take a curved
-      mesh. For a single bounded triangle Case B runs before the route is consulted, so that call
-      returns the SAME curved mesh and the escape does nothing.
-      **Do not fix it by gating Case B on `~forceSymbolic`** -- tried and reverted the same day:
-      Case C does not cover a single triangle (its header scopes it to nf>1 and/or a non-triangular
-      face) and raises `PLQ:conjCPLQ:cplqFailed` after 102 s on
-      {(-1,1),(-3,-3),(-4,-3)} with `x*y`. There is nowhere for 'symbolic' to go for that shape.
-      What is actually needed is a symbolic form for a single triangle -- Step 2's own cPLQ output
-      rather than Case C's whole-domain pipeline.
+- [x] **G12 -- DONE 2026-08-25 (overnight). `route='symbolic'` now has a destination for a single
+      triangle.** Case B ignored the route entirely, so a triangle came back as the same numeric
+      mesh whatever the caller asked for -- and `biconjCPLQ` asks for the symbolic form exactly
+      when the numeric first conjugate is a CURVED mesh, because the second conjugation cannot take
+      one. The escape did nothing. The destination is cPLQ's own PER-TRIANGLE form,
+      `conjEnvelopeViaCPLQ`, which `conjSingleTriangle` already falls back to -- NOT Case C, which
+      does not cover a single triangle and raises `cplqFailed` after 102 s (that route was tried
+      and is refuted in `DECISIONS.md`).
+      Measured: `x*y` over {(0,0),(1,0),(0,1)} returns a QuaParCPLQ in 14.4 s, exact to 0.000e+00
+      against the closed form `max(0,s1,s2)`. On the {(-1,1),(-3,-3),(-4,-3)} triangle cPLQ itself
+      raises `cplqFailed` -- a pre-existing limit of that pipeline on that fixture, now named
+      rather than silently answered with the numeric mesh. Pinned by
+      `conjSymFreeTest/routeSYMBOLICHasSomewhereToGoForASingleTriangle`.
 
 - [ ] **G13 -- `testPSqroot` is a LEGACY red, not a `conj` one.** Measured 2026-08-25 on
       {(-1,1),(-3,-3),(-4,-3)} carrying `x*y` at s = (-1,-1):

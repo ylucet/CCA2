@@ -166,6 +166,36 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
             end
         end
 
+        function routeSYMBOLICHasSomewhereToGoForASingleTriangle(testCase)
+        % TODO.md G12. `route='symbolic'` is documented as skipping the numeric path, and Case B
+        % used to ignore it entirely: a single bounded triangle came back as the same numeric mesh
+        % whatever the caller asked for. That is not only a testability point -- `biconjCPLQ` asks
+        % for the symbolic form exactly when the numeric first conjugate is a CURVED mesh, because
+        % the second conjugation cannot take one, and for a triangle it was handed the same curved
+        % mesh back. The escape did nothing.
+        %
+        % Gating Case B on ~forceSymbolic so it fell through to Case C is REFUTED (DECISIONS.md
+        % 2026-08-25 G12): Case C does not cover a single triangle and raises cplqFailed after
+        % 102 s. The destination is cPLQ's own PER-TRIANGLE form, `conjEnvelopeViaCPLQ`, which is
+        % what `conjSingleTriangle` already falls back to.
+        %
+        % The value is asserted, not just the type: `x*y` over {(0,0),(1,0),(0,1)} conjugates to
+        % max(0,s1,s2), whose closed form is exact here.
+            q = conjSymFreeTest.tri([0 0; 1 0; 0 1], [0 1 0 0 0 0]);
+            gs = conjCPLQ(q, [], 'symbolic');
+            testCase.verifyEqual(class(gs), 'QuaParCPLQ', ...
+                'route=symbolic on a triangle must return cPLQ''s symbolic form');
+            gn = conjCPLQ(q, [], 'numeric');
+            testCase.verifyFalse(isa(gn, 'QuaParCPLQ'), 'route=numeric must stay a mesh');
+            S = [0 0; 1 1; -1 -1; 2 0.5; -0.5 2; 1 -1];
+            for i = 1:size(S,1)
+                s = S(i,:);
+                testCase.verifyEqual(evalFunctionNDomain(gs.fnd, s), ...
+                    max([0, s(1), s(2)]), 'AbsTol', 1e-9, sprintf( ...
+                    'the symbolic form must equal max(0,s1,s2) at (%g,%g)', s(1), s(2)));
+            end
+        end
+
         function theRouteArgumentItselfIsValidated(testCase)
             q = QuaPol([1 0 1 0 0 0]);
             testCase.verifyError(@() conjCPLQ(q, [], 'nonsense'), 'PLQ:conjCPLQ:route');

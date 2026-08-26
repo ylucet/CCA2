@@ -291,9 +291,17 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             g = p.conj();
             testCase.verifyEqual(g.kind(), 'QuaPar');
             h = g.biconj();
+            % ACCESSOR CHANGED 2026-08-25 (overnight), not the assertion. This read `h.fnd`, which
+            % exists only on a QuaParCPLQ. `h` is now a QuaPar: `g` here is max(0,s1,s2), an
+            % all-affine function over unbounded faces, so conjugating it takes the new
+            % `conjAffinePLQ` route (TODO.md G2) and comes back as a MESH instead of cPLQ's
+            % symbolic form. That is an improvement -- the same values, numerically, without the
+            % symbolic pipeline -- and this test's own header says it asserts the VALUE, so it must
+            % read whichever representation it is handed rather than pin one.
+            evalH = @(x) biconjCPLQTest.evalAnyResult(h, x);
             X = [0 0; 2 1; -1 3; -2 -3; 0.5 0.25; 1 1; -0.5 -0.5];
             for i = 1:size(X,1)
-                v = evalFunctionNDomain(h.fnd, X(i,:));
+                v = evalH(X(i,:));
                 testCase.verifyEqual(v, max([0, X(i,1), X(i,2)]), 'AbsTol', 1e-9, ...
                     sprintf('g** must equal max(0,x,y) at (%g,%g)', X(i,1), X(i,2)));
             end
@@ -357,4 +365,18 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             v = -min(fv, fv2);
         end
     end
+    methods (Static)
+        function v = evalAnyResult(g, x)
+        % Evaluate a conj/biconj result whatever representation it came back as. Same idiom as
+        % conjCPLQTest.evalConjResult: since the numeric routes were widened, one input family can
+        % legitimately produce a QuaParCPLQ or a mesh, and a test that is about VALUES must not
+        % hard-code either.
+            if isa(g, 'QuaParCPLQ')
+                v = evalFunctionNDomain(g.fnd, x);
+            else
+                v = g.eval(x);
+            end
+        end
+    end
+
 end

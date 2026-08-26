@@ -23,6 +23,11 @@ Branch: `overnight/2026-08-25`
   unit simplex, checked against the closed form. New file + 3 tests, plus a second fixture
   (`max(0,|x|-1,|y|-1)` -> the L1 ball) that exercises a real 4-cell subdivision. The test that
   used to pin this as a gap is retargeted onto the new behaviour. **fast 306/0.**
+- **Item 5 / G12 CLOSED.** `route='symbolic'` was ignored by Case B, so `biconjCPLQ`'s
+  curved-mesh escape was a no-op for a single triangle. It now goes to cPLQ's per-triangle form and
+  returns a QuaParCPLQ, exact against the closed form. **fast 307/0.**
+- G2's route also improved `biconj`: `(x*y on a triangle)**` now comes back as a numeric MESH
+  instead of cPLQ's symbolic form, same values. One test's accessor updated accordingly.
 - Nightly slow gate (started first, per rule 9): **92 pass / 0 fail** over 5 suites.
 
 ## What is broken
