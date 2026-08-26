@@ -3156,3 +3156,25 @@ NotLumped`'s table listed the affine row as raising `conjugateIsAPoint`, and
 closed form. Both pinned a gap that is now an answer, so the affine row leaves the table, the
 message test is repointed at the rank-1 PSD case (still a refusal), and a new test asserts the
 returned needle's value and its +inf elsewhere.
+
+## 2026-08-25 (overnight, item 3) — the biconjugate timeout is DOWNSTREAM of item 2's hole
+
+Where the >3600 s goes, from the two `--verylong -j 4` gates run earlier today plus tonight's split:
+
+    tri + conj  (per-piece triangulate and conjugate)      ~28 s   -- rectConjugateMatchesTheSup
+    cross-piece max                                      ~1534 s   -- the rest of the 1562 s 'max'
+    biconjugateF                                         >2000 s   -- and does not finish
+
+So the cost is not distributed: it is almost entirely the cross-piece maximum and then
+`biconjugateF`, and only the last of those fails to terminate.
+
+**And it is being fed a broken input.** Item 2 established that the `max` stage on this fixture
+leaves a HOLE -- `PRect f* uncovered at (-0.5,2)`. `biconjugateF` computes f** = (f*)*, so it is
+being asked to conjugate a mesh that does not cover the plane. That is the first thing to rule in
+or out, and it is cheap to test now that the stages are split: repair or excise the uncovered
+region in the cached `max` result and re-run `biconjugateF` alone. If it terminates, the timeout is
+a symptom of item 2 and not an independent defect; if it does not, the two are separate.
+
+A stage-by-stage timing run was started tonight to confirm the split above end to end. It had not
+finished after several hours and was stopped when the run ended, which is itself consistent with
+the numbers: the chain is dominated by two stages that together already exceed the budget.

@@ -347,6 +347,15 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       Both remaining ones are the return-type work, not mathematics -- the closed forms are in the
       refusal messages. `DECISIONS.md` 2026-08-25 (overnight, B3).
 
+- [ ] **G15 -- the `rectBiconjugateIsAConvexUnderestimator` timeout is probably item 2's HOLE.**
+      Where the time goes, measured: tri + conj ~28 s, the cross-piece max ~1534 s, `biconjugateF`
+      >2000 s and not finishing. Only the last one fails to terminate -- and it is fed the `max`
+      stage that item 2 showed leaves a hole (`PRect f* uncovered at (-0.5,2)`), so it is
+      conjugating a mesh that does not cover the plane.
+      **Cheapest next step, now that the stages are split:** take the cached `max` result, repair
+      or excise the uncovered region, and run `biconjugateF` alone. Terminates => the timeout is a
+      symptom of item 2, not an independent defect.
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
