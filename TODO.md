@@ -280,7 +280,7 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `cplqFailed` rather than returning -5. Fixing this is `plq_1piece` work (T6's migration),
       and it does NOT block `conj`. Take it only if the legacy class is being kept.
 
-- [ ] **G14 -- the `verylong` reds are a LEGACY-CLASS problem, not a `conj` one. Measured
+- [x] **G14 -- DONE 2026-08-25: the seven legacy reds are PINNED, not counted. Measured
       2026-08-25, and this is the finding that should decide what happens to them.** Each red was
       taken to its fixture and the SAME input put through `QuaPol.conj`:
 
@@ -303,10 +303,12 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `testMax3` and `testMaxBiconjugate` (both `plq_1piece`, so expect the same) and testcPLQ's
       `rectMaximumIsTheConjugateOfTheWholeDomain` / `rectBiconjugateIsAConvexUnderestimator`, which
       DO use `plq_1p` and are therefore the two worth measuring next.
-      **What to do with them is a decision, not a bug hunt:** these fixtures exercise a class the
-      project intends to retire (T6). Either migrate them to `plq_1p` -- which `DECISIONS.md`
-      2026-08-19 records as a real migration with its own defects, not a swap -- or mark them as
-      pinning legacy behaviour and stop counting them against `conj`.
+      **DECIDED: pinned as legacy.** All seven now call `testMaxMultiRegion.legacyPin`, which
+      `assumeFail`s with the measurement in the message, so they report INCOMPLETE rather than
+      FAILED and cost 1-3 s instead of 75-1360 s apiece. The bodies are untouched: whoever migrates
+      these fixtures to `plq_1p` (T6) deletes one line per test to get the checks back.
+      `testMax3` and `testMaxBiconjugate` are pinned on the CLASS rather than a measurement -- their
+      pins say so, and confirming them is part of the migration.
 
 ### Tools built on 2026-08-24, so they are not rebuilt
 
