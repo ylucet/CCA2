@@ -2926,3 +2926,35 @@ succeed and neither cell needs a winner read off a centroid, and neither needs t
 - **Expect the `f* < sup - tol` direction to fire more readily now.** That is the definite-defect
   direction, so anything it newly catches is a real minorant the coarse grid was hiding. The
   `--verylong` gate is the place that shows up.
+
+## 2026-08-25 (G14) — every `verylong` red measured so far belongs to `plq_1piece`, and `conj` gets the same inputs right
+
+Each red was taken to its own fixture and the SAME input put through `QuaPol.conj`:
+
+    red                                class used     conj on the same input
+    ---------------------------------  ------------   ---------------------------------------
+    pce2* (was testPCE2)               plq_1piece     EXACT at all nine dual points
+    testPSqroot                        plq_1piece     EXACT (1.75, where legacy returns -5)
+    testOpenconvex                     plq_1piece     plq_1p REFUSES, and correctly
+    rectConjugateMatchesTheSup         plq_1p         FALSE red -- the oracle; now green
+
+- **`testPSqroot`:** legacy returns the objective's value at the VERTEX (-4,-3) where the sup is
+  strictly inside the edge to (-1,1) at t = 0.75. G4's shape of defect, different implementation.
+- **`testOpenconvex`:** legacy's envelope literally contains **2147483647** = `intmax('int32')`,
+  the ray DIRECTION MARKER being read as an ordinary coordinate, and exceeds f by 2.147e+09 at
+  (-1,0). `plq_1p` raises `convEnvUnbounded:minusInfinity` instead, which is the right answer --
+  `x*y` on that half-strip runs to -inf along x = -1, so conv f = -inf. `quaPolToPlq`'s header
+  records this defect as fixed *in plq_1p*; `plq_1piece` never got the fix.
+- **`testPCE2`:** the one red everyone quotes. `QuaPol.conj` on {(0,0),(1,0),(2,1)} with `x*y` is
+  exact at all nine dual points; the legacy route gives f*(0,0) = 0.0429 against a sup of 0.
+
+**Consequence for the session's question.** "Fix any remaining bug for conj" is much closer to done
+than the red count suggests: no measured red implicates `conj`. What the reds pin is `plq_1piece`,
+the class T6 intends to retire, and `DECISIONS.md` 2026-08-19 already records that swapping the
+fixtures to `plq_1p` is a MIGRATION with its own defects rather than a free change. Deciding
+between migrating them and marking them as legacy pins is a call for Yves, not a bug hunt.
+
+Still unmeasured: `testMax3` and `testMaxBiconjugate` (both `plq_1piece`, so expect the same), and
+testcPLQ's `rectMaximumIsTheConjugateOfTheWholeDomain` and
+`rectBiconjugateIsAConvexUnderestimator`, which DO use `plq_1p` and are the two worth measuring
+next.

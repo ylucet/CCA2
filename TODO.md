@@ -275,6 +275,34 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `cplqFailed` rather than returning -5. Fixing this is `plq_1piece` work (T6's migration),
       and it does NOT block `conj`. Take it only if the legacy class is being kept.
 
+- [ ] **G14 -- the `verylong` reds are a LEGACY-CLASS problem, not a `conj` one. Measured
+      2026-08-25, and this is the finding that should decide what happens to them.** Each red was
+      taken to its fixture and the SAME input put through `QuaPol.conj`:
+
+          red                                  class used     conj on the same input
+          ---------------------------------    ------------   -----------------------------------
+          pce2* (was testPCE2)                 plq_1piece     EXACT at all 9 dual points
+          testPSqroot                          plq_1piece     EXACT (1.75; legacy gives -5)
+          testOpenconvex                       plq_1piece     plq_1p REFUSES, correctly
+          rectConjugateMatchesTheSup           plq_1p         was a FALSE red -- oracle, now green
+
+      * `testPSqroot`: legacy takes the VERTEX value at (-4,-3) where the sup is strictly inside
+        the edge to (-1,1). `conj` gets 1.75.
+      * `testOpenconvex`: legacy's envelope contains **2147483647** -- `intmax('int32')`, the ray
+        DIRECTION MARKER read as an ordinary coordinate -- and exceeds f by 2.147e+09. `plq_1p`
+        raises `convEnvUnbounded:minusInfinity`, which is right: `x*y` on that half-strip runs to
+        -inf along x = -1, so conv f = -inf. This is the exact defect `quaPolToPlq`'s header says
+        was fixed *in plq_1p*; `plq_1piece` never got it.
+
+      **So `conj` is not implicated in any red measured so far.** The unmeasured ones are
+      `testMax3` and `testMaxBiconjugate` (both `plq_1piece`, so expect the same) and testcPLQ's
+      `rectMaximumIsTheConjugateOfTheWholeDomain` / `rectBiconjugateIsAConvexUnderestimator`, which
+      DO use `plq_1p` and are therefore the two worth measuring next.
+      **What to do with them is a decision, not a bug hunt:** these fixtures exercise a class the
+      project intends to retire (T6). Either migrate them to `plq_1p` -- which `DECISIONS.md`
+      2026-08-19 records as a real migration with its own defects, not a swap -- or mark them as
+      pinning legacy behaviour and stop counting them against `conj`.
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
