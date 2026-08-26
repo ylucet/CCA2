@@ -200,6 +200,19 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       by construction -- every candidate was rejected. It now asks whether the crossing sits ON
       that ray edge, which is when a cut really would cut off nothing. The A.5 triangle splits
       and stays exact to 3.6e-15; `splitDeclined` records the reason under `MAXQP_ASSERT`.
+      **SCOPE-REDUCED overnight 2026-08-25 to one named step.** The obstruction is
+      `matchHalfEdges` rejecting a curved half-edge against a straight one that is the SAME
+      boundary (both orphans had ZERO candidates -- rejected at generation, not consumed). The
+      discriminator is the SAGITTA, measured to separate the cases by five orders of magnitude
+      (true pair 1.172e-06, arc-vs-its-own-chord 1.127e-01), used RELATIVE to the endpoints' own
+      residuals rather than against a fixed tolerance. Sub-tolerance edges must be collapsed first
+      -- a piece whose own two vertices are 4.5e-06 apart against tolPos = 1e-3 cannot be matched.
+      **The working attempt is `.claude/assembly_attempt_2026-08-25.diff`** and it gets case 21
+      past assembly with case 8 still exact to 3.6e-15. **What is left is ONE thing:**
+      `clipArcByHalfPlane` raises `internal` on a degenerate arc -- one endpoint outside so a
+      crossing must exist, but the discriminant on a 5.76e-05 arc comes out negative. Handle that
+      (cut at the outside endpoint) and re-apply the diff. `DECISIONS.md` 2026-08-25 (overnight).
+
       **The hole is LOCATED, and G10 and G1 are the SAME defect (2026-08-25).** The uncovered
       point lies in g1 face 21 and g2 face 6 and the fold produced no piece with src [21 6] --
       G1's signature verbatim. But it is NOT `clipByFace`: tracked with `MAXQP_PROBE`, the cell is

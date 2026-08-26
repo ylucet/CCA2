@@ -2999,3 +2999,63 @@ by hand:
 
 **Next step is `assemblePieces`, and it is the documented redesign** (globally-consistent
 subdivision), not a small fix. Do not attempt it as a patch to `matchHalfEdges`.
+
+## 2026-08-25 (overnight, G1/G4/G10) — the assembly hole is `matchHalfEdges` rejecting curved-vs-straight, and the SAGITTA is the discriminator
+
+Four measurements, an attempt that got two stages further, and the blocker behind it. The attempt
+is kept verbatim at `.claude/assembly_attempt_2026-08-25.diff` -- it is not committed because it
+leaves the tree red, but it is 90% of the work and should be re-applied, not re-derived.
+
+**1. The piece is produced; assembly loses it.** Tracked with `MAXQP_PROBE`, the cell covering the
+uncovered point survives every straight clip, the curved cut and all four reduction passes, and is
+still covering it when `assemblePieces` is called.
+
+**2. WHICH piece, and why it is fragile.** Piece 28, src `[21 6]`, is an UNBOUNDED piece whose two
+own vertices are
+
+        [-0.20801507 -0.90722285]   and   [-0.20801318 -0.90721878]
+
+**4.5e-06 apart**, against `matchHalfEdges`' `tolPos = 1e-3`. It is a cone whose apex arithmetic
+split into two points. Its zero-length segment matched a neighbour it has no business matching,
+`buildGlobalVertices` unified its vertices with distant ones, and face 28 came out spanning a
+different region entirely.
+
+**3. With those sub-tolerance edges collapsed FIRST, the real obstruction appears, and it is
+`SUPPORT_MATRIX` 4.6's "live one" exactly.** `matchHalfEdges` then reports TWO orphans, each with
+**zero candidates** -- rejected at generation, not lost to greedy consumption:
+
+        piece 1 src [1 3]  straight  (-0.209275,-0.909936)->(-0.210638,-0.912444)
+        piece 2 src [2 4]  CURVED    (-0.210638,-0.912444)->(-0.209301,-0.909885)   dist 5.76e-05
+
+They are the same boundary, recorded as a chord by one piece and as an arc by the other, and
+`matchHalfEdges` rejects the pair by rule: "a curved half-edge only ever matches another curved
+one". That rule is CORRECT as far as its own reason goes -- an arc and its own chord share both
+endpoints while bounding different sets -- so the fix is not to drop it.
+
+**4. THE DISCRIMINATOR IS THE SAGITTA, and it separates the two cases by five orders of
+magnitude.** A genuine chord departs from the conic in the MIDDLE; an edge that two pieces recorded
+differently does not. Testing the straight edge's midpoint against the conic, measured on this
+fixture:
+
+        true pair   piece 1 src [1 3] vs piece 2 src [2 4]    residual 1.172e-06
+        false pair  piece 2 src [2 4] vs piece 3 src [3 1]    residual 1.127e-01
+
+Use it RELATIVE, not against a fixed tolerance: accept when the midpoint is no further off the
+conic than the ENDPOINTS are (`rM <= max(1e-12, 10*max(rA,rB))`). A fixed 1e-06 threshold rejects
+the true pair by a hair, because its endpoints already sit ~1e-06 off the conic having come from a
+different arithmetic path.
+
+**What the attempt achieves and where it stops.** With (a) sub-tolerance edges collapsed -- arcs
+included, since an arc 5.76e-05 long has area ~3e-09 and is noise wearing a conic -- and (b) the
+sagitta test, case 21 gets PAST assembly, and `case 8`'s A.5 triangle stays exact to 3.6e-15
+throughout. It then dies one stage later in `clipArcByHalfPlane:internal`, "no crossing of the clip
+line found within the arc's own u-span": exactly one endpoint outside, so a crossing must exist,
+but on an arc that short the quadratic's discriminant comes out negative and no real root is found.
+
+**Next step, and it is small and named:** make `clipArcByHalfPlane` handle the degenerate case --
+one endpoint outside, no real root in span means the arc is tangent to the clip line within
+tolerance, and the answer is to cut at the outside endpoint. Then re-apply the diff.
+
+**Why it is not committed.** It turns `conjEdgeLowerBoundTest`'s two case-21 tests red, correctly:
+they pin that the fixture is refused by a refusal we RECOGNISE, and `clipArcByHalfPlane:internal`
+is a raw internal error. fast was 301/2 with it, 303/0 without.

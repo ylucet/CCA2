@@ -4,9 +4,16 @@ Branch: `overnight/2026-08-25`
 
 ## What changed
 
-_(appended as the run goes)_
+- **Item 1 (`assemblePieces`, = G1 + G4 + G10) — scope-reduced to one named step, not closed.**
+  Found the obstruction and the discriminator for it; the working attempt is preserved at
+  `.claude/assembly_attempt_2026-08-25.diff` and is not committed because it leaves two tests red.
+  Full measurements in `DECISIONS.md` 2026-08-25 (overnight). One thing is left:
+  `clipArcByHalfPlane` fails on a degenerate arc; fix that and re-apply the diff.
+- Nightly slow gate (started first, per rule 9): **92 pass / 0 fail** over 5 suites.
 
 ## What is broken
+
+- `TODO.md` item 1 is still open, with a much smaller boundary — see above.
 
 ## Needs a decision
 
