@@ -2899,3 +2899,30 @@ succeed and neither cell needs a winner read off a centroid, and neither needs t
   curved mesh. For a single triangle that request is answered with the SAME curved mesh, so the
   escape does nothing. Filed as `TODO.md` G12. The fix is a symbolic form for a single triangle --
   Step 2's own cPLQ output -- not a reroute of the whole domain.
+
+## 2026-08-25 (G11a) — `rectConjugateMatchesTheSup` was a FALSE red: the oracle was the coarse thing
+
+- **One of the seven `verylong` reds, and it was never a defect.** The diagnostic reads
+  `f*(0,0) = 2 EXCEEDS the sup 1.99996661` -- the conjugate exceeding the reference by 3.34e-05,
+  asserted at 1e-05.
+- **Measured against the closed form** on the piece in question, `testcPLQ`'s PRect piece 3, the
+  triangle {(0,-4),(1,3),(1.8708,-0.2583)} carrying `x*y`:
+
+        s = ( 0, 0)   closed form  2.0000000000    plq_1p  2               grid  1.9999666056
+        s = (-1, 1)   closed form -0.4285714286    plq_1p -0.428571429     grid -0.4286032524
+
+  The conjugate is exactly right to ten digits. The GRID is short by 3.3e-05.
+- **The test was asserting the reference to an accuracy it does not have.**
+  `plqCheck.supOverDomain` was a pure 200-per-edge / 900-interior sample, and
+  `conjugateMatchesSup` checks BOTH directions at 1e-05 relative. `plqCheck`'s own header, and
+  CCA2's `CLAUDE.md`, both say the sampled sup is a LOWER bound and that only `f* < sup` is a
+  definite defect -- but the upper assertion at 1e-05 quietly demands the opposite.
+- **Fixed at the oracle, not at the tolerance.** For a quadratic `f` the objective `<s,x> - f(x)`
+  is quadratic, so its sup over a convex polygon is attained at a vertex, at a per-edge stationary
+  point, or at the interior stationary point -- a finite list, computed exactly. `supOverDomain`
+  now takes the max of the grid and that list. Both are lower bounds, so the result is still a
+  lower bound and can only move toward the truth; for a quadratic on a bounded polygon it IS the
+  truth. Measured after: 2.220e-16 on both points above, and the test passes in 28 s.
+- **Expect the `f* < sup - tol` direction to fire more readily now.** That is the definite-defect
+  direction, so anything it newly catches is a real minorant the coarse grid was hiding. The
+  `--verylong` gate is the place that shows up.

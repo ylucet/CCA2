@@ -97,12 +97,84 @@ classdef plqCheck
         end
 
         function s = supOverDomain(fExpr, vars, d, sPt, nB, nI)
-        % sup_{x in D} <sPt,x> - f(x), sampled. A LOWER bound on the true sup; see the header.
+        % sup_{x in D} <sPt,x> - f(x). A LOWER bound on the true sup; see the header.
+        %
+        % THE GRID ALONE IS NOT ACCURATE ENOUGH FOR THE TOLERANCE THE CALLERS ASSERT, and that was
+        % costing a false red. `conjugateMatchesSup` checks BOTH directions at 1e-5 relative; the
+        % upper one asks the reference to be accurate to 1e-5, and a 200-per-edge / 900-interior
+        % grid is not. MEASURED on `testcPLQ`'s PRect piece 3 -- the triangle {(0,-4),(1,3),
+        % (1.8708,-0.2583)} carrying x*y -- at s = (0,0): the true sup is EXACTLY 2, `plq_1p`
+        % returns 2, and the grid returns 1.9999666056. Short by 3.34e-05, asserted at 1e-05, and
+        % the test had been reading that as the conjugate exceeding the sup.
+        %
+        % So refine the grid with the CLOSED-FORM candidates. For a quadratic f the objective
+        % `<s,x> - f(x)` is quadratic, and its sup over a convex polygon is attained at a vertex,
+        % at a per-edge stationary point, or at the interior stationary point -- a finite list,
+        % computed exactly. Taking the max of the grid and that list is SAFE in the strong sense:
+        % both are lower bounds, so the result is still a lower bound and can only get closer to
+        % the truth. For a quadratic on a bounded polygon it IS the truth.
+        %
+        % One consequence to expect rather than be surprised by: a better lower bound makes the
+        % `f* < sup - tol` direction fire more readily. That direction is the definite-defect one,
+        % so anything it newly catches is a real minorant the coarse grid was hiding.
             if nargin < 5, nB = 200; end
             if nargin < 6, nI = 900; end
             X = plqCheck.domainSample(d, nB, nI);
             fv = plqCheck.evalSym(fExpr, vars, X);
             s = max(X * sPt(:) - fv);
+            s = max(s, plqCheck.supQuadExact(fExpr, vars, d, sPt));
+        end
+
+        function v = supQuadExact(fExpr, vars, d, sPt)
+        % The closed-form candidate maximisers of `<s,x> - f(x)` over the polygon of `d`, for a
+        % QUADRATIC f: the vertices, the stationary point along each edge, and the interior
+        % stationary point. Returns -inf when f is not quadratic or the polygon is unusable, so the
+        % caller's grid stands alone -- this only ever RAISES a lower bound.
+            v = -inf;
+            try
+                H = double(hessian(fExpr, vars));
+                g0 = double(subs(gradient(fExpr, vars), vars, [0 0]));
+                c0 = double(subs(fExpr, vars, [0 0]));
+                if any(~isfinite(H(:))) || any(~isfinite(g0)) || ~isfinite(c0), return, end
+                W = [double(d.polygon.vx(:)), double(d.polygon.vy(:))];
+            catch
+                return                      % not a quadratic, or no polygon: leave it to the grid
+            end
+            W = W(all(isfinite(W), 2) & all(abs(W) < 1e12, 2), :);   % drop ray markers
+            n = size(W,1);
+            if n < 2, return, end
+            obj = @(p) sPt(:).' * p(:) - (0.5*p(:).'*H*p(:) + g0(:).'*p(:) + c0);
+            cand = W;
+            % interior stationary point of the objective: H x = s - g0
+            if abs(det(H)) > 1e-12 * max(1, norm(H))
+                cand = [cand; (H \ (sPt(:) - g0(:))).'];
+            end
+            for e = 1:n
+                a = W(e,:); b = W(mod(e,n)+1,:); dir = b - a;
+                den = dir * H * dir.';
+                if abs(den) > 1e-14
+                    t = (sPt(:).'*dir(:) - (H*a(:) + g0(:)).'*dir(:)) / den;
+                    if t > 0 && t < 1, cand = [cand; a + t*dir]; end %#ok<AGROW>
+                end
+            end
+            for k = 1:size(cand,1)
+                p = cand(k,:);
+                if ~plqCheck.inConvexPolygon(p, W), continue, end
+                v = max(v, obj(p));
+            end
+        end
+
+        function tf = inConvexPolygon(p, W)
+        % p inside the CCW-or-CW convex polygon W, with a slack tolerance. Used only to reject
+        % candidate maximisers that fall outside, so a false accept would merely make the lower
+        % bound wrong -- hence the tolerance is tight and the orientation is handled by sign vote.
+            n = size(W,1); s = zeros(n,1);
+            for i = 1:n
+                a = W(i,:); b = W(mod(i,n)+1,:);
+                s(i) = (b(1)-a(1))*(p(2)-a(2)) - (b(2)-a(2))*(p(1)-a(1));
+            end
+            sc = max(1, max(abs(s)));
+            tf = all(s >= -1e-9*sc) || all(s <= 1e-9*sc);
         end
 
         % ---- the three checks -----------------------------------------------------------
