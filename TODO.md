@@ -227,6 +227,21 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       **G7 is verified by this run:** `-j 4` shards per test, consecutive stages of a fixture ran
       concurrently, and no cache error or spurious red appeared.
 
+- [x] **B5 -- STALE, corrected 2026-08-25.** `SUPPORT_MATRIX.md` listed "unbounded multi-face
+      domain, a face with a CURVED CONVEX envelope" as a GAP against
+      `plq_1p:conjugateFunction:unboundedNonAffine`. That case is DONE and has a green test:
+      `conjConvexOverPiece`'s KKT active-set decomposition covers the bounded triangle and the
+      unbounded wedge/half-strip with the same code -- a ray contributes its direction exactly as a
+      bounded edge does -- and `unboundedFaceTest/convexFaceOverAWedgeGoesThroughTheWholePipeline`
+      records that it *used to* raise that identifier.
+      What the guard actually tests is `envUnbounded && ~envIsAffine`, reached only AFTER the
+      convex branch has returned -- i.e. an unbounded face whose envelope is RATIONAL (the nCE==1 /
+      A.4 form). **No input has been found that reaches it**, and there is a reason to expect none:
+      over an unbounded face the recession directions force an indefinite quadratic's envelope to
+      be affine (`x*y` on the first quadrant, and on the half-strip `0<=x<=1, y>=0`, both give
+      conv f = 0) or `-inf` (`x*y` on `y>=0`), and both are handled. Mark it N/R when someone
+      proves it; until then it is a guard over an unproven-unreachable branch, not a feature.
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
