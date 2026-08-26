@@ -152,6 +152,19 @@ function g = conjCPLQ(obj, idx, route)
     end
 
     % ---- Case B: a single bounded-triangle piece -----------------------------------------
+    % `route='symbolic'` IS IGNORED HERE, DELIBERATELY, and this is the note that stops the next
+    % person from "fixing" it. The route is documented three screens up as "skips straight to Case
+    % C", so gating this branch on ~forceSymbolic looks like the obvious counterpart to the
+    % 'numeric' gate below. It was tried on 2026-08-25 and REVERTED: Case C does not cover a single
+    % triangle -- its own header scopes it to nf>1 and/or a non-triangular face -- and sending this
+    % fixture there raises PLQ:conjCPLQ:cplqFailed after 102 s (measured on the triangle
+    % {(-1,1),(-3,-3),(-4,-3)} carrying x*y). So 'symbolic' has nowhere to go for this shape and a
+    % no-op is the honest answer.
+    %
+    % ONE REAL CONSEQUENCE, recorded rather than papered over: biconjCPLQ asks for the symbolic
+    % form exactly when the numeric first conjugate has a CURVED edge, because the second
+    % conjugation cannot take one. For a single triangle that request is answered with the same
+    % curved mesh, so that escape does nothing here. See TODO.md.
     if obj.nf == 1 && obj.nv == 3 && obj.ne == 3 && obj.isDomBounded
         g = conjSingleTriangle(obj, forceNumeric);
         verifyEdgeBound(g, obj);

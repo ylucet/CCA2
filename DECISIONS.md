@@ -2868,3 +2868,34 @@ succeed and neither cell needs a winner read off a centroid, and neither needs t
   dispatches on.
 - Both halves are pinned by tests in `conjCPLQTest`; `SUPPORT_MATRIX.md` now carries them as two
   rows instead of one GAP.
+
+## 2026-08-25 (G13) — `testPSqroot` is a LEGACY red; `conj` gets the same input right
+
+- **Measured**, triangle {(-1,1),(-3,-3),(-4,-3)} carrying `x*y`, at `s = (-1,-1)`:
+
+        truth (closed form; the sup is on the edge (-4,-3)->(-1,1) at t = 0.75)   1.75
+        QuaPol.conj, numeric Case B                                              1.75    correct
+        plq_1piece + plq.maximum, which is what testPSqroot runs                -5       WRONG
+
+  `-5` is exactly the objective's value at the VERTEX (-4,-3), so the legacy pipeline takes a
+  vertex where the sup is strictly inside an edge -- the same shape of defect as G4, in a different
+  implementation.
+- **It does not reach `conj`.** Forcing `conj` down the symbolic route on the same triangle raises
+  `PLQ:conjCPLQ:cplqFailed` after 102 s rather than returning -5, because Case C never sees a
+  single triangle (see below). So this red belongs to `plq_1piece`, i.e. T6's migration, and does
+  not block the conjugate.
+
+## 2026-08-25 (G12) — REFUTED: gating Case B on `~forceSymbolic`
+
+- **Tried:** `route='symbolic'` is documented as "skips straight to Case C", and Case B ignored it
+  -- the exact counterpart of the `'numeric'` hole closed earlier the same day. Gating Case B on
+  `~forceSymbolic` looks like the obvious fix.
+- **Why it failed:** Case C does not cover a single triangle. Its own header scopes it to `nf>1`
+  and/or a non-triangular face, and sending the triangle above there raises
+  `PLQ:conjCPLQ:cplqFailed` after 102 s. `'symbolic'` has nowhere to go for that shape, so the
+  no-op is the honest behaviour and the note now sits at the branch.
+- **What it did expose, and it is real:** `biconjCPLQ` asks for the symbolic form exactly when the
+  numeric first conjugate `isMeshed && hasCurvedEdge`, because the second conjugation cannot take a
+  curved mesh. For a single triangle that request is answered with the SAME curved mesh, so the
+  escape does nothing. Filed as `TODO.md` G12. The fix is a symbolic form for a single triangle --
+  Step 2's own cPLQ output -- not a reroute of the whole domain.

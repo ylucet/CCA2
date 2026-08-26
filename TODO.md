@@ -251,6 +251,30 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       FALLBACK, and one that shrinks automatically as the Step 2 fallbacks (G1, G4) close --
       which is why it was scheduled last.
 
+- [ ] **G12 -- `biconjCPLQ`'s curved-mesh escape is a NO-OP for a single triangle.** Measured
+      2026-08-25. `biconjCPLQ` calls `conjCPLQ(..., 'symbolic')` exactly when the numeric first
+      conjugate `isMeshed && hasCurvedEdge`, because the second conjugation cannot take a curved
+      mesh. For a single bounded triangle Case B runs before the route is consulted, so that call
+      returns the SAME curved mesh and the escape does nothing.
+      **Do not fix it by gating Case B on `~forceSymbolic`** -- tried and reverted the same day:
+      Case C does not cover a single triangle (its header scopes it to nf>1 and/or a non-triangular
+      face) and raises `PLQ:conjCPLQ:cplqFailed` after 102 s on
+      {(-1,1),(-3,-3),(-4,-3)} with `x*y`. There is nowhere for 'symbolic' to go for that shape.
+      What is actually needed is a symbolic form for a single triangle -- Step 2's own cPLQ output
+      rather than Case C's whole-domain pipeline.
+
+- [ ] **G13 -- `testPSqroot` is a LEGACY red, not a `conj` one.** Measured 2026-08-25 on
+      {(-1,1),(-3,-3),(-4,-3)} carrying `x*y` at s = (-1,-1):
+
+          truth (closed form, edge maximiser at t=0.75)   1.75
+          QuaPol.conj (numeric Case B)                    1.75    correct
+          plq_1piece + plq.maximum (what the test runs)  -5       the VERTEX value at (-4,-3)
+
+      So the legacy symbolic pipeline takes a vertex where the sup is strictly inside an edge, and
+      `conj` does not: forcing `conj` down the symbolic route on the same input raises
+      `cplqFailed` rather than returning -5. Fixing this is `plq_1piece` work (T6's migration),
+      and it does NOT block `conj`. Take it only if the legacy class is being kept.
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
