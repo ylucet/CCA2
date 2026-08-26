@@ -3098,3 +3098,29 @@ unnecessary" for the cases known then. This fixture is the case that makes it ne
 they are not committed only because without provenance the fixture still ends in a raw internal
 error. Do not spend another night on tolerance tuning: three independent tolerances have now been
 measured to be un-separable on this input.
+
+## 2026-08-25 (overnight, item 2) — `rectMaximumIsTheConjugateOfTheWholeDomain` is a HOLE, and it does not reach `conj`
+
+- **The red is a hole, not a wrong value:** `PRect f* uncovered at (-0.5,2)`. Same symptom class as
+  item 1, in different code -- this is cPLQ's symbolic cross-piece `maximumConjugate`, not
+  `maxQuaPar`.
+- **`conj` gets the same domain RIGHT.** PRect is `x*y` over two adjacent polygons whose union is
+  the hexagon `[-5,-4; 0,-4; 2,0; 2,1; 1,3; -5,5]`. Put that through `QuaPol.conj`: it returns a
+  QuaParCPLQ in 151 s and `f*(-0.5,2) = 37.5`, which is the exact sup (attained at the vertex
+  (-5,5): `-0.5*(-5) + 2*5 - (-5)(5) = 37.5`). Exact at every other probe point too.
+- **Why the difference, and it is Step 0.** Both of PRect's pieces carry the SAME quadratic, so
+  `mergeSameQuadFaces` deletes the shared edge and hands Case C ONE face. The cross-piece maximum
+  that holes is then never performed. So this red cannot be reached through `conj` with this
+  fixture -- it is reachable only by calling `plq.maximum` on a two-piece `plq` directly, which is
+  what the test does.
+- **The general question is still open and is NOT this fixture.** A QuaPol whose two faces carry
+  DIFFERENT quadratics survives Step 0 and would exercise the same cross-piece max. Attempted with
+  `x*y` and `x*y + x` over PRect's two polygons: `conj` did not finish in 40 minutes, so this is
+  unmeasured rather than answered. A cheaper two-piece fixture is what that needs.
+- **Split done.** The `max` stage was computed as `tri.maximum`, and `plq.maximum` re-runs
+  convexEnvelope and conjugate on every piece before the cross-piece step -- work the `conj` stage
+  has already cached and `rectConjugateMatchesTheSup` has already verified. It now builds from the
+  cached `conj` stage via `crossPieceMax`, so attempts at this red stop paying for the per-piece
+  conjugates. `rectBiconjugateIsAConvexUnderestimator` was building the same `plqStage` key by a
+  DIFFERENT expression, so a cold `max` cost whichever path got there first; both now use the same
+  one.

@@ -13,6 +13,11 @@ Branch: `overnight/2026-08-25`
   exists (opposite signs at the two ends, continuous in between). The closed-form solve fails on a
   short arc; bisection is now its backstop. Independent of everything else. `clipArcByHalfPlaneTest`
   7/0, fast 303/0.
+- **Item 2 — answered, and the answer is no.** `rectMaximumIsTheConjugateOfTheWholeDomain`'s red is
+  a HOLE (`PRect f* uncovered at (-0.5,2)`), and it does **not** reach `conj`: both of PRect's
+  pieces carry the same quadratic, so Step 0 merges them and the cross-piece max that holes is
+  never performed. `conj` on the merged hexagon returns the exact 37.5 there. Split done as well:
+  the `max` stage now builds from the cached `conj` stage instead of re-running it.
 - Nightly slow gate (started first, per rule 9): **92 pass / 0 fail** over 5 suites.
 
 ## What is broken

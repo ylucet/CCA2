@@ -101,8 +101,16 @@ classdef testcPLQ < matlab.unittest.TestCase
         % Step 3. The max ACROSS pieces is f* of the union, so it must equal the sup over the
         % ORIGINAL (pre-triangulation) domain -- which is the property that makes Step 3 correct
         % and the one a crash test could never see.
+        % SPLIT FURTHER 2026-08-25. This stage used to be computed as `tri.maximum`, and
+        % `plq.maximum` re-runs convexEnvelope and conjugate on every piece before it does the
+        % cross-piece max -- work the `conj` stage above has already done and cached. Since this
+        % test is red on the CROSS-PIECE step (measured: `PRect f* uncovered at (-0.5,2)`, a hole,
+        % not a wrong value), every attempt at it was paying for the per-piece conjugates again.
+        % Build it from the cached `conj` stage instead, which is exactly what `plq.maximum` does
+        % minus the part already verified by `rectConjugateMatchesTheSup`.
             p = plqStage.get('PRect', 'max', @() ...
-                plqStage.get('PRect', 'tri', @() testCase.PRect.triangulate).maximum);
+                crossPieceMax(plqStage.get('PRect', 'conj', @() ...
+                    plqStage.get('PRect', 'tri', @() testCase.PRect.triangulate).conjugate)));
             testCase.verifyNotEmpty(p.maxConjugate, 'Step 3 produced no cells');
             S = testcPLQ.dualPoints();
             for i = 1:size(S,1)
@@ -126,9 +134,14 @@ classdef testcPLQ < matlab.unittest.TestCase
         function rectBiconjugateIsAConvexUnderestimator(testCase)
         % The stage that used to be the 3198 s crash test. It now starts from the cached Step 3
         % result, so a failure here is attributable to biconjugateF alone.
+        % The 'max' stage is built the SAME way as in the test above. It is keyed (fixture, stage)
+        % so whichever test runs first fills it, and having two different compute closures for one
+        % key meant the cost of a cold 'max' depended on which test got there -- the slow
+        % `tri.maximum` path if it was this one. Same expression in both places, no trap.
             p = plqStage.get('PRect', 'biconj', @() ...
                 plqStage.get('PRect', 'max', @() ...
-                    plqStage.get('PRect', 'tri', @() testCase.PRect.triangulate).maximum ...
+                    crossPieceMax(plqStage.get('PRect', 'conj', @() ...
+                        plqStage.get('PRect', 'tri', @() testCase.PRect.triangulate).conjugate)) ...
                 ).biconjugateF);
             testCase.verifyNotEmpty(p.biconjugate, 'biconjugateF produced no cells');
             for k = 1:testCase.PRect.nPieces
@@ -191,4 +204,17 @@ classdef testcPLQ < matlab.unittest.TestCase
                 q.f.f, q.d.polygon.vars, q.d, 'PRect3 f**');
         end
     end
+end
+
+% ==================================================================================================
+function p = crossPieceMax(p)
+% The cross-piece half of `plq.maximum`, starting from a plq whose pieces have already been
+% conjugated. `plq.maximum` is per-piece convexEnvelope + conjugate + maximumConjugate, then the
+% cross-piece maximumConjugate; this is the tail of that, so a red on the cross-piece step does not
+% re-run the per-piece conjugates the `conj` stage has already cached and verified.
+    for i = 1:p.nPieces
+        p.pieces(i) = p.pieces(i).maximumConjugate;
+    end
+    p = p.maximumConjugate;
+    p.lMax = true;
 end
