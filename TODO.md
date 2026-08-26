@@ -242,6 +242,15 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       conv f = 0) or `-inf` (`x*y` on `y>=0`), and both are handled. Mark it N/R when someone
       proves it; until then it is a guard over an unproven-unreachable branch, not a feature.
 
+- [x] **B6 -- NOT A GAP, corrected 2026-08-25.** Listed as "Step 3 with a non-triangular envelope
+      piece". The guard is in `conjPolygonalDomain`'s fan loop and says something else: it fires
+      when `conjSingleTriangle` hands back a `QuaParCPLQ`, i.e. that ONE TRIANGLE's Step 2 fell back
+      to symbolic, and Step 3's numeric max cannot mix a mesh with cPLQ's symbolic form. Refusing to
+      mix them is right. And it is not a gap: `conjCPLQ` lists `PLQ:conjCPLQ:notImplemented` in its
+      fallback catch, so under `auto` the domain routes to Case C and gets an answer. A symbolic
+      FALLBACK, and one that shrinks automatically as the Step 2 fallbacks (G1, G4) close --
+      which is why it was scheduled last.
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
