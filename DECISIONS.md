@@ -2958,3 +2958,44 @@ Still unmeasured: `testMax3` and `testMaxBiconjugate` (both `plq_1piece`, so exp
 testcPLQ's `rectMaximumIsTheConjugateOfTheWholeDomain` and
 `rectBiconjugateIsAConvexUnderestimator`, which DO use `plq_1p` and are the two worth measuring
 next.
+
+## 2026-08-25 (G10/G1) — the hole is `assemblePieces`, and G10 and G1 are the SAME defect
+
+Two findings, both from probe tracking rather than argument.
+
+**They are one defect.** G10's hole -- the point `(-0.866025, 0.5)` where `conj`'s numeric route
+returns `Inf` on the G4 fixture -- was located in each operand's own faces, the way `TODO.md` G1
+says to locate its own: the point lies in g1's face **21** and g2's face **6**, and the fold
+produced **no piece with src [21 6]**. That is G1's signature verbatim, on a different fixture. One
+fix closes both.
+
+**But it is NOT `clipByFace`.** G1's entry names "the operand SWAP at the top of clipByFace,
+`clipPolyByConic`, and the three reduction passes" as the candidates. Measured, with the probe
+tracked through every one of them:
+
+    enters clipByFace inside BOTH faces
+    after the clip loop        -> covered by 1 piece
+    dropDegeneratePieces       -> covered by 1 piece
+    dedupPieces                -> covered by 1 piece
+    dropSubsumedPieces         -> covered by 1 piece
+    insertGlobalPassthrough    -> covered by 1 piece
+    ...and the assembled QuaPar returns Inf there
+
+So the cell is produced, survives every straight clip, the curved cut and all four reduction
+passes, and is still covering the point when `assemblePieces` is called. **The loss is inside
+`assemblePieces`.** That is exactly what `SUPPORT_MATRIX.md` section 4.6 already calls "the live
+one": `matchHalfEdges` pairs curved with curved, and the subdivision is consistent per face PAIR
+rather than globally.
+
+**The instruments stay**, because three separate investigations this session began by adding them
+by hand:
+  * `MAXQP_PROBE` -- set a point and `clipByFace` names the exact straight clip, curved cut or
+    reduction pass at which a pair that CONTAINS it stops containing it, with the half-plane and
+    the probe's slack;
+  * `dropDegeneratePieces` reports what it removes and why, at `MAXQP_ASSERT >= 0` -- deliberately
+    not `>= 1`, because a violated invariant aborts before the drops and 0 is the setting you want
+    when chasing a hole;
+  * `splitDeclined` names why `splitUnboundedAtOneCrossing` gave up.
+
+**Next step is `assemblePieces`, and it is the documented redesign** (globally-consistent
+subdivision), not a small fix. Do not attempt it as a patch to `matchHalfEdges`.

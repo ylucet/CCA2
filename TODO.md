@@ -200,11 +200,14 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       by construction -- every candidate was rejected. It now asks whether the crossing sits ON
       that ray edge, which is when a cut really would cut off nothing. The A.5 triangle splits
       and stays exact to 3.6e-15; `splitDeclined` records the reason under `MAXQP_ASSERT`.
-      **What is left is a HOLE.** G4's own cell splits now and assembles WRONG: with the
-      definition checks off the numeric route returns `Inf` at some probe points where it used
-      to return a finite over-estimate, so the assembled mesh does not cover. Production is
-      unaffected (`foldDroppedACell` refuses in 2.3 s either way). Chase the hole -- the split
-      halves' ray propagation or their half-edge pairing -- not another winner heuristic.
+      **The hole is LOCATED, and G10 and G1 are the SAME defect (2026-08-25).** The uncovered
+      point lies in g1 face 21 and g2 face 6 and the fold produced no piece with src [21 6] --
+      G1's signature verbatim. But it is NOT `clipByFace`: tracked with `MAXQP_PROBE`, the cell is
+      produced, survives every straight clip, the curved cut, and all four reduction passes, and
+      is still covering the point when `assemblePieces` is called. **The loss is inside
+      `assemblePieces`** -- `SUPPORT_MATRIX.md` 4.6's "live one", where `matchHalfEdges` pairs
+      curved with curved and the subdivision is consistent per face PAIR rather than globally.
+      That is the documented redesign, not a patch to `matchHalfEdges`.
 
 - [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`

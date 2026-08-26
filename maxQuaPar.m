@@ -270,10 +270,14 @@ function g = maxQuaPar(g1, g2)
             end
         end
     end
-    pieces = dropDegeneratePieces(pieces);
-    pieces = dedupPieces(pieces);
-    pieces = dropSubsumedPieces(pieces);
-    pieces = insertGlobalPassthrough(pieces);
+    % Each reduction pass can only REMOVE coverage, so with MAXQP_PROBE set they are checked one by
+    % one and the first that loses the probe is named. Between them and clipByFace, that pins a
+    % "no piece with src [k l]" report (TODO.md G1/G10) to a single line of this file.
+    probeStage('after the clip loop', pieces);
+    pieces = dropDegeneratePieces(pieces);  probeStage('dropDegeneratePieces', pieces);
+    pieces = dedupPieces(pieces);           probeStage('dedupPieces', pieces);
+    pieces = dropSubsumedPieces(pieces);    probeStage('dropSubsumedPieces', pieces);
+    pieces = insertGlobalPassthrough(pieces); probeStage('insertGlobalPassthrough', pieces);
     global MAXQP_CAPTURE MAXQP_PIECES %#ok<GVMIS>
     if ~isempty(MAXQP_CAPTURE) && MAXQP_CAPTURE, MAXQP_PIECES = pieces; end
     assertPiecesWellFormed(pieces, g1, g2);
@@ -666,14 +670,32 @@ function pieces = dropDegeneratePieces(pieces)
 % when a crossing lands on a vertex. Such a piece contributes half-edges that duplicate a segment
 % and pair with nothing, which surfaces three stages later as "a boundary edge of piece N has no
 % matching neighbour".
+% WHAT IT DROPS IS REPORTED under MAXQP_ASSERT. A dropped cell is the one thing here that can turn
+% a partition into one with a HOLE, so when an assembled mesh comes back uncovered at a point this
+% is the first list to read. Silent removal meant that question could only be answered by editing
+% this function, which is how G10's investigation started.
+% Reported at MAXQP_ASSERT >= 0, not >= 1, so that MAXQP_ASSERT = 0 gives the drop list WITHOUT
+% the piece invariants -- which is the setting you want when chasing a hole, since a violated
+% invariant aborts before assembly and you never reach the drops.
+    global MAXQP_ASSERT %#ok<GVMIS>
+    report = ~isempty(MAXQP_ASSERT) && MAXQP_ASSERT >= 0;
     keep = true(1, numel(pieces));
     for i = 1:numel(pieces)
         p = pieces(i);
         if ~isempty(p.dirIn), continue, end                      % unbounded: never degenerate here
         nv = size(p.V,1);
         hasArc = ~isempty(p.curveAfter) && p.curveAfter ~= 0;
-        if nv < 2 || (nv < 3 && ~hasArc), keep(i) = false; continue, end
-        if ~hasArc && abs(signedAreaOf(p.V)) < 1e-12*(1 + max(abs(p.V(:))))^2, keep(i) = false; end
+        why = '';
+        if nv < 2 || (nv < 3 && ~hasArc)
+            keep(i) = false; why = sprintf('only %d vertices and no arc', nv);
+        elseif ~hasArc && abs(signedAreaOf(p.V)) < 1e-12*(1 + max(abs(p.V(:))))^2
+            keep(i) = false; why = sprintf('area %.3e below the collapse threshold', ...
+                abs(signedAreaOf(p.V)));
+        end
+        if ~keep(i) && report
+            fprintf('DROPPED DEGENERATE piece %d [src %s]: %s%s   V = %s%s', i, ...
+                mat2str(p.src), why, newline, mat2str(p.V, 6), newline);
+        end
     end
     pieces = pieces(keep);
 end
@@ -988,12 +1010,25 @@ function cells = clipByFace(polyK, polyL)
     % later clip has to be applied to each of them.
     work = {polyK};
     cons = polyConstraints(polyL);
+    % PROBE TRACKING. Set the global MAXQP_PROBE to a point and this reports the exact stage at
+    % which a pair that CONTAINS it stops containing it. That is the one question G1 asks -- "the
+    % fold produced no piece with src [k l] although the intersection is not empty" -- and answering
+    % it used to mean re-instrumenting this function by hand. Costs one global read per pair when
+    % unset. See TODO.md G1/G10.
+    tracking = probeWasIn(polyK) && probeWasIn(polyL);
+    if tracking, probeReport('enters clipByFace inside BOTH faces'); end
     for i = 1:size(cons,1)
         nxt = {};
         for t = 1:numel(work)
             nxt = [nxt, clipPolyHalfPlane(work{t}, cons(i,1:2), cons(i,3))]; %#ok<AGROW>
         end
         work = nxt;
+        if tracking && ~probeInAny(work)
+            probeReport(sprintf(['LOST at straight clip %d of %d: half-plane n = %s, c = %.10g ' ...
+                '(the probe evaluates to %+.3e there, so the clip believes it is OUTSIDE)'], ...
+                i, size(cons,1), mat2str(cons(i,1:2), 8), cons(i,3), probeSlack(cons(i,:))));
+            tracking = false;
+        end
         if isempty(work), cells = {}; return; end
     end
     % Two consecutive real vertices of polyL (or polyK) can be exactly collinear with a third --
@@ -1021,10 +1056,61 @@ function cells = clipByFace(polyK, polyL)
             if isempty(cutConic)
                 cells{end+1} = cell; %#ok<AGROW>
             else
-                cells = [cells, clipPolyByConic(cell, cutConic, cutX0, cutX1)]; %#ok<AGROW>
+                out = clipPolyByConic(cell, cutConic, cutX0, cutX1);
+                if tracking && probeInAny({cell}) && ~probeInAny(out)
+                    probeReport('LOST in clipPolyByConic: the CURVED cut removed it');
+                    tracking = false;
+                end
+                cells = [cells, out]; %#ok<AGROW>
             end
         end
     end
+    if tracking && ~probeInAny(cells)
+        probeReport(sprintf(['LOST after the reduction passes: %d cell(s) survived the clips and ' ...
+            'none contains it (insertPassthroughVertices / the minV drop)'], numel(work)));
+    end
+end
+
+% ---- probe tracking, see clipByFace ---------------------------------------------------------
+function tf = probeWasIn(poly)
+    global MAXQP_PROBE %#ok<GVMIS>
+    tf = false;
+    if isempty(MAXQP_PROBE), return, end
+    r = pieceContainsPt(poly, MAXQP_PROBE);
+    tf = ~isnan(r) && r;
+end
+
+function tf = probeInAny(work)
+    global MAXQP_PROBE %#ok<GVMIS>
+    tf = false;
+    if isempty(MAXQP_PROBE), return, end
+    for t = 1:numel(work)
+        r = pieceContainsPt(work{t}, MAXQP_PROBE);
+        if ~isnan(r) && r, tf = true; return, end
+    end
+end
+
+function v = probeSlack(con)
+    global MAXQP_PROBE %#ok<GVMIS>
+    v = con(1:2)*MAXQP_PROBE(:) - con(3);
+end
+
+function probeStage(stage, pieces)
+% Report whether the probe is still covered after `stage`. Takes a struct ARRAY (the reduction
+% passes' currency) rather than the cell array clipByFace uses.
+    global MAXQP_PROBE %#ok<GVMIS>
+    if isempty(MAXQP_PROBE), return, end
+    hit = 0;
+    for i = 1:numel(pieces)
+        r = pieceContainsPt(pieces(i), MAXQP_PROBE);
+        if ~isnan(r) && r, hit = hit + 1; end
+    end
+    probeReport(sprintf('%-26s -> covered by %d piece(s)', stage, hit));
+end
+
+function probeReport(msg)
+    global MAXQP_PROBE %#ok<GVMIS>
+    fprintf('PROBE (%.9g,%.9g): %s%s', MAXQP_PROBE(1), MAXQP_PROBE(2), msg, newline);
 end
 
 function cells = insertPassthroughVertices(cell, pts, depth)
