@@ -62,17 +62,30 @@ function [status, Xnew] = clipArcByHalfPlane(Ec, X0, X1, nrm, c)
     marg = 1e-6*(1+abs(uLo)+abs(uHi));
     cand = roots_u(roots_u >= uLo-marg & roots_u <= uHi+marg);
     if isempty(cand)
-        error('clipArcByHalfPlane:internal', ...
-            'No crossing of the clip line found within the arc''s own u-span.');
-    end
-    ustar = cand(1);
-    if numel(cand) > 1
-        % Both roots landed in range (only possible right at a near-tangential boundary case);
-        % pick whichever is closer to the OUTSIDE endpoint's own u (the genuine crossing nearest
-        % where the sign actually flips).
-        if in0, uOut = u1; else, uOut = u0; end
-        [~,ix] = min(abs(cand - uOut));
-        ustar = cand(ix);
+        % A ROOT PROVABLY EXISTS, so failing to find one is a solver failure, not a geometry
+        % result -- and it used to be reported as `clipArcByHalfPlane:internal`. We are here only
+        % because exactly one endpoint is outside, so v(u) = nrm*X(u)' - c has opposite signs at
+        % u0 and u1, and v is continuous along the arc: by the intermediate value theorem it
+        % vanishes somewhere strictly between them. What fails is the closed-form solve, on a
+        % SHORT arc where the discriminant is a difference of nearly equal quantities and comes
+        % out negative -- measured on TODO.md G4's fixture, an arc whose endpoints are 5.76e-05
+        % apart (DECISIONS.md 2026-08-25 overnight).
+        %
+        % Bisection cannot fail here for the same reason the root must exist, and it is exact to
+        % the last representable u in about 60 halvings. This is the closed form's backstop, not
+        % its replacement: the quadratic still answers every case it can, and this runs only when
+        % it returns nothing in span.
+        ustar = bisectOnArc(Xu, nrm, c, u0, u1, v0);
+    else
+        ustar = cand(1);
+        if numel(cand) > 1
+            % Both roots landed in range (only possible right at a near-tangential boundary case);
+            % pick whichever is closer to the OUTSIDE endpoint's own u (the genuine crossing
+            % nearest where the sign actually flips).
+            if in0, uOut = u1; else, uOut = u0; end
+            [~,ix] = min(abs(cand - uOut));
+            ustar = cand(ix);
+        end
     end
     Xstar = Xu(ustar);
     if in0
@@ -81,6 +94,20 @@ function [status, Xnew] = clipArcByHalfPlane(Ec, X0, X1, nrm, c)
         Xnew = [Xstar; X1];
     end
     status = 'cut';
+end
+
+function ustar = bisectOnArc(Xu, nrm, c, u0, u1, v0)
+% The crossing of {nrm*x' = c} along the arc, by bisection on u. Called only when exactly one
+% endpoint is outside, so v(u0) and v(u1) have opposite signs and a root is guaranteed between
+% them; see the caller for why the closed-form solve can miss it on a short arc.
+    a = u0; b = u1; va = v0;
+    for k = 1:80
+        m = 0.5*(a+b);
+        vm = nrm*Xu(m)' - c;
+        if vm == 0 || (b - a) == 0, a = m; b = m; break, end
+        if (vm > 0) == (va > 0), a = m; va = vm; else, b = m; end
+    end
+    ustar = 0.5*(a+b);
 end
 
 function r = solveQuadLocal(A,B,C)

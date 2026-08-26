@@ -3059,3 +3059,42 @@ tolerance, and the answer is to cut at the outside endpoint. Then re-apply the d
 **Why it is not committed.** It turns `conjEdgeLowerBoundTest`'s two case-21 tests red, correctly:
 they pin that the fixture is refused by a refusal we RECOGNISE, and `clipArcByHalfPlane:internal`
 is a raw internal error. fast was 301/2 with it, 303/0 without.
+
+## 2026-08-25 (overnight, continued) — `clipArcByHalfPlane` FIXED; and the assembly wall is the one its own history predicts
+
+**FIXED, and it is independent of everything else.** `clipArcByHalfPlane` raised
+`clipArcByHalfPlane:internal`, "no crossing of the clip line found within the arc's own u-span".
+That error is not reachable geometrically: the branch runs only when exactly ONE endpoint is
+outside, so `v(u) = nrm*X(u)' - c` has opposite signs at the two ends and is continuous along the
+arc, and a root exists between them by the intermediate value theorem. What failed was the
+closed-form SOLVE -- on a short arc (endpoints 5.76e-05 apart) the discriminant is a difference of
+nearly equal quantities and comes out negative, so `solveQuadLocal` returns nothing.
+
+Bisection cannot fail for the same reason the root must exist. It is now the closed form's
+BACKSTOP: the quadratic still answers every case it can, and bisection runs only when it returns
+nothing in span. `clipArcByHalfPlaneTest` 7/0, fast 303/0.
+
+**The assembly wall, measured.** With the attempt re-applied on top of that fix, case 21 gets one
+stage further again and then stops on a THIRD disagreement of the same kind:
+
+    piece 11 src [8 3]  (-0.207912,-0.907429)->(-0.208593,-0.908683)   length 1.43e-03
+    piece 18 src [10 4] (-0.209275,-0.909936)->(-0.208015,-0.907223)   length 2.99e-03
+    closest candidate rejected on POSITION at dist 1.43e-03, against tolPos = 1e-3
+
+Piece 11's edge is very nearly a SUB-SEGMENT of piece 18's -- a T-junction -- but its interior
+endpoint lies **9.1e-05 off** piece 18's edge, so it is not a clean one, and three half-edges
+orphan together (pieces 11, 12 and 18) because one long edge would have to pair with two short
+ones.
+
+**That is the wall `assemblePieces`' own HISTORY describes**, and the sequence of scales makes it
+concrete: the same boundary is disagreed about at 5.76e-05, then 9.1e-05, then 1.43e-03, while
+genuine features of this arrangement live at the same scales. No single tolerance separates them --
+which is exactly what that header says, and why it proposes vertex PROVENANCE (tagging each edge
+with which g1/g2 face-pair boundary produced it) as the resolution, noting it "turned out to be
+unnecessary" for the cases known then. This fixture is the case that makes it necessary.
+
+**So item 1's residue is now: implement edge provenance in `assemblePieces`.** The two fixes in
+`.claude/assembly_attempt_2026-08-25.diff` are prerequisites and are correct as far as they go;
+they are not committed only because without provenance the fixture still ends in a raw internal
+error. Do not spend another night on tolerance tuning: three independent tolerances have now been
+measured to be un-separable on this input.

@@ -9,6 +9,10 @@ Branch: `overnight/2026-08-25`
   `.claude/assembly_attempt_2026-08-25.diff` and is not committed because it leaves two tests red.
   Full measurements in `DECISIONS.md` 2026-08-25 (overnight). One thing is left:
   `clipArcByHalfPlane` fails on a degenerate arc; fix that and re-apply the diff.
+- **`clipArcByHalfPlane` FIXED** — it raised an internal error on a case where a root provably
+  exists (opposite signs at the two ends, continuous in between). The closed-form solve fails on a
+  short arc; bisection is now its backstop. Independent of everything else. `clipArcByHalfPlaneTest`
+  7/0, fast 303/0.
 - Nightly slow gate (started first, per rule 9): **92 pass / 0 fail** over 5 suites.
 
 ## What is broken
