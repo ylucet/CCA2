@@ -3283,3 +3283,29 @@ currently skipped.
 
 **Scale note.** PRect3 is small enough to iterate on: 44 s for the cross-piece max and 68 s for
 `biconjugateF`, against 1016 s and >3600 s for PRect. Use it, not PRect, when working this.
+
+## 2026-08-26 (item 2, assemblePieces) — the wall is a T-JUNCTION whose vertex is 9.1e-05 off the edge
+
+Not attempted tonight beyond locating it precisely; recorded so the next attempt starts here.
+
+`insertGlobalPassthrough` already exists to eliminate exactly the failure the assembly attempt hits.
+Its header describes the mechanism: two adjacent pieces share a boundary; one side gets split at a
+crossing point P and the other does not, so a long ray cannot pair with a segment, and re-inserting
+P as a vertex of the unsplit piece restores the pairing.
+
+**And it states the tolerance regime it was built for: "P ... lies EXACTLY on the decided ray
+(measured perp ~2e-15 on the arc-vs-arc fixtures)".**
+
+On `TODO.md` G4's fixture the T-junction vertex is **9.1e-05** off the edge it should split -- ten
+orders of magnitude worse than the case that routine was written against, and the same scale as this
+arrangement's genuine features (5.76e-05, 1.43e-03). So the insertion is not failing because a
+tolerance is a little too tight. **The two pieces genuinely disagree about where the shared boundary
+is**, having computed it by different arithmetic paths, and no threshold can separate that
+disagreement from a real feature -- which is the conclusion `assemblePieces`' own HISTORY already
+reached and why it proposes vertex PROVENANCE.
+
+**So the next attempt should tag half-edges with the (g1 face, g2 face, constraint) that produced
+them and pair on that**, using geometry only to break ties among candidates that already agree on
+provenance. Do not start by widening `insertGlobalPassthrough`'s tolerance: that is the third
+tolerance on this fixture to be measured un-separable, after `matchHalfEdges`' tolPos and
+`pieceRecessionRays`' sign tests.
