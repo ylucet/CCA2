@@ -3426,3 +3426,39 @@ Three for three, the representation was already there and the block was one rout
 know about it. **Before recording anything else as "blocked on the return type", build the object
 by hand and evaluate it.** That is a five-minute check, and here it would have saved the entry
 being written three times.
+
+## 2026-08-27 (item 1) — the curved tightening is skipped on UNBOUNDED cells, which is most of them
+
+The open question was whether `quadFacet_exactAnotInB` (374 refusals against 37 successes on the
+quadrilateral) is a CORRECT refusal or a CONSERVATIVE one. Measured, and it is neither exactly:
+**the tightening that would decide it does not run at all on most of these cells.**
+
+`maxAffineOverRegion` has an exact closed-form bound for a region with conic facets -- vertices plus
+the points where the arc's tangent is perpendicular to the objective -- added 2026-08-17 for exactly
+this conservatism. It bails to the loose LP through several early returns. Instrumenting each,
+on PRect3:
+
+    tighten_polyhedral          6      the region has no conic facet: LP already exact, fine
+    tighten_unboundedVertex     2      <-- the tightening GIVES UP
+
+`tighten_unboundedVertex` is the guard "every vertex must be a finite point for the compactness
+argument to apply" -- it returns as soon as any vertex is at `intmax`, the ray marker. **A conjugate
+is full of cones**, so this fires on a large fraction of the cells that have a conic facet at all,
+and those pairs fall back to the LP over the linear relaxation, which is precisely the bound whose
+conservatism produced `exactAnotInB`.
+
+**The guard is sound and the argument behind it is too narrow.** A linear form on an UNBOUNDED
+region need not attain its max, so the vertex-plus-tangency candidate set is not complete -- correct.
+But the max is still bounded, and decidable, whenever the form is bounded on the region's RECESSION
+CONE, which is exactly the situation where `unionIsExact`'s question has a finite answer. The
+candidate set then needs the recession directions added to it, not the whole region rejected.
+
+**So the answer to the question is: CONSERVATIVE, and located.** Extend the tightening to unbounded
+regions by testing the objective on the recession cone first -- unbounded above there means "no
+certificate" as now, bounded means the finite candidates plus the cone's extreme rays decide it.
+`pieceRecessionRays` already computes exactly those directions for `maxQuaPar`'s pieces.
+
+**Not attempted here**, because the last two attempts on this defect were both refuted by
+measurement after the code was written, and this one deserves a bounded experiment first: take ONE
+`exactAnotInB` pair from PRect3, work its union out by hand, and confirm the union really is convex
+before building anything.

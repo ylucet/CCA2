@@ -624,10 +624,22 @@ blocker for making the split the default, and it was a casualty of the double le
       merge, and its refusals break down as: `noSharedFacet` 2743 (pairs that are NOT ADJACENT --
       expected at 63 cells), and **`quadFacet_exactAnotInB` 374 against 37 successes**. That is the
       target: adjacent pairs sharing a CURVED facet whose union `unionIsExact` will not certify.
-      **Next step:** take one such pair and decide whether the refusal is CORRECT (union genuinely
-      non-convex, so 56 is near-optimal) or CONSERVATIVE (the deliberately-relaxed curved
-      certificate cannot certify an exact union). `region.m` says the relaxation "makes the
-      certificate harder to obtain, never wrong", so conservative is likelier.
+      **ANSWERED 2026-08-27: CONSERVATIVE, and located.** The exact closed-form bound that would
+      decide these pairs (`maxAffineOverRegion`'s vertex-plus-tangency candidate set, added
+      2026-08-17 for this very conservatism) DOES NOT RUN on most of them. Instrumented on PRect3:
+      `tighten_polyhedral 6` (no conic facet -- fine) and **`tighten_unboundedVertex 2`** -- the
+      guard "every vertex must be finite for the compactness argument" returns as soon as a vertex
+      is at `intmax`, the ray marker. A conjugate is full of CONES, so this fires on a large share
+      of exactly the cells with conic facets, and they fall back to the loose LP whose conservatism
+      IS `exactAnotInB`.
+      **The guard is sound, its argument is too narrow.** A linear form on an unbounded region need
+      not attain its max -- true -- but it is decidable whenever the form is bounded on the region's
+      RECESSION CONE, which is when `unionIsExact`'s question has a finite answer at all. Add the
+      recession directions to the candidate set instead of rejecting the region;
+      `pieceRecessionRays` already computes them.
+      **Before building it:** take ONE `exactAnotInB` pair from PRect3 and confirm by hand that its
+      union really is convex. Two attempts on this defect have already been refuted by measurement
+      taken after the code was written. `DECISIONS.md` 2026-08-27 (item 1).
       `DECISIONS.md` 2026-08-26 (item 1, third pass).
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
