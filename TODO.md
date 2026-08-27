@@ -160,13 +160,22 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       Both are pinned by tests in `conjCPLQTest`. What remains under this heading is the numeric
       route for (1), which is a performance item.
 
-- [ ] **G16 -- `QuaCon` storage (H-form).** (Renumbered from a SECOND G4 on 2026-08-26; two
-      different items carried that label and it caused confusion twice. The conjugate-of-`xy` G4
-      above keeps the name.) Now optional rather than blocking, and that is the
-      premise's doing. `Conic`/`RatCon` landed 2026-08-24 so the LATTICE can hold an elliptical
-      edge; `ratQ` and `conicMeet` are the exact coefficient layer and the vertex-naming primitive
-      it would use. Build it when a `conj` result actually needs a non-parabolic edge -- i.e. when
-      G1 lands and a three-piece input with two non-adjacent pieces reaches Step 3.
+- [ ] **G16 -- `QuaCon` storage (H-form). NOT STARTED, DELIBERATELY -- reviewed 2026-08-27.**
+      (Renumbered from a SECOND G4 on 2026-08-26; two items carried that label and it caused
+      confusion twice. The conjugate-of-`xy` G4 keeps the name.)
+      Its own trigger is "build it when a `conj` result actually needs a non-parabolic edge -- i.e.
+      when G1 lands and a three-piece input with two non-adjacent pieces reaches Step 3". **G1 is
+      open**, so nothing can produce that edge today, and building the storage now would be
+      speculative work with no way to test it against a real result.
+      **Checked, rather than assumed, that nothing is silently broken meanwhile:**
+      `QuaPar.assertParabolicEdges` runs in the constructor on every nonzero conic row, and its
+      message already names this exact case -- "A conjugate CAN have an elliptical edge -- between
+      two NON-adjacent pieces of f, see CONJ_FIELD_PROOF.md 7.4b -- and such a function is a
+      QuaCon, not a QuaPar". So an elliptical edge RAISES `QuaPar:notParabola` by name; it cannot
+      be stored as a wrong parabola. `Conic.m` and `RatCon.m` exist (the lattice can hold it);
+      `QuaCon.m` does not, which is the item.
+      **Do not start this before G1.** The first real elliptical edge is what tells you the storage
+      is right, and until then there is nothing to validate against.
 
 - [x] **G8 -- SUBSUMED 2026-08-25 by the legacy pins.** It recorded that `testPCE2`'s convex
       envelope is wrong one stage before the conjugate. True, and it is `plq_1piece`'s envelope:
