@@ -3534,3 +3534,44 @@ with two different causes, in two different implementations:
 
 The second has a name, a location, and a documented history. It should be worked as itself --
 `removeTangent`'s tie-point handling -- rather than as part of the assembly work.
+
+## 2026-08-27 (G17, corrected) — `removeTangent` DISCARDS whole regions, and that is the hole's mechanism
+
+**First, a correction to the entry above.** It identified the hole as "the known
+`mergeL`/`removeTangent` exact-tie-point gap" on the strength of a stack trace, and called the
+mechanism "removeTangent deletes a constraint the region needs". **The deletion half of that is
+impossible**, and the reasoning is one line: deleting a constraint makes a region BIGGER. A hole is
+a point covered by NO region, and enlarging regions cannot create one. The identification was right
+about the routine and wrong about how it does it.
+
+**Measured, with every branch of `removeTangent` instrumented.** On the PRect max stage, 5 events:
+
+    deletedLinear     at ( 3.1591, -1.0227)   s_1 - (9*s_2)/5 - 5
+    DISCARDED_REGION  at ( 3.1591, -1.0227)   148*s_1 - 196*s_2 + 14*s_1*s_2 + s_1^2 + 49*s_2^2 - 684
+    deletedLinear     at ( 0.7368, -2.3684)   s_1 - (9*s_2)/5 - 5
+    deletedLinear     at ( 3.5447, -0.0307)   s_1 - (104*s_2)/43 + ...
+    DISCARDED_REGION  at ( 0.8766,  1.3033)   4*s_1*s_2 - 40*s_2 + s_1^2 + 4*s_2^2 + 40
+
+**The three deletions are all far from the hole at (-0.5, 2) and, per the argument above, could not
+have caused it either way.** What can, and is not in that entry's account at all, is
+`removeTangent`'s `lin & ~tin` branch:
+
+        if lin & ~tin
+            obj = region.empty;     % the WHOLE region, discarded
+            return
+        end
+
+**Two regions were discarded, and the second one's quadratic is satisfied at the hole**:
+at `(-0.5, 2)`, `4(-0.5)(2) - 40(2) + 0.25 + 16 + 40 = -27.75 <= 0`. So the uncovered point lies
+inside the constraint of a region that `removeTangent` threw away. That is the mechanism, and it is
+a much sharper target than "the tie-point gap".
+
+**Stated as a candidate, not a proof**: the discarded region has other constraints that were not
+captured, so containment is established for the one named constraint rather than for the region.
+Confirming it is the next step and is cheap -- capture the full region at the discard and test the
+point against all of its constraints.
+
+**Why the branch exists at all**: `lin & ~tin` means the midpoint probe says the quadratic holds
+there but the tangent does not. For a genuinely tangent pair that is contradictory, so the code
+reads it as "this region is empty". At an exact tie point the probe is unreliable, and a region
+that is merely thin gets destroyed rather than kept.
