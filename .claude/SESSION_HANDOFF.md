@@ -1,33 +1,30 @@
 # Session Handoff
 
-_2026-08-25_
+_2026-08-27_
 
 ## Blocked
 - Phase C1 per-term cost target — EXTERNAL, needs Yves. Box terms are 0.01 s;
   the 40–60 s figure is stale.
 
 ## State
-- Branch `main` @ `cd66cc2` — "docs: REFUTED -- branching cannot isolate
-  two runs that share a working tree"
-- Pushed: yes — `origin/main`. Every other branch deleted; all were merged.
-- Tests (2026-08-25): fast 303/0 · slow 88/0 · verylong 26 pass / 7 fail /
-  1 timeout, that last figure IDENTICAL to a pristine `b9243d3`.
-- Known reds: the seven verylong ones, all pre-existing (`testPCE2` among them).
-- Hazard: `--verylong -j N` races on `plqStage`'s cache and can fake a red.
-  Re-run a suspect at `-j 1`. `TODO.md` G7 has the fix.
+- Branch `main` @ `2e18333` — "docs: G17 LOCATED -- the hole appears in fold 4's
+  maximumP, after the pairing"
+- Pushed: yes — `origin/main`
+- Tests: fast 309/0 (08-27) · slow 93/0 (08-26, STALE: predates B3's LINE+EMPTY)
+  · verylong 36/8/1 (08-25, STALE: predates the legacy pins)
+- Known reds: two, both `plq_1p` — G17 (`rectMaximumIsTheConjugateOfTheWholeDomain`,
+  a hole at (-0.5,2)) and `rectBiconjugateIsAConvexUnderestimator` (the scaling
+  defect). The seven legacy `plq_1piece` reds are pinned → incomplete, not failed.
 
 ## Next
-1. G1 — `clipByFace` returns nothing for a face pair whose intersection is not
-   empty (measured: g1 face 4 × g2 face 2). Last bounded fallback.
-2. G2 — affine face over an unbounded polygon (`max(0,x,y)`); `TODO.md` prices
-   an all-affine route that never enters `maxQuaPar`.
-3. G4 — `conj` of `xy` on some triangles computes a MINORANT. It now raises
-   instead of returning it, so the refusal is the safety net, not the fix.
+1. G17, one level deeper: count coverage across `maximumP`'s own split/merge
+   stages at FOLD 4 — the fold is already identified. ~15 min per run.
+2. Run `--slow` and `--verylong`; neither has run since B3's LINE/EMPTY landed.
+3. Scaling (`quadFacet_exactAnotInB`, 374 vs 37): hand-check ONE pair on PRect3
+   (44 s) before coding, then extend `maxAffineOverRegion` to unbounded regions
+   via the recession cone.
 
 ## Files
-- `TODO.md` — opens with the measured gap list G1–G7.
-- `MORNING.md` — the overnight run's report. The Lean proof moved OUT of this repo on
-  2026-08-25: it is now `AI/CCA2proof`, an independent repository, and its `MORNING.md`
-  went with it.
-- `DECISIONS.md` — nine entries dated 2026-08-24/25; read the headings.
-- `checkConjSymFree.m` — the symbolic-fallback rate, with reasons.
+- `TODO.md` — G1/G4/G10/G16/G17, each with its measurement
+- `DECISIONS.md` — 08-26/27 entries; FOUR refutations, read before proposing
+- `.claude/assembly_attempt_2026-08-25.diff` — parked assembly prerequisites
