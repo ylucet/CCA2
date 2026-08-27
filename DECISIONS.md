@@ -3575,3 +3575,35 @@ point against all of its constraints.
 there but the tangent does not. For a genuinely tangent pair that is contradictory, so the code
 reads it as "this region is empty". At an exact tie point the probe is unreliable, and a region
 that is merely thin gets destroyed rather than kept.
+
+## 2026-08-27 (G17, third pass) — REFUTED: `removeTangent` is not the cause at all
+
+The entry above found `removeTangent`'s `lin & ~tin` branch discarding whole regions, noted that one
+discarded region's single named constraint was satisfied at the hole, and called it "the mechanism"
+while flagging that containment was established for one constraint rather than the region.
+**Checked the whole region. It does not contain the hole. Neither does the other.**
+
+    discard 1 at (3.1591,-1.0227):  4 constraints, 2 violated, worst +9.100000e+00
+    discard 2 at (0.8766, 1.3033):  5 constraints, 1 violated, worst +3.983315e+00
+
+Both misses are of order 1 -- nowhere near the point. The single-constraint check that looked
+promising was simply the one constraint of five that happens to hold there; the region as a whole is
+far away.
+
+**So `removeTangent` is exonerated on this fixture**, and the whole G17 identification collapses:
+
+    claim 1  "removeTangent deletes a constraint the region needs"   -- impossible (deletion enlarges)
+    claim 2  "removeTangent discards a region containing the hole"   -- measured false, both discards
+
+The only evidence ever behind G17 was a stack trace, and a stack trace of a symbolic WARNING at
+that -- `removeTangent` is simply where cPLQ's `isAlways` calls are noisiest, so it appears in
+warning traces from any run. That is not evidence of causation, and I treated it as such twice.
+
+**What is actually known about this hole, and it is little:** 32 cells, the point (-0.5,2) uncovered,
+the nearest cell missing by 1.67e-02. That gap is four orders above the `maxQuaPar` assembly's
+scale, so it is still a genuinely absent region rather than a tolerance artefact -- that part stands.
+
+**The next step is a bisection, not another hypothesis.** `maxOfList` folds cell groups one at a
+time and the fold count here is small. Evaluate the accumulated result at (-0.5,2) after EVERY fold:
+the first fold at which it becomes NaN identifies the operand pair and the step, the way
+`MAXQP_PROBE` did for the assembly. Do that before naming a routine again.

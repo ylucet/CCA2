@@ -246,8 +246,21 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       curved with curved and the subdivision is consistent per face PAIR rather than globally.
       That is the documented redesign, not a patch to `matchHalfEdges`.
 
-- [ ] **G17 -- `rectMaximumIsTheConjugateOfTheWholeDomain`'s hole is the KNOWN
-      `mergeL`/`removeTangent` exact-tie-point gap.** Identified 2026-08-27. The nearest cell to the
+- [ ] **G17 -- `rectMaximumIsTheConjugateOfTheWholeDomain` holes at (-0.5,2). CAUSE UNKNOWN --
+      `removeTangent` was accused twice and is EXONERATED.** Read the refutation before proposing
+      anything: `DECISIONS.md` 2026-08-27 (G17, third pass). Deletion cannot cause a hole
+      (it enlarges regions), and neither of the two regions `removeTangent` DISCARDS contains the
+      point -- measured against all their constraints, misses of +9.10 and +3.98. The only evidence
+      ever behind the identification was a stack trace of a symbolic WARNING, and `removeTangent` is
+      where cPLQ's `isAlways` calls are noisiest, so it appears in traces from any run.
+      **What is known:** 32 cells, (-0.5,2) uncovered, nearest cell misses by 1.668523e-02 -- four
+      orders above the `maxQuaPar` assembly's scale, so a genuinely absent region, not a tolerance
+      artefact.
+      **Next step is a BISECTION, not a hypothesis:** `maxOfList` folds groups one at a time, so
+      evaluate the accumulated result at (-0.5,2) after every fold; the first NaN names the operand
+      pair and the step, as `MAXQP_PROBE` did for the assembly.
+
+      (Superseded text follows, kept for the reasoning.) ~~Identified 2026-08-27.~~ The nearest cell to the
       uncovered point (-0.5,2) misses by **1.668523e-02** -- a real gap, four orders above the
       1e-6..1e-3 scale at which the `maxQuaPar` assembly fails, so it is NOT that defect and no
       tolerance or snapping scheme touches it. The failing stack is
