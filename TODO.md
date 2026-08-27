@@ -253,9 +253,19 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       tolerance or snapping scheme touches it. The failing stack is
       `region.removeTangent <- functionNDomain.mergeL <- maximumP <- maxOfList <-
       plq.maximumConjugate`, which is the gap `DESIGN.md` records in five places as "the remaining
-      known bug". `removeTangent` deletes a constraint it believes tangent-redundant; at an exact
-      tie point it deletes one the region needs, and the region stops covering its own territory.
-      **Work it as itself, not as part of the assembly.** `DECISIONS.md` 2026-08-27 (item 4).
+      known bug".
+      **MECHANISM CORRECTED the same day -- it is NOT deletion.** Deleting a constraint makes a
+      region BIGGER, and no enlargement can create a hole, so "deletes a constraint the region
+      needs" was wrong. With every branch instrumented: the three `deletedLinear` events are all far
+      from the hole, and what matters is `removeTangent`'s `lin & ~tin` branch, which does
+      `obj = region.empty` -- **it discards the WHOLE region**. Two regions were discarded, and the
+      second one's quadratic is satisfied at the hole
+      (`4(-0.5)(2) - 40(2) + 0.25 + 16 + 40 = -27.75 <= 0`).
+      **Next step, cheap:** capture the full discarded region at that branch and test (-0.5,2)
+      against ALL its constraints -- containment is currently established only for the one named
+      constraint, so this is a strong candidate rather than a proof. Then decide whether
+      `lin & ~tin` should discard at all, or refuse to conclude when the probe sits at a tie point.
+      **Work it as itself, not as part of the assembly.** `DECISIONS.md` 2026-08-27 (G17, corrected).
 
 - [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
