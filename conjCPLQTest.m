@@ -822,6 +822,47 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyError(@() q.conj('cplq'), 'convEnvUnbounded:minusInfinity');
         end
 
+        function aGENUINETwoPieceDomainFoldsCorrectlyAndCHEAPLY(testCase)
+        % THE CROSS-PIECE MAXIMUM, on input that actually reaches it. Every two-piece fixture in
+        % this repository carries the SAME quadratic on both faces, so Step 0's mergeSameQuadFaces
+        % deletes the shared edge and hands the rest of the pipeline ONE face -- the fold is never
+        % performed. Measured 2026-08-25: that is exactly why `testcPLQ`'s hole at (-0.5,2) does
+        % not reach `conj`.
+        %
+        % These two carry DIFFERENT functions per face, so they survive Step 0 (asserted below --
+        % if a future Step 0 merged them this test would silently stop testing anything) and the
+        % fold runs for real. The truth is the max of the two per-piece sups, each computed in
+        % closed form: both faces are triangles carrying a convex or affine function, so the sup is
+        % attained at a vertex, an edge stationary point, or the interior stationary point.
+        %
+        % CHEAP ON PURPOSE. The obvious fixture -- PRect's two polygons with different quadratics
+        % -- did not finish in 40 minutes. The unit square split by its diagonal does the same job
+        % in 1.3 s, which is what lets this live in a fast bucket rather than being a thing nobody
+        % runs.
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 1 3 1; 3 4 1; 4 1 1];
+            F = [1 0; 1 0; 2 1; 2 0; 2 0];
+            T1 = V([1 2 3],:); T2 = V([1 3 4],:);
+            cases = { {[0 0 0 1 0 0; 0 0 0 0 1 0], 'affine x | affine y'}, ...
+                      {[2 0 2 0 0 0; 2 0 2 1 0 0], 'convex | convex shifted'} };
+            S = [0 0; 1 0; 0 1; 1 1; -1 1; 1 -1; -1 -1; 2 0.5; -0.5 2; 3 -2; 0.4 0.6];
+            for c = cases
+                f6 = c{1}{1}; nm = c{1}{2};
+                q = QuaPol(V, E, f6, F);
+                testCase.verifyEqual(q.nf, 2, ...
+                    [nm ': Step 0 must NOT merge these, or the fold is never exercised']);
+                g = q.conj('cplq');
+                for i = 1:size(S,1)
+                    sPt = S(i,:);
+                    want = max(conjCPLQTest.supQuadOverPoly(sPt, f6(1,:), T1), ...
+                               conjCPLQTest.supQuadOverPoly(sPt, f6(2,:), T2));
+                    got = conjCPLQTest.evalConjResult(g, sPt);
+                    testCase.verifyEqual(got, want, 'AbsTol', 1e-9, sprintf( ...
+                        '%s: f*(%g,%g)', nm, sPt(1), sPt(2)));
+                end
+            end
+        end
+
         function frameChangedPieceKeepsItsEnvelopeBLOCKS(testCase)
         % G5, the `MATLAB:badsubscript` crash. Found by checkConjAgainstDefinition's random sweep
         % (seed 20260824) as case 29, a 4-gon carrying x*y plus an affine part; case 17, a 5-gon,
