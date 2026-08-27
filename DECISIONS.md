@@ -3502,3 +3502,35 @@ compare positions.
 (three separate tolerances measured un-separable on this fixture), and provenance tagging (this
 entry). The measurement to start any future attempt from is the edge-length distribution above --
 if a change does not move it, it will not fix the assembly.
+
+## 2026-08-27 (item 4) — the cPLQ hole is the KNOWN `mergeL`/`removeTangent` gap, and it is NOT the assembly's problem
+
+G11's remaining `plq_1p` red -- `rectMaximumIsTheConjugateOfTheWholeDomain`, the hole at
+(-0.5, 2) -- was worth checking against item 2's finding: both are "the assembled result does not
+cover a point", so the natural guess is one cause. Measured, and it is not.
+
+    cells: 32;  eval at the hole = NaN
+    nearest cell misses by 1.668523e-02
+
+**1.67e-02 is a genuine GAP, not a near miss.** Item 2's assembly failures live at 1e-6 to 1e-3, at
+or below the tolerances meant to resolve them. Here the nearest cell is four orders of magnitude
+further away than that: no tolerance, no snapping and no provenance scheme would close it, because
+there is nothing there to close. A region is simply absent.
+
+**And it is already a named, documented gap.** The stack through the failing run is
+
+    region.removeTangent <- functionNDomain.mergeL <- maximumP <- maxOfList <- plq.maximumConjugate
+
+which is `DESIGN.md`'s "`mergeL`/`removeTangent` exact-tie-point gap" -- recorded there five times,
+including "the remaining known bug ... which `QuaParCPLQ.conj` now inherits when composing".
+`removeTangent` deletes a constraint it believes is tangent-redundant; at an exact tie point it
+deletes one the region needs, and the region then fails to cover territory that is its own.
+
+**So item 4 is not a new defect and not the same defect as item 2.** Two different "hole" symptoms
+with two different causes, in two different implementations:
+
+    maxQuaPar assembly   1e-6..1e-3   coordinates disagree below the matching tolerance   (item 2)
+    cPLQ maximumConjugate   1.7e-2    a constraint is wrongly deleted as tangent-redundant (here)
+
+The second has a name, a location, and a documented history. It should be worked as itself --
+`removeTangent`'s tie-point handling -- rather than as part of the assembly work.

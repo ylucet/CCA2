@@ -237,6 +237,17 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       curved with curved and the subdivision is consistent per face PAIR rather than globally.
       That is the documented redesign, not a patch to `matchHalfEdges`.
 
+- [ ] **G17 -- `rectMaximumIsTheConjugateOfTheWholeDomain`'s hole is the KNOWN
+      `mergeL`/`removeTangent` exact-tie-point gap.** Identified 2026-08-27. The nearest cell to the
+      uncovered point (-0.5,2) misses by **1.668523e-02** -- a real gap, four orders above the
+      1e-6..1e-3 scale at which the `maxQuaPar` assembly fails, so it is NOT that defect and no
+      tolerance or snapping scheme touches it. The failing stack is
+      `region.removeTangent <- functionNDomain.mergeL <- maximumP <- maxOfList <-
+      plq.maximumConjugate`, which is the gap `DESIGN.md` records in five places as "the remaining
+      known bug". `removeTangent` deletes a constraint it believes tangent-redundant; at an exact
+      tie point it deletes one the region needs, and the region stops covering its own territory.
+      **Work it as itself, not as part of the assembly.** `DECISIONS.md` 2026-08-27 (item 4).
+
 - [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
       now reporting as three because the split separates its stages. No regression.
