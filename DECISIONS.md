@@ -3246,3 +3246,40 @@ is not `nf = 0` (that means dim < 2). B3 is now one of three rather than three o
 
 **Worth noting for the return-type work**: two of B3's three "blocked on representation" items
 turned out to be blocked on `eval` instead. The representation was already there both times.
+
+## 2026-08-26 (item 1 / scaling) — the proposed fix is ALREADY IN PLACE; the refusal is `noSharedFacet`
+
+`TODO.md`'s "STEP 3's CROSS-PIECE MAXIMUM DOES NOT SCALE" entry (2026-08-16) ends with **"Where to
+start: merge same-function neighbours after each fold, not only at the end."** Measured today, that
+is already what happens, so the entry's advice is stale and following it would produce nothing.
+
+`functionNDomain.maxOfList` calls `maximumP(true)` after EVERY fold, and `maximumP` calls `mergeL`
+twice. The existing `CCA2_TRACE_MAXP` instrumentation shows it working, on PRect3 (`x*y` over a
+quadrilateral):
+
+    [maxP] in=11 afterSplit=11 merge1=8 merge2=7 (18 s)
+    CROSS-PIECE max: 7 cells in 44 s
+
+11 cells in, 7 out -- merging per fold, and succeeding.
+
+**What the cost actually is.** `region.mergeTally`, which counts refusals by reason:
+
+    cross-piece max -- 11 attempts:
+       noSharedFacet    7
+       okLinear         3
+       emptyOperand     1
+
+**`noSharedFacet` is 7 of 11**, and it is not a decision that the two cells cannot be merged -- it
+is `sharesFacet` returning false because it could not PROBE the edge. Its own header says so: "this
+routine is a LOCAL necessary condition ... a false here costs compactness, never correctness". So
+the surplus cells are pairs that `unionIsExact` was never asked about, because a probe on
+`probeOnConstraint` failed first.
+
+**That is where to start instead**, and it is a much smaller target than the entry suggests: make
+`sharesFacet` probeable on the edges it currently gives up on (the `probeOnConstraint` fallback when
+`vx+0.1`/`vx-0.1` are both infeasible), or let a failed probe fall through to `unionIsExact` rather
+than short-circuiting to "no". The second is strictly safer -- it can only ask a question that is
+currently skipped.
+
+**Scale note.** PRect3 is small enough to iterate on: 44 s for the cross-piece max and 68 s for
+`biconjugateF`, against 1016 s and >3600 s for PRect. Use it, not PRect, when working this.

@@ -618,9 +618,23 @@ blocker for making the split the default, and it was a casualty of the double le
       quadrilateral has a cone per vertex and a cell per edge -- of the order of a dozen. The
       surplus is adjacent cells carrying the SAME function that are never merged, which is
       `region.merge` / `unionIsExact` refusing a union it cannot certify across a conic edge.
-      **Where to start:** merge same-function neighbours after each fold, not only at the end. Many
+      **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
+      fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
+      `mergeL` twice. Measured on PRect3 with the existing `CCA2_TRACE_MAXP`:
+      `[maxP] in=11 afterSplit=11 merge1=8 merge2=7` -- 11 cells in, 7 out.
+      **The refusals are what to attack, and `region.mergeTally` names them:**
+      `noSharedFacet 7, okLinear 3, emptyOperand 1` -- so 7 of 11 attempts die in `sharesFacet`,
+      which is a LOCAL NECESSARY CONDITION that returns false when it cannot PROBE the edge, not a
+      decision that the cells are unmergeable. Its own header says "a false here costs compactness,
+      never correctness". Those pairs are never put to `unionIsExact` at all.
+      **Do this instead:** let a failed probe fall through to `unionIsExact` rather than
+      short-circuiting to "no" -- strictly safe, since it only asks a question currently skipped.
+      **Iterate on PRect3** (44 s cross-piece max, 68 s biconjugateF), NOT PRect (1016 s, >3600 s).
+      `DECISIONS.md` 2026-08-26 (item 1).
+
+      ~~**Where to start:** merge same-function neighbours after each fold, not only at the end. Many
       of these cells are POLYHEDRAL (the vertex cones), where `unionIsExact` already decides
-      exactly, so a large fraction should collapse without needing the conic case at all. Measure
+      exactly, so a large fraction should collapse without needing the conic case at all. Measure~~
       the cell count per fold before and after -- that is the number that predicts the time.
       **This is the FIRST of two things standing between the A.4/A.5 split and being the default**:
       `testcPLQ` goes from 1542 s to 4728 s with the split on. The second is that `testRectBiconj`
