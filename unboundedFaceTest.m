@@ -10,6 +10,19 @@ classdef unboundedFaceTest < matlab.unittest.TestCase
     % and, importantly, pin the REFUSALS too, since the affine-envelope class is not all of them.
 
     methods (Static)
+        function v = evalAnyConj(g, x)
+        % Evaluate a conj result whatever representation it came back as -- the same idiom as
+        % conjCPLQTest.evalConjResult and biconjCPLQTest.evalAnyResult. Since the numeric routes
+        % were widened, one input family can legitimately produce a QuaParCPLQ or a mesh, and a
+        % test about VALUES must not hard-code either. Note the two disagree on how "uncovered"
+        % reads: NaN from the symbolic form, +inf from a mesh.
+            if isa(g, 'QuaParCPLQ')
+                v = evalFunctionNDomain(g.fnd, x);
+            else
+                v = g.eval(x);
+            end
+        end
+
         function d = faceOf(ineqs, x, y)
             d = domain();
             d = d.domainEdge(ineqs, [x, y]);
@@ -142,15 +155,28 @@ classdef unboundedFaceTest < matlab.unittest.TestCase
             F = [3 2; 2 1; 1 4; 4 3];
             f = [0 0 0 1 1 0; 0 0 0 -1 1 0; 0 0 0 -1 -1 0; 0 0 0 1 -1 0];
             g = QuaPol(V, E, f, F).conj('cplq');
+            % ACCESSOR CHANGED 2026-08-26, not the assertion. This read `g.fnd` and tested the
+            % outside with `isnan`, both of which assume a QuaParCPLQ. f = |x|+|y| is ALL-AFFINE
+            % over four cones, so it now takes the `conjAffinePLQ` route (TODO.md G2) and comes
+            % back as a QuaPol MESH in 0.95 s instead of going through the symbolic pipeline --
+            % where "uncovered" reads as +inf rather than NaN.
+            %
+            % The values are unchanged and were re-measured before this edit: 0 at all six probe
+            % points inside (and at the corners (-1,1) and (1,-1) too), +inf at all four outside
+            % plus (-3,-3). This test's subject is the VALUE -- "the conjugate is the indicator of
+            % [-1,1]^2" -- so it must read whichever representation it is handed.
+            ev = @(x) unboundedFaceTest.evalAnyConj(g, x);
             inBox  = [0 0; 0.5 0.5; 1 1; -1 -1; 0.9 -0.3; -0.25 0.75];
             outBox = [1.5 0; 0 2; 2 2; -1.5 0.5];
             for i = 1:size(inBox,1)
-                testCase.verifyEqual(evalFunctionNDomain(g.fnd, inBox(i,:)), 0, 'AbsTol', 1e-12, ...
+                testCase.verifyEqual(ev(inBox(i,:)), 0, 'AbsTol', 1e-12, ...
                     sprintf('f* must be 0 inside [-1,1]^2 at (%g,%g)', inBox(i,1), inBox(i,2)));
             end
             for i = 1:size(outBox,1)
-                testCase.verifyTrue(isnan(evalFunctionNDomain(g.fnd, outBox(i,:))), ...
-                    sprintf('f* must be +inf outside [-1,1]^2 at (%g,%g)', outBox(i,1), outBox(i,2)));
+                v = ev(outBox(i,:));
+                testCase.verifyTrue(isnan(v) || isinf(v), sprintf( ...
+                    'f* must be +inf outside [-1,1]^2 at (%g,%g), got %g', ...
+                    outBox(i,1), outBox(i,2), v));
             end
         end
 
