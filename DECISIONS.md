@@ -3178,3 +3178,35 @@ a symptom of item 2 and not an independent defect; if it does not, the two are s
 A stage-by-stage timing run was started tonight to confirm the split above end to end. It had not
 finished after several hours and was stopped when the run ended, which is itself consistent with
 the numbers: the chain is dominated by two stages that together already exceed the budget.
+
+## 2026-08-26 (G15) — REFUTED: the biconjugate timeout is NOT item 2's hole. It is the known scaling defect
+
+Yesterday's G15 entry proposed that `rectBiconjugateIsAConvexUnderestimator`'s >3600 s is a symptom
+of item 2's hole, on the grounds that `biconjugateF` computes f** = (f*)* and is therefore handed a
+mesh that does not cover the plane. Measured today, and it is wrong.
+
+    max stage (from cache)                       1016 s, 32 cells
+    ...of which 1 of 10 probe points UNCOVERED   the hole is real and still there
+    conjugateOfPiecePoly                          191 s, 32 cells -> 111 cells in 32 blocks
+
+**The hole does not drive the cost.** The step that consumes the broken mesh -- and the only step
+whose behaviour a hole could plausibly change -- takes 191 s of a budget of 3600, and it TERMINATES.
+It does not choke, error, or spin on the uncovered region; it simply conjugates the cells that are
+there.
+
+**What is left is arithmetic, and it is the defect already on the list.** After that step there are
+**111 cells in 32 blocks**, and `biconjugateF` must take the pointwise max across them. That is
+`functionNDomain.maxOfList`, and `TODO.md`'s "STEP 3's CROSS-PIECE MAXIMUM DOES NOT SCALE" entry
+measured exactly this shape on a different fixture: folds of 93, 294, 647, 1273 and 2087 s with the
+cell count running 5, 14, 29, 45, 70, 86. At 111 cells, 3600 s is the expected cost rather than a
+hang.
+
+**So G15 folds into that entry rather than standing on its own**, and the fix that closes it is the
+one already written there: merge same-function neighbours after each fold instead of only at the
+end, starting with the POLYHEDRAL cells where `unionIsExact` already decides exactly. The prediction
+this makes is testable and cheap -- if the surplus cells are the same "adjacent cells carrying the
+same function, never merged" as on the quadrilateral, the 111 should collapse to of the order of a
+dozen, and the timeout should disappear without anything in `biconjugateF` changing.
+
+**Do not chase the hole for this.** It is a real defect (item 2 / G1 / G10) and worth fixing on its
+own account, but it is not what makes this test time out.

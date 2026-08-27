@@ -347,14 +347,17 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       Both remaining ones are the return-type work, not mathematics -- the closed forms are in the
       refusal messages. `DECISIONS.md` 2026-08-25 (overnight, B3).
 
-- [ ] **G15 -- the `rectBiconjugateIsAConvexUnderestimator` timeout is probably item 2's HOLE.**
-      Where the time goes, measured: tri + conj ~28 s, the cross-piece max ~1534 s, `biconjugateF`
-      >2000 s and not finishing. Only the last one fails to terminate -- and it is fed the `max`
-      stage that item 2 showed leaves a hole (`PRect f* uncovered at (-0.5,2)`), so it is
-      conjugating a mesh that does not cover the plane.
-      **Cheapest next step, now that the stages are split:** take the cached `max` result, repair
-      or excise the uncovered region, and run `biconjugateF` alone. Terminates => the timeout is a
-      symptom of item 2, not an independent defect.
+- [x] **G15 -- ANSWERED 2026-08-26, and the hypothesis was WRONG.** The
+      `rectBiconjugateIsAConvexUnderestimator` timeout is NOT item 2's hole. Measured:
+      `conjugateOfPiecePoly` -- the step that consumes the holed mesh, and the only one a hole
+      could plausibly derail -- takes **191 s** of the 3600 s budget and TERMINATES, turning 32
+      cells into **111 cells in 32 blocks**. The remaining cost is the pointwise max across those
+      111, i.e. `functionNDomain.maxOfList`.
+      That is the defect already recorded below as "STEP 3's CROSS-PIECE MAXIMUM DOES NOT SCALE",
+      whose own measurements run 5, 14, 29, 45, 70, 86 cells against folds of 93 ... 2087 s. At 111
+      cells a 3600 s timeout is the expected cost, not a hang. **G15 folds into that entry**, and
+      its fix -- merge same-function neighbours after each fold, polyhedral cells first -- is the
+      one to try. `DECISIONS.md` 2026-08-26 (G15).
 
 ### Tools built on 2026-08-24, so they are not rebuilt
 
