@@ -3607,3 +3607,35 @@ scale, so it is still a genuinely absent region rather than a tolerance artefact
 time and the fold count here is small. Evaluate the accumulated result at (-0.5,2) after EVERY fold:
 the first fold at which it becomes NaN identifies the operand pair and the step, the way
 `MAXQP_PROBE` did for the assembly. Do that before naming a routine again.
+
+## 2026-08-27 (G17, LOCATED) — the hole appears in fold 4's `maximumP`, after the pairing
+
+The bisection prescribed by the refutation above, run rather than reasoned about. Fold the
+per-piece conjugates one at a time and count how many regions contain (-0.5,2) at each step --
+before the pairing, after `mtimes`, and after `maximumP`:
+
+    start:  3 cells, covered by 1
+    fold 2: covered before=1   after mtimes=1   after maximumP=1   ( 8 cells)
+    fold 3: covered before=1   after mtimes=1   after maximumP=1   (19 cells)
+    fold 4: covered before=1   after mtimes=1   after maximumP=0   (25 cells)   <-- LOST
+    fold 5: covered before=0   after mtimes=0   after maximumP=0   (32 cells)
+
+**The point is covered entering fold 4 and by the paired object, and uncovered after
+`maximumP`.** So the loss is in `maximumP` -- the split-and-merge step -- at one identified fold,
+not in the pairing and not in any earlier fold.
+
+**A note on the probe, since it cost two attempts.** After `mtimes` each region carries TWO
+functions, so `evalFunctionNDomain` cannot read a paired object -- it errors in `subs`. Coverage has
+to be counted from the CONSTRAINTS at that stage, which is what this version does. Anyone
+instrumenting this pipeline will hit the same thing.
+
+**Every operand covers the point** (measured: the five groups give 37.5, 37.5, 2.5, 2.5, 2.5 at it,
+and 37.5 is the truth), so this is purely a fold defect -- no per-piece conjugate is at fault.
+
+**Where that leaves the accusation of `removeTangent`.** It is called from `mergeL`, which
+`maximumP` calls twice, so it remains *reachable* at the right step -- but the previous entry
+measured both of its region discards as far from the point, so it is not the mechanism by which
+fold 4 loses it. `maximumP` also SPLITS cells before merging (`in=N afterSplit=M`), and a split that
+drops territory would produce exactly this. **Next: instrument `maximumP`'s own split/merge stages
+for coverage at fold 4** -- the same before/after count, one level deeper. That isolates it to the
+split loop or to `mergeL`, and only then is naming a routine justified.

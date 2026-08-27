@@ -256,9 +256,23 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       **What is known:** 32 cells, (-0.5,2) uncovered, nearest cell misses by 1.668523e-02 -- four
       orders above the `maxQuaPar` assembly's scale, so a genuinely absent region, not a tolerance
       artefact.
-      **Next step is a BISECTION, not a hypothesis:** `maxOfList` folds groups one at a time, so
-      evaluate the accumulated result at (-0.5,2) after every fold; the first NaN names the operand
-      pair and the step, as `MAXQP_PROBE` did for the assembly.
+      **BISECTED 2026-08-27: the loss is in FOLD 4's `maximumP`, after the pairing.**
+
+          start:  3 cells, covered by 1
+          fold 2: before=1  after mtimes=1  after maximumP=1  ( 8 cells)
+          fold 3: before=1  after mtimes=1  after maximumP=1  (19 cells)
+          fold 4: before=1  after mtimes=1  after maximumP=0  (25 cells)   <-- LOST
+          fold 5: before=0  after mtimes=0  after maximumP=0  (32 cells)
+
+      Covered entering fold 4 AND after `mtimes`; gone after `maximumP`. Every operand covers the
+      point on its own (the five groups give 37.5, 37.5, 2.5, 2.5, 2.5; 37.5 is the truth), so no
+      per-piece conjugate is at fault -- it is purely a fold defect.
+      **Next, one level deeper:** `maximumP` splits cells and then calls `mergeL` twice. Count
+      coverage across its own split/merge stages at fold 4; that isolates the split loop from
+      `mergeL` and is what would finally justify naming a routine.
+      **Probe note that cost two attempts:** after `mtimes` each region carries TWO functions, so
+      `evalFunctionNDomain` cannot read a paired object (it errors in `subs`) -- count coverage from
+      the CONSTRAINTS at that stage.
 
       (Superseded text follows, kept for the reasoning.) ~~Identified 2026-08-27.~~ The nearest cell to the
       uncovered point (-0.5,2) misses by **1.668523e-02** -- a real gap, four orders above the
