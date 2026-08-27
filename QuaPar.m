@@ -164,7 +164,20 @@ classdef QuaPar < RatPar & Qua
             elseif max(obj.F,[],'all')==0 %edge chain   
                 fVal=Inf * ones(size(x,1),1);
                 for i=1:obj.ne%loop on each edge
-                    b = QuaPar.belongToEdge(obj.V(obj.E(i,1),:),obj.V(obj.E(i,2),:),x);%true if x belongs to edge i                    
+                    % A RAY EDGE IS A RAY, NOT A SEGMENT. `E(i,3) == 0` marks a ray everywhere
+                    % else in this class (see createP, edgeConics, faceBoundary), and
+                    % `belongToEdge` has taken an `isSegment` flag for exactly this since it was
+                    % written -- but this loop never passed it, so every edge of a dim<2 domain was
+                    % treated as the SEGMENT between its two stored vertices. A ray's second
+                    % "vertex" is a DIRECTION, so points beyond it came back +inf: the domain was
+                    % truncated at an arbitrary point with no geometric meaning.
+                    %
+                    % That is what made B3's LINE case unrepresentable -- a line is two opposite
+                    % rays from one point, and it evaluated to +inf everywhere except the two
+                    % direction markers' own segment. Measured before the fix: the two-ray line
+                    % through the origin gave +inf at (2,2) and (-2,-2), both of which are on it.
+                    isSeg = obj.E(i,3) ~= 0;
+                    b = QuaPar.belongToEdge(obj.V(obj.E(i,1),:),obj.V(obj.E(i,2),:),x,isSeg);%true if x belongs to edge i
                     if any(b)
                         R = QuaPar.evalPoly(obj.f(i,:),x(b,:)); 
                         ib=find(b);
@@ -1070,7 +1083,23 @@ classdef QuaPar < RatPar & Qua
             if isSegment
                 b(b) =  all(min(V1,V2) <= Xb + tol,2) & all( Xb - tol <= max(V1,V2),2);
             else
-                b(b) = all(V1 <= Xb + tol,2);
+                % ON THE RAY MEANS ON THE V2 SIDE OF V1, not "coordinate-wise at least V1".
+                % This read `all(V1 <= Xb + tol, 2)`, which is the right test only when the ray
+                % happens to point into the positive quadrant from V1; for any other direction it
+                % rejects the ray's OWN points. Measured on B3's line case: the ray from (0,0)
+                % toward (-1,-1) reported +inf at (-2,-2), a point on it.
+                %
+                % The contract is one dot product -- X is on [V1,V2) iff it is collinear (already
+                % established above) and (X - V1)·(V2 - V1) >= 0 -- and it is direction-agnostic,
+                % so there is no case analysis to get wrong. Scaled by the direction's own length
+                % so `tol` keeps meaning a distance.
+                d = V2 - V1;
+                nd = norm(d);
+                if nd <= tol
+                    b(b) = all(abs(Xb - V1) <= tol, 2);   % degenerate: V2 == V1, only V1 itself
+                else
+                    b(b) = ((Xb - V1) * d(:)) / nd >= -tol;
+                end
             end
         end
         function b = isCollinear(P, tol)

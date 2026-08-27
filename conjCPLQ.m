@@ -142,14 +142,28 @@ function g = conjCPLQ(obj, idx, route)
             % Q is PSD of rank 1: along the null direction n of Q, f is affine with slope <L,n>,
             % so the sup is finite only where <s-L,n> = 0. dom f* is that LINE, and on it
             % f*(s) = 1/2 (s-L)' pinv(Q) (s-L) - kappa.
+            % dom f* is that LINE, and a line IS representable: two opposite RAYS from one
+            % point, `E(:,3) = 0`, which the constructor has always accepted and `QuaPar.eval`
+            % now evaluates correctly (its edge-chain branch used to treat every edge as a
+            % SEGMENT between its stored vertices, truncating each ray at its own direction
+            % marker; and `belongToEdge`'s ray test was coordinate-wise, so it only worked for
+            % rays pointing into the positive quadrant). Both are fixed -- see QuaParTest's
+            % aLINEIsRepresentableAsTwoOppositeRays and belongToEdgeHandlesARayInANYDirection --
+            % so the answer is returned rather than refused. DECISIONS.md 2026-08-26 (B3).
+            %
+            % THE LINE. n spans null(Q); the line is {s : <s - L, n> = 0}, i.e. through the point
+            % L in the direction t perpendicular to n. On it f*(s) = 1/2 (s-L)' pinv(Q) (s-L) -
+            % kappa, which in the stored 6-coefficient basis is the quadratic below.
             n = null((Q+Q.')/2);
             n = n(:,1).' / norm(n(:,1));
-            error('PLQ:conjCPLQ:conjugateIsALine', ...
-                ['Q is positive semidefinite of rank 1 (eig(Q) = [%g %g]), so f* is finite only ' ...
-                 'on the LINE <s - L, n> = 0 with n = (%g,%g), where ' ...
-                 'f*(s) = 1/2 (s-L)'' pinv(Q) (s-L) - %g. dom f* is a line: QuaPar''s dim<2 ' ...
-                 'domain is a SEGMENT or ray between two vertices, not a line.'], ...
-                evs(1), evs(2), n(1), n(2), kappa);
+            t = [-n(2), n(1)];                       % along the line
+            M = pinv((Q+Q.')/2);
+            % 1/2 (s-L)' M (s-L) - kappa  expanded into [x^2 xy y^2 x y const]
+            ML = M * L(:);
+            f6 = [M(1,1), M(1,2), M(2,2), -ML(1), -ML(2), 0.5*(L(:).'*ML) - kappa];
+            Vl = [L(:).'; L(:).' + t; L(:).' - t];   % apex, then the two ray directions
+            g = QuaPar(Vl, [1 2 0; 1 3 0], [f6; f6], zeros(2,2));
+            return
         end
     end
 

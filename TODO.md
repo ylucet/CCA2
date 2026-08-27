@@ -160,29 +160,23 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       Both are pinned by tests in `conjCPLQTest`. What remains under this heading is the numeric
       route for (1), which is a performance item.
 
-- [ ] **G4 -- `QuaCon` storage (H-form).** Now optional rather than blocking, and that is the
+- [ ] **G16 -- `QuaCon` storage (H-form).** (Renumbered from a SECOND G4 on 2026-08-26; two
+      different items carried that label and it caused confusion twice. The conjugate-of-`xy` G4
+      above keeps the name.) Now optional rather than blocking, and that is the
       premise's doing. `Conic`/`RatCon` landed 2026-08-24 so the LATTICE can hold an elliptical
       edge; `ratQ` and `conicMeet` are the exact coefficient layer and the vertex-naming primitive
       it would use. Build it when a `conj` result actually needs a non-parabolic edge -- i.e. when
       G1 lands and a three-piece input with two non-adjacent pieces reaches Step 3.
 
-- [ ] **G8 -- `testPCE2`'s CONVEX ENVELOPE is wrong, one stage before the conjugate.** Found
-      2026-08-25 by splitting `testMaxMultiRegion`'s PCE family by stage: on the triangle
-      {(0,0),(1,0),(2,1)} carrying `x*y`, `pce2EnvelopeUnderestimates` fails in **26 s** --
-      Step 1's envelope does not underestimate `f` / touch it at the vertices. The known red
-      everyone quoted for this fixture was the CONJUGATE one (`f*(0,0) = 0.0429` against a sup of
-      0); `pce2ConjugateMatchesItsOwnSup` reproduces it in **36 s** and reports it as
-      `f*(1,1) = 1.125 BELOW the sampled sup 1.24999381`. Fix the envelope first: a conjugate
-      computed from a wrong envelope is not evidence of anything.
+- [x] **G8 -- SUBSUMED 2026-08-25 by the legacy pins.** It recorded that `testPCE2`'s convex
+      envelope is wrong one stage before the conjugate. True, and it is `plq_1piece`'s envelope:
+      that fixture is one of the seven legacy reds now pinned by name (G14), and `conj` is exact on
+      the same triangle. Nothing here is a `conj` defect. It comes back if the fixtures migrate to
+      `plq_1p`.
 
-- [ ] **G9 -- SIX of the seven `verylong` reds are still unnamed.** No verylong log was ever kept
-      and only `testMaxMultiRegion/testPCE2` is named anywhere in the repository, so "seven
-      pre-existing failures" has never been a list. Naming them costs one `--verylong -j 1` run.
-      Until that run happens no one can say whether any of the six is a `conj` defect.
-      The PCE family is now split by stage (below), which is what makes each of them cheap to
-      attack once named; `testBiconjugate` through `testBiconjugate8` are NOT split yet and are the
-      remaining monolithic block -- each still runs `.maximum` then `.biconjugateF` inline in one
-      method, uncached.
+- [x] **G9 -- FALSE as written, struck 2026-08-26.** It says six of the seven `verylong` reds are
+      unnamed. G11 named all seven on 2026-08-25 (`--verylong -j 4`, 3699 s), with per-test costs
+      and the class each one exercises, and G14 then pinned them. Read G11 instead.
 
 - [ ] **G10 -- the `maxQuaPar` accumulated fold, which is what G4 actually is.** Half closed
       2026-08-25. `pieceRecessionRays` was deciding a piece's recession cone from floating-point
@@ -291,17 +285,10 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       rather than silently answered with the numeric mesh. Pinned by
       `conjSymFreeTest/routeSYMBOLICHasSomewhereToGoForASingleTriangle`.
 
-- [ ] **G13 -- `testPSqroot` is a LEGACY red, not a `conj` one.** Measured 2026-08-25 on
-      {(-1,1),(-3,-3),(-4,-3)} carrying `x*y` at s = (-1,-1):
-
-          truth (closed form, edge maximiser at t=0.75)   1.75
-          QuaPol.conj (numeric Case B)                    1.75    correct
-          plq_1piece + plq.maximum (what the test runs)  -5       the VERTEX value at (-4,-3)
-
-      So the legacy symbolic pipeline takes a vertex where the sup is strictly inside an edge, and
-      `conj` does not: forcing `conj` down the symbolic route on the same input raises
-      `cplqFailed` rather than returning -5. Fixing this is `plq_1piece` work (T6's migration),
-      and it does NOT block `conj`. Take it only if the legacy class is being kept.
+- [x] **G13 -- SUBSUMED 2026-08-25 by the legacy pins.** Its measurement stands and is worth
+      keeping (`conj` returns 1.75 where the legacy route returns -5, the objective at the vertex
+      (-4,-3)); the ACTION is G14's, which pinned `testPSqroot` with exactly that evidence in the
+      message. Nothing separate left to do.
 
 - [x] **G14 -- DONE 2026-08-25: the seven legacy reds are PINNED, not counted. Measured
       2026-08-25, and this is the finding that should decide what happens to them.** Each red was
@@ -333,19 +320,21 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `testMax3` and `testMaxBiconjugate` are pinned on the CLASS rather than a measurement -- their
       pins say so, and confirming them is part of the migration.
 
-- [ ] **B3 -- two of the three representation gaps remain (one CLOSED 2026-08-25 overnight).**
-      A full-domain quadratic that is not strictly convex gives three different objects:
-        * **POINT** (Q = 0, f affine) -- **DONE.** dom f* is a NEEDLE, `nv=1/ne=0`, which
-          `QuaPar`'s constructor always anticipated; the block was one missing branch in
-          `QuaPar.eval`, which returned +inf on a needle including at its own vertex. `conj` now
-          returns the answer. Pinned by
-          `conjCPLQTest/theAffineFullDomainConjugateIsAPointAndIsRETURNED`.
-        * **LINE** (PSD rank 1) -- still refused: the `dim < 2` mesh expresses a SEGMENT between
-          two vertices, not a line.
-        * **EMPTY** (a negative eigenvalue) -- still refused: `nf = 0` means `dim < 2`, not empty,
-          so there is no encoding at all.
-      Both remaining ones are the return-type work, not mathematics -- the closed forms are in the
-      refusal messages. `DECISIONS.md` 2026-08-25 (overnight, B3).
+- [ ] **B3 -- ONE of the three remains (two closed).** A full-domain quadratic that is not
+      strictly convex gives three different objects:
+        * **POINT** (Q = 0, f affine) -- **DONE 2026-08-25.** A needle; the block was a missing
+          branch in `QuaPar.eval`.
+        * **LINE** (PSD rank 1) -- **DONE 2026-08-26.** A line is two opposite RAYS from one point,
+          which the constructor always accepted. Two real defects were in the way, both outside
+          B3: `eval`'s edge-chain branch ignored the `E(:,3)==0` ray marker and truncated every ray
+          at its direction vertex, and `belongToEdge`'s ray range test was COORDINATE-WISE
+          (`all(V1 <= X)`), so it only worked for rays pointing into the positive quadrant. Both
+          fixed and pinned in `QuaParTest`. `conj` now returns the answer, checked against
+          `1/2 (s-L)' pinv(Q) (s-L) - kappa` on two fixtures.
+        * **EMPTY** (a negative eigenvalue) -- still refused, and it is the one with genuinely no
+          encoding: `nf = 0` means `dim < 2`, not empty.
+      **Note for the return-type work:** two of the three turned out to be blocked on `eval`, not
+      on the representation, which was already there both times. `DECISIONS.md` 2026-08-26 (B3).
 
 - [x] **G15 -- ANSWERED 2026-08-26, and the hypothesis was WRONG.** The
       `rectBiconjugateIsAConvexUnderestimator` timeout is NOT item 2's hole. Measured:

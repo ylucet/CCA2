@@ -4,6 +4,54 @@ classdef QuaParTest < matlab.unittest.TestCase
     % parabola validation, evaluation across a genuine parabolic edge, and the conic helpers.
 
     methods (Test)
+
+        function belongToEdgeHandlesARayInANYDirection(testCase)
+        % `belongToEdge(V1,V2,X,false)` is documented as "X belongs to the RAY [V1,V2)". Its range
+        % test was `all(V1 <= X + tol, 2)` -- a COORDINATE-WISE comparison, which is the right test
+        % only when the ray happens to point into the positive quadrant from V1. For any other
+        % direction it rejects the ray's own points.
+        %
+        % The contract is one line of geometry: X is on the ray iff it is collinear with V1,V2 AND
+        % lies on the V2 side of V1, i.e. `(X - V1)·(V2 - V1) >= 0`. That is direction-agnostic.
+        %
+        % Found via B3's LINE case (TODO.md): a line is two opposite rays from one point, and the
+        % one pointing down-left evaluated to +inf at its own points -- measured, the two-ray line
+        % through the origin gave +inf at (-2,-2).
+            V1 = [0 0];
+            dirs = [1 1; -1 -1; -1 1; 1 -1; 0 -1; -1 0; 2 -3];
+            for k = 1:size(dirs,1)
+                d = dirs(k,:);
+                V2 = V1 + d;
+                on   = [V1; V1 + 0.5*d; V1 + d; V1 + 7.25*d];
+                off  = [V1 - d; V1 - 3*d];                      % the OPPOSITE ray
+                b = QuaPar.belongToEdge(V1, V2, on, false);
+                testCase.verifyTrue(all(b), sprintf( ...
+                    'points along the ray in direction (%g,%g) must be ON it', d(1), d(2)));
+                b = QuaPar.belongToEdge(V1, V2, off, false);
+                testCase.verifyFalse(any(b), sprintf( ...
+                    'points on the OPPOSITE ray from (%g,%g) must be off it', d(1), d(2)));
+            end
+        end
+
+        function aLINEIsRepresentableAsTwoOppositeRays(testCase)
+        % B3's LINE case needs a 1-D UNBOUNDED domain. `QuaPar`'s constructor already names
+        % `[nv,ne] = [2,1]` "segment / ray" beside the needle, so the representation exists; what
+        % was missing was that `eval`'s edge-chain branch treated every edge as a SEGMENT between
+        % its two stored vertices, ignoring the `E(:,3) == 0` ray marker it uses everywhere else.
+        % A ray's second "vertex" is a DIRECTION, so the domain was truncated there.
+            V = [0 0; 1 1; -1 -1];
+            E = [1 2 0; 1 3 0];                       % two opposite rays from the origin
+            f = [0 0 0 1 0 0; 0 0 0 1 0 0];           % f(x,y) = x on both
+            g = QuaPar(V, E, f, zeros(2,2));
+            for p = [2 2; -2 -2; 0 0; 5.5 5.5; -7 -7]'
+                testCase.verifyEqual(g.eval(p.'), p(1), 'AbsTol', 1e-12, sprintf( ...
+                    'the line must carry its function at (%g,%g)', p(1), p(2)));
+            end
+            for p = [1 -1; 0 3; -2 2]'
+                testCase.verifyTrue(isinf(g.eval(p.')), sprintf( ...
+                    'off the line must be +inf at (%g,%g)', p(1), p(2)));
+            end
+        end
         function linearEdgesMatchQuaPol(testCase)
             % A QuaPar built from linear edges must evaluate identically to the QuaPol
             % built from the same data (polyhedral subdivision = special parabolic subdivision).

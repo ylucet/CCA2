@@ -3210,3 +3210,39 @@ dozen, and the timeout should disappear without anything in `biconjugateF` chang
 
 **Do not chase the hole for this.** It is a real defect (item 2 / G1 / G10) and worth fixing on its
 own account, but it is not what makes this test time out.
+
+## 2026-08-26 (B3) — the LINE case is closed, and it uncovered two real defects in `QuaPar`
+
+B3's LINE case -- Q positive semidefinite of rank 1, so f is affine along null(Q) and f* is finite
+only on a line -- was recorded as blocked on the return type: "QuaPar's dim<2 domain is a SEGMENT or
+ray between two vertices, not a line". Measured, that was wrong twice over.
+
+**A line IS representable**: two opposite RAYS from one point, `E(:,3) = 0`, which the constructor
+has always accepted (it names `[nv,ne] = [2,1]` "segment / ray" beside the needle). What stopped it
+were two defects, both in code that had nothing to do with B3:
+
+**1. `QuaPar.eval`'s edge-chain branch treated every edge as a SEGMENT.** It called
+`belongToEdge(V1,V2,x)` without the `isSegment` flag, so a RAY edge was read as the segment between
+its apex and its DIRECTION marker, and the domain was silently truncated at a point with no
+geometric meaning. Measured: the two-ray line through the origin gave `+inf` at (2,2).
+
+**2. `belongToEdge`'s ray test only worked for rays pointing into the positive quadrant.** Its range
+check was
+
+        b(b) = all(V1 <= Xb + tol, 2);
+
+a COORDINATE-WISE comparison. The contract is one dot product -- X is on `[V1,V2)` iff it is
+collinear and `(X - V1)·(V2 - V1) >= 0` -- and that is direction-agnostic. With the flag fixed but
+this not, the ray from (0,0) toward (-1,-1) still reported `+inf` at (-2,-2), a point on it. Pinned
+by `QuaParTest/belongToEdgeHandlesARayInANYDirection`, which checks seven directions including the
+axis-aligned and negative ones, plus the opposite ray in each case.
+
+**Both fixed, so `conj` returns the answer.** Verified against the closed form
+`f*(s) = 1/2 (s-L)' pinv(Q) (s-L) - kappa` on two fixtures, `x^2/2` and `(x+y)^2/2 + 2x`, at four
+points along the line and two off it -- exact.
+
+**Only the EMPTY case remains a refusal**, and it is the one with no encoding at all: dom f* empty
+is not `nf = 0` (that means dim < 2). B3 is now one of three rather than three of three.
+
+**Worth noting for the return-type work**: two of B3's three "blocked on representation" items
+turned out to be blocked on `eval` instead. The representation was already there both times.

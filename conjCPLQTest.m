@@ -180,12 +180,12 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % single POINT, and a point IS representable -- a needle, nv=1/ne=0, which QuaPar's
         % constructor always anticipated and QuaPar.eval now understands. It is answered rather
         % than refused; see theAffineFullDomainConjugateIsAPointAndIsRETURNED.
-        %   Q PSD rank 1   -> f* finite only on a LINE through L along range(Q)
+        % The LINE case (Q PSD of rank 1) has ALSO left this table, 2026-08-26: a line is two
+        % opposite RAYS from one point, which the mesh represents, so it too is answered now.
+        % Only the EMPTY case is still a refusal. See theRank1PSDConjugateIsALineAndIsRETURNED.
             cases = {
                 [0  1  0  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'f = xy, indefinite'
                 [-2 0 -2  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'concave'
-                [1  0  0  0 0 0], 'PLQ:conjCPLQ:conjugateIsALine',        'PSD rank 1, x^2/2'
-                [1  1  1  2 0 0], 'PLQ:conjCPLQ:conjugateIsALine',        'PSD rank 1, (x+y)^2/2'
             };
             for i = 1:size(cases,1)
                 f6 = cases{i,1}; want = cases{i,2}; what = cases{i,3};
@@ -198,18 +198,19 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % The messages are the specification, so they are asserted rather than left to drift: the
         % affine case must name the point f* is supported on and its value there.
         % f = 3x - 2y + 5, so f* is the indicator of (3,-2) with value -5.
-            % Repointed off the AFFINE case 2026-08-25 (overnight), because that one is now an
-            % ANSWER rather than a refusal. f = x^2/2 has Q = diag(1,0), so f* is finite only on
-            % the line <s - L, n> = 0 with n = (0,1).
+            % Repointed twice as the gaps closed: off the AFFINE case on 2026-08-25 and off the
+            % rank-1 PSD case on 2026-08-26, both of which are now ANSWERS. The EMPTY case is the
+            % only refusal left, and it is the one that genuinely has no encoding: dom f* empty is
+            % not `nf = 0` (that means dim < 2), so there is nothing to return.
             try
-                QuaPol([1 0 0 0 0 0]).conj('cplq');
-                testCase.verifyFail('a rank-1 PSD full-domain quadratic was not refused');
+                QuaPol([0 1 0 0 0 0]).conj('cplq');
+                testCase.verifyFail('an indefinite full-domain quadratic was not refused');
             catch ME
-                testCase.verifyEqual(ME.identifier, 'PLQ:conjCPLQ:conjugateIsALine');
-                testCase.verifySubstring(ME.message, 'LINE', ...
-                    'the refusal must say what dom f* reduces to');
-                testCase.verifySubstring(ME.message, 'pinv', ...
-                    'the refusal must carry the closed form for f* on that line');
+                testCase.verifyEqual(ME.identifier, 'PLQ:conjCPLQ:conjugateHasEmptyDomain');
+                testCase.verifySubstring(ME.message, 'EMPTY', ...
+                    'the refusal must say what dom f* is');
+                testCase.verifySubstring(ME.message, '-inf', ...
+                    'the refusal must say why: conv f = -inf');
             end
         end
 
@@ -232,6 +233,41 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                 v = g.eval(s{1});
                 testCase.verifyTrue(isinf(v), sprintf( ...
                     'f*(%g,%g) must be +inf off the point, got %g', s{1}(1), s{1}(2), v));
+            end
+        end
+
+        function theRank1PSDConjugateIsALineAndIsRETURNED(testCase)
+        % B3's LINE case, closed 2026-08-26. For Q positive semidefinite of rank 1, f is affine
+        % along null(Q), so f* is finite only on the LINE {s : <s - L, n> = 0} with n spanning
+        % null(Q), and equals 1/2 (s-L)' pinv(Q) (s-L) - kappa there.
+        %
+        % It used to be refused because "QuaPar's dim<2 domain is a SEGMENT or ray between two
+        % vertices, not a line". A line IS two opposite RAYS from one point, which the constructor
+        % has always accepted; what was missing was in `eval` (its edge-chain branch treated every
+        % edge as a segment, ignoring the ray marker) and in `belongToEdge` (its ray range test was
+        % coordinate-wise, so it only worked for rays pointing into the positive quadrant). Both
+        % are fixed and pinned in QuaParTest.
+            for c = {{[1 0 0 0 0 0], 'x^2/2'}, {[1 1 1 2 0 0], '(x+y)^2/2 + 2x'}}
+                f6 = c{1}{1}; nm = c{1}{2};
+                g = QuaPol(f6).conj('cplq');
+                testCase.verifyEqual(g.kind(), 'QuaPar', nm);
+                testCase.verifyEqual(g.nv, 3, [nm ': a line is an apex plus two ray directions']);
+                testCase.verifyEqual(g.ne, 2, [nm ': two opposite rays']);
+                Q = [f6(1) f6(2); f6(2) f6(3)]; L = [f6(4); f6(5)]; kappa = f6(6);
+                M = pinv(Q);
+                n = null(Q); n = n(:,1).' / norm(n(:,1));
+                t = [-n(2), n(1)];
+                for a = [0 1 -2.5 4]
+                    s = L(:).' + a*t;
+                    want = 0.5*(s(:)-L).' * M * (s(:)-L) - kappa;
+                    testCase.verifyEqual(g.eval(s), want, 'AbsTol', 1e-9, sprintf( ...
+                        '%s: f* on the line at (%g,%g)', nm, s(1), s(2)));
+                end
+                for a = [0.7 -1.3]
+                    s = L(:).' + a*n;
+                    testCase.verifyTrue(isinf(g.eval(s)), sprintf( ...
+                        '%s: f* must be +inf off the line at (%g,%g)', nm, s(1), s(2)));
+                end
             end
         end
 
