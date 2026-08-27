@@ -3309,3 +3309,41 @@ them and pair on that**, using geometry only to break ties among candidates that
 provenance. Do not start by widening `insertGlobalPassthrough`'s tolerance: that is the third
 tolerance on this fixture to be measured un-separable, after `matchHalfEdges`' tolPos and
 `pieceRecessionRays`' sign tests.
+
+## 2026-08-26 (item 1, second pass) — REFUTED: the surplus cells are NOT unprobed facets
+
+The entry above proposed the fix: `noSharedFacet` is 7 of 11 merge refusals, `sharesFacet`'s
+`isconvex` is only a LOCAL probe that returns false when it cannot probe the edge, so let a failed
+probe fall through to `unionIsExact` -- "strictly safe, since it only asks a question currently
+skipped".
+
+**Built it and measured it. The reasoning is right and the conclusion is wrong.**
+
+The fallback keeps a pair whose facet has ALREADY matched (opposite constraints, matching edge
+vertices) but whose local probe failed, and hands it to `unionIsExact`; conservatively, only when no
+probe-passing candidate exists and exactly one unprobed candidate does. On PRect3:
+
+    before   11 attempts:  noSharedFacet 7, okLinear 3, emptyOperand 1
+             7 cells, 44 s
+    after    13 attempts:  noSharedFacet 5, okLinear 3, unprobedFacetTried 2,
+                           lin_exactAnotInB 2, emptyOperand 1
+             7 cells, 44 s
+
+**Two pairs were newly asked, and `unionIsExact` REFUSED BOTH** (`exactAnotInB` -- A is not
+contained in B'). The cell count and the runtime are unchanged.
+
+**So the 7 refusals decompose as: 2 unprobeable facets that are genuinely unmergeable, and 5 pairs
+with no shared facet at all** -- cells that are simply not adjacent, correctly not merged. There is
+no surplus hiding behind the probe. `merge` is already achieving what it can on this fixture, and
+7 cells is what it can.
+
+**Reverted.** The change is sound and costs two extra LPs to learn nothing; keeping it would add a
+code path with no measured benefit.
+
+**What this means for the scaling defect.** Two of its three plausible causes are now eliminated:
+the merge is not mis-SCHEDULED (it already runs per fold) and it is not being BLOCKED by the local
+probe. So on a fixture where the cell count really does blow up -- the quadrilateral at 5, 14, 29,
+45, 70, 86 -- the growth must be in the SPLIT, i.e. `maximumP` creating cells, not `mergeL` failing
+to remove them. `[maxP] in=N afterSplit=M` is the number to read next, and on PRect3 it is
+`in=11 afterSplit=11`, which creates nothing. **Measure afterSplit on the quadrilateral before
+touching merge again.**
