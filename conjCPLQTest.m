@@ -164,53 +164,57 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(q.eval(s'), direct, 'AbsTol', 1e-10);
         end
 
-        function fullDomainNonStrictlyConvexIsClassifiedNotLumped(testCase)
-        % A full-domain quadratic that is not strictly convex used to raise ONE
-        % `PLQ:conjCPLQ:notImplemented` for what are three different objects. They are still all
-        % refused -- the mathematics is closed form but none of the three has a representation --
-        % but the refusal now says WHICH, and its message carries the closed form.
+        function fullDomainNonStrictlyConvexIsANSWEREDInAllTHREECases(testCase)
+        % A full-domain quadratic that is not strictly convex gives three different objects, and as
+        % of 2026-08-27 `conj` RETURNS all three. They were one lumped `notImplemented` until
+        % 2026-08-25, then three classified refusals, and each fell in turn -- every time because
+        % the representation already existed and one routine elsewhere did not know about it.
         %
-        % TEST CHANGED 2026-08-25: `indefiniteQuadraticNotImplemented` asserted the generic
-        % identifier on the f = xy row of this table. The input is still refused; the identifier
-        % is now specific, and pinning the generic one would have blocked the classification.
+        %   Q indefinite / a negative eigenvalue  -> conv f = -inf, so f* = +inf EVERYWHERE.
+        %                                            dom f* is empty; the FUNCTION is a full-domain
+        %                                            mesh whose constant is +inf.
+        %   Q = 0 (affine)                        -> f* is the indicator of the single point L:
+        %                                            a NEEDLE (nv=1, ne=0).
+        %   Q PSD of rank 1                       -> f* is finite only on a LINE through L:
+        %                                            two opposite RAYS from one point.
         %
-        %   Q indefinite   -> conv f = -inf, so f* = +inf everywhere: dom f* is EMPTY
-        %
-        % The AFFINE case (Q = 0) has LEFT this table, 2026-08-25 (overnight): its dom f* is a
-        % single POINT, and a point IS representable -- a needle, nv=1/ne=0, which QuaPar's
-        % constructor always anticipated and QuaPar.eval now understands. It is answered rather
-        % than refused; see theAffineFullDomainConjugateIsAPointAndIsRETURNED.
-        % The LINE case (Q PSD of rank 1) has ALSO left this table, 2026-08-26: a line is two
-        % opposite RAYS from one point, which the mesh represents, so it too is answered now.
-        % Only the EMPTY case is still a refusal. See theRank1PSDConjugateIsALineAndIsRETURNED.
-            cases = {
-                [0  1  0  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'f = xy, indefinite'
-                [-2 0 -2  0 0 0], 'PLQ:conjCPLQ:conjugateHasEmptyDomain', 'concave'
-            };
-            for i = 1:size(cases,1)
-                f6 = cases{i,1}; want = cases{i,2}; what = cases{i,3};
-                testCase.verifyError(@() QuaPol(f6).conj('cplq'), want, ...
-                    sprintf('%s should raise %s', what, want));
+        % This test covers the first; the other two have their own tests below, which assert their
+        % values against the closed form.
+            for c = {{[0 1 0 0 0 0], 'f = xy, indefinite'}, ...
+                     {[-2 0 -2 0 0 0], 'concave'}, ...
+                     {[1 0 -1 0 0 0], 'x^2 - y^2'}}
+                f6 = c{1}{1}; nm = c{1}{2};
+                g = QuaPol(f6).conj('cplq');
+                testCase.verifyEqual(g.kind(), 'QuaPar', nm);
+                for s = {[0 0], [3 -2], [-1 5], [1e4 1e4]}
+                    testCase.verifyTrue(isinf(g.eval(s{1})) && g.eval(s{1}) > 0, sprintf( ...
+                        '%s: f* must be +inf at (%g,%g)', nm, s{1}(1), s{1}(2)));
+                end
             end
         end
 
-        function theFullDomainRefusalsCarryTheClosedForm(testCase)
-        % The messages are the specification, so they are asserted rather than left to drift: the
-        % affine case must name the point f* is supported on and its value there.
-        % f = 3x - 2y + 5, so f* is the indicator of (3,-2) with value -5.
-            % Repointed twice as the gaps closed: off the AFFINE case on 2026-08-25 and off the
-            % rank-1 PSD case on 2026-08-26, both of which are now ANSWERS. The EMPTY case is the
-            % only refusal left, and it is the one that genuinely has no encoding: dom f* empty is
-            % not `nf = 0` (that means dim < 2), so there is nothing to return.
-            try
-                QuaPol([0 1 0 0 0 0]).conj('cplq');
-                testCase.verifyFail('an indefinite full-domain quadratic was not refused');
-            catch ME
-                testCase.verifyEqual(ME.identifier, 'PLQ:conjCPLQ:conjugateHasEmptyDomain');
-                testCase.verifySubstring(ME.message, 'EMPTY', ...
-                    'the refusal must say what dom f* is');
-                testCase.verifySubstring(ME.message, '-inf', ...
-                    'the refusal must say why: conv f = -inf');
+        function theEMPTYDomainConjugateRoundTripsToMinusInfinity(testCase)
+        % REPLACES theFullDomainRefusalsCarryTheClosedForm, which checked that a refusal message
+        % carried its closed form. There is no refusal left in this family to check -- all three
+        % cases are answered as of 2026-08-27 -- so what is worth pinning instead is the one
+        % consequence a caller has to know about.
+        %
+        % f* for the empty-domain case is +inf everywhere. Conjugating THAT gives -inf everywhere,
+        % which is mathematically correct ((+inf)* = -inf) and is NOT a PLQ function: it is outside
+        % the class this library represents. So a caller computing f** on a function with a
+        % negative curvature direction gets a -inf mesh rather than an error.
+        %
+        % Pinned so the behaviour is deliberate rather than discovered. If a future return type
+        % gains a way to say "not a PLQ function", this is the site that should use it.
+            g = QuaPol([0 1 0 0 0 0]).conj('cplq');
+            testCase.verifyTrue(isinf(g.eval([0 0])) && g.eval([0 0]) > 0, ...
+                'f* of an indefinite full-domain quadratic is +inf everywhere');
+            h = g.conj('cplq');
+            for s = {[0 0], [2 -3]}
+                v = h.eval(s{1});
+                testCase.verifyTrue(isinf(v) && v < 0, sprintf( ...
+                    'f** must be -inf at (%g,%g) -- correct, and outside the PLQ class', ...
+                    s{1}(1), s{1}(2)));
             end
         end
 

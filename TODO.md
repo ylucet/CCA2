@@ -320,21 +320,18 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `testMax3` and `testMaxBiconjugate` are pinned on the CLASS rather than a measurement -- their
       pins say so, and confirming them is part of the migration.
 
-- [ ] **B3 -- ONE of the three remains (two closed).** A full-domain quadratic that is not
-      strictly convex gives three different objects:
-        * **POINT** (Q = 0, f affine) -- **DONE 2026-08-25.** A needle; the block was a missing
-          branch in `QuaPar.eval`.
-        * **LINE** (PSD rank 1) -- **DONE 2026-08-26.** A line is two opposite RAYS from one point,
-          which the constructor always accepted. Two real defects were in the way, both outside
-          B3: `eval`'s edge-chain branch ignored the `E(:,3)==0` ray marker and truncated every ray
-          at its direction vertex, and `belongToEdge`'s ray range test was COORDINATE-WISE
-          (`all(V1 <= X)`), so it only worked for rays pointing into the positive quadrant. Both
-          fixed and pinned in `QuaParTest`. `conj` now returns the answer, checked against
-          `1/2 (s-L)' pinv(Q) (s-L) - kappa` on two fixtures.
-        * **EMPTY** (a negative eigenvalue) -- still refused, and it is the one with genuinely no
-          encoding: `nf = 0` means `dim < 2`, not empty.
-      **Note for the return-type work:** two of the three turned out to be blocked on `eval`, not
-      on the representation, which was already there both times. `DECISIONS.md` 2026-08-26 (B3).
+- [x] **B3 -- DONE 2026-08-27. All three cases are ANSWERED; none was blocked on the return type.**
+        * **POINT** (Q = 0) -- 2026-08-25. A needle; `QuaPar.eval` had no branch for it.
+        * **LINE** (PSD rank 1) -- 2026-08-26. Two opposite rays; `eval` ignored the ray marker and
+          `belongToEdge`'s ray test was coordinate-wise.
+        * **EMPTY** (a negative eigenvalue) -- 2026-08-27. f* = +inf everywhere, which a
+          full-domain mesh with constant `+inf` represents exactly. Verified safe downstream
+          (eval/isMeshed/kind/isConvex/addition) before adopting.
+      **One consequence, pinned:** conjugating the EMPTY result gives -inf everywhere -- correct
+      ((+inf)* = -inf) and outside the PLQ class. `biconjCPLQ` never reaches it today.
+      **The transferable lesson:** three for three, "blocked on the return type" was wrong and the
+      representation already existed. Build the object by hand and evaluate it before recording
+      that phrase again. `DECISIONS.md` 2026-08-27 (B3).
 
 - [x] **G15 -- ANSWERED 2026-08-26, and the hypothesis was WRONG.** The
       `rectBiconjugateIsAConvexUnderestimator` timeout is NOT item 2's hole. Measured:

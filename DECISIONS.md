@@ -3394,3 +3394,35 @@ separate and 56 is near-optimal) or CONSERVATIVE (the LP relaxation over a curve
 certify a union that is in fact exact). `region.m`'s own header says the curved certificate is
 deliberately relaxed -- "makes the certificate harder to obtain, never wrong" -- so conservative is
 the likelier of the two, and that relaxation is the thing to sharpen.
+
+## 2026-08-27 (B3) — the EMPTY case closes too, and B3 is DONE. The pattern is worth naming.
+
+dom f* being EMPTY was the last of B3's three, and the one that looked genuinely blocked: "nf = 0
+means dim < 2, not empty, so there is no encoding at all".
+
+**That is true of the DOMAIN and beside the point. The FUNCTION is representable.** f* = +inf
+everywhere, and a full-domain mesh (`nv=0, nf=1`) whose constant is `+inf` evaluates to exactly
+that. Checked before adopting it: `eval` returns Inf at every point including far out, `isMeshed`
+and `kind` behave, `isConvex` says true (the indicator of the empty set IS convex), and addition
+propagates +inf rather than producing NaN.
+
+**ONE CONSEQUENCE, stated rather than left to be discovered.** Conjugating the result gives -inf
+everywhere -- mathematically right, since (+inf)* = -inf, and NOT a PLQ function. So a caller
+computing f** on a quadratic with a negative curvature direction now gets a -inf mesh instead of an
+error. `biconjCPLQ` short-circuits convex inputs and never reaches it, and nothing else in the
+repository conjugates twice without checking, so nothing is broken today. Pinned by
+`conjCPLQTest/theEMPTYDomainConjugateRoundTripsToMinusInfinity` so it is deliberate, and that is
+the site to revisit if a return type ever gains a way to say "not a PLQ function".
+
+**THE PATTERN, which is the transferable part.** All three of B3 were recorded as blocked on the
+RETURN TYPE. None of them was:
+
+    POINT  (2026-08-25)  the needle existed; `QuaPar.eval` had no branch for it
+    LINE   (2026-08-26)  two rays existed; `eval` ignored the ray marker, and `belongToEdge`'s
+                         ray test was coordinate-wise so it only worked in the positive quadrant
+    EMPTY  (2026-08-27)  a +inf full-domain mesh existed; nobody had tried it
+
+Three for three, the representation was already there and the block was one routine that did not
+know about it. **Before recording anything else as "blocked on the return type", build the object
+by hand and evaluate it.** That is a five-minute check, and here it would have saved the entry
+being written three times.

@@ -121,13 +121,28 @@ function g = conjCPLQ(obj, idx, route)
         tolE = sqrt(eps) * max(1, norm(Q));
         if evs(1) < -tolE
             % A negative eigenvalue: f decreases without bound along that eigendirection, so no
-            % affine function minorises it, conv f = -inf, and f*(s) = +inf for EVERY s. dom f*
-            % is EMPTY -- not a lower-dimensional domain but no domain at all, which the mesh has
-            % no encoding for either (nf=0 already means "dim < 2", not "empty").
-            error('PLQ:conjCPLQ:conjugateHasEmptyDomain', ...
-                ['f has a negative curvature direction (eig(Q) = [%g %g]), so conv f = -inf and ' ...
-                 'f* = +inf everywhere. dom f* is EMPTY, which no QuaPol/QuaPar mesh encodes.'], ...
-                evs(1), evs(2));
+            % affine function minorises it, conv f = -inf, and f*(s) = +inf for EVERY s.
+            %
+            % dom f* is EMPTY, and this used to refuse on the grounds that "no QuaPol/QuaPar mesh
+            % encodes it" -- nf=0 means dim<2, not empty. That is true of the DOMAIN and beside the
+            % point: the FUNCTION is representable. A full-domain mesh (nv=0, nf=1) whose constant
+            % is +inf evaluates to +inf everywhere, which is exactly f*. Checked 2026-08-27:
+            % `eval` returns Inf at every point, `isMeshed` and `kind` behave, `isConvex` says
+            % true (the indicator of the empty set IS convex), and addition propagates +inf rather
+            % than producing NaN.
+            %
+            % B3's other two cases went the same way: the representation was there, and what was
+            % missing was one line elsewhere. This is the third and last.
+            %
+            % ONE THING THE CALLER MUST KNOW, so it is stated rather than discovered: conjugating
+            % this BACK gives -inf everywhere, which is NOT a PLQ function -- `conj` of the result
+            % returns a mesh evaluating to -Inf. That is mathematically correct ((+inf)* = -inf)
+            % and outside the class this library represents, so a caller computing f** on a
+            % function with a negative curvature direction gets a -inf mesh, not an error.
+            % `biconjCPLQ` short-circuits convex inputs and never reaches it; nothing else in the
+            % repository conjugates twice without checking. Recorded in DECISIONS.md 2026-08-27.
+            g = QuaPar([0 0 0 0 0 inf]);
+            return
         elseif evs(2) <= tolE
             % Q = 0: f is AFFINE, f(x) = <L,x> + kappa, so
             %       f*(s) = sup_x <s - L, x> - kappa
