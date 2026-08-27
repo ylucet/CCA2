@@ -3347,3 +3347,50 @@ probe. So on a fixture where the cell count really does blow up -- the quadrilat
 to remove them. `[maxP] in=N afterSplit=M` is the number to read next, and on PRect3 it is
 `in=11 afterSplit=11`, which creates nothing. **Measure afterSplit on the quadrilateral before
 touching merge again.**
+
+## 2026-08-26 (item 1, third pass) — the blow-up MEASURED: it is `mtimes` pairing and CURVED-facet refusals
+
+The refutation above says: if the merge is neither mis-scheduled nor blocked by the local probe,
+read `afterSplit` on the fixture where the count really does blow up. Done -- `x*y` over
+conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}, 6 pieces after triangulation:
+
+    [maxP] in=14 afterSplit=15 merge1=14 merge2=12 ( 45 s)
+    [maxP] in=29 afterSplit=32 merge1=28 merge2=28 (126 s)
+    [maxP] in=42 afterSplit=45 merge1=44 merge2=43 (294 s)
+    [maxP] in=60 afterSplit=68 merge1=48 merge2=44 (551 s)
+    [maxP] in=63 afterSplit=63 merge1=58 merge2=56 (571 s)
+    CROSS-PIECE max: 56 cells in 2944 s
+
+**First, the entry's own numbers are STALE and should be replaced.** It records 5, 14, 29, 45, 70,
+86 cells and 73 minutes, measured 2026-08-16. Today the same fixture gives 14, 29, 42, 60, 63 -> 56
+cells in 49 minutes. Intervening work has already taken a third off both. Still far too slow, but
+re-measure before quoting it.
+
+**The split is NOT the growth.** `afterSplit` exceeds `in` by 1, 3, 3, 8, 0 -- fifteen cells created
+across the whole run. And the merge is working: fold 4 takes 68 down to 44.
+
+**The growth is in the PAIRING.** `in` for each fold is what `objR * g` produced -- `mtimes`
+intersects every cell of the accumulated result with every cell of the next operand -- and it runs
+12 -> 29, 28 -> 42, 43 -> 60. That is the quadratic blow-up of an arrangement overlay, and it is
+inherent to folding pairwise; what is supposed to contain it is the merge that follows.
+
+**Where the merge loses, by count** (3236 attempts):
+
+    noSharedFacet                   2743      pairs that are simply NOT ADJACENT -- with 63 cells
+                                              there are ~2000 pairs, so this is expected, not a defect
+    quadFacet_exactAnotInB           374      <-- THE REAL ONE
+    okQuadFacet                       11
+    okLinear                          26
+    everything else                  <30
+
+**`quadFacet_exactAnotInB` is the target: 374 refusals against 37 successes.** These are ADJACENT
+pairs sharing a CURVED facet, put to `unionIsExact`, which answers "A is not contained in B'". That
+is the conic case, and it is where the surplus cells live -- not in the probe (refuted above), not
+in the schedule (refuted above), not in the split (refuted here).
+
+**Next step, and now it is specific:** take one `quadFacet_exactAnotInB` pair from this fixture and
+determine whether the refusal is CORRECT (the union really is not convex, so the cells must stay
+separate and 56 is near-optimal) or CONSERVATIVE (the LP relaxation over a curved facet cannot
+certify a union that is in fact exact). `region.m`'s own header says the curved certificate is
+deliberately relaxed -- "makes the certificate harder to obtain, never wrong" -- so conservative is
+the likelier of the two, and that relaxation is the thing to sharpen.

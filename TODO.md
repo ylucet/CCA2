@@ -618,6 +618,21 @@ blocker for making the split the default, and it was a casualty of the double le
       quadrilateral has a cone per vertex and a cell per edge -- of the order of a dozen. The
       surplus is adjacent cells carrying the SAME function that are never merged, which is
       `region.merge` / `unionIsExact` refusing a union it cannot certify across a conic edge.
+      **NUMBERS RE-MEASURED 2026-08-26 -- the ones below are stale.** Same fixture today:
+      14, 29, 42, 60, 63 -> **56 cells in 49 min**, against the 5/14/29/45/70/86 and 73 min recorded
+      here from 2026-08-16. Intervening work has taken a third off both.
+      **And the cause is now located.** The SPLIT is not the growth (`afterSplit` exceeds `in` by
+      1,3,3,8,0 -- fifteen cells created in the whole run) and the merge works (fold 4: 68 -> 44).
+      The growth is `mtimes`, the pairwise overlay, which is inherent. What should contain it is the
+      merge, and its refusals break down as: `noSharedFacet` 2743 (pairs that are NOT ADJACENT --
+      expected at 63 cells), and **`quadFacet_exactAnotInB` 374 against 37 successes**. That is the
+      target: adjacent pairs sharing a CURVED facet whose union `unionIsExact` will not certify.
+      **Next step:** take one such pair and decide whether the refusal is CORRECT (union genuinely
+      non-convex, so 56 is near-optimal) or CONSERVATIVE (the deliberately-relaxed curved
+      certificate cannot certify an exact union). `region.m` says the relaxation "makes the
+      certificate harder to obtain, never wrong", so conservative is likelier.
+      `DECISIONS.md` 2026-08-26 (item 1, third pass).
+
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
       `mergeL` twice. Measured on PRect3 with the existing `CCA2_TRACE_MAXP`:
