@@ -3462,3 +3462,43 @@ certificate" as now, bounded means the finite candidates plus the cone's extreme
 measurement after the code was written, and this one deserves a bounded experiment first: take ONE
 `exactAnotInB` pair from PRect3, work its union out by hand, and confirm the union really is convex
 before building anything.
+
+## 2026-08-27 (item 2) — provenance is NOT the fix: the arrangement is finer than the tolerance
+
+`assemblePieces`' own HISTORY proposes vertex PROVENANCE as the resolution for its residual
+matching failures, and yesterday's entry accepted that and said the next attempt should tag
+half-edges with the face pair and constraint that produced them. **Measure first**, because
+threading a per-edge tag through thirteen producers (`clipPolyHalfPlane`, `clipPolyByConic`,
+`splitCell`, `boundedPiece`, `splitTwoArcPiece`, `insertPassthroughVertices`, ...) is a large,
+error-prone change. Measured on `TODO.md` G4's fixture, 30 pieces:
+
+    edge lengths      min 4.484e-06   median 2.987e-03   max 9.982e-01
+    edges shorter than matchHalfEdges' tolPos = 1e-3      9 of 42
+    pieces whose whole DIAMETER is under tolPos           4 of 30
+    pieces under 10x tolPos                               9 of 30
+
+**The median edge is three times the matching tolerance, and a fifth of the edges are shorter than
+it.** The orphaned piece 1 (src [1 3]) has its two vertices 3.0e-03 apart -- the entire piece is
+barely above the resolution at which the assembly claims to identify points.
+
+**That is not a pairing-strategy problem and provenance will not fix it.** Provenance answers "which
+of several candidate neighbours is the right one" -- a disambiguation. Here the difficulty is prior:
+at this scale the pieces' own COORDINATES, computed along different arithmetic paths, disagree by
+more than the features they are meant to distinguish. Tagging an edge with the constraint that made
+it does not make two disagreeing copies of that edge agree, and the fallbacks would still have to
+compare positions.
+
+**Two directions that do address it, neither cheap:**
+
+  1. **Do not produce the sub-tolerance pieces.** They are slivers from a fan of cells meeting near
+     one point; a snap-round of the arrangement, or collapsing sub-tolerance cells before assembly
+     (the parked diff's first half), removes the input rather than teaching the matcher to cope.
+     The parked attempt shows this gets two stages further before hitting the next disagreement.
+  2. **Make the coordinates agree.** The scale is set by float noise across arithmetic paths, so
+     exact rational vertices for the polyhedral part would remove the disagreement rather than
+     bound it. That is `TODO.md`'s `ratQ`/`conicMeet` direction, and it is a large piece of work.
+
+**What is now ruled out**, and recorded so it is not proposed a fourth time: tolerance tuning
+(three separate tolerances measured un-separable on this fixture), and provenance tagging (this
+entry). The measurement to start any future attempt from is the edge-length distribution above --
+if a change does not move it, it will not fix the assembly.

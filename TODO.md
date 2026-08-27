@@ -212,6 +212,22 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       crossing must exist, but the discriminant on a 5.76e-05 arc comes out negative. Handle that
       (cut at the outside endpoint) and re-apply the diff. `DECISIONS.md` 2026-08-25 (overnight).
 
+      **PROVENANCE IS RULED OUT (2026-08-27), and so is tolerance tuning.** Measured on this
+      fixture, 30 pieces: edge lengths min 4.484e-06, **median 2.987e-03**, max 9.982e-01, with
+      **9 of 42 edges SHORTER than `matchHalfEdges`' tolPos = 1e-3** and 4 pieces whose whole
+      diameter is under it. The orphaned piece 1 has its two vertices 3.0e-03 apart -- the piece is
+      barely above the resolution at which assembly claims to identify points.
+      Provenance answers "which candidate neighbour is right"; the difficulty here is prior to that
+      -- the pieces' own coordinates, computed along different arithmetic paths, disagree by more
+      than the features they must distinguish. Tagging an edge does not make two disagreeing copies
+      of it agree.
+      **The two directions that do address it:** (1) stop PRODUCING sub-tolerance pieces -- collapse
+      them before assembly, which is the parked diff's first half and gets two stages further; or
+      (2) make the coordinates agree, i.e. exact rational vertices for the polyhedral part
+      (`ratQ`/`conicMeet`), which is large. **Start any future attempt from the edge-length
+      distribution: if a change does not move it, it will not fix the assembly.**
+      `DECISIONS.md` 2026-08-27 (item 2).
+
       **The hole is LOCATED, and G10 and G1 are the SAME defect (2026-08-25).** The uncovered
       point lies in g1 face 21 and g2 face 6 and the fold produced no piece with src [21 6] --
       G1's signature verbatim. But it is NOT `clipByFace`: tracked with `MAXQP_PROBE`, the cell is
