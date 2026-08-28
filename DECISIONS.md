@@ -3708,3 +3708,55 @@ pieces) before falling back to the linear relaxation's LP. `region.m`'s temporar
 instrumentation used to reach this point through the real fixture was reverted -- it is not needed
 and should not be committed. The witness above (`region([s2^2-s1;-s2],...)` etc.) is cheap enough to
 turn directly into a unit test for `maxAffineOverRegion` and `unionIsExact` once the fix lands.
+
+## 2026-08-27 (item 1, REFUTED) — the recession-cone fix is UNSOUND for a curved region; caught before landing
+
+Built the fix item 1 and item 3 both pointed at: extend `maxAffineOverRegion`'s unbounded-region
+path by testing cRow against the region's recession cone (linear facets' extreme rays, plus the
+conic's null direction, mirroring `pieceRecessionRays.m`'s method) before falling back to the
+loose LP. It made the item-3 witness exact (`unionIsExact` on `A={s1>=s2^2,s2>=0}`,
+`B={s1<=s2^2,s1>=0,s2>=0}` went from `(false,'exactAnotInB')` to `(true,'ok')`, and
+`maxAffineOverRegion(A,[-1 0])` from `Inf/unbounded` to the correct `0/decided`).
+
+**Then a second, harder probe on the SAME region A refuted it before it was ever run against the
+test suite.** `maxAffineOverRegion(A, [0 1])` -- max of `s2` over A -- came back `val=0, st=0`
+(decided, finite). **The true answer is `+Inf`**: `(100,10)` satisfies `s1=100 >= s2^2=100`, and
+`s2` can be made arbitrarily large the same way for any `t`. A confidently WRONG answer, not a
+conservative one -- exactly the failure mode this file's every LP certificate exists to prevent.
+
+**Why: the theorem the fix relied on is for POLYHEDRA, and A is not one.** "cRow is bounded above
+on a closed convex set C iff cRow.d <= 0 for every d in C's recession cone" holds for a
+POLYHEDRON (`region.maxLinear`'s own domain), where the recession cone's straight-line extreme
+rays really do capture every direction the set extends in. It does NOT hold for a set with a
+CURVED boundary: A's recession cone (straight-line asymptotic directions only) is exactly the
+single ray `(1,0)` -- moving along any FIXED direction with a nonzero s2-component eventually
+violates `s1>=s2^2` for large t, confirmed by hand for both `x0=(0,0)` and `x0=(M,0)` for large M.
+`cRow=(0,1)` satisfies `cRow.(1,0) = 0 <= 0`, passing the recession-cone test, and yet `s2` is
+still unbounded on A -- along the CURVE `(t^2,t)`, whose direction `(t,1)/norm` does not converge
+to any FIXED ray as `t->infinity` in the way a recession-cone argument needs (it does converge in
+ANGLE to `(1,0)`, which is exactly why the straight-line test is fooled: the set's extent in the
+`s2` coordinate grows without a matching straight-line witness).
+
+**REVERTED. Do not retry the recession-cone-only construction; it needs a strictly stronger
+ingredient than `pieceRecessionRays`'s straight-line rays provide.** The `region.m` edit
+(`recessionRaysGeneral`, `recedesAllGeneral`, `quadNullDirsNumeric`) was fully reverted before
+being run against any test (`git checkout -- region.m`); nothing shipped.
+
+**What a correct fix needs instead.** The straight-line recession-cone check is still valid and
+necessary for the LINEAR facets (unchanged from the existing LP). What it cannot see is growth
+ALONG the conic arc itself: a parabola parametrizes as one coordinate quadratic in the other (here
+`s1 = s2^2`), and `cRow` evaluated along that parametrization is a QUADRATIC in the free parameter,
+whose behaviour as the parameter -> +-infinity (bounded above iff the parameter's own coefficient
+in cRow's composition is <= 0, exactly the classic "does this parabola open the right way for this
+linear functional" check) is what actually decides boundedness on the arc's unbounded branch --
+not the arc's asymptotic straight-line direction. This is a DIFFERENT and more specific
+computation than a recession cone: it needs the conic's own explicit parametrization along each
+unbounded branch, checked against cRow directly, in addition to (not instead of) the existing
+straight-line recession test for the linear facets.
+
+**Before attempting that:** hand-verify it on this SAME witness first (A's arc parametrizes as
+`s2=t, s1=t^2`; `cRow=(0,1)` composed along it is `t`, unbounded as `t->infinity` -- correctly
+predicts the counterexample above; `cRow=(-1,0)` composed is `-t^2`, bounded above by 0 at `t=0` --
+correctly predicts the finite answer that WAS right) before writing it into `region.m`, exactly as
+item 1 already prescribed for the first attempt and this entry now re-prescribes for the reason it
+failed.

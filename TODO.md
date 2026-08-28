@@ -733,11 +733,27 @@ blocker for making the split the default, and it was a casualty of the double le
       undecided) because the unbounded-region LP fallback drops the conic facet entirely, leaving
       only `s2>=0` -- which alone bounds nothing on `s1`, so the relaxation reports unbounded even
       though the true region's one recession direction cannot decrease `s1`.
-      `DECISIONS.md` 2026-08-27 (item 3). **Now build the fix**: extend `maxAffineOverRegion`'s
-      unbounded-region path to test the objective on the region's actual recession cone
-      (`pieceRecessionRays` already computes it) before falling back to the linear relaxation's LP.
-      The witness above is cheap enough to turn directly into its regression test.
-      `DECISIONS.md` 2026-08-27 (item 1), 2026-08-26 (item 1, third pass).
+      `DECISIONS.md` 2026-08-27 (item 3).
+      **THE RECESSION-CONE FIX IS REFUTED -- caught by a second probe on the SAME witness before
+      it ever reached the test suite.** Built it (mirroring `pieceRecessionRays`'s straight-line
+      extreme rays), and it made the witness above exact -- and then wrongly certified
+      `maxAffineOverRegion(A,[0 1])` (max of `s2` over A) as `0, decided`, when the true answer is
+      `+Inf` (`(100,10) in A`, and `s2` grows without bound the same way for any `t`). The
+      straight-line recession-cone theorem is for POLYHEDRA; A's boundary is curved, and its
+      recession cone (the single ray `(1,0)`) does not see growth ALONG the arc `(t^2,t)`, whose
+      direction converges in ANGLE to `(1,0)` without ever being witnessed by a fixed straight
+      ray. REVERTED before any test ran; nothing shipped. `DECISIONS.md` 2026-08-27 (item 1,
+      REFUTED) has the full counterexample.
+      **The correct ingredient, not yet built:** parametrize the conic's own unbounded branch
+      directly (a parabola is one coordinate quadratic in the other) and check whether `cRow`
+      composed along that parametrization is bounded above as the parameter -> +-infinity -- a
+      different and more specific question than the straight-line recession cone, which stays
+      valid and necessary only for the LINEAR facets. Hand-verify on the SAME witness first
+      (`cRow=(0,1)` composed is `t`, unbounded -- correctly predicts the counterexample;
+      `cRow=(-1,0)` composed is `-t^2`, bounded by 0 -- correctly predicts the case that was
+      right) before writing it into `region.m`.
+      `DECISIONS.md` 2026-08-27 (item 1), 2026-08-27 (item 1, REFUTED), 2026-08-26 (item 1, third
+      pass).
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
