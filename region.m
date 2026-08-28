@@ -2531,7 +2531,19 @@ classdef region
                 end
                 warning(ws);
                 if ef == -2
-                    tf = true; why = 'ok';      % P is empty: h <= 0 on it vacuously
+                    % `quadprog`'s -2 means "no feasible point found", and for THIS shape (a
+                    % rank-deficient/semidefinite Hessian over a possibly unbounded P) that code
+                    % also fires when the true failure is non-convergence, not infeasibility --
+                    % measured directly on a real fold-4 merge (DECISIONS.md 2026-08-27, G17 ROOT
+                    % CAUSE FOUND): quadprog's own iterates diverged past -6.4e7 on a region a
+                    % concrete point was independently confirmed feasible for. `linprog` is not
+                    % subject to this failure mode, so it is what actually decides emptiness here.
+                    [~, stCheck] = region.maxLinear(A, b, [1 0]);
+                    if stCheck == -1
+                        tf = true; why = 'ok';  % genuinely empty: h <= 0 on it vacuously
+                    else
+                        why = 'quadprogNonconvergent';
+                    end
                     return
                 end
                 if ef ~= 1

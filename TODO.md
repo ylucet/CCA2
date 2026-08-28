@@ -453,6 +453,15 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       its fix -- merge same-function neighbours after each fold, polyhedral cells first -- is the
       one to try. `DECISIONS.md` 2026-08-26 (G15).
 
+- [ ] **Code coverage, industry-standard measurement.** Requested 2026-08-27. This project is
+      MATLAB, not Python -- `pytest` (and its `pytest-cov`) do not apply here; the MATLAB
+      equivalent is `matlab.unittest.plugins.CodeCoveragePlugin`, run through
+      `matlab.unittest.TestRunner`, which can emit a Cobertura-XML report (same format most CI
+      coverage dashboards read) or an HTML report. Wire it into `.claude/suite.sh` (or a sibling
+      script) so a `--coverage` run produces a report under e.g. `.claude/coverage/`, gitignored
+      like `plqStage`'s cache. Decide the scope first (fast bucket only, to keep it cheap and
+      re-run often, vs. fast+normal+slow for a rarer "true" number) before wiring it in.
+
 ### Tools built on 2026-08-24, so they are not rebuilt
 
 - `checkConjSymFree.m` -- the fallback RATE and its reasons, per fixture. Run it before and after
