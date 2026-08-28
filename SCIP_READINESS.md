@@ -93,6 +93,10 @@ SCIP calls none of them.
 
 * **Do:** confirm against the current `cca2ConvexEnvelope.m` and write the exclusion into 0.0.
 * **Closes when:** the SCIP-relevant surface is a short, explicit list of entry points.
+* **DONE 2026-08-28.** `SUPPORT_MATRIX.md` §0.0 re-confirmed against the current tree: `biconj('cplq')`
+  (the recommended entry point per gap 1 below) routes through `biconjCPLQ.m` and never reaches
+  `partialConj`, `pqp`/`graph`, or `RatPol.conj`/`biconj`/`add` — same exclusion list as the current
+  `convEnvCPLQ` bridge, so switching entry points (a spike-side task) does not change CCA2's surface.
 
 ---
 

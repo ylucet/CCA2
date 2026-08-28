@@ -41,10 +41,19 @@ The two suites that differ between `46fac7c` and the final tree are `QuaParTest`
 ## 0.0 Downstream consumers — check before renaming anything
 
 **The SCIP feasibility spike (`AI/spike/SCIP`) calls into this toolbox** through the MATLAB
-Engine API for Python. Its glue is `SCIP/src/cca2ConvexEnvelope.m`, and it uses exactly one entry
-point: **`convEnvCPLQ`** (the convex ENVELOPE), consuming the resulting `RatPol`'s
+Engine API for Python. Its glue is `SCIP/src/cca2ConvexEnvelope.m`, and it currently uses exactly
+one entry point: **`convEnvCPLQ`** (the convex ENVELOPE), consuming the resulting `RatPol`'s
 `V/E/F/f(:,5:10)/den` as plain arrays. It does **not** call `conj`, `biconj`, `partialConj`, or
 any `QuaPar` method — per-node cut math is pure Python after one bridge call.
+
+**A4, re-confirmed 2026-08-28 against the CURRENT tree, for `SCIP_READINESS.md`'s gate item A4.**
+`SCIP_READINESS.md` §0.0.1 gap 1 recommends the bridge move from `convEnvCPLQ` to `q.biconj('cplq')`
+(0.01 s on box shapes vs. `convEnvCPLQ`'s known-invalid box path) — that move is unmade and is the
+spike's own wiring task, not CCA2's. What matters here is that it does not enlarge CCA2's call
+surface: `QuaPol.biconj('cplq')` (`QuaPol.m:613`) routes through `biconjCPLQ.m` and never reaches
+`partialConj`, the `pqp`/`graph` engines, or `RatPol.conj`/`biconj`/`add` (`QuaPol.m:587,605,624` —
+`conj`'s only non-`cplq` branches are `error(...)` stubs). So the exclusion list below holds
+identically whichever of the two entry points the bridge calls:
 
 This matters twice over:
 
