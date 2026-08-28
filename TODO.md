@@ -472,14 +472,20 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       its fix -- merge same-function neighbours after each fold, polyhedral cells first -- is the
       one to try. `DECISIONS.md` 2026-08-26 (G15).
 
-- [ ] **Code coverage, industry-standard measurement.** Requested 2026-08-27. This project is
-      MATLAB, not Python -- `pytest` (and its `pytest-cov`) do not apply here; the MATLAB
-      equivalent is `matlab.unittest.plugins.CodeCoveragePlugin`, run through
-      `matlab.unittest.TestRunner`, which can emit a Cobertura-XML report (same format most CI
-      coverage dashboards read) or an HTML report. Wire it into `.claude/suite.sh` (or a sibling
-      script) so a `--coverage` run produces a report under e.g. `.claude/coverage/`, gitignored
-      like `plqStage`'s cache. Decide the scope first (fast bucket only, to keep it cheap and
-      re-run often, vs. fast+normal+slow for a rarer "true" number) before wiring it in.
+- [x] **Code coverage, industry-standard measurement. DONE overnight 2026-08-27.** MATLAB, not
+      Python, so `pytest-cov` does not apply; wired `matlab.unittest.plugins.CodeCoveragePlugin`
+      (through `TestRunner`, not the plain `runtests` convenience function) into
+      `.claude/suite.sh --fast --coverage` / `--normal --coverage`, emitting a Cobertura-XML
+      report to `.claude/coverage/cobertura.xml` (gitignored, like `plqStage`'s cache). Scoped to
+      the fast bucket by default (cheap, re-runnable); `--normal --coverage` also works.
+      `--slow`/`--verylong --coverage` is rejected outright rather than silently doing something
+      partial -- sharding coverage per-suite would need merging multiple Cobertura reports, not
+      attempted. Verified: `--fast --coverage` matches plain `--fast`'s 309/0/0 with negligible
+      overhead (147s vs ~150s) and produced a real report -- **47.4% line coverage from the fast
+      bucket alone** (9825/20719 lines). Two MATLAB/bash interop snags recorded in the commit
+      message for anyone touching this again: the report path must come from MATLAB's own `pwd`
+      (bash's `$CCA2DIR` is a Git-Bash path native MATLAB silently fails to write to), and
+      `TestSuite.fromClass` needs array concatenation for multiple classes, not a comma list.
 
 ### Tools built on 2026-08-24, so they are not rebuilt
 
