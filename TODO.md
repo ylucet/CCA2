@@ -253,7 +253,7 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       curved with curved and the subdivision is consistent per face PAIR rather than globally.
       That is the documented redesign, not a patch to `matchHalfEdges`.
 
-- [ ] **G17 -- `rectMaximumIsTheConjugateOfTheWholeDomain` holes at (-0.5,2). CAUSE UNKNOWN --
+- [x] **G17 -- DONE overnight 2026-08-27. `rectMaximumIsTheConjugateOfTheWholeDomain` holes at (-0.5,2). CAUSE UNKNOWN --
       `removeTangent` was accused twice and is EXONERATED.** Read the refutation before proposing
       anything: `DECISIONS.md` 2026-08-27 (G17, third pass). Deletion cannot cause a hole
       (it enlarges regions), and neither of the two regions `removeTangent` DISCARDS contains the
@@ -335,6 +335,18 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       constraint, so this is a strong candidate rather than a proof. Then decide whether
       `lin & ~tin` should discard at all, or refuse to conclude when the probe sits at a tie point.
       **Work it as itself, not as part of the assembly.** `DECISIONS.md` 2026-08-27 (G17, corrected).
+
+      **ROOT CAUSE FOUND AND FIXED, overnight 2026-08-27.** Traced three levels deeper than the
+      corrected version above: the loss is a real merge (cells 12+17, then +21) that
+      `region.merge`/`unionIsExact` wrongly certify as exact. `certifiesNonPositive`'s concave
+      branch trusted `quadprog`'s `ef==-2` as "region empty, vacuously true" without verifying
+      it -- on this unbounded cell with a rank-deficient Hessian, `quadprog` genuinely fails to
+      converge and returns `ef==-2` as a non-convergence code, not an infeasibility one (confirmed
+      directly: the point is feasible, `quadprog`'s own iterates diverge). Fixed by verifying via
+      `linprog` (`region.maxLinear`) before accepting `ef==-2`. Fast 309/0, normal 12/0, no
+      regressions; the isolated reproducer (cells 12/17/21) now correctly refuses the bad merge.
+      An end-to-end re-run of the original fixture was still in progress when this landed (see
+      MORNING.md for its status). `DECISIONS.md` 2026-08-27 (G17, ROOT CAUSE FOUND).
 
 - [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
@@ -794,6 +806,23 @@ blocker for making the split the default, and it was a casualty of the double le
       right) before writing it into `region.m`.
       `DECISIONS.md` 2026-08-27 (item 1), 2026-08-27 (item 1, REFUTED), 2026-08-26 (item 1, third
       pass).
+
+      **FIXED, overnight 2026-08-27.** Built the arc-parametrization ingredient, then found a
+      SECOND gap on paper before writing anything: the arc-only check misses growth along a
+      STRAIGHT edge unrelated to the arc (a region with both an arc and a straight edge reaching
+      infinity, where the true maximiser sits on the straight edge). The landed fix combines TWO
+      independent sufficient conditions for unboundedness -- a straight recession ray (admitted by
+      the conic's own recession condition too, not just the linear facets) and arc growth via
+      `parabolaArcFrame` -- and only tightens when NEITHER fires. Validated against a true 2D
+      brute-force oracle: 5000+ prototype cases plus ~150 built as real `region` objects, zero
+      genuine disagreements (the few flagged were oracle-threshold artifacts or a pre-existing,
+      unrelated `region.linearForm` fragility on degenerate random test input). Fast 309/0, normal
+      12/0. `DECISIONS.md` 2026-08-27 (item 3, FIXED) has the derivation and the counterexample.
+      **Not yet re-measured:** whether this actually closes the ORIGINAL 374-refusal fixture's
+      cell-count blowup (`x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`) -- that fixture is too
+      expensive to reach quickly (DECISIONS.md 2026-08-27, item 3), so the fix is validated on the
+      MECHANISM, not yet on the ORIGINAL scaling measurement. Re-run `checkConjSymFree`/the
+      cell-count trace on that fixture next.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls

@@ -3854,3 +3854,61 @@ assembly complete."
 this fixture (with the diff applied) is new information -- Case C was known to not finish in 25
 minutes on this input (TODO.md G4), but not previously known to fail outright with an internal
 MuPAD error. Not investigated further tonight; it is downstream of a change that is not landing.
+
+## 2026-08-27 (item 3, FIXED) — the arc-parametrization fix, with a second gap found and closed before landing
+
+Item 1's recession-cone attempt was refuted the same day (see that entry) by a direct
+counterexample: a recession cone cannot see growth ALONG a curved arc. The correct ingredient it
+prescribed -- parametrize the conic's own unbounded branch and check `cRow` composed along it --
+was built, and validated the same way the first attempt should have been: hand-derive a
+counterexample BEFORE trusting a large random sweep.
+
+**A second gap, found on paper before writing any code.** The arc-only check answers "does cRow
+grow along the CURVE", but a region's boundary is straight edges PLUS one arc, and the true
+maximiser can sit on a STRAIGHT edge instead. Constructed by hand:
+
+    Region = {s1 <= s2^2, s1 >= s2, s2 >= 0}     (both the arc s1=s2^2 and the straight edge
+                                                    s1=s2 reach infinity as s2 -> infinity)
+    cRow = (-1, 2)
+
+Along the straight edge (s1=s2): `cRow.z = -s2+2s2 = s2`, UNBOUNDED. Along the arc (s1=s2^2):
+`cRow.z = -s2^2+2s2`, bounded above (critical point at s2=1, value 1). An arc-only check would
+find Ac<0 (bounded) and wrongly report the region's sup as ~1, missing the straight edge's genuine
+unboundedness entirely.
+
+**Fix: combine two independent sufficient conditions for unboundedness**, checked before ever
+tightening:
+1. a straight recession ray -- admitted by every linear facet AND by the conic's own recession
+   condition (`d'Qd<0`, or the tie `d'Qd==0` with `grad.d<=0`, valid for this codebase's rank<=1
+   parabola facets) -- with `cRow.d>0`. Sound as a sufficient trigger even though (per item 1's
+   refutation) it is NOT sufficient for concluding the converse.
+2. arc growth via `parabolaArcFrame`'s parametrization, exactly as item 1 prescribed.
+
+If NEITHER fires, the region is bounded in that direction, and the true max is the best of the
+arc's own finite candidates (endpoints/critical point) and the region's genuine finite vertices --
+reusing the SAME candidate logic the bounded-case (st==0) branch already had.
+
+**A third, more subtle gap, caught by the validation harness itself.** The FIRST version of this
+fix's own "is the arc's admissible u-range empty" check returned `st=-1` (empty region) when it
+came up empty -- but an empty ARC does not mean an empty REGION: a convex region can lie entirely
+on one side of the conic, never touching the curve, and still be a perfectly good nonempty
+polygon. Caught by a large random sweep (many `closed=-Inf, bruteforce=<finite>` mismatches).
+**Fixed by ABSTAINING** (keep the caller's original val/st) rather than concluding emptiness --
+sound because, by construction, this code only ever runs after the caller's own `region.maxLinear`
+has already ruled out `st==-1`.
+
+**Validated** against a true 2D brute-force oracle (the arc, every straight edge parametrized and
+clipped, plus a far-field grid -- the FIRST oracle version only sampled the arc, which is exactly
+why it missed the straight-edge gap above; rebuilding it properly was itself part of closing that
+gap): 5000+ cases at the prototype level (raw numeric, both `+` and `-` conic orientations), plus
+~150 built as real `region` objects through the actual `maxAffineOverRegion`. Zero genuine
+disagreements; the few flagged were either the oracle's own sampling threshold (values a few times
+below the reporting cutoff, still clearly growing) or a PRE-EXISTING, unrelated fragility in
+`region.linearForm` on degenerate random test input (the error fires before this fix's code is
+ever reached, on the unmodified call path).
+
+**Landed**: fast 309/0, normal 12/0, no regressions. `TODO.md`'s scaling-defect entry has the one
+remaining open question: whether this closes the ORIGINAL 374-refusal fixture's cell-count
+blowup, which is too expensive to re-measure quickly and has not been re-run yet -- this fix is
+validated on the MECHANISM (`maxAffineOverRegion`'s correctness), not yet on that specific
+fixture's cell count.
