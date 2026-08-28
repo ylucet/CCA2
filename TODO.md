@@ -267,9 +267,20 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       Covered entering fold 4 AND after `mtimes`; gone after `maximumP`. Every operand covers the
       point on its own (the five groups give 37.5, 37.5, 2.5, 2.5, 2.5; 37.5 is the truth), so no
       per-piece conjugate is at fault -- it is purely a fold defect.
-      **Next, one level deeper:** `maximumP` splits cells and then calls `mergeL` twice. Count
-      coverage across its own split/merge stages at fold 4; that isolates the split loop from
-      `mergeL` and is what would finally justify naming a routine.
+      **ONE LEVEL DEEPER, 2026-08-27: it is `mergeL`'s FIRST pass, not the split loop.**
+
+          entering fold 4:          19 cells, covered=1
+          fold 4 after mtimes:      35 cells, covered=1
+          fold 4 after SPLIT loop:  39 cells, covered=1
+          fold 4 after mergeL #1:   27 cells, covered=0   <-- LOST
+          fold 4 after mergeL #2:   25 cells, covered=0
+
+      The split creates 4 cells and loses nothing (covered stays 1 through `mtimes` and the split
+      loop), so `maximumP`'s own split/simplify path is ruled out. **Next: instrument `mergeL`
+      itself** -- coverage before/after each pairwise merge attempt inside the single
+      `mergeL(objSplit)` call, to name which attempt drops the covering cell (a discard) or merges
+      two cells into one that no longer contains the point (a different, more specific defect).
+      `DECISIONS.md` 2026-08-27 (G17, one level deeper).
       **Probe note that cost two attempts:** after `mtimes` each region carries TWO functions, so
       `evalFunctionNDomain` cannot read a paired object (it errors in `subs`) -- count coverage from
       the CONSTRAINTS at that stage.
@@ -710,10 +721,23 @@ blocker for making the split the default, and it was a casualty of the double le
       RECESSION CONE, which is when `unionIsExact`'s question has a finite answer at all. Add the
       recession directions to the candidate set instead of rejecting the region;
       `pieceRecessionRays` already computes them.
-      **Before building it:** take ONE `exactAnotInB` pair from PRect3 and confirm by hand that its
-      union really is convex. Two attempts on this defect have already been refuted by measurement
-      taken after the code was written. `DECISIONS.md` 2026-08-27 (item 1).
-      `DECISIONS.md` 2026-08-26 (item 1, third pass).
+      **HAND-CHECKED 2026-08-27: CONFIRMED conservative, with a minimal witness.** PRect3 turned
+      out to have NO `quadFacet_exactAnotInB` pairs at all (only 7 cells; the 374-count fixture is
+      the bigger quadrilateral above, and it is too expensive to reach one from cold -- over two
+      hours without hitting a single case, killed). Built the smallest possible witness directly
+      from `region`'s constructor instead: `A = {s1>=s2^2, s2>=0}` (unbounded), `B = {s1<=s2^2,
+      s1>=0, s2>=0}`, shared on the parabola. `unionIsExact` returns `(false, 'exactAnotInB')`; by
+      hand and by a 200,000-point sample (0 mismatches), `A union B` is exactly the convex
+      quarter-plane `{s1>=0, s2>=0}`. **So the refusal is wrong.** The mechanism is sharper than
+      "gives up": `maxAffineOverRegion([-1 0])` on A returns `st=1` (unbounded above, DECIDED, not
+      undecided) because the unbounded-region LP fallback drops the conic facet entirely, leaving
+      only `s2>=0` -- which alone bounds nothing on `s1`, so the relaxation reports unbounded even
+      though the true region's one recession direction cannot decrease `s1`.
+      `DECISIONS.md` 2026-08-27 (item 3). **Now build the fix**: extend `maxAffineOverRegion`'s
+      unbounded-region path to test the objective on the region's actual recession cone
+      (`pieceRecessionRays` already computes it) before falling back to the linear relaxation's LP.
+      The witness above is cheap enough to turn directly into its regression test.
+      `DECISIONS.md` 2026-08-27 (item 1), 2026-08-26 (item 1, third pass).
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls

@@ -3639,3 +3639,72 @@ fold 4 loses it. `maximumP` also SPLITS cells before merging (`in=N afterSplit=M
 drops territory would produce exactly this. **Next: instrument `maximumP`'s own split/merge stages
 for coverage at fold 4** -- the same before/after count, one level deeper. That isolates it to the
 split loop or to `mergeL`, and only then is naming a routine justified.
+
+## 2026-08-27 (G17, one level deeper) — the loss is in `mergeL`'s FIRST pass, not the split and not the second pass
+
+The next step prescribed above, run: instrument `maximumP`'s own split loop and its two `mergeL`
+calls separately, counting coverage of (-0.5,2) at each. `g17e.m` (scratchpad) replicates
+`maximumP`'s body by hand for fold 4 only, reusing `g17d`'s fold-2/3 setup and its
+constraint-based `coveredBy` (a paired object cannot be read by `evalFunctionNDomain`, per the
+prior entry's note):
+
+    entering fold 4:                19 cells, covered=1
+    fold 4 after mtimes:            35 cells, covered=1
+    fold 4 after SPLIT loop:        39 cells, covered=1
+    fold 4 after mergeL #1:         27 cells, covered=0   <-- LOST
+    fold 4 after mergeL #2:         25 cells, covered=0
+
+**The split creates 4 cells and loses nothing** -- covered stays 1 through mtimes and the split
+loop, ruling out `maximumP`'s own split-and-simplify path (the `d1 = d1.simplifyUnboundedRegion`
+calls at both branches) as the mechanism. **The first `mergeL` call is where the point's covering
+cell is merged away without carrying its coverage forward**, dropping 39 cells to 27. The second
+`mergeL` call (39->27->25) does not touch the hole again.
+
+So the accusation narrows from "somewhere in `maximumP`" to "somewhere inside `mergeL`'s first
+pass" -- which still calls `removeTangent`, but the previous refutation (2026-08-27, third pass)
+already ruled that routine out on this fixture by containment check. **Next: instrument `mergeL`
+itself the same way** -- coverage before/after each pairwise merge attempt within the single
+`mergeL(objSplit)` call, to name which of its ~39-choose-2 attempts is the one that drops the
+covering cell (or merges two cells into one that no longer contains the point, which would be a
+different and more specific defect than a discard).
+
+## 2026-08-27 (item 3) — hand-checked with a minimal witness: CONFIRMED conservative, not correct
+
+Item 1 (above) argued analytically that `quadFacet_exactAnotInB` is conservative because
+`maxAffineOverRegion` gives up on an unbounded region, and prescribed a bounded experiment before
+touching the code: take one such pair and confirm by hand that the union really is convex.
+
+**The real fixture is too expensive to use for that check.** `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`
+needs the symbolic conjugate route (irrational sub-triangle vertices, sqrt(15)/sqrt(30)) before a
+single fold runs, and the fold's own `isAlways` calls on those nested radicals are slow enough that
+a cold run of `.maximum` did not reach a single `quadFacet_exactAnotInB` case in over two hours.
+Killed; not worth waiting on for a question that does not need this fixture at all.
+
+**Built the smallest possible witness instead** (`region`'s constructor takes raw inequalities
+directly, no plq pipeline needed):
+
+    A = {s1 >= s2^2, s2 >= 0}            (unbounded, one conic facet, one linear)
+    B = {s1 <= s2^2, s1 >= 0, s2 >= 0}   (bounded above by the same arc)
+
+shared on `s2^2 - s1 = 0`. `A.unionIsExact(B, 1, 1)` returns exactly `(false, 'exactAnotInB')`.
+
+**By hand, and confirmed by a 200,000-point sample with zero mismatches: `A union B` is the
+quarter-plane `{s1>=0, s2>=0}`, which is convex.** So the refusal is wrong to refuse -- CONFIRMED
+conservative, not a correct rejection of a genuinely non-convex union.
+
+**The mechanism is sharper than "gives up".** `A.maxAffineOverRegion([-1 0])` (i.e. the max of
+`-s1`, testing whether `s1 >= 0` holds on A) returns `st = 1`, UNBOUNDED ABOVE -- not `st = 2`,
+undecided. That is because "unbounded regions keep the LP answer" (`maxAffineOverRegion`'s own
+header) and the LP relaxation DROPS THE CONIC FACET ENTIRELY: with only `s2 >= 0` left, nothing
+bounds `s1` at all, so the relaxed LP reports unbounded even though the true region, respecting its
+one curved facet, has `s1 >= s2^2 >= 0` everywhere and the true max of `-s1` is exactly 0 at the
+origin. The recession cone of the TRUE region (only the trivial direction, since any direction with
+`s1` decreasing violates the parabola for large t) is what the relaxation cannot see.
+
+**This is exactly the fix item 1 named**, now with a concrete, cheap, reproducible counterexample
+rather than an argument: extend `maxAffineOverRegion`'s unbounded-region path to test the objective
+on the region's actual recession cone (`pieceRecessionRays` already computes it for `maxQuaPar`
+pieces) before falling back to the linear relaxation's LP. `region.m`'s temporary dump
+instrumentation used to reach this point through the real fixture was reverted -- it is not needed
+and should not be committed. The witness above (`region([s2^2-s1;-s2],...)` etc.) is cheap enough to
+turn directly into a unit test for `maxAffineOverRegion` and `unionIsExact` once the fix lands.
