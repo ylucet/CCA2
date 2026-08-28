@@ -3815,3 +3815,42 @@ guess when `ef` is not unambiguously convergent. Either way: reproduce this EXAC
 (`fold4_objSplit.mat`'s cells 12, 17, 21) as the regression test before touching the code, and
 re-run `certifiesNonPositive` with `Display,'iter'` after any fix to confirm `quadprog` itself
 now agrees the region is not empty rather than merely patching the interpretation.
+
+## 2026-08-27 (overnight, G1/G10) — the parked assembly diff, MEASURED on the full case-21 `conj` call
+
+Re-applied `.claude/assembly_attempt_2026-08-25.diff` (the `collapseTinyEdges` pass plus
+`matchHalfEdges`'s sagitta test) and ran `checkConjAgainstDefinition`'s case 21 end to end
+(`q.conj('cplq')`, the actual reproducer G4/G10 name), since `clipArcByHalfPlane`'s bisection
+backstop -- the one piece TODO.md said was still needed before re-applying the diff -- already
+landed on 2026-08-25 and is in the tree.
+
+**Baseline (diff NOT applied), for comparison:** 2.4 s, `PLQ:conjCPLQ:foldDroppedACID` at
+`(-10,0)`, `47.10181578` against `10.86895777` -- exactly TODO.md G4's documented numbers,
+confirming the reproducer is right.
+
+**With the diff applied:** 292.5 s (120x longer), and a DIFFERENT failure --
+`PLQ:conjCPLQ:cplqFailed`, an internal MuPAD error
+(`mupadengine.evalin2sym: Invalid return value 'undefined'`) inside Case C's symbolic fallback,
+not the fold cross-check. **This is not a clean win.** The diff changes `maxQuaPar`'s assembly
+enough that the fast `foldDroppedACell` refusal (2.4 s) no longer fires on this fixture -- the
+numeric route runs much longer before eventually declining differently, or not declining at all
+and falling through to Case C, which then hits an UNRELATED, pre-existing bug in the symbolic
+pipeline (not documented anywhere in `DECISIONS.md`/`TODO.md`/`SUPPORT_MATRIX.md` before now).
+
+**Reverted** (`git checkout -- maxQuaPar.m`) -- the diff stays parked, unchanged from
+2026-08-25, not committed. Nothing here is a regression (the file was untouched on `main`), but it
+is also not the improvement the diff's own header claims for THIS specific measurement: the prior
+session's "gets case 21 past assembly" referred to a narrower, assembly-only test, not the whole
+`conj` call, and the two do not agree on this fixture.
+
+**What this adds, for whoever picks G1/G10 up next:** the diff is not simply safe to land as-is;
+turning it on changes the FAILURE MODE on at least one fixture from a fast, well-understood,
+documented refusal into a slow, unrelated, previously-unseen one. Any future attempt to land it
+should first check case 21 (and the other reds it was measured against) do not regress from "fast
+named refusal" to "slow unrelated crash" -- that is now a concrete acceptance test, not just "does
+assembly complete."
+
+**A separate, smaller finding worth its own line:** Case C's `mupadengine.evalin2sym` failure on
+this fixture (with the diff applied) is new information -- Case C was known to not finish in 25
+minutes on this input (TODO.md G4), but not previously known to fail outright with an internal
+MuPAD error. Not investigated further tonight; it is downstream of a change that is not landing.

@@ -216,10 +216,17 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       residuals rather than against a fixed tolerance. Sub-tolerance edges must be collapsed first
       -- a piece whose own two vertices are 4.5e-06 apart against tolPos = 1e-3 cannot be matched.
       **The working attempt is `.claude/assembly_attempt_2026-08-25.diff`** and it gets case 21
-      past assembly with case 8 still exact to 3.6e-15. **What is left is ONE thing:**
-      `clipArcByHalfPlane` raises `internal` on a degenerate arc -- one endpoint outside so a
-      crossing must exist, but the discriminant on a 5.76e-05 arc comes out negative. Handle that
-      (cut at the outside endpoint) and re-apply the diff. `DECISIONS.md` 2026-08-25 (overnight).
+      past assembly with case 8 still exact to 3.6e-15. `clipArcByHalfPlane`'s `internal` error on
+      a degenerate arc (one endpoint outside so a crossing must exist, but the discriminant on a
+      5.76e-05 arc came out negative) is FIXED already -- the bisection backstop landed
+      2026-08-25 and is in the tree, so that is no longer what blocks re-applying the diff.
+      **RE-APPLIED AND MEASURED, overnight 2026-08-27: not a clean win.** The FULL `conj('cplq')`
+      call on case 21 (not just the assembly stage) goes from the documented 2.4 s
+      `foldDroppedACell` refusal to 292.5 s and a DIFFERENT, unrelated failure -- an internal
+      MuPAD error inside Case C's symbolic fallback. Reverted; the diff stays parked, unchanged.
+      `DECISIONS.md` 2026-08-27 (overnight, G1/G10). **Whoever lands this next needs an
+      acceptance test that checks the FAILURE MODE doesn't regress** (fast named refusal ->
+      slow unrelated crash), not just "does assembly complete."
 
       **PROVENANCE IS RULED OUT (2026-08-27), and so is tolerance tuning.** Measured on this
       fixture, 30 pieces: edge lengths min 4.484e-06, **median 2.987e-03**, max 9.982e-01, with
