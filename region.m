@@ -2465,23 +2465,28 @@ classdef region
         % here via `region.tightenBoundedFacet`'s candidate logic applied to THIS conic only.
             val = []; st = []; ok = false;
             qidx = find(~lin);
-            if numel(qidx) ~= 1
-                return                              % 0 or >=2 curved facets: outside this argument
-            end
+            nq = numel(qidx);
+            if nq == 0 || nq > 2
+                return                    % 0, or >=3 curved facets: outside this argument (the
+            end                           % 3-conic case is DECISIONS.md 2026-08-27's measured 1%)
             vars = objA.vars;
-            [Qh, Lh, ch, okh] = region.quadraticParts(objA.ineqs(qidx), vars);
-            if ~okh
-                return
-            end
-            Ec = [Qh(1,1)/2, Qh(1,2), Qh(2,2)/2, Lh(1), Lh(2), ch];
-            try
-                fr = parabolaArcFrame(Ec);
-            catch
-                return                              % not a genuine parabola: outside this argument
+            Qs = cell(1,nq); Ls = cell(1,nq); Cs = cell(1,nq);
+            for ii = 1:nq
+                [Qh, Lh, ch, okh] = region.quadraticParts(objA.ineqs(qidx(ii)), vars);
+                if ~okh
+                    return
+                end
+                Qs{ii} = Qh; Ls{ii} = Lh; Cs{ii} = ch;
             end
 
-            % Mechanism 1: a straight recession ray, checked against every linear facet and the
-            % conic's own recession condition.
+            % Mechanism 1: a straight recession ray. This generalizes to TWO curved facets
+            % without change to the argument -- "a direction that recedes every linear facet AND
+            % every conic's own recession condition is a fixed asymptotic direction the region
+            % extends along" never used that there is only one conic (DECISIONS.md 2026-08-27,
+            % item 3 follow-up: the region's TRUE recession cone is the INTERSECTION of both
+            % conics' recessive-direction sets, which is exactly "receding both", checked below).
+            % Candidate directions are every linear facet's own edge direction plus each conic's
+            % null directions.
             cand = zeros(0,2);
             for i = 1:size(A,1)
                 if ~lin(i), continue, end
@@ -2491,16 +2496,42 @@ classdef region
                 cand(end+1,:) = d;  %#ok<AGROW>
                 cand(end+1,:) = -d; %#ok<AGROW>
             end
-            cand = [cand; region.quadNullDirsNumeric(Qh)];
+            for ii = 1:nq
+                cand = [cand; region.quadNullDirsNumeric(Qs{ii})]; %#ok<AGROW>
+            end
             tolR = 1.0d-9 * max(1, norm(cRow));
             for t = 1:size(cand,1)
                 d = cand(t,:);
                 nd = norm(d);
                 if nd < 1.0d-12, continue, end
                 d = d/nd;
-                if region.recedesFacet(d, A(lin,:), Qh, Lh) && cRow(:).'*d(:) > tolR
+                recedesAll = true;
+                for ii = 1:nq
+                    if ~region.recedesFacet(d, A(lin,:), Qs{ii}, Ls{ii})
+                        recedesAll = false; break
+                    end
+                end
+                if recedesAll && cRow(:).'*d(:) > tolR
                     val = inf; st = 1; ok = true; return
                 end
+            end
+
+            if nq == 2
+                % Mechanism 2 and the bounded-candidate closed form below both need ONE global
+                % arc parameter (`parabolaArcFrame`'s u) covering the WHOLE boundary. With two
+                % curved facets the boundary can alternate between the two arcs, so no such
+                % single parameter exists (DECISIONS.md 2026-08-27, item 3 follow-up -- sketched
+                % there, not a small generalization). Mechanism 1 above is still sound and still
+                % ran first; abstain rather than guess about boundedness.
+                return
+            end
+
+            Qh = Qs{1}; Lh = Ls{1}; ch = Cs{1};
+            Ec = [Qh(1,1)/2, Qh(1,2), Qh(2,2)/2, Lh(1), Lh(2), ch];
+            try
+                fr = parabolaArcFrame(Ec);
+            catch
+                return                              % not a genuine parabola: outside this argument
             end
 
             % Mechanism 2: growth along the arc's own admitted u-range.

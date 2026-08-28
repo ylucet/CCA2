@@ -658,5 +658,47 @@ classdef regionTest < matlab.unittest.TestCase
             end
             testCase.verifyTrue(hit, 'the vertex at (3-2*sqrt(2), 2*sqrt(2)-2) must survive');
         end
+
+        function tightenUnboundedFacetHandlesTWOCurvedFacets(testCase)
+        % `tightenUnboundedFacet` used to abort unconditionally whenever a region had more than
+        % one curved facet (`numel(qidx) ~= 1`), so `maxAffineOverRegion` fell back to whatever
+        % the LINEAR-only relaxation said, with no chance to confirm or correct it using the
+        % curved facets at all. Mechanism 1 (a straight recession ray receding every linear facet
+        % AND every conic's own recession condition) never actually used that there is only one
+        % conic, so it now runs for TWO as well (SCIP_READINESS.md task list, 2026-08-28).
+        %
+        % Region: {y >= x^2} intersect {y >= (x-1)^2} intersect {-5 <= x <= 5} -- two parabolas
+        % open the same way, TWO curved facets, genuinely unbounded upward (no linear facet
+        % bounds y at all). direction (0,1) recedes both parabolas (grad = (2x,-1) or
+        % (2(x-1),-1), grad.(0,1) = -1 <= 0 for every x) and both linear facets (normals (1,0)
+        % and (-1,0), dot 0). Cross-checked against a brute-force sample: feasible points exist
+        % arbitrarily far out along y (built as its own oracle, CLAUDE.md sec 6).
+            x = sym('x'); y = sym('y');
+            r = region([x^2 - y, (x-1)^2 - y, x - 5, -x - 5], [x y]);
+            [A, b, lin] = r.linearForm;
+            testCase.verifyEqual(sum(~lin), 2, 'fixture must have exactly two curved facets');
+
+            [val, st, ok] = region.tightenUnboundedFacet(r, [0 1], A, b, lin);
+            testCase.verifyTrue(ok, 'mechanism 1 must fire: a straight ray recedes both conics');
+            testCase.verifyEqual(st, 1);
+            testCase.verifyEqual(val, inf);
+
+            [valFull, stFull] = r.maxAffineOverRegion([0 1]);
+            testCase.verifyEqual(stFull, 1);
+            testCase.verifyEqual(valFull, inf);
+
+            % The oracle: sample the true (non-relaxed) constraint set directly and confirm it
+            % stays feasible at y far beyond any candidate finite bound.
+            rng(7);
+            hit = false;
+            for k = 1:2000
+                xx = -5 + 10*rand();
+                yy = 1e8 * rand();
+                if xx^2 <= yy && (xx-1)^2 <= yy
+                    hit = true; break
+                end
+            end
+            testCase.verifyTrue(hit, 'the true region must contain points at very large y');
+        end
     end
 end
