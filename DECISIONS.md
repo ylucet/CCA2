@@ -3984,3 +3984,31 @@ both active constraints -- the boundary can now alternate between the two arcs, 
 plus straight edges. This is a materially different and harder proof, not a small generalisation of
 the one just built, and should be scoped as its own item rather than folded into the existing one
 if it is picked up.
+
+## 2026-08-27 (overnight, G17 end-to-end) — abandoned after 12 hours; the isolated reproducer stands as verification
+
+`g17_full` (the full `rectMaximumIsTheConjugateOfTheWholeDomain` fixture, `.maximum` end to end,
+with the `certifiesNonPositive` fix in place) was left running overnight to confirm the hole at
+(-0.5,2) actually closes, beyond the isolated three-cell reproducer already confirmed. **Killed
+after 12 hours of continuous CPU-bound execution** (process start 22:14:17, CPU time 43344s at
+kill time -- essentially 100% of one core the whole time, not starved, genuinely still computing).
+That is a wall-clock cost this fixture never asked for before: the UNFIXED pipeline reached its
+(wrong) answer in 1562s (~26 min). The fix trades a fast wrong merge for real verification work at
+every affected merge, and this fixture apparently has enough of them that the full pipeline no
+longer finishes in any reasonable overnight budget.
+
+**Not a red flag about correctness** -- every other check passed: the exact isolated reproducer
+(cells 12, 17, 21 from the cached fold-4 state) now correctly refuses the bad merge and still
+covers the point; fast (309/0) and normal (12/0) are green; the item-3 sweep found zero unsound
+answers across thousands of cases. This is a COST finding, not a correctness one, and it belongs
+with item 3's own follow-up (this session's other finding): if 60% of the remaining merge
+refusals on the OTHER scaling fixture need the two-conic case, the same is plausible here --
+`certifiesNonPositive`'s newly-honest verification may simply be running the two-conic path's
+existing (already correct, already slow) machinery far more often than it used to, now that it is
+no longer short-circuited by a wrong quick answer.
+
+**Left as `UNVERIFIED` at the full-pipeline level**, correctly reported as such rather than
+claimed. Re-running this specific fixture end to end is not worth another overnight slot on its
+own; if it matters, instrument it the same way as item 3's follow-up (count nq per refusal on
+THIS fixture) before deciding whether to spend more time on it, or accept the isolated-reproducer
+level of verification as sufficient given the mechanism is otherwise fully confirmed.

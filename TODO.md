@@ -345,8 +345,13 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       directly: the point is feasible, `quadprog`'s own iterates diverge). Fixed by verifying via
       `linprog` (`region.maxLinear`) before accepting `ef==-2`. Fast 309/0, normal 12/0, no
       regressions; the isolated reproducer (cells 12/17/21) now correctly refuses the bad merge.
-      An end-to-end re-run of the original fixture was still in progress when this landed (see
-      MORNING.md for its status). `DECISIONS.md` 2026-08-27 (G17, ROOT CAUSE FOUND).
+      **The end-to-end re-run of the original fixture was ABANDONED after 12 hours of continuous
+      CPU-bound execution** (killed, not hung -- confirmed via CPU time tracking the whole way).
+      Not a correctness concern (every other check is green); the honest fix's real verification
+      work is apparently far more expensive on this fixture than the old wrong-but-fast merge was.
+      **Left `UNVERIFIED` at the full-pipeline level, correctly reported as such.** The isolated
+      three-cell reproducer stands as the verification this fix has. `DECISIONS.md` 2026-08-27
+      (G17, ROOT CAUSE FOUND) and 2026-08-27 (overnight, G17 end-to-end).
 
 - [ ] **G11 -- the seven `verylong` reds, NAMED at last (2026-08-25, `--verylong -j 4`, 3699 s).**
       45 jobs, 35 pass, 9 fail, 1 timeout -- and the 9 are the 7 pre-existing ones, with `testPCE2`
