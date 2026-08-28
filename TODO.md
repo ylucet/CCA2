@@ -824,11 +824,25 @@ blocker for making the split the default, and it was a casualty of the double le
       genuine disagreements (the few flagged were oracle-threshold artifacts or a pre-existing,
       unrelated `region.linearForm` fragility on degenerate random test input). Fast 309/0, normal
       12/0. `DECISIONS.md` 2026-08-27 (item 3, FIXED) has the derivation and the counterexample.
-      **Not yet re-measured:** whether this actually closes the ORIGINAL 374-refusal fixture's
-      cell-count blowup (`x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`) -- that fixture is too
-      expensive to reach quickly (DECISIONS.md 2026-08-27, item 3), so the fix is validated on the
-      MECHANISM, not yet on the ORIGINAL scaling measurement. Re-run `checkConjSymFree`/the
-      cell-count trace on that fixture next.
+      **RE-MEASURED overnight against the ORIGINAL fixture: NO material win.**
+      `.claude/step3cost.m` on `x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`: final cell count
+      **58, against the baseline's 56** -- unchanged, if anything slightly worse; distinctF stayed
+      at 8 both times, so the ~7x surplus this defect is named for is still there. The
+      `quadFacet_exactAnotInB` refusal RATE did drop (139/2010 = 6.9% here vs 374/3236 = 11.6%
+      before), but not enough to move the final count, and the two runs are not a clean diff
+      (intermediate paired counts differ fold by fold, so Step 1/2's own use of
+      `maxAffineOverRegion` likely produced slightly different upstream cells too).
+      **The fix is correct and stays** (independently validated by a brute-force oracle and a
+      hand-derived counterexample, fast/normal green) -- it closes a real soundness gap, it is
+      just not what closes THIS scaling defect. `DECISIONS.md` 2026-08-27 (overnight, item 3 vs
+      the ORIGINAL fixture).
+      **Next, if picked up again:** `tightenUnboundedFacet` only handles EXACTLY ONE curved facet
+      by design (the proof needs the single-parabola structure); the likely reason it does not
+      move this fixture's count is that a meaningful share of its surplus cells carry TWO OR MORE
+      conic facets (six pieces folded pairwise -- plausible for an accumulated cell to inherit
+      conics from multiple ancestors). Instrument `unionIsExact` directly (not `mergeTally`'s
+      aggregate reasons) to count how many `exactAnotInB` refusals on this fixture have
+      `numel(qidx) > 1` before attempting to extend the argument to that harder case.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls

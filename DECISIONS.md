@@ -3912,3 +3912,47 @@ remaining open question: whether this closes the ORIGINAL 374-refusal fixture's 
 blowup, which is too expensive to re-measure quickly and has not been re-run yet -- this fix is
 validated on the MECHANISM (`maxAffineOverRegion`'s correctness), not yet on that specific
 fixture's cell count.
+
+## 2026-08-27 (overnight, item 3 vs the ORIGINAL fixture) — measured against the real scaling target: no material win
+
+Item 3's fix was validated on a minimal witness and a hand-derived counterexample, and against a
+brute-force oracle on thousands of synthetic cases -- but never against the actual fixture the
+scaling defect was named on. Measured it overnight with `.claude/step3cost.m` (`x*y` over
+`conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`, the A.4/A.5 quadrilateral):
+
+    FOLD 1: paired= 14 -> cells= 12   (baseline: paired=14 -> cells=12, unchanged)
+    FOLD 2: paired= 24 -> cells= 23   (baseline: paired=29 -> cells=28)
+    FOLD 3: paired= 46 -> cells= 36   (baseline: paired=42 -> cells=43)
+    FOLD 4: paired= 56 -> cells= 50   (baseline: paired=60 -> cells=44)
+    FOLD 5: paired= 64 -> cells= 58   (baseline: paired=63 -> cells=56)
+    TOTAL 2794 s (baseline: 2944 s / "49 min")
+
+**Final cell count: 58, against the baseline's 56 -- no improvement, and if anything two cells
+worse.** distinctF stayed at 8 both times (the true minimum the answer needs), so the surplus
+(~7x) is essentially unchanged.
+
+**The refusal-reason tally moved, though not enough to matter.** Summed across all 5 folds:
+`quadFacet_exactAnotInB` fired 139 times this run (of 2010 total merge attempts, 6.9%) against
+the previously-recorded 374 (of 3236, 11.6%) -- a real drop in both count and proportion, and
+`okQuadFacet` successes are up too (11 here). But the intermediate PAIRED counts also differ
+(e.g. fold 4: paired=56 here vs paired=60 before), so this is not a clean apples-to-apples
+before/after on identical inputs -- Step 1/2's own numeric route, which the fix also touches
+(`maxAffineOverRegion` is called from more places than just this merge), plausibly produces
+slightly different intermediate cells upstream, so the two runs are not diffing the exact same
+arrangement fold by fold.
+
+**Conclusion: the fix is a genuine, validated correctness fix (confirmed sound by an independent
+brute-force oracle and a hand-derived counterexample), and it is NOT what closes this scaling
+defect.** Most likely reason, from the fix's own documented scope: `tightenUnboundedFacet`
+requires EXACTLY ONE curved facet (`numel(qidx) ~= 1` aborts) -- a real, deliberate restriction,
+not a bug, since the argument's proof needs the single-parabola structure. If a meaningful share
+of this fixture's surplus cells carry TWO OR MORE conic facets (plausible: six pieces folded
+pairwise, so an accumulated cell can inherit conics from multiple ancestors), those pairs are
+still refused exactly as before, no matter how correct the one-facet case now is.
+
+**Kept the fix** -- it is a real bug fix, independently justified, and the fast/normal suites are
+green with it in. **The scaling defect itself stays OPEN**, and the next step for it is
+measuring how many `quadFacet_exactAnotInB` refusals on THIS fixture actually carry 2+ curved
+facets (instrument `unionIsExact` directly, not `mergeTally`'s aggregate reasons) before
+attempting to extend the argument to that case -- which is a materially harder proof (two conics'
+combined recession behaviour, not one).
