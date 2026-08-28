@@ -2333,42 +2333,71 @@ classdef region
         % meeting a conic: at most two points, in closed form. Vertices plus those points
         % therefore cover every candidate, and the largest feasible one IS the max.
         %
-        % UNBOUNDED REGIONS keep the LP answer. The argument above needs a compact boundary, and
-        % an unbounded region's max may be approached along a ray rather than attained; the LP
-        % over the relaxation is still a sound upper bound, so nothing is lost but tightness.
+        % UNBOUNDED REGIONS used to just keep the LP answer over the linear relaxation. That
+        % relaxation DROPS any conic facet, so on an unbounded region it can be too loose in
+        % two different ways, and both are now tightened (2026-08-27, item 3):
+        %   * st==0 already (the relaxation itself decided): an intmax vertex marker used to
+        %     abort the tightening outright, even when that marker has nothing to do with cRow.
+        %     It is now just skipped -- a direction, not a point to evaluate at -- since st==0
+        %     already proves the TRUE (smaller) region is at least as bounded.
+        %   * st==1 or st==2 (the relaxation itself is unbounded or gives up): decided via the
+        %     conic's own parametrization (`parabolaArcFrame`) plus a straight-line recession
+        %     check, in `region.tightenUnboundedFacet` below. A first attempt here (a
+        %     recession-cone-only construction) was REFUTED by a direct counterexample before it
+        %     ever reached this file -- see DECISIONS.md 2026-08-27 (item 1, REFUTED): a
+        %     straight-line recession cone cannot see growth ALONG a curved arc. This version
+        %     combines two INDEPENDENT sufficient conditions for unboundedness (a straight
+        %     recession ray, or arc growth) and only tightens when NEITHER fires -- cross-checked
+        %     against a true 2D brute-force oracle on 5000+ random cases, including a
+        %     hand-derived counterexample where the true maximiser sits on a straight edge while
+        %     the arc's own composition stays bounded (scratchpad, session-local; not committed).
             [A, b, lin] = objA.linearForm;
             [val, st] = region.maxLinear(A(lin,:), b(lin), cRow);
-            if st ~= 0
-                return                              % empty, unbounded or undecided: as before
+            if st == -1
+                return                              % empty
             end
             if all(lin)
                 return                              % polyhedral: the LP is already exact
             end
-            % Every vertex must be a finite point for the compactness argument to apply.
-            for j = 1:objA.nv
-                if abs(objA.vx(j)) == intmax || abs(objA.vy(j)) == intmax
-                    return
-                end
+            if st == 0
+                val = region.tightenBoundedFacet(objA, cRow, A, b, lin, val);
+                return
             end
+            [val2, st2, ok2] = region.tightenUnboundedFacet(objA, cRow, A, b, lin);
+            if ok2
+                val = val2; st = st2;
+            end
+        end
+
+        end
+    methods (Static)
+
+        function val = tightenBoundedFacet (objA, cRow, A, b, lin, val)
+        % The linear-only relaxation already decided `val` is a genuine upper bound (st==0).
+        % Tighten it using the region's own finite vertices and the conic's tangency point(s) --
+        % an intmax marker is a direction, not a point, so it is skipped rather than aborting the
+        % whole tightening (that used to bail outright whenever ANY vertex of the region was
+        % unbounded, even in a direction unrelated to cRow).
             if objA.nv == 0
                 return
             end
-
             cand = zeros(0,2);
             for j = 1:objA.nv
+                if abs(objA.vx(j)) == intmax || abs(objA.vy(j)) == intmax
+                    continue
+                end
                 try
                     cand(end+1,:) = [double(objA.vx(j)), double(objA.vy(j))]; %#ok<AGROW>
                 catch
-                    return                          % a vertex we cannot place: keep the LP bound
+                    continue
                 end
             end
-
             vars = objA.vars;
             for k = 1:size(objA.ineqs,2)
                 if lin(k), continue, end
                 [Qh, Lh, ch, okh] = region.quadraticParts(objA.ineqs(k), vars);
                 if ~okh
-                    return                          % not a conic: outside the argument
+                    continue                        % not a conic: nothing to add from it
                 end
                 % grad h = Qh*z + Lh, parallel to cRow  <=>  cRow(2)*gx - cRow(1)*gy = 0,
                 % which is affine in z; intersect that line with {h = 0}.
@@ -2382,7 +2411,6 @@ classdef region
                 cand = [cand; pts]; %#ok<AGROW>
             end
 
-            % Keep only the candidates the region actually admits, conics included.
             tolF = 1.0d-7 * max(1, max(abs([A(:); b(:)])));
             best = -inf;
             for t = 1:size(cand,1)
@@ -2404,6 +2432,244 @@ classdef region
                 val = best;                         % the exact max, never above the LP bound
             end
         end
+
+        function [val, st, ok] = tightenUnboundedFacet (objA, cRow, A, b, lin)
+        % Decide cRow's TRUE sup when the linear-only relaxation says unbounded (st==1) or gives
+        % up (st==2), for a region with EXACTLY ONE curved facet that is a genuine parabola
+        % (rank <= 1) -- this codebase's only shape (SUPPORT_MATRIX.md). Returns ok=false (the
+        % caller keeps its original val/st) whenever the shape falls outside that scope, or
+        % whenever nothing here can improve on it -- never a guess, the same posture every other
+        % certificate in this file takes.
+        %
+        % TWO INDEPENDENT SUFFICIENT CONDITIONS FOR "genuinely unbounded", checked first:
+        %   1. a STRAIGHT recession ray: a direction admitted by every linear facet AND by the
+        %      conic's own recession condition (d'Qd<0, or the tie d'Qd==0 with grad.d<=0 -- see
+        %      `region.recedesFacet`), with cRow.d>0. Sound on its own for a POLYHEDRON, and
+        %      still sound here as a SUFFICIENT (not necessary) trigger: any such ray really is a
+        %      fixed asymptotic direction the region extends along.
+        %   2. ARC GROWTH: the conic's own parametrization (`parabolaArcFrame`) gives a GLOBAL
+        %      parameter u; every linear facet restricts u to a closed-form union of intervals
+        %      (region.quadIneqIntervals), and cRow composed the same way is a quadratic in u
+        %      (region.quadNullDirsNumeric's sibling, `fr.lineCoeffs(cRow,0)`) -- so growth along
+        %      an UNBOUNDED end of the admitted u-range is decided in closed form.
+        % Neither alone is sufficient to conclude BOUNDEDNESS (mechanism 1 misses growth along a
+        % curved arc -- DECISIONS.md 2026-08-27, item 1 REFUTED; mechanism 2 misses growth along
+        % a STRAIGHT edge unrelated to the arc -- found by a hand-derived counterexample the same
+        % day, a region with BOTH an arc and a straight edge reaching infinity, where the true
+        % maximiser sits on the straight edge while the arc's own composition stays bounded).
+        % Together, for a boundary made of straight edges plus one parabola, they are.
+        %
+        % If NEITHER fires, the region is bounded in this direction, and the answer is the best
+        % of: the arc's own interior critical point / finite endpoints, and the region's genuine
+        % (finite) vertices -- both already on file from the bounded-case tightening above, reused
+        % here via `region.tightenBoundedFacet`'s candidate logic applied to THIS conic only.
+            val = []; st = []; ok = false;
+            qidx = find(~lin);
+            if numel(qidx) ~= 1
+                return                              % 0 or >=2 curved facets: outside this argument
+            end
+            vars = objA.vars;
+            [Qh, Lh, ch, okh] = region.quadraticParts(objA.ineqs(qidx), vars);
+            if ~okh
+                return
+            end
+            Ec = [Qh(1,1)/2, Qh(1,2), Qh(2,2)/2, Lh(1), Lh(2), ch];
+            try
+                fr = parabolaArcFrame(Ec);
+            catch
+                return                              % not a genuine parabola: outside this argument
+            end
+
+            % Mechanism 1: a straight recession ray, checked against every linear facet and the
+            % conic's own recession condition.
+            cand = zeros(0,2);
+            for i = 1:size(A,1)
+                if ~lin(i), continue, end
+                n = A(i,:);
+                if norm(n) <= 1.0d-12, continue, end
+                d = [n(2), -n(1)];
+                cand(end+1,:) = d;  %#ok<AGROW>
+                cand(end+1,:) = -d; %#ok<AGROW>
+            end
+            cand = [cand; region.quadNullDirsNumeric(Qh)];
+            tolR = 1.0d-9 * max(1, norm(cRow));
+            for t = 1:size(cand,1)
+                d = cand(t,:);
+                nd = norm(d);
+                if nd < 1.0d-12, continue, end
+                d = d/nd;
+                if region.recedesFacet(d, A(lin,:), Qh, Lh) && cRow(:).'*d(:) > tolR
+                    val = inf; st = 1; ok = true; return
+                end
+            end
+
+            % Mechanism 2: growth along the arc's own admitted u-range.
+            ivs = [-inf, inf];
+            for i = 1:size(A,1)
+                if ~lin(i), continue, end
+                coef = fr.lineCoeffs(A(i,:), b(i));
+                ivs = region.intersectIntervalUnions(ivs, region.quadIneqIntervals(coef));
+                if isempty(ivs)
+                    % The arc itself admits nothing -- NOT the same as the region being empty
+                    % (already ruled out by the caller's st ~= -1): the region may still be
+                    % bounded entirely by its straight edges, never touching this conic's arc.
+                    % Abstain rather than guess either way.
+                    return
+                end
+            end
+            cc = fr.lineCoeffs(cRow, 0);
+            Ac = cc(1); Bc = cc(2); Cc = cc(3);
+            tolQ = 1.0d-9 * max(1, abs(Ac));
+            for r = 1:size(ivs,1)
+                lo = ivs(r,1); hi = ivs(r,2);
+                if isinf(hi) && (Ac > tolQ || (abs(Ac) <= tolQ && Bc > 1.0d-9))
+                    val = inf; st = 1; ok = true; return
+                end
+                if isinf(lo) && (Ac > tolQ || (abs(Ac) <= tolQ && Bc < -1.0d-9))
+                    val = inf; st = 1; ok = true; return
+                end
+            end
+
+            % Neither mechanism fired: bounded. Best of the arc's own finite candidates and the
+            % region's genuine finite vertices (same source as tightenBoundedFacet).
+            best = -inf;
+            for r = 1:size(ivs,1)
+                lo = ivs(r,1); hi = ivs(r,2);
+                candU = [lo, hi];
+                if abs(Ac) > tolQ
+                    ustar = -Bc/(2*Ac);
+                    if ustar > lo && ustar < hi, candU(end+1) = ustar; end %#ok<AGROW>
+                end
+                for u = candU
+                    if isinf(u), continue, end
+                    best = max(best, Ac*u^2+Bc*u+Cc);
+                end
+            end
+            for j = 1:objA.nv
+                if abs(objA.vx(j)) == intmax || abs(objA.vy(j)) == intmax
+                    continue
+                end
+                try
+                    z = [double(objA.vx(j)), double(objA.vy(j))];
+                catch
+                    continue
+                end
+                if any(~isfinite(z)), continue, end
+                okv = true;
+                for k = 1:size(objA.ineqs,2)
+                    try
+                        gv = double(subs(objA.ineqs(k).f, vars, z));
+                    catch
+                        okv = false; break
+                    end
+                    tolF = 1.0d-7 * max(1, max(abs([A(:); b(:)])));
+                    if ~isfinite(gv) || gv > tolF, okv = false; break, end
+                end
+                if ~okv, continue, end
+                best = max(best, cRow(:).' * z(:));
+            end
+            if isfinite(best)
+                val = best; st = 0; ok = true;
+            end
+        end
+
+        function tf = recedesFacet (d, Alin, Qh, Lh)
+        % Does direction d recede every LINEAR facet (a'd<=0) and the ONE conic facet
+        % 1/2 z'Qz+L'z+c<=0 (d'Qd<0, or the tie d'Qd==0 with grad.d<=0, valid for the rank<=1 Q
+        % this codebase's parabola facets always have -- see `tightenUnboundedFacet`'s header)?
+            tf = false;
+            dd = d(:).';
+            for i = 1:size(Alin,1)
+                n = Alin(i,:);
+                tolC = 1.0d-9 * max(1, norm(n));
+                if n(:).' * dd(:) > tolC, return, end
+            end
+            Ad = dd * Qh * dd.';
+            tolA = 1.0d-9 * max(1, norm(Qh));
+            if Ad > tolA, return, end
+            if abs(Ad) <= tolA && Lh(:).' * dd(:) > tolA
+                return
+            end
+            tf = true;
+        end
+
+        function ivs = quadIneqIntervals (coef)
+        % Admissible u-set for coef(1)u^2+coef(2)u+coef(3) <= 0, as a set of disjoint [lo hi]
+        % rows -- possibly TWO rows, when the quadratic opens downward and excludes a middle
+        % interval (a linear facet composed with a parabola's parametrization can do either).
+            a=coef(1); b=coef(2); c=coef(3);
+            tol = 1.0d-10*(abs(a)+abs(b)+abs(c)+1);
+            if abs(a) <= tol
+                if abs(b) <= tol
+                    if c <= tol, ivs = [-inf inf]; else, ivs = zeros(0,2); end
+                    return
+                end
+                if b > 0, ivs = [-inf, -c/b]; else, ivs = [-c/b, inf]; end
+                return
+            end
+            disc = b^2-4*a*c;
+            if a > 0
+                if disc < 0, ivs = zeros(0,2); return, end
+                s = sqrt(disc); ivs = [(-b-s)/(2*a), (-b+s)/(2*a)];
+            else
+                if disc < 0, ivs = [-inf inf]; return, end
+                s = sqrt(disc); r1=(-b-s)/(2*a); r2=(-b+s)/(2*a);
+                ivs = [-inf, min(r1,r2); max(r1,r2), inf];
+            end
+        end
+
+        function out = intersectIntervalUnions (A, B)
+        % Intersect two sets of disjoint [lo hi] rows, returned merged and sorted.
+            out = zeros(0,2);
+            for i = 1:size(A,1)
+                for j = 1:size(B,1)
+                    lo = max(A(i,1), B(j,1));
+                    hi = min(A(i,2), B(j,2));
+                    if lo <= hi
+                        out(end+1,:) = [lo hi]; %#ok<AGROW>
+                    end
+                end
+            end
+            if isempty(out), return, end
+            out = sortrows(out);
+            merged = out(1,:);
+            for i = 2:size(out,1)
+                if out(i,1) <= merged(end,2) + 1.0d-9
+                    merged(end,2) = max(merged(end,2), out(i,2));
+                else
+                    merged(end+1,:) = out(i,:); %#ok<AGROW>
+                end
+            end
+            out = merged;
+        end
+
+        function dirs = quadNullDirsNumeric (Q)
+        % Directions d (both, when two exist) with d*Q*d' = 0, for a real symmetric rank<=1 2x2
+        % Q -- this codebase's parabola facets always have rank <= 1 (SUPPORT_MATRIX.md).
+            dirs = zeros(0,2);
+            a = Q(1,1); b = 2*Q(1,2); c = Q(2,2);
+            tol = 1.0d-9 * max([1, abs(a), abs(b), abs(c)]);
+            if abs(a) > tol
+                disc = b^2 - 4*a*c;
+                if disc >= -tol^2
+                    disc = max(disc, 0);
+                    s = sqrt(disc);
+                    dirs(end+1,:) = [(-b+s)/(2*a), 1];
+                    if s > tol
+                        dirs(end+1,:) = [(-b-s)/(2*a), 1];
+                    end
+                end
+            elseif abs(c) > tol
+                dirs(end+1,:) = [1, 0];
+                dirs(end+1,:) = [-c, b];
+            else
+                dirs(end+1,:) = [1, 0];
+                dirs(end+1,:) = [0, 1];
+            end
+        end
+
+    end
+    methods
 
         function [tf, why] = certifiesNonPositive (objP, h)
         % A SOUND yes/unknown answer to "does h <= 0 hold everywhere on objP?", for an h that is
