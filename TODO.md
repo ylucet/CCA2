@@ -991,17 +991,17 @@ blocker for making the split the default, and it was a casualty of the double le
       domain and is a MAX, so EVERY per-piece conjugate must be finite there. Evaluating all 12
       groups at six interior points named the three bad ones in one cheap run.
 
-- [ ] **The parallelogram's LAST 2 of 10 — `getInterior` on a SINGULAR quadratic.** The chord's
-      edge cell and the arc's claim the SAME region and the chord's is checked first and is wrong
-      there (0.0176 and -0.0138 against 0.0333 and 0.0363; the arc's cell is right at both).
-      `f` is a singular convex quadratic on that piece -- constant along one whole edge, `∇f = 0`
-      at two of the three vertices -- so `functionNDomain.getInterior`, which eliminates `s`
-      between `x = ∂1f` and `y = ∂2f`, returns the gradient map's image LINE instead of a curve
-      separating the two cells.
-      **Do NOT attack the `isQuad` chord rewrite for this.** Both alternatives were measured
-      2026-08-16 and are recorded in `DECISIONS.md`: chording the vertices the conic actually
-      touches makes the piece WORSE (2 wrong of 10 -> 3), and skipping the rewrite changes nothing.
-      Start from `functionNDomainTest.parallelogramPiece9`, which reproduces it in about a minute.
+- [x] **STALE -- already FIXED 2026-08-17, found overnight 2026-08-27 while sweeping the list.**
+      The parallelogram's LAST 2 of 10 — `getInterior` on a SINGULAR quadratic. This entry is
+      dated 2026-08-16; the fix (`functionNDomain.singularEdgeCut`, commit `699326d`, "Two
+      fixes: the concave-conic certificate, and the SINGULAR-quadratic edge cut") landed the very
+      next day and was never checked off. Confirmed still passing tonight:
+      `functionNDomainTest/aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane` (the
+      correct name for what this entry called `parallelogramPiece9` -- that is the fixture
+      builder, not the test) is 1/0/0. The fix computes the interior cut from the KKT multiplier
+      directly (`mu = <n, s - grad f(x*)>`, affine in `s`, no inversion needed) instead of the
+      gradient-map elimination that fails when the Hessian is singular -- see `getInterior`'s own
+      header for the derivation. No action needed; kept only as a note that this entry was stale.
 
 ### Bugs, in the order they should be taken (2026-08-15)
 
