@@ -92,6 +92,21 @@ function g = conjCPLQ(obj, idx, route)
     if obj.nv == 0 && obj.nf == 1
         [L, Q, C] = QuaPol.matrixForm(obj.f);   %#ok<ASGLU> (C is empty for quadratics)
         kappa = obj.f(end);
+        if isinf(kappa)
+            % obj is ITSELF a degenerate +-inf-everywhere mesh -- exactly conjCPLQ's own output
+            % for an indefinite full-domain quadratic (the `evs(1) < -tolE` branch below,
+            % DECISIONS.md 2026-08-27 B3), reached here because a caller conjugated it a second
+            % time. Q and L are exactly zero in that representation (nothing else produces this
+            % shape), so the finite-affine formula a few lines down does NOT apply: sup over an
+            % EMPTY domain (obj==+inf) is -inf everywhere, and sup of +inf over a NONEMPTY domain
+            % (obj==-inf) is +inf everywhere, in both cases for every s, not just at one needle.
+            % Before this guard, kappa=+-inf fell into the `evs(2)<=tolE` "f is affine" branch,
+            % which built a needle at s=L=(0,0) instead -- caught by
+            % conjCPLQTest.theEMPTYDomainConjugateRoundTripsToMinusInfinity evaluating away from
+            % the origin. See conjCPLQTest.m and DECISIONS.md 2026-08-28.
+            g = QuaPol([0 0 0 0 0 -kappa]);
+            return
+        end
         ev = eig(Q);
         if all(ev > sqrt(eps))
             % Strictly convex: the conjugate is again a full-domain quadratic

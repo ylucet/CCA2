@@ -924,6 +924,38 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyTrue(sawFrame, ...
                 'no piece took the frame-change branch: the fixture no longer exercises G5');
         end
+
+        function sweepCase21FailsFastAndNamedNotSlowAndUnrelated(testCase)
+        % ACCEPTANCE TEST for any future retry of the parked `assemblePieces` diff (G1/G10,
+        % TODO.md, DECISIONS.md 2026-08-27 overnight): the one thing that must not happen is
+        % trading a fast, named refusal for a slow, unrelated crash. That is exactly what
+        % happened when the diff was re-applied and measured -- 2.4 s foldDroppedACell became
+        % 292.5 s and an internal MuPAD error inside Case C's symbolic fallback. This pins
+        % TODAY's failure mode so a regression like that shows up here first, not 5 minutes into
+        % a manual re-check.
+        %
+        % Fixture: `checkConjAgainstDefinition`'s own sweep case 21 (seed 20260824, the G4/G10
+        % triangle: 3-gon, indefinite xy), reconstructed by hand since `randomCase` is a private
+        % local function -- the coefficients below are that seed's case 21, verified byte-for-
+        % byte against a fresh sweep run before this test was written.
+            W = [ 0.605704715097184  0.930075181116088
+                 -0.335394747201423  0.525152429255813
+                 -1.08249961702189   0.0844860974378195];
+            f6 = [0 1 0 -0.717791341344706 -0.607564534720844 -0.678183523294723];
+            E = [1 2 1; 2 3 1; 3 1 1];
+            F = [1 0; 1 0; 1 0];
+            q = QuaPol(W, E, f6, F);
+
+            t0 = tic;
+            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:foldDroppedACell');
+            elapsed = toc(t0);
+            % 30 s is generous over the measured ~2.3 s and nowhere near the 292.5 s regression:
+            % it separates "still the fast refusal" from "silently became the slow crash path".
+            testCase.verifyLessThan(elapsed, 30, sprintf( ...
+                ['case 21 took %.1f s to refuse -- the fast/named refusal may have regressed ' ...
+                 'into the slow/unrelated failure mode DECISIONS.md 2026-08-27 (overnight, ' ...
+                 'G1/G10) measured at 292.5 s.'], elapsed));
+        end
     end
 
     methods (Static)
