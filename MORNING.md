@@ -41,6 +41,16 @@ Branch: overnight/2026-08-27
   run that hits a different, unrelated MuPAD internal error in Case C. Diff stays parked.
   `DECISIONS.md` 2026-08-27 (overnight, G1/G10).
 
+- **Stale TODO.md entry found and checked off.** "The parallelogram's LAST 2 of 10" (dated
+  2026-08-16) described a bug that `functionNDomain.singularEdgeCut` (commit `699326d`, the very
+  next day) already fixed; nobody had checked the box. Confirmed still passing tonight
+  (`aBoundedPieceWithATangentVertexConjugatesOntoTheWholePlane`, 1/0/0). Commit `378a45b`. Swept
+  the two remaining open items after this (`splitTwoArcLens`, the piece-5-ray item under an
+  explicitly `SUPERSEDED` 2026-08-03 status section) -- both are the same difficult
+  `assemblePieces` family already explored tonight via G1/G10, without a quick reproducer the way
+  the parallelogram item had; not attempted fresh tonight rather than starting a multi-hour
+  investigation this late in the run.
+
 - **Code coverage tooling — DONE.** `.claude/suite.sh --fast --coverage` / `--normal --coverage`
   via `matlab.unittest.plugins.CodeCoveragePlugin`, Cobertura-XML report to
   `.claude/coverage/cobertura.xml` (gitignored). Verified: `--fast --coverage` matches plain
@@ -76,9 +86,13 @@ non-improvement report).
 
 Worked through, in order: G1/G10 (measured, reverted), G17 (root cause found and fixed), item 3
 (fixed, then honestly re-measured against its own target and found wanting, then the shortfall's
-cause confirmed), code coverage (built and verified). Ten commits deep on `overnight/2026-08-27`,
-tree clean, fast 309/0 and normal 12/0 both green as of the last real code change (commit
-`84dbba7`; every commit after that is docs/tooling only).
+cause confirmed), code coverage (built and verified), a stale TODO.md entry (found and checked
+off). 15 commits deep on `overnight/2026-08-27`, tree clean, fast 309/0 and normal 12/0 both
+green as of the last real code change (commit `84dbba7`; every commit after that is docs/tooling
+only). Stopped here after sweeping the two remaining open items and finding neither had a quick
+reproducer the way the stale one did -- both are the same difficult family already worked
+tonight without a clean win, and starting a fresh multi-hour investigation into either did not
+look like a good use of what was left of the run.
 
 **Next, in the order I would take it:**
 1. The two-conic extension to item 3's fix, if the scaling defect is worth more time -- it is a
