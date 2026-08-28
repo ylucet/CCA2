@@ -276,14 +276,38 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
           fold 4 after mergeL #2:   25 cells, covered=0
 
       The split creates 4 cells and loses nothing (covered stays 1 through `mtimes` and the split
-      loop), so `maximumP`'s own split/simplify path is ruled out. **Next: instrument `mergeL`
-      itself** -- coverage before/after each pairwise merge attempt inside the single
-      `mergeL(objSplit)` call, to name which attempt drops the covering cell (a discard) or merges
-      two cells into one that no longer contains the point (a different, more specific defect).
-      `DECISIONS.md` 2026-08-27 (G17, one level deeper).
+      loop), so `maximumP`'s own split/simplify path is ruled out.
       **Probe note that cost two attempts:** after `mtimes` each region carries TWO functions, so
       `evalFunctionNDomain` cannot read a paired object (it errors in `subs`) -- count coverage from
       the CONSTRAINTS at that stage.
+
+      **ROOT CAUSE FOUND, 2026-08-27.** Cached the 39-cell pre-merge state
+      (`fold4_objSplit.mat`) and replicated `mergeL`'s two accumulation loops by hand. The
+      covering cell (12) merges with cell 17 (still covers), then merges with cell 21 --
+      `region.merge` reports SUCCESS and the result no longer covers `s`. **Not a discard: a
+      WRONG "the union is exact" certificate.** `unionIsExact` needs `r21`'s one curved
+      constraint (`h = 40s2-4s1s2-s1^2-4s2^2-40 <= 0`) to hold on all of `r1217` (cells 12+17,
+      by then purely polyhedral); `certifiesNonPositive` says yes, and it is wrong -- `h(s)=27.75
+      > 0` and `s` is directly confirmed feasible for `r1217`. `h` is CONCAVE (Hessian eigenvalues
+      `{-10,0}`, rank 1), so `certifiesNonPositive` maximises it via `quadprog` and treats exit
+      code `ef==-2` as "the region is empty, vacuously true." Run by hand with `Display,'iter'`:
+      `quadprog` genuinely fails to converge (`Fval` diverges past `-6.4e7`) on this unbounded
+      cell with a rank-deficient Hessian, and `ef=-2` here means NUMERICAL FAILURE, not
+      infeasibility -- the two share an exit code and the code cannot tell them apart. This is
+      the actual defect, three levels deeper than the first bisection (`maximumP` -> `mergeL`'s
+      first pass -> the 12+17+21 merge -> `certifiesNonPositive`'s `ef==-2` branch), and it is
+      NOT `removeTangent` (exonerated twice) and NOT a discard anywhere in the split loop
+      (exonerated this session). `DECISIONS.md` 2026-08-27 (G17, ROOT CAUSE FOUND).
+      **Not fixed here -- deserves a clean-headed attempt, not a rushed one** (item 1's
+      recession-cone fix was JUST refuted this same session by an analogous "trusted a
+      plausible-looking answer without a second probe" mistake). **What a fix needs:** never
+      trust `ef==-2` alone as "empty" -- verify emptiness independently first (e.g.
+      `region.maxLinear` on the same `A,b`, which uses `linprog` and is not subject to this
+      failure mode), or detect "unbounded objective, degenerate Hessian" directly (Q's null space
+      intersected with the region's recession cone, checking `L'd` there) and refuse rather than
+      guess. Reproduce this EXACT case (`fold4_objSplit.mat` cells 12, 17, 21 -- scratchpad,
+      session-local, not committed; regenerate via `g17f_save.m`'s method if needed) as the
+      regression test before touching `certifiesNonPositive`.
 
       (Superseded text follows, kept for the reasoning.) ~~Identified 2026-08-27.~~ The nearest cell to the
       uncovered point (-0.5,2) misses by **1.668523e-02** -- a real gap, four orders above the

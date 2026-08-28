@@ -3760,3 +3760,58 @@ predicts the counterexample above; `cRow=(-1,0)` composed is `-t^2`, bounded abo
 correctly predicts the finite answer that WAS right) before writing it into `region.m`, exactly as
 item 1 already prescribed for the first attempt and this entry now re-prescribes for the reason it
 failed.
+
+## 2026-08-27 (G17, ROOT CAUSE FOUND) — `certifiesNonPositive` accepts a WRONG `quadprog` exit code as proof the region is empty
+
+Traced one level deeper than "mergeL's first pass" (previous entry): replicated `mergeL`'s two
+accumulation loops by hand on the cached 39-cell fold-4 state (`fold4_objSplit.mat`, scratchpad).
+The covering cell (12) merges cleanly with cell 17 (still covers `s=(-0.5,2)`), then merges with
+cell 21 -- `region.merge` reports SUCCESS and the result no longer covers `s`. **This is not a
+discard: it is a wrong "the union is exact" certificate.**
+
+`r1217` (cells 12+17 merged) and `r21` share a LINEAR facet (`s1-sqrt(14)s2+4<=0` against its
+negative). Deleting it and intersecting what's left needs `unionIsExact`'s two subset checks; the
+one that fails silently is "does `r21`'s one CURVED constraint,
+`h = 40 s2 - 4 s1 s2 - s1^2 - 4 s2^2 - 40 <= 0`, hold everywhere on `r1217`?", answered by
+`certifiesNonPositive`. **It returned `tf=true, why='ok'`. It is wrong**: at `s`,
+`h(s) = 27.75 > 0`, and `s` is confirmed feasible for `r1217`'s own linear relaxation directly
+(`all(A*s<=b)` is true) -- `r1217` is not empty and `h` is not `<=0` on all of it.
+
+**The mechanism, reproduced directly.** `h`'s Hessian is `Q=[[-2,-4],[-4,-8]]`, eigenvalues
+`{-10, 0}` -- CONCAVE, rank 1 (not the convex branch). `certifiesNonPositive`'s concave branch
+maximises `h` over `r1217`'s linear relaxation via `quadprog(-Q,-L,A,b,...)` and treats exit code
+`ef==-2` as "the region is empty, so `h<=0` holds vacuously" (`tf=true`). Run by hand with
+`Display,'iter'`: **`ef` comes back `-2`, and the iterates do not converge** -- `Fval` diverges
+past `-6.4e7`, the returned point is `(-3.2e6, 1.6e6)`, and the solver's own message says
+"unable to find a point that satisfies the constraints within the value of the constraint
+tolerance." **`s` is feasible; the region is not empty.** `quadprog`'s `-2` here is a
+NUMERICAL-FAILURE code on a QP that is unbounded above with a rank-DEFICIENT (semidefinite, not
+definite) Hessian -- not the "primal infeasible" code the surrounding logic assumes it always
+means. The two situations share an exit code and `certifiesNonPositive` cannot tell them apart.
+
+**Why this shape is exactly where it bites.** `r1217` is an UNBOUNDED cell (this whole
+investigation has been inside `maxQuaPar`'s unbounded-cell folds), and `h` is concave with a NULL
+DIRECTION (rank 1) -- precisely the combination (unbounded feasible region, semidefinite not
+definite Hessian) that interior-point QP solvers are known to struggle to certify correctly:
+`quadprog` cannot always distinguish "truly infeasible" from "feasible but the objective runs away
+along a flat direction, and the algorithm never converges" when the Hessian has a null space
+aligned with the region's own recession cone.
+
+**This is G17's actual root cause**, three levels deeper than where it was first bisected
+(`maximumP` -> `mergeL`'s first pass -> the merge of cells 12+17+21 -> `certifiesNonPositive`'s
+`ef==-2` branch). It is NOT `removeTangent` (exonerated twice already) and NOT a discard anywhere
+in `maximumP`'s split loop (also exonerated, previous entry) -- it is a false "yes" from the ONE
+place in this file that calls `quadprog` rather than `linprog`.
+
+**Not fixed here** -- this took the whole session's remaining budget to isolate and deserves a
+clean-headed fix rather than a rushed one, especially after item 1's recession-cone attempt was
+just refuted by an analogous "trusted a plausible-looking answer without a second probe" mistake.
+**What a fix needs:** never trust `ef==-2` alone as "empty" -- either verify emptiness
+independently (e.g. `region.maxLinear` on the SAME `A,b` with an arbitrary objective, which uses
+`linprog` and is not subject to this Hessian-driven failure mode) before accepting the vacuous-true
+branch, or detect the "unbounded objective, degenerate Hessian" case directly (Q's null space
+intersected with the region's recession cone, checking `L'd` there) and refuse rather than
+guess when `ef` is not unambiguously convergent. Either way: reproduce this EXACT case
+(`fold4_objSplit.mat`'s cells 12, 17, 21) as the regression test before touching the code, and
+re-run `certifiesNonPositive` with `Display,'iter'` after any fix to confirm `quadprog` itself
+now agrees the region is not empty rather than merely patching the interpretation.
