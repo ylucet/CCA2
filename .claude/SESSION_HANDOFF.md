@@ -1,30 +1,30 @@
 # Session Handoff
 
-_2026-08-27_
+_2026-08-28_
 
 ## Blocked
-- Phase C1 per-term cost target — EXTERNAL, needs Yves. Box terms are 0.01 s;
-  the 40–60 s figure is stale.
+- Nothing external. Two-conic extension for item 3 and the `assemblePieces`
+  defect (G1/G4/G10) are both open but merely hard, not blocked — see Next.
 
 ## State
-- Branch `main` @ `2e18333` — "docs: G17 LOCATED -- the hole appears in fold 4's
-  maximumP, after the pairing"
+- Branch `main` @ `2e80373` — "chore: final overnight report update -- stale-entry
+  sweep and closing note"
 - Pushed: yes — `origin/main`
-- Tests: fast 309/0 (08-27) · slow 93/0 (08-26, STALE: predates B3's LINE+EMPTY)
-  · verylong 36/8/1 (08-25, STALE: predates the legacy pins)
-- Known reds: two, both `plq_1p` — G17 (`rectMaximumIsTheConjugateOfTheWholeDomain`,
-  a hole at (-0.5,2)) and `rectBiconjugateIsAConvexUnderestimator` (the scaling
-  defect). The seven legacy `plq_1piece` reds are pinned → incomplete, not failed.
+- Tests (2026-08-28): fast 309/0 · normal 12/0 · slow 94/1 · verylong 29/0/7/1-timeout
+- Known reds: `theEMPTYDomainConjugateRoundTripsToMinusInfinity` (slow, pre-existing
+  per B3) · `testcPLQ` (verylong, G11's known unresolved timeout)
 
 ## Next
-1. G17, one level deeper: count coverage across `maximumP`'s own split/merge
-   stages at FOLD 4 — the fold is already identified. ~15 min per run.
-2. Run `--slow` and `--verylong`; neither has run since B3's LINE/EMPTY landed.
-3. Scaling (`quadFacet_exactAnotInB`, 374 vs 37): hand-check ONE pair on PRect3
-   (44 s) before coding, then extend `maxAffineOverRegion` to unbounded regions
-   via the recession cone.
+1. Two-conic extension of item 3's `maxAffineOverRegion` fix (60% of remaining
+   `exactAnotInB` refusals need it) — a harder proof, not a continuation; see
+   `DECISIONS.md` 2026-08-27 (item 3 follow-up) for the sketch.
+2. `assemblePieces` curved/straight matching (G1/G4/G10) — any retry of the
+   parked diff needs the acceptance test named in `TODO.md`: failure mode must
+   not regress from fast/named refusal to slow/unrelated crash.
+3. `splitTwoArcLens` and the piece-5-ray item (`TODO.md`) — same family as
+   above, no quick reproducer; swept for staleness 2026-08-27, still open.
 
 ## Files
-- `TODO.md` — G1/G4/G10/G16/G17, each with its measurement
-- `DECISIONS.md` — 08-26/27 entries; FOUR refutations, read before proposing
-- `.claude/assembly_attempt_2026-08-25.diff` — parked assembly prerequisites
+- `region.m` — tonight's 2 real fixes: `certifiesNonPositive` (G17), `maxAffineOverRegion` (item 3)
+- `.claude/suite.sh` — new `--coverage` flag (Cobertura report)
+- `MORNING.md` — full overnight-run narrative, only read once
