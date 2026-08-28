@@ -3956,3 +3956,31 @@ measuring how many `quadFacet_exactAnotInB` refusals on THIS fixture actually ca
 facets (instrument `unionIsExact` directly, not `mergeTally`'s aggregate reasons) before
 attempting to extend the argument to that case -- which is a materially harder proof (two conics'
 combined recession behaviour, not one).
+
+## 2026-08-27 (overnight, item 3 follow-up) — CONFIRMED: 60% of the remaining refusals are the two-conic case, out of the fix's scope
+
+The previous entry's hypothesis, measured directly. Instrumented `unionIsExact`'s bare
+`exactAnotInB` branch (a TEMP probe, reverted after this measurement -- `git checkout -- region.m`
+immediately after, nothing shipped) to count `objA`'s curved-facet count on every refusal, on the
+same fixture (`x*y` over `conv{(0,0),(2,0),(2.5,1.5),(0.5,1)}`):
+
+    probeMultiQ_nq1: 55    (39%) -- exactly one curved facet: tightenUnboundedFacet's target
+    probeMultiQ_nq2: 84    (60%) -- two curved facets: OUTSIDE the fix's scope, refused as before
+    probeMultiQ_nq3:  2    ( 1%) -- three: also outside
+
+**Confirmed.** The majority of what is left (60%) is the harder case the fix deliberately declined
+to handle (`tightenUnboundedFacet` aborts outright when `numel(qidx) ~= 1`), which is exactly why
+tightening the one-conic case barely moved this fixture's final cell count (58 vs 56 baseline,
+previous entry). The one-conic slice (39%) is real and IS being helped (`okQuadFacet` successes
+rose, `quadFacet_exactAnotInB`'s overall RATE dropped) -- it is just not the majority share on this
+particular fixture, where cells accumulate conics from multiple ancestors after several folds.
+
+**What a two-conic extension would need, sketched but not attempted.** The single-conic argument's
+two mechanisms (a straight recession ray, or growth along ONE arc's own parametrization) do not
+compose directly for two conics: the region's TRUE recession cone is the intersection of both
+conics' individual recessive-direction sets (not their union, and not decidable from either alone),
+and there is no single global parameter analogous to `parabolaArcFrame`'s `u` once two curves are
+both active constraints -- the boundary can now alternate between the two arcs, not just one arc
+plus straight edges. This is a materially different and harder proof, not a small generalisation of
+the one just built, and should be scoped as its own item rather than folded into the existing one
+if it is picked up.

@@ -836,13 +836,17 @@ blocker for making the split the default, and it was a casualty of the double le
       hand-derived counterexample, fast/normal green) -- it closes a real soundness gap, it is
       just not what closes THIS scaling defect. `DECISIONS.md` 2026-08-27 (overnight, item 3 vs
       the ORIGINAL fixture).
-      **Next, if picked up again:** `tightenUnboundedFacet` only handles EXACTLY ONE curved facet
-      by design (the proof needs the single-parabola structure); the likely reason it does not
-      move this fixture's count is that a meaningful share of its surplus cells carry TWO OR MORE
-      conic facets (six pieces folded pairwise -- plausible for an accumulated cell to inherit
-      conics from multiple ancestors). Instrument `unionIsExact` directly (not `mergeTally`'s
-      aggregate reasons) to count how many `exactAnotInB` refusals on this fixture have
-      `numel(qidx) > 1` before attempting to extend the argument to that harder case.
+      **CONFIRMED overnight 2026-08-27: 60% of the remaining refusals have 2+ curved facets, out
+      of the fix's scope.** Instrumented `unionIsExact` directly (temp probe, reverted
+      immediately after -- nothing shipped): of 141 bare `exactAnotInB` refusals on this fixture,
+      `nq1=55` (39%, the fix's target, and it IS helping there), `nq2=84` (60%, outside scope),
+      `nq3=2` (1%). `DECISIONS.md` 2026-08-27 (overnight, item 3 follow-up).
+      **If picked up again:** the two-conic case is a MATERIALLY HARDER proof, not a small
+      generalisation -- the region's true recession cone is the INTERSECTION of both conics'
+      recessive-direction sets (not decidable from either alone), and there is no single global
+      parameter analogous to `parabolaArcFrame`'s `u` once two arcs are both active constraints.
+      Scope it as its own item rather than extending this one; DECISIONS.md's entry has a fuller
+      sketch of what would be needed.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
