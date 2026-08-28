@@ -5,6 +5,8 @@
 #   CCA2_TEST_TIMEOUT=1800 .claude/suite.sh
 #   CCA2_TEST_TIMEOUT=0 .claude/suite.sh          # no timeout at all
 #   .claude/suite.sh --fast                       # fast bucket, one process, budget 5 min
+#   .claude/suite.sh --fast --coverage            # ...plus a Cobertura report under
+#                                                  #    .claude/coverage/cobertura.xml
 #   .claude/suite.sh --normal                     # normal bucket, one process, budget 10 min
 #   .claude/suite.sh --slow                       # slow (symbolic) bucket, one process per suite
 #   .claude/suite.sh --slow -j 4                  # ...four at a time
@@ -158,11 +160,13 @@ esac
 # -j N anywhere after the bucket flag. Any remaining NAMES narrow the bucket to those suites --
 # silently dropping them (which an earlier version of this parsing did) turns
 # `--slow -j 4 regionTest` into a two-hour run when the user asked for one suite.
+COVERAGE=0
 EXPLICIT=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
         -j) JOBS="${2:-1}"; shift 2 ;;
         -j*) JOBS="${1#-j}"; shift ;;
+        --coverage) COVERAGE=1; shift ;;
         -*) printf 'suite.sh: unknown option "%s"
 ' "$1" >&2; exit 2 ;;
         *) EXPLICIT+=("$1"); shift ;;
@@ -181,12 +185,43 @@ printf '=== suite: %s (timeout %ss per suite) ===\n' "$CCA2DIR" "${TIMEOUT:-none
 tp=0; tf=0; ti=0; tt=0; bad=0
 run_started=$(date +%s)
 
+if [ "$COVERAGE" -eq 1 ] && [ "$ONEPROC" -ne 1 ]; then
+    printf 'suite.sh: --coverage only works with --fast or --normal (one MATLAB process)\n' >&2
+    exit 2
+fi
+
 if [ "$ONEPROC" -eq 1 ]; then
     # One process for the whole bucket: build a cell array of suite names for runtests.
     list=$(printf "'%s'," "${SUITES[@]}"); list="{${list%,}}"
-    script="r = runtests($list);
-            fprintf('COUNTS %d %d %d\\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));
-            for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\\n', r(k).Name); end, end"
+    if [ "$COVERAGE" -eq 1 ]; then
+        # Same suites, run through matlab.unittest.TestRunner instead of the plain `runtests`
+        # convenience function, so a CodeCoveragePlugin can be attached. Coverage is measured over
+        # every .m file directly under the repo root (one level, not test files or .claude/) --
+        # that is where the production code lives; test classes measuring their own coverage
+        # would just show 100% and dilute the number that matters.
+        mkdir -p "$CCA2DIR/.claude/coverage"
+        # `pwd` INSIDE matlab, not bash's $CCA2DIR: bash's $(pwd) is a Git-Bash-style path
+        # (/c/Users/...) that native Windows MATLAB does not understand as a string literal --
+        # measured directly, CoberturaFormat('/tmp/...') silently wrote nothing. matlab -batch
+        # inherits the OS-level cwd bash already `cd`'d into above, which IS the correct native
+        # path, so let MATLAB read its own pwd rather than re-embedding bash's version of it.
+        script="import matlab.unittest.TestSuite
+                import matlab.unittest.TestRunner
+                import matlab.unittest.plugins.CodeCoveragePlugin
+                import matlab.unittest.plugins.codecoverage.CoberturaFormat
+                suite = [$(printf "TestSuite.fromClass(?%s), " "${SUITES[@]}" | sed 's/, $//')];
+                runner = TestRunner.withTextOutput;
+                runner.addPlugin(CodeCoveragePlugin.forFolder(pwd, ...
+                    'IncludingSubfolders', false, ...
+                    'Producing', CoberturaFormat(fullfile(pwd,'.claude','coverage','cobertura.xml'))));
+                r = runner.run(suite);
+                fprintf('COUNTS %d %d %d\\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));
+                for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\\n', r(k).Name); end, end"
+    else
+        script="r = runtests($list);
+                fprintf('COUNTS %d %d %d\\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));
+                for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\\n', r(k).Name); end, end"
+    fi
     if [ "$TIMEOUT" = "0" ]; then
         out=$(matlab -batch "$script" 2>&1); rc=$?
     else
