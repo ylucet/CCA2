@@ -1204,16 +1204,21 @@ blocker for making the split the default, and it was a casualty of the double le
 - [ ] `splitTwoArcLens` refuses when the cut `A -> M -> B` leaves the cell (the seeded far-field
       fixture). The two arcs there join corners on OPPOSITE branches of their parabolas, so the arc
       between them swings far out and the polyline exits the cell; a different subdivision is needed.
-      **Still no reproducer (checked again 2026-08-28).** A hand-built two-parabola lens (opening
-      towards each other, shared corners solved in closed form) does NOT trigger the guard: the
-      `evalConic(ec) < -sc` check assumes both `curveEc`s share ONE sign convention (interior
-      `<=0`), and a hand-picked `ec2` built independently from its own equation lands on the
-      OPPOSITE convention (interior `>=0` for how I derived it), so the two evaluations are not
-      comparable and the guard cannot be exercised this way. The real `curveEc` pair is oriented by
-      whatever `clipPolyByConic`/`poly.curveEc` do upstream, which is what would need tracing to
-      build a faithful standalone reproducer -- not attempted further this session (bounded
-      time-box; genuinely no quick reproducer exists, confirming the prior sweep's finding rather
-      than refuting it).
+      **Still no reproducer (checked again 2026-08-28, two passes).** First pass wrongly guessed
+      the sign convention; corrected by reading `maxQuaPar.m:917`: `curveEc` is SIGN-NORMALIZED so
+      `evalConic(curveEc,.) > 0` on the face's OWN interior (not `<=0` as first assumed). Rebuilt
+      three hand-picked two-parabola lenses with that convention right -- (a) `y>=x^2` meeting
+      `y<=-(x-4)^2+20`, (b) `x>=y^2` meeting `y>=x^2` (a 90-degree axis mismatch), (c) a
+      curvature-mismatched pair (`y=x^2/2` vs `x=y^2/50`, corners near the origin and far out at
+      `(5.85,17.1)`) -- and NONE trigger `splitTwoArcLens`'s guard: `M` and both edge midpoints
+      stay strictly positive on both conics every time, well inside the lens. So the failure is
+      not "any two opposite-opening parabolas", nor just an axis or curvature mismatch by itself --
+      whatever makes the real fixture's `M` swing outside is a more specific geometric
+      configuration than these three tried. The real `curveEc` pair is produced by
+      `clipPolyByConic`/`poly.curveEc` from an actual `maxQuaPar` fold, which is what a faithful
+      reproducer needs to trace instead of guessing conic equations by hand -- not attempted
+      further this session (three configurations is a reasonable bounded search; a fourth guess
+      without new information would be thrashing, AI/CLAUDE.md sec 5).
 - [x] **FIXED** `twoCurvedWhereTheSplitCurveCrossesAnArc` -- the test passes, and `MAXQP_ASSERT=2`
       is clean on that fixture. The four non-compact-arc-piece findings this entry recorded were
       closed by `QuaPar.chordCuts` (2026-08-13) and the corrected chord derivation in
