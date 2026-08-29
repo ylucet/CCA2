@@ -1346,6 +1346,17 @@ blocker for making the split the default, and it was a casualty of the double le
       the public `maxQuaPar(g1,g2)` entry point with two operands engineered to produce this
       exact two-vertex lens, which was not attempted (nontrivial reverse-construction, separate
       from finding the failing geometry itself).
+      **ONE BOUNDED ATTEMPT, 2026-08-29: confirms the reverse-construction is real work, not
+      just tedium.** Built `g1`,`g2` as simple bounded triangles sharing the curved edge A-B
+      (`ec1`,`ec2` from the found reproducer) via `QuaPar`'s own constructor -- rejected outright,
+      `maxQuaPar:notFullDomain`, "F has a 0 entry". Every `maxQuaPar` input must be FULL-DOMAIN
+      (finite everywhere, matching a real conjugate's `+inf` outside its proper domain via
+      genuine unbounded rays, not a plain bounded polygon) -- confirmed against
+      `maxQuaParTest.m`'s own unbounded examples (`dirIn`/`dirOut` apex-plus-direction markers).
+      Getting this right needs the SAME ray-construction machinery those examples use, correctly
+      oriented so clipping produces the exact two-vertex lens -- real, careful, separate work,
+      not attempted further (the risk flagged before: an incorrectly-built full-domain input
+      could silently pass or fail for the WRONG reason, which is worse than no test).
 - [x] **FIXED** `twoCurvedWhereTheSplitCurveCrossesAnArc` -- the test passes, and `MAXQP_ASSERT=2`
       is clean on that fixture. The four non-compact-arc-piece findings this entry recorded were
       closed by `QuaPar.chordCuts` (2026-08-13) and the corrected chord derivation in
