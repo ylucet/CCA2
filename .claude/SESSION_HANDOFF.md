@@ -6,8 +6,8 @@ _2026-08-29_
 Nothing external.
 
 ## State
-- Branch `main` @ `965cfd9` — "docs: item 1 generalized -- 141 refusals
-  concentrate into ~12 cell signatures"
+- Branch `main` @ `bbf18f8` — "docs: item 1 root cause found -- a genuine
+  high-degree hub vertex, present before folding"
 - Pushed: yes — `origin/main`
 - Tests (2026-08-28): fast 312/0 · normal 12/0 · maxQuaParTest 31/0 ·
   conjCPLQTest 33/0 · conjEdgeLowerBoundTest 5/0. Slow/verylong not run.
@@ -18,9 +18,9 @@ Nothing external.
 1. G1/G4/G10 LANDED (assemblePieces diff, trade-off in DECISIONS.md
    2026-08-28). Case 21 hits a known Step-3 legacy gap, not new — don't
    re-derive.
-2. Scaling defect: the 58-vs-8 surplus traces to ~12 cell signatures
-   (89% in top 5), not a diffuse problem. Trace THEIR histories next
-   (DECISIONS.md 2026-08-29) — tractable, not a redesign.
+2. Scaling defect: root cause found — a high-degree hub vertex (8 cells
+   meet there pre-fold). Fix is a fold-STRATEGY change (resolve each hub's
+   fan once, not pairwise), not a bug fix. Not attempted.
 3. `splitTwoArcLens`: reproducer FOUND (random search, large curvature
    ratio). Needs a real `maxQuaPar(g1,g2)` regression, not built yet.
 4. Conic-conic closed form: `conicMeet.m`/`ratQ.m` exist, tested, unused —
