@@ -8,7 +8,7 @@ Nothing external.
 ## State
 - Branch `main` @ `6a8e6dd` — "docs: correct my own overconfident claim --
   the edge-adjacency pre-filter is unsafe"
-- Pushed: pending
+- Pushed: yes — `origin/main`
 - Tests (2026-08-28): fast 312/0 · normal 12/0 · regionTest 27/0 ·
   conjCPLQTest 33/0. Slow/verylong not re-run in full this session.
 - Known reds: `testcPLQ/rectBiconjugateIsAConvexUnderestimator` (verylong,
