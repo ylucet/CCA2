@@ -3105,8 +3105,39 @@ classdef region
         end
 
         function [l, why] = unionIsExact (objA, objB, ia, ib)
-        % Precondition: objA.ineqs(ia) == -objB.ineqs(ib), i.e. the two regions meet on the
-        % facet {g = 0} of that shared constraint, with objA on {g <= 0} and objB on {g >= 0}.
+        % MEMOIZED: this is a pure function of (objA, objB, ia, ib) -- nothing it reads is
+        % global or mutable -- so caching by a canonical string key changes NOTHING about the
+        % answer, only skips recomputing it. MEASURED 2026-08-29: a partial run of
+        % `.claude/step3cost.m` called this with the IDENTICAL (objA, objB, ia, ib) 34% of the
+        % time (30 of 46 calls unique) -- a same-function cell that fails to merge with a
+        % same-curve-different-arc candidate in one fold is tried against that SAME candidate
+        % again in every later fold, since neither side changes and mergeL re-derives its
+        % same-function groups from scratch each fold. `region.uieKey` builds the key; the
+        % actual computation is unchanged, in `unionIsExactCompute` below.
+            persistent cache
+            if isempty(cache), cache = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+            key = objA.uieKey(objB, ia, ib);
+            if isKey(cache, key)
+                v = cache(key); l = v{1}; why = v{2};
+                return
+            end
+            [l, why] = objA.unionIsExactCompute(objB, ia, ib);
+            cache(key) = {l, why};
+        end
+
+        function key = uieKey (objA, objB, ia, ib)
+        % objective: a canonical string key for unionIsExact's memoization cache. Includes ia,ib
+        % (which facet is treated as shared) since the same two regions could in principle be
+        % tested against a different pair of indices, even though today's callers never do.
+            sA = ''; for kk = 1:size(objA.ineqs,2), sA = [sA char(objA.ineqs(kk).f) '|']; end %#ok<AGROW>
+            sB = ''; for kk = 1:size(objB.ineqs,2), sB = [sB char(objB.ineqs(kk).f) '|']; end %#ok<AGROW>
+            key = sprintf('%d,%d##%s##%s', ia, ib, sA, sB);
+        end
+
+        function [l, why] = unionIsExactCompute (objA, objB, ia, ib)
+        % The actual computation, unchanged -- see unionIsExact above for the memoized entry
+        % point. Precondition: objA.ineqs(ia) == -objB.ineqs(ib), i.e. the two regions meet on
+        % the facet {g = 0} of that shared constraint, with objA on {g <= 0} and objB on {g >= 0}.
         %
         % merge unions them by deleting that facet from both and intersecting what is left:
         % writing A = A' n {g<=0} = objA and B = B' n {g>=0} = objB, it returns M = A' n B'.

@@ -220,11 +220,16 @@ conditions, each with a measurement on the CURRENT tree:
    2026-08-28: the point is to know the cost and compare it to plain SCIP, not to clear a number
    picked in advance). Measured extensively on the reference non-box fixture (the A.4/A.5
    quadrilateral): `maximumP` on one fold went from 195.9 s (2026-08-18) to 173 s
-   (2026-08-28) from work landed since, then to as low as 2226-2341 s TOTAL for the full 5-fold
-   run depending on machine load (AI/CLAUDE.md sec 3 -- direction, not magnitude). **Not yet
-   measured against a real QPLIB-shaped non-box constraint** -- everything above used the one
-   reference fixture; that comparison is still open and is the number that actually answers
-   "fast enough for QPLIB", not another pass on the same fixture.
+   (2026-08-28) from work landed since, then TOTAL for the full 5-fold run from 2944 s
+   (original baseline) to 2226-2546 s (2026-08-28, machine-load range) to **2186 s (2026-08-29,
+   after memoizing `unionIsExact` -- a real, verified-safe, but modest win**: cell counts and
+   every merge-tally count are byte-identical to every prior run, confirming the cache changes
+   no answer; see DECISIONS.md 2026-08-29 "landed"). AI/CLAUDE.md sec 3 -- direction, not
+   magnitude, still applies. **Not yet measured against a real QPLIB-shaped non-box constraint**
+   -- everything above used the one reference fixture; that comparison is still open and is the
+   number that actually answers "fast enough for QPLIB", not another pass on the same fixture.
+   **The fold-strategy redesign (below) is what would change the underlying cell-count surplus,
+   not just the wall-clock cost of computing it -- still not attempted.**
 4. ~~Full suite green.~~ **MET, in the sense sec 9/10 define it (fast+normal+slow all pass; the
    one known-red is quarantined by name, not silently red).** Re-verified 2026-08-29:
    - **Slow bucket: 96/0.** The previously-known red (`theEMPTYDomainConjugateRoundTripsToMinusInfinity`)

@@ -4429,3 +4429,37 @@ conjugate over much of the dual), fragmented by the incremental fold process. **
 fold 5 is the LAST fold -- all 6 pieces are already in, and they still have not merged.** So
 this is not "hasn't finished yet"; it is the final, persistent state, confirming rather than
 contradicting the hub-vertex/different-arc diagnosis above, not a separate coverage bug.
+
+## 2026-08-29 (landed) — `unionIsExact` memoized: a small, safe, MEASURED win, not the fold-strategy fix
+
+Rather than the full fold-strategy redesign (still not attempted -- a genuine algorithm change),
+found and landed a smaller, provably-safe optimization: `region.unionIsExact` is a PURE function
+of its four arguments (nothing global or mutable feeds it), so caching by a canonical string key
+cannot change any answer, only skip recomputing one already known. Verified the redundancy is
+real before implementing: a partial (fold 1-3) run with a temporary key-logging probe found
+**30 unique keys out of 46 total calls -- 34% exact duplicates**, consistent with the hub-vertex
+finding above (a same-function cell that fails against a same-curve-different-arc candidate in
+one fold is tried against that SAME candidate again in every later fold, since neither side
+changes and `mergeL` re-derives its groups from scratch each fold).
+
+**Landed as `unionIsExact` (memoized wrapper, persistent `containers.Map` cache) calling the
+unchanged original logic, renamed `unionIsExactCompute`.** One bug caught before it shipped:
+first attempt called the new helper methods with STATIC syntax (`region.uieKey(...)`) though
+they are instance methods in the same block as `unionIsExact` -- `regionTest` caught it
+immediately (2 failures, `MATLAB:subscripting:classHasNoPropertyOrMethod`), fixed by calling
+them as `objA.uieKey(...)` instead.
+
+**Correctness: IDENTICAL to every prior run.** Full 5-fold measurement on the reference
+fixture: `paired=64->cells=58`, every merge-tally reason count byte-identical to all previous
+runs (this session's and earlier). The cache changes nothing about what gets computed, only
+skips recomputing it.
+
+**Speed: real but modest, not a breakthrough.** TOTAL 2186 s against the 2226-2546 s range of
+prior runs, with each fold's `maximumP` a bit faster than its own prior measurements (fold 5:
+428 s vs 428-503 s previously). Consistent with `unionIsExact` being only PART of a fold's cost
+(the 2026-08-18 profile's own breakdown: `getVertices` 125.6 s, region ctor 84.3 s, `merge` 66.1 s
+of one ~200 s fold) -- eliminating a third of its redundant calls saves a real slice, not the
+whole fold. **This is not the fold-strategy fix** (TODO.md G4, DECISIONS.md 2026-08-29 "item 1,
+root cause") -- that remains open and is what would actually change the surplus cell count, not
+just the wall-clock cost of computing it. Verified clean: fast 312/0, normal 12/0, regionTest
+27/0.
