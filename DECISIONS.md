@@ -4148,3 +4148,35 @@ genuinely too fine an arrangement for `unionIsExact` to recombine, because many 
 not pairwise-union convexly. The next attempt should look UPSTREAM of `unionIsExact` -- at why
 the arrangement has cells this fragmented in the first place -- not at the merge certificate
 again.
+
+## 2026-08-28 (very last) — the upstream cause, first witness: a genuine SLIVER cell failing against THREE different neighbours
+
+One more rung-1 step (temp probe on `holdsOn`, geometry only, reverted after -- nothing shipped):
+dumped the actual cell behind three of fold 2's `exactAnotInB` refusals. All three are the SAME
+cell A --
+
+    A.nv=4, vertices (0.572949,1.80902) (0.818182,1.72727) (0.0919554,0.954022) (0.25,0.875)
+    A.ineqs: 4 linear + 1 quadratic (a genuine parabola, (s1+0.6 s2)^2 - 4.8 s1 <= 0)
+    area 0.0379, diameter 1.061  -- a SLIVER: about 15x thinner than a "round" shape of the
+    same diameter (a disc of that diameter has area ~0.56)
+
+-- refused against three DIFFERENT candidate neighbours (three separate merge attempts), each
+with a real, non-numerical-noise excess (0.196, 0.93, 3.125 on the violated bound).
+
+**Working hypothesis, not yet proven:** this matches the SAME topological signature
+`maxQuaPar.m`'s `assemblePieces` documents for its own (different, numeric) pipeline -- "a
+genuinely AMBIGUOUS 3-way (or more) cluster... there is no valid pairwise resolution however the
+candidates are chosen" -- except here in the LEGACY `region`/`functionNDomain` pipeline, and about
+CELL SHAPE rather than vertex identity: a thin sliver sitting where 3+ neighbours meet may need a
+genuinely N-ARY union to recombine correctly, which `unionIsExact`'s inherently PAIRWISE test
+(one A, one B, checked in isolation) cannot express even in principle -- no single B' can contain
+a sliver whose true covering is the union of several neighbours together.
+
+**Not confirmed, and deliberately not chased further this session** -- confirming it needs: (1)
+identifying ALL of A's true geometric neighbours (not just the 3 sampled here) and checking
+whether their COMBINED union (not any one pairwise attempt) is what A's own boundary actually
+needs; (2) if so, deciding whether an N-ary merge test is buildable, or whether the real fix is
+upstream (whatever fold step produced this sliver in the first place, avoiding it at the source
+per `AI/CLAUDE.md` sec 5's rung 5 -- reduce scope / prevent, rather than reconcile after the
+fact). Either is real, scoped, multi-step work for a fresh session, not a continuation of
+today's `region.m` fixes.

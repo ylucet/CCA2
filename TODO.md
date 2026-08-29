@@ -903,6 +903,20 @@ blocker for making the split the default, and it was a casualty of the double le
       cause is upstream of `unionIsExact`**: the cells Step 1/2/`maxQuaPar` hand it are
       genuinely too fragmented to pairwise-union convexly. Any future attempt should instrument
       WHY the arrangement is this fine before touching `region.m` again.
+      **FIRST WITNESS, 2026-08-28 (very last):** one of fold 2's refused cells is a genuine
+      SLIVER (area 0.038, diameter 1.06 -- ~15x thinner than round) refused against THREE
+      different candidate neighbours, each with a real excess margin. Matches the SAME
+      topological signature `maxQuaPar.m`'s `assemblePieces` already documents for its own
+      pipeline (an ambiguous 3-or-more-way cluster with no valid PAIRWISE resolution) -- not yet
+      proven here, but a strong lead: `unionIsExact` only ever tests ONE candidate B against A in
+      isolation, and a sliver whose true covering needs several neighbours TOGETHER can fail
+      every pairwise attempt while still being perfectly recombinable as a group.
+      **Next step, if picked up:** (1) find ALL of this sliver's true geometric neighbours (not
+      just the 3 sampled) and check whether their COMBINED union is what its boundary actually
+      needs; (2) if confirmed, decide between an N-ary merge test (new machinery) or fixing
+      whatever upstream fold step produces slivers like this in the first place (prevention over
+      reconciliation, `AI/CLAUDE.md` sec 5 rung 5). `DECISIONS.md` 2026-08-28 (very last) has the
+      exact witness (vertices, constraints, all three failed candidates).
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
