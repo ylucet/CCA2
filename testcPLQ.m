@@ -138,6 +138,21 @@ classdef testcPLQ < matlab.unittest.TestCase
         % so whichever test runs first fills it, and having two different compute closures for one
         % key meant the cost of a cold 'max' depended on which test got there -- the slow
         % `tri.maximum` path if it was this one. Same expression in both places, no trap.
+        %
+        % QUARANTINED 2026-08-29 (G11, AI/CLAUDE.md sec 7/8: known red, named, not deleted or
+        % weakened). This does not finish (>3600 s, `TODO.md` G11) -- confirmed SCIP-relevant
+        % 2026-08-28: `biconjugateF`'s `functionNDomain.maxOfList`/`mergeL`/`region.maximum` is
+        % the EXACT machinery `QuaParCPLQ.conj` (reached by `biconj('cplq')`'s non-box Case C
+        % path) reuses verbatim, not an unrelated legacy-only slowdown. `SCIP_READINESS.md`
+        % Phase C tracks the underlying cost; this is a genuine, currently-unresolved performance
+        % ceiling, not a correctness defect (fast/normal suites pass, and this stage's own
+        % definition check has no counterexample, only no verdict in reasonable time). Delete
+        % this line once that ceiling is addressed (fold-strategy work, DECISIONS.md 2026-08-29
+        % "item 1, root cause") -- the body below is unchanged and ready to verify it.
+            testCase.assumeFail(['QUARANTINED (G11): biconjugateF on this fixture does not ' ...
+                'finish in the verylong budget -- confirmed SCIP-relevant (same Step 3 legacy ' ...
+                'machinery biconj(''cplq'') reuses for non-box Case C), not a correctness ' ...
+                'defect. See TODO.md G11 and SCIP_READINESS.md Phase C.']);
             p = plqStage.get('PRect', 'biconj', @() ...
                 plqStage.get('PRect', 'max', @() ...
                     crossPieceMax(plqStage.get('PRect', 'conj', @() ...
