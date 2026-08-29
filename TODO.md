@@ -868,6 +868,24 @@ blocker for making the split the default, and it was a casualty of the double le
       parameter analogous to `parabolaArcFrame`'s `u` once two arcs are both active constraints.
       Scope it as its own item rather than extending this one; DECISIONS.md's entry has a fuller
       sketch of what would be needed.
+      **PARTIALLY CLOSED 2026-08-28, in two steps, both real (not the scaling defect itself).**
+      (1) Mechanism 1 (straight recession ray) generalized to two conics -- sound, but MEASURED
+      to move NOTHING on this fixture (139 `quadFacet_exactAnotInB` refusals before and after,
+      byte-identical), confirming rather than refuting its own stated scope: it only confirms
+      genuine UNBOUNDEDNESS, and this fixture's two-conic refusals are all bounded regions.
+      (2) **A real, separate CLOSED-FORM result found and landed:** when BOTH curved facets are
+      CONVEX (`trace(Qi)>0`) with DIFFERENT axes, the region is provably BOUNDED -- a rank<=1 PSD
+      conic can only be receded along its own null direction, so two different axes share no
+      common receding direction, full stop, no arc parametrization needed. This is NOT the
+      general two-conic proof (same-axis and any-concave-facet configurations still abstain,
+      correctly), but it closed a genuine, previously-undetected BUG: `maxAffineOverRegion`
+      returned `Inf` -- unconditionally wrong, not conservative -- on `region([y^2-x,x^2-y],[x
+      y])`, whose true max of `y-x` is `0.25` at a smooth tangency point, confirmed by brute
+      force. `regionTest.twoDifferentAxisConvexConicsAreProvablyBounded` pins it on 6 directions.
+      **Not yet measured against THIS scaling fixture's own nq2=84 population** (whether many of
+      those 84 two-conic refusals happen to be different-axis-convex, the case this now
+      resolves, or same-axis/mixed, which it does not touch) -- that measurement is the natural
+      next step, not a re-derivation of the math.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
