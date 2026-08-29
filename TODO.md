@@ -914,12 +914,17 @@ blocker for making the split the default, and it was a casualty of the double le
       `obj.ineqs(mq1(i)) == -obj2.ineqs(mq2(j))`), meeting the sliver at one point and running off
       in unrelated directions. `unionIsExact` is correctly refusing candidates that were never
       real neighbours -- not a proof gap, one-conic or N-ary, at all.
-      **ACTIONABLE LEAD:** `region.merge`'s "same conic equation" match is necessary but not
-      sufficient for genuine adjacency -- a cheap pre-filter (do `A` and `B` actually share an
-      EDGE, two consecutive matching vertices, not just a vertex or the bare curve equation)
-      would eliminate these before paying for `unionIsExact`'s LP-backed certificate at all. This
-      is a real, cheap, well-scoped PERFORMANCE fix (fewer wasted `unionIsExact` calls), whether
-      or not it also touches the final cell count.
+      **CORRECTION (checked before implementing, same session): the "cheap pre-filter" is NOT
+      safe as stated -- do not implement it.** `region.merge`'s own HISTORY names the exact
+      precedent: `quadCutsOther` (removed 2026-08-17) was the SAME CLASS of plausible-looking
+      geometric pre-check ("refused when one region's conic met the other anywhere but at a
+      vertex") and it wrongly refused valid merges, since two cells CAN union convexly while
+      sharing a curve only partially or elsewhere. `unionIsExact`'s soundness is purely
+      algebraic, not dependent on segment adjacency, so an edge-sharing requirement could reject
+      a merge `unionIsExact` would have correctly approved. Six refused samples is evidence, not
+      a proof of safety. `DECISIONS.md` 2026-08-28 (correction) has the full argument. Any future
+      attempt at a candidate-generation speedup here needs a soundness proof first, not another
+      plausible heuristic.
       **STILL OPEN, and now sharper:** whether the sliver's TRUE neighbour (whichever piece
       shares its actual arc SEGMENT) was ever generated as a candidate at all, and if so, whether
       IT also failed and why. That is where to look next -- `unionIsExact`'s certificate has now

@@ -4216,3 +4216,34 @@ never real neighbours say nothing about whether `A`'s TRUE neighbour (whichever 
 shares its full curved edge) was tried and also failed, or was never generated as a candidate at
 all. That is where a future session should look first -- not at `unionIsExact`'s certificate,
 which this session has now shown twice over is not the defect.
+
+## 2026-08-28 (correction) — the edge-adjacency pre-filter this session proposed is UNSAFE, and there is a direct precedent
+
+Before implementing the "cheap pre-filter" the previous entry recommended (skip `unionIsExact`
+when the matched curved facet's two operands do not share two matching endpoints, only a bare
+equation), checked `region.merge`'s own HISTORY comment first -- and it names this exact class of
+mistake already made and reverted. `quadCutsOther` (removed 2026-08-17) "refused when one
+region's conic met the other anywhere but at a vertex" -- a DIFFERENT-looking but SAME-CLASS
+heuristic (a plausible local-geometry pre-check standing in for the real certificate) -- and it
+was wrong: "two adjacent cells each carrying a different parabolic arc ELSEWHERE have a perfectly
+convex union and were refused by the first outright", costing 322 of 612 attempts on the control
+fixture. The file's own conclusion: `unionIsExact` is "the EXACT criterion... so dropping a
+conservative pre-check cannot make a wrong merge happen" -- which cuts both ways: ADDING one back
+CAN.
+
+**Why my proposed filter is not provably safe.** `unionIsExact`'s soundness argument (`A subset
+B'` and `B subset A'`) is purely ALGEBRAIC -- it does not require the matched facet to be a
+genuinely shared boundary SEGMENT, only that the inequality removed from each side is the same
+equation with opposite orientation. Two operands whose curved facet only touches at one point
+could, in principle, still satisfy the global containment conditions and merge validly, the same
+way two cells sharing a DIFFERENT parabolic arc elsewhere can still union convexly. I have six
+empirical samples where the arcs did not share a segment and `unionIsExact` correctly refused all
+six -- that is evidence, not a proof, and `quadCutsOther`'s own history is a direct warning
+against trusting six examples of a plausible-sounding geometric shortcut.
+
+**Correction: do not implement the pre-filter as stated.** It would need either a proof that
+sharing only one endpoint makes the algebraic containment conditions provably impossible (not
+attempted), or it stays exactly what `unionIsExact` already is -- a call that is always made and
+always correct, just possibly slower on candidates like this one. The actionable finding stands
+(these six merges are correctly refused, and the sliver's TRUE neighbour, if any, is still
+unidentified) -- the SPEEDUP idea does not, until someone proves it sound.
