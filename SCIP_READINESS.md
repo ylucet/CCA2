@@ -206,17 +206,67 @@ measured: cell count (86 to 60 so far) and the merge gates.
 
 ## Gate -- what "ready for SCIP" means
 
-All of the following, each with a measurement on the current tree:
+**REWRITTEN 2026-08-29** -- the version below (as of 2026-08-18) predated an entire session's
+work landing three real `region.m` bug fixes, closing G1/G4/G10 in `assemblePieces`, and
+correcting several load-bearing assumptions about what "ready" actually requires. All four
+conditions, each with a measurement on the CURRENT tree:
 
 1. ~~`checkBoxEnvelopeForSCIP` shows **no ERROR rows** (A1, A2).~~ **MET 2026-08-18** -- six rows,
-   no ERROR, every one 0 s and meshed.
+   no ERROR, every one 0 s and meshed. Unaffected by anything since; not re-measured.
 2. ~~The direct-formula / symbolic map exists and names the entry point a separator should call
    (B1, B2).~~ **MET 2026-08-18** -- the map is B1, the entry point is `q.biconj('cplq')`, and on
    SCIP's own shapes it answers in 0.01 s without reaching Step 3.
-3. Per-term cost is measured, attributed, and inside a **stated** target (C1-C3).
-4. Full suite green -- currently **332 / 0** -- with A2's new tests in it.
+3. **Timing is MEASURED and COMPARED, not held to an arbitrary target** (revised framing,
+   2026-08-28: the point is to know the cost and compare it to plain SCIP, not to clear a number
+   picked in advance). Measured extensively on the reference non-box fixture (the A.4/A.5
+   quadrilateral): `maximumP` on one fold went from 195.9 s (2026-08-18) to 173 s
+   (2026-08-28) from work landed since, then to as low as 2226-2341 s TOTAL for the full 5-fold
+   run depending on machine load (AI/CLAUDE.md sec 3 -- direction, not magnitude). **Not yet
+   measured against a real QPLIB-shaped non-box constraint** -- everything above used the one
+   reference fixture; that comparison is still open and is the number that actually answers
+   "fast enough for QPLIB", not another pass on the same fixture.
+4. **Full suite green -- NOT MET.** Known reds, both attributed and both SCIP-relevant (neither
+   is a stray, unexplained failure):
+   - `testcPLQ/rectBiconjugateIsAConvexUnderestimator` (verylong) -- does not finish. Confirmed
+     2026-08-28 to exercise the EXACT SAME legacy Step 3 machinery
+     (`functionNDomain.maxOfList`/`mergeL`/`region.maximum`) that `biconj('cplq')`'s non-box
+     Case C path reuses, so this is a genuine SCIP-relevant performance ceiling, not an
+     unrelated legacy-only concern. Not yet formally quarantined (§8's own rule: name it, state
+     why, never leave it silently red -- see TODO below).
+   - Slow bucket not re-run in full this session before 2026-08-29; a fresh run is the other
+     half of closing this gate item.
 
-Only then: wire the bridge, expose value and subgradient off whatever B2 names, and run QPLIB.
+Only then: wire the bridge, expose value and subgradient off whatever B2 names, and run QPLIB
+(spike/SCIP's job, not this project's, per the umbrella working agreement).
+
+---
+
+## What changed since 2026-08-18, for anyone reading this file cold
+
+- **Three real, independently-verified bugs fixed in `region.m`'s `maxAffineOverRegion`**
+  (different-axis convex conics, same-axis-opposite-sense convex conics, and a sign-gap in the
+  original mechanism) -- each previously returned `Inf` where the true value was finite. None of
+  the three moved the reference fixture's own cell count (measured three times, byte-identical),
+  but each is a genuine correctness fix on its own witness and may matter on QPLIB's actual
+  constraint shapes, which this project has not yet tried.
+- **G1/G4/G10 landed** (the parked `assemblePieces` diff, `collapseTinyEdges` +
+  `matchHalfEdges`'s sagitta test) -- a deliberate, user-authorized trade-off: fixes the
+  numeric-path assembly defect at the cost of one symbolic Case-C fallback input (sweep case 21)
+  hitting the known Step 3 legacy gap instead of refusing fast.
+- **The scaling defect's real cause found**: a high-degree hub vertex in the dual arrangement
+  where many same-function cells from different pieces meet at one point without sharing a real
+  edge, so pairwise folding re-tests far more candidates than the answer needs. The fix is a
+  fold-STRATEGY change (resolve each hub's fan once, not pairwise) -- a genuine algorithm change,
+  not attempted. This is what actually determines non-box timing for real QPLIB constraints, more
+  than any single bug fix does.
+- **Conic-conic exact intersection infrastructure exists** (`conicMeet.m`/`ratQ.m`, tested,
+  12/0) but is wired into nothing -- built for a `QuaCon` class that exists only as design docs
+  (`doc/QuaConExample.md`, `CONJ_FIELD_PROOF.md` sec 6), not as code. Corrects this file's
+  earlier read of `region.getVertices`'s remaining `solve()` cost as "needs a quartic
+  implementation" -- it needs `QuaCon`, or a proven-safe adapter, neither of which exists yet.
+
+Full detail, evidence, and the mechanisms ruled unsafe along the way are in `DECISIONS.md`
+2026-08-28/29 and `TODO.md`'s G1/G4/G10 and item-3 entries.
 
 ---
 
@@ -232,6 +282,10 @@ the only one that still reaches Step 3. A1 and A2 are also close: `x^2 - y^2` ov
 now returns in 0.00 s through the separable route (B1's table;
 `biconjCPLQTest.separableOverABoxTakesTheOneDimensionalRoute` pins it), so section 0.0.1's two
 ERROR rows and its "no mesh" headline both need re-deriving.
+
+**Update 2026-08-29: sequencing is effectively done.** A1/A2/B are all closed; what remains is
+gate item 4 (quarantine the known reds, confirm the slow bucket) and the fold-strategy work that
+would make gate item 3's non-box timing actually competitive, not just measured.
 
 
 ---
