@@ -947,11 +947,16 @@ blocker for making the split the default, and it was a casualty of the double le
       ought to have merged" -- assumes every function's true argmax region is a single connected
       convex piece. The sliver is a concrete counterexample to that assumption AT THIS FOLD: it
       may need a piece not yet produced, or may simply be one of several genuinely-separate
-      components. **Whether this generalises to most of the 58-vs-8 surplus, or the sliver is a
-      rare outlier, is the open question now** -- not `unionIsExact`, not candidate generation,
-      not any boundedness proof (all three have been checked and cleared this session). Next
-      step: sample 2-3 more of fold 5's surplus cells the same way and check the same-function
-      ratio. `DECISIONS.md` 2026-08-28 (item 1, resolved) has the full chain.
+      components. **GENERALIZED, 2026-08-29: it is not an outlier.** A compact signature probe
+      over the FULL 5-fold run's 141 `exactAnotInB` refusals found only 12 DISTINCT cells behind
+      all of them, the top 5 accounting for 89%, and the original sliver persisting unmerged
+      from fold 2 through fold 5. **The 58-vs-8 surplus is dominated by a handful (~5-6) of
+      specific, persistently-stuck cells, not a broad, diffuse problem.** `unionIsExact`,
+      candidate generation, and every boundedness mechanism have all been independently checked
+      and cleared this session -- what remains is tracing these FEW cells' actual histories
+      (which fold created each, what its true intended neighbour would have to be), a
+      tractable, bounded investigation rather than a general redesign.
+      `DECISIONS.md` 2026-08-29 (item 1, generalized) has the full signature breakdown.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls

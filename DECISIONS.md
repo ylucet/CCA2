@@ -4361,3 +4361,31 @@ history in this file -- see `region.merge`'s HISTORY on `quadCutsOther`) or a re
 piece 11's boundary lands 0.00143 from its closest candidate instead of exactly on it. Re-run the
 FULL fast bucket (not just the two fixtures already known) before concluding it's isolated to
 this one.
+
+## 2026-08-29 (item 1, generalized) — the whole fixture's 141 refusals concentrate into ~12 cell signatures, and the sliver persists across every fold to the end
+
+Fold 2's finding (14 refusals, 2 cells) generalized to the FULL 5-fold run: a compact signature
+probe (`nv`, first vertex, temp, reverted) over all 141 `exactAnotInB` refusals in the whole
+fixture (14+43+26+58 across folds 2-5, matching the per-fold tallies exactly) found only
+**12 DISTINCT cell signatures** account for every one of them:
+
+    37x A[nv=4 v1=(0.25,1.4091)]      28x A[nv=5 v1=(0.57295,1.809)]
+    25x A[nv=4 v1=(0.57295,1.809)]    21x A[nv=4 v1=(0.25,0.875)]
+    14x A[nv=4 v1=(0.33768,1.5591)]    8x A[nv=3 v1=(0,0)]
+    (6 more, 1-2 occurrences each)
+
+**The top 5 signatures account for 125 of 141 (89%).** And the original sliver
+(`v1=(0.57295,1.809)`) is not a fold-2 curiosity: it reappears with `nv=4` (25x) AND `nv=5` (28x)
+-- meaning a cell rooted at that same vertex persists, unmerged, from fold 2 all the way through
+fold 5, repeatedly tried against the same family of same-curve-different-arc false candidates
+and never once finding a real partner.
+
+**This is the closing finding for item 1, and it is good news for tractability.** The 58-vs-8
+surplus is not 50 independent small problems -- it is dominated by a HANDFUL of specific,
+persistently-stuck cells (best guess ~5-6 underlying cells, since some signatures are the same
+cell surviving into a later fold with one more vertex from an intervening split). Whoever
+attempts a real fix should trace these ~12 signatures' actual histories (which fold created each,
+what its true intended neighbour would have to be) rather than treating this as a broad,
+diffuse problem needing a general redesign. `unionIsExact`, candidate generation, and the
+boundedness proofs have all been independently checked and cleared this session -- what remains
+is specific to these few cells.
