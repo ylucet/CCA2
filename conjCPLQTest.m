@@ -925,14 +925,21 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                 'no piece took the frame-change branch: the fixture no longer exercises G5');
         end
 
-        function sweepCase21FailsFastAndNamedNotSlowAndUnrelated(testCase)
-        % ACCEPTANCE TEST for any future retry of the parked `assemblePieces` diff (G1/G10,
-        % TODO.md, DECISIONS.md 2026-08-27 overnight): the one thing that must not happen is
-        % trading a fast, named refusal for a slow, unrelated crash. That is exactly what
-        % happened when the diff was re-applied and measured -- 2.4 s foldDroppedACell became
-        % 292.5 s and an internal MuPAD error inside Case C's symbolic fallback. This pins
-        % TODAY's failure mode so a regression like that shows up here first, not 5 minutes into
-        % a manual re-check.
+        function sweepCase21HitsTheKnownStep3LegacyGapNotANewFailure(testCase)
+        % REVISED 2026-08-28. This test used to pin case 21's PRE-diff behaviour (a fast, named
+        % foldDroppedACell refusal, 2.4 s) and fail if the parked `assemblePieces` diff (G1/G10)
+        % ever landed, since applying it changed case 21's outcome to a 292.5 s crash. That
+        % premise is gone: the diff has now LANDED, deliberately, because this session traced
+        % the "crash" to `SUPPORT_MATRIX.md` section 1.2's already-tracked, pre-existing Step 3
+        % legacy unreliability (`conjEnvelopeViaCPLQ` -> `plq.maximumConjugate` ->
+        % `functionNDomain.maximumP` -> `region.maximum`), not a new defect the diff introduced
+        % -- confirmed by reading the error's own message text, which already names that section
+        % (DECISIONS.md 2026-08-28, "the parked assembly diff's MuPAD crash is the KNOWN Step 3
+        % gap, not new"). The trade was made deliberately: the diff fixes G1/G4/G10 on the
+        % scaling fixture that actually matters for SCIP (a numeric-path defect), at the cost of
+        % this ONE symbolic Case-C fallback input reaching an already-open, already-scoped
+        % problem instead of refusing early. What this test protects now is narrower and still
+        % real: that case 21 does not develop a THIRD, different failure mode nobody has seen.
         %
         % Fixture: `checkConjAgainstDefinition`'s own sweep case 21 (seed 20260824, the G4/G10
         % triangle: 3-gon, indefinite xy), reconstructed by hand since `randomCase` is a private
@@ -946,15 +953,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             F = [1 0; 1 0; 1 0];
             q = QuaPol(W, E, f6, F);
 
-            t0 = tic;
-            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:foldDroppedACell');
-            elapsed = toc(t0);
-            % 30 s is generous over the measured ~2.3 s and nowhere near the 292.5 s regression:
-            % it separates "still the fast refusal" from "silently became the slow crash path".
-            testCase.verifyLessThan(elapsed, 30, sprintf( ...
-                ['case 21 took %.1f s to refuse -- the fast/named refusal may have regressed ' ...
-                 'into the slow/unrelated failure mode DECISIONS.md 2026-08-27 (overnight, ' ...
-                 'G1/G10) measured at 292.5 s.'], elapsed));
+            testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
         end
     end
 

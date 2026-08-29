@@ -274,6 +274,7 @@ function g = maxQuaPar(g1, g2)
     % one and the first that loses the probe is named. Between them and clipByFace, that pins a
     % "no piece with src [k l]" report (TODO.md G1/G10) to a single line of this file.
     probeStage('after the clip loop', pieces);
+    pieces = collapseTinyEdges(pieces);     probeStage('collapseTinyEdges', pieces);
     pieces = dropDegeneratePieces(pieces);  probeStage('dropDegeneratePieces', pieces);
     pieces = dedupPieces(pieces);           probeStage('dedupPieces', pieces);
     pieces = dropSubsumedPieces(pieces);    probeStage('dropSubsumedPieces', pieces);
@@ -661,6 +662,79 @@ function partitionReport(pieces)
     txt = '';
     for i = 1:size(srcs,1), txt = [txt sprintf(' (%d,%d)', srcs(i,1), srcs(i,2))]; end %#ok<AGROW>
     fprintf('SRCS PRODUCED:%s%s', txt, newline);
+end
+
+function pieces = collapseTinyEdges(pieces)
+% Merge each piece's OWN consecutive vertices that are closer together than the tolerance
+% `matchHalfEdges` matches at. A segment shorter than that tolerance is not a feature the assembly
+% can see: both of its endpoints lie within tolPos of each other, so every candidate that matches
+% one matches the other, and the pairing is ambiguous by construction.
+%
+% MEASURED, and this is G1/G4/G10's hole. On `TODO.md` G4's fixture, piece 28 (src [21 6]) is an
+% UNBOUNDED piece with two vertices
+%       [-0.20801507 -0.90722285]   and   [-0.20801318 -0.90721878]
+% 4.5e-06 apart -- three orders of magnitude below tolPos = 1e-3. It is a cone whose apex has been
+% split into two points by arithmetic. Its zero-length segment then matched a neighbour it has no
+% business matching, `buildGlobalVertices` unified its vertices with distant ones, and face 28 came
+% out spanning
+%       [-0.20801318 -0.90721879; -0.60324685 0.011361831; -0.20791186 -0.90742891; ...]
+% -- a different region entirely, leaving the point (-0.866025, 0.5) covered by nothing. That is
+% the `Inf` the fold cross-check reports, and the "no piece with src [21 6]" that `TODO.md` G1
+% describes: the piece IS produced, and assembly loses it.
+%
+% WHY COLLAPSING IS RIGHT AND NOT A TOLERANCE HACK. `assemblePieces` already reaches this
+% conclusion -- one stage too late. Its `checkOrphanHalfEdges` header records that for every
+% orphaned half-edge investigated, "its own two endpoints ALWAYS resolved to the very same global
+% vertex", and that emitting no edge for it "is exactly correct, not a guess". This does the same
+% thing BEFORE matching, where the degenerate edge cannot first corrupt the pairing it is later
+% found not to need.
+%
+% THE ARC IS COLLAPSED TOO, and the first version of this did not, which was wrong. The note then
+% read "a curved edge between two near-coincident endpoints is a lens, which is a legitimate shape".
+% A lens IS legitimate -- at a scale the arrangement can see. One whose two endpoints are 5.76e-05
+% apart, against a matching tolerance of 1e-3, is not: its area is ~3e-09, far below the collapse
+% threshold `dropDegeneratePieces` already applies to straight cells, and downstream it is a
+% liability rather than information. Measured on `TODO.md` G4's fixture -- with only the straight
+% edges collapsed, assembly then succeeded and the NEXT fold died in
+% `clipArcByHalfPlane:internal`, "no crossing of the clip line found within the arc's own u-span":
+% exactly one endpoint outside, so a crossing must exist, but the quadratic's discriminant on an
+% arc that short comes out negative and no real root is found. The arc was never the geometry; it
+% was noise wearing a conic.
+    tolPos = 1e-3;                       % keep in step with matchHalfEdges
+    for i = 1:numel(pieces)
+        p = pieces(i);
+        nv = size(p.V,1);
+        if nv < 2, continue, end
+        ca = p.curveAfter; if isempty(ca), ca = 0; end
+        bounded = isempty(p.dirIn);
+        keep = true(1, nv);
+        arcCollapsed = false;
+        % Walk the segments in boundary order. For a bounded piece the closing edge nv->1 is a
+        % segment too; for an unbounded one it is not (the rays close it).
+        last = nv; if ~bounded, last = nv-1; end
+        for e = 1:last
+            j = mod(e, nv) + 1;
+            if ~keep(e) || ~keep(j), continue, end
+            if norm(p.V(j,:) - p.V(e,:)) > tolPos, continue, end
+            if e == ca, arcCollapsed = true; end
+            % Drop the LATER endpoint, except that an unbounded piece's first and last vertices
+            % are the two ray apexes and dropping the wrong one moves a ray.
+            if ~bounded && j == nv, keep(e) = false; else, keep(j) = false; end
+        end
+        if all(keep), continue, end
+        newIdx = cumsum(keep);
+        if ca > 0 && keep(ca) && ~arcCollapsed
+            p.curveAfter = newIdx(ca);
+        elseif ca > 0
+            % Either the arc's own start vertex went, or its edge did. In both cases the conic no
+            % longer describes any edge this piece still has -- keeping it would put the arc on
+            % whichever edge inherited the index, which is the latent bug localEdgeLists' header
+            % records from the other direction.
+            p.curveAfter = 0; p.curveEc = [];
+        end
+        p.V = p.V(keep,:);
+        pieces(i) = p;
+    end
 end
 
 function pieces = dropDegeneratePieces(pieces)
@@ -4222,7 +4296,48 @@ function opp = matchHalfEdges(pieces, HE)
             % of a two-vertex "lens" cell, or an arc and the cut edge that closed the cell it was
             % split from) while being completely different boundaries, so endpoint coincidence
             % alone must not pair them: a curved half-edge only ever matches another curved one.
-            if any(HE(h2).ec ~= 0) ~= any(HE(h).ec ~= 0), continue; end
+            % ...unless the straight one LIES ON that conic, which is a different situation and is
+            % SUPPORT_MATRIX 4.6's "assembly after an arc split: one side CURVED, the other
+            % STRAIGHT". The reason above is sound and stays: an arc and its own chord share both
+            % endpoints while bounding different sets, so endpoint coincidence alone must not pair
+            % them. What separates the two cases is the SAGITTA. A genuine chord of a genuine arc
+            % departs from the conic in the middle; an edge that two pieces recorded differently --
+            % one keeping the conic, one having lost it to a straight-splitting cut -- does not.
+            % Test the straight edge's MIDPOINT against the conic: it is exactly the point where a
+            % chord is furthest from its arc, and it costs one evalConic.
+            %
+            % MEASURED on TODO.md G4's fixture, which is what sent this whole family to the
+            % symbolic fallback: piece 1 src [1 3] carries the straight edge
+            % (-0.209275,-0.909936)->(-0.210638,-0.912444) and piece 2 src [2 4] carries the same
+            % boundary as an arc, 5.76e-05 away. Both came out of matchHalfEdges with ZERO
+            % candidates -- rejected here, not lost to greedy consumption -- and the assembled mesh
+            % then had a hole at (-0.866025,0.5).
+            if any(HE(h2).ec ~= 0) ~= any(HE(h).ec ~= 0)
+                if ~HE(h).isSeg, continue; end            % rays carry no conic; nothing to test
+                if any(HE(h).ec ~= 0), ecC = HE(h).ec; hS = h2; else, ecC = HE(h2).ec; hS = h; end
+                sA = vertexAt(pieces, HE(hS).piece, HE(hS).aLoc);
+                sB = vertexAt(pieces, HE(hS).piece, HE(hS).bLoc);
+                sc = max(1, max(abs(ecC)));
+                rA = abs(QuaPar.evalConic(ecC, sA)) / sc;
+                rB = abs(QuaPar.evalConic(ecC, sB)) / sc;
+                rM = abs(QuaPar.evalConic(ecC, 0.5*(sA+sB))) / sc;
+                % THE TEST IS RELATIVE, not a fixed tolerance, and that is the point. The question
+                % is whether the MIDDLE of the straight edge is further from the conic than its
+                % ENDS are -- which is the definition of a sagitta. It needs no constant tuned to
+                % this arrangement's scale, and both cases separate by orders of magnitude.
+                % Measured on TODO.md G4's fixture:
+                %       true pair  (piece 1 src [1 3] vs piece 2 src [2 4])  rM = 1.172e-06
+                %       false pair (piece 2 src [2 4] vs piece 3 src [3 1])  rM = 1.127e-01
+                % -- five orders apart, with the true pair's endpoints themselves sitting ~1e-06
+                % off the conic because they came from a different arithmetic path. A fixed 1e-06
+                % threshold rejected the true pair by a hair; this does not, and still rejects an
+                % arc against its own chord, whose endpoints are exactly ON the conic while its
+                % middle is not.
+                if rM > max(1e-12, 10*max(rA, rB))
+                    reportMixedReject(pieces, HE, h, h2, rM);
+                    continue
+                end
+            end
             % ...and two curved half-edges must lie on the SAME conic, not merely share their two
             % endpoints. Four arcs can run between the same pair of dual points: the arc-vs-arc
             % lens between two operands' arcs is bounded by BOTH of them, and each also bounds the
@@ -4267,6 +4382,54 @@ function opp = matchHalfEdges(pieces, HE)
     % once global vertex identity is available -- see its header for why some of these are
     % provably safe to drop rather than treat as errors (a genuinely ambiguous 3-way vertex
     % cluster, not fixable by this function's own local view of the candidate list alone).
+    reportOrphanCandidates(pieces, HE, cand, opp);
+end
+
+function reportMixedReject(pieces, HE, h, h2, resid)
+% A curved/straight pair rejected by the sagitta test, with the residual that rejected it. Gated
+% like the other assembly diagnostics. Only prints when the two half-edges are actually near each
+% other, so it does not narrate every unrelated pair in the arrangement.
+    global MAXQP_ASSERT %#ok<GVMIS>
+    if isempty(MAXQP_ASSERT) || MAXQP_ASSERT < 0, return, end
+    Ah = vertexAt(pieces, HE(h).piece, HE(h).aLoc);
+    A2 = vertexAt(pieces, HE(h2).piece, HE(h2).aLoc);
+    if norm(Ah - A2) > 1e-2, return, end
+    fprintf(['MIXED-CURVATURE REJECT: half-edges %d (piece %d src %s, curved=%d) and %d ' ...
+             '(piece %d src %s, curved=%d) -- the straight one''s midpoint is %.3e off the ' ...
+             'conic%s'], h, HE(h).piece, mat2str(pieces(HE(h).piece).src), any(HE(h).ec ~= 0), ...
+             h2, HE(h2).piece, mat2str(pieces(HE(h2).piece).src), any(HE(h2).ec ~= 0), ...
+             resid, newline);
+end
+
+function reportOrphanCandidates(pieces, HE, cand, opp)
+% For every half-edge left unmatched, print the candidates it HAD and what consumed each of them.
+% Under MAXQP_ASSERT >= 0, like the other assembly diagnostics.
+%
+% An orphan has exactly two possible causes and they call for opposite fixes: either it generated
+% NO candidate (the pair was rejected -- by the conic test at the top of the candidate loop, or by
+% tolPos/tolDir), or it generated candidates that a better-scoring pair consumed first (the greedy
+% misassignment this function's header describes). Without this list the two are indistinguishable
+% from the error message, and both have been guessed at more than once.
+    global MAXQP_ASSERT %#ok<GVMIS>
+    if isempty(MAXQP_ASSERT) || MAXQP_ASSERT < 0, return, end
+    for h = 1:numel(opp)
+        if opp(h) ~= 0, continue, end
+        mine = cand(cand(:,1) == h | cand(:,2) == h, :);
+        fprintf('ORPHAN half-edge %d (piece %d src %s, isSeg=%d, curved=%d): %d candidate(s)%s', ...
+            h, HE(h).piece, mat2str(pieces(HE(h).piece).src), HE(h).isSeg, ...
+            any(HE(h).ec ~= 0), size(mine,1), newline);
+        for r = 1:size(mine,1)
+            other = mine(r,1); if other == h, other = mine(r,2); end
+            if opp(other) == 0
+                fate = 'also an orphan';
+            else
+                fate = sprintf('taken by half-edge %d', opp(other));
+            end
+            fprintf('    candidate half-edge %d (piece %d src %s, curved=%d) score %.3e -- %s%s', ...
+                other, HE(other).piece, mat2str(pieces(HE(other).piece).src), ...
+                any(HE(other).ec ~= 0), mine(r,3), fate, newline);
+        end
+    end
 end
 
 function [root, parent] = findRoot(parent, x)

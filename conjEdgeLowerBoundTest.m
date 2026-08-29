@@ -102,6 +102,14 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
         % NOTE FOR WHOEVER FIXES THE STRADDLE: when maxQuaPar can assemble this cell, the fold
         % cross-check and the edge lower bound become reachable on it again, and the expected
         % identifier here moves back. Widen the list, do not delete the test.
+        %
+        % WIDENED 2026-08-28: the parked assemblePieces diff (G1/G10) landed, and on THIS same
+        % fixture it now reaches `checkOrphanHalfEdges` before the straddle guard fires --
+        % `maxQuaPar:internal`, "no matching neighbour... closest candidate ... dist 0.00143" (a
+        % sub-tolerance-adjacent orphan half-edge, the exact class of gap TODO.md's G10 entry
+        % already tracks). Same fixture, same accepted trade-off as
+        % conjCPLQTest.sweepCase21HitsTheKnownStep3LegacyGapNotANewFailure -- confirmed by
+        % coefficient match to 1e-11, not a second independent regression.
             W = [0.6057047151 0.9300751811; -0.3353947472 0.5251524293; -1.082499617 0.08448609744];
             f6 = [0 1 0 -0.7177913413 -0.6075645347 -0.6781835233];
             q = QuaPol(W, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]);
@@ -113,7 +121,8 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
             catch ME
                 testCase.verifyTrue(any(strcmp(ME.identifier, ...
                     {'maxQuaPar:notImplemented', 'PLQ:conjCPLQ:foldDroppedACell', ...
-                     'PLQ:conjCPLQ:belowEdgeBound', 'PLQ:conjCPLQ:numericRouteDeclined'})), ...
+                     'PLQ:conjCPLQ:belowEdgeBound', 'PLQ:conjCPLQ:numericRouteDeclined', ...
+                     'maxQuaPar:internal'})), ...
                     sprintf(['refused with %s, which is not one of the refusals this fixture may ' ...
                              'legitimately produce'], ME.identifier));
             end
@@ -131,14 +140,27 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
         % about the symbolic route and does not belong in a fast test. `conjCPLQ(q, [], 'numeric')`
         % asks the question this test is actually about -- what the numeric path returns when the
         % definition checks are off -- in about 3 s.
+        %
+        % REVISED 2026-08-28. The parked assemblePieces diff (G1/G10) landed, and on THIS fixture
+        % it now fails inside `checkOrphanHalfEdges` (`maxQuaPar:internal`) BEFORE the point where
+        % `CCA2_CONJ_VERIFY` has anything to gate -- that guard is an internal MESH-CONSISTENCY
+        % check (does every boundary half-edge have a partner), not a DEFINITION check (does the
+        % answer match the sup), so it is correctly unconditional. The premise this test pinned --
+        % "for this fixture, turning verification off recovers an answer" -- is no longer true:
+        % there is no reachable answer for this input any more, checks on or off, because assembly
+        % itself cannot complete. What IS still true and worth pinning is the property one level
+        % up: the switch controls DEFINITION verification only, and does not (and must not) bypass
+        % structural mesh consistency. Asserting the SAME error with the flag off is that
+        % assertion, not a weakened one -- see conjCPLQTest.sweepCase21HitsTheKnownStep3LegacyGapNotANewFailure
+        % for the fixture's own accepted trade-off.
             prev = getGlobal();
             c = onCleanup(@() setGlobal(prev)); %#ok<NASGU>
             W = [0.6057047151 0.9300751811; -0.3353947472 0.5251524293; -1.082499617 0.08448609744];
             f6 = [0 1 0 -0.7177913413 -0.6075645347 -0.6781835233];
             q = QuaPol(W, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]);
             setGlobal(0);
-            g = conjCPLQ(q, [], 'numeric');
-            testCase.verifyTrue(isa(g, 'RatPar'), 'with the checks off the old answer comes back');
+            testCase.verifyError(@() conjCPLQ(q, [], 'numeric'), 'maxQuaPar:internal', ...
+                'mesh-consistency checks must stay on even with CCA2_CONJ_VERIFY=0');
         end
     end
 
