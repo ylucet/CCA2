@@ -957,6 +957,21 @@ blocker for making the split the default, and it was a casualty of the double le
       (which fold created each, what its true intended neighbour would have to be), a
       tractable, bounded investigation rather than a general redesign.
       `DECISIONS.md` 2026-08-29 (item 1, generalized) has the full signature breakdown.
+      **ROOT CAUSE FOUND, 2026-08-29 (later): a genuine HIGH-DEGREE HUB VERTEX, present before
+      any folding.** The sliver's own vertex is already shared by 4 cells in piece 1's own
+      Step-2 output and 4 in piece 2's, INDEPENDENTLY, before fold 1 even runs -- plausibly one
+      of the "cone per vertex" apexes `.claude/step3cost.m`'s own header names. **This is a
+      structural consequence of pairwise-folding many pieces that share a hub vertex, not a
+      missing merge**: each new piece's fan re-tests against every existing same-curve cell
+      touching that point, and most were never going to succeed (the same-curve-different-arc
+      false positives measured all session). **Reframes the fix, one more time and probably
+      finally: not "find cell X's partner" (there may be none, if the correct decomposition near
+      a fan genuinely needs several wedge pieces) but "does the pairwise-fold STRATEGY generate
+      more candidates near a hub than the answer needs" -- e.g. resolving each hub vertex's fan
+      once, grouped, rather than re-testing it against every incoming piece. A genuine
+      architectural change to the fold order/strategy, not a bug fix. Not attempted -- this is
+      the natural stopping point for item 1's diagnosis. `DECISIONS.md` 2026-08-29 (item 1, root
+      cause) has the full trace.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls

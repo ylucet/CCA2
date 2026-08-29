@@ -4389,3 +4389,32 @@ what its true intended neighbour would have to be) rather than treating this as 
 diffuse problem needing a general redesign. `unionIsExact`, candidate generation, and the
 boundedness proofs have all been independently checked and cleared this session -- what remains
 is specific to these few cells.
+
+## 2026-08-29 (item 1, root cause) — the persistent sliver sits on a genuine HIGH-DEGREE HUB VERTEX, present before any folding at all
+
+Traced the persistent sliver's vertex `(0.572949, 1.80902)` back to its origin: a standalone
+script running just Steps 1+2 (no folding) on the quadrilateral fixture found this EXACT point
+already shared by **4 separate cells in piece 1's own Step-2 output and 4 separate cells in
+piece 2's**, independently -- 8 distinct cells meeting at one point before fold 1 even runs.
+
+**This explains the whole pattern, not just this one witness.** `.claude/step3cost.m`'s own
+header says `f*` of `x*y` over a convex quadrilateral has "a cone per vertex" -- so a dual point
+like this one is very plausibly one of those cone apexes, where every piece whose primal
+triangle touches the corresponding primal vertex contributes a cell that meets there. With 6
+pieces (the A.4/A.5 split of a 4-vertex quadrilateral), a single hub vertex can accumulate cells
+from MOST of them, and each pairwise fold (`region.merge`'s "same conic equation" match) finds
+many candidates that touch at that one point without sharing a real edge -- exactly the
+same-curve-different-arc false positives measured all session. **The refusal volume is a
+structural consequence of PAIRWISE folding near a high-degree vertex, not a missing merge**: as
+each new piece folds in, it re-tests the accumulating fan against every existing cell that
+happens to touch the same point, and most of those tests were never going to succeed.
+
+**This reframes the "fix" question one more time.** It is not "find cell X's missing partner"
+(there may be none to find near a genuine fan vertex -- the correct decomposition there may
+legitimately need several small pieces, one per angular wedge). It is "does the pairwise-fold
+architecture generate MORE candidate pairs near a hub vertex than the final answer needs", which
+is a question about the FOLD STRATEGY (perhaps: group cells by which hub vertex they touch and
+resolve each hub's fan once, rather than re-testing it against every incoming piece) -- a
+genuine architectural change, not a bug fix, and out of scope for anything short of a dedicated
+redesign effort. Not attempted further; this is the natural stopping point for item 1's
+diagnosis.
