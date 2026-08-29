@@ -972,6 +972,16 @@ blocker for making the split the default, and it was a casualty of the double le
       architectural change to the fold order/strategy, not a bug fix. Not attempted -- this is
       the natural stopping point for item 1's diagnosis. `DECISIONS.md` 2026-08-29 (item 1, root
       cause) has the full trace.
+      **PARTIAL MITIGATION LANDED, 2026-08-29: `unionIsExact` memoized.** A safe, verified,
+      MODEST win -- not the fold-strategy fix above. `region.unionIsExact` is a pure function of
+      its inputs, so caching its result cannot change any answer; measured 34% of calls were
+      exact repeats (the SAME candidate re-tried in every later fold). Full 5-fold measurement:
+      cell counts and every merge-tally count IDENTICAL to every prior run (correctness
+      unaffected); TOTAL time 2186s vs the 2226-2546s range before. Real but partial because
+      `unionIsExact` is only part of a fold's cost (`getVertices`, region construction, and
+      pairing are the rest, untouched by this). **The fold-strategy redesign is still the actual
+      fix** for the cell-count surplus itself. `DECISIONS.md` 2026-08-29 (landed) has the
+      measurement.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
