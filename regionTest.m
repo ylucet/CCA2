@@ -743,17 +743,64 @@ classdef regionTest < matlab.unittest.TestCase
                     best, double(val), c(1), c(2)));
             end
 
-            % Mixed convex/concave and same-axis configurations must be UNCHANGED (still abstain
-            % or still resolved by mechanism 1) -- mechanism 3 must not fire outside its scope.
+            % A GENUINELY unbounded same-axis pair (both facets recede the SAME way) must still
+            % report Inf -- mechanism 3 must not turn a real unboundedness into a false bound.
             rSameAxis = region([x^2-y, (x-1)^2-y, x-5, -x-5], [x y]);
             [valSA, stSA] = rSameAxis.maxAffineOverRegion([0 1]);
             testCase.verifyEqual(stSA, 1);
             testCase.verifyEqual(valSA, inf);
 
+            % Mixed convex/concave must still abstain (mechanism 3 only fires when BOTH are
+            % convex; curvature alone does not rule out an escape when one facet is concave).
             rMixed = region([y^2-x, y-x^2], [x y]);   % x>=y^2 (convex) AND y<=x^2 (concave)
             [valM, stM] = rMixed.maxAffineOverRegion([1 0]);
             testCase.verifyEqual(stM, 1, 'mixed convex/concave must still report unbounded');
             testCase.verifyEqual(valM, inf);
+        end
+
+        function sameAxisOppositeSenseConvexConicsAreProvablyBounded(testCase)
+        % A SECOND, separate previously-latent bug, found while generalizing the different-axis
+        % mechanism above: two CONVEX facets sharing the SAME axis, but receding in OPPOSITE
+        % senses along it (one needs y->+inf, the other y->-inf), also bound the region --
+        % mechanism 1's own candidate list only tested ONE sign of each conic's null direction
+        % (`region.quadNullDirsNumeric`'s own convention, not a geometric necessity), so a facet
+        % receding only in the UNTESTED sign was invisible to it. Fixed alongside this test by
+        % adding the negated null direction to mechanism 1's candidate list too.
+        %
+        % `y >= x^2-1` recedes only at (0,1); `y <= 1-x^2` recedes only at (0,-1); no common
+        % direction, so the true region is bounded: `x^2-1 <= y <= 1-x^2` forces `x^2<=1`, a
+        % lens with true max(x)=1 and max(y)=1, both at smooth points, neither a vertex of the
+        % OTHER facet. Before this fix, both directions answered `Inf`.
+            x = sym('x'); y = sym('y');
+            r = region([x^2-y-1, x^2+y-1], [x y]);
+            [A, b, lin] = r.linearForm;
+            testCase.verifyEqual(sum(lin), 0, 'fixture must have NO linear facets');
+
+            [valX, stX] = r.maxAffineOverRegion([1 0]);
+            testCase.verifyEqual(stX, 0);
+            testCase.verifyEqual(double(valX), 1, 'AbsTol', 1e-9);
+
+            [valY, stY] = r.maxAffineOverRegion([0 1]);
+            testCase.verifyEqual(stY, 0);
+            testCase.verifyEqual(double(valY), 1, 'AbsTol', 1e-9);
+
+            rng(13);
+            for c = {[1 0], [0 1], [1 1], [1 -1]}
+                cc = c{1};
+                [val, st] = r.maxAffineOverRegion(cc);
+                testCase.verifyEqual(st, 0);
+                best = -inf;
+                for it = 1:200000
+                    xx = -1 + 2*rand();
+                    if xx^2 > 1, continue, end
+                    lo = xx^2 - 1; hi = 1 - xx^2;
+                    yy = lo + (hi-lo)*rand();
+                    best = max(best, cc(1)*xx + cc(2)*yy);
+                end
+                testCase.verifyLessThanOrEqual(best, double(val) + 1e-6, sprintf( ...
+                    'brute-force sample %.6f exceeds the computed bound %.6f for [%g %g]', ...
+                    best, double(val), cc(1), cc(2)));
+            end
         end
     end
 end
