@@ -4247,3 +4247,87 @@ attempted), or it stays exactly what `unionIsExact` already is -- a call that is
 always correct, just possibly slower on candidates like this one. The actionable finding stands
 (these six merges are correctly refused, and the sliver's TRUE neighbour, if any, is still
 unidentified) -- the SPEEDUP idea does not, until someone proves it sound.
+
+## 2026-08-28 (item 1, continued) — fold 2's 14 refusals trace to just TWO troublesome cells, and they look like each other's true neighbour
+
+Captured EVERY `exactAnotInB` refusal in fold 2 (compact vertex-only dump, temp probe, reverted).
+All 14 trace to exactly two cells:
+
+    A  = (0.573,1.809)(0.818,1.727)(0.092,0.954)(0.25,0.875)   [the sliver, area 0.038]
+    A2 = (0,0)(0.25,0.875)(0.092,0.954)
+
+each repeatedly tried against the SAME small set of same-curve-different-arc false candidates
+already identified (`B1`..`B4` from the earlier witness). **`A` and `A2` share TWO vertices --
+`(0.25,0.875)` and `(0.092,0.954)` -- the exact pair that would make them genuine edge-adjacent
+neighbours**, not just same-curve coincidences. Not confirmed whether they carry the same
+function value or were ever tried against EACH OTHER (not captured by this dump, which only
+logs the FAILING pair, not every attempted one) -- that is the concrete next check: if `A` and
+`A2` have matching `.f` and were never paired against each other by `mergeL`'s same-function
+grouping, that would be a real, narrow, checkable gap (not a proof gap, a GROUPING one -- two
+cells with the same function value that `mergeL`'s `isAlways(simplifyFraction(...)==0)` test
+failed to recognise as equal, for the usual symbolic-form reasons documented elsewhere in this
+file). If they were tried and refused, the next question is why THAT specific pair fails
+`unionIsExact` despite the apparent adjacency.
+
+**Net effect: this fixture's whole 14-refusal count reduces to a two-cell, not a
+twenty-three-cell, question.** Whoever picks this up should start by checking whether `A.f`
+equals `A2.f` (one `isAlways` call) before doing anything else.
+
+## 2026-08-28 (item 4) — the conic-conic closed form's PIECES already exist, unwired, one layer up the design
+
+Checked before writing off item 4 as needing a from-scratch quartic implementation: `conicMeet.m`
+and `ratQ.m` already exist, are tested (`conicMeetTest.m`, 12/0), and do EXACTLY what
+`region.getVertices`' remaining `solve()` calls need -- the real intersection points of two
+conics from an exact integer Sylvester resultant, Newton-polished and verified, with the
+resultant itself kept as an exact certificate. **They are called from nowhere in the live
+pipeline.** `grep -rln "conicMeet(" *.m` finds only `conicMeet.m` and its own test.
+
+**Why they are not a drop-in for `region.m`.** Both require INTEGER-coefficient conics
+(`ratQ.conic` asserts exact integers via `gcd`), and `region.m`'s facets are general `sym`
+expressions that routinely carry surds (the A.4/A.5 split's whole reason for existing). More
+fundamentally, `conicMeet`'s own header states its design premise: "vertices are stored as
+intersections of conics with approximate coordinates as needed" -- i.e. it is built for
+`QuaCon`, a NAMED-vertex H-representation (`CONJ_FIELD_PROOF.md` sec 6, `doc/QuaConExample.md`)
+that does not yet exist as code (`QuaCon.m` is referenced by comment in three files and appears
+only as design docs under `doc/`, never committed as a class). `region.m` stores vertices as
+literal symbolic COORDINATES, used directly and exactly throughout (the same exactness this
+session's other findings depend on) -- dropping a Newton-polished FLOAT into that model risks
+exactly the "one ULP breaks merge" class of defect `ratQ.m`'s own header describes fixing
+elsewhere.
+
+**Corrected scope, from "needs a quartic implementation" (this session's earlier, too-pessimistic
+read) to "needs QuaCon, or a proven-safe adapter into region's exact model, neither of which
+exists yet."** Building `QuaCon` is the architecturally right answer per this codebase's own
+design docs, and is a genuine multi-session rewrite (it touches how EVERY mesh class stores
+vertices), not attempted here. Not implementing an adapter either -- the same soundness-first
+discipline as the edge-adjacency finding above: dropping approximate coordinates into an exact
+model needs a proof it cannot cost precision anywhere that matters, not a hopeful try.
+
+## 2026-08-28 (item 1, resolved) — A and A2 are NOT the same function; the "adjacent sliver" theory is refuted, and this reframes the whole scaling defect
+
+Checked the concrete question the previous entry raised (temp probe in `mergeL`'s own
+function-equality test, reverted after): does `A` (the sliver) share a function value with
+`A2` (its apparent edge-adjacent neighbour)? Caught all 4 times they were compared across
+fold 2 -- **`sameF=0` every time.** They are genuinely different functions that happen to share
+an edge. Not a merge failure; ordinary adjacency between two different pieces of the answer.
+
+**This means `A`'s only SAME-FUNCTION partners in this fold are exactly the same-curve-
+different-arc candidates already found (B1..B4)**, none of which share a real boundary segment
+with it (2026-08-28 earlier entry, the brute-force refutation). So within fold 2, `A`'s function
+genuinely has NO valid merge partner at all -- not because one was missed, but because none
+exists yet: either the true completing piece has not been produced by this fold (arrives later,
+if ever), or `A` is a genuinely separate connected component of that function's argmax region.
+
+**Reframes the scaling defect's own premise, which has stood since 2026-08-25.**
+`.claude/step3cost.m`'s header calls `distinctF` "the count the answer actually needs: any
+excess over it is cells that ought to have merged" -- but a function whose true domain has (or
+temporarily has, mid-fold) more than one connected convex piece breaks that equivalence. `A`'s
+15x-thinner-than-round sliver, isolated from every other same-function cell sampled, is a
+concrete instance where "cells > distinctF" does NOT mean "a merge was missed." **Whether this
+generalises to most of the 58-vs-8 gap, or `A` is a rare outlier, is now the open question** --
+and it is a question about the COUNT's own definition, not about `unionIsExact`,
+`region.merge`'s candidate generation, or any boundedness proof. Recommended next step for
+whoever picks this up: pick 2-3 more of fold 5's 50-cell surplus at random and check
+whether each has a genuine, findable same-function neighbour it failed to merge with, or is
+(like `A`) alone in its group -- that ratio is what tells you whether this is one outlier or the
+main story.

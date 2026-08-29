@@ -4,11 +4,11 @@ piece 2: 6 cells (5 s)
 piece 3: 5 cells (3 s)
 piece 4: 6 cells (7 s)
 piece 5: 5 cells (4 s)
-piece 6: 6 cells (6 s)
-Steps 1+2 total 35 s
+piece 6: 6 cells (7 s)
+Steps 1+2 total 36 s
 FOLD 0 (seed): cells=5 distinctF=5
-FOLD 1: paired= 14 -> cells= 12 distinctF=  6   mtimes 22 s, maximumP 39 s
+FOLD 1: paired= 14 -> cells= 12 distinctF=  6   mtimes 23 s, maximumP 40 s
   merge: okLinear=2 noSharedFacet=22 quadFacet_curved_indefinite=2
-FOLD 2: paired= 24 -> cells= 23 distinctF=  7   mtimes 62 s, maximumP 145 s
+FOLD 2: paired= 24 -> cells= 23 distinctF=  7   mtimes 65 s, maximumP 146 s
   merge: okLinear=6 noSharedFacet=101 lin_curved_positiveAtAVertex=2 quadFacet_exactAnotInB=14 okQuadFacet=1 quadFacet_curved_positiveAtAVertex=2 quadFacet_curved_positiveSomewhereOnP=2 lin_curved_positiveSomewhereOnP=2
-TOTAL 305 s
+TOTAL 311 s

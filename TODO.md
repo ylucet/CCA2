@@ -925,13 +925,24 @@ blocker for making the split the default, and it was a casualty of the double le
       a proof of safety. `DECISIONS.md` 2026-08-28 (correction) has the full argument. Any future
       attempt at a candidate-generation speedup here needs a soundness proof first, not another
       plausible heuristic.
-      **STILL OPEN, and now sharper:** whether the sliver's TRUE neighbour (whichever piece
-      shares its actual arc SEGMENT) was ever generated as a candidate at all, and if so, whether
-      IT also failed and why. That is where to look next -- `unionIsExact`'s certificate has now
-      been shown correct twice over (this witness and the exactAnotInB/nq analysis above); the
-      defect, if there is one, is in candidate GENERATION (`region.merge`'s matching test or
-      whatever fold step decided the sliver's own boundary), not in how merges are verified.
-      `DECISIONS.md` 2026-08-28 (truly last) has the full witness and the oracle.
+      **RESOLVED, same session: the sliver has NO valid merge partner in this fold, and that is
+      not a bug.** Captured every `exactAnotInB` refusal in fold 2 (14 total): all trace to just
+      TWO cells, the sliver and one apparent edge-adjacent neighbour ("A2"). Checked directly
+      whether they share a function value (`mergeL`'s own equality test, instrumented) -- **NO,
+      confirmed 4/4 times.** So A2 is not a missed merge either; it is an ordinary different
+      piece that happens to share an edge. That leaves the sliver's only same-function
+      candidates as B1-B4 (the same-curve-different-arc false positives), none of which share a
+      real boundary segment with it. **The sliver genuinely has no valid partner in fold 2's
+      piece list** -- not because one was missed, but because none exists yet at this stage.
+      **REFRAMES THE WHOLE ITEM.** `.claude/step3cost.m`'s own premise -- "cells above distinctF
+      ought to have merged" -- assumes every function's true argmax region is a single connected
+      convex piece. The sliver is a concrete counterexample to that assumption AT THIS FOLD: it
+      may need a piece not yet produced, or may simply be one of several genuinely-separate
+      components. **Whether this generalises to most of the 58-vs-8 surplus, or the sliver is a
+      rare outlier, is the open question now** -- not `unionIsExact`, not candidate generation,
+      not any boundedness proof (all three have been checked and cleared this session). Next
+      step: sample 2-3 more of fold 5's surplus cells the same way and check the same-function
+      ratio. `DECISIONS.md` 2026-08-28 (item 1, resolved) has the full chain.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
@@ -1283,6 +1294,29 @@ blocker for making the split the default, and it was a casualty of the double le
       reproducer needs to trace instead of guessing conic equations by hand -- not attempted
       further this session (three configurations is a reasonable bounded search; a fourth guess
       without new information would be thrashing, AI/CLAUDE.md sec 5).
+      **REPRODUCER FOUND, 2026-08-28 (later): a SYSTEMATIC random search (not another hand
+      guess) hit it on the FIRST trial.** Two upward-opening parabolas of very different
+      curvature (`y = 1.174 x^2 - 6.348 x + 9.975` and `y = 0.518 x^2 + 2.139 x - 0.444`),
+      intersecting at `A=(1.374,3.470)` (near the smaller-curvature parabola's own vertex
+      region) and `B=(11.571,93.667)` (far out, where the LARGER-curvature term dominates and
+      the two curves' values diverge sharply). `splitTwoArcLens`'s own guard fires:
+      `evalConic` at `M`, `A->M`'s midpoint, and `M->B`'s midpoint is `< -sc` for the arc with
+      the SMALLER curvature -- confirmed against the exact guard condition copied verbatim from
+      `maxQuaPar.m:2033-2040`. Four more hits found in the same 20000-trial search (seed 42,
+      script not committed -- trivial to rebuild: two random `y=a(x-h)^2+k` or `x=a(y-h)^2+k`
+      parabolas per trial, intersect symbolically, test every point-pair as (A,B)).
+      **What makes it fire, now that a real example exists to generalise from:** a LARGE
+      curvature ratio between the two parabolas (here ~2.3x, and the search's other 4 hits are
+      similar), NOT axis mismatch or opposite-opening (my three earlier failed attempts all
+      used comparable curvatures). The smaller-curvature arc's own parametrization stretches
+      much further in `u` between the same two endpoints than the larger-curvature one's does,
+      so their arc-midpoints `P1`,`P2` diverge sharply and `M = (P1+P2)/2` lands far from
+      either true arc.
+      **Not yet wired into a maxQuaParTest regression** -- `splitTwoArcLens` is a local function
+      in `maxQuaPar.m`, not callable from outside it, so a real test needs to reach it through
+      the public `maxQuaPar(g1,g2)` entry point with two operands engineered to produce this
+      exact two-vertex lens, which was not attempted (nontrivial reverse-construction, separate
+      from finding the failing geometry itself).
 - [x] **FIXED** `twoCurvedWhereTheSplitCurveCrossesAnArc` -- the test passes, and `MAXQP_ASSERT=2`
       is clean on that fixture. The four non-compact-arc-piece findings this entry recorded were
       closed by `QuaPar.chordCuts` (2026-08-13) and the corrected chord derivation in
