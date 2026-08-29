@@ -326,6 +326,29 @@ the call-count reduction is real, machine-independent and sound; not claimed as 
 conic x conic still call `solve` 700 times per fold, and both have textbook closed forms -- the
 line substituted into the conic gives a quadratic in one variable.
 
+### Re-measured on the current tree (2026-08-28), fold 2 only (`CCA2_STEP3_FOLDS=2`)
+
+Same fixture (the A.4/A.5 quadrilateral), same fold-2 cell count (23, unchanged) -- a clean
+before/after since the input geometry did not move. `maximumP`: **173 s**, against 195.9 s the
+last time this exact fold was measured (2026-08-18, after the `ptFeasible` filter). A real,
+machine-independent improvement (cell count and call-count reductions from `getVertices`'
+closed-form affine x affine path and the two-conic recession-ray extension both landed since),
+though per `AI/CLAUDE.md` §3 not claimed as a precise percentage on a shared machine -- direction,
+not magnitude. `getVertices`'s remaining `solve` calls (affine x conic, conic x conic) are still
+the next lever, unchanged from the 2026-08-18 recommendation above; not attempted this session.
+
+**Why this matters for SCIP, stated plainly (2026-08-28).** This fold is not an isolated
+benchmark: `QuaParCPLQ.conj` -- reached by `biconj('cplq')` whenever a QPLIB term's domain is
+non-box (Case C, `conjCPLQ.m`) -- "reuses `plq.biconjugateF`'s own recipe verbatim"
+(`QuaParCPLQ.m:59`), i.e. the SAME `functionNDomain.maxOfList`/`mergeL`/`region.getVertices` fold
+measured here. So `testcPLQ`'s slow-bucket reds (G11, `TODO.md`) are not an orthogonal
+legacy-pipeline concern: `rectMaximumIsTheConjugateOfTheWholeDomain` (G17, fixed 2026-08-27) and
+`rectBiconjugateIsAConvexUnderestimator` (still times out, `>3600 s`) are running this exact fold
+machinery on a different fixture, and a fix to one moves the other. Confirmed by re-running
+`rectBiconjugateIsAConvexUnderestimator` this session: it produces the identical warning
+signature (`isAlways:TruthUnknown` inside `region/getEdgeNos`, `functionNDomain/mergeL`) as this
+profile, not a different failure.
+
 
 ### getVertices: affine x conic in closed form (2026-08-18)
 

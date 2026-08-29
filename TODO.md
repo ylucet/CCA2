@@ -376,6 +376,16 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       3695 s, against 35/9/1 before. One red fixed, NO new reds -- so the sharper lower bound
       exposed no hidden minorant anywhere in the two suites.
 
+      **SCIP-RELEVANCE, checked 2026-08-28 (SCIP_READINESS.md Phase C).** These two are not an
+      orthogonal legacy-pipeline concern for SCIP: `QuaParCPLQ.conj` -- reached by `biconj('cplq')`
+      whenever a QPLIB term's domain is non-box (Case C) -- reuses this exact
+      `functionNDomain.maxOfList`/`mergeL` fold verbatim (`QuaParCPLQ.m:59`). Re-ran
+      `rectBiconjugateIsAConvexUnderestimator` this session (killed after ~15 min, not to
+      completion -- see AI/CLAUDE.md §9 on verylong budget): same warning signature
+      (`isAlways:TruthUnknown` in `region/getEdgeNos`, `functionNDomain/mergeL`) as
+      `.claude/step3cost.m`'s profiled fold, not a different failure. So optimizing THAT fold
+      (SCIP_READINESS.md Phase C's `getVertices` closed-form lever, not yet done) is the same work
+      as fixing this test's timeout, not a separate task.
       **Read G14 before taking any of these.** Every red measured so far belongs to `plq_1piece`,
       and `conj` is exact on the same inputs -- so they are not `conj` bugs. The two that still
       matter for `conj` are the two `plq_1p` ones: `rectMaximumIsTheConjugateOfTheWholeDomain`
