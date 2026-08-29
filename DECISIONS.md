@@ -4418,3 +4418,14 @@ resolve each hub's fan once, rather than re-testing it against every incoming pi
 genuine architectural change, not a bug fix, and out of scope for anything short of a dedicated
 redesign effort. Not attempted further; this is the natural stopping point for item 1's
 diagnosis.
+
+**Confirmatory check, 2026-08-29 (final):** worried this might instead signal a genuine
+COVERAGE defect (a same-function group split by OTHER functions' territory sitting wrongly in
+between) rather than the benign "correctly fragmented, never reconciled" reading above. Checked
+the bounding box of the sliver's confirmed same-function siblings (B1-B4): it spans a huge area
+(x in [-10.6, 0.82], y in [0.9, 11.5]) against the sliver's own tiny 0.038-area footprint --
+consistent with one large, genuinely convex argmax region (plausible for a dominant face's
+conjugate over much of the dual), fragmented by the incremental fold process. **Decisive point:
+fold 5 is the LAST fold -- all 6 pieces are already in, and they still have not merged.** So
+this is not "hasn't finished yet"; it is the final, persistent state, confirming rather than
+contradicting the hub-vertex/different-arc diagnosis above, not a separate coverage bug.
