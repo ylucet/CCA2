@@ -983,10 +983,17 @@ blocker for making the split the default, and it was a casualty of the double le
       **SECOND MITIGATION LANDED, same day: `getVertices` memoized too, bigger win.** Same
       pure-function argument (region's only properties are ineqs/nv/vx/vy/vars, and nv/vx/vy
       are exactly what this computes); measured 29% duplicate calls first. TOTAL time 2186s ->
-      **2008s**; slow bucket 612s -> 543s. Still IDENTICAL cell counts/tallies at every step.
-      **The fold-strategy redesign is still the actual fix** for the cell-count surplus itself
-      (58, unchanged by either memoization) -- these two reduce wasted recomputation, not the
-      surplus. `DECISIONS.md` 2026-08-29 ("landed" and "landed, second") has both measurements.
+      2008s; slow bucket 612s -> 543s.
+      **THIRD MITIGATION LANDED, same day: `simplifyUnboundedRegion` too, highest duplicate rate
+      of the three (37%).** Same argument (value class, no side effects, checked directly).
+      TOTAL time 2008s -> **1830s**; slow bucket 543s -> **493s**. Cumulative from the 2944s
+      original baseline: ~38% faster. Still IDENTICAL cell counts/tallies at every one of the
+      three steps. **The fold-strategy redesign is still the actual fix** for the cell-count
+      surplus itself (58, unchanged by all three) -- these reduce wasted recomputation, not the
+      surplus. `mtimes` (untouched by any of the three) is now comparable to or larger than
+      `maximumP` in later folds -- an unchecked candidate for a future pass.
+      `DECISIONS.md` 2026-08-29 ("landed", "landed, second", "landed, third") has all three
+      measurements.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
