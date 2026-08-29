@@ -6,8 +6,8 @@ _2026-08-29_
 Nothing external.
 
 ## State
-- Branch `main` @ `9df1fd7` — "docs: item 3 -- one bounded regression-test
-  attempt, confirms it needs real ray construction"
+- Branch `main` @ `8900a42` — "docs: item 3 second attempt -- the target
+  cell is intermediate, not directly constructible"
 - Pushed: yes — `origin/main`
 - Tests (2026-08-28): fast 312/0 · normal 12/0 · maxQuaParTest 31/0 ·
   conjCPLQTest 33/0 · conjEdgeLowerBoundTest 5/0. Slow/verylong not run.
@@ -21,8 +21,9 @@ Nothing external.
 2. Scaling defect: root cause found — a high-degree hub vertex (8 cells
    meet there pre-fold). Fix is a fold-STRATEGY change (resolve each hub's
    fan once, not pairwise), not a bug fix. Not attempted.
-3. `splitTwoArcLens`: reproducer FOUND (random search). Regression test
-   needs genuine unbounded (ray-based) QuaPar inputs, not bounded triangles.
+3. `splitTwoArcLens`: reproducer FOUND. Target cell is an INTERMEDIATE
+   `clipByFace` product, not directly buildable — needs tracing forward
+   from operands, not backward from the cell. Two attempts, both stopped.
 4. Conic-conic closed form: `conicMeet.m`/`ratQ.m` exist, tested, unused —
    built for `QuaCon`, uncoded.
 
