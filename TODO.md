@@ -1357,6 +1357,20 @@ blocker for making the split the default, and it was a casualty of the double le
       oriented so clipping produces the exact two-vertex lens -- real, careful, separate work,
       not attempted further (the risk flagged before: an incorrectly-built full-domain input
       could silently pass or fail for the WRONG reason, which is worse than no test).
+      **SECOND ATTEMPT, same session: studied the unbounded-QuaPar convention further and found
+      a DEEPER obstacle, not just a representation detail.** `splitTwoArcLens`'s own two-vertex
+      lens (corners A, B) is itself BOUNDED -- it is an INTERMEDIATE cell `clipByFace` produces
+      while clipping one genuinely unbounded, full-domain operand against another, not something
+      a caller hands in directly. Building `g1`,`g2` correctly (each covering the whole plane,
+      via real rays) is necessary but not SUFFICIENT: there is no direct control over where
+      `clipByFace`'s internal clipping happens to leave a two-vertex remainder with exactly the
+      found `ec1`,`ec2` -- that emerges from the interaction of both operands' full boundaries,
+      not from A, B, ec1, ec2 alone. Constructing operands that provably produce THIS exact
+      intermediate cell (rather than some other shape that happens to also error) needs tracing
+      `clipByFace` forward from candidate operands, not backward from the target cell -- a
+      genuinely different, larger task than "build two curved triangles". Stopping here rather
+      than guess further; the standalone reproducer (verified against the real guard condition)
+      remains the deliverable for this item.
 - [x] **FIXED** `twoCurvedWhereTheSplitCurveCrossesAnArc` -- the test passes, and `MAXQP_ASSERT=2`
       is clean on that fixture. The four non-compact-arc-piece findings this entry recorded were
       closed by `QuaPar.chordCuts` (2026-08-13) and the corrected chord derivation in
