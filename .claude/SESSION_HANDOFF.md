@@ -3,28 +3,30 @@
 _2026-08-28_
 
 ## Blocked
-- Nothing external. Two-conic extension for item 3 and the `assemblePieces`
-  defect (G1/G4/G10) are both open but merely hard, not blocked — see Next.
+Nothing external.
 
 ## State
-- Branch `main` @ `2e80373` — "chore: final overnight report update -- stale-entry
-  sweep and closing note"
-- Pushed: yes — `origin/main`
-- Tests (2026-08-28): fast 309/0 · normal 12/0 · slow 94/1 · verylong 29/0/7/1-timeout
-- Known reds: `theEMPTYDomainConjugateRoundTripsToMinusInfinity` (slow, pre-existing
-  per B3) · `testcPLQ` (verylong, G11's known unresolved timeout)
+- Branch `main` @ `6a8e6dd` — "docs: correct my own overconfident claim --
+  the edge-adjacency pre-filter is unsafe"
+- Pushed: pending
+- Tests (2026-08-28): fast 312/0 · normal 12/0 · regionTest 27/0 ·
+  conjCPLQTest 33/0. Slow/verylong not re-run in full this session.
+- Known reds: `testcPLQ/rectBiconjugateIsAConvexUnderestimator` (verylong,
+  times out — now known SCIP-relevant, see SCIP_READINESS.md Phase C)
 
 ## Next
-1. Two-conic extension of item 3's `maxAffineOverRegion` fix (60% of remaining
-   `exactAnotInB` refusals need it) — a harder proof, not a continuation; see
-   `DECISIONS.md` 2026-08-27 (item 3 follow-up) for the sketch.
-2. `assemblePieces` curved/straight matching (G1/G4/G10) — any retry of the
-   parked diff needs the acceptance test named in `TODO.md`: failure mode must
-   not regress from fast/named refusal to slow/unrelated crash.
-3. `splitTwoArcLens` and the piece-5-ray item (`TODO.md`) — same family as
-   above, no quick reproducer; swept for staleness 2026-08-27, still open.
+1. Scaling defect (TODO.md G4): real cause is upstream of `unionIsExact` —
+   trace `region.merge`'s candidate generation for a sliver's TRUE neighbour
+   (shared arc segment, not just curve equation). DECISIONS.md 2026-08-28
+   has the witness + a proven-unsafe fix not to retry.
+2. `assemblePieces` (G1/G4/G10): the documented globally-consistent
+   redesign, not a patch. Acceptance test landed; parked diff's crash is a
+   known Step-3 legacy gap, not new — don't re-derive.
+3. `splitTwoArcLens`: 4 hand-built reproducer attempts failed. Needs
+   `clipPolyByConic`'s real output on a failing fixture, not more guesses.
 
 ## Files
-- `region.m` — tonight's 2 real fixes: `certifiesNonPositive` (G17), `maxAffineOverRegion` (item 3)
-- `.claude/suite.sh` — new `--coverage` flag (Cobertura report)
-- `MORNING.md` — full overnight-run narrative, only read once
+- `region.m` — 5 real `Inf`/needle bugs fixed in `maxAffineOverRegion`
+- `conjCPLQ.m` — fixed double-conjugating +-inf built a needle, not -inf
+- `DECISIONS.md`, `TODO.md` — extensive: fixes, 2 refuted hypotheses, 1
+  caught-before-shipping unsafe idea, all with evidence
