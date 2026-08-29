@@ -4331,3 +4331,33 @@ whoever picks this up: pick 2-3 more of fold 5's 50-cell surplus at random and c
 whether each has a genuine, findable same-function neighbour it failed to merge with, or is
 (like `A`) alone in its group -- that ratio is what tells you whether this is one outlier or the
 main story.
+
+## 2026-08-28 (item 2, attempted and reverted) — the parked assemblePieces diff has a SECOND regression beyond case 21
+
+User authorized landing the parked diff and accepting case 21's known trade-off (fast refusal ->
+the already-tracked Step 3 legacy crash, SUPPORT_MATRIX.md 1.2). Applied it, updated
+`sweepCase21FailsFastAndNamedNotSlowAndUnrelated` to
+`sweepCase21HitsTheKnownStep3LegacyGapNotANewFailure` (pinning `PLQ:conjCPLQ:cplqFailed`,
+confirmed at 204 s), then ran the fast bucket as the standard regression check before committing.
+
+**Found a SECOND, different, previously-uncharacterized regression: `conjEdgeLowerBoundTest`
+2 failures + 1 incomplete**, on a fixture unrelated to case 21. `checkOrphanHalfEdges` now raises
+`maxQuaPar:internal` ("piece 11 src [8 3] has no matching neighbour... closest candidate ...
+dist 0.00143") where it previously didn't -- one test expects a refusal from a specific allowed
+set and `maxQuaPar:internal` is not in it; the other test errors outright instead of completing.
+0.00143 sits just ABOVE the diff's own `collapseTinyEdges` threshold (`tolPos = 1e-3`), so this
+looks like the exact "genuinely small feature vs. arithmetic noise, ambiguous scale" territory
+`TODO.md`'s G10 entry already flagged (median edge length ~2.987e-03, several edges near/under
+`tolPos`) -- but on a DIFFERENT fixture than the one that analysis was done on.
+
+**Reverted** (`git checkout -- maxQuaPar.m conjCPLQTest.m`) rather than deciding this is also an
+acceptable trade-off -- the user's authorization covered the ONE known, already-documented case
+21 trade-off specifically, not an open-ended "accept whatever else breaks." Confirmed clean at
+baseline after revert (`conjEdgeLowerBoundTest` 5/0). **Not committed; nothing shipped.**
+
+**For whoever picks this up:** the diff needs either a tolerance fix for edges just above
+`tolPos` (risky without re-deriving why 1e-3 was chosen, and tolerance-tuning has its own bad
+history in this file -- see `region.merge`'s HISTORY on `quadCutsOther`) or a real look at why
+piece 11's boundary lands 0.00143 from its closest candidate instead of exactly on it. Re-run the
+FULL fast bucket (not just the two fixtures already known) before concluding it's isolated to
+this one.
