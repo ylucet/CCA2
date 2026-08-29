@@ -4059,3 +4059,26 @@ trading a FAST known failure for a SLOW instance of a DIFFERENT already-known fa
 which is a separate, larger, already-tracked item, not a consequence of the assembly diff itself.
 Reverted (`git checkout -- maxQuaPar.m`); nothing committed. Acceptance test
 (`sweepCase21FailsFastAndNamedNotSlowAndUnrelated`) re-confirmed green at baseline afterward.
+
+## 2026-08-28 (later) — mechanism 3 (different-axis convex conics) ALSO measures zero on the scaling fixture
+
+Landed a genuine, separate closed-form fix today (`region.m`'s `tightenUnboundedFacet`): two
+CONVEX (PSD) curved facets on different axes are provably bounded, closing a real `Inf` bug
+(`region([y^2-x,x^2-y],[x y])`, true max 0.25, previously answered `Inf`). Measured its effect on
+the actual scaling fixture the same way as mechanism 1 was measured (`.claude/step3cost.m`, full
+5-fold run): **paired=64->cells=58 and `quadFacet_exactAnotInB` sums to 139 -- IDENTICAL to both
+the pre-mechanism-3 AND the pre-mechanism-1 numbers.**
+
+**So this fixture's 84 `nq2` (two-curved-facet) refusals are not the different-axis-convex case
+either.** They must be same-axis pairs (mechanism 1 already resolves those when a straight ray
+exists, but a same-axis pair need not HAVE one) or involve at least one concave facet (TODO.md's
+Step-4 entry: "a piece whose arc is CONCAVE towards it" is a documented, real configuration).
+Neither mechanism 1 nor mechanism 3 was ever expected to cover those -- this is confirmation, not
+a surprise, and it sharpens what a future attempt needs: same-axis two-conic tightening (a
+DIFFERENT closed form -- the shared axis makes a 1-D reduction possible along it, not attempted)
+and/or the mixed-concavity case (where recession is generically permissive, per mechanism-1's own
+analysis, and the real question shifts to the linear facets combined with ONE conic, closer to
+the already-solved one-conic case than to a genuinely new two-conic proof).
+
+Total wall time 2226 s against 2546 s last time -- likely shared-machine variance (AI/CLAUDE.md
+sec 3), not attributed to this fix.

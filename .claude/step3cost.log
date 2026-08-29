@@ -1,20 +1,20 @@
 pieces: 6
-piece 1: 5 cells (5 s)
-piece 2: 6 cells (6 s)
+piece 1: 5 cells (4 s)
+piece 2: 6 cells (5 s)
 piece 3: 5 cells (3 s)
-piece 4: 6 cells (9 s)
-piece 5: 5 cells (5 s)
-piece 6: 6 cells (8 s)
-Steps 1+2 total 42 s
+piece 4: 6 cells (7 s)
+piece 5: 5 cells (4 s)
+piece 6: 6 cells (6 s)
+Steps 1+2 total 35 s
 FOLD 0 (seed): cells=5 distinctF=5
-FOLD 1: paired= 14 -> cells= 12 distinctF=  6   mtimes 28 s, maximumP 51 s
+FOLD 1: paired= 14 -> cells= 12 distinctF=  6   mtimes 23 s, maximumP 39 s
   merge: okLinear=2 noSharedFacet=22 quadFacet_curved_indefinite=2
-FOLD 2: paired= 24 -> cells= 23 distinctF=  7   mtimes 82 s, maximumP 188 s
+FOLD 2: paired= 24 -> cells= 23 distinctF=  7   mtimes 65 s, maximumP 145 s
   merge: okLinear=6 noSharedFacet=101 lin_curved_positiveAtAVertex=2 quadFacet_exactAnotInB=14 okQuadFacet=1 quadFacet_curved_positiveAtAVertex=2 quadFacet_curved_positiveSomewhereOnP=2 lin_curved_positiveSomewhereOnP=2
-FOLD 3: paired= 46 -> cells= 36 distinctF=  7   mtimes 232 s, maximumP 292 s
+FOLD 3: paired= 46 -> cells= 36 distinctF=  7   mtimes 204 s, maximumP 249 s
   merge: noSharedFacet=344 okLinear=4 quadFacet_exactAnotInB=41 lin_exactAnotInB=2 okQuadFacet=5 lin_curved_positiveAtAVertex=1 quadFacet_curved_positiveAtAVertex=4 lin_exactBnotInA=1 quadFacet_curved_positiveSomewhereOnP=2 lin_curved_positiveSomewhereOnP=2
-FOLD 4: paired= 56 -> cells= 50 distinctF=  8   mtimes 299 s, maximumP 394 s
+FOLD 4: paired= 56 -> cells= 50 distinctF=  8   mtimes 274 s, maximumP 341 s
   merge: noSharedFacet=551 quadFacet_curved_positiveAtAVertex=4 quadFacet_exactAnotInB=26 okLinear=7 okQuadFacet=1 quadFacet_curved_indefinite=2 lin_curved_positiveAtAVertex=1 quadFacet_curved_positiveSomewhereOnP=2 lin_curved_positiveSomewhereOnP=2
-FOLD 5: paired= 64 -> cells= 58 distinctF=  8   mtimes 429 s, maximumP 503 s
+FOLD 5: paired= 64 -> cells= 58 distinctF=  8   mtimes 393 s, maximumP 455 s
   merge: okLinear=2 noSharedFacet=770 quadFacet_curved_positiveAtAVertex=6 quadFacet_exactAnotInB=58 lin_curved_positiveAtAVertex=3 quadFacet_curved_indefinite=2 quadFacet_exactBnotInA=3 okQuadFacet=4 quadFacet_curved_positiveSomewhereOnP=2 lin_curved_positiveSomewhereOnP=2
-TOTAL 2546 s
+TOTAL 2226 s
