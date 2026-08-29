@@ -4012,3 +4012,26 @@ claimed. Re-running this specific fixture end to end is not worth another overni
 own; if it matters, instrument it the same way as item 3's follow-up (count nq per refusal on
 THIS fixture) before deciding whether to spend more time on it, or accept the isolated-reproducer
 level of verification as sufficient given the mechanism is otherwise fully confirmed.
+
+## 2026-08-28 — the two-conic straight-ray extension MEASURED zero effect on the scaling fixture, exactly as its own commit message predicted
+
+This session's `tightenUnboundedFacet` extension (mechanism 1, straight recession ray, generalized
+from one curved facet to two) landed with an honest caveat: "most remaining two-conic refusals are
+bounded regions needing a genuine finite tightening, which this does not attempt." Measured
+directly with `.claude/step3cost.m`'s full 5-fold run on the A.4/A.5 quadrilateral (the same
+fixture 2026-08-27's "item 3 vs the ORIGINAL fixture" entry used):
+
+    FOLD 5: paired= 64 -> cells= 58   (IDENTICAL to the item-3-only, single-conic-fix numbers)
+    quadFacet_exactAnotInB summed over all 5 folds: 139   (IDENTICAL to the 139 recorded 2026-08-27)
+    TOTAL 2546 s   (against 2794 s on 2026-08-27, and 2944 s / "49 min" on the original baseline --
+                    a real speed improvement from OTHER work since, not from this extension)
+
+**Zero change to cell count or refusal tally, exact match to the pre-extension numbers.** This is
+the confirmation the caveat predicted, not a surprise: `tightenUnboundedFacet` only runs when the
+LINEAR-only relaxation says unbounded, and mechanism 1 only fires when a genuine straight ray
+recedes every facet -- a condition that is vacuously false on every region that is actually
+BOUNDED, which is what most of this fixture's accumulated two-conic cells are. The fix is sound
+(regionTest's dedicated case still pins it) and correctly scoped; it simply does not touch the
+refusal population THIS fixture has. **Confirms, rather than refutes, the commit message's own
+disclaimer** -- recorded so nobody re-measures this expecting a different answer without a new
+mechanism (the genuinely open two-conic BOUNDED tightening, still unattempted).
