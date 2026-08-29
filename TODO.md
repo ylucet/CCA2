@@ -26,6 +26,15 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
 
 ### The gaps that remain, in the order they should be closed
 
+- [x] **G1/G4/G10 -- LANDED 2026-08-28.** The parked `assemblePieces` diff (`collapseTinyEdges`
+      + `matchHalfEdges`' sagitta test) is committed. Deliberate trade-off, user-authorized: it
+      fixes the assembly-level defect below, at the cost of case 21 (a symbolic Case-C fallback
+      input) changing from a fast named refusal to hitting the already-tracked, pre-existing
+      Step 3 legacy gap (`SUPPORT_MATRIX.md` 1.2) instead of refusing early -- confirmed a
+      pre-existing issue, not a new one introduced by this diff. Full suite verified clean
+      (fast/normal/maxQuaParTest/conjCPLQTest/conjEdgeLowerBoundTest). See the commit and
+      `DECISIONS.md` 2026-08-28 for the full trade-off record. Original entry follows, for the
+      trail:
 - [ ] **G1 -- a missing LENS in the overlay.** `maxQuaPar` can now SPLIT a cell whose arc is cut
       twice, or whose arc carries a neighbour's vertex in its interior (`bulgeSplit` / the
       passthrough split, 2026-08-24), and `maxQuaParTest` is green with it. The two fixtures that
