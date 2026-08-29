@@ -326,6 +326,18 @@ the call-count reduction is real, machine-independent and sound; not claimed as 
 conic x conic still call `solve` 700 times per fold, and both have textbook closed forms -- the
 line substituted into the conic gives a quadratic in one variable.
 
+**Checked 2026-08-28: affine x conic is DONE** (`region.m:4527` on, `region.lineMeetsConicSym`) --
+the only shape left calling `solve()` in `getVertices` (region.m:4588) is conic x conic. That is
+NOT the same textbook closed form: two general conics meet in up to 4 points (Bezout), a quartic,
+not a quadratic, and `DECISIONS.md` 2026-08-20 (T2b) already found one vertex of `f*` with Galois
+group S4 -- "no tower of square roots is enough" -- so a from-radicals closed form here would need
+more than the square-root extensions this codebase's exactness model uses elsewhere, or Ferrari's
+full quartic formula (cube roots), neither attempted. `CONJ_FIELD_PROOF.md`'s naming-a-vertex-by-
+its-conic-pair route sidesteps needing coordinates at all, but that is a representational change to
+`region.m`, not a drop-in replacement for this one `solve()` call -- not started. Left for whoever
+picks this up: it is NOT a quick win, and re-deriving that S4 finding from scratch would repeat
+already-refuted work.
+
 ### Re-measured on the current tree (2026-08-28), fold 2 only (`CCA2_STEP3_FOLDS=2`)
 
 Same fixture (the A.4/A.5 quadrilateral), same fold-2 cell count (23, unchanged) -- a clean
