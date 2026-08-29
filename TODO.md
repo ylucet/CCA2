@@ -979,9 +979,14 @@ blocker for making the split the default, and it was a casualty of the double le
       cell counts and every merge-tally count IDENTICAL to every prior run (correctness
       unaffected); TOTAL time 2186s vs the 2226-2546s range before. Real but partial because
       `unionIsExact` is only part of a fold's cost (`getVertices`, region construction, and
-      pairing are the rest, untouched by this). **The fold-strategy redesign is still the actual
-      fix** for the cell-count surplus itself. `DECISIONS.md` 2026-08-29 (landed) has the
-      measurement.
+      pairing are the rest, untouched by this).
+      **SECOND MITIGATION LANDED, same day: `getVertices` memoized too, bigger win.** Same
+      pure-function argument (region's only properties are ineqs/nv/vx/vy/vars, and nv/vx/vy
+      are exactly what this computes); measured 29% duplicate calls first. TOTAL time 2186s ->
+      **2008s**; slow bucket 612s -> 543s. Still IDENTICAL cell counts/tallies at every step.
+      **The fold-strategy redesign is still the actual fix** for the cell-count surplus itself
+      (58, unchanged by either memoization) -- these two reduce wasted recomputation, not the
+      surplus. `DECISIONS.md` 2026-08-29 ("landed" and "landed, second") has both measurements.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
