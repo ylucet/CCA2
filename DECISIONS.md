@@ -4494,3 +4494,34 @@ with only `unionIsExact` memoized and 798 s originally).
 **Still not the fold-strategy fix.** Both memoizations reduce WASTED recomputation; neither
 changes what gets computed or the final cell count (58, unchanged). The actual surplus (58 vs
 `distinctF`=8) is still open, per the hub-vertex diagnosis above.
+
+## 2026-08-29 (landed, third) — `simplifyUnboundedRegion` memoized too: same pattern, another real win
+
+Re-profiled again (folds 1-3) with both prior memoizations in place. `region.getVertices`'
+CACHE HITS were confirmed working (127 of 406 calls skipped, cost concentrated in
+`getVerticesCompute`'s 279 genuine misses) -- `simplifyUnboundedRegion` (167 s, 256 calls) was
+the next candidate. **Same argument, verified before implementing**: it reads only
+`obj.ineqs/nv/vx/vy/vars`, has no global state or side effect anywhere in its ~400-line body
+(checked directly), and `region` is a VALUE class (`classdef region`, no `< handle`), so caching
+a copy of its result is exactly as safe as a local variable. A 3-fold key-logging probe found
+**161 unique keys of 256 calls -- 37% duplicates**, the highest rate of the three found this
+session.
+
+Landed the same way: memoized wrapper, unchanged body renamed `simplifyUnboundedRegionCompute`.
+
+**Correctness: IDENTICAL to every prior run, third time.** Full 5-fold measurement:
+`paired=64->cells=58`, every merge-tally count byte-identical to every run this session.
+**Speed: another real, substantial win** -- TOTAL **1830 s**, against 2008 s (two memoizations),
+2186 s (one), and the 2226-2546 s range before any. Cumulative from the original 2944 s
+baseline: roughly 38% faster, with zero change to any answer at any step.
+
+**Cumulative summary of this session's three memoizations** (all pure-function caches on
+`region.m`, all verified byte-identical output at every stage): reference fixture TOTAL time
+2944 s -> 1830 s; slow bucket 798 s -> 493 s. Verified clean at every step: fast 312/0, normal
+12/0, regionTest 27/0, slow bucket 96/0.
+
+`mtimes` (the fold's initial pairing step,
+NOT touched by any of these three) is now comparable to or larger than `maximumP` in the later,
+larger folds (fold 5: 417 s vs 260 s) -- a natural next place to look, though it is a
+genuinely different kind of cost (new cross-products each fold, not obviously redundant in the
+same way) and has not been checked.

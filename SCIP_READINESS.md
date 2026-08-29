@@ -221,13 +221,16 @@ conditions, each with a measurement on the CURRENT tree:
    picked in advance). Measured extensively on the reference non-box fixture (the A.4/A.5
    quadrilateral): `maximumP` on one fold went from 195.9 s (2026-08-18) to 173 s
    (2026-08-28) from work landed since, then TOTAL for the full 5-fold run from 2944 s
-   (original baseline) to 2226-2546 s (2026-08-28, machine-load range) to 2186 s (2026-08-29,
-   memoizing `unionIsExact`) to **2008 s (2026-08-29, ALSO memoizing `getVertices` -- a real,
-   verified-safe, and now more substantial win**: cell counts and every merge-tally count are
-   byte-identical to every prior run at every step, confirming both caches change no answer; see
-   DECISIONS.md 2026-08-29 "landed" and "landed, second"). Slow bucket 798 s -> 612 s -> 543 s
-   over the same two steps. AI/CLAUDE.md sec 3 -- direction, not magnitude, still applies. **Not
-   yet measured against a real QPLIB-shaped non-box constraint**
+   (original baseline) to 2226-2546 s (2026-08-28, machine-load range) to 2186 s (memoizing
+   `unionIsExact`) to 2008 s (ALSO memoizing `getVertices`) to **1830 s (2026-08-29, ALSO
+   memoizing `simplifyUnboundedRegion` -- three safe, verified, cumulative wins**: cell counts
+   and every merge-tally count are byte-identical to every prior run at every step, confirming
+   all three caches change no answer; see DECISIONS.md 2026-08-29 "landed", "landed, second",
+   "landed, third"). Slow bucket 798 s -> 612 s -> 543 s -> 493 s over the same three steps --
+   roughly 38% faster overall, zero change to any answer. AI/CLAUDE.md sec 3 -- direction, not
+   magnitude, still applies. `mtimes` (the fold's own pairing step, not touched by any of these)
+   is now comparable to or larger than `maximumP` in later folds -- a candidate for a future
+   pass, not yet checked. **Not yet measured against a real QPLIB-shaped non-box constraint**
    -- everything above used the one reference fixture; that comparison is still open and is the
    number that actually answers "fast enough for QPLIB", not another pass on the same fixture.
    **The fold-strategy redesign (below) is what would change the underlying cell-count surplus,
