@@ -700,5 +700,60 @@ classdef regionTest < matlab.unittest.TestCase
             end
             testCase.verifyTrue(hit, 'the true region must contain points at very large y');
         end
+
+        function twoDifferentAxisConvexConicsAreProvablyBounded(testCase)
+        % REGRESSION for a real bug, not a hypothetical: before this fix, `maxAffineOverRegion`
+        % answered `Inf` on a region with NO linear facets at all (so the linear-only relaxation
+        % is trivially "unbounded", region.maxLinear's own isempty(A) branch) bounded by two
+        % CONVEX (PSD) parabolas on DIFFERENT axes -- {x>=y^2} n {y>=x^2}, a small lens between
+        % (0,0) and (1,1). That answer is not conservative, it is WRONG: the true region is
+        % bounded (a rank<=1 PSD conic can only be receded along its own null/axis direction --
+        % see `tightenUnboundedFacet`'s mechanism-3 comment for the closed-form argument -- and
+        % two DIFFERENT axes share no common receding direction, so neither facet's curvature
+        % admits an escape).
+        %
+        % Cross-checked against a brute-force sample (built as its own oracle, CLAUDE.md sec 6)
+        % on 6 directions, including one (`[-1 1]`) whose true maximiser is a SMOOTH tangency
+        % point on one arc, `(0.25, 0.5)`, not a vertex -- confirming the fix reuses
+        % `tightenBoundedFacet`'s candidate machinery correctly, not just the two known corners.
+            x = sym('x'); y = sym('y');
+            r = region([y^2 - x, x^2 - y], [x y]);
+            [A, b, lin] = r.linearForm;
+            testCase.verifyEqual(sum(lin), 0, 'fixture must have NO linear facets');
+            testCase.verifyEqual(sum(~lin), 2, 'fixture must have exactly two curved facets');
+
+            cases = {[-1 1], 0.25; [1 1], 2; [1 0], 1; [0 1], 1; [2 -1], 1; [1 -3], 1/12};
+            rng(11);
+            for k = 1:size(cases,1)
+                c = cases{k,1}; want = cases{k,2};
+                [val, st] = r.maxAffineOverRegion(c);
+                testCase.verifyEqual(st, 0, sprintf('direction [%g %g] must be decided bounded', c));
+                testCase.verifyEqual(double(val), want, 'AbsTol', 1e-9, sprintf( ...
+                    'direction [%g %g]: got %s, want %g', c(1), c(2), char(val), want));
+
+                best = -inf;
+                for it = 1:200000
+                    xx = rand(); yy = rand();
+                    if xx >= yy^2 && yy >= xx^2
+                        best = max(best, c(1)*xx + c(2)*yy);
+                    end
+                end
+                testCase.verifyLessThanOrEqual(best, double(val) + 1e-6, sprintf( ...
+                    'brute-force sample %.6f exceeds the computed bound %.6f for [%g %g]', ...
+                    best, double(val), c(1), c(2)));
+            end
+
+            % Mixed convex/concave and same-axis configurations must be UNCHANGED (still abstain
+            % or still resolved by mechanism 1) -- mechanism 3 must not fire outside its scope.
+            rSameAxis = region([x^2-y, (x-1)^2-y, x-5, -x-5], [x y]);
+            [valSA, stSA] = rSameAxis.maxAffineOverRegion([0 1]);
+            testCase.verifyEqual(stSA, 1);
+            testCase.verifyEqual(valSA, inf);
+
+            rMixed = region([y^2-x, y-x^2], [x y]);   % x>=y^2 (convex) AND y<=x^2 (concave)
+            [valM, stM] = rMixed.maxAffineOverRegion([1 0]);
+            testCase.verifyEqual(stM, 1, 'mixed convex/concave must still report unbounded');
+            testCase.verifyEqual(valM, inf);
+        end
     end
 end

@@ -2517,12 +2517,67 @@ classdef region
             end
 
             if nq == 2
+                % Mechanism 3: BOTH facets CONVEX (Qi PSD) with DIFFERENT axes -- provably
+                % BOUNDED, in closed form, with no arc parametrization needed at all.
+                %
+                % THE ARGUMENT. A rank<=1 Qi has one zero eigenvalue (null direction ni, the
+                % facet's own axis) and one nonzero eigenvalue lambda_i = trace(Qi) (the other
+                % eigenvalue is 0, so the trace IS the nonzero one). PSD means lambda_i > 0.
+                % Along ANY direction d, d'Qi d = lambda_i (ni_hat . d)^2 -- PSD forces this
+                % >= 0 everywhere, so hi(z+td) = O(t^2) grows to +inf as t -> inf UNLESS
+                % ni_hat . d = 0, i.e. d is exactly ON the axis ni. So facet i can only possibly
+                % be receded along its own single axis line -- not approximately, exactly, since
+                % PSD rules out d'Qi d < 0 for every OTHER direction. A common receding
+                % direction for BOTH facets therefore requires n1 parallel n2; if the axes
+                % differ, no nonzero direction survives d'Q1 d<=0 AND d'Q2 d<=0 simultaneously,
+                % so NEITHER facet's curvature admits an escape and the two together bound the
+                % region regardless of what the (already unbounded/undecided) linear-only view
+                % says. (Same-axis parabolas -- n1 parallel n2 -- are NOT covered here: mechanism
+                % 1 above already resolves that case correctly, by testing the shared axis
+                % itself as a candidate.)
+                %
+                % VERIFIED as a real, previously-latent BUG, not a hypothetical: `region([y^2-x,
+                % x^2-y],[x y])` (no linear facets at all, so the linear-only view is trivially
+                % "unbounded", st=1) has TRUE max of `y-x` equal to 0.25 at (0.25,0.5) -- a
+                % smooth boundary point, not a vertex -- confirmed against a 200000-point
+                % brute-force sample (0.2497). Before this mechanism, `maxAffineOverRegion`
+                % returned `Inf` here: unconditionally wrong, not just conservative.
+                %
+                % Once boundedness is established this way, the exact value needs no new
+                % machinery: `tightenBoundedFacet`'s candidate set (finite vertices plus each
+                % conic's own tangency point where grad h_i is parallel to cRow) is ALREADY
+                % curve-count-agnostic -- it loops over every quadratic facet, not just one -- so
+                % calling it with val=Inf as the starting bound (accepted whenever it finds any
+                % finite candidate) reuses it exactly as designed.
+                tolAxis = 1.0d-9;
+                bothConvex = true;
+                axesD = zeros(2,2);
+                for ii = 1:2
+                    if trace(Qs{ii}) <= 1.0d-9 * max(1, norm(Qs{ii}))
+                        bothConvex = false; break
+                    end
+                    nd = region.quadNullDirsNumeric(Qs{ii});
+                    if isempty(nd) || norm(nd(1,:)) < 1.0d-12
+                        bothConvex = false; break
+                    end
+                    axesD(ii,:) = nd(1,:) / norm(nd(1,:));
+                end
+                if bothConvex
+                    crossAx = axesD(1,1)*axesD(2,2) - axesD(1,2)*axesD(2,1);
+                    if abs(crossAx) > tolAxis
+                        valB = region.tightenBoundedFacet(objA, cRow, A, b, lin, inf);
+                        if isfinite(valB)
+                            val = valB; st = 0; ok = true; return
+                        end
+                    end
+                end
                 % Mechanism 2 and the bounded-candidate closed form below both need ONE global
                 % arc parameter (`parabolaArcFrame`'s u) covering the WHOLE boundary. With two
                 % curved facets the boundary can alternate between the two arcs, so no such
                 % single parameter exists (DECISIONS.md 2026-08-27, item 3 follow-up -- sketched
-                % there, not a small generalization). Mechanism 1 above is still sound and still
-                % ran first; abstain rather than guess about boundedness.
+                % there, not a small generalization). Mechanism 1 and mechanism 3 above are still
+                % sound and still ran first; abstain rather than guess about boundedness for
+                % same-axis or concave-facet configurations.
                 return
             end
 
