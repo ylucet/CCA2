@@ -4463,3 +4463,34 @@ whole fold. **This is not the fold-strategy fix** (TODO.md G4, DECISIONS.md 2026
 root cause") -- that remains open and is what would actually change the surplus cell count, not
 just the wall-clock cost of computing it. Verified clean: fast 312/0, normal 12/0, regionTest
 27/0.
+
+## 2026-08-29 (landed, second) — `getVertices` memoized too: same argument, bigger win
+
+Re-profiled the reference fixture (folds 1-4, MATLAB's own profiler) with `unionIsExact` already
+memoized to find what dominates now. `region.getVertices` topped the list (407 s, 406 calls) --
+`unionIsExact` had dropped out of the top 20 entirely, confirming the first memoization worked.
+
+**Same soundness argument applies, and is even cleaner here.** `region`'s ONLY properties are
+`ineqs, nv, vx, vy, vars` -- `nv`/`vx`/`vy` are EXACTLY what `getVertices` computes, and nothing
+else in the object can affect the answer. The function's own long-standing HISTORY comment
+already says it "is called more than once on the same (already-populated) object"
+(`removeTangent` re-invokes it after deleting ineqs). Verified the redundancy before
+implementing: a 3-fold key-logging probe (temp, reverted) found **312 unique keys of 439 calls
+(29% duplicates)**, one region's ineqs recurring 10 times.
+
+Landed as a memoized `getVertices` wrapping the unchanged original body (renamed
+`getVerticesCompute`), same pattern as `unionIsExact` -- this time with no bug on the first try
+(learned from the earlier mistake, used instance-call syntax throughout).
+
+**Correctness: IDENTICAL to every prior run, again.** Full 5-fold measurement:
+`paired=64->cells=58`, every merge-tally count byte-identical to every run this session and
+before. **Speed: a real, bigger win this time** -- TOTAL **2008 s**, against 2186 s with only
+`unionIsExact` memoized and the 2226-2546 s range before either landed. Every fold's `maximumP`
+dropped substantially (fold 2: 109 s vs 138-160 s; fold 4: 233 s vs 316-386 s), consistent with
+`getVertices` being the LARGER of the two redundant-computation sources this session found.
+Verified clean: fast 312/0, normal 12/0, regionTest 27/0, slow bucket 96/0 (543 s, against 612 s
+with only `unionIsExact` memoized and 798 s originally).
+
+**Still not the fold-strategy fix.** Both memoizations reduce WASTED recomputation; neither
+changes what gets computed or the final cell count (58, unchanged). The actual surplus (58 vs
+`distinctF`=8) is still open, per the hub-vertex diagnosis above.
