@@ -4106,3 +4106,45 @@ facets combined with the convex partner, which needs its own argument, not attem
 **Stopping the fixture re-measurement here.** A fourth run without a new mechanism to test would
 add no information (AI/CLAUDE.md sec 5) -- this is the point to change what is being tried, not
 to keep measuring the same thing.
+
+## 2026-08-28 (final) — the ORIGINAL DIAGNOSIS was wrong: `exactAnotInB` refusals are correctly-decided TRUE violations, not proof-completeness gaps
+
+Rung 1 (observe, no editing): instrumented `holdsOn` directly (temp probes, `git checkout --
+region.m` after -- nothing shipped) at its TWO distinct failure points, since `unionIsExact`'s
+`why='exactAnotInB'` covers both and 2026-08-27's original nq1/nq2/nq3 count never distinguished
+them:
+
+    branch 1 (st ~= 0, i.e. maxAffineOverRegion could not DECIDE a value)  -- HOLDSON_PROBE
+    branch 2 (val decided but val > bc(i), a genuine VIOLATION)             -- HOLDSON_PROBE2
+
+Ran fold 2 alone (14 `exactAnotInB` refusals, matching every prior measurement exactly).
+**HOLDSON_PROBE fired ZERO times. HOLDSON_PROBE2 fired all 14, with real excess margins**
+(3.12, 1.85, 0.93, 0.666, 0.196 -- not near-zero numerical noise) **and mostly `nq=1`, not
+`nq=2`** (12 of 14 single-curved-facet, only 2 two-curved-facet).
+
+**This overturns the premise behind three of today's fixes.** 2026-08-27's "60% of refusals are
+nq2, outside the fix's scope" measurement counted curved-facet numbers on EVERY `exactAnotInB`
+refusal without asking WHY `holdsOn` returned false -- lumping genuine geometric violations
+(branch 2: A really is not contained in B', so refusing IS correct) together with proof gaps
+(branch 1: `maxAffineOverRegion` could not decide, which mechanisms 1/3 target). On this fixture,
+EVERY refusal in the sample is branch 2. There is nothing here for a better boundedness proof to
+fix, one-conic or two-conic: `maxAffineOverRegion` already computes the right, decided answer,
+and that answer correctly says the merge is unsound. This is not a new defect and needs no fix --
+it is `unionIsExact` doing exactly its job, on cells that genuinely do not tile convexly.
+
+**Why this was not caught earlier.** The 2026-08-27 measurement was real and its raw counts
+(nq1=55, nq2=84, nq3=2) are not in question -- what was never checked, by that session or by
+this one until now, is whether ANY of those refusals were actually undecided rather than
+correctly decided. Three real, independently-verified bug fixes came out of chasing this anyway
+(the different-axis, same-axis, and sign-gap fixes all stand on their own witnesses and remain
+correct and committed) -- but none of them could ever have moved THIS fixture's count, because
+the count was never measuring what it was assumed to measure.
+
+**What this means for the scaling defect.** It stays open, and the real target is different from
+what TODO.md's G4/item-3 entries have said since 2026-08-25: the ~7x cell-count surplus (58 cells
+against distinctF's true minimum of 8) is not primarily a merge-CERTIFICATE gap -- it is that the
+cells being generated upstream (Step 1/2's split, or `maxQuaPar`'s own fold construction) are
+genuinely too fine an arrangement for `unionIsExact` to recombine, because many of them really do
+not pairwise-union convexly. The next attempt should look UPSTREAM of `unionIsExact` -- at why
+the arrangement has cells this fragmented in the first place -- not at the merge certificate
+again.

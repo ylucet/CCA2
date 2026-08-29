@@ -882,10 +882,27 @@ blocker for making the split the default, and it was a casualty of the double le
       returned `Inf` -- unconditionally wrong, not conservative -- on `region([y^2-x,x^2-y],[x
       y])`, whose true max of `y-x` is `0.25` at a smooth tangency point, confirmed by brute
       force. `regionTest.twoDifferentAxisConvexConicsAreProvablyBounded` pins it on 6 directions.
-      **Not yet measured against THIS scaling fixture's own nq2=84 population** (whether many of
-      those 84 two-conic refusals happen to be different-axis-convex, the case this now
-      resolves, or same-axis/mixed, which it does not touch) -- that measurement is the natural
-      next step, not a re-derivation of the math.
+      (3) Generalized further same session: fixed a SIGN GAP in mechanism 1 itself (only one
+      sign of each conic's null direction was ever tested, latent since 2026-08-27), which let
+      mechanism 3 generalize from "different axes only" to "any two convex facets" -- a
+      same-axis pair receding in OPPOSITE senses also bounds the region. Second genuine,
+      previously-undetected `Inf` bug closed (`region([x^2-y-1,x^2+y-1],[x y])`, true max(x)=1,
+      max(y)=1). `regionTest.sameAxisOppositeSenseConvexConicsAreProvablyBounded` pins it.
+      **MEASURED against this fixture three times (mechanism 1, mechanism 3, the sign fix) --
+      byte-identical numbers every time (139 `quadFacet_exactAnotInB`, cells=58).**
+      **THE REASON WHY, found 2026-08-28 (final) by instrumenting `holdsOn` directly rather than
+      guessing a fourth mechanism: `unionIsExact`'s `exactAnotInB` refusals on this fixture are
+      almost entirely (14/14 sampled on fold 2) GENUINELY DECIDED VIOLATIONS
+      (`maxAffineOverRegion` returns a correct finite value that legitimately exceeds the
+      bound), not undecided proof gaps -- and mostly `nq=1`, not `nq=2` (12/14). See
+      `DECISIONS.md` 2026-08-28 (final).** This means 2026-08-25's original framing of this
+      scaling defect as a merge-CERTIFICATE gap was itself the wrong diagnosis: the three fixes
+      above are real, correct, and worth keeping (each closes a genuine `Inf` bug on its own
+      witness), but NONE of them, nor any further two-conic proof, can close THIS fixture's
+      surplus -- there is nothing wrong with the certificate to fix. **The scaling defect's real
+      cause is upstream of `unionIsExact`**: the cells Step 1/2/`maxQuaPar` hand it are
+      genuinely too fragmented to pairwise-union convexly. Any future attempt should instrument
+      WHY the arrangement is this fine before touching `region.m` again.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
