@@ -4082,3 +4082,27 @@ the already-solved one-conic case than to a genuinely new two-conic proof).
 
 Total wall time 2226 s against 2546 s last time -- likely shared-machine variance (AI/CLAUDE.md
 sec 3), not attributed to this fix.
+
+## 2026-08-28 (last) — the mechanism-1 sign-gap fix ALSO measures zero: three real fixes, three zero-effect measurements, and that is itself the finding
+
+Generalizing mechanism 3 exposed a real, previously-latent bug in mechanism 1 itself (only one
+sign of each conic's null direction was ever tested, since `quadNullDirsNumeric` returns one
+representative and the candidate list never added its negation) -- fixed alongside the same-axis
+generalization. Re-measured the scaling fixture a third time: **`paired=64->cells=58`,
+`quadFacet_exactAnotInB` sums to 139 -- IDENTICAL to all three prior measurements** (pre-mechanism-1,
+post-mechanism-1, post-mechanism-3).
+
+**Three consecutive real, independently-verified bug fixes; three consecutive exact-zero
+measurements on this one fixture.** Each fix is real and correctly scoped (regionTest's dedicated
+cases prove each one on its own witness, cross-checked against brute-force sampling) -- this is
+not a case of chasing phantom bugs. It means this fixture's 84 `nq2` refusals are consistently
+outside ALL FOUR mechanisms tried (straight-ray, different-axis-convex, same-axis-opposite-sense-
+convex, and the sign fix that should have made the first three exhaustive for their own scope).
+**The remaining population is very likely CONCAVE-facet-involving** (mixed convex/concave, or
+concave/concave) -- the one class none of today's mechanisms touch, per this session's own
+analysis (concave facets recede almost everywhere, shifting the real question to the linear
+facets combined with the convex partner, which needs its own argument, not attempted).
+
+**Stopping the fixture re-measurement here.** A fourth run without a new mechanism to test would
+add no information (AI/CLAUDE.md sec 5) -- this is the point to change what is being tried, not
+to keep measuring the same thing.
