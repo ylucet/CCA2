@@ -4180,3 +4180,39 @@ upstream (whatever fold step produced this sliver in the first place, avoiding i
 per `AI/CLAUDE.md` sec 5's rung 5 -- reduce scope / prevent, rather than reconcile after the
 fact). Either is real, scoped, multi-step work for a fresh session, not a continuation of
 today's `region.m` fixes.
+
+## 2026-08-28 (truly last) — the sliver hypothesis is REFUTED; the real mechanism is same-CURVE, not same-FACET, false candidates
+
+Tested the multi-way-junction hypothesis above directly rather than leaving it as a guess:
+dumped the FULL geometry (not just the one violated constraint) for every distinct candidate `B`
+`region.merge` tried against the sliver `A` on its curved edge (`ia=3`) -- four distinct `B`
+shapes across six attempts. Built a brute-force oracle (2,000,000 samples inside `A`'s own
+bounding box, Python, independent of MATLAB) and checked: does `A` lie inside `B_a`, `B_b`, `B_c`,
+`B_d`, or their UNION?
+
+**Zero coverage. Of 799,743 samples landing inside `A`, exactly 1 also landed in any of the four
+candidates, combined.** The N-ary hypothesis is REFUTED, decisively -- these are not slices of a
+group that together reconstruct `A`'s true neighbourhood.
+
+**Why, found by comparing bounding boxes: every one of the four candidates shares exactly ONE
+VERTEX with `A` -- `(0.572949, 1.80902)` -- and none of the other three.** They are different
+ARCS of the SAME underlying parabola (`region.merge`'s candidate test,
+`obj.ineqs(mq1(i)) == -obj2.ineqs(mq2(j))`, checks EQUATION equality only), meeting `A` at that
+one point and extending away from it in unrelated directions (`B_c`/`B_d` run out to
+`x approx -10.6, y approx 11.5`). They were never going to merge with `A` -- not because of a
+missing N-ary proof, but because they do not share a boundary SEGMENT with it at all, only a
+point on the same infinite curve.
+
+**This is the real, mundane, and actionable finding.** `region.merge`'s "same conic equation"
+match is a NECESSARY but not SUFFICIENT condition for two pieces to be genuine neighbours: many
+pieces can lie on one shared parabola without ever touching along an arc. Every one of today's
+`quadFacet_exactAnotInB` refusals sampled (6 of 6, this witness) is `unionIsExact` correctly
+rejecting a candidate that was never a real neighbour, not a proof gap of any kind, one-conic or
+N-ary. **A cheap pre-filter -- do `A` and `B` actually share two consecutive vertices (an edge),
+not merely a vertex or the same curve equation -- would eliminate these attempts before paying
+for an LP-backed `unionIsExact` call at all.** Whether it would also shrink the final CELL COUNT
+(58 vs. `distinctF`=8) is a separate, still-open question: correctly-refused pairs that were
+never real neighbours say nothing about whether `A`'s TRUE neighbour (whichever piece actually
+shares its full curved edge) was tried and also failed, or was never generated as a candidate at
+all. That is where a future session should look first -- not at `unionIsExact`'s certificate,
+which this session has now shown twice over is not the defect.
