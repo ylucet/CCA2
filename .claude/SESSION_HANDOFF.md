@@ -7,7 +7,7 @@ Nothing external.
 
 ## State
 - Branch `main` @ `44d0ee9` — "docs: mark G1/G4/G10 landed in TODO.md"
-- Pushed: pending
+- Pushed: yes — `origin/main`
 - Tests (2026-08-28): fast 312/0 · normal 12/0 · maxQuaParTest 31/0 ·
   conjCPLQTest 33/0 · conjEdgeLowerBoundTest 5/0. Slow/verylong not run in
   full.
