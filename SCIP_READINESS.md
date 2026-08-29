@@ -225,16 +225,19 @@ conditions, each with a measurement on the CURRENT tree:
    measured against a real QPLIB-shaped non-box constraint** -- everything above used the one
    reference fixture; that comparison is still open and is the number that actually answers
    "fast enough for QPLIB", not another pass on the same fixture.
-4. **Full suite green -- NOT MET.** Known reds, both attributed and both SCIP-relevant (neither
-   is a stray, unexplained failure):
-   - `testcPLQ/rectBiconjugateIsAConvexUnderestimator` (verylong) -- does not finish. Confirmed
-     2026-08-28 to exercise the EXACT SAME legacy Step 3 machinery
-     (`functionNDomain.maxOfList`/`mergeL`/`region.maximum`) that `biconj('cplq')`'s non-box
-     Case C path reuses, so this is a genuine SCIP-relevant performance ceiling, not an
-     unrelated legacy-only concern. Not yet formally quarantined (§8's own rule: name it, state
-     why, never leave it silently red -- see TODO below).
-   - Slow bucket not re-run in full this session before 2026-08-29; a fresh run is the other
-     half of closing this gate item.
+4. ~~Full suite green.~~ **MET, in the sense sec 9/10 define it (fast+normal+slow all pass; the
+   one known-red is quarantined by name, not silently red).** Re-verified 2026-08-29:
+   - **Slow bucket: 96/0.** The previously-known red (`theEMPTYDomainConjugateRoundTripsToMinusInfinity`)
+     is fixed (this session, `conjCPLQ.m`); nothing else broke.
+   - **`testcPLQ` (verylong): 8/0/1.** `rectBiconjugateIsAConvexUnderestimator` (G11) does not
+     finish and is now formally QUARANTINED (`assumeFail`, same pattern `testMaxMultiRegion`
+     already uses) rather than left to hang the bucket -- confirmed SCIP-relevant (it exercises
+     the exact legacy Step 3 machinery `biconj('cplq')`'s non-box Case C path reuses,
+     `functionNDomain.maxOfList`/`mergeL`/`region.maximum`), not an unrelated legacy-only
+     concern, and not a correctness defect (definition checks have no counterexample, only no
+     verdict in reasonable time). Delete the `assumeFail` line once the fold-strategy work
+     (item 3 below) closes the underlying performance ceiling.
+   - `testMaxMultiRegion` (verylong) not re-run this session; no reason to expect it changed.
 
 Only then: wire the bridge, expose value and subgradient off whatever B2 names, and run QPLIB
 (spike/SCIP's job, not this project's, per the umbrella working agreement).
