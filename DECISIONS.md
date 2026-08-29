@@ -4035,3 +4035,27 @@ BOUNDED, which is what most of this fixture's accumulated two-conic cells are. T
 refusal population THIS fixture has. **Confirms, rather than refutes, the commit message's own
 disclaimer** -- recorded so nobody re-measures this expecting a different answer without a new
 mechanism (the genuinely open two-conic BOUNDED tightening, still unattempted).
+
+## 2026-08-28 — the parked assembly diff's downstream MuPAD crash is the ALREADY-KNOWN Step 3 gap, not a fresh bug
+
+2026-08-27's entry flagged the diff's `mupadengine.evalin2sym` crash on case 21 as "new information
+... not investigated further." Investigated now, without re-landing the diff: applied it
+uncommitted (`git apply`), re-ran case 21's `q.conj('cplq')` directly (not the whole suite), read
+the full error with its own message text this time instead of just the identifier.
+
+**It is not a fresh bug.** The error's own text: *"Step 2 fell back to cPLQ for a rational envelope
+face, and cPLQ's symbolic pipeline failed at `mupadengine.evalin2sym`... Step 2 itself is known to
+complete on these envelopes; what is not yet reliable is Step 3, cPLQ's cross-piece maximum
+(`plq.maximumConjugate` -> `functionNDomain.maximumP` -> `region.maximum`). See `SUPPORT_MATRIX.md`
+section 1.2."* That is `conjEnvelopeViaCPLQ`'s OWN pre-existing, documented error wrapper -- the
+diff does not introduce a new failure mode, it just makes THIS fixture reach an old, already-named
+one (the legacy Step 3 `region.maximum`/`mergeL`/`isAlways` pipeline, the exact machinery
+`.claude/step3cost.m` profiles) instead of exiting earlier via `foldDroppedACell`.
+
+**Consequence: the parked diff still has no clean path to landing**, for a reason distinct from
+2026-08-27's "not a clean win" -- it isn't trading a known failure for an unknown one, it is
+trading a FAST known failure for a SLOW instance of a DIFFERENT already-known failure (SUPPORT_MATRIX
+1.2's Step 3 unreliability). Landing it would need Step 3's legacy reliability gap closed first,
+which is a separate, larger, already-tracked item, not a consequence of the assembly diff itself.
+Reverted (`git checkout -- maxQuaPar.m`); nothing committed. Acceptance test
+(`sweepCase21FailsFastAndNamedNotSlowAndUnrelated`) re-confirmed green at baseline afterward.
