@@ -6,12 +6,13 @@ _2026-08-30_
 Nothing external.
 
 ## State
-- Branch `main` @ `48c7736` — "test: pin the 3-piece elliptical-edge
-  witness now completing and matching ground truth"
+- Branch `main` @ `d49e90c` — "test: fuzz conjConvexPolygon (the
+  SCIP-relevant path) across scales -- clean"
 - Pushed: yes — `origin/main`. Tags `v0.2`, `v0.2.1` (memoizations +
   scip-09's real-QPLIB validation).
-- Tests (2026-08-30): fast 313/0 · normal 12/0 · slow 98/0 (1003s, was
-  96/0 -- 2 new tests, all green after today's 2 fixes).
+- Tests (2026-08-30): fast 314/0 · normal 12/0 · slow 98/0 (1003s).
+  `conjConvexPolygon` (the ACTUAL SCIP box-envelope path, different
+  code from today's 2 fixes) independently fuzzed clean, 0/4500.
 - Known reds: none silent. G11 quarantined via `assumeFail`.
 - scip-09 validated the box envelope on real QPLIB data (0 error,
   837 cases); their remaining wall-clock loss is their own cut mgmt.
