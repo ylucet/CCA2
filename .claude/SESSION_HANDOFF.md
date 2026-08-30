@@ -6,8 +6,8 @@ _2026-08-30_
 Nothing external.
 
 ## State
-- Branch `main` @ `b7d6a31` — "docs: extra mergeL passes don't close
-  the 58-vs-8 gap -- confirms N-ary fan merge is the real fix"
+- Branch `main` @ `92088e9` — "docs: G16's trigger is SUPPORT_MATRIX
+  1.2, not G1 -- checked directly, G1 didn't change it"
 - Pushed: yes — `origin/main`. Tags `v0.2`, `v0.2.1` (memoizations +
   scip-09's real-QPLIB validation).
 - Tests (2026-08-29, no code changes since): fast 312/0 · normal 12/0 ·
@@ -25,8 +25,8 @@ Nothing external.
    in Steps 1/2. Genuine redesign, not attempted.
 2. `splitTwoArcLens`: reproducer FOUND. Target cell is an INTERMEDIATE
    `clipByFace` product — trace forward, not backward.
-3. Conic-conic closed form: `conicMeet.m`/`ratQ.m` exist, unused.
-4. QPLIB-shaped timing — spike/SCIP's side (notified, scip-09, no reply).
+3. `QuaCon`/G16 blocked on `SUPPORT_MATRIX.md` 1.2 (checked directly,
+   not on G1 as its own text claimed) — re-check only after 1.2 moves.
 
 ## Files
 - `region.m` — THREE memoizations this session (`unionIsExact`,
