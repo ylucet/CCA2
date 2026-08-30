@@ -1545,8 +1545,9 @@ two-arc split). The [0.5 0.5] fixture chained ~9 distinct arc-handling bugs; six
   `{diff=0}`. Exact at all 68 samples. (The long note below about decideWinner/parabola-to-infinity was
   the WRONG lead -- the real cell here is a strip cut by a LINE at two finite boundary points.)
 
-- **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- STILL RED (errors). NEW, sharper
-  diagnosis; the old "piece 5 over-extended" note below is WRONG.** Piece 5 (`src[2 2]` =
+- **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- SUPERSEDED, now FIXED (see line ~1401;
+  `QuaPar.chordCuts` 2026-08-13 + `pieceRecessionRays` 2026-08-14). Kept below for the diagnosis
+  that led there.** Piece 5 (`src[2 2]` =
   g1f2 n g2f2, an **arc-vs-arc** clip via `clipPolyByConic`) emits an unmatched ray on `x+y=0`
   (g1's face-2/face-6 edge) from apex `(-2.03125,2.03125)`, dir `(-1,1)`. The clip is CORRECT, not
   over-extended: the sign data at that cell is `evalConic(Ecut)@V = [0, -0.046, -0.015]`, so the
@@ -1601,8 +1602,13 @@ The "over-extended, should terminate" framing below is REFUTED by the sign data 
 piece 5's ray is legitimately g2-face-2; the real bug is the missing g1f6 n g2f2 mirror from the
 arc-vs-half-plane clip path. Kept below only for its geometric measurements.
 
-- [ ] **Piece 5 (src `[2 2]`) emits a RAY where its boundary should terminate.**
-      Localised to the cell, the edge and the reason; this is the last defect.
+- [x] **SUPERSEDED -- already closed, see line ~1401.** `twoCurvedWhereTheSplitCurveCrossesAnArc`
+      is the same fixture this whole section discusses; it is green (`MAXQP_ASSERT=2` clean),
+      closed by `QuaPar.chordCuts` (2026-08-13) and `pieceRecessionRays` (2026-08-14). The "Piece
+      5 emits a RAY" framing below was the pre-fix diagnosis; kept for its geometric measurements,
+      not as an open item.
+      **Piece 5 (src `[2 2]`) emits a RAY where its boundary should terminate.**
+      Localised to the cell, the edge and the reason; this was the last defect before the fix.
 
       * Its unmatched ray: apex `(-2.03125, 2.03125)`, direction `(-1,1)`, lying
         on the line `x+y=0`, which is g1's face-2/face-6 edge.
