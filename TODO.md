@@ -209,6 +209,11 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       **Does not by itself close 1.2 or unblock G16** -- the 3-piece witness needs re-running end
       to end to see how far it gets now; not done this session. `DECISIONS.md` 2026-08-30 (later
       still) has the full trace.
+      **RE-RAN END TO END WITH THE FIX, 2026-08-30 (final): real progress, not closed.** No longer
+      hits `cplqFailed` at `s=(-121,-121)` at all -- gets further, then dies on a NEW, different
+      `MATLAB:badsubscript` (an array indexed one past its length). Not traced -- needs a stack
+      trace first. 1.2/G16 still open, moved to a later pipeline stage. `DECISIONS.md` 2026-08-30
+      (final) has the run.
 
 - [x] **G8 -- SUBSUMED 2026-08-25 by the legacy pins.** It recorded that `testPCE2`'s convex
       envelope is wrong one stage before the conjugate. True, and it is `plq_1piece`'s envelope:

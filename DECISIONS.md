@@ -4639,3 +4639,19 @@ narrow, not something their validation would have been expected to catch by chan
 itself close `SUPPORT_MATRIX.md` 1.2 or unblock G16: the 3-piece witness still needs re-running end
 to end to see how far it now gets (not done this session -- that run costs ~5 more minutes and is
 the natural next step, not attempted here to keep this commit to the verified fix alone).
+
+## 2026-08-30 (final) — the vertex-cone fix moved the 3-piece witness past its old failure, into a NEW, different bug
+
+Re-ran `doc/QuaConExample.md`'s 3-piece witness through `conj('cplq')` end to end with the
+`edgeDirsAt` fix applied, to see whether it actually helps rather than just fixing an isolated
+symptom. **It does move things**: the run no longer hits `PLQ:conjCPLQ:cplqFailed` at
+`s=(-121,-121)` at all -- real, measurable progress from a fix that started as "found while
+tracing, not proven to matter yet". It now gets further and dies on a different, generic error:
+`MATLAB:badsubscript: Index exceeds the number of array elements. Index must not exceed 1.`
+
+**Not traced further this session.** This is a new failure, not a reappearance of the old one, so
+it does not refute the fix -- but it means `SUPPORT_MATRIX.md` 1.2 and G16 are still not closed,
+just moved to a later stage of the same pipeline. Whoever picks this up next should get a stack
+trace first (the log above does not show one; rerun with `dbstop if error` or capture `ME.stack`)
+before guessing which array is short. `.claude`-equivalent probe scripts not committed (rebuild
+from `doc/QuaConExample.md` section 2's coefficients, same as the previous two entries today).
