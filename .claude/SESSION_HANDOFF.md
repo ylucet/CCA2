@@ -6,8 +6,8 @@ _2026-08-29_
 Nothing external.
 
 ## State
-- Branch `main` @ `c4923dc` — "docs: record the third memoization win
-  (simplifyUnboundedRegion) in TODO.md"
+- Branch `main` @ `89648d4` — "docs: region.plus has zero redundancy --
+  memoization thread stops on a clean negative"
 - Pushed: yes — `origin/main`. Tag `v0.2` predates all three
   memoizations below — consider `v0.2.1`.
 - Tests (2026-08-29): fast 312/0 · normal 12/0 · slow 96/0 (493s, was
@@ -17,9 +17,9 @@ Nothing external.
 ## Next
 1. Fold-strategy redesign (TODO G4): hub-vertex root cause found. THREE
    safe memoizations landed — reference fixture 2944s -> 1830s (~38%),
-   cell count unchanged (58). `mtimes` (untouched) now rivals `maximumP`
-   in later folds — unchecked. Real fix (resolve each hub's fan once)
-   still open.
+   cell count unchanged (58). `region.plus`/`mtimes` CHECKED, zero
+   redundancy (0/246 dup keys) — not a memoization candidate. Real fix
+   (resolve each hub's fan once) still open.
 2. `splitTwoArcLens`: reproducer FOUND. Target cell is an INTERMEDIATE
    `clipByFace` product — trace forward, not backward.
 3. Conic-conic closed form: `conicMeet.m`/`ratQ.m` exist, unused.
