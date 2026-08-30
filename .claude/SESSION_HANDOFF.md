@@ -10,8 +10,8 @@ Nothing external.
   witness now completing and matching ground truth"
 - Pushed: yes — `origin/main`. Tags `v0.2`, `v0.2.1` (memoizations +
   scip-09's real-QPLIB validation).
-- Tests (2026-08-30): fast 313/0 · normal 12/0 · unboundedFaceTest 19/0
-  · conjCPLQTest new test 1/0 (467s) · earlier full slow 96/0 (08-29).
+- Tests (2026-08-30): fast 313/0 · normal 12/0 · slow 98/0 (1003s, was
+  96/0 -- 2 new tests, all green after today's 2 fixes).
 - Known reds: none silent. G11 quarantined via `assumeFail`.
 - scip-09 validated the box envelope on real QPLIB data (0 error,
   837 cases); their remaining wall-clock loss is their own cut mgmt.
