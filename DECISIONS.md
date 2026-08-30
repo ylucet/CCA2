@@ -4525,3 +4525,24 @@ NOT touched by any of these three) is now comparable to or larger than `maximumP
 larger folds (fold 5: 417 s vs 260 s) -- a natural next place to look, though it is a
 genuinely different kind of cost (new cross-products each fold, not obviously redundant in the
 same way) and has not been checked.
+
+## 2026-08-29 (checked, ruled out) — `region.plus` has ZERO redundancy; `mtimes`'s cost is genuinely irreducible by caching
+
+Checked `mtimes`'s own dominant cost, `region.plus` (region intersection, called once per (i,j)
+pair in `mtimes`'s O(m x n) loop), for the same redundancy pattern the other three had. Read it
+first: it already has a cheap early exit (a direct symbolic-equality check finds a trivially
+contradictory pair before ever building the combined ineqs list or calling the expensive
+constructor), so any remaining memoization win would have to come from repeated (obj1,obj2)
+pairs across DIFFERENT fold's `mtimes` calls.
+
+**A 3-fold key-logging probe (temp, reverted) found 246 unique keys of 246 total calls -- ZERO
+duplicates.** Confirms the reasoning that predicted this: `mtimes`'s inner loop tests every
+(i,j) pair exactly once by construction, and across folds both operands change (the accumulated
+result grows, and each fold introduces a genuinely NEW piece), so the same pair essentially
+never recurs. **`region.plus` is NOT a memoization candidate -- this is real, unique,
+irreducible-by-caching work**, unlike the other three functions. A different kind of
+optimization (a cheap geometric pre-filter to skip pairs that provably cannot intersect, before
+paying for the symbolic equality checks and constructor) is the only remaining lever here, and
+it carries real soundness risk (must never reject a genuinely non-empty pair) that a pure cache
+does not -- not attempted, and this session's memoization thread stops here, on a clean negative
+result rather than a guess.

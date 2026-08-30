@@ -991,9 +991,14 @@ blocker for making the split the default, and it was a casualty of the double le
       three steps. **The fold-strategy redesign is still the actual fix** for the cell-count
       surplus itself (58, unchanged by all three) -- these reduce wasted recomputation, not the
       surplus. `mtimes` (untouched by any of the three) is now comparable to or larger than
-      `maximumP` in later folds -- an unchecked candidate for a future pass.
-      `DECISIONS.md` 2026-08-29 ("landed", "landed, second", "landed, third") has all three
-      measurements.
+      `maximumP` in later folds.
+      **CHECKED AND RULED OUT, same day: `region.plus` (mtimes' own dominant cost) has ZERO
+      redundancy** -- a 3-fold probe found 246 unique keys of 246 calls, confirming its inner
+      loop tests every pair exactly once and cross-fold operands always differ. Not a
+      memoization candidate; a geometric pre-filter would be a DIFFERENT, riskier kind of
+      optimization (must never reject a genuinely non-empty pair), not attempted. This session's
+      memoization thread stops here, on a clean negative result.
+      `DECISIONS.md` 2026-08-29 ("landed" x3, "checked, ruled out") has all four measurements.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls
