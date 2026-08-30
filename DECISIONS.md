@@ -4741,3 +4741,29 @@ in the code under test. Rewrote the test against a proper exact oracle
 oracle built for one regime (small, well-conditioned fixtures) is not automatically trustworthy
 outside it -- checking the ORACLE against something more precise before trusting a "failure" is
 the same discipline as checking the code under test.
+
+## 2026-08-30 (splitTwoArcLens, third attempt) — a genuinely different method tried, clean negative, likely structural
+
+Two prior attempts (2026-08-29) hand-constructed full-domain operands and got stuck on the
+representation itself. Tried a different method this time: reuse `maxQuaParTest`'s OWN trusted
+operand-building machinery (`buildCurvedG1G2`/`curvedFixtureTriangles`, real `conjPieceCPLQ`
+output, not hand-built) and SEARCH over it -- 500 random affine perturbations (shift + rotation +
+anisotropic scale) of the fixture's second triangle, checking every `maxQuaPar` error for
+`splitTwoArcLens` in its stack. **0 hits out of 500.**
+
+**Likely structural, not bad luck.** This fixture family conjugates the SAME function, `f=xy`,
+over two triangles every time -- only the triangles' geometry varies. `xy`'s Hessian is fixed
+rank-1 (`[0 1;1 0]`), so both resulting parabolic arcs' INTRINSIC curvature comes from the same
+source and only their position/orientation differs with the triangle. The original reproducer
+(TODO.md item 3, found by a systematic search 2026-08-28) needed a **large curvature RATIO**
+between two independent parabolas (~2.3x) -- a property this single-function fixture family may
+be structurally unable to produce, however it is shifted, rotated, or scaled, since scaling a
+triangle scales the SAME `xy` Hessian's effective curvature by a factor tied to the triangle's own
+size, not independently per operand.
+
+**Not pursued further -- this confirms rather than changes the standing diagnosis**: a real
+reproducer needs two operands with independently-chosen curvatures, which needs the ray/apex
+full-domain construction machinery from scratch (TODO.md item 3's stated obstacle), not a
+perturbation of an existing single-function fixture. Three attempts, three different methods, one
+consistent conclusion -- stopping here per the project's own rung discipline rather than trying a
+fourth variation of the same "search an existing fixture family" idea.

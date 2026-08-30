@@ -1450,6 +1450,17 @@ blocker for making the split the default, and it was a casualty of the double le
       genuinely different, larger task than "build two curved triangles". Stopping here rather
       than guess further; the standalone reproducer (verified against the real guard condition)
       remains the deliverable for this item.
+      **THIRD ATTEMPT, 2026-08-30, a genuinely different method: SEARCH real operands instead of
+      hand-building them. 0/500 hits.** Reused `maxQuaParTest`'s own trusted machinery
+      (`buildCurvedG1G2`/`curvedFixtureTriangles`, real `conjPieceCPLQ` output) and swept 500
+      random affine perturbations (shift+rotation+scale) of the fixture, checking every
+      `maxQuaPar` error for `splitTwoArcLens` in its stack -- none hit. **Likely structural**:
+      this family always conjugates `f=xy`, whose Hessian is fixed rank-1, so both arcs'
+      intrinsic curvature share one source and may be unable to reach the large curvature RATIO
+      (~2.3x) the real reproducer needs, however the triangle is transformed. `DECISIONS.md`
+      2026-08-30 (splitTwoArcLens, third attempt) has the reasoning. Three attempts, three
+      different methods, one answer: needs the ray/apex full-domain construction machinery built
+      from scratch, not a search over an existing single-function fixture family. Stopping here.
 - [x] **FIXED** `twoCurvedWhereTheSplitCurveCrossesAnArc` -- the test passes, and `MAXQP_ASSERT=2`
       is clean on that fixture. The four non-compact-arc-piece findings this entry recorded were
       closed by `QuaPar.chordCuts` (2026-08-13) and the corrected chord derivation in
