@@ -999,6 +999,14 @@ blocker for making the split the default, and it was a casualty of the double le
       optimization (must never reject a genuinely non-empty pair), not attempted. This session's
       memoization thread stops here, on a clean negative result.
       `DECISIONS.md` 2026-08-29 ("landed" x3, "checked, ruled out") has all four measurements.
+      **CHEAPEST POSSIBLE FIX CHECKED AND RULED OUT, 2026-08-30: extra `mergeL` passes on the
+      FINAL fold's output find NOTHING.** 58 -> 58 -> 58 across two more calls beyond the two
+      `maximumP` already makes. Rules out a merge-ORDER artifact; confirms the hub's same-function
+      cells genuinely cannot pairwise-merge in any order because most pairs share only the single
+      hub point, not a real edge. **The real fix needs an N-ARY simultaneous fan merge (its own
+      new soundness proof -- `unionIsExact`'s pairwise argument does not generalize automatically)
+      or avoiding the fragmentation upstream in Steps 1/2.** Both are genuine redesigns; neither
+      attempted. `DECISIONS.md` 2026-08-30 has the measurement.
 
       **THE "WHERE TO START" BELOW IS STALE -- read this first (2026-08-26).** Merging after each
       fold is ALREADY what happens: `maxOfList` calls `maximumP(true)` per fold and `maximumP` calls

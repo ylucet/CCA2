@@ -4546,3 +4546,29 @@ paying for the symbolic equality checks and constructor) is the only remaining l
 it carries real soundness risk (must never reject a genuinely non-empty pair) that a pure cache
 does not -- not attempted, and this session's memoization thread stops here, on a clean negative
 result rather than a guess.
+
+## 2026-08-30 — extra `mergeL` passes on the FINAL fold's output find nothing: confirms the hub fragmentation is genuinely structural, not order-dependent
+
+Tested the cheapest possible fix for the 58-vs-8 scaling defect before attempting any redesign:
+what if the pairwise merge just needs to be tried MORE times, or in a different pass, rather than
+a real architectural change? `maximumP` already calls `mergeL` twice per fold; ran the reference
+fixture to completion (58 cells, 8 distinct functions, matches every prior measurement exactly)
+and called `mergeL` on the FINAL result two MORE times, outside any fold.
+
+**Result: 58 -> 58 -> 58. Zero additional merges, both times.** This rules out an order-of-pairing
+artifact (mergeL's grouping is greedy over increasing index; a different traversal order finding
+new merges was the remaining untested explanation) and confirms [[item 1's root-cause]] finding
+directly: the same-function cells around a hub vertex do not merge PAIRWISE in any order because
+most pairs never share more than the single hub point as a boundary -- not a missing candidate,
+not a merge-order problem, a genuine structural mismatch between what pairwise `region.merge` can
+prove and what the hub's fan actually needs (an N-ARY simultaneous union of all wedges meeting at
+the point, which `unionIsExact` was never designed to attempt two cells at a time).
+
+**Why this closes off the "cheap fix" avenue for good.** Any fix must therefore either (a) merge
+an entire hub's fan as one N-ary operation with its own soundness proof (unionIsExact's pairwise
+argument does not generalize automatically -- a genuinely new, harder correctness question), or
+(b) avoid the fragmentation upstream in Steps 1/2 so the hub's cells are never split into separate
+wedges in the first place. Both are real redesigns, not increments; neither attempted this
+session, consistent with the standing conclusion. `.claude/step3cost_extramerge.m`-equivalent
+probe script not committed (trivial to rebuild: run the reference fixture to completion, then
+call `mergeL` on the result once or twice more).
