@@ -185,6 +185,14 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `QuaCon.m` does not, which is the item.
       **Do not start this before G1.** The first real elliptical edge is what tells you the storage
       is right, and until then there is nothing to validate against.
+      **RE-CHECKED, 2026-08-30, now that G1 IS landed: still not triggerable, but for a DIFFERENT
+      reason.** Ran `doc/QuaConExample.md`'s minimal 3-piece witness through `conj('cplq')`
+      directly -- it dies on the exact same `PLQ:conjCPLQ:cplqFailed` at `s=(-121,-121)` this doc
+      already recorded in 2026-08-20/21, unchanged by G1. That is `SUPPORT_MATRIX.md` 1.2's
+      general Step-3 assembly gap, unrelated to `matchHalfEdges`/sagitta -- the run never reaches
+      far enough to test `maxQuaPar` against a real elliptical edge. **The real trigger is 1.2
+      closing, not G1** (G1 was necessary but the text overstated it as sufficient). Do not re-run
+      this check again until 1.2 moves. `DECISIONS.md` 2026-08-30 (later) has the run.
 
 - [x] **G8 -- SUBSUMED 2026-08-25 by the legacy pins.** It recorded that `testPCE2`'s convex
       envelope is wrong one stage before the conjugate. True, and it is `plq_1piece`'s envelope:

@@ -4572,3 +4572,26 @@ wedges in the first place. Both are real redesigns, not increments; neither atte
 session, consistent with the standing conclusion. `.claude/step3cost_extramerge.m`-equivalent
 probe script not committed (trivial to rebuild: run the reference fixture to completion, then
 call `mergeL` on the result once or twice more).
+
+## 2026-08-30 (later) — G16's "wait for G1" precondition still not met: the 3-piece elliptical-edge witness dies on an UNRELATED, earlier gap
+
+Checked whether G1 landing (2026-08-28, the `assemblePieces` fix) changed reachability for
+`doc/QuaConExample.md`'s minimal 3-piece elliptical-edge witness (triangle `(0,0),(60,10),(-5,10)`
+cut by two cevians, pieces 1/3 non-adjacent, both positive definite -- the exact, math-verified
+case where `f*` needs a genuinely elliptical edge). Ran `q.conj('cplq')` on it directly.
+
+**Identical failure to the one this doc already recorded 2026-08-20/21, unaffected by G1:**
+`PLQ:conjCPLQ:cplqFailed` at the same dual point `s=(-121,-121)`, assembled max `NaN` vs the
+per-piece pointwise max `0`. This is `SUPPORT_MATRIX.md` 1.2's tracked pre-existing gap (the same
+family as sweep case 21's Step 3 fallback, [[G1/G4/G10 landed]]) -- a coverage/assembly defect at
+the far corner of the initial probe grid, unrelated to G1's `matchHalfEdges`/sagitta fix. The run
+never gets far enough to test whether `maxQuaPar` would hit `QuaPar:notParabola` on a genuine
+elliptical edge; the input dies on this earlier gap first, exactly as before.
+
+**Conclusion: G16 ("build `QuaCon` when a three-piece input reaches Step 3 with an elliptical
+edge") is still not triggerable, but for a different reason than its own text states.** It is not
+waiting on G1 specifically -- it is waiting on `SUPPORT_MATRIX.md` 1.2's general Step-3 assembly
+gap, which is a separate, already-tracked, unresolved item. Do not re-check this precondition
+again after any future G1-adjacent fix; check it after 1.2 closes instead. `.claude`-equivalent
+probe script not committed (trivial to rebuild from `doc/QuaConExample.md` section 2's exact
+coefficients).
