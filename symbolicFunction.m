@@ -426,19 +426,29 @@ classdef symbolicFunction
          end
 
 
-         function f = tangent (obj, x, y)
-             
-         
-             dx = obj.dfdx(obj.vars(1));
-             dy = obj.dfdx(obj.vars(2));
-             if isAlways(dy.subsF(obj.vars,[x,y]).f==0)
-                 f = symbolicFunction(obj.vars(1)-x);
+         function f = tangent (obj, x, y, vars)
+             % HISTORY (2026-08-30): `obj.vars` is populated from `symvar(obj.f)` at
+             % construction (see the constructor), i.e. the expression's OWN free variables --
+             % not the ambient 2-variable dual space. A quadratic that happens not to depend on
+             % one of the two ambient variables (e.g. a degenerate conic like a repeated/parallel
+             % line, `s1^2 + 101*s1 + 239`, genuinely independent of s2) then has `obj.vars` of
+             % length 1, and `obj.vars(2)` below crashed with `MATLAB:badsubscript`. A tangent
+             % LINE needs the ambient space regardless of which variables the curve happens to
+             % use, so the caller must supply it -- exactly as `subsF` already requires its own
+             % explicit `vars` argument rather than trusting `obj.vars`. Defaults to `obj.vars`
+             % so every existing caller and test, whose functions always depend on both
+             % variables, is unaffected.
+             if nargin < 4, vars = obj.vars; end
+             dx = obj.dfdx(vars(1));
+             dy = obj.dfdx(vars(2));
+             if isAlways(dy.subsF(vars,[x,y]).f==0)
+                 f = symbolicFunction(vars(1)-x);
              else
-               m =  - dx.subsF(obj.vars,[x,y]).f / dy.subsF(obj.vars,[x,y]).f;
+               m =  - dx.subsF(vars,[x,y]).f / dy.subsF(vars,[x,y]).f;
                c = y - m*x;
-               f = symbolicFunction(obj.vars(2) - m * obj.vars(1) -c);
+               f = symbolicFunction(vars(2) - m * vars(1) -c);
              end
-             
+
          end
 
     end

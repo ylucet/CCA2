@@ -3257,7 +3257,7 @@ classdef region
                 if isAlways(gI(1) == 0) && isAlways(gI(2) == 0)
                     continue
                 end
-                tangent = obj.ineqs(i).tangent(px(j),py(j));
+                tangent = obj.ineqs(i).tangent(px(j),py(j),vars);
                 %tangent
                 tangent = tangent.normalize1;
                 %disp('tan')

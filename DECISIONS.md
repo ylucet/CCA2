@@ -4655,3 +4655,31 @@ just moved to a later stage of the same pipeline. Whoever picks this up next sho
 trace first (the log above does not show one; rerun with `dbstop if error` or capture `ME.stack`)
 before guessing which array is short. `.claude`-equivalent probe scripts not committed (rebuild
 from `doc/QuaConExample.md` section 2's coefficients, same as the previous two entries today).
+
+## 2026-08-30 (final, second bug) — `symbolicFunction.tangent` crashed on a curve missing one ambient variable
+
+Traced the new `MATLAB:badsubscript` from the previous entry: stack trace pointed at
+`symbolicFunction.tangent` via `region.removeTangent`. Dumped the exact failing ineq: `101*s_1 +
+s_1^2 + 239` -- a genuine, valid degenerate conic (independent of `s_2`, i.e. a repeated/parallel
+line pair in `s_1` alone), which is legal input, not corrupted data.
+
+**Root cause:** `symbolicFunction`'s private `vars` property is set from `symvar(obj.f)` at
+construction -- the expression's OWN free variables, not the ambient 2-variable dual space.
+`tangent(obj,x,y)` unconditionally used `obj.vars(1)`/`obj.vars(2)` to build a tangent LINE, which
+needs the full ambient space regardless of which variables the curve happens to depend on. For
+this ineq `obj.vars` came out length 1, and `obj.vars(2)` crashed.
+
+**Fix:** `tangent` now takes an explicit optional `vars` argument (`function f = tangent(obj, x,
+y, vars)`, defaulting to `obj.vars` when omitted), exactly the pattern `subsF` already uses for
+the same reason. The one production call site, `region.removeTangent`, now passes its own ambient
+`vars` explicitly. Backward compatible: every existing caller/test whose function actually depends
+on both variables gets `obj.vars` of length 2 regardless, unchanged behaviour.
+
+**Verified:** standalone reproducer green (`101*s1+s1^2+239` at `(0,0)` -> tangent `s1`, matching
+by hand: a vertical-line curve's own tangent IS that line); backward-compat case (circle tangent)
+still correct. New test `tangentOfACurveMissingOneAmbientVariable` in `testSymbolicFunction.m`.
+Fast 313/0 (was 312, new test added), normal 12/0 -- both unaffected elsewhere.
+
+This is the SECOND distinct real bug found tracing `SUPPORT_MATRIX.md` 1.2's `cplqFailed` gap
+today (see the two entries above). Not yet re-run end to end with both fixes together -- that is
+the natural next step, not done this session to keep this commit to the verified fix alone.

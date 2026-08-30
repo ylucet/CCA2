@@ -169,7 +169,25 @@ classdef testSymbolicFunction < matlab.unittest.TestCase
             t = f2.tangent(tx,ty)
             t = t.normalize1
         end
-        
+
+        function tangentOfACurveMissingOneAmbientVariable(testCase)
+        % Regression (2026-08-30): obj.vars is populated from symvar(obj.f) at construction, the
+        % expression's OWN free variables -- not the ambient 2-variable dual space. A degenerate
+        % conic that genuinely does not depend on one ambient variable (a repeated/parallel-line
+        % pair like s1^2+101*s1+239=0, independent of s2) then has obj.vars of length 1, and the
+        % old tangent(obj,x,y) crashed on obj.vars(2) with MATLAB:badsubscript. Reached in
+        % production via region.removeTangent on doc/QuaConExample.md's 3-piece witness.
+            s1 = sym('s_1'); s2 = sym('s_2');
+            f = symbolicFunction(101*s1 + s1^2 + 239);
+            t = f.tangent(0, 0, [s1 s2]);
+            testCase.verifyTrue(isAlways(t.f == s1), ...
+                'tangent to a curve independent of s2 is the vertical line s1=x');
+            % Backward compatible: omitting vars still works when the function genuinely uses both.
+            g = symbolicFunction(s1^2 + s2^2 - 4);
+            t2 = g.tangent(2, 0);
+            testCase.verifyTrue(isAlways(t2.f == s1 - 2));
+        end
+
         function testGradient(testCase)
            x = sym('x');
            y = sym('y');
