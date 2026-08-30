@@ -4714,3 +4714,30 @@ already handles it correctly, so `QuaCon` remains an EFFICIENCY project, not a c
 Three real bugs found and fixed today tracing one reported gap, in order: `conjConvexOverPiece`'s
 vertex-cone collapse, `symbolicFunction.tangent`'s missing-variable crash, and (transitively) the
 `cplqFailed` symptom that led here in the first place, which was never a distinct bug of its own.
+
+## 2026-08-30 (extra) — `conjConvexPolygon` (the SCIP-relevant path) checked independently: clean
+
+Today's two fixes both live in `conjConvexOverPiece.m`, the LEGACY Case-C routine
+(`plq_1p.conjugateFunction`'s only caller) -- NOT the fast numeric path SCIP's box envelope
+actually calls (`conjConvexPolygon.m`, a different implementation entirely: analytic cone
+construction via `outwardNormal`, no numeric feasibility probe). Ran the same differential-fuzz
+technique against it directly, since nothing guarantees a different implementation is clean just
+because a sibling one wasn't.
+
+**300 random convex polygons (via `convhull`, genuinely convex) x random SPD Hessians, coordinate
+scales 0.1 to 1000, ~15 dual points each (4500 checks): 0 mismatches, 0 errors**, against an exact
+closed-form oracle (vertex / edge-clamped stationary point / interior stationary point -- no
+sampling). `conjConvexPolygon` is confirmed clean at scales its own existing fixtures never
+reached.
+
+**One false alarm along the way, worth recording.** Promoting the fuzz to a permanent test
+(`conjConvexPolygonTest/agreesAcrossRandomPolygonsAndCoordinateScales`) first used the file's own
+`supOverPolygon` (sample-then-pattern-search) as the reference and got a ~1e-3 "disagreement" on
+one elongated, ill-conditioned trial. Checked directly against an EXACT closed-form oracle before
+concluding anything: `conjConvexPolygon`'s answer matched it to ~1e-12 at every point -- the
+supposed disagreement was `supOverPolygon`'s own search stalling on that geometry, not a defect
+in the code under test. Rewrote the test against a proper exact oracle
+(`conjConvexPolygonTest.exactPolygonOracle`, added as a static helper) instead. The lesson: an
+oracle built for one regime (small, well-conditioned fixtures) is not automatically trustworthy
+outside it -- checking the ORACLE against something more precise before trusting a "failure" is
+the same discipline as checking the code under test.

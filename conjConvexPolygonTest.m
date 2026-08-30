@@ -167,6 +167,48 @@ classdef conjConvexPolygonTest < matlab.unittest.TestCase
             testCase.verifyError(@() conjConvexPolygon([0 0; 1 0], [0 1], [], eye(2), [0;0], 0), ...
                 'conjConvexPolygon:oneRay');
         end
+
+        function agreesAcrossRandomPolygonsAndCoordinateScales(testCase)
+        % This is the SCIP-relevant fast path (the box envelope calls it directly), and it is a
+        % DIFFERENT implementation from conjConvexOverPiece.m -- the legacy Case-C routine whose
+        % vertex-cone construction had a real coverage-gap bug found and fixed 2026-08-30 (a
+        % numeric feasibility-probe step too small relative to its own tolerance, on a
+        % coordinate-scale this file's own fixtures never reached). That bug does not transfer
+        % here mechanically (this file builds cones analytically via outwardNormal, not by a
+        % numeric probe), but nothing in the existing fixtures tests scales bigger than a handful
+        % of units either. This sweeps random convex polygons (via convhull, so genuinely convex)
+        % and random SPD Hessians across scales from 0.1 to 1000 -- the range real coefficient/box
+        % data can plausibly span -- against exactPolygonOracle: for a BOUNDED convex polygon and
+        % a genuinely convex q the maximiser is exactly a vertex, an edge's clamped 1-D stationary
+        % point, or the interior unconstrained one, so there is a CLOSED FORM and no need for
+        % supOverPolygon's coarser sample-then-search reference. Measured directly: at one
+        % elongated, ill-conditioned trial this test's first version (using supOverPolygon)
+        % reported a spurious ~1e-3 disagreement that conjConvexPolygon's OWN answer disproved --
+        % it matched the exact oracle to ~1e-12 at every one of those points, so the mismatch was
+        % supOverPolygon's own search stalling early on that geometry, not a defect here.
+            rng(20260830);
+            nTrials = 40;
+            for trial = 1:nTrials
+                pts = (rand(18, 2) - 0.5) * (10^(rand*4-1)) + (rand(1,2)-0.5)*10;
+                k = convhull(pts(:,1), pts(:,2));
+                W = pts(k(1:end-1), :);
+                x = W(:,1); y = W(:,2); n = size(W,1); a = 0;
+                for i = 1:n, j = mod(i,n)+1; a = a + (x(i)*y(j) - x(j)*y(i)); end
+                if a < 0, W = flipud(W); end
+                scale = max(1, max(abs(W(:))));
+                M = randn(2) * scale; A = M*M'/scale + eye(2)*1e-3*scale;
+                L = (rand(2,1)-0.5) * scale;
+                c = (rand-0.5) * scale;
+
+                g = conjConvexPolygon(W, [], [], A, L, c);
+                for s = [conjConvexPolygonTest.probes(); (rand(4,2)-0.5)*scale*3]'
+                    got = g.eval(s');
+                    ref = conjConvexPolygonTest.exactPolygonOracle(s', W, A, L, c);
+                    testCase.verifyEqual(got, ref, 'RelTol', 1e-9, 'AbsTol', 1e-6, ...
+                        sprintf('trial %d, scale %.3g, s=(%g,%g)', trial, scale, s(1), s(2)));
+                end
+            end
+        end
     end
 
     methods (Static)
@@ -274,6 +316,35 @@ classdef conjConvexPolygonTest < matlab.unittest.TestCase
         function v = obj(s, x, A, L, c)
             x = x(:);
             v = s(:).'*x - (0.5*(x.'*A*x) + L(:).'*x + c);
+        end
+
+        function best = exactPolygonOracle(s0, W, Q, L, c)
+        % EXACT sup_{x in P} <s,x>-q(x) for q convex on a BOUNDED convex polygon P: since q is
+        % strictly convex on a compact set, the maximiser is exactly a vertex, an edge's own
+        % clamped 1-D stationary point, or the unconstrained interior stationary point -- no
+        % sampling, no search, full double precision regardless of scale or conditioning.
+            s0 = s0(:);
+            n = size(W,1);
+            cand = W;
+            if rcond(Q) > 1e-14
+                xs = Q \ (s0 - L(:));
+                if conjConvexPolygonTest.inHull(xs.', W)
+                    cand = [cand; xs.'];
+                end
+            end
+            for e = 1:n
+                a = W(e,:).'; b = W(mod(e,n)+1,:).';
+                d = b - a;
+                den = d.'*Q*d;
+                if abs(den) > 1e-14
+                    t = min(1, max(0, (d.'*s0 - d.'*Q*a - L(:).'*d) / den));
+                    cand = [cand; (a + t*d).']; %#ok<AGROW>
+                end
+            end
+            best = -inf;
+            for k = 1:size(cand,1)
+                best = max(best, conjConvexPolygonTest.obj(s0, cand(k,:), Q, L, c));
+            end
         end
     end
 end
