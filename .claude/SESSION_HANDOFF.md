@@ -6,8 +6,8 @@ _2026-08-30_
 Nothing external.
 
 ## State
-- Branch `main` @ `d49e90c` — "test: fuzz conjConvexPolygon (the
-  SCIP-relevant path) across scales -- clean"
+- Branch `main` @ `fcc3ae9` — "docs: third splitTwoArcLens reproducer
+  attempt -- clean negative, likely structural"
 - Pushed: yes — `origin/main`. Tags `v0.2`, `v0.2.1` (memoizations +
   scip-09's real-QPLIB validation).
 - Tests (2026-08-30): fast 314/0 · normal 12/0 · slow 98/0 (1003s).
@@ -21,8 +21,10 @@ Nothing external.
 1. Fold-strategy redesign (TODO G4): hub-vertex root cause confirmed
    twice (extra `mergeL` passes: 58->58->58). Needs an N-ARY fan merge
    (new soundness proof) or fixing fragmentation upstream. Not attempted.
-2. `splitTwoArcLens`: reproducer FOUND, not wired into a test — target
-   cell is an INTERMEDIATE `clipByFace` product, trace forward.
+2. `splitTwoArcLens`: reproducer FOUND but not wired into a test.
+   THREE attempts (3 different methods) all reach the same conclusion:
+   needs ray/apex full-domain construction from scratch, not a search
+   over an existing fixture. Stop retrying without a new method.
 3. `QuaCon`/G16: precondition now genuinely MET (a real elliptical edge
    reaches Step 3 and is handled correctly) — now an EFFICIENCY project
    (H-form), not a correctness gap. Still not started; nothing blocks it.
