@@ -4595,3 +4595,47 @@ gap, which is a separate, already-tracked, unresolved item. Do not re-check this
 again after any future G1-adjacent fix; check it after 1.2 closes instead. `.claude`-equivalent
 probe script not committed (trivial to rebuild from `doc/QuaConExample.md` section 2's exact
 coefficients).
+
+## 2026-08-30 (later still) — REAL BUG FOUND AND FIXED: `conjConvexOverPiece`'s vertex cone could collapse to a single point
+
+Traced `SUPPORT_MATRIX.md` 1.2's `cplqFailed` coverage gap (Step 3's assembled max disagrees with
+the pointwise max of per-piece conjugates) on `doc/QuaConExample.md`'s 3-piece witness. Localized
+it FAR earlier than assembly: `evalFunctionNDomain` on PIECE 1's OWN Step-2 conjugate (alone, no
+folding at all) already returns `NaN` at `s=(-1,-1)` -- one unit from the origin, nowhere near the
+"far field". An independent brute-force oracle (vertex + each edge's clamped 1-D stationary point,
+since `q` is convex, no dependency on `region.m` or `conjConvexOverPiece`) proves `f*_1(-1,-1) = 0`,
+attained at the primal vertex `(0,0)`. So piece 1's mesh has a genuine hole, not a far-field
+artifact -- and since Step 3's assembly can only ever be as good as what Step 2 hands it, this was
+never an assembly bug at all.
+
+**Root cause, in `conjConvexOverPiece.m`'s `edgeDirsAt`:** the feasibility probe that decides
+which of two directions along an active facet stays inside the polygon used a step of the fixed
+constant `1e-6`, compared against `tolA` (itself scale-dependent, `1e-7*scale`). On T1 =
+`(0,0),(60,10),(15,10)` with `Q=[3 -1;-1 5]`, at vertex `(0,0)`: `tolA` came out `1e-6`, and moving
+`1e-6` along one active facet's own tangent direction changes the OTHER active facet's value by
+only `~4.9e-7` -- SMALLER than `tolA`, so both `+e` and `-e` passed the feasibility check for the
+SAME facet. That duplicated one edge direction with the opposite sign instead of finding the two
+genuinely distinct edge directions, and the vertex's cell (`region(g,...)` with `g(1)=-g(2)` as
+functions) collapsed from a 2D wedge to a single point -- provably wrong, since a compact convex
+piece's conjugate must be finite (and its vertex cells full-dimensional generically) everywhere.
+
+**Fix:** `step = max(1e-6, 1e4*tolA)`, one line -- ties the probe step to the SAME tolerance it is
+compared against (both are decisions about the same comparison, per the file's own stated rule),
+rather than an independent hardcoded constant that happened to work for the smaller-coordinate
+triangles every existing test used.
+
+**Verification:** the standalone reproducer (T1, `Q`, `s=(-1,-1)`) goes `NaN -> 0`, matching the
+oracle exactly. A 2000-trial random sweep over `s in [-200,200]^2` against the same independent
+oracle: **0 mismatches** (was failing before the fix, not run at scale before). `unboundedFaceTest`
+19/0 (was 18, new test `anisotropicQOnALargeTriangleCoversTheVertexCone` added and green). Fast
+bucket unaffected, 312/0 identical. This is `conjConvexOverPiece`'s FIRST bug found since it landed
+2026-08-24 -- every existing test used small, roughly-unit-scale triangles/wedges, which never hit
+the `step ~ tolA` knife-edge this fix closes.
+
+**Scope: this is a real correctness fix to code used by every convex-piece conjugate**, including
+the box-envelope path scip-09 validated on real QPLIB data (0 error there, presumably because none
+of their 837 cases' triangles hit this specific scale/geometry combination -- the bug is real but
+narrow, not something their validation would have been expected to catch by chance). Does NOT by
+itself close `SUPPORT_MATRIX.md` 1.2 or unblock G16: the 3-piece witness still needs re-running end
+to end to see how far it now gets (not done this session -- that run costs ~5 more minutes and is
+the natural next step, not attempted here to keep this commit to the verified fix alone).

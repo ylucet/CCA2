@@ -211,15 +211,28 @@ function [idx, sgn] = edgeDirsAt(A, b, v, tolA)
 % Returns the facet INDEX and the SIGN rather than the direction itself, so the caller can
 % rebuild the direction EXACTLY from its symbolic constraint row. The feasibility probe and the
 % deduplication stay numeric -- they are decisions, and this file's tolerances belong to them.
+%
+% HISTORY (vertex-cone coverage gap, 2026-08-30): the probe step used to be the fixed constant
+% 1e-6, independent of tolA. At a vertex where the OTHER active facet's cross-sensitivity to a
+% move along e is small, the resulting constraint change can come out SMALLER than tolA, so a
+% genuinely infeasible direction (moving backward along an edge) spuriously passes `<= b+tolA` --
+% both signs of the same facet then look feasible, producing a duplicate direction that reduces
+% the vertex's cell from a 2D cone to a single point. Measured on T1=(0,0),(60,10),(15,10),
+% q=1/2 x'diag stuff -- Q=[3 -1;-1 5], at v=(0,0): step 1e-6 against tolA=1e-6 left the
+% cross-facet violation (4.9e-7) below tolA, so BOTH signs along the (60,10)-facing edge passed,
+% and the resulting cell excluded s=(-1,-1) even though vertex (0,0) is provably optimal there
+% (independent brute-force oracle: f*=0). The step must be large relative to tolA, not an
+% independent constant, since both are decisions about the SAME comparison.
     idx = []; sgn = [];
     seen = zeros(0,2);
+    step = max(1e-6, 1e4*tolA);
     for i = 1:size(A,1)
         if abs(A(i,:)*v - b(i)) > tolA, continue, end
         n = A(i,:);
         if norm(n) <= 0, continue, end
         e = [-n(2), n(1)] / norm(n);
         for sg = [1 -1]
-            if all(A*(v + 1e-6*sg*e') <= b + tolA)
+            if all(A*(v + step*sg*e') <= b + tolA)
                 cand = sg*e;
                 dup = false;
                 for t = 1:size(seen,1)

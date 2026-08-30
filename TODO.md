@@ -193,6 +193,22 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       far enough to test `maxQuaPar` against a real elliptical edge. **The real trigger is 1.2
       closing, not G1** (G1 was necessary but the text overstated it as sufficient). Do not re-run
       this check again until 1.2 moves. `DECISIONS.md` 2026-08-30 (later) has the run.
+      **REAL BUG FOUND AND FIXED tracing 1.2, 2026-08-30 (later still): `conjConvexOverPiece`'s
+      vertex cone could collapse to a single point.** Traced the `cplqFailed` disagreement past
+      assembly entirely -- piece 1 ALONE (no folding) returned `NaN` at `s=(-1,-1)`, one unit
+      from the origin, where an independent brute-force oracle proves `f*=0`. Root cause:
+      `edgeDirsAt`'s feasibility-probe step was the fixed constant `1e-6`, uncorrelated with
+      `tolA` (scale-dependent); on `T1=(0,0),(60,10),(15,10)`, `Q=[3 -1;-1 5]` the resulting
+      cross-facet violation (4.9e-7) came out smaller than `tolA` (1e-6), so both signs of one
+      facet's tangent direction passed, collapsing the vertex-(0,0) cell from a 2D wedge to a
+      point. FIXED: `step = max(1e-6, 1e4*tolA)`. Verified: 0/2000 mismatches on a random sweep
+      against the oracle (was failing before); `unboundedFaceTest` 19/0 (new regression test
+      `anisotropicQOnALargeTriangleCoversTheVertexCone` added); fast 312/0 and normal 12/0
+      unaffected. `conjConvexOverPiece`'s first bug since it landed 2026-08-24 -- every existing
+      test used small, roughly-unit-scale geometry that never hit the `step~tolA` knife-edge.
+      **Does not by itself close 1.2 or unblock G16** -- the 3-piece witness needs re-running end
+      to end to see how far it gets now; not done this session. `DECISIONS.md` 2026-08-30 (later
+      still) has the full trace.
 
 - [x] **G8 -- SUBSUMED 2026-08-25 by the legacy pins.** It recorded that `testPCE2`'s convex
       envelope is wrong one stage before the conjugate. True, and it is `plq_1piece`'s envelope:

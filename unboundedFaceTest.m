@@ -247,6 +247,46 @@ classdef unboundedFaceTest < matlab.unittest.TestCase
             testCase.verifyEqual(evalFunctionNDomain(cj, [3 1]),     4,    'AbsTol', 1e-12);
         end
 
+        function anisotropicQOnALargeTriangleCoversTheVertexCone(testCase)
+        % Regression for a real coverage gap (2026-08-30): edgeDirsAt's feasibility probe used a
+        % FIXED step (1e-6) unrelated to tolA. At a vertex where the OTHER active facet's
+        % cross-sensitivity to a move along the probed edge direction is small enough that
+        % step*sensitivity < tolA, a genuinely INFEASIBLE direction spuriously passed, doubling
+        % one edge direction with opposite sign and collapsing the vertex's cone to a single
+        % point -- so most of the plane around that vertex went uncovered (NaN).
+        %
+        % T = (0,0),(60,10),(15,10), q = 1/2 x'Qx + beta'x with Q=[3 -1;-1 5] (anisotropic,
+        % det=14), beta=(0,1): triggers it at v=(0,0). An independent brute-force oracle (vertex
+        % + each edge's clamped 1-D stationary point, since q is convex) proves f*(-1,-1) = 0,
+        % attained at the vertex itself -- not NaN.
+            x = sym('x'); y = sym('y');
+            s1 = sym('s_1'); s2 = sym('s_2');
+            V = [0 0; 60 10; 15 10];
+            ineqs = sym.empty(1,0);
+            for e = 1:3
+                a = V(e,:); b = V(mod(e,3)+1,:); c = V(mod(e+1,3)+1,:);
+                n = [-(b(2)-a(2)), b(1)-a(1)];
+                g = n(1)*(x-a(1)) + n(2)*(y-a(2));
+                if double(subs(g, [x y], c)) > 0, g = -g; end
+                ineqs(e) = g; %#ok<AGROW>
+            end
+            r = region(ineqs, [x y]);
+            Q = [3 -1; -1 5]; beta = [0;1];
+            cj = conjConvexOverPiece(r, Q, beta, 0, [s1 s2]);
+            testCase.verifyEqual(evalFunctionNDomain(cj, [-1 -1]), 0, 'AbsTol', 1e-9, ...
+                'vertex (0,0) is optimal there; the cell must not have shrunk to a point');
+            % A wider sweep against the same brute-force oracle, at the far-field scale
+            % (doc/QuaConExample.md's own witness) that first exposed the gap.
+            S = [-121 -121; -50 3; 12 -80; 40 40; 5 5; -10 200; 300 -5];
+            for t = 1:size(S,1)
+                s0 = S(t,:);
+                ref = anisotropicTriangleOracle(s0', double(V), Q, beta);
+                got = evalFunctionNDomain(cj, s0);
+                testCase.verifyEqual(got, ref, 'RelTol', 1e-6, 'AbsTol', 1e-9, ...
+                    sprintf('at s=(%g,%g)', s0(1), s0(2)));
+            end
+        end
+
         function convexFaceOverAWedgeGoesThroughTheWholePipeline(testCase)
         % End to end through triangulate -> maximum for a CONVEX face on an unbounded domain.
         % This used to raise plq_1p:conjugateFunction:unboundedNonAffine: Step 1 correctly
@@ -448,6 +488,42 @@ classdef unboundedFaceTest < matlab.unittest.TestCase
                 testCase.verifyTrue(isnan(evalFunctionNDomain(P.maxConjugate, s')), ...
                     sprintf('f* must be +inf at (%g,%g)', s(1), s(2)));
             end
+        end
+    end
+end
+
+function best = anisotropicTriangleOracle(s0, V, Q, beta)
+% Independent brute-force sup for q convex on a triangle: vertices, plus each edge's own 1-D
+% stationary point clamped to [0,1]. No dependency on conjConvexOverPiece or region.m.
+    candidates = V;
+    xstar = Q \ (s0 - beta);
+    if inTriangleOracle(xstar, V)
+        candidates = [candidates; xstar'];
+    end
+    for e = 1:3
+        a = V(e,:)'; b = V(mod(e,3)+1,:)';
+        d = b - a;
+        den = d'*Q*d;
+        if abs(den) > 1e-12
+            t = min(1, max(0, (d'*s0 - d'*Q*a - beta'*d) / den));
+            candidates = [candidates; (a+t*d)']; %#ok<AGROW>
+        end
+    end
+    best = -inf;
+    for k = 1:size(candidates,1)
+        xx = candidates(k,:)';
+        v = s0'*xx - (0.5*(xx'*Q*xx) + beta'*xx);
+        if v > best, best = v; end
+    end
+end
+
+function tf = inTriangleOracle(x, V)
+    tf = true;
+    for e = 1:3
+        a = V(e,:)'; b = V(mod(e,3)+1,:)'; c = V(mod(e+1,3)+1,:)';
+        n = [-(b(2)-a(2)); b(1)-a(1)];
+        if sign(n'*(x-a)) ~= sign(n'*(c-a)) && abs(n'*(x-a)) > 1e-9
+            tf = false; return
         end
     end
 end
