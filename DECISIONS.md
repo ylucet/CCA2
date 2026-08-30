@@ -4683,3 +4683,34 @@ Fast 313/0 (was 312, new test added), normal 12/0 -- both unaffected elsewhere.
 This is the SECOND distinct real bug found tracing `SUPPORT_MATRIX.md` 1.2's `cplqFailed` gap
 today (see the two entries above). Not yet re-run end to end with both fixes together -- that is
 the natural next step, not done this session to keep this commit to the verified fix alone.
+
+## 2026-08-30 (final, closure) — `SUPPORT_MATRIX.md` 1.2's `cplqFailed` witness now COMPLETES AND VERIFIES
+
+With both fixes above landed, re-ran `doc/QuaConExample.md`'s 3-piece elliptical-edge witness
+through `conj('cplq')` end to end: **it completes** (`class=QuaParCPLQ`, ~440s), where it used to
+die every time this session started tracing it (and, per the doc, since 2026-08-20/21).
+
+**Verified correct, not just non-crashing:**
+- `f*(s*) = 2.9278190688` at the doc's own triple-value point, matching its recorded value to
+  every printed digit.
+- An independent oracle (max over the 3 pieces' own `sup_{x in T_k} <s,x>-q_k(x)`, vertex + each
+  edge's clamped 1-D stationary point) agrees exactly at `s*` and on **0/200 mismatches** across a
+  wide random sweep (`|s|` up to ~300).
+- Committed as `conjCPLQTest/threePieceEllipticalEdgeWitnessNowCompletes`: 1/0, 467s (slow
+  bucket). Pins the doc's value plus a 30-point independent-oracle sweep, reusing the file's own
+  `supQuadOverPoly`/`evalConjResult` helpers rather than a new oracle.
+
+**What this closes and what it does not.** This specific witness -- the smallest known input
+needing a genuinely elliptical `f*` edge -- now runs correctly through the general symbolic Case C
+route (`QuaParCPLQ`, `region.m`'s own general conic inequalities), confirming
+`doc/QuaConExample.md` section 4's own finding ("the algorithm is right, the theorem is not") now
+holds all the way through, not just up to the old gate. It does NOT mean `SUPPORT_MATRIX.md` 1.2
+is closed in general -- 1.2 is a family of inputs, not one -- but a concrete member of that family
+that was reliably broken is now reliably correct, and **G16's own precondition is genuinely met
+for the first time**: a real, verified elliptical edge now reaches Step 3 and could seed a
+`QuaCon` H-form design, if someone builds one (`QuaParCPLQ`'s existing general representation
+already handles it correctly, so `QuaCon` remains an EFFICIENCY project, not a correctness gap).
+
+Three real bugs found and fixed today tracing one reported gap, in order: `conjConvexOverPiece`'s
+vertex-cone collapse, `symbolicFunction.tangent`'s missing-variable crash, and (transitively) the
+`cplqFailed` symptom that led here in the first place, which was never a distinct bug of its own.

@@ -214,6 +214,21 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       `MATLAB:badsubscript` (an array indexed one past its length). Not traced -- needs a stack
       trace first. 1.2/G16 still open, moved to a later pipeline stage. `DECISIONS.md` 2026-08-30
       (final) has the run.
+      **SECOND BUG FOUND AND FIXED, same day: `symbolicFunction.tangent` crashed on a degenerate
+      conic missing one ambient variable** (`obj.vars` from `symvar` can be length 1; `tangent`
+      assumed 2). Fixed by an explicit `vars` argument, backward compatible. `DECISIONS.md`
+      2026-08-30 (final, second bug).
+      **CLOSED for this witness, 2026-08-30 (final, closure): the 3-piece elliptical-edge input
+      now COMPLETES AND VERIFIES end to end.** `f*(s*)=2.9278190688` matches
+      `doc/QuaConExample.md`'s own recorded value exactly; 0/200 mismatches against an
+      independent oracle over a wide sweep. Pinned by
+      `conjCPLQTest/threePieceEllipticalEdgeWitnessNowCompletes` (1/0, 467s, slow bucket).
+      **G16's own precondition is genuinely met for the first time** -- a real elliptical edge
+      reaches Step 3 and is handled correctly by `QuaParCPLQ`'s existing representation, so
+      `QuaCon` remains an EFFICIENCY project (H-form), not a correctness gap. `SUPPORT_MATRIX.md`
+      1.2 is a FAMILY of inputs, not fully closed by one witness, but this member of it -- the
+      one this session traced -- is done. `DECISIONS.md` 2026-08-30 (final, closure) has the
+      full chain: three real bugs found and fixed tracing one reported gap.
 
 - [x] **G8 -- SUBSUMED 2026-08-25 by the legacy pins.** It recorded that `testPCE2`'s convex
       envelope is wrong one stage before the conjugate. True, and it is `plq_1piece`'s envelope:

@@ -955,6 +955,51 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
             testCase.verifyError(@() q.conj('cplq'), 'PLQ:conjCPLQ:cplqFailed');
         end
+
+        function threePieceEllipticalEdgeWitnessNowCompletes(testCase)
+        % doc/QuaConExample.md's minimal 3-piece counterexample to [JOGO] Theorem 6 / [COAP]
+        % section 4: a triangle (0,0),(60,10),(-5,10) cut by two cevians into pieces 1,2,3, all
+        % positive definite, with pieces 1 and 3 NON-adjacent -- so f*'s edge between them is a
+        % genuine ELLIPSE (b^2-4ac=-71/2254 there), not a parabola. Historically this input DIED
+        % in conj('cplq'): first a PLQ:conjCPLQ:cplqFailed coverage gap traced (2026-08-30) to a
+        % single piece's own vertex-cone collapsing to a point (conjConvexOverPiece/edgeDirsAt),
+        % then -- after that fix -- a MATLAB:badsubscript in symbolicFunction.tangent (a
+        % degenerate conic missing one ambient variable). Both fixed the same day; this pins the
+        % result correct, not just "does not crash".
+        %
+        % f6 rows are QuaPol's raw-Hessian convention [Q11 Q12 Q22 beta1 beta2 gamma], matching
+        % CONJ_FIELD_PROOF.md 4.1 / doc/QuaConExample.md section 2 exactly (pieces 4,5 of the
+        % five-piece example deleted).
+            V = [0 0; 60 10; 15 10; 5 10; -5 10];
+            E = [1 2 1; 1 3 1; 1 4 1; 1 5 1; 2 3 1; 3 4 1; 4 5 1];
+            F = [1 0; 2 1; 3 2; 0 3; 1 0; 2 0; 3 0];
+            f6 = [ 3 -1  5  0  1 0;
+                   3 -5 17  6 -8 0;
+                  15 -2 11  2 -6 0];
+            q = QuaPol(V, E, f6, F);
+            g = q.conj('cplq');
+
+            % doc/QuaConExample.md section 2: the exact triple-value point on {g1=g3}, where
+            % pieces 1 and 3 tie and piece 2 is strictly below -- f*(s*) = 2.9278190688.
+            sstar = double([-17/62 + sqrt(sym(612030))/186, sym(3)/2]);
+            got = conjCPLQTest.evalConjResult(g, sstar);
+            testCase.verifyEqual(got, 2.9278190688, 'AbsTol', 1e-9);
+
+            % A random sweep against the SAME per-piece oracle every other test in this file
+            % uses (supQuadOverPoly, max over the 3 pieces) -- no dependency on the pipeline.
+            W = {V([1 2 3],:), V([1 3 4],:), V([1 4 5],:)};
+            rng(7);
+            for t = 1:30
+                s = (rand(1,2)-0.5)*300;
+                ref = -inf;
+                for k = 1:3
+                    ref = max(ref, conjCPLQTest.supQuadOverPoly(s, f6(k,:), W{k}));
+                end
+                got = conjCPLQTest.evalConjResult(g, s);
+                testCase.verifyEqual(got, ref, 'RelTol', 1e-6, 'AbsTol', 1e-9, ...
+                    sprintf('at s=(%g,%g)', s(1), s(2)));
+            end
+        end
     end
 
     methods (Static)
