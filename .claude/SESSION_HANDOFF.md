@@ -1,25 +1,28 @@
 # Session Handoff
 
-_2026-08-29_
+_2026-08-30_
 
 ## Blocked
 Nothing external.
 
 ## State
-- Branch `main` @ `89648d4` — "docs: region.plus has zero redundancy --
-  memoization thread stops on a clean negative"
-- Pushed: yes — `origin/main`. Tag `v0.2` predates all three
-  memoizations below — consider `v0.2.1`.
-- Tests (2026-08-29): fast 312/0 · normal 12/0 · slow 96/0 (493s, was
-  798s) · regionTest 27/0 · testcPLQ (verylong) 8/0/1 (G11 quarantined).
+- Branch `main` @ `b7d6a31` — "docs: extra mergeL passes don't close
+  the 58-vs-8 gap -- confirms N-ary fan merge is the real fix"
+- Pushed: yes — `origin/main`. Tags `v0.2`, `v0.2.1` (memoizations +
+  scip-09's real-QPLIB validation).
+- Tests (2026-08-29, no code changes since): fast 312/0 · normal 12/0 ·
+  slow 96/0 (493s) · regionTest 27/0 · testcPLQ (verylong) 8/0/1 (G11).
 - Known reds: none silent. G11 quarantined via `assumeFail`.
+- scip-09 validated the box envelope on real QPLIB data (0 error,
+  837 cases); their remaining wall-clock loss is their own cut
+  management, not CCA2.
 
 ## Next
-1. Fold-strategy redesign (TODO G4): hub-vertex root cause found. THREE
-   safe memoizations landed — reference fixture 2944s -> 1830s (~38%),
-   cell count unchanged (58). `region.plus`/`mtimes` CHECKED, zero
-   redundancy (0/246 dup keys) — not a memoization candidate. Real fix
-   (resolve each hub's fan once) still open.
+1. Fold-strategy redesign (TODO G4): hub-vertex root cause confirmed
+   TWICE — extra `mergeL` passes on the final result find nothing
+   (58->58->58), ruling out a merge-order fix. Real fix needs an N-ARY
+   fan merge (new soundness proof) or fixing the fragmentation upstream
+   in Steps 1/2. Genuine redesign, not attempted.
 2. `splitTwoArcLens`: reproducer FOUND. Target cell is an INTERMEDIATE
    `clipByFace` product — trace forward, not backward.
 3. Conic-conic closed form: `conicMeet.m`/`ratQ.m` exist, unused.
