@@ -554,10 +554,21 @@ classdef symbolicFunction
         end
 
         function [l,c] = quadterm (obj, x)
-            
+        % objective: is there an x^2 term here, and with what coefficient.
+        % [output] l : true when x^2 occurs
+        %          c : its coefficient, EMPTY when l is false
+        %
+        % HISTORY 2026-08-31: `c` was assigned only on the true branch, so
+        % `[l,c] = f.quadterm(x)` on an expression WITHOUT x^2 raised
+        % "Output argument c ... not assigned a value" instead of returning
+        % false -- the routine could only be called safely with one output,
+        % or on inputs already known to contain the square. Found by the
+        % first unit test ever written for it. Initialising c costs nothing
+        % and changes no answer on the path that already worked.
             [qc,qt] = coeffs(obj.f,x);
             l = false;
-            
+            c = [];
+
             for i = 1:size(qt,2)
                 if isAlways (qt(i) == x^2)
                     l = true;
@@ -664,18 +675,6 @@ classdef symbolicFunction
             
         end    
 
-        function d = double (obj)
-            c = obj.f.coeffs();
-            if (size(c) == 0)
-                d = 0;
-                return
-            end
-            if (size(c) ~= 1)
-                disp("Error in double in symbolicFunction");
-                return
-            end
-            d = c(1);
-        end
 
        
         function f = solve (obj,x)
