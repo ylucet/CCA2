@@ -248,6 +248,74 @@ classdef frameAndFanTest < matlab.unittest.TestCase
             end
         end
 
+        function convEnvUnboundedOnAHalfStripIsAlsoATouchingAffineMinorant(testCase)
+        % The 'ray' branch -- the largest of the three and the one the two tests above do not
+        % reach, since a wedge dispatches on 'wedge' and a triangle on 'bounded'.
+        %
+        % ITS HYPOTHESIS, from the header: conv{v1,v2} + cone(d) with d'Qd = 0 and w'Qw <= 0 for
+        % w = v2 - v1. For q = x*y the null directions of Q are the two axes, so d = (0,1); and
+        % w'Qw = 2*w1*w2 <= 0 needs w with components of opposite sign, so w = (1,-1). The
+        % fixture is built to satisfy exactly that, because a fixture that misses the hypothesis
+        % tests the guard rather than the branch.
+            v = frameAndFanTest.vars();
+            r = plqCheck.halfStripRegion([0 0], [1 -1], [0 1], v);
+            Q = [0 1; 1 0]; L = [0;0]; c = 0;
+            q = frameAndFanTest.quadSym(Q, L, c, v);
+            [expr, why] = convEnvUnbounded(r, q, v);
+            testCase.verifyNotEmpty(why, 'the shape verdict must be reported');
+
+            testCase.verifyEqual(double(diff(expr, v(1), 2)), 0, 'AbsTol', 1e-12, ...
+                'the envelope must be affine in x');
+            testCase.verifyEqual(double(diff(expr, v(2), 2)), 0, 'AbsTol', 1e-12, ...
+                'the envelope must be affine in y');
+            testCase.verifyEqual(double(diff(diff(expr, v(1)), v(2))), 0, 'AbsTol', 1e-12, ...
+                'the envelope must have no cross term');
+
+            box = plqCheck.regionBox(r);
+            P = plqCheck.regionSample(r, box, 35, 1e-7);
+            testCase.verifyGreaterThan(size(P,1), 0, 'nothing sampled on the half-strip');
+            h = matlabFunction(expr, 'Vars', {v(1), v(2)});
+            gap = zeros(size(P,1),1);
+            for i = 1:size(P,1)
+                gap(i) = frameAndFanTest.quadNum(Q, L, c, P(i,:)) - double(h(P(i,1), P(i,2)));
+            end
+            sc = max(1, max(abs(gap)));
+            [worst, iw] = min(gap);
+            testCase.verifyGreaterThanOrEqual(worst, -1e-7*sc, sprintf( ...
+                'the half-strip envelope exceeds q by %.3g at (%g,%g)', -worst, P(iw,1), P(iw,2)));
+
+            Vf = plqCheck.finiteVertexSet(r);
+            testCase.verifyGreaterThan(size(Vf,1), 0, 'the half-strip must report finite vertices');
+            for i = 1:size(Vf,1)
+                gv = frameAndFanTest.quadNum(Q, L, c, Vf(i,:)) - double(h(Vf(i,1), Vf(i,2)));
+                testCase.verifyEqual(gv, 0, 'AbsTol', 1e-7*sc, sprintf( ...
+                    'the envelope must touch q at the finite vertex (%g,%g) -- gap %.3g', ...
+                    Vf(i,1), Vf(i,2), gv));
+            end
+        end
+
+        function theThreeShapesDispatchToThreeDifferentBranches(testCase)
+        % `why` is the routine's own report of which of the three hypotheses decided the answer.
+        % If two shapes came back with the same verdict, one of them would be going down a branch
+        % written for the other -- which the value checks above could still pass by accident on a
+        % symmetric fixture. Cheap, and it is the only thing that pins the dispatch itself.
+            v = frameAndFanTest.vars();
+            Q = [0 1; 1 0]; L = [0;0]; c = 0;
+            q = frameAndFanTest.quadSym(Q, L, c, v);
+            shapes = { plqCheck.wedgeRegion([0 0], [1 0], [0 1], v),      'wedge'
+                       plqCheck.halfStripRegion([0 0], [1 -1], [0 1], v), 'half-strip'
+                       plqCheck.triRegion([0 0; 3 0; 0 2], v),            'bounded triangle' };
+            whys = cell(size(shapes,1),1);
+            for k = 1:size(shapes,1)
+                [~, whys{k}] = convEnvUnbounded(shapes{k,1}, q, v);
+                testCase.verifyNotEmpty(whys{k}, sprintf('%s: no verdict', shapes{k,2}));
+            end
+            testCase.verifyEqual(numel(unique(whys)), numel(whys), sprintf( ...
+                ['the three shapes must take three different branches, but the verdicts were ' ...
+                 '%s -- a repeat means one shape is being handled by another''s formula'], ...
+                strjoin(whys.', ', ')));
+        end
+
         function convEnvUnboundedOnABoundedTriangleAgreesWithTheVertexHull(testCase)
         % The header says a bounded triangle is also accepted. There the affine envelope of a
         % quadratic that is concave along every edge is the affine interpolant of the three VERTEX
