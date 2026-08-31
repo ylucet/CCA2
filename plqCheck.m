@@ -188,18 +188,19 @@ classdef plqCheck
         % conv{v1,v2} + cone(d): the two-vertex, two-parallel-ray shape. Three facets -- the two
         % rays and the segment -- so it is the smallest fixture with both a bounded and an
         % unbounded facet, which is where clipping routines usually part company with their spec.
-            e = v2 - v1;
-            if abs(e(1)*d(2) - e(2)*d(1)) <= 0
+        % Written in the (s,t) COORDINATES the set is defined by rather than by picking signs for
+        % three normals: p = v1 + s e + t d with e = v2 - v1, so the set is exactly
+        % {s >= 0, s <= 1, t >= 0}, and (s,t) is an affine function of p through inv([e d]).
+        % Choosing normals by hand got two of the three facets backwards and produced an empty
+        % region, which then failed several stages downstream instead of here.
+            e = (v2(:) - v1(:));
+            C = [e, d(:)];
+            if abs(det(C)) <= eps * max(1, norm(C))
                 error('plqCheck:halfStripRegion', 'd must not be parallel to v2 - v1.');
             end
-            if e(1)*d(2) - e(2)*d(1) < 0, e = -e; tmp = v1; v1 = v2; v2 = tmp; end
-            A = [ e(2), -e(1);                            % below the segment is out
-                  d(2), -d(1);                            % left of the ray at v1
-                 -d(2),  d(1)];                           % right of the ray at v2
-            b = [ e(2)*v1(1) - e(1)*v1(2);
-                  d(2)*v1(1) - d(1)*v1(2);
-                 -d(2)*v2(1) + d(1)*v2(2)];
-            A(1,:) = -A(1,:); b(1) = -b(1);               % keep the interior on the +d side
+            W = inv(C);                                   %#ok<MINV>  2x2, exactness not at stake
+            A = [-W(1,:); W(1,:); -W(2,:)];
+            b = [-W(1,:)*v1(:); 1 + W(1,:)*v1(:); -W(2,:)*v1(:)];
             r = plqCheck.halfPlanes(A, b, vars);
         end
 
