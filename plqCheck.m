@@ -99,15 +99,108 @@ classdef plqCheck
         %          P      : k x 2 points
         %          margin : slack added to the right-hand side (default 0)
         % [output] tf     : k x 1 logical
+        %
+        % MEMOIZED HANDLES, and it is not an optimisation. `matlabFunction` calls the symbolic
+        % engine, so it costs tens of milliseconds per constraint per call -- and the callers below
+        % ask the same question of the same region dozens of times (both directions of a
+        % containment, then again after the operation, then again for idempotence). Measured
+        % 2026-08-31: without this cache the assertions added to `testRegion` took that suite from
+        % ~120 s to ~13 min, which is a fast-bucket budget spent on re-compiling the same three
+        % inequalities. The key is the constraint's own `char`, which is exactly what determines
+        % the handle, so the cache cannot answer a different question than the caller asked.
             if nargin < 3, margin = 0; end
             if isempty(r), tf = false(size(P,1),1); return, end
             tf = true(size(P,1), 1);
             v = r.vars;
             for k = 1:size(r.ineqs, 2)
-                h = matlabFunction(r.ineqs(k).f, 'Vars', {v(1), v(2)});
+                h = plqCheck.handleFor(r.ineqs(k).f, v);
                 g = arrayfun(@(i) double(h(P(i,1), P(i,2))), (1:size(P,1))');
                 tf = tf & (g <= margin);
             end
+        end
+
+        function h = handleFor(f, v)
+        % A numeric function handle for the symbolic expression f in the variables v, cached on
+        % (char(f), char(v)). See inRegion for why.
+            persistent cache
+            if isempty(cache), cache = containers.Map('KeyType','char','ValueType','any'); end
+            key = [char(f) '##' char(v(1)) ',' char(v(2))];
+            if isKey(cache, key), h = cache(key); return, end
+            h = matlabFunction(f, 'Vars', {v(1), v(2)});
+            cache(key) = h;
+        end
+
+        % ---- FIXTURE BUILDERS -------------------------------------------------------------------
+        % Every unit suite needs the same four shapes -- a bounded triangle, a box, a wedge (one
+        % vertex, two rays) and a half-strip (two vertices, two parallel rays) -- because those are
+        % the only shapes `plq_1p` and `fanUnboundedFace` emit and therefore the only ones the
+        % routines downstream are specified for. Each suite used to rebuild them by hand, which is
+        % why no two fixtures agreed. Built from EXPLICIT half-planes so the sign convention is
+        % written once: `region` reads every constraint as g(x,y) <= 0.
+
+        function r = halfPlanes(A, b, vars)
+        % {x : A x <= b} as a `region`, from numeric rows. The rows are kept exactly as given --
+        % no normalisation -- so a caller can hand in the badly scaled rows a scale test needs.
+            g = sym.empty(1,0);
+            for i = 1:size(A,1)
+                g(i) = A(i,1)*vars(1) + A(i,2)*vars(2) - b(i);
+            end
+            r = region(g, vars);
+        end
+
+        function r = triRegion(V, vars)
+        % The closed triangle on the three rows of V, given COUNTER-CLOCKWISE. Each edge a->b
+        % contributes "the interior is on the left": cross(b-a, p-a) >= 0.
+            if size(V,1) ~= 3, error('plqCheck:triRegion', 'V must be 3 x 2.'); end
+            A = zeros(3,2); b = zeros(3,1);
+            for i = 1:3
+                a = V(i,:); c = V(mod(i,3)+1,:); e = c - a;
+                A(i,:) = [e(2), -e(1)];          % -cross(e, p-a) <= 0
+                b(i)   = e(2)*a(1) - e(1)*a(2);
+            end
+            r = plqCheck.halfPlanes(A, b, vars);
+        end
+
+        function r = boxRegion(lo, hi, vars)
+        % The axis-aligned box [lo(1),hi(1)] x [lo(2),hi(2)] -- the SCIP/QPLIB domain shape.
+            A = [-1 0; 1 0; 0 -1; 0 1];
+            b = [-lo(1); hi(1); -lo(2); hi(2)];
+            r = plqCheck.halfPlanes(A, b, vars);
+        end
+
+        function r = wedgeRegion(v, d1, d2, vars)
+        % The pointed cone v + cone(d1,d2), with d1 -> d2 turning COUNTER-CLOCKWISE. Refuses a
+        % non-pointed pair rather than returning a half-plane the caller did not ask for.
+            c = d1(1)*d2(2) - d1(2)*d2(1);
+            if c <= 0
+                error('plqCheck:wedgeRegion', ...
+                    ['d1 -> d2 must turn counter-clockwise through less than pi (cross = %g). ' ...
+                     'A flat or reflex pair is a half-plane or a non-convex set, not a wedge.'], c);
+            end
+            A = [ d1(2), -d1(1);          % -cross(d1, p-v) <= 0
+                 -d2(2),  d2(1)];         % -cross(p-v, d2) <= 0
+            b = [ d1(2)*v(1) - d1(1)*v(2);
+                 -d2(2)*v(1) + d2(1)*v(2)];
+            r = plqCheck.halfPlanes(A, b, vars);
+        end
+
+        function r = halfStripRegion(v1, v2, d, vars)
+        % conv{v1,v2} + cone(d): the two-vertex, two-parallel-ray shape. Three facets -- the two
+        % rays and the segment -- so it is the smallest fixture with both a bounded and an
+        % unbounded facet, which is where clipping routines usually part company with their spec.
+            e = v2 - v1;
+            if abs(e(1)*d(2) - e(2)*d(1)) <= 0
+                error('plqCheck:halfStripRegion', 'd must not be parallel to v2 - v1.');
+            end
+            if e(1)*d(2) - e(2)*d(1) < 0, e = -e; tmp = v1; v1 = v2; v2 = tmp; end
+            A = [ e(2), -e(1);                            % below the segment is out
+                  d(2), -d(1);                            % left of the ray at v1
+                 -d(2),  d(1)];                           % right of the ray at v2
+            b = [ e(2)*v1(1) - e(1)*v1(2);
+                  d(2)*v1(1) - d(1)*v1(2);
+                 -d(2)*v2(1) + d(1)*v2(2)];
+            A(1,:) = -A(1,:); b(1) = -b(1);               % keep the interior on the +d side
+            r = plqCheck.halfPlanes(A, b, vars);
         end
 
         function b = regionBox(rs, pad)

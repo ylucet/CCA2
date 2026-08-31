@@ -416,14 +416,6 @@ classdef symbolicFunction
          % this works only for bivariate - put checks in place and change
          % name
          
-         function f = tangentOfSlope (obj, m)
-             dx = obj.dfdx(obj.vars(1))
-             dy = obj.dfdx(obj.vars(2))
-             
-             f = symbolicFunction(m * dy.f - dx.f);
-             
-             
-         end
 
 
          function f = tangent (obj, x, y, vars)
@@ -481,13 +473,6 @@ classdef symbolicFunction
         
         end
 
-        function l = isParabolic(obj)
-            l = false;
-            if ~ obj.isQuad
-                return;
-            end
-            c = coeffs(obj.f, obj.vars)
-        end
         
         function l = isLinear(obj)
          
@@ -502,16 +487,6 @@ classdef symbolicFunction
           end
         end
 
-        % fix this
-        function l = isConst(obj)
-
-            if size(obj.vars,2) > 0
-                l = false;
-                return
-            end
-            cn = coeffs(obj.f,obj.vars);
-            l = all(cn(2:end)==0);
-        end
     end
     
     methods
@@ -772,13 +747,6 @@ classdef symbolicFunction
         end
         
 
-        function [vx,vy] = solveF (f2)
-            f1x = subs(obj.f, obj.vars,[x,y]);
-            f2x = subs(f2.f, obj.vars,[x,y]);
-            s = solve ([f1==0,f2==0],[x,y]);
-            vx = s.x;
-            vy = s.y;
-        end
             
         
         function f = removeDenominator2 (obj)
