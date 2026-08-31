@@ -156,18 +156,61 @@ classdef testSymbolicFunction < matlab.unittest.TestCase
  
         
         function testTangent(testCase)
+        % `tangent(x0,y0)` is the tangent LINE to the curve {f = 0} at (x0,y0), so it is pinned by
+        % two properties and nothing else:
+        %     t(x0,y0) = 0                      the line passes through the point
+        %     grad t  parallel to  grad f       it has the curve's own direction there
+        % Both are checked at every root of the conic-and-line system, for the conic AND for its
+        % NEGATION -- the same curve, so the normalised tangent must come out identical. That last
+        % one is the real content: `tangent` divides by partial derivatives, and negating f flips
+        % every sign in the quotient, which is exactly where a sign slip hides.
+        %
+        % Previously this test computed all of the above and displayed it.
             x = sym('x');
             y = sym('y');
-            f2 = symbolicFunction(148*x - 196*y + (x + 7*y)^2 - 684)
-            %f2.tangent(3.159091,-1.022727)
-            f3 = symbolicFunction(x - (9*y)/5 - 5)
-            [tx,ty] = solve(f3.f==0,f2.f==0)
-            
-            t = f2.tangent(tx,ty)
-            t = t.normalize1
-            f2 = -f2  
-            t = f2.tangent(tx,ty)
-            t = t.normalize1
+            f2 = symbolicFunction(148*x - 196*y + (x + 7*y)^2 - 684);
+            f3 = symbolicFunction(x - (9*y)/5 - 5);
+            [tx, ty] = solve(f3.f == 0, f2.f == 0);
+            testCase.verifyGreaterThanOrEqual(numel(tx), 1, ...
+                'the line must meet the conic; with no root nothing below is tested');
+
+            for k = 1:numel(tx)
+                p = [tx(k), ty(k)];
+                for s = [1 -1]
+                    fk = f2;
+                    if s < 0, fk = -f2; end
+                    t = fk.tangent(tx(k), ty(k));
+                    t = t.normalize1;
+
+                    testCase.verifyEqual(double(subs(t.f, [x y], p)), 0, 'AbsTol', 1e-9, ...
+                        sprintf('root %d, sign %+d: the tangent does not pass through the point', k, s));
+
+                    gT = double([subs(diff(t.f, x), [x y], p),  subs(diff(t.f, y), [x y], p)]);
+                    gF = double([subs(diff(fk.f, x), [x y], p), subs(diff(fk.f, y), [x y], p)]);
+                    testCase.verifyGreaterThan(norm(gT), 1e-9, ...
+                        sprintf('root %d, sign %+d: the tangent is degenerate (zero gradient)', k, s));
+                    cross = gT(1)*gF(2) - gT(2)*gF(1);
+                    testCase.verifyEqual(cross / (norm(gT)*norm(gF)), 0, 'AbsTol', 1e-9, ...
+                        sprintf(['root %d, sign %+d: the tangent is not parallel to the curve ' ...
+                                 'there (grad t = %s, grad f = %s)'], k, s, mat2str(gT,4), mat2str(gF,4)));
+
+                    % The tangent is AFFINE: a "tangent line" that still carries a quadratic term
+                    % is the failure mode a value check at the touch point cannot see.
+                    testCase.verifyEqual(double(diff(t.f, x, 2)), 0, 'AbsTol', 1e-12, ...
+                        sprintf('root %d, sign %+d: the tangent is not affine in x', k, s));
+                    testCase.verifyEqual(double(diff(t.f, y, 2)), 0, 'AbsTol', 1e-12, ...
+                        sprintf('root %d, sign %+d: the tangent is not affine in y', k, s));
+                end
+
+                % Same curve, opposite sign of f: after normalize1 the two tangents must be the
+                % same line.
+                fNeg = -f2;
+                tPos = f2.tangent(tx(k), ty(k));    tPos = tPos.normalize1;
+                tNeg = fNeg.tangent(tx(k), ty(k));  tNeg = tNeg.normalize1;
+                testCase.verifyTrue(isAlways(simplify(tPos.f - tNeg.f) == 0), sprintf( ...
+                    'root %d: tangent(f) = %s but tangent(-f) = %s -- the same curve must give the same line', ...
+                    k, char(tPos.f), char(tNeg.f)));
+            end
         end
 
         function tangentOfACurveMissingOneAmbientVariable(testCase)

@@ -75,6 +75,216 @@ classdef plqCheck
             tf = all(s >= -tol, 2) | all(s <= tol, 2);
         end
 
+        % ==========================================================================================
+        % REGION-LEVEL DEFINITION CHECKS
+        %
+        % WHY THESE ARE HERE. `testRegion` and `testfunctionNDomain` between them held 22 tests
+        % that printed a region and returned -- the same shape this class already replaced for the
+        % cPLQ pipeline. A region is a POINT SET, {p : g_k(p) <= 0 for every k}, and every
+        % operation on one (merge, simplifyUnboundedRegion, removeTangent, linear3pt) has a
+        % contract stated in terms of that point set. So the check is the definition: SAMPLE the
+        % set and compare memberships. Nothing here pins a constraint list or a vertex order,
+        % which is what made the previous assertions in this suite brittle.
+        %
+        % THE MARGIN, and why the sample is one-sided. A sampled point sitting exactly on a facet
+        % belongs to both sides and decides nothing, so `regionSample` returns only points that
+        % are STRICTLY inside by `margin`, and a containment test then accepts the other region
+        % up to `+margin`. A defect that moves a facet by less than the margin is invisible to
+        % this check -- but every defect these operations can have (a dropped facet, a facet on
+        % the wrong side, a merge that swallows a non-convex gap) is O(1), not O(margin).
+
+        function tf = inRegion(r, P, margin)
+        % Membership in a `region` by its own definition: every constraint <= margin at P.
+        % [input]  r      : a scalar region
+        %          P      : k x 2 points
+        %          margin : slack added to the right-hand side (default 0)
+        % [output] tf     : k x 1 logical
+            if nargin < 3, margin = 0; end
+            if isempty(r), tf = false(size(P,1),1); return, end
+            tf = true(size(P,1), 1);
+            v = r.vars;
+            for k = 1:size(r.ineqs, 2)
+                h = matlabFunction(r.ineqs(k).f, 'Vars', {v(1), v(2)});
+                g = arrayfun(@(i) double(h(P(i,1), P(i,2))), (1:size(P,1))');
+                tf = tf & (g <= margin);
+            end
+        end
+
+        function b = regionBox(rs, pad)
+        % A sampling window big enough to see the interesting part of a family of regions: the
+        % bounding box of every FINITE vertex any of them has, padded. Unbounded regions run off
+        % this window, which is fine -- the check is over the window, not over the plane.
+        %
+        % The pad is RELATIVE to the vertices' own spread, not a constant. A fixed pad of 8 around
+        % the unit triangle left a 45 x 45 grid with three interior points -- technically not
+        % vacuous, and useless.
+            V = zeros(0,2);
+            for i = 1:numel(rs)
+                r = rs(i);
+                if isempty(r), continue, end
+                for j = 1:r.nv
+                    xv = double(r.vx(j)); yv = double(r.vy(j));
+                    if isfinite(xv) && isfinite(yv) && abs(xv) < 1e6 && abs(yv) < 1e6
+                        V(end+1,:) = [xv yv];                                  %#ok<AGROW>
+                    end
+                end
+            end
+            if isempty(V), b = [-10 10 -10 10]; return, end
+            if nargin < 2 || isempty(pad)
+                pad = max(1, 0.6 * max(max(V,[],1) - min(V,[],1)));
+            end
+            lo = min(V,[],1) - pad; hi = max(V,[],1) + pad;
+            b = [lo(1) hi(1) lo(2) hi(2)];
+        end
+
+        function P = regionSample(r, box, n, margin)
+        % Points STRICTLY inside r (by `margin`) on an n x n grid over `box = [x0 x1 y0 y1]`.
+        % Returns 0 x 2 when the region misses the window entirely -- callers must treat that as
+        % "nothing checked" rather than "check passed", which `verifyRegionSubset` does.
+        %
+        % ONE ADAPTIVE RETRY, and it is not a nicety. `regionBox` sizes the window from the finite
+        % vertices, so a region with a single vertex gets a window of pad-size around it -- and a
+        % PARABOLIC region with one vertex extends far beyond that. Measured on testRegion's
+        % removeTangent fixture: the default window found 0 interior points and the check went
+        % silently vacuous, while [-60,60]^2 found 3712 and the check was decisive. Widening
+        % unconditionally instead would cost density on the small fixtures, so widen only when
+        % there is nothing to look at.
+            if nargin < 3, n = 45; end
+            if nargin < 4, margin = 1e-6; end
+            P = gridInside(box);
+            if isempty(P)
+                cx = (box(1)+box(2))/2; cy = (box(3)+box(4))/2;
+                hx = max(box(2)-box(1), 1) * 10; hy = max(box(4)-box(3), 1) * 10;
+                P = gridInside([cx-hx, cx+hx, cy-hy, cy+hy]);
+            end
+
+            function Q = gridInside(b)
+                [gx, gy] = meshgrid(linspace(b(1), b(2), n), linspace(b(3), b(4), n));
+                C = [gx(:), gy(:)];
+                Q = C(plqCheck.inRegion(r, C, -margin), :);
+            end
+        end
+
+        function nChecked = verifyRegionSubset(tc, rSub, rSup, box, name, margin)
+        % Every point strictly inside rSub must lie in rSup. Returns how many points were
+        % actually tested so the caller can assert the check was not vacuous.
+            if nargin < 6, margin = 1e-6; end
+            P = plqCheck.regionSample(rSub, box, 45, margin);
+            nChecked = size(P,1);
+            if nChecked == 0, return, end
+            in = plqCheck.inRegion(rSup, P, margin);
+            bad = find(~in, 1);
+            if isempty(bad), bad = 1; end
+            tc.verifyTrue(all(in), sprintf( ...
+                '%s: %d of %d sampled points of the subset are outside the superset (first at (%g,%g))', ...
+                name, sum(~in), nChecked, P(bad,1), P(bad,2)));
+        end
+
+        function nChecked = verifyRegionsAgree(tc, rA, rB, name, box)
+        % rA and rB describe the SAME point set over the window. Used for every operation that is
+        % documented to rewrite a region's presentation without moving its boundary --
+        % simplifyUnboundedRegion, removeTangent, linear3pt.
+        %
+        % RETURNS how many points were actually compared, and does NOT itself assert that the
+        % number is positive. A region with empty interior -- and testRegion's own fixtures
+        % include an infeasible one and one that is a single point -- has nothing to sample, and
+        % that is a property of the fixture, not a failure. The caller knows which of its inputs
+        % are supposed to be two-dimensional and asserts non-vacuity there; `finiteVertexSet`
+        % below is the check for the degenerate ones.
+            if nargin < 5, box = plqCheck.regionBox([rA, rB]); end
+            nA = plqCheck.verifyRegionSubset(tc, rA, rB, box, [name ' (A subset B)']);
+            nB = plqCheck.verifyRegionSubset(tc, rB, rA, box, [name ' (B subset A)']);
+            nChecked = nA + nB;
+        end
+
+        function V = finiteVertexSet(r)
+        % The region's finite vertices as a sorted, de-duplicated numeric list -- the only thing
+        % left to compare when a region has no interior to sample. Sorted, because the vertex
+        % ORDER is a Symbolic Math Toolbox detail (see testRegion/testCreation).
+            V = zeros(0,2);
+            if isempty(r), return, end
+            for j = 1:r.nv
+                xv = double(r.vx(j)); yv = double(r.vy(j));
+                if isfinite(xv) && isfinite(yv) && abs(xv) < 1e6 && abs(yv) < 1e6
+                    V(end+1,:) = [xv yv];                                      %#ok<AGROW>
+                end
+            end
+            V = unique(round(V, 9), 'rows');
+        end
+
+        function verifyMergeSound(tc, rM, rA, rB, isExact, name, box)
+        % `region.merge`'s own contract, and it has TWO branches, not one.
+        %
+        % The signature is `[l, obj] = merge(obj, obj2)`: the result overwrites the FIRST
+        % argument. So when merge declines -- no shared facet, more than one shared facet, or
+        % `unionIsExact` withholding its certificate -- it returns `l = false` and the first
+        % operand UNCHANGED. It has not produced a union and must not be asserted as one.
+        %
+        %   l TRUE   rM is exactly A u B. Both halves are asserted: rM contains A and contains B
+        %            (merge deletes the shared facet from each and intersects the rest, which
+        %            `unionIsExactCompute`'s header proves can never lose a point), and rM adds
+        %            nothing (every point of rM lies in A or in B). The second half is the one
+        %            that catches the over-claiming defect merge's own header describes -- three
+        %            Step 3 cells merging into one that covered a point none of them did.
+        %   l FALSE  no merge happened, so the contract is that A came back untouched. Asserted
+        %            as a point-set identity rather than as a constraint-list identity, because
+        %            merge may return the pre-restore copy `obj3` on the empty-union path.
+            if nargin < 7, box = plqCheck.regionBox([rA, rB, rM]); end
+            if isempty(rM)
+                tc.verifyTrue(isempty(rA) && isempty(rB), sprintf( ...
+                    '%s: merge returned empty for non-empty inputs', name));
+                return
+            end
+            if ~isExact
+                plqCheck.verifyRegionsAgree(tc, rA, rM, ...
+                    [name ' declined, so the first operand must come back unchanged'], box);
+                tc.verifyEqual(size(rM.ineqs,2), size(rA.ineqs,2), sprintf( ...
+                    ['%s: merge declined but returned %d constraints against the first ' ...
+                     'operand''s %d -- a declined merge must change nothing'], ...
+                    name, size(rM.ineqs,2), size(rA.ineqs,2)));
+                return
+            end
+            nA = plqCheck.verifyRegionSubset(tc, rA, rM, box, [name ' (A subset merge)']);
+            nB = plqCheck.verifyRegionSubset(tc, rB, rM, box, [name ' (B subset merge)']);
+            tc.verifyGreaterThan(nA + nB, 0, sprintf( ...
+                '%s: neither input has a sampled interior point -- the check was vacuous', name));
+            P = plqCheck.regionSample(rM, box, 45, 1e-6);
+            if isempty(P), return, end
+            in = plqCheck.inRegion(rA, P, 1e-6) | plqCheck.inRegion(rB, P, 1e-6);
+            bad = find(~in, 1);
+            if isempty(bad), bad = 1; end
+            tc.verifyTrue(all(in), sprintf( ...
+                ['%s: merge was reported EXACT but %d of %d of its own points lie in neither ' ...
+                 'input (first at (%g,%g)) -- the union is not convex there'], ...
+                name, sum(~in), numel(in), P(bad,1), P(bad,2)));
+        end
+
+        function verifyVerticesAreVertices(tc, r, name)
+        % Every finite vertex a region reports must (a) satisfy all of its constraints and
+        % (b) make at least TWO of them active -- that is what makes it a vertex rather than a
+        % boundary point. Catches the duplicate-vertex and stale-vertex failures getVertices'
+        % own HISTORY note describes, without pinning coordinates.
+            nFinite = 0;
+            for j = 1:r.nv
+                xv = double(r.vx(j)); yv = double(r.vy(j));
+                if ~isfinite(xv) || ~isfinite(yv) || abs(xv) >= 1e6 || abs(yv) >= 1e6, continue, end
+                nFinite = nFinite + 1;
+                g = zeros(1, size(r.ineqs,2));
+                for k = 1:size(r.ineqs,2)
+                    g(k) = double(subs(r.ineqs(k).f, r.vars, [xv yv]));
+                end
+                sc = max(1, max(abs(g)));
+                tc.verifyLessThanOrEqual(max(g), 1e-7*sc, sprintf( ...
+                    '%s: reported vertex %d = (%g,%g) violates its own constraints by %.3g', ...
+                    name, j, xv, yv, max(g)));
+                tc.verifyGreaterThanOrEqual(sum(abs(g) <= 1e-7*sc), 2, sprintf( ...
+                    '%s: reported vertex %d = (%g,%g) has %d active constraints; a vertex needs 2', ...
+                    name, j, xv, yv, sum(abs(g) <= 1e-7*sc)));
+            end
+            tc.verifyGreaterThan(nFinite, 0, sprintf( ...
+                '%s: no finite vertex was reported, so nothing was checked', name));
+        end
+
         function [v, ok] = safeEval(fnd, pt)
         % evalFunctionNDomain at one point, with a RATIONAL face's pole treated as "no value
         % here" rather than an error. Step 1's envelope is quadratic-over-LINEAR, and its
