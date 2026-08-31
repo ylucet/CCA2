@@ -87,7 +87,8 @@ FAST_SUITES=(PLQVCTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolT
              conjAffinePLQTest conjPieceCPLQTest conjSymFreeTest
              convEnvCPLQTest
              exactQTest infConvTest
-             lasryLionsTest maxQuaParTest mergeSameQuadFacesTest moreauTest proxAverageTest
+             lasryLionsTest maxQuaParTest mergeSameQuadFacesTest meshPredicateTest
+             moreauTest proxAverageTest
              ratQTest regionTest testSymbolicFunction)
 NORMAL_SUITES=(cplqAdapterTest functionNDomainTest testfunctionNDomain)
 # Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
