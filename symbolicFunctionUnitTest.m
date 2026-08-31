@@ -168,6 +168,46 @@ classdef symbolicFunctionUnitTest < matlab.unittest.TestCase
             end
         end
 
+
+        % =========================================================================================
+        % limitDirectional -- the bivariate 0/0 that MATLAB's own `limit` cannot resolve
+        % =========================================================================================
+        function limitDirectionalResolvesARemovableBivariateSingularity(testCase)
+        % Its header: `limit` takes ITERATED univariate limits, which is the wrong tool for a
+        % genuine bivariate 0/0 -- the inner limit is itself indeterminate and the iteration
+        % returns NaN. This restricts to straight lines into the point and requires the values to
+        % AGREE, which is what makes agreement a proof that the limit exists.
+        %
+        % The fixture is removable by construction: (x^2 - y^2)/(x - y) = x + y away from the
+        % diagonal, so the limit at (1,1) is 2 along every direction. The answer is therefore
+        % known independently of the routine.
+            v = symbolicFunctionUnitTest.vars();
+            f = symbolicFunction((v(1)^2 - v(2)^2) / (v(1) - v(2)));
+            got = f.limitDirectional(v, [1 1]);
+            testCase.verifyEqual(double(got.f), 2, 'AbsTol', 1e-9, ...
+                '(x^2-y^2)/(x-y) simplifies to x+y, so its limit at (1,1) is 2');
+
+            g = symbolicFunction((v(1)^2 - v(2)^2) / (v(1) - v(2)));
+            got0 = g.limitDirectional(v, [0 0]);
+            testCase.verifyEqual(double(got0.f), 0, 'AbsTol', 1e-9, ...
+                'the same expression at the origin has limit 0');
+        end
+
+        function limitDirectionalRefusesADirectionDependentSingularity(testCase)
+        % The other half of the contract, and the reason the routine compares directions at all:
+        % x*y/(x^2 + y^2) at the origin has a DIFFERENT limit along every line (0 along the axes,
+        % 1/2 along y = x), so no limit exists and the documented answer is NaN. A routine that
+        % returned one arbitrary branch's value would look perfectly reasonable at any single
+        % probe -- which is exactly why this is asserted.
+            v = symbolicFunctionUnitTest.vars();
+            f = symbolicFunction(v(1)*v(2) / (v(1)^2 + v(2)^2));
+            got = f.limitDirectional(v, [0 0]);
+            val = double(got.f);
+            testCase.verifyTrue(isnan(val), sprintf( ...
+                ['x*y/(x^2+y^2) has no limit at the origin -- 0 along the axes, 1/2 along ' ...
+                 'y = x -- so the answer must be NaN, not %g'], val));
+        end
+
         % =========================================================================================
         % dfdx and normalize1 -- small, and both are read by slopeAtVertex
         % =========================================================================================

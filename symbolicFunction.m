@@ -381,8 +381,19 @@ classdef symbolicFunction
              dirs = [1 0; 0 1; 1 1; 3 -2; -1 2];
              vals = sym([]);
              for k = 1:size(dirs,1)
-                 e = subs(obj.f, vars, [pt(1) + t*dirs(k,1), pt(2) + t*dirs(k,2)]);
+                 % The SUBSTITUTION itself can raise, and that has to be caught here rather than
+                 % only around `limit`. A direction TANGENT to the denominator's zero set makes
+                 % the denominator vanish identically in t, and `subs` then raises
+                 % symbolic:kernel:DivisionByZero instead of returning an indeterminate
+                 % expression. (1,1) is in the list above and the line x = y is a denominator
+                 % this codebase produces, so (x^2-y^2)/(x-y) at (1,1) took the whole routine
+                 % down -- HISTORY 2026-08-31, found by symbolicFunctionUnitTest. Skipping the
+                 % degenerate direction is exactly right: the contract is that the directions
+                 % which DO yield a value must agree, and a direction that yields none says
+                 % nothing either way. If every direction degenerates, `vals` is empty and the
+                 % routine already answers NaN.
                  try
+                     e = subs(obj.f, vars, [pt(1) + t*dirs(k,1), pt(2) + t*dirs(k,2)]);
                      v = limit(e, t, 0);
                  catch
                      continue
