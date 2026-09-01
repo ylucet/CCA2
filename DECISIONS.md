@@ -4767,3 +4767,37 @@ full-domain construction machinery from scratch (TODO.md item 3's stated obstacl
 perturbation of an existing single-function fixture. Three attempts, three different methods, one
 consistent conclusion -- stopping here per the project's own rung discipline rather than trying a
 fourth variation of the same "search an existing fixture family" idea.
+
+## 2026-08-31 — deleting `plq_1piece.m` is REFUTED: it is legacy, not dead
+
+**Tried.** The coverage plan's first decision was to delete `plq_1piece.m` -- 1134 executable
+lines, 0% covered in fast, normal AND slow, 8% of the whole production denominator, and every
+reference to it from the repository root is a comment. On that evidence it reads as dead code and
+deleting it would have cut the work to reach 80% coverage roughly in half.
+
+**Why it cannot go.** `testMaxMultiRegion` builds EVERY one of its fixtures with
+`plq_1piece(domain(...), symbolicFunction(...))` -- 42 tests, of which only 7 are `legacyPin`ned.
+The other 35 are live, and they span 13 distinct fixtures (PCE0_2, PCE0_3, PCE1, PCE2, the eight
+`testBiconjugate*` cases, `testFractional`, `testMaxThesis`) against `testcPLQ`'s 10 tests over
+2 fixtures. Deleting the class deletes the repository's broadest pipeline validation, which is a
+much larger loss than the coverage gain.
+
+**Before retrying:** finish the T6/G14 fixture migration to `plq_1p` -- the legacyPin message
+already names it ("delete this line when the fixture moves to plq_1p"). Until then the honest
+options are to exclude the file from the coverage metric with the reason stated, or to quote the
+figure as "80% of live code". Both need a decision that is not the model's to make.
+
+**Evidence:** `grep -n "plq_1piece" testMaxMultiRegion.m`; `legacyPin` at testMaxMultiRegion.m:149.
+
+## 2026-08-31 — a red bucket during a licence dropout is not a regression
+
+**Cost half an hour, so worth recording.** A fast-bucket run immediately after the dead-code
+deletions came back `pass=298 fail=16 incomplete=16`, all 16 in `regionTest`, against 314/0
+before. It read as a regression caused by the deletions. It was not: the MATLAB licence server
+had become unreachable mid-run (`Licensing error: -96,7`), and every symbolic call in flight
+failed. Re-running the same tree once the VPN was back gave `regionTest` 27/0 and the bucket
+363/0, with no code change in between.
+
+**The tell is the shape, not the count:** equal numbers of failed and incomplete, concentrated in
+one symbolic suite, with empty framework diagnostics. Check `matlab -batch "disp(1)"` before
+bisecting a red that appears alongside an environment change.
