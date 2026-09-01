@@ -10,7 +10,7 @@ _2026-08-31_
 ## State
 - Branch `main` @ `e3a0671` — "fix: limitDirectional crashed on a direction
   tangent to the denominator's zero set"
-- Pushed: pending
+- Pushed: yes — `origin/main`
 - Tests (2026-08-31): fast 363/0 (30 suites, ~175 s) · normal 13/0 (369 s) ·
   slow 98/0 (measured before today's deletions; re-run before a tag)
 - Known reds: none. G11 still quarantined via `assumeFail`.
