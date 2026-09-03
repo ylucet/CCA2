@@ -4801,3 +4801,73 @@ failed. Re-running the same tree once the VPN was back gave `regionTest` 27/0 an
 **The tell is the shape, not the count:** equal numbers of failed and incomplete, concentrated in
 one symbolic suite, with empty framework diagnostics. Check `matlab -batch "disp(1)"` before
 bisecting a red that appears alongside an environment change.
+
+## 2026-09-03 — the exact fields go on the NEW types, not retrofitted onto the legacy four
+
+**The question this closes.** The approved exact-arithmetic plan opened with a Phase 1 that made
+`f`/`den`/`Ec`/`V` exact on `RatCon` itself, with the double views as dependent properties, so that
+the ~243 existing `obj.f` read sites kept working. That is safe only if every value the CURRENT
+pipeline stores round-trips through `ratQ.fromDouble`, which raises rather than snapping. Measured
+before building it, and the answer is no.
+
+**The sweep** (8 fixtures, `conj` through the existing double path, counting rows that fail to
+convert):
+
+    case                           kind      f bad    Ec bad   V bad
+    energy on the unit square      QuaPol     0/9      0/12     8/12
+    xy on the unit square          QuaPar     0/10     0/12     5/11
+    x^2-y^2 on the unit square     QuaPar    10/12     2/16    10/13
+    3xy+7x-2y+5 on the square      QuaPar     6/10     2/12    11/11
+    energy on a triangle           QuaPar     0/7      0/9      2/9
+    xy on a triangle               QuaPar     0/3      0/3      0/4
+    concave on a triangle          QuaPar     0/3      0/3      0/4
+    xy on a wide box               QuaPar     0/10     0/12     5/11
+    TOTAL BAD                                16       4        41
+
+**The vertices are expected and are not a defect.** 41 of 87 vertex rows are not rational, which is
+`CONJ_FIELD_PROOF.md` Theorem 1 appearing in the code exactly as stated: face functions and edge
+conics are rational, vertices need not be. It is the reason `QuaCon` names vertices instead of
+storing them, and it settles that `V` must NOT become an exact field on the legacy types. The plan
+said as much in Phase 2 ("`QuaCon` alone gets named vertices; the four legacy types keep coordinate
+`V`") and contradicted itself in Phase 1; Phase 2 is right.
+
+**The 16 bad FACE rows are a different thing, and they are a live defect.** Theorem 1 says a
+coefficient of `f*` cannot be irrational, so those rows are the double pipeline losing exactness.
+Traced, and it is not marginal-but-explainable — it is one or two ULP:
+
+    face  1..6   worst |x - p/q| = 2.220e-16   entry 5   x = 0.99999999999999978   (the value is 1)
+    face  7..12  worst |x - p/q| = 1.110e-16   entry 10  x = 0.50000000000000011   (the value is 1/2)
+
+**Why that matters beyond tidiness.** `mergeSameQuadFaces` compares face coefficients EXACTLY, on
+purpose -- `ALGORITHM.md` says "a normaliser that merged coefficients agreeing to 1e-12 would be
+changing the function". So a face carrying `0.99999999999999978` cannot merge with one carrying
+`1`, and Step 0 silently does nothing on `x^2-y^2` over the square. This is the same mechanism
+`DECISIONS.md` 2026-08-17 recorded one level down (an ULP hiding a shared facet from `region.merge`
+and the cell count then growing without bound), now measured in the FACE layer rather than the
+constraint layer.
+
+**Decision.** Exactness is a property of the OBJECT, and it is expressed by the type, not by a flag
+or by a second copy of the coefficients:
+
+* The exact fields go on the NEW types (`QuaCon`, later `AlgAlg`), which are exact-only and have
+  no legacy producer to satisfy.
+* The four legacy types keep double `f`/`den`/`Ec`/`V` unchanged, so the existing pipeline keeps
+  running and stays available as the differential oracle for the exact one -- which is what
+  `CLAUDE.md` section 6 wants and what a retrofit would have destroyed on day one.
+* An exact INPUT is exact by construction: the caller's own coefficients are exact rationals
+  (`[0 0 0 0 1 0 -1 0 0 0]` is what a user writes), so `ratQ.fromDouble` at the boundary is a
+  reconstruction of data that never went through a computation. That is the one place it is
+  legitimate, and its own header already says so.
+
+**Rejected, and why.** Storing the exact coefficients ALONGSIDE the doubles, present when known:
+that is two sources of truth for one value, and the failure mode is the flag disagreeing with the
+object -- the same objection `RatCon.m` already records against a stored type flag. Snapping a
+computed double to the nearest rational is the refuted design (`DECISIONS.md`, attempt 3 of the
+general-quadrilateral fix): bounding the vertex denominators does not bound the downstream ones.
+
+**Consequence for the plan.** Phase 1 as approved is dropped; its content moves inside `QuaCon`.
+The `x^2-y^2` ULP finding becomes a test once the exact route can produce the answer -- the assertion
+being that Step 0 merges what it should, which is a property, not a coefficient value.
+
+**Evidence:** `scratchpad/exactness_sweep.m` reproduces the table; the ULP trace is `rat(x,1e-9)`
+against each failing entry.
