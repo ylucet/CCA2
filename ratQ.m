@@ -353,6 +353,133 @@ classdef ratQ
             [G, d] = ratQ.canon([n(5) n(6) n(8); n(6) n(7) n(9)], dn);
         end
 
+        function [n2, d2] = substAffine(n, d, Mn, tn, md)
+        % objective: the EXACT affine change of variables h(u) = g(M*u + t), where g = n/d is a
+        %            face in RatCon's 10-wide weighted cubic basis and M = Mn/md, t = tn/md.
+        % [input]  n, d : the face, exactly; Mn : 2x2 integer; tn : 2x1 integer;
+        %          md   : (optional) the common denominator of the map, default 1
+        % [output] n2, d2 : h, canonically, in the same basis
+        %
+        % This is substituteFrame.m's exact twin. That routine does the same substitution with
+        % `subs` on a sym, which is where 21 of plq_1p's engine calls live; this one is integer
+        % arithmetic and returns a canonical form, so two faces that ARE equal after a frame change
+        % compare equal -- which `subs` cannot promise (no canonical form; equal quantities can
+        % compare Unknown).
+        %
+        % WHY THE CUBIC TERMS ARE CARRIED. `f` is stored in the cubic basis and isConvex accepts a
+        % cubic (Rat.m's closing note), so a routine that silently truncated to the quadratic part
+        % would pass every quadratic test and be wrong on the one input that reaches it.
+        %
+        % A SINGULAR M IS REFUSED. A change of VARIABLES is invertible by definition; a singular M
+        % collapses the plane onto a line, and g restricted to that line is a different function on
+        % a lower-dimensional domain, not a reparametrisation of this one. Returning the collapsed
+        % coefficients would be a plausible wrong answer, which is the outcome this class exists to
+        % prevent.
+        %
+        % HOW IT STAYS INTEGRAL. The weighted basis carries sixths and halves, so the plain
+        % monomial coefficients are taken over 6*d:
+        %       6*g = c1 x^3 + 3 c2 x^2 y + 3 c3 x y^2 + c4 y^3
+        %           + 3 c5 x^2 + 6 c6 xy + 3 c7 y^2 + 6 c8 x + 6 c9 y + 6 c10      (all over d)
+        % Substituting a map of denominator md multiplies a degree-k term by md^-k, so every term
+        % is lifted to the common denominator md^3 and the result sits over 6*d*md^3. Converting
+        % back to the weighted basis is the inverse scaling, and `canon` removes whatever the two
+        % conversions left behind.
+            if nargin < 5 || isempty(md), md = 1; end
+            ratQ.chk(n, 'face'); ratQ.chk(d, 'face denominator');
+            ratQ.chk(Mn, 'map matrix'); ratQ.chk(tn, 'map translation');
+            ratQ.chk(md, 'map denominator');
+            if ~isequal(size(Mn), [2 2]) || ~isequal(size(tn), [2 1])
+                error('ratQ:badMap', 'substAffine needs a 2x2 M and a 2x1 t.');
+            end
+            if ~isscalar(md) || md == 0
+                error('ratQ:badDenominator', 'the map denominator must be a nonzero scalar.');
+            end
+            if ratQ.detExact(Mn) == 0
+                error('ratQ:singular', ...
+                    ['the change of variables is singular: M collapses the plane onto a line, ' ...
+                     'so g(M*u+t) is a different function on a lower-dimensional domain, not a ' ...
+                     'reparametrisation. Handle the degenerate map at the call site.']);
+            end
+            if md < 0, Mn = -Mn; tn = -tn; md = -md; end
+
+            % ---- the source face, as PLAIN monomial coefficients over 6*d ---------------------
+            % P is indexed P(i+1, j+1) = coefficient of x^i y^j, with i + j <= 3.
+            P = zeros(4,4);
+            P(4,1) = n(1);      P(3,2) = 3*n(2);    P(2,3) = 3*n(3);    P(1,4) = n(4);
+            P(3,1) = 3*n(5);    P(2,2) = 6*n(6);    P(1,3) = 3*n(7);
+            P(2,1) = 6*n(8);    P(1,2) = 6*n(9);
+            P(1,1) = 6*n(10);
+            P = ratQ.chk(P, 'plain face coefficient');
+
+            % ---- the two substituted linear forms, as polynomials in (u,v) --------------------
+            % Numerators only; the md's are accounted for by the degree lift below.
+            X = zeros(4,4);  X(2,1) = Mn(1,1);  X(1,2) = Mn(1,2);  X(1,1) = tn(1);
+            Y = zeros(4,4);  Y(2,1) = Mn(2,1);  Y(1,2) = Mn(2,2);  Y(1,1) = tn(2);
+
+            % ---- accumulate P(i,j) * X^i * Y^j, each lifted to the denominator md^3 -----------
+            R = zeros(4,4);
+            Xp = ratQ.polyPow(X, 3);      % Xp{k+1} is X^k
+            Yp = ratQ.polyPow(Y, 3);
+            for i = 0:3
+                for j = 0:(3-i)
+                    cij = P(i+1, j+1);
+                    if cij == 0, continue, end
+                    term = ratQ.polyMul(Xp{i+1}, Yp{j+1});
+                    lift = md^(3 - i - j);
+                    R = ratQ.chk(R + cij * lift * term, 'substituted coefficient');
+                end
+            end
+
+            % ---- back to the weighted basis, over 6*d*md^3 ------------------------------------
+            den = ratQ.chk(6 * d * md^3, 'substituted denominator');
+            % Inverting the basis weights: the entry multiplying x^i y^j is R(i+1,j+1), and the
+            % weighted slot for that monomial carries 1/6 (the two cubic corners), 1/2 (the mixed
+            % cubics and the pure quadratics) or 1 (xy, linear, constant), so each slot is scaled
+            % by the reciprocal of its own weight.
+            n2 = ratQ.chk([6*R(4,1), 2*R(3,2), 2*R(2,3), 6*R(1,4), ...
+                           2*R(3,1),   R(2,2), 2*R(1,3), ...
+                             R(2,1),   R(1,2), ...
+                             R(1,1)] , 'substituted face');
+            [n2, d2] = ratQ.canon(n2, den);
+        end
+
+        function C = polyMul(A, B)
+        % objective: multiply two bivariate polynomials held as 4x4 coefficient arrays, where
+        %            A(i+1,j+1) is the coefficient of x^i y^j and every term has i + j <= 3.
+        % Exact integer arithmetic. A product leaving total degree 3 is a defect in the caller
+        % (substAffine only ever multiplies factors whose degrees it has already summed), so it
+        % raises rather than truncating.
+            C = zeros(4,4);
+            for i1 = 0:3
+                for j1 = 0:(3-i1)
+                    if A(i1+1,j1+1) == 0, continue, end
+                    for i2 = 0:3
+                        for j2 = 0:(3-i2)
+                            if B(i2+1,j2+1) == 0, continue, end
+                            i = i1 + i2;  j = j1 + j2;
+                            if i + j > 3
+                                error('ratQ:degreeOverflow', ...
+                                    ['the product reached total degree %d, above the cubic ' ...
+                                     'basis. Truncating would silently change the function.'], i+j);
+                            end
+                            C(i+1,j+1) = C(i+1,j+1) + A(i1+1,j1+1)*B(i2+1,j2+1);
+                        end
+                    end
+                end
+            end
+            C = ratQ.chk(C, 'polynomial product');
+        end
+
+        function Ps = polyPow(A, kmax)
+        % objective: the powers A^0 ... A^kmax of a bivariate polynomial, as a cell array with
+        %            Ps{k+1} = A^k. A^0 is the constant 1.
+            Ps = cell(1, kmax+1);
+            Ps{1} = zeros(4,4);  Ps{1}(1,1) = 1;
+            for k = 1:kmax
+                Ps{k+1} = ratQ.polyMul(Ps{k}, A);
+            end
+        end
+
         function [n, d] = fromDouble(x, maxDen)
         % objective: the rational vector a caller MEANT, recovered from the doubles they passed.
         % [input]  x : 1 x k double; maxDen : largest denominator to accept (default 10^6)

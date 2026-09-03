@@ -280,6 +280,78 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyError(@() ratQ.hessQ([1 0 0 0 0 0 0 0 0 0], 1), 'ratQ:cubicFace');
         end
 
+        % ---- the exact affine change of variables --------------------------------------------
+
+        function substAffineAgreesWithSymbolicSubstitutionOnCubicsAndQuadratics(testCase)
+        % Differential test against the Symbolic Toolbox, on the FULL cubic basis: h(u) = g(Mu+t)
+        % must be the same polynomial sym gets by substituting. Cubic terms are included on
+        % purpose -- RatCon stores f in the cubic basis and isConvex accepts one, so a routine that
+        % silently truncated the cubic part would pass every quadratic test and be wrong.
+            u = sym('ratQTest_su');  v = sym('ratQTest_sv');
+            rng(20260903);
+            for k = 1:20
+                c  = randi([-5 5], 1, 10);
+                d  = randi([1 6]);
+                Mn = randi([-4 4], 2, 2);
+                tn = randi([-4 4], 2, 1);
+                md = randi([1 5]);
+                % A random integer matrix is singular often enough to matter, and substAffine
+                % REFUSES a singular change of variables by contract. Decide that exactly, with
+                % the class's own determinant -- `det` here would be the floating-point test the
+                % whole layer exists to avoid.
+                if ratQ.detExact(Mn) == 0, continue, end
+
+                [n2, d2] = ratQ.substAffine(c, d, Mn, tn, md);
+
+                X = (Mn(1,1)*u + Mn(1,2)*v + tn(1)) / md;
+                Y = (Mn(2,1)*u + Mn(2,2)*v + tn(2)) / md;
+                want = ratQTest.symCubic(c, X, Y) / d;
+                got  = ratQTest.symCubic(n2, u, v) / d2;
+                testCase.verifyTrue(isAlways(expand(want - got) == 0, 'Unknown', 'false'), ...
+                    sprintf('case %d: substAffine disagrees with symbolic substitution', k));
+            end
+        end
+
+        function substAffineIsTheIdentityOnTheIdentityMap(testCase)
+        % The map u -> u must return the value unchanged, in CANONICAL form -- a stronger
+        % statement than returning something numerically equal.
+            c = [1 -2 3 -4 5 -6 7 -8 9 -10];
+            [n2, d2] = ratQ.substAffine(c, 3, eye(2), [0; 0], 1);
+            [a, ad]  = ratQ.canon(c, 3);
+            testCase.verifyEqual([n2 d2], [a ad]);
+        end
+
+        function substAffineComposesTheSameWayTheMapsDo(testCase)
+        % g(M1(M2 u + t2) + t1) reached in one step or two must be the same object. This is the
+        % property the x*y frame change and its read-back depend on, and it is what a sign or
+        % transpose slip breaks -- neither of which a single round trip through the identity sees.
+            rng(20260903);
+            for k = 1:15
+                c   = randi([-5 5], 1, 10);   d = randi([1 4]);
+                M1  = randi([-3 3], 2, 2);   t1 = randi([-3 3], 2, 1);
+                M2  = randi([-3 3], 2, 2);   t2 = randi([-3 3], 2, 1);
+                % Both maps must be invertible, and so must their composite -- see the note in
+                % substAffineAgreesWith... above for why this is decided exactly.
+                if ratQ.detExact(M1) == 0 || ratQ.detExact(M2) == 0, continue, end
+
+                [nA, dA] = ratQ.substAffine(c,  d,  M1, t1, 1);
+                [nA, dA] = ratQ.substAffine(nA, dA, M2, t2, 1);
+
+                [nB, dB] = ratQ.substAffine(c, d, M1*M2, M1*t2 + t1, 1);
+
+                testCase.verifyEqual([nA dA], [nB dB], ...
+                    sprintf('case %d: the two-step and one-step substitutions differ', k));
+            end
+        end
+
+        function substAffineRefusesASingularChangeOfVariables(testCase)
+        % A change of VARIABLES has to be invertible. A singular M is not a reparametrisation --
+        % it collapses the plane onto a line, and the resulting face is a different function on a
+        % lower-dimensional domain. Refusing names the caller's error where it happens.
+            testCase.verifyError(@() ratQ.substAffine([0 0 0 0 1 0 1 0 0 0], 1, ...
+                                                     [1 2; 2 4], [0; 0], 1), 'ratQ:singular');
+        end
+
         % ---- an independent symbolic cross-check (legitimate in a test, not on the path) --------
 
         function theDifferenceConicAgreesWithTheSymbolicLevelSet(testCase)
@@ -316,6 +388,15 @@ classdef ratQTest < matlab.unittest.TestCase
         % A quadratic face in CCA2's 10-wide weighted cubic basis (RatCon.m's `f`):
         %     value = c5*x^2/2 + c6*xy + c7*y^2/2 + c8*x + c9*y + c10
             c = [0 0 0 0, c5, c6, c7, c8, c9, c10];
+        end
+
+        function s = symCubic(c, x, y)
+        % The FULL 10-wide weighted basis of RatCon.m's `f`, as a symbolic expression:
+        %   c1 x^3/6 + c2 x^2 y/2 + c3 x y^2/2 + c4 y^3/6
+        % + c5 x^2/2 + c6 x y + c7 y^2/2 + c8 x + c9 y + c10
+        % symOf below is the quadratic special case, kept because most tests only need it.
+            s = c(1)*x^3/6 + c(2)*x^2*y/2 + c(3)*x*y^2/2 + c(4)*y^3/6 ...
+              + c(5)*x^2/2 + c(6)*x*y + c(7)*y^2/2 + c(8)*x + c(9)*y + c(10);
         end
 
         function s = symOf(c, x, y)
