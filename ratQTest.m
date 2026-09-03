@@ -173,6 +173,113 @@ classdef ratQTest < matlab.unittest.TestCase
             end
         end
 
+        % ---- the predicate leaf, and the arithmetic the per-piece closed forms need ------------
+
+        function signQAgreesWithTheSignOfTheValueItself(testCase)
+        % A definition test, not a golden one: signQ must agree with the sign of n/d wherever the
+        % double division happens to be exact, and must be exact where the double is not.
+            testCase.verifyEqual(ratQ.signQ([3 0 -3], 5), [1 0 -1]);
+            testCase.verifyEqual(ratQ.signQ([3 0 -3], -5), [-1 0 1], ...
+                'a negative denominator flips every sign');
+            rng(20260903);
+            for k = 1:50
+                n = randi([-40 40], 1, 4);  d = randi([-40 40]);
+                if d == 0, continue, end
+                testCase.verifyEqual(ratQ.signQ(n, d), sign(n/d), ...
+                    sprintf('case %d: signQ disagrees with the value it is the sign of', k));
+            end
+        end
+
+        function divIsTheInverseOfScale(testCase)
+        % The identity is the assertion: dividing by a value and multiplying it back is the
+        % identity ON THE CANONICAL FORM, which is stronger than agreeing numerically.
+            rng(20260903);
+            for k = 1:40
+                n1 = randi([-30 30], 1, 5);  d1 = randi([1 30]);
+                n2 = randi([-30 30]);        d2 = randi([1 30]);
+                if n2 == 0, continue, end
+                [q, qd] = ratQ.div(n1, d1, n2, d2);
+                [b, bd] = ratQ.scale(q, qd, n2, d2);
+                [a, ad] = ratQ.canon(n1, d1);
+                testCase.verifyEqual([b bd], [a ad], ...
+                    sprintf('case %d: (v / w) * w is not v', k));
+            end
+        end
+
+        function divRefusesZeroRatherThanReturningInf(testCase)
+            testCase.verifyError(@() ratQ.div([1 2], 3, 0, 7), 'ratQ:divideByZero');
+        end
+
+        function combineDenSharesOneDenominatorWithoutChangingAnyValue(testCase)
+        % What it must preserve is the VALUE of every row; what it must produce is ONE denominator.
+            Ns = [1 2 3; 1 1 1; 5 0 -5];  ds = [2; 3; 10];
+            [N, d] = ratQ.combineDen(Ns, ds);
+            testCase.verifyEqual(d, 30, 'the shared denominator is the lcm, not the product');
+            for i = 1:size(Ns,1)
+                testCase.verifyTrue(ratQ.eqRat(N(i,:), d, Ns(i,:), ds(i)), ...
+                    sprintf('row %d changed value', i));
+            end
+        end
+
+        function combineDenIsIdempotentAndHandlesASingleRow(testCase)
+            [N, d]   = ratQ.combineDen([4 6], 8);
+            [N2, d2] = ratQ.combineDen(N, d);
+            testCase.verifyEqual([N2 d2], [N d], 'combineDen must be idempotent');
+            testCase.verifyTrue(ratQ.eqRat(N, d, [4 6], 8));
+        end
+
+        % ---- the exact linear solve: polyhedral vertices and the KKT systems -------------------
+
+        function solve2SatisfiesItsOwnSystemExactly(testCase)
+        % Recomputed, not pinned: A*x must equal b as an exact rational identity.
+            rng(20260903);
+            for k = 1:60
+                n = 2 + (mod(k,2) == 0);                 % alternate 2x2 and 3x3
+                A = randi([-9 9], n, n);  b = randi([-9 9], n, 1);
+                % NOT `det(A) == 0`: det factorises in floating point, so a singular integer
+                % matrix can come back as 4.4e-16 and a nonsingular one as 6.0000000000000009.
+                % The true determinant IS an integer, so |det| < 0.5 decides singularity exactly.
+                if abs(det(A)) < 0.5, continue, end
+                [x, xd] = ratQ.solve2(A, b);
+                testCase.verifyEqual(size(x), [n 1]);
+                testCase.verifyTrue(all(A*x == b*xd), ...
+                    sprintf('case %d: A*(x/xd) ~= b', k));
+                testCase.verifyGreaterThan(xd, 0, 'the denominator is normalised positive');
+            end
+        end
+
+        function solve2RefusesASingularSystemRatherThanReturningNaN(testCase)
+            testCase.verifyError(@() ratQ.solve2([1 2; 2 4], [1; 2]), 'ratQ:singular');
+        end
+
+        % ---- exact Hessian and gradient, against the Symbolic Toolbox as an oracle -------------
+
+        function hessQAndGradQAgreeWithSymbolicDifferentiation(testCase)
+        % Differential test. The weighted basis exists so that the Hessian reads straight off
+        % c5..c7 (RatCon.m says so); this is the check that it actually does.
+            x = sym('ratQTest_hx');  y = sym('ratQTest_hy');
+            rng(20260903);
+            for k = 1:20
+                c = randi([-8 8], 1, 6);  dn = randi([1 9]);
+                g = ratQTest.face(c(1), c(2), c(3), c(4), c(5), c(6));
+                s = ratQTest.symOf(g, x, y) / dn;
+
+                [H, hd] = ratQ.hessQ(g, dn);
+                testCase.verifyEqual(double(hessian(s, [x y])), H/hd, 'AbsTol', 0, ...
+                    sprintf('case %d: exact Hessian disagrees with sym', k));
+
+                [G, gd] = ratQ.gradQ(g, dn);
+                pt = randi([-5 5], 2, 1);
+                want = double(subs(gradient(s, [x y]), [x y], pt.'));
+                testCase.verifyEqual(G*[pt; 1]/gd, want, 'AbsTol', 0, ...
+                    sprintf('case %d: exact gradient disagrees with sym', k));
+            end
+        end
+
+        function hessQRefusesACubicBecauseItsHessianIsNotConstant(testCase)
+            testCase.verifyError(@() ratQ.hessQ([1 0 0 0 0 0 0 0 0 0], 1), 'ratQ:cubicFace');
+        end
+
         % ---- an independent symbolic cross-check (legitimate in a test, not on the path) --------
 
         function theDifferenceConicAgreesWithTheSymbolicLevelSet(testCase)

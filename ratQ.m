@@ -195,6 +195,164 @@ classdef ratQ
             end
         end
 
+        function s = signQ(n, d)
+        % objective: the exact sign of the rational n/d, elementwise on n.
+        % [output] s : -1, 0 or +1 per entry
+        %
+        % The leaf of every predicate. Trivial by itself, and it is here rather than at the call
+        % sites so that "the sign of a rational" has ONE spelling: sign(n/d) in a caller would
+        % perform a floating-point division first, which is the one thing this layer exists to
+        % avoid, and n*d > 0 would overflow for no reason.
+            ratQ.chk(n, 'numerator'); ratQ.chk(d, 'denominator');
+            if ~isscalar(d) || d == 0
+                error('ratQ:badDenominator', 'the denominator must be a nonzero scalar.');
+            end
+            s = sign(n) * sign(d);
+        end
+
+        function [n, d] = div(n1, d1, n2, d2)
+        % objective: (n1/d1) / (n2/d2), canonically. The divisor is a SCALAR rational.
+        %
+        % The counterpart of scale, which is already the multiplication (scale IS kn/kd times a
+        % vector, so no separate mul is added -- a second spelling of one operation is how two
+        % canonical forms drift apart).
+            if ~isscalar(n2)
+                error('ratQ:badDivisor', ...
+                    'the divisor must be a scalar rational; dividing by a vector is not defined.');
+            end
+            if n2 == 0
+                error('ratQ:divideByZero', ...
+                    'division by the exact zero: a defect in the caller, not a case to regularise.');
+            end
+            [n, d] = ratQ.scale(n1, d1, d2, n2);
+        end
+
+        function [N, d] = combineDen(Ns, ds)
+        % objective: put several rational vectors over ONE common denominator, values unchanged.
+        % [input]  Ns : k x m integer numerators, one row per value; ds : k x 1 nonzero denominators
+        % [output] N  : k x m over the single denominator d = lcm(|ds|)
+        %
+        % Deliberately NOT canonicalised row by row: the caller wants the rows COMPARABLE (a common
+        % denominator is what turns a matrix of rationals into integer arithmetic), and reducing
+        % each row by its own gcd would undo exactly that. Use canon when a single value is wanted
+        % in canonical form; use this when several must share a scale.
+        %
+        % lcm, not the product -- the same reason add gives: the product is what makes
+        % coefficients grow down a fold chain for no mathematical reason.
+            ratQ.chk(Ns, 'numerators'); ratQ.chk(ds, 'denominators');
+            ds = ds(:);
+            if size(Ns,1) ~= numel(ds)
+                error('ratQ:sizeMismatch', ...
+                    'combineDen needs one denominator per row: %d rows, %d denominators.', ...
+                    size(Ns,1), numel(ds));
+            end
+            if any(ds == 0)
+                error('ratQ:badDenominator', 'every denominator must be nonzero.');
+            end
+            d = 1;
+            for i = 1:numel(ds)
+                d = lcm(d, abs(ds(i)));
+                ratQ.chk(d, 'common denominator');
+            end
+            N = ratQ.chk(Ns .* (d ./ ds), 'rescaled numerator');
+        end
+
+        function [x, xd] = solve2(A, b)
+        % objective: the EXACT solution of A*x = b, for a 2x2 or 3x3 integer system.
+        % [input]  A : n x n integer matrix, n = 2 or 3; b : n x 1 integer vector
+        % [output] x : n x 1 integer numerators; xd : positive integer denominator (x/xd solves it)
+        %
+        % Where it is used: a polyhedral vertex is two lines meeting (n = 2) and the KKT systems of
+        % the per-piece conjugate are n = 3. Both are small and both must be DECIDED, not estimated.
+        %
+        % A RATIONAL system is cleared by the caller: multiplying one row of [A b] by a nonzero
+        % integer changes no solution, so scaling each row by its own denominator reduces to this.
+        %
+        % CRAMER, AND NOT MATLAB det. det factorises in floating point: on an integer matrix it
+        % returns 6.0000000000000009 for 6 and, worse, something like 4.4e-16 for a singular
+        % system -- so a singularity test built on it is a tolerance test wearing a disguise. The
+        % cofactor expansion below is exact integer arithmetic and the singular case is DECIDED.
+        % Cramer is the wrong algorithm at size 20 and the right one at size 3, where it is a
+        % handful of multiplications and needs no pivoting, hence no ordering choice to get wrong.
+            ratQ.chk(A, 'system matrix'); ratQ.chk(b, 'right-hand side');
+            n = size(A, 1);
+            if size(A,2) ~= n || ~ismember(n, [2 3]) || ~isequal(size(b), [n 1])
+                error('ratQ:badSystem', ...
+                    'solve2 takes a 2x2 or 3x3 matrix with a matching n x 1 column.');
+            end
+            D = ratQ.detExact(A);
+            if D == 0
+                error('ratQ:singular', ...
+                    ['the system is exactly singular (determinant 0), so it has no unique ' ...
+                     'solution. The caller must handle the degenerate configuration -- parallel ' ...
+                     'edges, a collapsed cell -- rather than perturbing it.']);
+            end
+            x = zeros(n, 1);
+            for j = 1:n
+                Aj = A;  Aj(:,j) = b;
+                x(j) = ratQ.detExact(Aj);
+            end
+            [x, xd] = ratQ.canon(x, D);
+        end
+
+        function D = detExact(A)
+        % objective: the determinant of a 2x2 or 3x3 integer matrix, by cofactor expansion.
+        % Exact integer arithmetic; see solve2 for why MATLAB det cannot be used here.
+            ratQ.chk(A, 'matrix');
+            switch size(A,1)
+                case 1
+                    D = A(1,1);
+                case 2
+                    D = ratQ.chk(A(1,1)*A(2,2) - A(1,2)*A(2,1), 'determinant');
+                case 3
+                    D = ratQ.chk( ...
+                        A(1,1)*(A(2,2)*A(3,3) - A(2,3)*A(3,2)) ...
+                      - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) ...
+                      + A(1,3)*(A(2,1)*A(3,2) - A(2,2)*A(3,1)), 'determinant');
+                otherwise
+                    error('ratQ:badSystem', 'detExact handles n <= 3; got %d.', size(A,1));
+            end
+        end
+
+        function [H, d] = hessQ(n, dn)
+        % objective: the exact Hessian of a QUADRATIC face n/dn, as H/d with H integer.
+        % [output] H : 2 x 2 integer, symmetric; d : positive integer
+        %
+        % This is one line of arithmetic because the weighted basis was chosen to make it one:
+        % RatCon.m stores f with the weights [1/6 1/2 1/2 1/6 1/2 1 1/2 1 1 1] precisely "to
+        % easily manipulate Hessians", so H is [c5 c6; c6 c7] with no factor to remember.
+        %
+        % A CUBIC IS REFUSED rather than evaluated at a point, and that is the contract: a cubic
+        % Hessian is not constant, so returning one would be a wrong answer rather than a missing
+        % feature. QuaPar.evalHessian is the routine that takes a point.
+            if any(n(1:4) ~= 0)
+                error('ratQ:cubicFace', ...
+                    ['hessQ is for QUADRATIC faces: a cubic Hessian varies with the point, so ' ...
+                     'there is no constant matrix to return. Use QuaPar.evalHessian(c,x).']);
+            end
+            [H, d] = ratQ.canon([n(5) n(6); n(6) n(7)], dn);
+        end
+
+        function [G, d] = gradQ(n, dn)
+        % objective: the exact gradient of a QUADRATIC face n/dn, as the AFFINE map G/d.
+        % [output] G : 2 x 3 integer, so that grad(x,y) = G*[x; y; 1] / d
+        %          d : positive integer
+        %
+        % Returning the MAP rather than a value at a point is what the callers want: the normal
+        % cone of a face, the KKT stationarity row and the conjugate change of variables are all
+        % statements about grad AS A FUNCTION, and evaluating it early forces a point to be chosen
+        % before it is known.
+        %
+        % Refuses a cubic for the same reason hessQ does -- the gradient is then quadratic, not
+        % affine, and would not fit this shape.
+            if any(n(1:4) ~= 0)
+                error('ratQ:cubicFace', ...
+                    ['gradQ is for QUADRATIC faces: a cubic gradient is quadratic, not affine, ' ...
+                     'so it does not fit the 2x3 map. Use QuaPar.evalHessian(c,x).']);
+            end
+            [G, d] = ratQ.canon([n(5) n(6) n(8); n(6) n(7) n(9)], dn);
+        end
+
         function [n, d] = fromDouble(x, maxDen)
         % objective: the rational vector a caller MEANT, recovered from the doubles they passed.
         % [input]  x : 1 x k double; maxDen : largest denominator to accept (default 10^6)
