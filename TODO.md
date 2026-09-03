@@ -37,6 +37,32 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-03 — EXACT `conj` landed for Case A; one legacy defect found on the way
+
+- [ ] **`conjCPLQ`'s `eig(Q) > sqrt(eps)` can claim an EMPTY domain for a strictly convex
+      quadratic.** Reproducer, and it is two lines: `k=16384; N=k^2+1; QuaPol([1,k,N,0,0,0]).conj()`
+      returns a QuaPar evaluating to `+Inf` everywhere, where `f*` is finite on all of R^2 (`det H`
+      is exactly 1). NOT a refusal -- a silent wrong answer. `conjQ` gets it right, against the
+      definition, to ten digits. Not fixed: every alternative tolerance is wrong in a different
+      direction and the correct fix IS the exact test, i.e. `conjQ` itself; changing `conjCPLQ`'s
+      branch would alter dispatch across three buckets to fix an input nothing currently produces.
+      Full trace and the table: `DECISIONS.md` 2026-09-03 (second entry).
+
+- [ ] **Extend `conjQ` past Case A**, in this order (its own header repeats it):
+      the per-piece closed forms first -- `convEnvCPLQ`, `conjPieceCPLQ`, `conjConvexOverPiece`,
+      `conjConvexPolygon`, `conjAffinePLQ` are ALREADY 100% sym-free, so porting them is replacing
+      double arithmetic with `ratQ` calls rather than rewriting an algorithm -- then Step 3
+      (`maxQuaPar`), which is the large item, then the filtered predicates behind it.
+
+- [ ] **`ratQ.hullQ` is deferred to B1** (the concave-quadratic-on-a-polygon envelope), where it
+      can be validated against a real envelope rather than in isolation. It is the one Layer 0
+      routine from the plan not built.
+
+- [x] **DONE 2026-09-03: `QuaCon` (G16) exists.** Exact faces `fN`/`fD`, primitive integer edge
+      conics `EcQ`, vertices as NAMES `[edgeA edgeB rootIdx]` realised on demand through
+      `conicMeet`, faces in H-form as signed conic constraints. `conicMeet`, built 2026-08-24 and
+      wired to nothing since, is now wired to this. `QuaConTest` 15/0.
+
 ## 2026-08-24 — SYM-FREE `conj`: what is left, measured. READ THIS FIRST.
 
 The premise changed on 2026-08-24, and it changes the whole plan below: **vertices are stored as

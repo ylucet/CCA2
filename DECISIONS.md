@@ -4871,3 +4871,52 @@ being that Step 0 merges what it should, which is a property, not a coefficient 
 
 **Evidence:** `scratchpad/exactness_sweep.m` reproduces the table; the ULP trace is `rat(x,1e-9)`
 against each failing entry.
+
+## 2026-09-03 — `conjCPLQ`'s `eig(Q) > sqrt(eps)` convexity test returns a SILENT WRONG ANSWER
+
+**Found by the exact route on its first day, which is the argument for the exact route.** Case A
+decides strict convexity with `all(eig(Q) > sqrt(eps))` -- a fixed ABSOLUTE threshold on a quantity
+that scales with the problem. The reproducer is two lines:
+
+    k = 16384;  N = k^2 + 1;              % H = [1 k; k N], det(H) = 1 exactly, H(1,1) = 1
+    f = QuaPol([1, k, N, 0, 0, 0]);
+    f.conj()
+
+`H` is positive definite -- leading minor 1, determinant exactly 1 -- so `f*` is finite everywhere
+and equals `1/2 s' adj(H) s`. But `min(eig(H))` is 3.73e-09, below `sqrt(eps)` = 1.49e-08, so the
+strictly-convex branch is not taken.
+
+**And it does not refuse.** It falls through and returns a two-face `QuaPar` whose coefficients are
+`[1.4e-17, 2.3e-13, 3.7e-09]` -- numerically the zero function -- which evaluates to **`+Inf` at
+every point tested**, i.e. it reports `dom f*` as EMPTY when `f*` is finite on all of R^2:
+
+    s        definition        conjQ         legacy
+    (1, 0)   134217728.5       134217728.5   Inf
+    (0, 1)           0.5               0.5   Inf
+    (1, 1)     134201345         134201345   Inf
+    (2,-3)   536969222.5       536969222.5   Inf
+
+`conjQ` agrees with the definition at all four points to ten digits. The definition here needs no
+search: for a strictly convex quadratic the sup is attained at `x* = H^-1(s-L)`.
+
+**Why the exact test cannot make this mistake.** Positive definiteness of a symmetric 2x2 is
+Sylvester's criterion -- `H(1,1) > 0` and `det(H) > 0` -- which on integer coefficients is two
+comparisons of exact integers. It is DECIDED. `conjQ` uses `ratQ.detExact`, not `det`, for the same
+reason `solve2` does: `det` factorises in floating point.
+
+**Not fixed here, deliberately, and this is a scope decision rather than an omission.** The cause is
+one line in `conjCPLQ`, but every alternative tolerance is wrong in a different direction (a
+scale-relative threshold `ev > tol*norm(Q)` is *worse* on this input, since `norm(Q)` is 2.7e8), so
+the correct fix IS the exact test -- which is what `conjQ` is. Changing `conjCPLQ`'s branch would
+alter dispatch for every input in the fast, normal and slow buckets to fix an input nothing
+currently produces. Recorded with its reproducer instead, as a `SUPPORT_MATRIX.md`-style GAP against
+the path that is scheduled for demotion.
+
+**How badly it bites in practice is unmeasured.** The witness is extreme (condition number ~7e16),
+and no fixture in the repository is near it. What the finding establishes is the CLASS of defect --
+a convexity decision made by a fixed tolerance can silently claim an empty domain -- not that any
+current result is wrong.
+
+**Pinned by** `conjQTest/theExactTestAcceptsAStrictlyConvexQuadraticEigWouldRefuse`, which asserts
+`conjQ` against the definition and deliberately does NOT assert the legacy behaviour: pinning a
+defect's current output is a golden-value test that has to be edited when the defect goes.
