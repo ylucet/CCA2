@@ -1,5 +1,42 @@
 # TODO
 
+## 2026-09-03 — Target venue decided: Mathematical Programming Computation
+
+Author decision, 2026-09-03. CCA2's paper targets **Mathematical
+Programming Computation** (backup: Computational Optimization and
+Applications; SVVA if the paper ends up led by the mathematics rather
+than the algorithms).
+
+**Why MPC:** of the four manuscripts in the group — `FLTW`, `SCATpy`,
+`convexdb`, `CCA2` — CCA2 is the only one that really is a *solver*, and
+MPC exists for practical computation in mathematical optimization. Its
+mandatory code-and-data submission with independent verification of
+computational results suits exact closed-form conjugacy for bivariate PLQ
+better than any other venue on the list. All four had been aimed at ACM
+TOMS; they were split across communities because the same five to ten
+people would referee all four whatever the masthead. FLTW keeps TOMS,
+SCATpy moved to the Journal of Symbolic Computation. Full reasoning:
+`../convexdb/DECISIONS.md` 2026-09-03 and
+`../convexdb/manuscript/PLAN.md` "Cross-project allocation".
+
+**Compliance and cost:** free. Springer's 12-month green route
+(self-archive the accepted manuscript) clears the tri-agency bar at no
+APC; gold is ~$3,290 and unnecessary.
+
+**Two things to handle deliberately when the paper is written:**
+
+- [ ] **The MATLAB + Symbolic Math Toolbox dependency is real friction at
+  MPC**, whose results verification assumes a referee can run the code —
+  and this one needs a licence on the UBC VPN. **Declare it in the cover
+  letter** and offer MPC's "detailed observation / guest access" route
+  rather than letting a referee discover it. COAP has no code mandate if
+  it turns out fatal.
+- [ ] **Cite `convexdb` by its Zenodo DOI**, not a repo URL, wherever this
+  project uses that registry as ground truth. The DOI is deliberately
+  being minted before any of the four papers is submitted, so the citation
+  does not depend on the convexdb paper's own fate.
+
+
 ## 2026-08-24 — SYM-FREE `conj`: what is left, measured. READ THIS FIRST.
 
 The premise changed on 2026-08-24, and it changes the whole plan below: **vertices are stored as
