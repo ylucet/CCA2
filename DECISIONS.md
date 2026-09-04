@@ -4802,7 +4802,7 @@ failed. Re-running the same tree once the VPN was back gave `regionTest` 27/0 an
 one symbolic suite, with empty framework diagnostics. Check `matlab -batch "disp(1)"` before
 bisecting a red that appears alongside an environment change.
 
-## 2026-09-03 — the exact fields go on the NEW types, not retrofitted onto the legacy four
+## ~~2026-09-03 — the exact fields go on the NEW types, not retrofitted onto the legacy four~~ (OVERTURNED the same day, see below)
 
 **The question this closes.** The approved exact-arithmetic plan opened with a Phase 1 that made
 `f`/`den`/`Ec`/`V` exact on `RatCon` itself, with the double views as dependent properties, so that
@@ -4920,3 +4920,38 @@ current result is wrong.
 **Pinned by** `conjQTest/theExactTestAcceptsAStrictlyConvexQuadraticEigWouldRefuse`, which asserts
 `conjQ` against the definition and deliberately does NOT assert the legacy behaviour: pinning a
 defect's current output is a golden-value test that has to be edited when the defect goes.
+
+## 2026-09-03 (later) — OVERTURNS the entry above: `QuaPol` stores its input exactly after all
+
+**What was wrong with it.** That entry measured correctly and concluded wrongly. The measurement
+stands: 41 of 87 vertex rows and 16 of 64 face rows out of the current pipeline do not convert
+exactly, the vertex ones by Theorem 1 and the face ones by one or two ULP. The conclusion it drew
+-- put the exact fields only on the new types -- rested on a premise nobody had stated: that the
+FLOAT pipeline is a load-bearing oracle which must keep storing its own output in the same fields,
+so the type design had to bend around keeping it alive.
+
+**The author's specification, given directly.** Store `QuaPol` exactly as input; do all computation
+exactly in rational arithmetic; return a `QuaCon` stored exactly. The float version is kept for unit
+testing and **will not be in the final version**. And for unit testing it is not even the best
+oracle -- sympy and SNAT are INDEPENDENT implementations that share no code with what they check,
+which is what a differential oracle is supposed to be. The float path shares its entire algorithm
+with the exact one.
+
+So the constraint the earlier entry optimised for does not exist, and designing around it was
+solving the wrong problem.
+
+**What is stored now.** `QuaPol` carries `fN`/`fD` and `VN`/`VD`, filled once at the end of the
+constructor. The primal domain needs no vertex-naming machinery: Theorem 1 constrains `f*`, not `f`,
+so a `QuaPol`'s own vertices are the caller's rational data and are simply stored. That asymmetry --
+named vertices on the dual side, stored vertices on the primal side -- is the mathematics, not a
+compromise.
+
+**The one thing the earlier entry got right, kept.** An unconvertible value must not raise in the
+CONSTRUCTOR, because the float pipeline builds `QuaPol` objects out of computed doubles at nine
+production call sites and has to keep running. Such an object is simply not exact (`isExact` is
+false, `fN` empty) and every exact operation raises `PLQ:QuaPol:notExact`. One truth plus an honest
+unknown; both fields go when the float pipeline does.
+
+**Method note, worth more than the decision.** The earlier entry is a good measurement attached to
+an unexamined premise, and the premise was the part that mattered. Measuring what the code does is
+not the same as checking what the code is FOR.
