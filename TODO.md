@@ -37,6 +37,41 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (final) — items (1) and (2) DONE. Only the THIN dual domain is left.
+
+    domain \ Hessian    PD    PSD-sing  indefinite  ND      NSD-sing  affine
+    full plane          OK    LINE      OK nf=0     OK nf=0 OK nf=0   POINT
+    bounded triangle    OK    OK        OK          OK      OK        OK
+    bounded square      OK    OK        OK          OK      OK        OK
+    unbounded wedge     OK    OK        OK nf=0     OK nf=0 OK nf=0   OK
+    half-strip          OK    OK        OK nf=0     OK nf=0 OK        OK
+    needle (dim 0)  OK nf=1     segment (dim 1)  OK nf=2
+    multi-face bounded OK    multi-face unbounded OK
+
+**(1) The empty dual domain now RETURNS the zero-face QuaCon** instead of raising. `nf = 0` is how
+"+infinity everywhere" is spelled, and it needed no change to the type -- only the willingness to
+return it. `assembleQuaConCells` and `conjPieceQ` both do. `caseAFullDomain` was raising one
+identifier for two different situations and now separates them: `~isPSD2(H)` means some direction
+has negative curvature, so `f*` is +infinity everywhere -- three of the five non-PD full-plane
+cells -- while a PSD-singular H leaves a genuinely thin domain.
+
+**(2) A domain of dimension < 2 is now READ.** The conjugate of such an input is FULL-dimensional,
+so this needed no storage work either: a needle at `p` with value `c` gives `<s,p> - c`, affine on
+all of `R^2`; a segment gives the clamped one-dimensional maximum, which is exactly `caseD`'s
+candidate set. The only new code is `degenerateShape`, because such a mesh has `nf = 0` and an empty
+`F`, so there is no face to read the geometry from and every edge belongs to the single piece.
+`caseD` is used unconditionally there: the problem is ONE-dimensional, so what decides its shape is
+the curvature ALONG the edge, `d'Hd`, not the definiteness of H in the plane. A chain carrying more
+than one function is refused by name (`ambiguousChain`) since `F` cannot say which edge takes which.
+
+**LEFT: the thin dual domain, two cells, and it now says which kind it is** --
+`PLQ:conjQ:domainIsAPoint` (q affine on the plane: `dom f* = {L}`) and `PLQ:conjQ:domainIsALine`
+(q PSD-singular: the sup is finite only for s in the range of H). Storing either needs the H-form's
+side column to carry `0` for "on the curve" -- one value in an existing field, three touch points
+(`QuaCon`'s constructor validation, `eval`, the producer), and NOT a new class. Worth doing when
+something consumes it; the caveat stands that evaluating a line-supported function in floating point
+answers +infinity almost surely.
+
 ## 2026-09-04 (later still) — what `dim<2` actually needs: almost nothing, and NOT a new type
 
 Asked directly, so measured. The label covered THREE different situations and they need three

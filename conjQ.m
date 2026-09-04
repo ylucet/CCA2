@@ -94,6 +94,32 @@ function g = conjPieceQ(obj, k)
     end
 
     [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
+
+    % ---- a domain of dimension < 2: a needle, a segment, a ray, or a chain of edges ------------
+    % THE CONJUGATE OF A LOW-DIMENSIONAL INPUT IS FULL-DIMENSIONAL, which is why this needs no new
+    % storage: a needle at p with value c conjugates to <s,p> - c, affine and finite on all of R^2,
+    % and a segment to a max over its two endpoints and, where the restriction is concave, its
+    % interior stationary point. That is exactly caseD's candidate set, so the only new code is
+    % building the shape -- there is no face to read it from, since such a mesh has nf = 0 and an
+    % empty F, so every edge belongs to the single piece.
+    %
+    % caseD unconditionally, never caseB, and the reason is that the problem is ONE-dimensional:
+    % what decides the shape is the curvature ALONG the edge, d'Hd, not the definiteness of H in
+    % the plane. An interior maximiser of the 1-D restriction is already the edge candidate.
+    if obj.dom.dim < 2
+        if size(obj.fN,1) > 1
+            error('PLQ:conjQ:ambiguousChain', ...
+                ['a domain of dimension < 2 carrying %d different functions has no F to say ' ...
+                 'which edge takes which, so the mapping is ambiguous. One function only.'], ...
+                size(obj.fN,1));
+        end
+        sh = degenerateShape(obj, Vi);
+        [okFinite, dom, ~] = recessionConditions(sh, Hn, [fN(8); fN(9)], fD, Vi, vd);
+        if ~okFinite, g = emptyConjugate(); return, end
+        g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom);
+        return
+    end
+
     sh = pieceShape(obj, k, Vi, vd);
     if numel(sh.vs) == 0
         error('PLQ:conjQ:noVertex', ...
@@ -104,10 +130,13 @@ function g = conjPieceQ(obj, k)
 
     [okFinite, dom, why] = recessionConditions(sh, Hn, [fN(8); fN(9)], fD, Vi, vd);
     if ~okFinite
-        error('PLQ:conjQ:emptyDomain', ...
-            ['%s, so f* is +infinity everywhere and dom f* is EMPTY. That is the right answer ' ...
-             'and there is nowhere to put it -- a QuaCon carries at least one face, the same ' ...
-             'representational gap conjCPLQ records as conjugateHasEmptyDomain.'], why);
+        % dom f* is EMPTY -- `why` says which recession direction does it. That is the right
+        % answer and it IS representable: a QuaCon with zero faces evaluates to +infinity
+        % everywhere. This used to raise PLQ:conjQ:emptyDomain on the belief that the type could
+        % not hold such a function, which was wrong.
+        assert(~isempty(why));                 %#ok<NASGU> -- the reason, kept for debugging
+        g = emptyConjugate();
+        return
     end
 
     if Hn(1,1) > 0 && D > 0
@@ -115,6 +144,47 @@ function g = conjPieceQ(obj, k)
     else
         g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom);       % everything else: max over the boundary
     end
+end
+
+function g = emptyConjugate()
+% objective: the function that is +infinity everywhere, as a QuaCon.
+%
+% A QuaCon with NO faces: `eval` matches nothing and so answers +inf at every point, which is
+% exactly that function. Verified directly rather than assumed. This is the honest answer whenever
+% the sup diverges for every s, and it needs no extension to the type -- what was missing was only
+% the willingness to return it.
+    g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
+end
+
+function sh = degenerateShape(obj, Vi)
+% objective: the shape record for a domain of dimension < 2, where every edge belongs to the one
+%            piece and there are no bounding half-planes.
+%
+% `hp` is empty on purpose: a segment is not the intersection of half-planes, it IS the candidate
+% set. The membership constraint that a 2-D piece needs is carried here by the edge's own clamping
+% conditions instead.
+    sh.vs = [];
+    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {});
+    sh.rays = zeros(0,2);
+    sh.hp = zeros(0,3);
+    sh.bounded = true;
+    for j = 1:size(obj.E,1)
+        a = obj.E(j,1);  b = obj.E(j,2);
+        d = ratQ.chk(Vi(b,:) - Vi(a,:), 'edge direction');
+        if obj.E(j,3) ~= 0
+            sh.vs = [sh.vs; a; b];
+            sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false); %#ok<AGROW>
+        else
+            sh.vs = [sh.vs; a];
+            sh.ed(end+1) = struct('a', a, 'b', 0, 'd', d, 'isRay', true); %#ok<AGROW>
+            sh.rays(end+1,:) = d; %#ok<AGROW>
+            sh.bounded = false;
+        end
+    end
+    if isempty(sh.ed)
+        sh.vs = (1:size(obj.VN,1)).';        % a NEEDLE: the single vertex, and no edge at all
+    end
+    sh.vs = unique(sh.vs);
 end
 
 function g = caseAFullDomain(fN, fD)
@@ -142,12 +212,32 @@ function g = caseAFullDomain(fN, fD)
     % definiteness). DECIDED, not estimated -- see this file's header for what the tolerance test
     % it replaces gets wrong.
     if ~(Hn(1,1) > 0 && D > 0)
-        error('PLQ:conjQ:notStrictlyConvex', ...
-            ['the full-domain quadratic is not strictly convex (leading minor %d, determinant ' ...
-             '%d, both of which must be positive). Its conjugate is not a full-domain quadratic ' ...
-             '-- for the affine, rank-deficient and indefinite cases the mathematics is three ' ...
-             'lines each and the obstacle is representational; conjCPLQ.m classifies them.'], ...
-            Hn(1,1), D);
+        % NOT ONE CASE BUT TWO, and only the second is still a gap.
+        %
+        % If H has a direction of NEGATIVE curvature -- H not positive semidefinite, which covers
+        % negative definite, negative semidefinite-singular and indefinite -- then <s,x> - q(x)
+        % rises without bound along it for EVERY s, so f* is +infinity everywhere. That is an
+        % answer, and a QuaCon with zero faces is exactly it.
+        if ~ratQ.isPSD2(Hn)
+            g = emptyConjugate();
+            return
+        end
+        % Otherwise H is positive SEMIdefinite and singular, and dom f* is thin rather than empty:
+        % a LINE when H is nonzero (the sup is finite only for s in the range of H), and a single
+        % POINT when H is zero (q affine, so f* is finite only at s = L). Both are correct answers
+        % and neither fits a QuaCon, whose faces are two-dimensional. Representing them needs the
+        % H-form's side column to carry 0 for "on the curve" -- one value in an existing field,
+        % not a new type. See TODO.md 2026-09-04.
+        if all(Hn(:) == 0)
+            error('PLQ:conjQ:domainIsAPoint', ...
+                ['q is affine on the whole plane, so dom f* is the single point s = L and f* ' ...
+                 'there is -kappa. A QuaCon face is two-dimensional; storing this needs an ' ...
+                 'EQUALITY side in the H-form.']);
+        end
+        error('PLQ:conjQ:domainIsALine', ...
+            ['q is positive semidefinite and SINGULAR on the whole plane (determinant %d), so ' ...
+             'the sup is finite only for s in the range of H: dom f* is a LINE. A QuaCon face ' ...
+             'is two-dimensional; storing this needs an EQUALITY side in the H-form.'], D);
     end
 
     A   = [Hn(2,2), -Hn(1,2); -Hn(1,2), Hn(1,1)];    % adjugate of a 2x2, exactly

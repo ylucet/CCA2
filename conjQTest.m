@@ -103,15 +103,6 @@ classdef conjQTest < matlab.unittest.TestCase
             % which would then have to be edited when the defect goes.
         end
 
-        function aNonStrictlyConvexFullDomainQuadraticIsRefusedByName(testCase)
-        % Exact-or-named-refusal, never a silent fallback.
-            testCase.verifyError(@() conjQ(QuaPol([1 1 1 0 0 0])), ...
-                'PLQ:conjQ:notStrictlyConvex', 'a rank-one PSD form is not strictly convex');
-            testCase.verifyError(@() conjQ(QuaPol([1 0 -1 0 0 0])), ...
-                'PLQ:conjQ:notStrictlyConvex', 'an indefinite form is not strictly convex');
-            testCase.verifyError(@() conjQ(QuaPol([-1 0 -1 0 0 0])), ...
-                'PLQ:conjQ:notStrictlyConvex', 'a concave form is not strictly convex');
-        end
 
         function aMultiFaceQuaPolConjugatesByFoldingItsPieces(testCase)
         % CHANGED TWICE, and the trail is the point. It first pinned the unit square as
@@ -175,20 +166,74 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isinf(g.eval(outCone))));
         end
 
-        function whatRemainsRefusedIsExactlyTheDomainsOfDimensionBelowTwo(testCase)
-        % After the unbounded work, every refusal left is REPRESENTATIONAL: the answer is known and
-        % a QuaCon face is two-dimensional, so there is nowhere to put it. Asserted here so that a
-        % future case landing turns this red rather than passing silently.
-            % (a) the sup really is +infinity everywhere -- dom f* is EMPTY
-            testCase.verifyError(@() conjQ(conjQTest.wedge([0 0], [1 0], [0 1], ...
-                [0 0 0 0, -2, 0, -2, 1, 1, 0])), 'PLQ:conjQ:emptyDomain');
-            % (b) a full-domain quadratic that is not strictly convex: dom f* is a point or a line
-            testCase.verifyError(@() conjQ(QuaPol([0 0 0 1 2 3])), 'PLQ:conjQ:notStrictlyConvex');
-            % (c) an input whose own domain has dimension < 2
-            needle = QuaPol([0 0], zeros(0,3), [0 0 0 0 0 0 0 0 0 1], zeros(0,2));
-            testCase.verifyError(@() conjQ(needle), ?MException);
-            % (d) refused by design rather than by gap
-            testCase.verifyError(@() conjQ(QuaPol([sqrt(2) 0 1 0 0 0])), 'PLQ:QuaPol:notExact');
+
+        function aDivergentSupReturnsThePlusInfinityFunctionRatherThanRaising(testCase)
+        % REPLACES three refusal tests, 2026-09-04. They asserted that an empty dual domain was
+        % REFUSED, on the belief that a QuaCon could not hold such a function. It can: an object
+        % with ZERO faces matches nothing in eval and so answers +infinity everywhere, which IS
+        % the function. The routines were declining to return an answer the type already stores.
+        %
+        % A strictly concave q on a cone runs to +infinity along every recession direction, so
+        % f* is +infinity for every s.
+            g = conjQ(conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, -2, 0, -2, 1, 1, 0]));
+            testCase.verifyEqual(g.nf, 0, 'no faces is how "+infinity everywhere" is spelled');
+            testCase.verifyTrue(all(isinf(g.eval([0 0; 1 2; -3 4; 1e6 -1e6]))));
+            testCase.verifyTrue(g.isMeshed(), 'it is still a well-formed object');
+        end
+
+        function aFullPlaneQuadraticWithNegativeCurvatureAlsoConjugatesToPlusInfinity(testCase)
+        % Three of the five non-PD full-plane cases are this, not a thin domain: if H has any
+        % direction of negative curvature then <s,x> - q(x) rises without bound along it for EVERY
+        % s. Negative definite, negative semidefinite-singular and indefinite all qualify.
+            for H = {[-2 0; 0 -2], [1 0; 0 -1], [-1 0; 0 0]}
+                g = conjQ(QuaPol([H{1}(1,1), H{1}(1,2), H{1}(2,2), 1, 2, 3]));
+                testCase.verifyEqual(g.nf, 0, sprintf('H = %s', mat2str(H{1})));
+                testCase.verifyTrue(all(isinf(g.eval([0 0; 3 4]))));
+            end
+        end
+
+        function aTHINDualDomainIsStillRefusedAndSaysWhichKindItIs(testCase)
+        % The two cases that genuinely need an extension, and they are separated by name so that
+        % the reason is legible: a full-plane AFFINE q has dom f* equal to the single point s = L,
+        % and a positive semidefinite SINGULAR q has dom f* equal to a line. Both are correct
+        % answers that a QuaCon cannot hold, because its faces are two-dimensional; representing
+        % them needs the H-form's side column to carry 0 for "on the curve" -- one value in an
+        % existing field, not a new type. TODO.md 2026-09-04 has the analysis.
+            testCase.verifyError(@() conjQ(QuaPol([0 0 0 1 2 3])), 'PLQ:conjQ:domainIsAPoint');
+            testCase.verifyError(@() conjQ(QuaPol([1 0 0 1 2 3])), 'PLQ:conjQ:domainIsALine');
+        end
+
+        function aNEEDLEConjugatesToAnAffineFunctionOnTheWHOLEPlane(testCase)
+        % A low-dimensional INPUT has a full-dimensional OUTPUT, which is why this needed no new
+        % storage: the conjugate of the function that is c at p and +infinity elsewhere is
+        % <s,p> - c, affine and finite everywhere.
+            p = [2 -1];  c = 5;
+            f = QuaPol(p, zeros(0,3), [0 0 0 0 0 0 0 0 0 c], zeros(0,2));
+            testCase.verifyEqual(f.dom.dim, 0);
+            g = conjQ(f);
+            rng(20260904);
+            S = [randn(200,2)*3; 0 0; 1 1];
+            testCase.verifyEqual(g.eval(S), S*p.' - c, 'AbsTol', 1e-12);
+            testCase.verifyEqual(g.nf, 1, 'one affine piece, and no boundary at all');
+            testCase.verifyEqual(g.ne, 0);
+        end
+
+        function aSEGMENTConjugatesToItsOneDimensionalClampedMaximum(testCase)
+        % The dimension-1 input. The sup over a segment of <s,x> - q(x) is a ONE-dimensional
+        % problem in the segment parameter, so the candidates are the two endpoints and, where the
+        % restriction is concave, its interior stationary point -- which is exactly caseD's
+        % candidate set, computed here with no new machinery.
+            f = QuaPol([0 0; 2 0], [1 2 1], [0 0 0 0 1 0 0 0 0 0], [0 0]);   % q = x^2/2 on [0,2]x{0}
+            testCase.verifyEqual(f.dom.dim, 1);
+            g = conjQ(f);
+            rng(20260904);
+            S = [randn(200,2)*2; -1 0; 0.5 0; 1 5; 3 -2; 2 0];
+            want = zeros(size(S,1),1);
+            for i = 1:size(S,1)
+                t = min(2, max(0, S(i,1)));            % the clamped maximiser along the segment
+                want(i) = S(i,1)*t - t^2/2;
+            end
+            testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
@@ -566,14 +611,6 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'AbsTol', 1e-12);
         end
 
-        function anUnboundedPieceWhoseSupDivergesIsRefusedByName(testCase)
-        % A STRICTLY concave q on a cone runs to +infinity along every recession direction -- the
-        % objective's -q term grows like t^2 -- so f* is +inf everywhere and dom f* is EMPTY. That
-        % is the correct answer, and there is nowhere to put it: a QuaCon carries at least one face.
-        % The same representational gap conjCPLQ records as conjugateHasEmptyDomain.
-            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, -2, 0, -2, 1, 1, 0]);
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:emptyDomain');
-        end
 
 
         function aRaysDirectionMarkerIsNotTreatedAsAVertex(testCase)

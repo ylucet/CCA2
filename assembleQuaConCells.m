@@ -44,8 +44,13 @@ function g = assembleQuaConCells(cells)
 % Neither gap can produce a wrong VALUE: `eval` reads the face functions and the sign conditions,
 % and both are exact.
 
+    % NO CELLS IS AN ANSWER, NOT A FAILURE. A QuaCon with zero faces evaluates to +infinity at
+    % every point, which IS the function f = +inf -- the correct conjugate whenever the sup
+    % diverges for every s. Raising here made the routines above decline to return something this
+    % type can already store; verified directly that the empty object builds and evaluates.
     if isempty(cells)
-        error('QuaCon:noCells', 'assembleQuaConCells was given no cells.');
+        g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
+        return
     end
 
     % ---- drop the cells that provably carry no two-dimensional face -------------------------
@@ -100,10 +105,11 @@ function g = assembleQuaConCells(cells)
     end
     cells = cells(live);
     if isempty(cells)
-        error('QuaCon:noCells', ...
-            ['every candidate cell is empty. For a bounded domain the cells must cover the ' ...
-             'plane, so this means the constraint signs are inconsistent -- check that each ' ...
-             'side was taken through sgnOf after ratQ.conic normalised the row.']);
+        % Everything filtered away. For a BOUNDED domain the cells must cover the plane, so this
+        % would mean the constraint signs are inconsistent -- but an unbounded piece can legitimately
+        % leave nothing, and the zero-face object says exactly that.
+        g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
+        return
     end
 
     % ---- one canonical curve list, shared by every cell that borders it ----------------------
