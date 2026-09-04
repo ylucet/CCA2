@@ -48,7 +48,15 @@ APC; gold is ~$3,290 and unnecessary.
       branch would alter dispatch across three buckets to fix an input nothing currently produces.
       Full trace and the table: `DECISIONS.md` 2026-09-03 (second entry).
 
-- [ ] **Extend `conjQ` past Case A**, in this order (its own header repeats it):
+- [x] **DONE 2026-09-03: `conjQ` Case B -- a strictly convex quadratic on a bounded convex
+      polygon**, exactly, as the KKT active-set subdivision (one affine cell per polygon vertex,
+      one quadratic cell per edge, one interior cell). Every cell boundary is a straight line, so
+      the answer is a `QuaCon` whose edge conics are all lines -- the shape the SCIP bridge wants.
+      Ports `conjConvexOverPiece`'s decomposition and removes its ten `sym` calls. Verified against
+      an independent candidate-enumeration maximisation: 40 random polygons, 8040 dual points,
+      0 wrong, 0 uncovered, worst relative error 4.6e-15.
+
+- [ ] **Extend `conjQ` past Cases A and B**, in this order (its own header repeats it):
       the per-piece closed forms first -- `convEnvCPLQ`, `conjPieceCPLQ`, `conjConvexOverPiece`,
       `conjConvexPolygon`, `conjAffinePLQ` are ALREADY 100% sym-free, so porting them is replacing
       double arithmetic with `ratQ` calls rather than rewriting an algorithm -- then Step 3

@@ -114,10 +114,14 @@ classdef conjQTest < matlab.unittest.TestCase
         end
 
         function aCaseNotYetImplementedIsRefusedByNameAndSaysWhy(testCase)
-        % The bounded-domain cases are the next work item, and until they land the refusal must be
-        % nameable rather than a fallback into the symbolic engine.
-            f = QuaPol([0 0; 1 0; 1 1; 0 1], [1 2 1; 2 3 1; 3 4 1; 4 1 1], ...
-                       [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0; 1 0]);
+        % CHANGED 2026-09-03: this used to hand in the unit square, which Case B now covers. The
+        % assertion is unaltered -- an uncovered case must be a NAMED refusal and never a silent
+        % fallback into the symbolic engine -- so the fixture moves to one that is genuinely
+        % uncovered: a MULTI-FACE input, which needs Step 3 (the pointwise max across pieces).
+            V = [0 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
+            f = QuaPol(V, E, [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 2 0 2 0 0 0], ...
+                       [1 0; 1 0; 2 0; 2 0; 1 2]);
             testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
         end
 
@@ -152,6 +156,185 @@ classdef conjQTest < matlab.unittest.TestCase
                 testCase.verifyEqual(h.fN, n0, sprintf('case %d: f** numerator', k));
                 testCase.verifyEqual(h.fD, d0, sprintf('case %d: f** denominator', k));
             end
+        end
+        % ---- Case B: a strictly convex quadratic on a bounded convex polygon --------------------
+
+        function theSquareConjugateMatchesTheSeparableClosedForm(testCase)
+        % (x^2+y^2)/2 over [0,1]^2 SEPARATES, so f*(s) = g(s1) + g(s2) with g the 1-D conjugate
+        %       g(t) = 0 for t <= 0,  t^2/2 for 0 <= t <= 1,  t - 1/2 for t >= 1.
+        % That closed form is written down here independently of anything conjQ computes, which is
+        % what makes it an oracle rather than a restatement.
+            g = conjQ(conjQTest.unitSquareEnergy());
+            gg = @(t) (t<=0).*0 + (t>0 & t<1).*(t.^2/2) + (t>=1).*(t-0.5);
+
+            rng(20260903);
+            S = [randn(300,2)*1.5; 0 0; 1 1; 0.5 0.5; -2 3; 2 2; 1 0; 0 1];
+            [got, idx] = g.eval(S);
+            testCase.verifyEqual(got, gg(S(:,1)) + gg(S(:,2)), 'RelTol', 1e-12, 'AbsTol', 1e-12);
+            testCase.verifyTrue(all(idx > 0), ...
+                'the cells must COVER the plane: dom f* is R^2 for a bounded domain');
+        end
+
+        function theSquareConjugateHasTheSubdivisionTheMathematicsPredicts(testCase)
+        % Nine cells -- one per vertex (4), one per edge (4), one interior -- and the cell
+        % boundaries are exactly the four lines s1 = 0, s1 = 1, s2 = 0, s2 = 1.
+            g = conjQ(conjQTest.unitSquareEnergy());
+            testCase.verifyEqual(g.nf, 9, '4 vertex cells + 4 edge cells + 1 interior');
+            testCase.verifyEqual(g.ne, 4, 'and only four distinct bounding lines');
+            for j = 1:g.ne
+                testCase.verifyEqual(g.edgeKind(j), 'line');
+            end
+            want = sortrows([ratQ.conic([0 0 0 1 0  0]);      % s1 = 0
+                             ratQ.conic([0 0 0 1 0 -1]);      % s1 = 1
+                             ratQ.conic([0 0 0 0 1  0]);      % s2 = 0
+                             ratQ.conic([0 0 0 0 1 -1])]);    % s2 = 1
+            testCase.verifyEqual(sortrows(g.EcQ), want);
+            testCase.verifyEqual(g.nv, 4, 'the four dual corners where those lines meet');
+        end
+
+        function aFacetSHAREDByTwoCellsIsONEEdgeIndexNotTwoSpellings(testCase)
+        % THE property the exact representation exists for. DECISIONS.md 2026-08-17 measured the
+        % alternative: two cells reached one facet by different routes, the doubles differed by an
+        % ULP, region.merge could not see that they matched, and Step 3's cell count grew without
+        % bound -- 57 cells carrying 10 distinct functions, 4 merges out of 612 attempts.
+        %
+        % Here the constraint rows are canonical integers, so a shared facet is the SAME INDEX.
+        % Asserted structurally: the cells reference far more constraints than there are distinct
+        % lines, which can only happen through sharing.
+            g = conjQ(conjQTest.unitSquareEnergy());
+            total = 0;
+            for k = 1:g.nf, total = total + size(g.FC{k},1); end
+            testCase.verifyGreaterThan(total, 3 * g.ne, ...
+                'the cells must reuse the same line indices, not each carry their own copy');
+            for k = 1:g.nf
+                testCase.verifyTrue(all(g.FC{k}(:,1) >= 1 & g.FC{k}(:,1) <= g.ne));
+            end
+        end
+
+        function conjugatesOverRandomPolygonsMatchAnIndependentMaximisation(testCase)
+        % Differential sweep. The oracle enumerates the candidate maximisers of a concave objective
+        % over a polytope -- the unconstrained stationary point when interior, each edge's clamped
+        % 1-D stationary point, and the vertices -- which is a DIFFERENT computation from conjQ's
+        % cell subdivision: no normal cones, no multipliers, no arrangement.
+            rng(20260903);
+            for c = 1:12
+                [V, E, F] = conjQTest.randomConvexPolygon();
+                [H, L, k0] = conjQTest.randomStrictlyConvexQ();
+                f = QuaPol(V, E, [0 0 0 0, H(1,1), H(1,2), H(2,2), L(1), L(2), k0], F);
+                testCase.assumeTrue(f.isExact());
+
+                g = conjQ(f);
+                S = [randn(60,2)*3; 0 0];
+                [got, idx] = g.eval(S);
+                testCase.verifyTrue(all(idx > 0), sprintf('case %d: a point fell in no cell', c));
+
+                want = zeros(size(S,1),1);
+                for i = 1:size(S,1)
+                    want(i) = conjQTest.supOverPolygon(S(i,:).', V, H, L, k0);
+                end
+                testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                    sprintf('case %d: conjQ disagrees with the independent maximisation', c));
+            end
+        end
+
+        function theConjugateOverAPolygonIsConvex(testCase)
+        % f* is convex whatever f is -- a definition-level property no cell-by-cell check implies,
+        % and one a wrong cell boundary breaks immediately.
+            g = conjQ(conjQTest.unitSquareEnergy());
+            rng(20260903);
+            A = randn(200,2)*2;  B = randn(200,2)*2;  M = (A+B)/2;
+            testCase.verifyLessThanOrEqual(g.eval(M), (g.eval(A) + g.eval(B))/2 + 1e-12, ...
+                'the midpoint value must not exceed the average of the endpoints');
+        end
+
+        function theCellFunctionsAreExactRationalsWithSmallDenominators(testCase)
+        % Not a golden value: the assertion is that the coefficients ARE rationals stored as
+        % integers, and that the denominators have not blown up -- which is what would happen if
+        % the routine multiplied denominators instead of taking the lcm.
+            g = conjQ(conjQTest.unitSquareEnergy());
+            testCase.verifyTrue(all(g.fD > 0));
+            testCase.verifyEqual(g.fN, round(g.fN), 'AbsTol', 0, 'numerators are integers');
+            testCase.verifyLessThan(max(g.fD), 100, ...
+                'the unit square carries halves, not products of every intermediate denominator');
+        end
+
+        % ---- Case B refuses what it does not cover, by name ---------------------------------
+
+        function anUnboundedPolygonIsRefusedByName(testCase)
+            V = [0 0; 1 0; 0 1];
+            f = QuaPol(V, [1 2 1; 2 3 0; 3 1 0], [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0]);
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
+        end
+
+        function aNonStrictlyConvexQuadraticOnAPolygonIsRefusedByName(testCase)
+        % A semidefinite Q makes the interior cell degenerate -- the unconstrained sup is finite
+        % only on a measure-zero set -- which is a real case, and a different one.
+            V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
+            f = QuaPol(V, E, [0 0 0 0 1 1 1 0 0 0], F);      % rank-one PSD
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notStrictlyConvex');
+        end
+    end
+
+    methods (Static)
+
+        function f = unitSquareEnergy()
+        % (x^2 + y^2)/2 over [0,1]^2
+            f = QuaPol([0 0; 1 0; 1 1; 0 1], [1 2 1; 2 3 1; 3 4 1; 4 1 1], ...
+                       [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0; 1 0]);
+        end
+
+        function v = supOverPolygon(s, V, H, L, k0)
+        % THE ORACLE. max over the polygon of <s,x> - q(x), by enumerating the candidate
+        % maximisers of a concave objective over a polytope: the unconstrained stationary point
+        % when it lies inside, each edge's clamped 1-D stationary point, and the vertices. One of
+        % those is always the maximiser, so this is exact up to double rounding -- and it shares no
+        % machinery with conjQ, which is the point.
+            q   = @(x) 0.5 * x.' * H * x + L.' * x + k0;
+            obj = @(x) s.' * x - q(x);
+            cand = V.';
+            xs = H \ (s - L);
+            if conjQTest.inPolygon(xs.', V), cand = [cand, xs]; end
+            m = size(V,1);
+            for j = 1:m
+                a = V(j,:).';  b = V(mod(j,m)+1,:).';  d = b - a;
+                t = min(1, max(0, (s - (H*a + L)).' * d / (d.' * H * d)));
+                cand = [cand, a + t*d]; %#ok<AGROW>
+            end
+            v = -inf;
+            for i = 1:size(cand,2), v = max(v, obj(cand(:,i))); end
+        end
+
+        function tf = inPolygon(x, V)
+            m = size(V,1);  ctr = mean(V,1);  tf = true;
+            for j = 1:m
+                a = V(j,:);  b = V(mod(j,m)+1,:);  d = b - a;  n = [d(2), -d(1)];
+                if n * (ctr - a).' > 0, n = -n; end
+                if n * (x - a).' > 1e-12, tf = false; return, end
+            end
+        end
+
+        function [V, E, F] = randomConvexPolygon()
+        % Vertices on a coarse half-integer grid, so they are exactly rational and QuaPol reads
+        % them exactly -- an irrational vertex would make the whole object inexact and there would
+        % be nothing to test.
+            m  = randi([3 6]);
+            th = sort(rand(1,m) * 2*pi);
+            r  = randi([1 6], 1, m);
+            V  = round([r'.*cos(th'), r'.*sin(th')] * 2) / 2;
+            V  = uniquetol(V, 1e-9, 'ByRows', true);
+            k  = convhull(V(:,1), V(:,2));
+            V  = V(k(1:end-1), :);
+            m  = size(V,1);
+            E  = [(1:m).', [2:m, 1].', ones(m,1)];
+            F  = [ones(m,1), zeros(m,1)];
+        end
+
+        function [H, L, k0] = randomStrictlyConvexQ()
+            while true
+                H = randi([-4 4], 2, 2);  H = H + H.';
+                if H(1,1) > 0 && (H(1,1)*H(2,2) - H(1,2)^2) > 0, break, end
+            end
+            L = randi([-4 4], 2, 1);  k0 = randi([-4 4]);
         end
     end
 end
