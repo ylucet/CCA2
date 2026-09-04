@@ -37,6 +37,51 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (closing) — the `conjQ` coverage table is COMPLETE. Every entry is OK.
+
+    domain \ Hessian    PD    PSD-sing  indefinite  ND      NSD-sing  affine
+    full plane          OK    OK        OK          OK      OK        OK
+    bounded triangle    OK    OK        OK          OK      OK        OK
+    bounded square      OK    OK        OK          OK      OK        OK
+    unbounded wedge     OK    OK        OK          OK      OK        OK
+    half-strip          OK    OK        OK          OK      OK        OK
+    needle (dim 0) OK   segment (dim 1) OK   multi-face bounded OK   multi-face unbounded OK
+
+`.claude/coverage-probe.m` reproduces it. The only inputs that still raise are the two the toolbox
+declines BY DESIGN and neither is a gap: a CUBIC numerator (`assertOperable`, out of scope since
+`CLAUDE.md` says the design target is quadratic) and an INEXACT input (`PLQ:QuaPol:notExact`,
+refused deliberately because exact arithmetic on rounded coefficients yields exactly the wrong
+number).
+
+**(3) The thin dual domain is now BUILT**, and it cost one value in an existing column exactly as
+predicted -- no new class, and `AlgAlg` remains unrelated (that type is for irrational
+COEFFICIENTS, not thin domains). `FC`'s side takes `0` meaning ON the curve:
+- **q AFFINE on the plane** -> `dom f*` is the single POINT `s = L`, value `-kappa`: two equality
+  rows, one constant face.
+- **q PSD-SINGULAR on the plane** -> `dom f*` is a LINE. With `H = lambda*w*w'` the objective is a
+  concave parabola along `w` and LINEAR along `w`-perp, so the sup is `+inf` unless `u = fD*s - Ln`
+  is parallel to `w`; on that line `f* = (u.w)^2/(2 lambda) - kappa`. Stored as one equality row
+  (`u . null(H) = 0`) and a quadratic face, using `pinv(H) = m m'/(m'Hm)` for any `m` spanning the
+  range -- all rational.
+
+**Three touch points, as forecast**: `QuaCon`'s constructor validation (sides are now `-1/0/+1`),
+`eval` (a side of 0 tests `|q| <= tol` instead of `sign*q >= -tol`), and the producer.
+
+**One bug found while building it, and it is a good illustration of why the filters are separate
+from the geometry.** `dropRedundantRows` reasons about HALF-PLANES: it asks whether the other rows
+make a row impossible to violate. Handing it an EQUALITY turns the row into `0*c`, i.e. all-zero,
+which `ratQ.feasible2` correctly reads as having no interior -- so every equality was deleted as
+"redundant", the thin face silently became the whole plane, and the conjugate of an affine function
+evaluated to `-kappa` EVERYWHERE. Thin cells are now skipped by that pass and by the
+nonempty-interior filter in `assembleQuaConCells`, both for the same reason: a thin cell has no
+interior BY CONSTRUCTION, so a filter that deletes interior-less cells deletes exactly the faces
+this case exists to build.
+
+**The caveat stands and is worth repeating**: evaluating a line- or point-supported function in
+floating point answers `+inf` almost surely, because a random double is never exactly on the line.
+The mesh is exactly right and every predicate that built it is exact; it is simply not an object to
+probe interactively. `QuaCon.eval` says so at the point where it tests an equality.
+
 ## 2026-09-04 (final) — items (1) and (2) DONE. Only the THIN dual domain is left.
 
     domain \ Hessian    PD    PSD-sing  indefinite  ND      NSD-sing  affine

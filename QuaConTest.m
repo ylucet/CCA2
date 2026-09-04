@@ -174,12 +174,37 @@ classdef QuaConTest < matlab.unittest.TestCase
             testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, FC), 'QuaCon:cubicFace');
         end
 
-        function aFaceConstraintWithoutASideIsRefused(testCase)
-        % The sign says WHICH side of the conic the face lies on. For a straight edge it could be
-        % recovered from the other vertices; for an ellipse it cannot, so it is never optional.
+        function aFaceConstraintCarriesOneOfTheThreeSidesAndNothingElse(testCase)
+        % CHANGED 2026-09-04, and the change is a widening rather than a weakening. This used to
+        % assert that a side of 0 was REFUSED, on the reading that 0 meant "omitted". It now means
+        % ON the curve -- an EQUALITY -- which is how a THIN face is expressed: dom f* is a line
+        % when the primal is a positive semidefinite singular quadratic on the plane, and a point
+        % when the primal is affine there. Both are correct conjugates that had nowhere to go.
+        %
+        % What the test exists for is unchanged: a side must be one of the three meanings and
+        % nothing else, because for an ellipse the side cannot be recovered from the endpoints.
             [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
-            FC{1}(1,2) = 0;
-            testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, FC), 'QuaCon:badConstraint');
+
+            FC{1}(1,2) = 0;                       % an equality is now legitimate
+            qc = QuaCon(V, E, Ec, fN, fD, F, FC);
+            testCase.verifyEqual(qc.FC{1}(1,2), 0);
+
+            for badSide = [2, -3, 0.5]
+                FC{1}(1,2) = badSide;
+                testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, FC), ...
+                    'QuaCon:badConstraint', sprintf('side %g must be refused', badSide));
+            end
+        end
+
+        function anEqualitySideMakesTheFaceTHINAndEvalRespectsIt(testCase)
+        % The behaviour the new side buys, asserted directly: a face carrying an equality is only
+        % entered ON the curve. The unit square's face is cut down to the segment y = 0 within it.
+            [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
+            FC{1} = [FC{1}; 1 0];                 % edge 1 is y = 0; demand ON it
+            qc = QuaCon(V, E, Ec, fN, fD, F, FC);
+            testCase.verifyTrue(isfinite(qc.eval([0.5 0])), 'on the line, inside the square');
+            testCase.verifyTrue(isinf(qc.eval([0.5 0.5])), 'off the line: not in the face');
+            testCase.verifyTrue(isinf(qc.eval([2 0])), 'on the line but outside the square');
         end
 
         function theFaceCoefficientsAreStoredCanonicallyWhateverSpellingIsPassed(testCase)

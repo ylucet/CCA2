@@ -39,8 +39,14 @@ classdef QuaCon < RatCon & Qua
 %             those two edges meet, rootIdx selecting among the (at most four) real intersections in
 %             `conicMeet`'s canonical order. No coordinate is stored, ever -- see `vertexCoords`.
 %
-%   FC        the faces, in H-FORM. FC{k} is an m x 2 list of [edgeIndex, sign], meaning
-%                     face k = { x : sign_i * Q_{e_i}(x) >= 0 for every row i }.
+%   FC        the faces, in H-FORM. FC{k} is an m x 2 list of [edgeIndex, side], meaning
+%                     face k = { x : side_i * Q_{e_i}(x) >= 0 for every row i },
+%             and a side of 0 means ON the curve, i.e. Q = 0 -- an EQUALITY rather than an
+%             inequality. That third value is what lets a face be THIN: dom f* is a line when the
+%             primal is a positive semidefinite singular quadratic on the whole plane, and a single
+%             point when the primal is affine there. Both are correct conjugates, and without the
+%             equality side there is nowhere to put either. It costs one value in a column that
+%             already existed rather than a new class -- see TODO.md 2026-09-04.
 %             This is NOT derivable from the combinatorics. For a straight edge the side can be
 %             recovered from the face's other vertices; for a conic it cannot -- the two sides of an
 %             ellipse are not distinguished by the edge's endpoints -- so the sign is stored.
@@ -172,10 +178,11 @@ classdef QuaCon < RatCon & Qua
                         error('QuaCon:badConstraint', ...
                             'FC{%d} names an edge outside 1..%d.', k, ne);
                     end
-                    if ~all(ismember(Ck(:,2), [-1 1]))
+                    if ~all(ismember(Ck(:,2), [-1 0 1]))
                         error('QuaCon:badConstraint', ...
-                            ['FC{%d} carries a sign that is not -1 or +1. The sign says WHICH ' ...
-                             'side of the conic the face lies on and cannot be omitted.'], k);
+                            ['FC{%d} carries a side that is not -1, 0 or +1. The side says WHICH ' ...
+                             'side of the conic the face lies on and cannot be omitted; 0 means ' ...
+                             'ON the curve.'], k);
                     end
                 end
                 FC{k} = Ck;
@@ -259,7 +266,15 @@ classdef QuaCon < RatCon & Qua
                 for r = 1:size(Ck,1)
                     q = QuaPar.evalConic(obj.EcQ(Ck(r,1),:), X);
                     scale = max(1, max(abs(obj.EcQ(Ck(r,1),:))) * max(1, max(abs(X(:)))^2));
-                    inFace = inFace & (Ck(r,2) * q >= -sqrt(eps) * scale);
+                    if Ck(r,2) == 0
+                        % ON the curve. A THIN face, and the honest caveat is that a point picked
+                        % at random in floating point is never exactly on a line, so such a face
+                        % answers +inf almost surely -- the mesh is still exactly right, and the
+                        % exact predicates that build it are unaffected. See this class's header.
+                        inFace = inFace & (abs(q) <= sqrt(eps) * scale);
+                    else
+                        inFace = inFace & (Ck(r,2) * q >= -sqrt(eps) * scale);
+                    end
                 end
                 take = inFace & (idx == 0);
                 if any(take)

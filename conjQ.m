@@ -228,16 +228,41 @@ function g = caseAFullDomain(fN, fD)
         % and neither fits a QuaCon, whose faces are two-dimensional. Representing them needs the
         % H-form's side column to carry 0 for "on the curve" -- one value in an existing field,
         % not a new type. See TODO.md 2026-09-04.
+        % A THIN dual domain, and both kinds are now BUILT rather than refused, using the
+        % H-form's equality side (a side of 0 on a curve means ON it).
         if all(Hn(:) == 0)
-            error('PLQ:conjQ:domainIsAPoint', ...
-                ['q is affine on the whole plane, so dom f* is the single point s = L and f* ' ...
-                 'there is -kappa. A QuaCon face is two-dimensional; storing this needs an ' ...
-                 'EQUALITY side in the H-form.']);
+            % q is AFFINE on the plane: f*(s) = -kappa at the single point s = L, +inf elsewhere.
+            % Two equalities, fD*s_i - Ln_i = 0, and a constant face.
+            con = [ratQ.conic([0 0 0, fD, 0, -Ln(1)]), sgnOf([fD, 0, -Ln(1)], 0); ...
+                   ratQ.conic([0 0 0, 0, fD, -Ln(2)]), sgnOf([0, fD, -Ln(2)], 0)];
+            g = assembleQuaConCells(struct('num', [0 0 0 0 0 0 0 0 0 -fN(10)], ...
+                                           'den', fD, 'con', con));
+            return
         end
-        error('PLQ:conjQ:domainIsALine', ...
-            ['q is positive semidefinite and SINGULAR on the whole plane (determinant %d), so ' ...
-             'the sup is finite only for s in the range of H: dom f* is a LINE. A QuaCon face ' ...
-             'is two-dimensional; storing this needs an EQUALITY side in the H-form.'], D);
+        % q is positive semidefinite and SINGULAR. With u = fD*s - Ln, the unconstrained sup of
+        % u'x - x'Hn x/2 is finite exactly when u lies in range(Hn) -- equivalently u is orthogonal
+        % to the null direction n -- and then equals u'pinv(Hn)u/2. For a rank-one PSD Hn the
+        % pseudo-inverse is m*m'/(m'Hn m) for any m spanning the range, so
+        %       f*(s) = ( (u.m)^2 / (2 m'Hn m) - kappa ) / fD      on the line  u.n = 0,
+        % which is rational throughout. Checked against q = x^2/2: n = (0,1) gives s2 = 0, m = (1,0)
+        % gives f* = s1^2/2.
+        if Hn(1,1) ~= 0
+            nl = [-Hn(1,2); Hn(1,1)];               % Hn*nl = 0 because det(Hn) = 0
+        else
+            nl = [1; 0];                            % Hn(1,1) = 0 forces Hn(1,2) = 0 here
+        end
+        m = [Hn(1,1); Hn(1,2)];
+        if all(m == 0), m = [Hn(1,2); Hn(2,2)]; end
+        mHm = ratQ.chk(m.' * Hn * m, 'range scaling');
+        P = [ratQ.chk(fD*m(1),'p1'), ratQ.chk(fD*m(2),'p2'), ratQ.chk(-(Ln.'*m),'p3')];
+        den = ratQ.chk(2 * mHm * fD, 'line denominator');
+        num = [0 0 0 0, ratQ.chk(2*P(1)^2,'c5'), ratQ.chk(2*P(1)*P(2),'c6'), ...
+               ratQ.chk(2*P(2)^2,'c7'), ratQ.chk(2*P(1)*P(3),'c8'), ratQ.chk(2*P(2)*P(3),'c9'), ...
+               ratQ.chk(P(3)^2 - 2*mHm*fN(10), 'c10')];
+        row = [ratQ.chk(fD*nl(1),'e1'), ratQ.chk(fD*nl(2),'e2'), ratQ.chk(-(Ln.'*nl),'e0')];
+        g = assembleQuaConCells(struct('num', num, 'den', den, ...
+                                       'con', [ratQ.conic([0 0 0, row]), sgnOf(row, 0)]));
+        return
     end
 
     A   = [Hn(2,2), -Hn(1,2); -Hn(1,2), Hn(1,1)];    % adjugate of a 2x2, exactly
@@ -427,6 +452,11 @@ function s = sgnOf(row, want)
 % Takes either the three LINEAR coefficients [d e f] or a full conic [a b c d e f]; the caller has
 % one or the other depending on whether the constraint came from a half-plane or from a difference
 % of two quadratics, and getting the padding wrong would look at the wrong leading entry.
+    if want == 0
+        % An EQUALITY is symmetric: {c = 0} and {-c = 0} are the same set, so ratQ.conic's sign
+        % normalisation cannot disturb it and there is nothing to follow.
+        s = 0;  return
+    end
     if numel(row) == 3
         r = [0 0 0, row(1), row(2), row(3)];
     else

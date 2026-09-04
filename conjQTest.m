@@ -192,16 +192,66 @@ classdef conjQTest < matlab.unittest.TestCase
             end
         end
 
-        function aTHINDualDomainIsStillRefusedAndSaysWhichKindItIs(testCase)
-        % The two cases that genuinely need an extension, and they are separated by name so that
-        % the reason is legible: a full-plane AFFINE q has dom f* equal to the single point s = L,
-        % and a positive semidefinite SINGULAR q has dom f* equal to a line. Both are correct
-        % answers that a QuaCon cannot hold, because its faces are two-dimensional; representing
-        % them needs the H-form's side column to carry 0 for "on the curve" -- one value in an
-        % existing field, not a new type. TODO.md 2026-09-04 has the analysis.
-            testCase.verifyError(@() conjQ(QuaPol([0 0 0 1 2 3])), 'PLQ:conjQ:domainIsAPoint');
-            testCase.verifyError(@() conjQ(QuaPol([1 0 0 1 2 3])), 'PLQ:conjQ:domainIsALine');
+        function anAFFINEFunctionOnThePlaneConjugatesToAPOINTSupportedFunction(testCase)
+        % THE THIN DUAL DOMAIN, first kind. q(x) = <a,x> + b on all of R^2 gives
+        %       f*(s) = -b at s = a,  +infinity elsewhere,
+        % so dom f* is a single POINT. It is stored with the H-form's EQUALITY side -- a side of 0
+        % on a curve means ON it -- which is one value in a column that already existed rather
+        % than a new class.
+            a = [1; 2];  b = 3;
+            g = conjQ(QuaPol([0 0 0 a(1) a(2) b]));
+            testCase.verifyEqual(g.nf, 1);
+            testCase.verifyEqual(g.ne, 2, 'two equalities cut the plane down to one point');
+            testCase.verifyEqual(g.eval(a.'), -b, 'AbsTol', 1e-12);
+            testCase.verifyTrue(all(isinf(g.eval([1.5 2; 1 2.5; 0 0; -3 7]))), ...
+                'and +infinity at every other point');
+            for k = 1:g.nf
+                testCase.verifyTrue(all(g.FC{k}(:,2) == 0), 'both sides are EQUALITIES');
+            end
         end
+
+        function aPSDSINGULARQuadraticOnThePlaneConjugatesToALINESupportedFunction(testCase)
+        % The second kind. With H = lambda*w*w' the objective splits: along w it is a concave
+        % parabola, and along w-perp it is LINEAR, so the sup is +infinity unless s - L is parallel
+        % to w. Hence dom f* is the LINE {u parallel to w} and there f* = (u.w)^2/(2 lambda) - kappa.
+        % Written down independently of conjQ's own algebra below.
+            rng(20260904);
+            for t = 1:12
+                w = randi([-3 3], 2, 1);
+                if all(w == 0), continue, end
+                lam = randi([1 4]);
+                H = lam * (w * w.');
+                L = randi([-3 3], 2, 1);  k0 = randi([-3 3]);
+                g = conjQ(QuaPol([H(1,1), H(1,2), H(2,2), L(1), L(2), k0]));
+                testCase.verifyEqual(g.nf, 1, sprintf('case %d', t));
+                testCase.verifyEqual(g.ne, 1, 'one equality: a line');
+
+                % on the line: s = L + r*w for any r
+                for r = [-2 -0.5 0 1 3]
+                    sOn = (L + r*w).';
+                    want = (sOn*w - L.'*w)^2 / (2 * lam * (w.'*w)^2) * (w.'*w) - k0;
+                    % (u.w)^2/(2 lambda |w|^4) * |w|^2 simplifies to (u.w)^2/(2 lambda |w|^2)
+                    want = (r*(w.'*w))^2 / (2*lam*(w.'*w)^2) - k0;
+                    testCase.verifyEqual(g.eval(sOn), want, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                        sprintf('case %d on the line at r=%g', t, r));
+                end
+                % off the line
+                off = (L + [w(2); -w(1)]).';
+                testCase.verifyTrue(isinf(g.eval(off)), 'and +infinity off it');
+            end
+        end
+
+        function everyRefusalLeftIsByDESIGNRatherThanAGap(testCase)
+        % After the thin-domain work the coverage table has no gaps: what still raises is what the
+        % toolbox deliberately does not accept, and both are contract rather than absence.
+            V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
+            cubic = QuaPol(V, E, [1 0 0 0 1 0 1 0 0 0], F);
+            testCase.verifyError(@() conjQ(cubic), ?MException, ...
+                'a cubic numerator is out of scope by assertOperable');
+            testCase.verifyError(@() conjQ(QuaPol([sqrt(2) 0 1 0 0 0])), 'PLQ:QuaPol:notExact', ...
+                'and an inexact input is refused deliberately, not for want of an algorithm');
+        end
+
 
         function aNEEDLEConjugatesToAnAffineFunctionOnTheWHOLEPlane(testCase)
         % A low-dimensional INPUT has a full-dimensional OUTPUT, which is why this needed no new

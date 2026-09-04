@@ -29,6 +29,14 @@ function FC = dropRedundantRows(EcQ, FC)
         rows = FC{k};
         if size(rows,1) < 2, continue, end
 
+        % A THIN cell -- one carrying an EQUALITY side -- is left alone. This pass reasons about
+        % HALF-PLANES: it asks whether the others make a row impossible to violate, and an equality
+        % is not a half-plane. Passing one through anyway turns it into the all-zero row 0*c, which
+        % feasible2 correctly reads as having no interior, so every equality was deleted and the
+        % thin face silently became the whole plane. Measured while building the point-domain case:
+        % ne came out 0 and the conjugate of an affine function evaluated to -kappa everywhere.
+        if any(rows(:,2) == 0), continue, end
+
         keep = true(size(rows,1), 1);
         for i = 1:size(rows,1)
             if any(EcQ(rows(i,1), 1:3) ~= 0), continue, end     % curved: not a candidate

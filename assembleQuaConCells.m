@@ -74,6 +74,19 @@ function g = assembleQuaConCells(cells)
     for k = 1:numel(cells)
         rows = cells(k).con;
 
+        % A THIN cell -- one carrying an EQUALITY side -- has no interior BY CONSTRUCTION, so the
+        % nonempty-interior tests below would delete exactly the faces that case exists to build.
+        % Only the contradictory-sides test still applies to it, and that one is about +1 against
+        % -1 on one curve, which a 0 does not participate in.
+        if any(rows(:,7) == 0)
+            [~, ~, ict] = unique(rows(:,1:6), 'rows');
+            for u = 1:max(ict)
+                sd = rows(ict == u, 7);
+                if any(sd > 0) && any(sd < 0), live(k) = false; break, end
+            end
+            continue
+        end
+
         % (c) first, because it can DELETE rows and so make (a) and (b) sharper. A conic that
         %     takes one sign everywhere gives a condition that is either vacuous (drop the row,
         %     it constrains nothing) or unsatisfiable off the curve itself (drop the cell).
@@ -193,6 +206,10 @@ function tf = cellHoldsAt(EcQ, rows, xn, xd)
         c = EcQ(rows(r,1), :);
         val = ratQ.chk(c(1)*xn(1)^2 + c(2)*xn(1)*xn(2) + c(3)*xn(2)^2 ...
                      + c(4)*xn(1)*xd + c(5)*xn(2)*xd + c(6)*xd^2, 'constraint at corner');
-        if rows(r,2) * val < 0, tf = false; return, end
+        if rows(r,2) == 0
+            if val ~= 0, tf = false; return, end      % an EQUALITY row: the corner must be ON it
+        elseif rows(r,2) * val < 0
+            tf = false; return
+        end
     end
 end
