@@ -90,6 +90,21 @@ function g = conjPieceQ(obj, k)
         return
     end
 
+    % ---- an UNBOUNDED piece takes a different route, and only the concave/affine half of it ----
+    [vs, rays, bounded] = pieceGeometry(obj, k);
+    if ~bounded
+        if Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0
+            [ViU, vdU] = ratQ.combineDen(obj.VN, obj.VD);
+            g = caseEUnboundedConcave(fN, fD, ViU, vdU, vs, rays);
+            return
+        end
+        error('PLQ:conjQ:unbounded', ...
+            ['piece %d is unbounded and its quadratic is not concave or affine (leading minor ' ...
+             '%d, second diagonal %d, determinant %d). On an unbounded piece the finiteness of ' ...
+             'the sup is a QUADRATIC condition on the recession CONE rather than a linear one -- ' ...
+             'a real case, and a separate one.'], k, Hn(1,1), Hn(2,2), D);
+    end
+
     [Vi, vd, cyc] = polygonExactly(obj, k);
     % A CLEAN DICHOTOMY, and it is the whole case analysis for a bounded piece. If H is positive
     % DEFINITE the objective <s,x> - q(x) is strictly concave and its maximiser can be interior,
@@ -354,6 +369,10 @@ function [Vi, vd, cyc] = polygonExactly(obj, k)
     if isempty(E)
         error('PLQ:conjQ:noFace', 'face %d has no edges.', k);
     end
+    % An INTERNAL INVARIANT since caseE landed: conjPieceQ tests boundedness first and routes an
+    % unbounded piece elsewhere, so this cannot fire from there. Kept because the routine's own
+    % contract is about its input -- walking a cycle that does not close would otherwise build a
+    % silently wrong polygon rather than raise.
     if any(E(:,3) == 0)
         error('PLQ:conjQ:unbounded', ...
             ['the exact conjugate needs a BOUNDED piece; face %d has a ray (edge %d). The ' ...
@@ -630,4 +649,142 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
     end
 
     g = assembleQuaConCells(out);
+end
+
+function g = caseEUnboundedConcave(fN, fD, Vi, vd, vs, rays)
+% objective: the conjugate of a CONCAVE or AFFINE quadratic over an UNBOUNDED polyhedral piece.
+% [input]  fN, fD : the piece's function, exactly;  Vi, vd : the mesh vertices over one denominator
+%          vs     : the indices of this piece's own vertices;  rays : k x 2 integer directions
+% [output] g      : QuaCon -- and unlike every case so far, its cells DO NOT COVER THE PLANE
+%
+% ------------------------------------------------------------------------------------------------
+% THIS IS THE FIRST CASE WHERE dom f* IS A PROPER SUBSET, and that is the mathematics, not a gap.
+%
+% Along a recession direction d of the piece, with a any point of it,
+%       <s, a+td> - q(a+td)  =  [ <s,a> - q(a) ]  +  t <s - grad q(a), d>  -  (t^2/2) d'Hd,
+% so the sup is +infinity as soon as the leading behaviour is upward. With H negative semidefinite
+% the quadratic term is -(t^2/2) d'Hd >= 0, so it ALREADY diverges unless d'Hd = 0 -- and for an
+% NSD H that is equivalent to Hd = 0. Two consequences, both exact tests on integers:
+%
+%   * if Hd is nonzero for some recession direction, f* is +infinity EVERYWHERE and dom f* is
+%     empty. Refused by name: a function with no domain has no QuaCon to be stored in, which is a
+%     representational gap this type shares with conjCPLQ (`conjugateHasEmptyDomain`).
+%
+%   * otherwise Hd = 0 makes <grad q(a), d> = <Ha + L, d> = a'Hd + <L,d> = <L,d>, independent of
+%     which point of the ray is used, so the finiteness condition is
+%           <s - L, d>  <=  0
+%     -- LINEAR in s, and linear in d as well, which is why testing it on the EXTREME rays settles
+%     it for the whole recession cone rather than only its generators.
+%
+% dom f* is therefore the polar-type cone { s : <s - L, d> <= 0 for every ray direction d }, and on
+% it the objective is CONVEX in x (its Hessian is -H, positive semidefinite), so the maximum over
+% the piece is attained at an EXTREME POINT -- and the extreme points of a polyhedron are exactly
+% its vertices, unbounded or not. So the value is the same vertex max as the bounded concave case;
+% all that changes is that every cell also carries the domain constraints.
+%
+% WHAT THIS COVERS, and it is the reason to build it before the general unbounded case: q AFFINE is
+% the H = 0 instance, and that is the whole family of elementary unbounded conjugates -- an
+% indicator function, a support function, a norm, max(0,x,y). Those are the inputs a user writes
+% first and the ones the legacy conjAffinePLQ exists for.
+
+    Hn = [fN(5) fN(6); fN(6) fN(7)];
+    Ln = [fN(8); fN(9)];
+    kn = fN(10);
+    m  = numel(vs);
+    if m == 0
+        error('PLQ:conjQ:noVertex', ...
+            ['an unbounded piece with no vertex at all is a half-plane or a slab, whose ' ...
+             'conjugate is supported on a line or a point -- a domain of dimension < 2, which ' ...
+             'this type cannot carry.']);
+    end
+
+    % ---- the finiteness conditions, and the refusal when there are none ----------------------
+    dom = zeros(0,3);
+    for r = 1:size(rays,1)
+        d = rays(r,:).';
+        if any(ratQ.chk(Hn * d, 'recession curvature') ~= 0)
+            error('PLQ:conjQ:emptyDomain', ...
+                ['the piece recedes along (%d,%d), where the objective grows without bound for ' ...
+                 'every s, so f* is +infinity everywhere and dom f* is EMPTY. That is the right ' ...
+                 'answer and there is nowhere to put it -- a QuaCon carries at least one face. ' ...
+                 'Same representational gap conjCPLQ records as conjugateHasEmptyDomain.'], ...
+                d(1), d(2));
+        end
+        % <s - L, d> <= 0, cleared by fD > 0 and written as a >= 0 half-plane
+        row = [ratQ.chk(-fD*d(1), 'r1'), ratQ.chk(-fD*d(2), 'r2'), ratQ.chk(Ln.'*d, 'r0')];
+        if all(row == 0), continue, end            % a zero direction constrains nothing
+        dom(end+1,:) = row; %#ok<AGROW>
+    end
+
+    % ---- the vertex values, exactly ----------------------------------------------------------
+    denV = ratQ.chk(2 * fD * vd^2, 'vertex denominator');
+    qv = zeros(m,1);  numV = zeros(m,10);
+    for i = 1:m
+        v = Vi(vs(i), :).';
+        qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
+        numV(i,:) = [0 0 0 0, 0, 0, 0, ...
+                     ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv(i)];
+    end
+
+    % ---- one cell per vertex that wins somewhere INSIDE dom f* --------------------------------
+    cells = struct('num', {}, 'den', {}, 'con', {});
+    for i = 1:m
+        rows = dom;
+        for j = 1:m
+            if j == i, continue, end
+            r = [ratQ.chk(2*fD*vd*(Vi(vs(i),1)-Vi(vs(j),1)), 'd1'), ...
+                 ratQ.chk(2*fD*vd*(Vi(vs(i),2)-Vi(vs(j),2)), 'd2'), ...
+                 ratQ.chk(-(qv(i) - qv(j)), 'd0')];
+            if all(r == 0)
+                error('PLQ:conjQ:repeatedVertex', ...
+                    'piece vertices %d and %d coincide.', vs(i), vs(j));
+            end
+            rows(end+1,:) = r; %#ok<AGROW>
+        end
+        if ~ratQ.feasible2(rows, true), continue, end     % this vertex never attains the max
+        con = zeros(size(rows,1), 7);
+        for t = 1:size(rows,1)
+            con(t,:) = [ratQ.conic([0 0 0, rows(t,:)]), sgnOf(rows(t,:), +1)];
+        end
+        cells(end+1) = struct('num', numV(i,:), 'den', denV, 'con', con); %#ok<AGROW>
+    end
+
+    g = assembleQuaConCells(cells);
+end
+
+function [vs, rays, bounded] = pieceGeometry(obj, k)
+% objective: face k's own vertices and its recession directions, exactly.
+% [output] vs      : the indices into obj.VN of the vertices on this face
+%          rays    : r x 2 INTEGER directions (over the shared vertex denominator, but a direction
+%                    is scale-free so the denominator never has to be divided out)
+%          bounded : true when the face has no ray edge
+%
+% A ray edge is stored as [v1 v2 0] meaning the ray [V(v1), V(v2)) -- base then a second point
+% giving the direction, both of them real vertices of the mesh (QuaPol.belongToEdge is where that
+% convention is written down). So the direction is simply V(v2) - V(v1), and it is exact.
+    own = find(any(obj.F == k, 2));
+    if isempty(own)
+        error('PLQ:conjQ:noFace', 'face %d has no edges.', k);
+    end
+    E = obj.E(own, :);
+    [Vi, ~] = ratQ.combineDen(obj.VN, obj.VD);
+
+    % A RAY EDGE STORES A DIRECTION MARKER, NOT A SECOND VERTEX. `[v1 v2 0]` means the ray
+    % [V(v1), V(v2)) -- v1 is the base and V(v2) only fixes the direction (QuaPol.belongToEdge is
+    % where that convention is written down). So V(v2) is a point OF the piece but not an extreme
+    % point of it, and putting it in the vertex list would ask the max to consider a point that can
+    % only ever tie. Harmless for the VALUE -- every point of the domain is bounded by the sup --
+    % but it manufactures cells that are empty, which is the thing this pass exists to avoid.
+    vs = [];
+    rays = zeros(0,2);
+    for j = 1:size(E,1)
+        if E(j,3) ~= 0
+            vs = [vs; E(j,1); E(j,2)]; %#ok<AGROW>
+        else
+            vs = [vs; E(j,1)]; %#ok<AGROW>
+            rays(end+1,:) = ratQ.chk(Vi(E(j,2),:) - Vi(E(j,1),:), 'ray direction'); %#ok<AGROW>
+        end
+    end
+    vs = unique(vs);
+    bounded = isempty(rays);
 end

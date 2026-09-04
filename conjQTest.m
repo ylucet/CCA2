@@ -490,9 +490,101 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(occupied, g.nf, ...
                 'occupancy cannot exceed the reported face count');
         end
+        % ---- Case E: a concave or affine quadratic on an UNBOUNDED piece ------------------------
+
+        function theOneNormConjugatesToTheLibrarysOwnExpectedAnswer(testCase)
+        % THE BEST ORACLE IN THE REPOSITORY FOR THIS CASE: QuaPol.oneNormConjugate is an
+        % independently written fixture, in the library since before any of this work, stating what
+        % |x|_1 conjugates to -- the indicator of the unit infinity-ball. Nothing about it came from
+        % conjQ, so agreement is a genuine cross-check rather than a restatement.
+        %
+        % This is also the first case where dom f* is a PROPER SUBSET, which is the mathematics and
+        % not a gap: an unbounded domain makes the sup infinite outside a cone.
+            g = conjQ(QuaPol.oneNorm());
+            want = QuaPol.oneNormConjugate();
+
+            rng(20260904);
+            S = [randn(400,2)*1.5; 0 0; 1 1; -1 -1; 0.999 0.999; 1.001 0; 2 0; -3 1];
+            testCase.verifyEqual(g.eval(S), want.eval(S), 'AbsTol', 1e-12, ...
+                'the exact conjugate must agree with the library''s own expected answer');
+
+            inside  = all(abs(S) <= 1 - 1e-9, 2);
+            outside = any(abs(S) >= 1 + 1e-9, 2);
+            testCase.verifyTrue(all(g.eval(S(inside,:))  == 0),   'zero on the infinity-ball');
+            testCase.verifyTrue(all(isinf(g.eval(S(outside,:)))), '+inf off it');
+            testCase.verifyEqual(g.nf, 1, 'the answer is ONE cell -- an indicator of a square');
+            testCase.verifyEqual(g.ne, 4, 'bounded by four lines');
+        end
+
+        function anIndicatorOfAConeConjugatesToTheIndicatorOfItsPolar(testCase)
+        % q = 0 on the first quadrant is the indicator of that cone, and the conjugate of an
+        % indicator is the support function -- which for a cone is the indicator of its POLAR,
+        % here the third quadrant. Elementary, and it is where a sign slip would surface first.
+            f = conjQTest.wedge([0 0], [1 0], [0 1], zeros(1,10));
+            g = conjQ(f);
+            testCase.verifyEqual(g.nf, 1);
+            testCase.verifyEqual(sortrows(g.EcQ), sortrows([0 0 0 1 0 0; 0 0 0 0 1 0]), ...
+                'the two bounding lines are the axes');
+
+            S = [-1 -1; -2 -3; 0 0; -0.5 -0.5];
+            testCase.verifyEqual(g.eval(S), zeros(4,1), 'zero on the polar cone');
+            T = [1 -1; -1 1; 1 1; 3 0];
+            testCase.verifyTrue(all(isinf(g.eval(T))), '+inf off it');
+        end
+
+        function anAffinePieceOnAWedgeIsTheSupportFunctionShifted(testCase)
+        % q(x) = <a,x> + b on a cone C gives f*(s) = sup_C <s-a,x> - b, which is -b on the polar of
+        % C shifted by a, and +inf elsewhere. Written down independently below.
+            a = [-1; -2];  b = 3;
+            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, 0, 0, 0, a(1), a(2), b]);
+            g = conjQ(f);
+            rng(20260904);
+            S = [randn(300,2)*2; a.'; a.' + [-1 -1]; a.' + [1 0]];
+            want = inf(size(S,1),1);
+            in = (S(:,1) - a(1) <= 1e-12) & (S(:,2) - a(2) <= 1e-12);
+            want(in) = -b;
+            testCase.verifyEqual(g.eval(S), want, 'AbsTol', 1e-12);
+        end
+
+        function anUnboundedPieceWhoseSupDivergesIsRefusedByName(testCase)
+        % A STRICTLY concave q on a cone runs to +infinity along every recession direction -- the
+        % objective's -q term grows like t^2 -- so f* is +inf everywhere and dom f* is EMPTY. That
+        % is the correct answer, and there is nowhere to put it: a QuaCon carries at least one face.
+        % The same representational gap conjCPLQ records as conjugateHasEmptyDomain.
+            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, -2, 0, -2, 1, 1, 0]);
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:emptyDomain');
+        end
+
+        function anUnboundedPieceThatIsNotConcaveIsRefusedByName(testCase)
+        % Exact-or-named-refusal. On an unbounded piece the finiteness of the sup is a QUADRATIC
+        % condition on the recession CONE, not the linear one the concave case enjoys, so this is a
+        % real case and a separate one rather than missing arithmetic.
+            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, 1, 0, -1, 0, 0, 0]);
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:unbounded');
+        end
+
+        function aRaysDirectionMarkerIsNotTreatedAsAVertex(testCase)
+        % A ray edge [v1 v2 0] stores the ray [V(v1), V(v2)) -- v1 is the base and V(v2) only fixes
+        % the DIRECTION. Counting V(v2) as a vertex cannot change a VALUE, since it is a point of
+        % the domain and so bounded by the sup, but it manufactures cells that are empty. The wedge
+        % has exactly one extreme point, so its conjugate has exactly one cell.
+            g = conjQ(conjQTest.wedge([0 0], [1 0], [0 1], zeros(1,10)));
+            testCase.verifyEqual(g.nf, 1, ...
+                'one extreme point, so one cell -- not one per direction marker as well');
+        end
     end
 
     methods (Static)
+
+        function f = wedge(apex, d1, d2, fc)
+        % A two-ray cone: the apex, plus one direction marker along each ray. The F columns are
+        % OPPOSITE because the two rays bound the wedge from opposite sides -- F(j,:) is
+        % [left, right] of edge j with 0 meaning +inf, so putting the face on the left of both
+        % describes no convex wedge at all, and QuaPol.eval then cannot locate its own interior
+        % (measured while building this: q(1,1) came back +Inf inside the first quadrant).
+            V = [apex; apex + d1; apex + d2];
+            f = QuaPol(V, [1 2 0; 1 3 0], fc, [1 0; 0 1]);
+        end
 
         function H = hessianOfClass(cls)
         % A random integer symmetric H of a named definiteness class. The classes ARE the dispatch:

@@ -117,9 +117,33 @@ APC; gold is ~$3,290 and unnecessary.
       occupied, and 70 occupied carrying 10 functions. `CLAUDE.md` section 5's ladder, rungs 1-3,
       is what this sequence was.
 
-- [ ] **Extend `conjQ` past Cases A, B, C and D** -- what is left is the DOMAIN, not the function:
-      an UNBOUNDED piece (wedge or half-strip; the sup can be +inf, so dom f* stops being the whole
-      plane and needs a representation) and a domain of dimension < 2. Both refuse by name today.
+- [x] **DONE 2026-09-04: `conjQ` Case E -- a CONCAVE or AFFINE quadratic on an UNBOUNDED piece.**
+      The first case where `dom f*` is a PROPER SUBSET, which is the mathematics rather than a gap.
+      With H negative semidefinite the objective already diverges along a recession direction `d`
+      unless `Hd = 0`, and then `<grad q, d> = <L,d>` independently of where on the ray it is taken,
+      so the finiteness condition is `<s - L, d> <= 0` -- LINEAR in `s` AND in `d`, which is why
+      testing the extreme rays settles the whole cone. On that cone the objective is convex, so the
+      max is at an extreme point and the value is the same vertex max as the bounded case.
+      Covers the whole elementary unbounded family, `q` affine being the `H = 0` instance:
+      indicators, support functions, norms, `max(0,x,y)`. Cross-checked against
+      `QuaPol.oneNormConjugate` -- a fixture that predates all of this work and states independently
+      that `|x|_1` conjugates to the indicator of the unit infinity-ball.
+
+- [ ] **What is left of the DOMAIN gap**: an unbounded piece whose `q` is NOT concave/affine (the
+      finiteness test becomes a quadratic form on the recession CONE rather than a linear one --
+      `PLQ:conjQ:unbounded`), a piece whose sup diverges everywhere so `dom f*` is EMPTY (correct
+      answer, nowhere to put it, since a `QuaCon` carries at least one face --
+      `PLQ:conjQ:emptyDomain`, the same representational gap `conjCPLQ` records as
+      `conjugateHasEmptyDomain`), and a domain of dimension < 2. All three refuse by name.
+
+- [ ] **A CONVENTION WORTH KNOWING, learned the hard way 2026-09-04.** Three of the five fixtures
+      written for the unbounded sweep were MALFORMED, and each looked like a defect in `conjQ`
+      first. `F(j,:)` is `[left, right]` of edge `j` with 0 meaning +inf, so the two rays bounding a
+      wedge need OPPOSITE columns -- `[1 0; 1 0]` puts the face on the left of both, describes no
+      convex wedge, and `QuaPol.eval` then returns `+Inf` inside its own domain (measured:
+      `q(1,1) = Inf` on the first quadrant). A fourth signal was the oracle evaluating a multi-piece
+      `f` with face 1's coefficients. Check a hand-built unbounded fixture with `f.eval` at an
+      interior point BEFORE using it to judge anything.
 
       the per-piece closed forms first -- `convEnvCPLQ`, `conjPieceCPLQ`, `conjConvexOverPiece`,
       `conjConvexPolygon`, `conjAffinePLQ` are ALREADY 100% sym-free, so porting them is replacing
