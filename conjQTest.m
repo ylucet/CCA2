@@ -266,16 +266,115 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
         end
 
-        function aNonStrictlyConvexQuadraticOnAPolygonIsRefusedByName(testCase)
-        % A semidefinite Q makes the interior cell degenerate -- the unconstrained sup is finite
-        % only on a measure-zero set -- which is a real case, and a different one.
+        function aSemidefiniteSingularQuadraticOnAPolygonIsRefusedByName(testCase)
+        % IDENTIFIER UPDATED 2026-09-03 when Case C landed: the refusal moved UP to the dispatch,
+        % which now classifies H exactly and names all three outcomes (strictly convex, concave or
+        % affine, neither), so it raises notImplemented rather than notStrictlyConvex. The
+        % assertion this test exists for is unchanged -- an uncovered case is a NAMED refusal and
+        % never a silent fallback.
+        %
+        % A rank-one PSD Q is genuinely a third case: the interior cell degenerates, because the
+        % unconstrained sup is finite only on a measure-zero set.
             V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
             f = QuaPol(V, E, [0 0 0 0 1 1 1 0 0 0], F);      % rank-one PSD
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notStrictlyConvex');
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
+        end
+        % ---- Case C: a concave or affine quadratic on a bounded convex polygon ------------------
+
+        function theConcaveConjugateIsTheMaxOverTheVerticesAndNothingElse(testCase)
+        % If q is concave then <s,x> - q(x) is CONVEX in x, so its max over a polytope sits at an
+        % extreme point and f* is the max of the affine functions <s,v> - q(v). The oracle is that
+        % max, written directly -- no cells, no normal fan.
+            V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
+            H = [-2 -1; -1 -2];  L = [1; -2];  k0 = 3;
+            f = QuaPol(V, E, [0 0 0 0, H(1,1), H(1,2), H(2,2), L(1), L(2), k0], F);
+            g = conjQ(f);
+
+            rng(20260903);
+            S = [randn(300,2)*2.5; 0 0];
+            want = conjQTest.maxOverVertices(S, V, H, L, k0);
+            [got, idx] = g.eval(S);
+            testCase.verifyEqual(got, want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
+            testCase.verifyTrue(all(idx > 0), 'the normal fan covers the plane');
+            testCase.verifyTrue(all(g.fN(:,5) == 0 & g.fN(:,6) == 0 & g.fN(:,7) == 0), ...
+                'every cell of a concave conjugate is AFFINE -- no curvature can appear');
+        end
+
+        function anAffineFunctionConjugatesToTheSupportFunctionOfItsDomain(testCase)
+        % q affine is the same statement with a zero Hessian, and then f* is the polygon's support
+        % function shifted -- the elementary case, and the one a sign error shows up in first.
+            V = [0 0; 2 0; 2 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
+            L = [1; 2];  k0 = -1;
+            f = QuaPol(V, E, [0 0 0 0, 0, 0, 0, L(1), L(2), k0], F);
+            g = conjQ(f);
+
+            rng(20260903);
+            S = [randn(200,2)*2; 0 0];
+            want = conjQTest.maxOverVertices(S, V, zeros(2), L, k0);
+            testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
+            testCase.verifyEqual(g.nf, 4, 'each of the four corners wins on its own normal cone');
+        end
+
+        function aDominatedVertexContributesNoCellAtAll(testCase)
+        % WHERE THE EXACT FEASIBILITY TEST EARNS ITS KEEP. Add a vertex at the midpoint of an edge
+        % and give q strict concavity: q(midpoint) then EXCEEDS the average of the two endpoints,
+        % so the lifted point sits strictly above the chord and that vertex never attains the max.
+        % Its cell is EMPTY -- not small, empty -- and must not appear in the mesh.
+            V = [0 0; 1/2 0; 1 0; 1 1; 0 1];
+            E = [1 2 1; 2 3 1; 3 4 1; 4 5 1; 5 1 1];
+            F = [ones(5,1), zeros(5,1)];
+            f = QuaPol(V, E, [0 0 0 0, -2, 0, -2, 0, 0, 0], F);   % q = -(x^2+y^2)
+            g = conjQ(f);
+
+            testCase.verifyEqual(g.nf, 4, ...
+                'the midpoint vertex is dominated, so four cells remain, not five');
+            rng(20260903);
+            S = [randn(200,2)*2; 0 0];
+            want = conjQTest.maxOverVertices(S, V, [-2 0; 0 -2], [0;0], 0);
+            testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12, ...
+                'and dropping it changes no value -- it never attained the max anywhere');
+        end
+
+        function concaveConjugatesOverRandomPolygonsMatchTheVertexMax(testCase)
+            rng(20260903);
+            for c = 1:10
+                [V, E, F] = conjQTest.randomConvexPolygon();
+                H = randi([0 4], 2, 2);  H = -(H + H.');
+                if ~(H(1,1) <= 0 && H(2,2) <= 0 && (H(1,1)*H(2,2)-H(1,2)^2) >= 0), continue, end
+                L = randi([-4 4], 2, 1);  k0 = randi([-4 4]);
+                f = QuaPol(V, E, [0 0 0 0, H(1,1), H(1,2), H(2,2), L(1), L(2), k0], F);
+                testCase.assumeTrue(f.isExact());
+                g = conjQ(f);
+                S = [randn(60,2)*3; 0 0];
+                [got, idx] = g.eval(S);
+                testCase.verifyTrue(all(idx > 0), sprintf('case %d: uncovered dual point', c));
+                testCase.verifyEqual(got, conjQTest.maxOverVertices(S, V, H, L, k0), ...
+                    'RelTol', 1e-9, 'AbsTol', 1e-9, sprintf('case %d', c));
+            end
+        end
+
+        function anIndefiniteQuadraticOnAPolygonIsRefusedByName(testCase)
+        % Neither branch applies, and the refusal must say which case is missing rather than
+        % falling through to something that happens to run.
+            V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
+            f = QuaPol(V, E, [0 0 0 0, 1, 0, -1, 0, 0, 0], F);      % x^2/2 - y^2/2
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
         end
     end
 
     methods (Static)
+
+        function w = maxOverVertices(S, V, H, L, k0)
+        % THE ORACLE for Case C: max over the polygon's VERTICES of <s,v> - q(v), written directly.
+        % For a concave or affine q that IS the conjugate, because <s,x> - q(x) is then convex in x
+        % and a convex function attains its maximum over a polytope at an extreme point.
+            w = -inf(size(S,1), 1);
+            for j = 1:size(V,1)
+                v = V(j,:).';
+                qv = 0.5 * v.' * H * v + L.' * v + k0;
+                w = max(w, S * v - qv);
+            end
+        end
 
         function f = unitSquareEnergy()
         % (x^2 + y^2)/2 over [0,1]^2

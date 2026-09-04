@@ -56,7 +56,21 @@ APC; gold is ~$3,290 and unnecessary.
       an independent candidate-enumeration maximisation: 40 random polygons, 8040 dual points,
       0 wrong, 0 uncovered, worst relative error 4.6e-15.
 
-- [ ] **Extend `conjQ` past Cases A and B**, in this order (its own header repeats it):
+- [x] **DONE 2026-09-03: `conjQ` Case C -- a CONCAVE or AFFINE quadratic on a bounded polygon**,
+      exactly. `<s,x> - q(x)` is then convex in x, so the max sits at an extreme point and
+      `f*` is the max of the affine functions `<s,v> - q(v)`: one cell per vertex that wins, and
+      no curvature anywhere in the answer. Verified against that max, written directly: 40 random
+      polygons, 4221 dual points, 0 wrong, 0 uncovered, worst 1.8e-15. This is the conjugate half
+      of `ALGORITHM.md`'s concave-envelope case, and the cells ARE the lower hull's normal fan --
+      so `ratQ.hullQ` is not needed for it after all; the hull is implicit in the cell
+      construction plus the feasibility filter.
+
+- [x] **DONE 2026-09-03: `ratQ.feasible2`** -- exact 2-D polyhedral feasibility (and nonempty
+      INTERIOR) by one Fourier-Motzkin elimination. Needed to drop cells that describe the empty
+      set: a collinear vertex under a strictly concave q is DOMINATED, and its cell is empty
+      rather than small. Cross-checked against `linprog` on 1939 random systems, 0 disagreements.
+
+- [ ] **Extend `conjQ` past Cases A, B and C**, in this order (its own header repeats it):
       the per-piece closed forms first -- `convEnvCPLQ`, `conjPieceCPLQ`, `conjConvexOverPiece`,
       `conjConvexPolygon`, `conjAffinePLQ` are ALREADY 100% sym-free, so porting them is replacing
       double arithmetic with `ratQ` calls rather than rewriting an algorithm -- then Step 3

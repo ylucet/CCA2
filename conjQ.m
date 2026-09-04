@@ -29,6 +29,10 @@ function g = conjQ(obj)
 %     subdivision: one affine cell per polygon vertex, one quadratic cell per edge, one for the
 %     interior. Every cell boundary is a straight line, so the answer is a QuaCon whose edge
 %     conics are all lines. Exact.
+%   * Case C, one CONCAVE or AFFINE quadratic on a BOUNDED convex polygon -> the max of the
+%     affine functions <s,v> - q(v) over the polygon's vertices, since <s,x> - q(x) is then
+%     CONVEX in x and a convex function attains its maximum over a polytope at an extreme point.
+%     One cell per vertex that actually wins somewhere; the rest are empty and are dropped.
 %   * Everything else raises PLQ:conjQ:notImplemented, naming the case.
 %
 % The order the remaining cases should land in is the plan's Phase 2a: the per-piece closed forms
@@ -60,10 +64,24 @@ function g = conjQ(obj)
         return
     end
 
-    % ---- Case B: one strictly convex quadratic on a bounded convex polygon ---------------------
+    % ---- one quadratic on a bounded convex polygon: classify H EXACTLY and route ---------------
     if nf == 1 && obj.nv >= 3 && all(obj.E(:,3) == 1)
-        g = caseBConvexOnPolygon(obj);
-        return
+        Hn = [fN(5) fN(6); fN(6) fN(7)];
+        D  = ratQ.detExact(Hn);
+        if Hn(1,1) > 0 && D > 0
+            g = caseBConvexOnPolygon(obj);          % strictly convex: vertex/edge/interior cells
+            return
+        elseif Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0
+            g = caseCConcaveOnPolygon(obj);         % concave or affine: the max is at a vertex
+            return
+        end
+        error('PLQ:conjQ:notImplemented', ...
+            ['on a bounded polygon the exact conjugate covers a strictly convex Q (leading minor ' ...
+             'and determinant both positive) and a concave or affine Q (both diagonal entries ' ...
+             'nonpositive and determinant nonnegative). This Q has leading minor %d, second ' ...
+             'diagonal %d and determinant %d, so it is semidefinite-singular or INDEFINITE -- ' ...
+             'the indefinite case needs the x*y frame change and [COAP] A.2-A.5, which is the ' ...
+             'next work item.'], Hn(1,1), Hn(2,2), D);
     end
 
     error('PLQ:conjQ:notImplemented', ...
@@ -162,6 +180,9 @@ function g = caseBConvexOnPolygon(obj)
     Ln = [fN(8); fN(9)];
     kn = fN(10);
     D  = ratQ.detExact(Hn);
+    % AN INTERNAL INVARIANT, not a reachable gap: conjQ's dispatch already classified H exactly
+    % and only routes a strictly convex one here. Kept because this function's contract is stated
+    % in terms of its own input, and a future caller that forgets should be told loudly.
     if ~(Hn(1,1) > 0 && D > 0)
         error('PLQ:conjQ:notStrictlyConvex', ...
             ['Case B needs a STRICTLY convex quadratic (leading minor %d, determinant %d; both ' ...
@@ -364,6 +385,71 @@ function n = outwardNormal(Vi, cyc, i)
     end
 end
 
+function g = caseCConcaveOnPolygon(obj)
+% objective: the conjugate of a CONCAVE or AFFINE quadratic over one bounded convex polygon.
+%
+% WHY THIS CASE IS EASY, AND IT IS THE MATHEMATICS THAT MAKES IT SO. If q is concave then -q is
+% convex, so the objective <s,x> - q(x) is CONVEX in x, and a convex function attains its maximum
+% over a polytope at an EXTREME POINT. Hence
+%       q*(s) = max_i [ <s, v_i> - q(v_i) ],
+% a maximum of finitely many AFFINE functions of s -- no normal cones, no multipliers, no interior
+% cell, and no curvature anywhere in the answer. The affine case is the same statement with a zero
+% Hessian, which is why one branch serves both.
+%
+% This is the conjugate half of what ALGORITHM.md calls the concave envelope: co q on the polygon
+% is the affine interpolant over the LOWER HULL of the lifted vertices, and the cells below are
+% exactly that hull's normal fan. The vertices NOT on the lower hull are the ones whose cell comes
+% out empty -- so assembleQuaCon's feasibility filter is doing real work here rather than tidying,
+% and that is why it had to be exact.
+    [fN, fD] = obj.faceQ(1);
+    Hn = [fN(5) fN(6); fN(6) fN(7)];
+    Ln = [fN(8); fN(9)];
+    kn = fN(10);
+
+    [Vi, vd, cyc] = polygonExactly(obj);
+    m = numel(cyc);
+
+    % q(v_i), over the common denominator 2*fD*vd^2 -- the same clearing as Case B's vertex cells
+    qv = zeros(m,1);
+    for i = 1:m
+        v = Vi(cyc(i), :).';
+        qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
+    end
+
+    den = ratQ.chk(2 * fD * vd^2, 'cell denominator');
+    cells = struct('num', {}, 'den', {}, 'con', {});
+    for i = 1:m
+        vi = Vi(cyc(i), :).';
+        num = [0 0 0 0, 0, 0, 0, ...
+               ratQ.chk(2*fD*vd*vi(1), 'c8'), ratQ.chk(2*fD*vd*vi(2), 'c9'), -qv(i)];
+
+        % cell i:  <s,v_i> - q(v_i) >= <s,v_j> - q(v_j)  for every other vertex j, cleared by the
+        % same positive 2*fD*vd^2:
+        %       2*fD*vd*<s, Vi_i - Vi_j>  -  (qv_i - qv_j)  >= 0
+        con = zeros(0,7);
+        for j = 1:m
+            if j == i, continue, end
+            vj = Vi(cyc(j), :).';
+            row = [0 0 0, ratQ.chk(2*fD*vd*(vi(1)-vj(1)), 'd1'), ...
+                          ratQ.chk(2*fD*vd*(vi(2)-vj(2)), 'd2'), ...
+                          ratQ.chk(-(qv(i) - qv(j)), 'd0')];
+            if all(row(4:6) == 0)
+                % Two DISTINCT vertices cannot give a zero direction, so this can only be reached
+                % if the polygon carried a repeated vertex. Refuse rather than skip: a repeated
+                % vertex means the caller's mesh is malformed, and silently ignoring it would put
+                % a duplicated affine piece into the answer.
+                error('PLQ:conjQ:repeatedVertex', ...
+                    'polygon vertices %d and %d coincide, so the domain is not a simple polygon.', ...
+                    cyc(i), cyc(j));
+            end
+            con(end+1,:) = [ratQ.conic(row), sgnOf(row(4:6), +1)]; %#ok<AGROW>
+        end
+        cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
+    end
+
+    g = assembleQuaCon(cells);
+end
+
 function g = assembleQuaCon(cells)
 % objective: turn the per-cell constraint lists into a QuaCon -- deduplicating the bounding lines
 %            into one canonical edge list, naming the corners, and reducing each face function.
@@ -373,6 +459,23 @@ function g = assembleQuaCon(cells)
 % shared facet becomes invisible (DECISIONS.md 2026-08-17, measured: 57 cells carrying 10 distinct
 % functions, 4 merges out of 612 attempts). Here they are the same integer row, and `find` on an
 % integer matrix is the whole comparison.
+    % ---- drop the cells that describe the empty set, or no 2-D face ------------------------
+    % A polygon vertex that never attains the maximum contributes a cell that is EMPTY, not small,
+    % and a cell degenerating to a point or a segment carries no face either. Both are decided
+    % exactly by ratQ.feasible2 rather than inferred from a sample. Leaving them in would not make
+    % `eval` wrong -- no point satisfies them -- but it would put faces into the mesh that bound
+    % nothing, and `nf` would stop meaning what it says.
+    live = true(1, numel(cells));
+    for k = 1:numel(cells)
+        rows = cells(k).con;
+        live(k) = ratQ.feasible2(rows(:,7) .* rows(:,4:6), true);
+    end
+    cells = cells(live);
+    if isempty(cells)
+        error('PLQ:conjQ:noCells', ...
+            'every candidate cell is empty, which cannot happen for a bounded domain.');
+    end
+
     EcQ = zeros(0,6);
     FC  = cell(numel(cells), 1);
     for k = 1:numel(cells)

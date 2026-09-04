@@ -480,6 +480,81 @@ classdef ratQ
             end
         end
 
+        function tf = feasible2(P, strict)
+        % objective: is the 2-D polyhedron { s : P(j,1)*s1 + P(j,2)*s2 + P(j,3) >= 0 for all j }
+        %            nonempty -- and with `strict`, does it have nonempty INTERIOR.
+        % [input]  P      : k x 3 integer rows [p1 p2 p0]; strict : (optional) default false
+        % [output] tf     : logical, DECIDED exactly
+        %
+        % WHY THIS IS NEEDED. A cell of a conjugate's subdivision is a list of sign conditions on
+        % lines (the H-form), and some of those lists describe the empty set -- a polygon vertex
+        % that never attains the max contributes a cell that is empty, not small. Emitting it
+        % anyway is not wrong for `eval` (no point satisfies it) but it inflates the face count and
+        % puts a face into the mesh that bounds nothing. `strict` separates the other degenerate
+        % case: a cell that is a single point or a segment is nonempty and still carries no
+        % two-dimensional face.
+        %
+        % FOURIER-MOTZKIN, and it is the right algorithm at n = 2 for the same reason Cramer is at
+        % n = 3: eliminating one of two variables leaves a one-dimensional problem that is just
+        % "is the largest lower bound below the smallest upper bound", and every comparison is
+        % between two rationals, i.e. one integer cross-multiplication. No pivoting, no ordering
+        % choice, nothing to get wrong. The pair blow-up that makes Fourier-Motzkin unusable in
+        % general is bounded here by one elimination.
+        %
+        % ALL COMPARISONS ARE EXACT. -b/a <= -d/c with a, c > 0 is b*c >= d*a, and both sides go
+        % through ratQ.chk, so an overflow raises rather than deciding the wrong way.
+            if nargin < 2, strict = false; end
+            ratQ.chk(P, 'half-plane');
+            if isempty(P), tf = true; return, end
+
+            % ---- eliminate s2 -------------------------------------------------------------
+            % Rows with p2 = 0 already constrain s1 alone; the rest split into lower and upper
+            % bounds on s2 and every (lower, upper) pair yields one more constraint on s1.
+            Q = zeros(0,2);                          % rows [a b] meaning a*s1 + b >= 0
+            lo = find(P(:,2) > 0);  up = find(P(:,2) < 0);  fl = find(P(:,2) == 0);
+            for i = fl(:).'
+                Q(end+1,:) = [P(i,1), P(i,3)]; %#ok<AGROW>
+            end
+            for i = lo(:).'
+                for j = up(:).'
+                    % P(i): p2i*s2 >= -(p1i*s1 + p0i)   with p2i > 0
+                    % P(j): p2j*s2 >= -(p1j*s1 + p0j)   with p2j < 0, i.e. an upper bound
+                    % Combining eliminates s2 with positive weights (-p2j) and (p2i):
+                    a = ratQ.chk(-P(j,2)*P(i,1) + P(i,2)*P(j,1), 'FM coefficient');
+                    b = ratQ.chk(-P(j,2)*P(i,3) + P(i,2)*P(j,3), 'FM constant');
+                    Q(end+1,:) = [a, b]; %#ok<AGROW>
+                end
+            end
+
+            % ---- solve the 1-D problem ------------------------------------------------------
+            % a*s1 + b >= 0 is s1 >= -b/a for a > 0, s1 <= -b/a for a < 0, and b >= 0 for a = 0.
+            % Bounds are kept as the pair (num, den) with den > 0 and compared by cross product.
+            loN = -inf; loD = 1;  hiN = inf; hiD = 1;  haveLo = false; haveHi = false;
+            for r = 1:size(Q,1)
+                a = Q(r,1);  b = Q(r,2);
+                if a == 0
+                    if (strict && b <= 0) || (~strict && b < 0), tf = false; return, end
+                elseif a > 0
+                    % s1 >= -b/a, and a > 0, so the bound is (-b)/a. Keep the LARGEST.
+                    if ~haveLo || ratQ.chk(-b*loD - loN*a, 'lower bound') > 0
+                        loN = -b;  loD = a;  haveLo = true;
+                    end
+                else
+                    % s1 <= -b/a with a < 0; writing it with a positive denominator gives
+                    % b/(-a). Keep the SMALLEST.
+                    nN = b;  nD = -a;
+                    if ~haveHi || ratQ.chk(nN*hiD - hiN*nD, 'upper bound') < 0
+                        hiN = nN;  hiD = nD;  haveHi = true;
+                    end
+                end
+            end
+            if haveLo && haveHi
+                c = ratQ.chk(loN*hiD - hiN*loD, 'bound comparison');
+                if (strict && c >= 0) || (~strict && c > 0), tf = false; return, end
+            end
+            tf = true;
+        end
+
         function [n, d] = fromDouble(x, maxDen)
         % objective: the rational vector a caller MEANT, recovered from the doubles they passed.
         % [input]  x : 1 x k double; maxDen : largest denominator to accept (default 10^6)

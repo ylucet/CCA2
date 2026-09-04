@@ -352,6 +352,55 @@ classdef ratQTest < matlab.unittest.TestCase
                                                      [1 2; 2 4], [0; 0], 1), 'ratQ:singular');
         end
 
+        % ---- exact 2-D feasibility, which decides whether a cell exists at all -----------------
+
+        function feasible2DecidesTheStandardShapesCorrectly(testCase)
+        % `strict` is the distinction between "nonempty" and "carries a two-dimensional face", and
+        % the degenerate shapes are exactly where a cell subdivision goes wrong quietly.
+            sq  = [1 0 0; -1 0 1; 0 1 0; 0 -1 1];    % the unit square
+            emp = [1 0 -1; -1 0 0];                   % s1 >= 1 and s1 <= 0
+            pt  = [1 0 0; -1 0 0; 0 1 0; 0 -1 0];     % the single point (0,0)
+            seg = [1 0 0; -1 0 0; 0 1 0; 0 -1 1];     % a segment
+            cone = [1 0 0; 0 1 0];                    % the first quadrant, unbounded
+
+            testCase.verifyTrue (ratQ.feasible2(sq));   testCase.verifyTrue (ratQ.feasible2(sq, true));
+            testCase.verifyFalse(ratQ.feasible2(emp));  testCase.verifyFalse(ratQ.feasible2(emp, true));
+            testCase.verifyTrue (ratQ.feasible2(pt));   testCase.verifyFalse(ratQ.feasible2(pt, true), ...
+                'a single point is nonempty but carries no 2-D face');
+            testCase.verifyTrue (ratQ.feasible2(seg));  testCase.verifyFalse(ratQ.feasible2(seg, true), ...
+                'nor does a segment');
+            testCase.verifyTrue (ratQ.feasible2(cone)); testCase.verifyTrue (ratQ.feasible2(cone, true), ...
+                'an unbounded cone has interior and no vertex enumeration would find it');
+            testCase.verifyTrue (ratQ.feasible2(zeros(0,3)), 'no constraints is the whole plane');
+        end
+
+        function feasible2AgreesWithLinprogOnRandomSystems(testCase)
+        % Differential test against an entirely different algorithm -- a simplex/interior-point LP
+        % in floating point, from the Optimization Toolbox. Legitimate in a TEST and nowhere near
+        % the compute path. 500 systems here; 1939 were run in the scratchpad with 0 disagreements.
+            rng(20260903);
+            opts = optimoptions('linprog', 'Display', 'none');
+            for k = 1:500
+                m = randi([2 6]);
+                P = randi([-5 5], m, 3);
+                if any(all(P(:,1:2) == 0, 2)), continue, end
+                [~, ~, flag] = linprog(zeros(2,1), -P(:,1:2), P(:,3), [], [], [], [], opts);
+                testCase.verifyEqual(ratQ.feasible2(P), flag == 1, ...
+                    sprintf('case %d: %s', k, mat2str(P)));
+            end
+        end
+
+        function strictFeasibilityImpliesFeasibility(testCase)
+        % A property no single example pins: an interior point is a point.
+            rng(20260903);
+            for k = 1:300
+                P = randi([-5 5], randi([2 6]), 3);
+                if ratQ.feasible2(P, true)
+                    testCase.verifyTrue(ratQ.feasible2(P), sprintf('case %d', k));
+                end
+            end
+        end
+
         % ---- an independent symbolic cross-check (legitimate in a test, not on the path) --------
 
         function theDifferenceConicAgreesWithTheSymbolicLevelSet(testCase)
