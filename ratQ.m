@@ -555,6 +555,54 @@ classdef ratQ
             tf = true;
         end
 
+        function s = conicSign(c)
+        % objective: does the conic form c take ONE sign over the whole plane, and which.
+        % [input]  c : 1 x 6 integer conic [a b c d e f] for a x^2 + b xy + c y^2 + d x + e y + f
+        % [output] s : +1 if c(x,y) >= 0 everywhere, -1 if <= 0 everywhere, 0 if it takes both signs
+        %
+        % WHY THIS IS WORTH A ROUTINE. A cell of the subdivision is a list of sign conditions, and
+        % a nested fold produces conditions that are vacuous (the curve has no real points, so one
+        % side is everything) or contradictory (so the cell has empty interior). Both are invisible
+        % to a LINEAR feasibility test, and both are decided here exactly, in integers -- which is
+        % the only handle on curved emptiness that does not need the degree-4 kernel.
+        %
+        % THE TEST. Writing m = [x; y; 1], the form is c(x,y) = (1/2) m' M m with
+        %       M = [2a  b  d;  b  2c  e;  d  e  2f]
+        % (the halves cleared by the factor 2, so M is integral). c >= 0 on the whole plane exactly
+        % when M is positive SEMIdefinite -- the m = (x,y,1) slice misses only the points at
+        % infinity, where a PSD form is still nonnegative by continuity.
+        %
+        % ALL SEVEN PRINCIPAL MINORS, not the three leading ones. Sylvester's leading-minor
+        % criterion characterises positive DEFINITE; for semidefinite it is false in both
+        % directions -- diag(0,-1) has both leading minors 0 and is not PSD. So every principal
+        % minor is tested, which for 3x3 is three diagonal entries, three 2x2s and the determinant.
+            ratQ.chk(c, 'conic');
+            M = [2*c(1),   c(2),   c(4); ...
+                   c(2), 2*c(3),   c(5); ...
+                   c(4),   c(5), 2*c(6)];
+            if ratQ.isPSD3(M)
+                s = 1;
+            elseif ratQ.isPSD3(-M)
+                s = -1;
+            else
+                s = 0;
+            end
+        end
+
+        function tf = isPSD3(M)
+        % objective: is the 3x3 symmetric integer matrix M positive semidefinite. Exact.
+        % Every principal minor must be nonnegative -- see conicSign for why the leading ones alone
+        % are not enough.
+            ratQ.chk(M, 'matrix');
+            if any(diag(M) < 0), tf = false; return, end
+            pairs = [1 2; 1 3; 2 3];
+            for k = 1:3
+                p = pairs(k,:);
+                if ratQ.detExact(M(p,p)) < 0, tf = false; return, end
+            end
+            tf = ratQ.detExact(M) >= 0;
+        end
+
         function [n, d] = fromDouble(x, maxDen)
         % objective: the rational vector a caller MEANT, recovered from the doubles they passed.
         % [input]  x : 1 x k double; maxDen : largest denominator to accept (default 10^6)

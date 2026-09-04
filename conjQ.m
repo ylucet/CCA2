@@ -29,11 +29,14 @@ function g = conjQ(obj)
 %     subdivision: one affine cell per polygon vertex, one quadratic cell per edge, one for the
 %     interior. Every cell boundary is a straight line, so the answer is a QuaCon whose edge
 %     conics are all lines. Exact.
-%   * Case C, one CONCAVE or AFFINE quadratic on a BOUNDED convex polygon -> the max of the
-%     affine functions <s,v> - q(v) over the polygon's vertices, since <s,x> - q(x) is then
-%     CONVEX in x and a convex function attains its maximum over a polytope at an extreme point.
-%     One cell per vertex that actually wins somewhere; the rest are empty and are dropped.
-%   * Everything else raises PLQ:conjQ:notImplemented, naming the case.
+%   * Case D, EVERY OTHER quadratic on a BOUNDED convex polygon -- indefinite, concave, affine,
+%     negative definite or PSD-singular. When H is not positive definite the sup is attained on
+%     the BOUNDARY, so the answer is the max of the vertex affines and, for each edge of positive
+%     curvature, that edge's clamped one-dimensional maximum. The concave case falls out of this
+%     with no qualifying edge, so it is one branch rather than two.
+%   * A MULTI-FACE input is the fold of the above over its pieces, via maxQ.
+%   * What is still refused by name: an UNBOUNDED piece (a wedge or half-strip -- the sup can be
+%     +inf, so dom f* stops being the whole plane) and a domain of dimension < 2.
 %
 % The order the remaining cases should land in is the plan's Phase 2a: the per-piece closed forms
 % (convEnvCPLQ, conjPieceCPLQ, conjConvexOverPiece, conjConvexPolygon, conjAffinePLQ) are ALREADY
@@ -88,17 +91,15 @@ function g = conjPieceQ(obj, k)
     end
 
     [Vi, vd, cyc] = polygonExactly(obj, k);
+    % A CLEAN DICHOTOMY, and it is the whole case analysis for a bounded piece. If H is positive
+    % DEFINITE the objective <s,x> - q(x) is strictly concave and its maximiser can be interior,
+    % so the KKT active set is needed. Otherwise the maximiser can always be taken on the
+    % BOUNDARY -- caseDBoundaryMax's header proves it -- and the answer is a max over the edges.
+    % Sylvester's criterion decides which, on exact integers.
     if Hn(1,1) > 0 && D > 0
-        g = caseBConvexOnPolygon(fN, fD, Vi, vd, cyc);      % strictly convex
-    elseif Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0
-        g = caseCConcaveOnPolygon(fN, fD, Vi, vd, cyc);     % concave, or affine
+        g = caseBConvexOnPolygon(fN, fD, Vi, vd, cyc);      % strictly convex: vertex/edge/interior
     else
-        error('PLQ:conjQ:notImplemented', ...
-            ['piece %d is neither strictly convex (leading minor and determinant both positive) ' ...
-             'nor concave/affine (both diagonal entries nonpositive, determinant nonnegative): ' ...
-             'leading minor %d, second diagonal %d, determinant %d. A semidefinite-SINGULAR Q ' ...
-             'degenerates the interior cell, and an INDEFINITE one needs the x*y frame change ' ...
-             'and [COAP] A.2-A.5. Both are the next work item.'], k, Hn(1,1), Hn(2,2), D);
+        g = caseDBoundaryMax(fN, fD, Vi, vd, cyc);          % everything else: max over the boundary
     end
 end
 
@@ -398,8 +399,15 @@ function n = outwardNormal(Vi, cyc, i)
     end
 end
 
-function g = caseCConcaveOnPolygon(fN, fD, Vi, vd, cyc)
-% objective: the conjugate of a CONCAVE or AFFINE quadratic over one bounded convex polygon.
+function g = maxOverVerticesQuaCon(fN, fD, Vi, vd, cyc)
+% objective: the max of the AFFINE functions <s,v> - q(v) over the polygon's vertices, as a QuaCon.
+%
+% RENAMED 2026-09-04 from caseCConcaveOnPolygon, because the construction was never about
+% concavity: it is the max of finitely many affine functions and is meaningful for any q. What
+% concavity supplied was the THEOREM that this max IS the conjugate -- and caseDBoundaryMax now
+% owns that reasoning, in the more general form that also covers the indefinite and PSD-singular
+% cases. For a concave q that routine finds no qualifying edge and returns exactly this object, so
+% the concave case is unchanged, not merely similar.
 %
 % WHY THIS CASE IS EASY, AND IT IS THE MATHEMATICS THAT MAKES IT SO. If q is concave then -q is
 % convex, so the objective <s,x> - q(x) is CONVEX in x, and a convex function attains its maximum
@@ -456,6 +464,109 @@ function g = caseCConcaveOnPolygon(fN, fD, Vi, vd, cyc)
         end
         cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
     end
+
+    g = assembleQuaConCells(cells);
+end
+
+function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
+% objective: the conjugate of a quadratic that is NOT positive definite, over a bounded convex
+%            polygon -- indefinite, negative definite, concave, affine, or PSD-singular.
+%
+% THE ONE FACT THAT MAKES THIS CASE TRACTABLE, and it replaces the whole A.2-A.5 apparatus for the
+% conjugate: when H is not positive DEFINITE, the sup of <s,x> - q(x) over P is attained on the
+% BOUNDARY of P. Suppose it were attained at an interior point x0. Then x0 is a local maximum of
+% the objective, so the objective's Hessian -H must be negative semidefinite there, i.e. H is PSD.
+% If H is PSD but SINGULAR the argument still gives the boundary: there is a direction d with
+% d'Hd = 0, along which the objective is affine, so from any interior maximiser one can travel to
+% the boundary without decreasing. Only a positive DEFINITE H makes the interior stationary point a
+% strict maximiser, and that is Case B.
+%
+% So for every H this branch sees,
+%       q*(s) = max over the edges of P of [ max over that edge of <s,x> - q(x) ],
+% and the inner maximum over one edge is a ONE-DIMENSIONAL problem in the segment parameter:
+%
+%   alpha = d'Hd > 0    the restriction is CONCAVE, so the max is at the clamped stationary point
+%                       t* = T(s)/alpha, giving three regimes -- t* <= 0 (the max is at the first
+%                       endpoint), 0 <= t* <= 1 (a genuine quadratic in s), t* >= 1 (the second
+%                       endpoint). All three boundaries are AFFINE in s, since t* is.
+%
+%   alpha <= 0          the restriction is CONVEX (or affine), so its max over the segment sits at
+%                       an ENDPOINT and the edge contributes no new function at all -- both
+%                       endpoints are already in the vertex max below.
+%
+% Hence the answer is the max of ONE object covering every vertex (maxOverVerticesQuaCon, which is
+% just the max of the affine functions <s,v> - q(v)) and ONE object per edge of positive curvature.
+% The fold is maxQ, and that is where the conic edges enter: two of these pieces differ by a
+% genuine quadratic.
+%
+% WHY THIS SUBSUMES THE CONCAVE CASE RATHER THAN DUPLICATING IT. If H is negative semidefinite then
+% d'Hd <= 0 for every direction, so no edge qualifies, the parts list has one entry, no fold
+% happens, and this returns exactly maxOverVerticesQuaCon -- which is the concave case's own
+% construction. One branch, not two, and the concave case's tests still pin the same object.
+    Hn = [fN(5) fN(6); fN(6) fN(7)];
+    Ln = [fN(8); fN(9)];
+    kn = fN(10);
+    m  = numel(cyc);
+
+    parts = {maxOverVerticesQuaCon(fN, fD, Vi, vd, cyc)};
+
+    for j = 1:m
+        a = Vi(cyc(j), :).';
+        b = Vi(cyc(mod(j, m) + 1), :).';
+        d = ratQ.chk(b - a, 'edge direction');
+        alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
+        if alpha <= 0
+            % Convex or affine along this edge: the max is at an endpoint, and both endpoints are
+            % already carried by the vertex max. Skipping is exact, not an approximation.
+            continue
+        end
+        parts{end+1} = edgeMaxQuaCon(fN, fD, Hn, Ln, kn, Vi, vd, a, b, d, alpha); %#ok<AGROW>
+    end
+
+    g = parts{1};
+    for k = 2:numel(parts)
+        g = maxQ(g, parts{k});
+    end
+end
+
+function g = edgeMaxQuaCon(fN, fD, Hn, Ln, kn, Vi, vd, a, b, d, alpha) %#ok<INUSL,INUSD>
+% objective: the TOTAL function s -> max over one edge of <s,x> - q(x), as a three-face QuaCon.
+%
+% Total, not partial, and that is what lets maxQ fold it: every s gets an answer, because the
+% clamped stationary point is defined for every s. The three faces are the three clamping regimes.
+%
+% The algebra is Case B's edge cell, with the same clearing:
+%       T(s) = fD*vd*<s,d> - <ga,d>        satisfies   t* = T(s)/alpha
+% and the middle face's value is <s,a> - q(a) + T^2/(2 alpha fD vd^2) over 2*alpha*fD*vd^2.
+    ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
+    qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'first endpoint value');
+    qb = ratQ.chk(b.'*Hn*b + 2*vd*(Ln.'*b) + 2*vd^2*kn, 'second endpoint value');
+
+    Td = [ratQ.chk(fD*vd*d(1), 't1'), ratQ.chk(fD*vd*d(2), 't2'), ratQ.chk(-(ga.'*d), 't0')];
+    Tu = [Td(1), Td(2), ratQ.chk(Td(3) - alpha, 'edge upper')];
+
+    denV = ratQ.chk(2 * fD * vd^2, 'endpoint denominator');
+    numA = [0 0 0 0, 0, 0, 0, ratQ.chk(2*fD*vd*a(1),'c8'), ratQ.chk(2*fD*vd*a(2),'c9'), -qa];
+    numB = [0 0 0 0, 0, 0, 0, ratQ.chk(2*fD*vd*b(1),'c8'), ratQ.chk(2*fD*vd*b(2),'c9'), -qb];
+
+    denM = ratQ.chk(2 * alpha * fD * vd^2, 'edge denominator');
+    lin  = [ratQ.chk(2*alpha*fD*vd*a(1), 'c8'), ratQ.chk(2*alpha*fD*vd*a(2), 'c9')];
+    numM = [0 0 0 0, ...
+            ratQ.chk(2*Td(1)^2,'c5'), ratQ.chk(2*Td(1)*Td(2),'c6'), ratQ.chk(2*Td(2)^2,'c7'), ...
+            ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
+            ratQ.chk(Td(3)^2 - alpha*qa,'c10')];
+
+    rT = ratQ.conic([0 0 0, Td(1), Td(2), Td(3)]);
+    rU = ratQ.conic([0 0 0, Tu(1), Tu(2), Tu(3)]);
+
+    cells = struct('num', {}, 'den', {}, 'con', {});
+    % t* <= 0: the maximum sits at the first endpoint
+    cells(end+1) = struct('num', numA, 'den', denV, 'con', [rT, sgnOf(Td, -1)]);
+    % 0 <= t* <= 1: the interior stationary point of the restriction
+    cells(end+1) = struct('num', numM, 'den', denM, ...
+                          'con', [rT, sgnOf(Td, +1); rU, sgnOf(Tu, -1)]);
+    % t* >= 1: the second endpoint
+    cells(end+1) = struct('num', numB, 'den', denV, 'con', [rU, sgnOf(Tu, +1)]);
 
     g = assembleQuaConCells(cells);
 end

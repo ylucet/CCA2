@@ -42,13 +42,55 @@ function g = assembleQuaConCells(cells)
         error('QuaCon:noCells', 'assembleQuaConCells was given no cells.');
     end
 
-    % ---- drop the cells whose linear part is already infeasible ----------------------------
+    % ---- drop the cells that provably carry no two-dimensional face -------------------------
+    % Two sound tests, both exact, neither complete (see note 1 in the header):
+    %
+    %  (a) CONTRADICTORY SIDES. A cell asking for both c >= 0 and c <= 0 on the SAME canonical
+    %      curve lies inside {c = 0}, which has empty interior whatever c is -- curve or line. A
+    %      nested fold produces these in quantity, because the same pair of functions can be
+    %      compared again at a later fold step, and this is the only filter that sees a CURVED
+    %      constraint at all. Cheap: the rows are canonical integers, so it is an equality test.
+    %
+    %  (b) INFEASIBLE LINEAR PART. Everything straight, decided exactly by Fourier-Motzkin.
+    %
+    %  (c) A CONSTANT-SIGN CONIC. A conic form that is nonnegative (or nonpositive) on the whole
+    %      plane -- ratQ.conicSign decides this exactly, by testing the 3x3 form for semi-
+    %      definiteness -- makes its condition either VACUOUS, in which case the row is dropped and
+    %      the remaining tests get sharper, or satisfiable only ON the curve, in which case the
+    %      cell has empty interior. This is the only handle on CURVED emptiness that does not need
+    %      the degree-4 kernel, and it is what a nested fold generates most of.
     live = true(1, numel(cells));
     for k = 1:numel(cells)
         rows = cells(k).con;
+
+        % (c) first, because it can DELETE rows and so make (a) and (b) sharper. A conic that
+        %     takes one sign everywhere gives a condition that is either vacuous (drop the row,
+        %     it constrains nothing) or unsatisfiable off the curve itself (drop the cell).
+        keep = true(size(rows,1), 1);
+        for r = 1:size(rows,1)
+            cs = ratQ.conicSign(rows(r,1:6));
+            if cs == 0, continue, end
+            if cs == rows(r,7)
+                keep(r) = false;                               % vacuous
+            else
+                live(k) = false;  break                        % empty interior
+            end
+        end
+        if ~live(k), continue, end
+        rows = rows(keep,:);
+        cells(k).con = rows;
+        if isempty(rows), continue, end                        % no conditions: the whole plane
+
+        [~, ~, ic] = unique(rows(:,1:6), 'rows');
+        for u = 1:max(ic)
+            sides = rows(ic == u, 7);
+            if any(sides > 0) && any(sides < 0)
+                live(k) = false;  break                        % (a)
+            end
+        end
+        if ~live(k), continue, end
         isLine = all(rows(:,1:3) == 0, 2);
-        P = rows(isLine,7) .* rows(isLine,4:6);
-        live(k) = ratQ.feasible2(P, true);
+        live(k) = ratQ.feasible2(rows(isLine,7) .* rows(isLine,4:6), true);   % (b)
     end
     cells = cells(live);
     if isempty(cells)

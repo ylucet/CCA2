@@ -401,6 +401,60 @@ classdef ratQTest < matlab.unittest.TestCase
             end
         end
 
+        % ---- constant-sign conics, which is the only exact handle on CURVED emptiness ----------
+
+        function conicSignRecognisesFormsThatNeverChangeSign(testCase)
+            testCase.verifyEqual(ratQ.conicSign([1 0 1 0 0 1]),  1, ...
+                'x^2 + y^2 + 1 is positive everywhere');
+            testCase.verifyEqual(ratQ.conicSign([-1 0 -1 0 0 -1]), -1, ...
+                'and its negation is negative everywhere');
+            testCase.verifyEqual(ratQ.conicSign([1 0 1 0 0 0]),  1, ...
+                'x^2 + y^2 touches zero at the origin and is still nonnegative');
+            testCase.verifyEqual(ratQ.conicSign([1 0 1 0 0 -1]), 0, ...
+                'the unit circle genuinely separates the plane');
+            testCase.verifyEqual(ratQ.conicSign([0 0 0 1 0 0]),  0, ...
+                'a line takes both signs');
+            testCase.verifyEqual(ratQ.conicSign([1 0 -1 0 0 0]), 0, ...
+                'a hyperbolic form takes both signs');
+            testCase.verifyEqual(ratQ.conicSign([1 0 0 0 0 0]),  1, ...
+                'x^2 is a degenerate PSD form, nonnegative everywhere');
+        end
+
+        function conicSignAgreesWithSamplingOnRandomConics(testCase)
+        % Differential test: a form claimed one-signed must never be caught taking the other sign,
+        % and a form claimed two-signed must actually be seen taking both. Sampling can only refute
+        % the first claim and confirm the second, which is exactly how the two halves are checked.
+            rng(20260904);
+            [X, Y] = meshgrid(linspace(-8, 8, 61));
+            for k = 1:300
+                c = randi([-4 4], 1, 6);
+                if all(c == 0), continue, end
+                v = c(1)*X.^2 + c(2)*X.*Y + c(3)*Y.^2 + c(4)*X + c(5)*Y + c(6);
+                s = ratQ.conicSign(c);
+                switch s
+                    case 1
+                        testCase.verifyGreaterThanOrEqual(min(v(:)), -1e-9, ...
+                            sprintf('case %d claimed nonnegative: %s', k, mat2str(c)));
+                    case -1
+                        testCase.verifyLessThanOrEqual(max(v(:)), 1e-9, ...
+                            sprintf('case %d claimed nonpositive: %s', k, mat2str(c)));
+                end
+            end
+        end
+
+        function isPSD3NeedsEveryPrincipalMinorNotJustTheLeadingOnes(testCase)
+        % Sylvester's LEADING-minor criterion characterises positive DEFINITE and is false in both
+        % directions for semidefinite -- this matrix has all three leading minors zero and is not
+        % PSD, so a leading-minor implementation would return true and conicSign would then declare
+        % a two-signed conic one-signed, silently deleting a real constraint.
+            M = diag([0 -1 0]);
+            testCase.verifyEqual(det(M(1,1)), 0);
+            testCase.verifyFalse(ratQ.isPSD3(M));
+            testCase.verifyTrue(ratQ.isPSD3(diag([0 0 0])));
+            testCase.verifyTrue(ratQ.isPSD3(diag([2 3 5])));
+            testCase.verifyFalse(ratQ.isPSD3([1 0 0; 0 1 2; 0 2 1]));
+        end
+
         % ---- an independent symbolic cross-check (legitimate in a test, not on the path) --------
 
         function theDifferenceConicAgreesWithTheSymbolicLevelSet(testCase)

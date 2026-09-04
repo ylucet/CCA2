@@ -144,6 +144,24 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9);
         end
 
+        function whatRemainsUnsupportedIsRefusedByNameAndNothingElseIs(testCase)
+        % REPLACES two tests deleted 2026-09-04. They pinned the INDEFINITE and SEMIDEFINITE-
+        % SINGULAR cases on a polygon as refusals; caseDBoundaryMax implements both, so asserting
+        % a refusal there would now be asserting a defect. Their real content -- an uncovered case
+        % must be a NAMED refusal and never a silent fallback into the symbolic engine -- moves
+        % here, onto the cases that are genuinely still uncovered.
+        %
+        % Both are about the DOMAIN, not the function, and both are real mathematics rather than
+        % missing arithmetic: on an unbounded piece the sup can be +inf, so dom f* stops being the
+        % whole plane and the answer needs a representation this type does not yet carry.
+            V = [0 0; 1 0; 0 1];
+            unbounded = QuaPol(V, [1 2 1; 2 3 0; 3 1 0], [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0]);
+            testCase.verifyError(@() conjQ(unbounded), 'PLQ:conjQ:unbounded');
+
+            % and an inexact input is refused before any of that is even looked at
+            testCase.verifyError(@() conjQ(QuaPol([sqrt(2) 0 1 0 0 0])), 'PLQ:QuaPol:notExact');
+        end
+
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
         % Bounding the vertex denominators does not bound the downstream ones -- DECISIONS.md's
         % attempt 3 carried 1e5 to 1e25 in a few squarings and the run hung. So an irrational
@@ -289,19 +307,6 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:unbounded');
         end
 
-        function aSemidefiniteSingularQuadraticOnAPolygonIsRefusedByName(testCase)
-        % IDENTIFIER UPDATED 2026-09-03 when Case C landed: the refusal moved UP to the dispatch,
-        % which now classifies H exactly and names all three outcomes (strictly convex, concave or
-        % affine, neither), so it raises notImplemented rather than notStrictlyConvex. The
-        % assertion this test exists for is unchanged -- an uncovered case is a NAMED refusal and
-        % never a silent fallback.
-        %
-        % A rank-one PSD Q is genuinely a third case: the interior cell degenerates, because the
-        % unconstrained sup is finite only on a measure-zero set.
-            V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
-            f = QuaPol(V, E, [0 0 0 0 1 1 1 0 0 0], F);      % rank-one PSD
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
-        end
         % ---- Case C: a concave or affine quadratic on a bounded convex polygon ------------------
 
         function theConcaveConjugateIsTheMaxOverTheVerticesAndNothingElse(testCase)
@@ -376,16 +381,172 @@ classdef conjQTest < matlab.unittest.TestCase
             end
         end
 
-        function anIndefiniteQuadraticOnAPolygonIsRefusedByName(testCase)
-        % Neither branch applies, and the refusal must say which case is missing rather than
-        % falling through to something that happens to run.
+        % ---- Case D: every quadratic that is not positive definite, on a bounded polygon --------
+
+        function anIndefiniteQuadraticMatchesItsSeparableClosedForm(testCase)
+        % x^2/2 - y^2/2 over [0,1]^2 SEPARATES, and each axis has an elementary 1-D conjugate:
+        %       sup_{0<=x<=1} s1 x - x^2/2  = s1*xc - xc^2/2 with xc = clamp(s1, 0, 1)   (concave)
+        %       sup_{0<=y<=1} s2 y + y^2/2  = max(0, s2 + 1/2)                            (convex,
+        %                                     so the max is at an endpoint)
+        % Written down independently of anything conjQ computes.
             V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
-            f = QuaPol(V, E, [0 0 0 0, 1, 0, -1, 0, 0, 0], F);      % x^2/2 - y^2/2
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
+            g = conjQ(QuaPol(V, E, [0 0 0 0 1 0 -1 0 0 0], F));
+
+            rng(20260904);
+            S = [randn(400,2)*2; 0 0; 1 1; -1 -1; 0.5 -0.5];
+            xc = min(1, max(0, S(:,1)));
+            want = S(:,1).*xc - xc.^2/2 + max(0, S(:,2) + 0.5);
+            [got, idx] = g.eval(S);
+            testCase.verifyTrue(all(idx > 0), 'the cells must cover the plane');
+            testCase.verifyEqual(got, want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
+        end
+
+        function everyHessianClassOnAPolygonAgreesWithAnIndependentMaximisation(testCase)
+        % The dichotomy conjQ dispatches on is "H positive definite or not", so the sweep has to
+        % cover BOTH sides of it and the boundary between them: positive definite, indefinite,
+        % negative definite, PSD-singular, NSD-singular and identically zero.
+            rng(20260904);
+            classes = {'PD', 'indefinite', 'ND', 'PSD-singular', 'NSD-singular', 'affine'};
+            for c = 1:numel(classes)
+                for rep = 1:2
+                    [V, E, F] = conjQTest.randomConvexPolygon();
+                    H = conjQTest.hessianOfClass(classes{c});
+                    L = randi([-4 4], 2, 1);  k0 = randi([-4 4]);
+                    f = QuaPol(V, E, [0 0 0 0, H(1,1), H(1,2), H(2,2), L(1), L(2), k0], F);
+                    testCase.assumeTrue(f.isExact());
+                    g = conjQ(f);
+                    S = [randn(40,2)*3; 0 0];
+                    [got, idx] = g.eval(S);
+                    testCase.verifyTrue(all(idx > 0), ...
+                        sprintf('%s rep %d: a dual point fell in no cell', classes{c}, rep));
+                    want = zeros(size(S,1),1);
+                    for i = 1:size(S,1)
+                        want(i) = conjQTest.supAnyQ(S(i,:).', V, H, L, k0);
+                    end
+                    testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                        sprintf('%s rep %d', classes{c}, rep));
+                end
+            end
+        end
+
+        function theConcaveCaseIsUNCHANGEDByTheGeneralBoundaryBranch(testCase)
+        % Case D subsumes the concave case rather than replacing it: for a negative semidefinite H
+        % no edge has positive curvature, so no edge object is built, the parts list has one entry,
+        % no fold happens, and the result IS the vertex max. This pins that the subsumption is
+        % exact and not merely close -- the object must still be all-affine with one cell per
+        % winning vertex.
+            V = [0 0; 1 0; 1 1; 0 1];  E = [1 2 1; 2 3 1; 3 4 1; 4 1 1];  F = [1 0;1 0;1 0;1 0];
+            g = conjQ(QuaPol(V, E, [0 0 0 0, -2, -1, -2, 1, -2, 3], F));
+            testCase.verifyEqual(g.nf, 4, 'one cell per corner, and no edge cells at all');
+            testCase.verifyTrue(all(g.fN(:,5) == 0 & g.fN(:,6) == 0 & g.fN(:,7) == 0), ...
+                'a concave conjugate is piecewise AFFINE -- no curvature can appear');
+            for j = 1:g.ne
+                testCase.verifyEqual(g.edgeKind(j), 'line');
+            end
+        end
+
+        function anIndefiniteConjugateIsConvexAndCarriesACurvedEdge(testCase)
+        % f* is convex whatever f is -- broken immediately by a wrong split side. And the fold of
+        % pieces with different Hessians must produce a genuine conic boundary, which is the whole
+        % reason QuaCon exists rather than QuaPar.
+            V = [0 0; 2 0; 2 1; 0 2];  m = size(V,1);
+            E = [(1:m).', [2:m,1].', ones(m,1)];  F = [ones(m,1), zeros(m,1)];
+            g = conjQ(QuaPol(V, E, [0 0 0 0, 2, 3, -1, 1, 1, 0], F));
+
+            rng(20260904);
+            A = randn(200,2)*2;  B = randn(200,2)*2;
+            testCase.verifyLessThanOrEqual(g.eval((A+B)/2), (g.eval(A) + g.eval(B))/2 + 1e-9);
+
+            kinds = arrayfun(@(j) string(g.edgeKind(j)), 1:g.ne);
+            testCase.verifyTrue(any(kinds ~= "line"), ...
+                'an indefinite piece produces edge cells whose differences are genuine conics');
+        end
+
+        function theReportedFaceCountIsAnUpperBoundAndTheValuesAreStillRight(testCase)
+        % HONEST PIN OF A KNOWN GAP, and it asserts the gap's BOUNDARY rather than its size. A cell
+        % that is empty only because of a CURVED constraint is not detected -- assembleQuaConCells
+        % says so -- so nf over-counts. What must NOT happen is a wrong value or an uncovered
+        % point, and that is what is asserted here. Measured 2026-09-04 on this fixture: 274 faces
+        % reported, 75 ever occupied over 200k samples, carrying 10 distinct functions. The size is
+        % deliberately not pinned: it will move as the filters improve, and a number pinned here
+        % would turn an improvement into a failure.
+            u = [2;1];  H = u*u.';                         % PSD-singular: the worst case for this
+            V = [0 0; 3 0; 3 2; 1 3; 0 2];  m = size(V,1);
+            E = [(1:m).', [2:m,1].', ones(m,1)];  F = [ones(m,1), zeros(m,1)];
+            g = conjQ(QuaPol(V, E, [0 0 0 0, H(1,1), H(1,2), H(2,2), 1, -1, 2], F));
+
+            rng(20260904);
+            S = randn(500,2)*6;
+            [got, idx] = g.eval(S);
+            testCase.verifyTrue(all(idx > 0), 'every dual point still lands in a face');
+            want = zeros(size(S,1),1);
+            for i = 1:size(S,1)
+                want(i) = conjQTest.supAnyQ(S(i,:).', V, H, [1;-1], 2);
+            end
+            testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                'the over-counting must not disturb a single value');
+
+            occupied = numel(unique(idx(idx > 0)));
+            testCase.verifyLessThanOrEqual(occupied, g.nf, ...
+                'occupancy cannot exceed the reported face count');
         end
     end
 
     methods (Static)
+
+        function H = hessianOfClass(cls)
+        % A random integer symmetric H of a named definiteness class. The classes ARE the dispatch:
+        % conjQ branches on "positive definite or not", so a sweep has to cover both sides and the
+        % singular boundary between them.
+            switch cls
+                case 'PD'
+                    while true, H = randi([-4 4],2,2); H = H+H.';
+                        if H(1,1) > 0 && det(H) > 0.5, return, end, end
+                case 'indefinite'
+                    while true, H = randi([-4 4],2,2); H = H+H.';
+                        if det(H) < -0.5, return, end, end
+                case 'ND'
+                    while true, H = randi([-4 4],2,2); H = H+H.';
+                        if H(1,1) < 0 && det(H) > 0.5, return, end, end
+                case 'PSD-singular'
+                    u = randi([-3 3],2,1);  if all(u == 0), u = [1;0]; end
+                    H = u*u.';
+                case 'NSD-singular'
+                    u = randi([-3 3],2,1);  if all(u == 0), u = [1;0]; end
+                    H = -u*u.';
+                case 'affine'
+                    H = zeros(2);
+                otherwise
+                    error('conjQTest:badClass', 'unknown Hessian class %s', cls);
+            end
+        end
+
+        function v = supAnyQ(s, V, H, L, k0)
+        % THE GENERAL ORACLE: sup over the polygon of <s,x> - q(x), for ANY H. Enumerates the
+        % candidate maximisers -- every vertex, every edge's clamped 1-D stationary point whatever
+        % that edge's curvature, and the unconstrained stationary point when it lies inside. For a
+        % concave objective one of those IS the maximiser; for an indefinite one the maximiser is
+        % on the boundary, hence a vertex or an edge stationary point, so the list is complete
+        % either way. Every candidate is a genuine point of P, so a spurious one can only ever be
+        % dominated -- which is why adding the interior point unconditionally is safe.
+            q   = @(x) 0.5 * x.' * H * x + L.' * x + k0;
+            obj = @(x) s.' * x - q(x);
+            cand = V.';
+            if abs(det(H)) > 1e-12
+                xs = H \ (s - L);
+                if conjQTest.inPolygon(xs.', V), cand = [cand, xs]; end
+            end
+            m = size(V,1);
+            for j = 1:m
+                a = V(j,:).';  b = V(mod(j,m)+1,:).';  d = b - a;
+                al = d.' * H * d;
+                if abs(al) < 1e-14, continue, end     % affine along this edge: endpoints suffice
+                t = min(1, max(0, (s - (H*a + L)).' * d / al));
+                cand = [cand, a + t*d]; %#ok<AGROW>
+            end
+            v = -inf;
+            for i = 1:size(cand,2), v = max(v, obj(cand(:,i))); end
+        end
 
         function w = maxOverVertices(S, V, H, L, k0)
         % THE ORACLE for Case C: max over the polygon's VERTICES of <s,v> - q(v), written directly.

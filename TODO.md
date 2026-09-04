@@ -84,7 +84,36 @@ APC; gold is ~$3,290 and unnecessary.
       upper bound -- 38 cells where the true count is smaller), and corners involving a curved edge
       are not named. Both need Phase 2c's exact degree-4 sign kernel.
 
-- [ ] **Extend `conjQ` past Cases A, B and C**, in this order (its own header repeats it):
+- [x] **DONE 2026-09-04: `conjQ` Case D -- EVERY quadratic that is not positive definite**, on a
+      bounded polygon: indefinite, negative definite, PSD-singular, NSD-singular, affine. This
+      closes the bounded-piece case analysis, and it did NOT need [COAP] A.2-A.5 or the `x*y`
+      frame change. One fact replaces all of it: when H is not positive DEFINITE the sup of
+      `<s,x> - q(x)` over P is attained on the BOUNDARY (an interior maximiser would force the
+      objective's Hessian `-H` to be NSD, i.e. H PSD; and a PSD-SINGULAR H leaves a direction of
+      zero curvature along which one can walk to the boundary without decreasing). So the answer is
+      the max of the vertex affines and, per edge of positive curvature, that edge's clamped 1-D
+      maximum -- folded with `maxQ`. The concave case falls out with no qualifying edge, so it is
+      ONE branch, not two, and `caseCConcaveOnPolygon` became `maxOverVerticesQuaCon`.
+      Verified over all six Hessian classes: 9060 dual points, 0 wrong, 0 uncovered, worst 4.6e-15
+      (`.claude/allH-sweep.m`).
+
+- [ ] **THE CELL COUNT IS AN UPPER BOUND, and this is now the top item.** Measured 2026-09-04 on a
+      PSD-singular fixture: **274 faces reported, 75 ever occupied over 200k samples, carrying 10
+      distinct functions.** Values are unaffected (0 wrong anywhere), but a mesh 3x larger than
+      necessary matters for the SCIP consumer. Two causes, and they need different fixes:
+      1. **No exact CURVED emptiness test.** Three sound filters exist -- infeasible linear part
+         (`ratQ.feasible2`), contradictory sides on one canonical curve, and a constant-sign conic
+         (`ratQ.conicSign`, the only handle on curvature that avoids the degree-4 kernel). Together
+         they took the worst case 501 -> 274. What is left needs Phase 2c's filtered predicate.
+      2. **No MERGE of adjacent cells carrying the same function.** 75 occupied cells for 10
+         functions is a merge problem, not an emptiness problem -- the nested fold re-splits cells
+         that already agree. In H-form two cells with the same exact function and complementary
+         sides on one shared curve are trivially mergeable; that is worth doing before 2c.
+
+- [ ] **Extend `conjQ` past Cases A, B, C and D** -- what is left is the DOMAIN, not the function:
+      an UNBOUNDED piece (wedge or half-strip; the sup can be +inf, so dom f* stops being the whole
+      plane and needs a representation) and a domain of dimension < 2. Both refuse by name today.
+
       the per-piece closed forms first -- `convEnvCPLQ`, `conjPieceCPLQ`, `conjConvexOverPiece`,
       `conjConvexPolygon`, `conjAffinePLQ` are ALREADY 100% sym-free, so porting them is replacing
       double arithmetic with `ratQ` calls rather than rewriting an algorithm -- then Step 3
