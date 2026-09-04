@@ -35,6 +35,38 @@ classdef QuaPol < RatPol & QuaPar
    % and for why the four types are siblings rather than a chain.
    
    % Class methods
+   properties
+        % ---- THE EXACT INPUT, which is what a QuaPol IS FOR ---------------------------------
+        % CCA2's design target is the conjugate of a QuaPol, computed exactly over the rationals
+        % and returned as an exact QuaCon. So the input carries its coefficients and its domain
+        % vertices EXACTLY, as integers, and the exact pipeline reads only these.
+        %
+        % WHY THE CONSTRUCTOR CONVERTS RATHER THAN DEMANDING INTEGERS. A caller writes
+        % `QuaPol([3 1 3 0 0 0])` or `[0 0 0 0 1 0 1 0 0 0]/2`, in doubles, because that is what
+        % MATLAB source looks like. Those are the CALLER'S OWN numbers -- they have not been
+        % through a computation -- so recovering the rational they meant is a reconstruction, not
+        % the refuted rational snapping (ratQ.fromDouble's header draws that line precisely).
+        %
+        % WHY AN UNCONVERTIBLE INPUT IS NOT A CONSTRUCTOR ERROR. The legacy FLOAT pipeline builds
+        % QuaPol objects out of COMPUTED doubles at nine production call sites, and those values
+        % are genuinely inexact -- measured, `DECISIONS.md` 2026-09-03: 16 of 64 face rows out of
+        % today's `conj` are one or two ULP off a simple rational. That pipeline is kept for unit
+        % testing and will not be in the final version, so it must keep running; raising here
+        % would stop it on day one. Instead such an object is simply NOT EXACT: `fN`/`fD` are
+        % empty, `isExact` says so, and every exact operation raises rather than guessing.
+        %
+        % THAT IS ONE TRUTH PLUS AN HONEST UNKNOWN, NOT TWO SPELLINGS OF ONE VALUE. When `fN`/`fD`
+        % are present they ARE the function and `f` is the same number written in binary; when
+        % they are absent nothing claims to be exact. The failure mode RatCon.m warns about -- a
+        % second copy that can silently disagree with the object -- needs two copies that both
+        % claim authority, and there are never two here. Both fields go when the float pipeline
+        % does, leaving nothing to unpick.
+        fN (:,10){mustBeNumeric} = []   % nf x 10 integer numerators, ratQ.canon form against fD
+        fD (:,1) {mustBeNumeric} = []   % nf x 1  positive integer denominators
+        VN (:,2){mustBeNumeric} = []    % nv x 2 integer vertex numerators over VD
+        VD (:,1) {mustBeNumeric} = []   % nv x 1 positive integer denominators
+   end
+
    methods
        function obj = QuaPol(varargin) % constructor
             % No-argument path writes NOTHING -- see RatPar.m's CONSTRUCTOR PROTOCOL note. This is
@@ -83,8 +115,82 @@ classdef QuaPol < RatPol & QuaPar
             end        
             obj = obj.setPinnedDefaults();   % den:=1, Ec:=0 -- see RatPar.setPinnedDefaults
             obj.dom = obj.createDom;
+            obj = obj.readExactly();         % fN/fD/VN/VD, or empty -- see the properties block
        end % constructor
         
+       function obj = readExactly(obj)
+       % objective: fill the exact fields from the double ones, or leave them empty.
+       % Called ONCE, at the end of the constructor. See the properties block for why an
+       % unconvertible input is not an error.
+       %
+       % ALL OR NOTHING, per object. A partially exact object -- three faces exact and one not --
+       % is the trap this avoids: every caller would then have to ask per row, and the one that
+       % forgot would compute exactly on rounded data and produce a plausible wrong answer.
+            try
+                nfk = size(obj.f, 1);
+                N = zeros(nfk, 10);  D = ones(nfk, 1);
+                for k = 1:nfk
+                    [N(k,:), D(k)] = ratQ.fromDouble(obj.f(k,:));
+                end
+                nvk = size(obj.V, 1);
+                NV = zeros(nvk, 2);  DV = ones(nvk, 1);
+                for i = 1:nvk
+                    [NV(i,:), DV(i)] = ratQ.fromDouble(obj.V(i,:));
+                end
+                obj.fN = N;  obj.fD = D;  obj.VN = NV;  obj.VD = DV;
+            catch e
+                if ~any(strcmp(e.identifier, {'ratQ:notExact', 'ratQ:overflow', 'ratQ:notFinite'}))
+                    rethrow(e)     % a real defect here must not be swallowed as "inexact"
+                end
+                obj.fN = [];  obj.fD = [];  obj.VN = [];  obj.VD = [];
+            end
+       end
+
+       function tf = isExact(obj)
+       % objective: does this object carry its coefficients and vertices EXACTLY.
+       % [output] tf : logical
+       %
+       % True for anything a caller wrote down, false for anything the legacy float pipeline
+       % computed. The exact operators test this and refuse rather than reading `f` -- see
+       % assertExact.
+            tf = ~isempty(obj.fN) && (obj.nv == 0 || ~isempty(obj.VN));
+       end
+
+       function assertExact(obj)
+       % objective: refuse, by name and with the reason, to compute exactly on inexact data.
+       %
+       % This is the guard that keeps the two pipelines from contaminating each other. Computing
+       % with exact arithmetic on coefficients that are already one ULP wrong produces an answer
+       % that is exactly the wrong number -- which is worse than an approximate one, because it
+       % carries no warning. `pieceRecessionRays` did exactly that (its header claimed exact sign
+       % tests, on doubles lifted with `sym()`) and it was a real defect: `DECISIONS.md`
+       % 2026-08-25, G10.
+            if ~obj.isExact()
+                error('PLQ:QuaPol:notExact', ...
+                    ['this QuaPol does not carry exact coefficients, so it cannot be used on ' ...
+                     'the exact path. It was built from COMPUTED doubles (the legacy float ' ...
+                     'pipeline does that at nine call sites) rather than from data a caller ' ...
+                     'wrote down. Computing exactly on inexact input yields exactly the wrong ' ...
+                     'number, which carries no warning -- see DECISIONS.md 2026-08-25 (G10).']);
+            end
+       end
+
+       function [n, d] = faceQ(obj, k)
+       % objective: face k's function, exactly, as the numerator/denominator pair.
+       % [input]  k : face index
+       % [output] n : 1 x 10 integer numerator in the weighted cubic basis; d : positive integer
+            obj.assertExact();
+            n = obj.fN(k,:);  d = obj.fD(k);
+       end
+
+       function [n, d] = vertexQ(obj, i)
+       % objective: vertex i, exactly. The domain of a QuaPol is POLYHEDRAL and its vertices are
+       %            the caller's own data, so unlike a conjugate's vertices they are rational and
+       %            can simply be stored (CONJ_FIELD_PROOF.md Theorem 1 concerns f*, not f).
+            obj.assertExact();
+            n = obj.VN(i,:);  d = obj.VD(i);
+       end
+
        function P = createP(obj)%create object P
             P = cell(obj.nf,1);
             for j = 1:obj.ne

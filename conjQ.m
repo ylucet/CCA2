@@ -5,10 +5,11 @@ function g = conjQ(obj)
 %   decision made by exact integer arithmetic. This is the sym-free, tolerance-free counterpart of
 %   conjCPLQ, and the route CONJ_FIELD_PROOF.md 8.6/8.7 recommends.
 %
-% [input]  obj : QuaPol, operable (degree <= 2). Its coefficients are read exactly at the boundary
-%                with ratQ.fromDouble -- legitimate here and nowhere else, because they are the
-%                CALLER'S OWN data and have not been through a computation (see that routine's
-%                header for why this is a reconstruction and not the refuted rational snapping).
+% [input]  obj : QuaPol, operable (degree <= 2), and EXACT -- it must carry fN/fD, which a QuaPol
+%                built from data a caller wrote down always does. One built by the legacy float
+%                pipeline out of computed doubles does not, and is refused by name: computing
+%                exactly on coefficients that are already one ULP wrong yields exactly the wrong
+%                number, which carries no warning (QuaPol.assertExact has the reference).
 % [output] g   : QuaCon -- exact faces, primitive integer edge conics, NAMED vertices.
 %
 % ------------------------------------------------------------------------------------------------
@@ -45,13 +46,9 @@ function g = conjQ(obj)
             'conjQ takes a QuaPol (quadratic on polyhedral); got a %s.', class(obj));
     end
     obj.assertOperable();
+    obj.assertExact();          % refuses a QuaPol the legacy float pipeline computed -- see there
 
-    % ---- read the caller's coefficients EXACTLY, once, at the boundary ----------------------
-    nf = size(obj.f, 1);
-    fN = zeros(nf, 10);  fD = ones(nf, 1);
-    for k = 1:nf
-        [fN(k,:), fD(k)] = ratQ.fromDouble(obj.f(k,:));
-    end
+    fN = obj.fN;  fD = obj.fD;  nf = size(fN, 1);
 
     % ---- Case A: full domain, one face -------------------------------------------------------
     if obj.nv == 0 && nf == 1

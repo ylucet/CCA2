@@ -127,17 +127,41 @@ classdef RatParTest < matlab.unittest.TestCase
             testCase.verifyEqual(quaPar.den, [0 0 1], 'AbsTol', 0);   % Qua pins the denominator
         end
 
-        function allDataLivesOnRatParAlone(testCase)
-            % No child declares a property of its own -- forced by MATLAB's multiple-inheritance
-            % rules, and checked here so a future edit does not quietly reintroduce one and make
-            % the diamond unconstructible.
+        function noPropertyNameIsDeclaredTwiceInTheDiamond(testCase)
+            % CHANGED 2026-09-03, because the assertion was broader than the hazard it names.
+            %
+            % It used to require that QuaPol, RatPol and QuaPar declare NO property of their own,
+            % on the stated grounds that MATLAB's multiple-inheritance rules force it. That is not
+            % what those rules say. The fatal case
+            % (MATLAB:class:conflictingSuperClassProperty) needs ONE NAME declared on TWO
+            % superclasses of a common child -- i.e. on RatPol AND QuaPar, whose common child is
+            % QuaPol. A property on QuaPol ITSELF cannot conflict: QuaPol is the JOIN of the
+            % diamond, so nothing inherits it along two paths.
+            %
+            % The distinction became load-bearing when QuaPol gained its exact fields
+            % (fN/fD/VN/VD), which are the exact INPUT the rational conjugate reads. Those are
+            % pinned by name below, so an ACCIDENTAL property is still caught -- what is no longer
+            % forbidden is a deliberate one on a leaf.
             own = @(c) setdiff(properties(c), properties('RatPar'));
-            for c = {'QuaPol','RatPol','QuaPar'}
+
+            % The real invariant: the two mid-diamond classes must not collide.
+            testCase.verifyEmpty(intersect(own('RatPol'), own('QuaPar')), ...
+                'a name on BOTH RatPol and QuaPar makes QuaPol unconstructible');
+
+            % And, more strictly than that requires, the mid-diamond classes carry no data at all.
+            for c = {'RatPol','QuaPar'}
                 testCase.verifyEmpty(own(c{1}), ...
                     sprintf('%s must declare no properties of its own', c{1}));
             end
-            % QuaParCPLQ is the one exception: it adds the symbolic payload it wraps.
-            testCase.verifyEqual(own('QuaParCPLQ'), {'fnd'});
+
+            % The leaves declare exactly what they are documented to declare.
+            testCase.verifyEqual(sort(own('QuaPol')), sort({'fN';'fD';'VN';'VD'}), ...
+                'QuaPol carries the exact input and nothing else');
+            testCase.verifyEqual(own('QuaParCPLQ'), {'fnd'}, ...
+                'QuaParCPLQ adds the symbolic payload it wraps');
+
+            % The diamond really does construct, which is what the whole rule is protecting.
+            testCase.verifyClass(QuaPol([1 0 1 0 0 0]), 'QuaPol');
         end
 
         function ratParItselfCannotBeInstantiated(testCase)

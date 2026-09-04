@@ -14,8 +14,8 @@ classdef QuaPoly < QuaPol
    %
    % So the alias goes in rather than the caller being changed, for the same reason PLQVC's does:
    % a downstream consumer should not have to move because an internal naming scheme was
-   % regularized. This one is cheap -- QuaPol adds no properties of its own, so the subclass is a
-   % constructor forward and nothing else.
+   % regularized. This one is cheap: the subclass is a constructor forward and nothing else, and
+   % it inherits whatever QuaPol carries (since 2026-09-03 that includes the exact fN/fD/VN/VD).
    %
    % Keep it through 0.1 at least. Removing it is a breaking change for a real, identified caller,
    % and should be done (if ever) by deprecation with that caller updated first.

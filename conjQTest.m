@@ -126,7 +126,9 @@ classdef conjQTest < matlab.unittest.TestCase
         % attempt 3 carried 1e5 to 1e25 in a few squarings and the run hung. So an irrational
         % coefficient is a defect in the caller, not a case to round away.
             f = QuaPol([sqrt(2) 0 1 0 0 0]);
-            testCase.verifyError(@() conjQ(f), 'ratQ:notExact');
+            testCase.verifyFalse(f.isExact(), ...
+                'an irrational coefficient makes the whole object inexact, all or nothing');
+            testCase.verifyError(@() conjQ(f), 'PLQ:QuaPol:notExact');
         end
 
         function theConjugateOfAConjugateReturnsTheOriginalFunction(testCase)
