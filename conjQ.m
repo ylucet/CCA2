@@ -324,7 +324,15 @@ function s = sgnOf(row, want)
 % ratQ.conic makes the first nonzero entry positive, which may have negated the whole row. The
 % face's side must follow that negation, or the cell silently becomes its own complement -- which
 % is a wrong answer that still produces a plausible mesh.
-    r  = [0 0 0, row(1), row(2), row(3)];
+%
+% Takes either the three LINEAR coefficients [d e f] or a full conic [a b c d e f]; the caller has
+% one or the other depending on whether the constraint came from a half-plane or from a difference
+% of two quadratics, and getting the padding wrong would look at the wrong leading entry.
+    if numel(row) == 3
+        r = [0 0 0, row(1), row(2), row(3)];
+    else
+        r = row;
+    end
     nz = find(r ~= 0, 1);
     if isempty(nz)
         error('ratQ:zeroConic', 'a constraint with all-zero coefficients names no half-plane.');
@@ -481,92 +489,145 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
 % the boundary without decreasing. Only a positive DEFINITE H makes the interior stationary point a
 % strict maximiser, and that is Case B.
 %
-% So for every H this branch sees,
-%       q*(s) = max over the edges of P of [ max over that edge of <s,x> - q(x) ],
-% and the inner maximum over one edge is a ONE-DIMENSIONAL problem in the segment parameter:
+% So q*(s) is the largest of finitely many CANDIDATES:
 %
-%   alpha = d'Hd > 0    the restriction is CONCAVE, so the max is at the clamped stationary point
-%                       t* = T(s)/alpha, giving three regimes -- t* <= 0 (the max is at the first
-%                       endpoint), 0 <= t* <= 1 (a genuine quadratic in s), t* >= 1 (the second
-%                       endpoint). All three boundaries are AFFINE in s, since t* is.
+%   every vertex v          val_v(s) = <s,v> - q(v),  AFFINE in s, always available;
+%   every edge of positive  the clamped stationary point of the edge's 1-D restriction, QUADRATIC
+%   curvature d'Hd > 0      in s, and available only where 0 <= t* <= 1 -- which is a pair of
+%                           AFFINE conditions, since t* = T(s)/alpha is affine.
 %
-%   alpha <= 0          the restriction is CONVEX (or affine), so its max over the segment sits at
-%                       an ENDPOINT and the edge contributes no new function at all -- both
-%                       endpoints are already in the vertex max below.
+% An edge of non-positive curvature has a convex (or affine) restriction, so its maximum sits at an
+% endpoint and it contributes no candidate at all -- both endpoints are already vertices. When H is
+% negative semidefinite NO edge qualifies, the candidate set is just the vertices, and this routine
+% degenerates to exactly maxOverVerticesQuaCon. So the concave case is one branch of this, not a
+% separate algorithm.
 %
-% Hence the answer is the max of ONE object covering every vertex (maxOverVerticesQuaCon, which is
-% just the max of the affine functions <s,v> - q(v)) and ONE object per edge of positive curvature.
-% The fold is maxQ, and that is where the conic edges enter: two of these pieces differ by a
-% genuine quadratic.
+% ------------------------------------------------------------------------------------------------
+% CLASSIFY FIRST, SPLIT LAST -- and here that is worth a measurement, not just a principle.
 %
-% WHY THIS SUBSUMES THE CONCAVE CASE RATHER THAN DUPLICATING IT. If H is negative semidefinite then
-% d'Hd <= 0 for every direction, so no edge qualifies, the parts list has one entry, no fold
-% happens, and this returns exactly maxOverVerticesQuaCon -- which is the concave case's own
-% construction. One branch, not two, and the concave case's tests still pin the same object.
+% The obvious implementation makes each edge's clamped maximum into a total three-piece function
+% and folds them pairwise with maxQ. That is CORRECT and was the first version, but each fold
+% re-splits cells the previous fold had already separated, and the splits are CONIC, so no exact
+% test available today can tell that the resulting cell is empty. Measured on a PSD-singular
+% pentagon: 501 faces, of which 75 were ever occupied and which carried 10 distinct functions.
+% Three sound filters (linear infeasibility, contradictory sides, constant-sign conics) took it to
+% 274, and exact redundancy elimination shrank the lists from 14 constraints to 6.3 without
+% removing a single cell -- because what separates those cells is curved.
+%
+% This version removes the cause instead of filtering the symptom. EVERY availability condition is
+% AFFINE, so the arrangement they cut the plane into is a LINE arrangement, whose cells
+% ratQ.feasible2 decides exactly and completely. Build that arrangement first, pruning as it grows;
+% only then, inside each cell, ask which of the few surviving candidates is largest -- and that is
+% the only place a conic ever enters. The exponential 3^m enumeration never materialises because an
+% infeasible partial assignment is dropped as soon as it is infeasible.
+
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     Ln = [fN(8); fN(9)];
     kn = fN(10);
     m  = numel(cyc);
 
-    parts = {maxOverVerticesQuaCon(fN, fD, Vi, vd, cyc)};
+    % ---- the vertex candidates, and the linear cells on which each is the vertex maximum -------
+    denV = ratQ.chk(2 * fD * vd^2, 'vertex denominator');
+    qv = zeros(m,1);  numV = zeros(m,10);
+    for i = 1:m
+        v = Vi(cyc(i), :).';
+        qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
+        numV(i,:) = [0 0 0 0, 0, 0, 0, ...
+                     ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv(i)];
+    end
 
+    % ---- the edge candidates ------------------------------------------------------------------
+    Ed = struct('Td', {}, 'alpha', {}, 'num', {}, 'den', {});
     for j = 1:m
         a = Vi(cyc(j), :).';
         b = Vi(cyc(mod(j, m) + 1), :).';
         d = ratQ.chk(b - a, 'edge direction');
         alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
-        if alpha <= 0
-            % Convex or affine along this edge: the max is at an endpoint, and both endpoints are
-            % already carried by the vertex max. Skipping is exact, not an approximation.
-            continue
+        if alpha <= 0, continue, end
+        ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
+        qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'edge base value');
+        Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chk(-(ga.'*d),'t0')];
+        lin = [ratQ.chk(2*alpha*fD*vd*a(1),'c8'), ratQ.chk(2*alpha*fD*vd*a(2),'c9')];
+        Ed(end+1) = struct('Td', Td, 'alpha', alpha, ...
+            'num', [0 0 0 0, ...
+                    ratQ.chk(2*Td(1)^2,'c5'), ratQ.chk(2*Td(1)*Td(2),'c6'), ...
+                    ratQ.chk(2*Td(2)^2,'c7'), ...
+                    ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ...
+                    ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
+                    ratQ.chk(Td(3)^2 - alpha*qa,'c10')], ...
+            'den', ratQ.chk(2*alpha*fD*vd^2, 'edge denominator')); %#ok<AGROW>
+    end
+
+    % ---- the LINE arrangement, built incrementally and pruned exactly at every step -------------
+    % A cell records the half-planes defining it, which vertex is the vertex maximum there, and
+    % which edge candidates are available. Every condition here is affine, so feasible2 decides
+    % emptiness exactly -- this is the pruning that keeps 3^(#edges) from ever being enumerated.
+    cells0 = struct('lin', {}, 'vi', {}, 'ei', {});
+    for i = 1:m
+        rows = zeros(0,3);
+        for j = 1:m
+            if j == i, continue, end
+            r = [ratQ.chk(2*fD*vd*(Vi(cyc(i),1)-Vi(cyc(j),1)), 'd1'), ...
+                 ratQ.chk(2*fD*vd*(Vi(cyc(i),2)-Vi(cyc(j),2)), 'd2'), ...
+                 ratQ.chk(-(qv(i) - qv(j)), 'd0')];
+            if all(r == 0)
+                error('PLQ:conjQ:repeatedVertex', ...
+                    'polygon vertices %d and %d coincide.', cyc(i), cyc(j));
+            end
+            rows(end+1,:) = r; %#ok<AGROW>
         end
-        parts{end+1} = edgeMaxQuaCon(fN, fD, Hn, Ln, kn, Vi, vd, a, b, d, alpha); %#ok<AGROW>
+        if ratQ.feasible2(rows, true)
+            cells0(end+1) = struct('lin', rows, 'vi', i, 'ei', []); %#ok<AGROW>
+        end
     end
 
-    g = parts{1};
-    for k = 2:numel(parts)
-        g = maxQ(g, parts{k});
+    for e = 1:numel(Ed)
+        Td = Ed(e).Td;  alpha = Ed(e).alpha;
+        regimes = { [-Td(1) -Td(2) -Td(3)], ...                                   % t* <= 0
+                    [Td; -Td(1), -Td(2), alpha - Td(3)], ...                      % 0 <= t* <= 1
+                    [Td(1) Td(2) Td(3)-alpha] };                                  % t* >= 1
+        nxt = struct('lin', {}, 'vi', {}, 'ei', {});
+        for c = 1:numel(cells0)
+            for r = 1:3
+                lin = [cells0(c).lin; regimes{r}];
+                if ~ratQ.feasible2(lin, true), continue, end
+                ei = cells0(c).ei;
+                if r == 2, ei = [ei, e]; end
+                nxt(end+1) = struct('lin', lin, 'vi', cells0(c).vi, 'ei', ei); %#ok<AGROW>
+            end
+        end
+        cells0 = nxt;
     end
-end
 
-function g = edgeMaxQuaCon(fN, fD, Hn, Ln, kn, Vi, vd, a, b, d, alpha) %#ok<INUSL,INUSD>
-% objective: the TOTAL function s -> max over one edge of <s,x> - q(x), as a three-face QuaCon.
-%
-% Total, not partial, and that is what lets maxQ fold it: every s gets an answer, because the
-% clamped stationary point is defined for every s. The three faces are the three clamping regimes.
-%
-% The algebra is Case B's edge cell, with the same clearing:
-%       T(s) = fD*vd*<s,d> - <ga,d>        satisfies   t* = T(s)/alpha
-% and the middle face's value is <s,a> - q(a) + T^2/(2 alpha fD vd^2) over 2*alpha*fD*vd^2.
-    ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
-    qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'first endpoint value');
-    qb = ratQ.chk(b.'*Hn*b + 2*vd*(Ln.'*b) + 2*vd^2*kn, 'second endpoint value');
+    % ---- inside each linear cell, the winner among its few candidates --------------------------
+    % This is the ONLY place a conic appears: the difference of a vertex affine and an edge
+    % quadratic, or of two edge quadratics.
+    out = struct('num', {}, 'den', {}, 'con', {});
+    for c = 1:numel(cells0)
+        base = [zeros(size(cells0(c).lin,1), 3), cells0(c).lin, ones(size(cells0(c).lin,1),1)];
+        for k = 1:size(base,1)
+            row = ratQ.conic(base(k,1:6));
+            base(k,:) = [row, sgnOf(base(k,4:6), +1)];
+        end
 
-    Td = [ratQ.chk(fD*vd*d(1), 't1'), ratQ.chk(fD*vd*d(2), 't2'), ratQ.chk(-(ga.'*d), 't0')];
-    Tu = [Td(1), Td(2), ratQ.chk(Td(3) - alpha, 'edge upper')];
+        cand = struct('num', {}, 'den', {});
+        cand(1) = struct('num', numV(cells0(c).vi,:), 'den', denV);
+        for e = cells0(c).ei
+            cand(end+1) = struct('num', Ed(e).num, 'den', Ed(e).den); %#ok<AGROW>
+        end
 
-    denV = ratQ.chk(2 * fD * vd^2, 'endpoint denominator');
-    numA = [0 0 0 0, 0, 0, 0, ratQ.chk(2*fD*vd*a(1),'c8'), ratQ.chk(2*fD*vd*a(2),'c9'), -qa];
-    numB = [0 0 0 0, 0, 0, 0, ratQ.chk(2*fD*vd*b(1),'c8'), ratQ.chk(2*fD*vd*b(2),'c9'), -qb];
+        for i = 1:numel(cand)
+            con = base;
+            for j = 1:numel(cand)
+                if j == i, continue, end
+                [dn, ~] = ratQ.sub(cand(i).num, cand(i).den, cand(j).num, cand(j).den);
+                if all(dn == 0), continue, end        % the same function: no boundary between them
+                R = ratQ.chk([dn(5), 2*dn(6), dn(7), 2*dn(8), 2*dn(9), 2*dn(10)], 'winner');
+                con(end+1,:) = [ratQ.conic(R), sgnOf(R, +1)]; %#ok<AGROW>
+            end
+            out(end+1) = struct('num', cand(i).num, 'den', cand(i).den, 'con', con); %#ok<AGROW>
+        end
+    end
 
-    denM = ratQ.chk(2 * alpha * fD * vd^2, 'edge denominator');
-    lin  = [ratQ.chk(2*alpha*fD*vd*a(1), 'c8'), ratQ.chk(2*alpha*fD*vd*a(2), 'c9')];
-    numM = [0 0 0 0, ...
-            ratQ.chk(2*Td(1)^2,'c5'), ratQ.chk(2*Td(1)*Td(2),'c6'), ratQ.chk(2*Td(2)^2,'c7'), ...
-            ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
-            ratQ.chk(Td(3)^2 - alpha*qa,'c10')];
-
-    rT = ratQ.conic([0 0 0, Td(1), Td(2), Td(3)]);
-    rU = ratQ.conic([0 0 0, Tu(1), Tu(2), Tu(3)]);
-
-    cells = struct('num', {}, 'den', {}, 'con', {});
-    % t* <= 0: the maximum sits at the first endpoint
-    cells(end+1) = struct('num', numA, 'den', denV, 'con', [rT, sgnOf(Td, -1)]);
-    % 0 <= t* <= 1: the interior stationary point of the restriction
-    cells(end+1) = struct('num', numM, 'den', denM, ...
-                          'con', [rT, sgnOf(Td, +1); rU, sgnOf(Tu, -1)]);
-    % t* >= 1: the second endpoint
-    cells(end+1) = struct('num', numB, 'den', denV, 'con', [rU, sgnOf(Tu, +1)]);
-
-    g = assembleQuaConCells(cells);
+    g = assembleQuaConCells(out);
 end

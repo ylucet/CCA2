@@ -35,6 +35,12 @@ function g = assembleQuaConCells(cells)
 %    Naming it without that test would put points into the vertex list that bound nothing, which is
 %    worse than a vertex list that is honestly partial -- E and F are empty for the same reason.
 %
+% 3. THE MERGE IS PARTIAL TOO. mergeAdjacentCells joins two cells that carry one function and are
+%    separated by a single curve, which is an exact set identity and is the pattern a pairwise fold
+%    generates. Two cells carrying one function that differ in more than one constraint are left
+%    apart; joining those needs redundancy elimination against a curved constraint set, i.e. (1)'s
+%    kernel again.
+%
 % Neither gap can produce a wrong VALUE: `eval` reads the face functions and the sign conditions,
 % and both are exact.
 
@@ -121,6 +127,23 @@ function g = assembleQuaConCells(cells)
     fN = zeros(numel(cells), 10);  fD = ones(numel(cells), 1);
     for k = 1:numel(cells)
         [fN(k,:), fD(k)] = ratQ.canon(cells(k).num, cells(k).den);
+    end
+
+    % ---- shrink each cell to the constraints it actually needs, then merge --------------------
+    % The order matters and was measured: without the redundancy pass the merge finds NOTHING,
+    % because the fold leaves cells differing by one side AND one implied row, which does not match
+    % the merge's "same list, opposite side" pattern until the implied row is gone.
+    FC = dropRedundantRows(EcQ, FC);
+    [fN, fD, FC] = mergeAdjacentCells(fN, fD, FC);
+
+    % Some curves may now be referenced by nothing; drop them so `ne` counts the curves that
+    % actually bound something, and renumber what is left.
+    used = false(size(EcQ,1), 1);
+    for k = 1:numel(FC), used(FC{k}(:,1)) = true; end
+    renum = cumsum(used);
+    EcQ = EcQ(used, :);
+    for k = 1:numel(FC)
+        if ~isempty(FC{k}), FC{k}(:,1) = renum(FC{k}(:,1)); end
     end
 
     % ---- name the corners that can be decided exactly ----------------------------------------

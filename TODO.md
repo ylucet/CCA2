@@ -97,18 +97,25 @@ APC; gold is ~$3,290 and unnecessary.
       Verified over all six Hessian classes: 9060 dual points, 0 wrong, 0 uncovered, worst 4.6e-15
       (`.claude/allH-sweep.m`).
 
-- [ ] **THE CELL COUNT IS AN UPPER BOUND, and this is now the top item.** Measured 2026-09-04 on a
-      PSD-singular fixture: **274 faces reported, 75 ever occupied over 200k samples, carrying 10
-      distinct functions.** Values are unaffected (0 wrong anywhere), but a mesh 3x larger than
-      necessary matters for the SCIP consumer. Two causes, and they need different fixes:
-      1. **No exact CURVED emptiness test.** Three sound filters exist -- infeasible linear part
-         (`ratQ.feasible2`), contradictory sides on one canonical curve, and a constant-sign conic
-         (`ratQ.conicSign`, the only handle on curvature that avoids the degree-4 kernel). Together
-         they took the worst case 501 -> 274. What is left needs Phase 2c's filtered predicate.
-      2. **No MERGE of adjacent cells carrying the same function.** 75 occupied cells for 10
-         functions is a merge problem, not an emptiness problem -- the nested fold re-splits cells
-         that already agree. In H-form two cells with the same exact function and complementary
-         sides on one shared curve are trivially mergeable; that is worth doing before 2c.
+- [ ] **THE CELL COUNT IS STILL AN UPPER BOUND, but 4x less so.** Tracked on one PSD-singular
+      pentagon, which is the worst class: **501 -> 274 -> 121 faces**, 70 of them ever occupied over
+      200k samples, carrying 10 distinct functions. Values were never affected (0 wrong at every
+      stage). What each step bought, because the order is the lesson:
+      1. Three sound FILTERS -- infeasible linear part (`ratQ.feasible2`), contradictory sides on
+         one canonical curve, and a constant-sign conic (`ratQ.conicSign`) -- took 501 to 274.
+      2. Exact REDUNDANCY elimination (`dropRedundantRows`) shrank the constraint lists from 14
+         rows to 6.3 and removed **not one cell**, and `mergeAdjacentCells` then fired **zero**
+         times. Both are still in and both are right; they simply could not reach the problem,
+         because what separated those cells was CURVED and no exact test available today can see it.
+      3. RESTRUCTURING Case D took 274 to 121 and the runtime from 10 s to 4 s. That is the actual
+         fix, and the two attempts above are what identified it: the pairwise `maxQ` fold was
+         generating the conic splits in the first place. Every availability condition (`0 <= t* <= 1`)
+         is AFFINE, so the arrangement is a LINE arrangement that `feasible2` decides exactly and
+         completely; build that first, pruning as it grows, and let a conic appear only when asking
+         which of a cell's few surviving candidates is largest.
+      **What is left is genuinely curved** and needs Phase 2c's kernel: 121 reported against 70
+      occupied, and 70 occupied carrying 10 functions. `CLAUDE.md` section 5's ladder, rungs 1-3,
+      is what this sequence was.
 
 - [ ] **Extend `conjQ` past Cases A, B, C and D** -- what is left is the DOMAIN, not the function:
       an UNBOUNDED piece (wedge or half-strip; the sup can be +inf, so dom f* stops being the whole
