@@ -37,6 +37,50 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (later still) — what `dim<2` actually needs: almost nothing, and NOT a new type
+
+Asked directly, so measured. The label covered THREE different situations and they need three
+different (small) answers.
+
+**1. `dom f*` is EMPTY -- needs NOTHING. Already representable, verified.** A `QuaCon` with ZERO
+faces constructs today and evaluates to `+inf` at every point, which IS the function `f* = +inf`:
+
+    z = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
+    z.eval([0 0; 1 2; -3 4])   ->   Inf Inf Inf
+
+So every `emptyDomain` refusal is a routine declining to return an answer it can already store.
+This is THREE of the five full-plane cells too -- ND, indefinite and NSD-singular on `R^2` all give
+`f* = +inf` everywhere, not a lower-dimensional domain. The only change needed is to stop raising:
+`assembleQuaConCells` errors on an empty cell list, and `caseAFullDomain` raises
+`notStrictlyConvex` without distinguishing which case it is in.
+
+**2. The INPUT has dimension < 2 (needle, segment, ray) -- needs NOTHING either, and the label was
+misleading.** The conjugate of a low-dimensional input is FULL-dimensional: a needle at `p` with
+value `c` conjugates to `<s,p> - c`, affine and finite on all of `R^2`; a segment carrying an affine
+`f` conjugates to a max of two affine functions, again finite everywhere. Both are ordinary
+`QuaCon`s. What is missing is the INPUT side -- `pieceShape` looks for a face and these meshes have
+`nf = 0` -- so this is reading work, not representation work.
+
+**3. `dom f*` is a POINT or a LINE -- the only case that needs an extension, and it is one value in
+an existing column.** Just two cells: a full-plane AFFINE `q` gives `dom f* = {L}`, a single point;
+a full-plane PSD-SINGULAR `q` gives a line. A `QuaCon` cell is a list of sign conditions `>= 0`, and
+a lower-dimensional set is the same list with some conditions as EQUALITIES -- so the side column in
+`FC`, which today holds `+1` or `-1`, gains the value `0` meaning "on the curve". Three touch
+points: `QuaCon`'s constructor validation (which currently insists on `+-1`), `eval` (which must
+test `|q| <= tol` rather than `sign*q >= -tol`, since side 0 currently reads as vacuous), and
+whatever produces such a cell. **No new class, and `AlgAlg` is unrelated to this** -- that type is
+for faces whose COEFFICIENTS are irrational, not for domains of low dimension.
+
+**The honest caveat on 3**, and it is why this is worth doing deliberately rather than by reflex:
+evaluating such a function in floating point is nearly meaningless, because a random double is never
+exactly on a line, so `eval` would answer `+inf` almost surely. The exact predicates would still be
+right, and the object would still be the correct answer to store, print and conjugate back. That is
+a real use, but it is not the interactive one.
+
+**Order, if built:** (1) is a few lines and removes a whole column of refusals; (2) is
+straightforward input handling; (3) is the only one that touches the type, and it should wait until
+something actually consumes it.
+
 ## 2026-09-04 (later) — `conjQ` IS COMPLETE for every 2-D domain. The refusals left are the ANSWER's shape.
 
 Supersedes the "NO" measured earlier the same day, which is kept below for its table. Re-run
