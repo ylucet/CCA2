@@ -144,21 +144,50 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9);
         end
 
-        function whatRemainsUnsupportedIsRefusedByNameAndNothingElseIs(testCase)
-        % REPLACES two tests deleted 2026-09-04. They pinned the INDEFINITE and SEMIDEFINITE-
-        % SINGULAR cases on a polygon as refusals; caseDBoundaryMax implements both, so asserting
-        % a refusal there would now be asserting a defect. Their real content -- an uncovered case
-        % must be a NAMED refusal and never a silent fallback into the symbolic engine -- moves
-        % here, onto the cases that are genuinely still uncovered.
-        %
-        % Both are about the DOMAIN, not the function, and both are real mathematics rather than
-        % missing arithmetic: on an unbounded piece the sup can be +inf, so dom f* stops being the
-        % whole plane and the answer needs a representation this type does not yet carry.
-            V = [0 0; 1 0; 0 1];
-            unbounded = QuaPol(V, [1 2 1; 2 3 0; 3 1 0], [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0]);
-            testCase.verifyError(@() conjQ(unbounded), 'PLQ:conjQ:unbounded');
 
-            % and an inexact input is refused before any of that is even looked at
+        function aCONVEXQuadraticOnAnUNBOUNDEDConeIsComputedNotRefused(testCase)
+        % REPLACES three refusal tests deleted 2026-09-04, and it is the gap the coverage table
+        % named: q = (x^2+y^2)/2 on the first quadrant has a FINITE conjugate at every s, and the
+        % routine used to refuse it. The quadrant makes the problem separable, so the answer is
+        % written down independently: sup_{x>=0} t*x - x^2/2 is t^2/2 for t >= 0 and 0 below.
+            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0 1 0 1 0 0 0]);
+            g = conjQ(f);
+            gg = @(t) (t >= 0) .* (t.^2/2);
+            rng(20260904);
+            S = [randn(300,2)*2; 0 0; 1 1; -1 -1; 2 -3];
+            [got, idx] = g.eval(S);
+            testCase.verifyTrue(all(idx > 0), 'dom f* is the whole plane here');
+            testCase.verifyEqual(got, gg(S(:,1)) + gg(S(:,2)), 'RelTol', 1e-12, 'AbsTol', 1e-12);
+        end
+
+        function aNULLRECESSIONDIRECTIONGivesAHalfPlaneNotARefusal(testCase)
+        % The second half of the same gap, and the reason it is a computation rather than a
+        % refusal: along a recession direction of ZERO curvature the slope is
+        % <s-L,d> - <Hd,x>, so the condition is <s-L,d> <= inf_P <Hd,x> -- a LINEAR PROGRAM over
+        % the piece, hence the minimum over its vertices. For q = xy on the first quadrant and
+        % d = (1,0) that infimum is 0, giving s1 <= 0, and by symmetry s2 <= 0; on that cone the
+        % sup is 0, attained at the origin.
+            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0 0 1 0 0 0 0]);
+            g = conjQ(f);
+            inCone  = [-1 -1; -3 -0.5; 0 0; -2 -7];
+            outCone = [1 -1; -1 1; 2 2; 0.5 -3];
+            testCase.verifyEqual(g.eval(inCone), zeros(4,1), 'AbsTol', 1e-12);
+            testCase.verifyTrue(all(isinf(g.eval(outCone))));
+        end
+
+        function whatRemainsRefusedIsExactlyTheDomainsOfDimensionBelowTwo(testCase)
+        % After the unbounded work, every refusal left is REPRESENTATIONAL: the answer is known and
+        % a QuaCon face is two-dimensional, so there is nowhere to put it. Asserted here so that a
+        % future case landing turns this red rather than passing silently.
+            % (a) the sup really is +infinity everywhere -- dom f* is EMPTY
+            testCase.verifyError(@() conjQ(conjQTest.wedge([0 0], [1 0], [0 1], ...
+                [0 0 0 0, -2, 0, -2, 1, 1, 0])), 'PLQ:conjQ:emptyDomain');
+            % (b) a full-domain quadratic that is not strictly convex: dom f* is a point or a line
+            testCase.verifyError(@() conjQ(QuaPol([0 0 0 1 2 3])), 'PLQ:conjQ:notStrictlyConvex');
+            % (c) an input whose own domain has dimension < 2
+            needle = QuaPol([0 0], zeros(0,3), [0 0 0 0 0 0 0 0 0 1], zeros(0,2));
+            testCase.verifyError(@() conjQ(needle), ?MException);
+            % (d) refused by design rather than by gap
             testCase.verifyError(@() conjQ(QuaPol([sqrt(2) 0 1 0 0 0])), 'PLQ:QuaPol:notExact');
         end
 
@@ -297,15 +326,6 @@ classdef conjQTest < matlab.unittest.TestCase
 
         % ---- Case B refuses what it does not cover, by name ---------------------------------
 
-        function anUnboundedPieceIsRefusedByName(testCase)
-        % IDENTIFIER NARROWED 2026-09-03: the per-piece refactor moved this refusal into the
-        % polygon walk, which knows the piece is unbounded and says so, rather than reporting the
-        % generic notImplemented. A wedge or half-strip is a real case and a separate one -- the
-        % sup can be +inf there, so dom f* stops being the whole plane.
-            V = [0 0; 1 0; 0 1];
-            f = QuaPol(V, [1 2 1; 2 3 0; 3 1 0], [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0]);
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:unbounded');
-        end
 
         % ---- Case C: a concave or affine quadratic on a bounded convex polygon ------------------
 
@@ -555,13 +575,6 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:emptyDomain');
         end
 
-        function anUnboundedPieceThatIsNotConcaveIsRefusedByName(testCase)
-        % Exact-or-named-refusal. On an unbounded piece the finiteness of the sup is a QUADRATIC
-        % condition on the recession CONE, not the linear one the concave case enjoys, so this is a
-        % real case and a separate one rather than missing arithmetic.
-            f = conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, 1, 0, -1, 0, 0, 0]);
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:unbounded');
-        end
 
         function aRaysDirectionMarkerIsNotTreatedAsAVertex(testCase)
         % A ray edge [v1 v2 0] stores the ray [V(v1), V(v2)) -- v1 is the base and V(v2) only fixes

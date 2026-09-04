@@ -75,12 +75,15 @@ end
 
 function g = conjPieceQ(obj, k)
 % objective: the exact conjugate of ONE piece -- q_k restricted to its own face P_k -- as a QuaCon.
-% [input]  obj : the exact QuaPol; k : face index
 %
-% Classifying by the EXACT Hessian rather than by eig against a threshold is the whole point: the
-% three branches below are decided by two integer comparisons, and conjCPLQ's floating-point
-% version of the same decision is what silently claims an empty domain on a badly scaled input
-% (DECISIONS.md 2026-09-03).
+% THE WHOLE CASE ANALYSIS, and it is two questions asked in order. FIRST, can the sup be finite at
+% all: on an unbounded piece that is a condition on the recession CONE, and recessionConditions
+% decides it exactly and returns whatever linear conditions on s it imposes. SECOND, is the
+% objective strictly concave -- i.e. is H positive DEFINITE -- because that is what decides whether
+% the maximiser can be interior (the KKT active set, caseB) or must lie on the boundary (the max
+% over edges, caseD). Both questions are integer comparisons; conjCPLQ asks the second with
+% eig against a fixed threshold, which is what silently claims an empty domain on a badly scaled
+% input (DECISIONS.md 2026-09-03).
     [fN, fD] = obj.faceQ(k);
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     D  = ratQ.detExact(Hn);
@@ -90,31 +93,27 @@ function g = conjPieceQ(obj, k)
         return
     end
 
-    % ---- an UNBOUNDED piece takes a different route, and only the concave/affine half of it ----
-    [vs, rays, bounded] = pieceGeometry(obj, k);
-    if ~bounded
-        if Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0
-            [ViU, vdU] = ratQ.combineDen(obj.VN, obj.VD);
-            g = caseEUnboundedConcave(fN, fD, ViU, vdU, vs, rays);
-            return
-        end
-        error('PLQ:conjQ:unbounded', ...
-            ['piece %d is unbounded and its quadratic is not concave or affine (leading minor ' ...
-             '%d, second diagonal %d, determinant %d). On an unbounded piece the finiteness of ' ...
-             'the sup is a QUADRATIC condition on the recession CONE rather than a linear one -- ' ...
-             'a real case, and a separate one.'], k, Hn(1,1), Hn(2,2), D);
+    [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
+    sh = pieceShape(obj, k, Vi, vd);
+    if numel(sh.vs) == 0
+        error('PLQ:conjQ:noVertex', ...
+            ['piece %d has no vertex, so it is a half-plane or a slab and its conjugate is ' ...
+             'supported on a line or a point -- a domain of dimension < 2, which this type ' ...
+             'cannot carry.'], k);
     end
 
-    [Vi, vd, cyc] = polygonExactly(obj, k);
-    % A CLEAN DICHOTOMY, and it is the whole case analysis for a bounded piece. If H is positive
-    % DEFINITE the objective <s,x> - q(x) is strictly concave and its maximiser can be interior,
-    % so the KKT active set is needed. Otherwise the maximiser can always be taken on the
-    % BOUNDARY -- caseDBoundaryMax's header proves it -- and the answer is a max over the edges.
-    % Sylvester's criterion decides which, on exact integers.
+    [okFinite, dom, why] = recessionConditions(sh, Hn, [fN(8); fN(9)], fD, Vi, vd);
+    if ~okFinite
+        error('PLQ:conjQ:emptyDomain', ...
+            ['%s, so f* is +infinity everywhere and dom f* is EMPTY. That is the right answer ' ...
+             'and there is nowhere to put it -- a QuaCon carries at least one face, the same ' ...
+             'representational gap conjCPLQ records as conjugateHasEmptyDomain.'], why);
+    end
+
     if Hn(1,1) > 0 && D > 0
-        g = caseBConvexOnPolygon(fN, fD, Vi, vd, cyc);      % strictly convex: vertex/edge/interior
+        g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom);     % strictly convex: KKT active set
     else
-        g = caseDBoundaryMax(fN, fD, Vi, vd, cyc);          % everything else: max over the boundary
+        g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom);       % everything else: max over the boundary
     end
 end
 
@@ -167,170 +166,165 @@ function g = caseAFullDomain(fN, fD)
     g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), gN, gD, zeros(0,2), {zeros(0,2)});
 end
 
-function g = caseBConvexOnPolygon(fN, fD, Vi, vd, cyc)
-% objective: the conjugate of a STRICTLY CONVEX quadratic over one bounded convex polygon,
-%            exactly, as a QuaCon whose faces are the KKT active-set cells.
+function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
+% objective: the conjugate of a STRICTLY CONVEX quadratic over one polyhedral piece, bounded or
+%            not, exactly, as the KKT active-set subdivision.
 %
-% THE DECOMPOSITION is conjConvexOverPiece's, and its header states it: q* (s) = max{<s,x> - q(x)
-% : x in P} is a concave program, so the maximiser lies on exactly one relatively open face of P,
-% and which one is decided by where s - grad q(x*) sits. What is new here is only the ARITHMETIC:
-% that routine reaches for `sym` ten times to keep its values exact while deciding combinatorics in
-% doubles, and every one of those calls becomes integer arithmetic below.
+% GENERALISED 2026-09-04 from the bounded-polygon version. The decomposition is unchanged and is
+% conjConvexOverPiece's: the maximiser of the concave program lies on exactly one relatively open
+% face of P, so there is one AFFINE cell per vertex (its normal cone, shifted by grad q(v)), one
+% QUADRATIC cell per edge of positive curvature, and one interior cell.
 %
-%   VERTEX v      x* = v, valid iff s - grad q(v) lies in the normal cone N_P(v), i.e.
-%                 <s - grad q(v), e> <= 0 for every edge direction e leaving v.
-%                 Value <s,v> - q(v): AFFINE in s.
-%
-%   EDGE (base a, direction d, outward normal n)
-%                 the derivative along d vanishes at t* = <s - grad q(a), d> / (d'Q d), which is
-%                 affine in s, and the multiplier condition is <s - grad q(x*), n> >= 0. With
-%                 alpha = d'Qd and u = s - grad q(a):
-%                       value = <s,a> - q(a) + <u,d>^2 / (2 alpha),   QUADRATIC in s
-%                 and the cell is 0 <= t* <= 1 together with the multiplier sign -- all affine.
-%
-%   INTERIOR      x* = Q^-1 (s - L), valid iff x* lies in P, value 1/2 (s-L)'Q^-1(s-L) - c.
-%
-% So EVERY cell boundary is a straight line and every face function is a rational quadratic: the
-% answer is a QuaCon all of whose edge conics are lines. That is the shape the SCIP bridge wants.
-%
-% WHAT IS BUILT AND WHAT IS DEFERRED. The faces are complete: exact functions, canonical line
-% conics, and the full H-form sign conditions, which is everything `eval` and every predicate
-% needs. The INCIDENCE arrays E and F are left empty, and that is stated rather than faked --
-% recovering which cell borders which along which segment is an arrangement computation that
-% nothing consumes yet, and inventing a plausible-looking incidence would be worse than an honest
-% gap. Vertices ARE named, since a corner of a cell is just two of its own bounding lines meeting.
-
+% WHAT AN UNBOUNDED PIECE CHANGES, and conjConvexOverPiece's header already said the first part:
+% "a RAY leaving v contributes its direction exactly as a bounded edge does, so unbounded pieces
+% need no special case" -- the normal cone is built from the directions leaving the vertex, and a
+% ray gives one. The second part is the edge cell: a segment is clamped at BOTH ends (0 <= t* <= 1)
+% and a ray only at its base (t* >= 0), which is one affine condition instead of two. The third is
+% the interior cell, whose membership test is the piece's half-planes evaluated at the maximiser --
+% which for a bounded polygon was written from its vertex cycle and is now read off sh.hp, the same
+% list for either shape.
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     Ln = [fN(8); fN(9)];
     kn = fN(10);
     D  = ratQ.detExact(Hn);
-    m  = numel(cyc);
-    % AN INTERNAL INVARIANT, not a reachable gap: conjQ's dispatch already classified H exactly
-    % and only routes a strictly convex one here. Kept because this function's contract is stated
-    % in terms of its own input, and a future caller that forgets should be told loudly.
     if ~(Hn(1,1) > 0 && D > 0)
         error('PLQ:conjQ:notStrictlyConvex', ...
-            ['Case B needs a STRICTLY convex quadratic (leading minor %d, determinant %d; both ' ...
-             'must be positive). A merely semidefinite Q makes the interior cell degenerate -- ' ...
-             'the unconstrained sup is finite only on a measure-zero set -- which is a real case ' ...
-             'but a different one.'], Hn(1,1), D);
+            'caseB needs a strictly convex Q; leading minor %d, determinant %d.', Hn(1,1), D);
     end
 
-    % Everything below is built over these two denominators, and only at the end is each cell's
-    % function reduced by `canon`. q(x) = (1/2 x'Hn x + Ln'x + kn)/fD with x = Vi/vd.
+    denV = ratQ.chk(2 * fD * vd^2, 'vertex denominator');
+    cells = struct('num', {}, 'den', {}, 'con', {});
 
-    cells = struct('num', {}, 'den', {}, 'con', {});   % con: k x 7 rows [a b c d e f  sign]
-
-    % ---- one cell per VERTEX -----------------------------------------------------------------
-    for i = 1:m
-        v  = Vi(cyc(i), :).';                        % over vd
-        gv = ratQ.chk(Hn * v + vd * Ln, 'vertex gradient');   % grad q(v) = (Hn v/vd + Ln)/fD
-                                                              % numerator over fD*vd
-        % q(v) over 2*fD*vd^2
-        qv = ratQ.chk(v.' * Hn * v + 2 * vd * (Ln.' * v) + 2 * vd^2 * kn, 'vertex value');
-
-        % value  <s,v> - q(v)  =  (v1 s1 + v2 s2)/vd - qv/(2 fD vd^2)
-        %        over the common denominator 2*fD*vd^2
+    % ---- one cell per VERTEX: its normal cone, shifted by grad q(v) ---------------------------
+    for i = 1:numel(sh.vs)
+        vi = sh.vs(i);
+        v  = Vi(vi, :).';
+        gv = ratQ.chk(Hn * v + vd * Ln, 'vertex gradient');       % over fD*vd
+        qv = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
         num = [0 0 0 0, 0, 0, 0, ...
-               ratQ.chk(2*fD*vd*v(1), 'c8'), ratQ.chk(2*fD*vd*v(2), 'c9'), -qv];
-        den = ratQ.chk(2 * fD * vd^2, 'vertex cell denominator');
+               ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv];
 
-        % normal cone: <s - grad q(v), e> <= 0 for each edge direction e leaving v
-        con = zeros(0,7);
-        dirs = edgeDirsAtVertex(Vi, cyc, i);
+        rows = dom;
+        dirs = dirsAtVertex(sh, vi);
         for kk = 1:numel(dirs)
-            ed = dirs{kk};                            % integer direction, over vd
-            % <s,e> - <grad q(v), e> <= 0, cleared by fD*vd:
-            %   fD*vd*(e1 s1 + e2 s2) - <gv, e> <= 0        (gv is over fD*vd)
-            row = [0 0 0, ratQ.chk(fD*vd*ed(1),'n1'), ratQ.chk(fD*vd*ed(2),'n2'), ...
-                   ratQ.chk(-(gv.' * ed), 'n0')];
-            % sgnOf, NOT a hardcoded -1: ratQ.conic normalises the row's overall sign and may
-            % have negated it, in which case "<= 0" now names the OTHER half-plane and the cone
-            % becomes its own complement -- a wrong answer that still builds a plausible mesh.
-            con(end+1, :) = [ratQ.conic(row), sgnOf(row(4:6), -1)]; %#ok<AGROW>
+            ed = dirs{kk};
+            % <s - grad q(v), e> <= 0, cleared by fD*vd, written as a >= 0 half-plane
+            rows(end+1,:) = [ratQ.chk(-fD*vd*ed(1),'n1'), ratQ.chk(-fD*vd*ed(2),'n2'), ...
+                             ratQ.chk(gv.' * ed, 'n0')]; %#ok<AGROW>
         end
-        cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
+        [con, ok] = toCon(rows);
+        if ok
+            cells(end+1) = struct('num', num, 'den', denV, 'con', con); %#ok<AGROW>
+        end
     end
 
-    % ---- one cell per EDGE --------------------------------------------------------------------
-    for i = 1:m
-        a = Vi(cyc(i), :).';
-        b = Vi(cyc(mod(i, m) + 1), :).';
-        d = ratQ.chk(b - a, 'edge direction');                 % over vd
-        alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');      % d'Hn d, over 1 (d is integral)
+    % ---- one cell per EDGE of positive curvature ----------------------------------------------
+    for j = 1:numel(sh.ed)
+        e = sh.ed(j);
+        a = Vi(e.a, :).';
+        d = e.d(:);
+        alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
         if alpha <= 0
-            % q is affine along this edge, so its max sits at an endpoint and the edge carries no
-            % 2-D cell. Cannot happen for a strictly convex q with d ~= 0, and is kept as an
-            % assertion rather than a branch.
+            % Impossible for a strictly convex Q and a nonzero direction; kept as an assertion.
             error('PLQ:conjQ:degenerateEdge', ...
-                'edge %d has d''Qd = %d <= 0 under a strictly convex Q, which is impossible.', ...
-                i, alpha);
+                'edge %d has d''Qd = %d <= 0 under a strictly convex Q.', j, alpha);
         end
-        ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');  % over fD*vd
-        qa = ratQ.chk(a.' * Hn * a + 2 * vd * (Ln.' * a) + 2 * vd^2 * kn, 'edge base value');
-        n  = outwardNormal(Vi, cyc, i);                          % integer, over vd (scale free)
-
-        % t* = <s - grad q(a), d> / alpha, with <s,d> cleared by fD*vd:
-        %      T(s) := fD*vd*(d1 s1 + d2 s2) - <ga,d>   satisfies   t* = T(s) / alpha
-        % (d and a are the INTEGER numerators over vd, so the actual direction is d/vd and the
-        %  actual curvature is alpha/(fD*vd^2); the two vd's and the fD cancel to exactly this.)
+        ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
+        qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'edge base value');
         Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chk(-(ga.'*d),'t0')];
 
-        % value = <s,a> - q(a) + <u,d_actual>^2 / (2 alpha_actual), and that last term works out
-        % to T(s)^2 / (2 alpha fD vd^2), while <s,a>/vd and q(a) = qa/(2 fD vd^2). So the common
-        % denominator is 2*alpha*fD*vd^2 and the three contributions scale by alpha, 1 and 1.
-        den = ratQ.chk(2 * alpha * fD * vd^2, 'edge cell denominator');
-        lin = [ratQ.chk(2*alpha*fD*vd*a(1), 'c8'), ratQ.chk(2*alpha*fD*vd*a(2), 'c9')];
+        den = ratQ.chk(2 * alpha * fD * vd^2, 'edge denominator');
+        lin = [ratQ.chk(2*alpha*fD*vd*a(1),'c8'), ratQ.chk(2*alpha*fD*vd*a(2),'c9')];
         num = [0 0 0 0, ...
-               ratQ.chk(2*Td(1)^2, 'c5'), ratQ.chk(2*Td(1)*Td(2), 'c6'), ratQ.chk(2*Td(2)^2, 'c7'), ...
-               ratQ.chk(lin(1) + 2*Td(1)*Td(3), 'c8'), ratQ.chk(lin(2) + 2*Td(2)*Td(3), 'c9'), ...
-               ratQ.chk(Td(3)^2 - alpha*qa, 'c10')];
+               ratQ.chk(2*Td(1)^2,'c5'), ratQ.chk(2*Td(1)*Td(2),'c6'), ratQ.chk(2*Td(2)^2,'c7'), ...
+               ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
+               ratQ.chk(Td(3)^2 - alpha*qa,'c10')];
 
-        con = zeros(0,7);
-        % 0 <= t*  ->  T(s) >= 0
-        con(end+1,:) = [ratQ.conic([0 0 0, Td(1), Td(2), Td(3)]), sgnOf(Td, +1)]; %#ok<AGROW>
-        % t* <= 1   ->  T(s) - alpha <= 0
-        Tu = [Td(1), Td(2), ratQ.chk(Td(3) - alpha, 'edge upper')];
-        con(end+1,:) = [ratQ.conic([0 0 0, Tu(1), Tu(2), Tu(3)]), sgnOf(Tu, -1)]; %#ok<AGROW>
-        % multiplier: <s - grad q(a), n> - t* <Hn d / fD, n> >= 0, cleared to integers.
-        %   <s - grad q(a), n> is (fD*vd*<s,n> - <ga,n>)/(fD*vd), and
-        %   t* <Q d, n> = T(s) * (d' Hn n) / (fD*vd*alpha*fD) ... clear everything by fD*vd*alpha:
+        rows = [dom; Td];                                  % 0 <= t*
+        if ~e.isRay
+            rows(end+1,:) = [-Td(1), -Td(2), ratQ.chk(alpha - Td(3), 'edge upper')]; %#ok<AGROW>
+        end
+        % the multiplier condition, cleared by alpha > 0
+        n = outwardNormalOf(sh, j, Vi);
         Hdn = ratQ.chk(d.' * Hn * n, 'edge multiplier coupling');
-        Mu  = [ratQ.chk(alpha*fD*vd*n(1) - Td(1)*Hdn, 'm1'), ...
-               ratQ.chk(alpha*fD*vd*n(2) - Td(2)*Hdn, 'm2'), ...
-               ratQ.chk(-alpha*(ga.'*n) - Td(3)*Hdn, 'm0')];
-        con(end+1,:) = [ratQ.conic([0 0 0, Mu(1), Mu(2), Mu(3)]), sgnOf(Mu, +1)]; %#ok<AGROW>
-
-        cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
+        rows(end+1,:) = [ratQ.chk(alpha*fD*vd*n(1) - Td(1)*Hdn, 'm1'), ...
+                         ratQ.chk(alpha*fD*vd*n(2) - Td(2)*Hdn, 'm2'), ...
+                         ratQ.chk(-alpha*(ga.'*n) - Td(3)*Hdn, 'm0')]; %#ok<AGROW>
+        [con, ok] = toCon(rows);
+        if ok
+            cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
+        end
     end
 
-    % ---- the INTERIOR cell ---------------------------------------------------------------------
-    % x* = Q^-1(s-L) = fD*A*(s - L/fD)/D with A = adj(Hn); membership is <n_j, x*> <= <n_j, v_j>
-    % for every facet j, cleared to integers.
+    % ---- the INTERIOR cell ----------------------------------------------------------------------
+    % x* = H^-1(s - L) = fD*A*(s - L/fD)/D with A = adj(Hn); it is in the piece exactly when every
+    % half-plane holds there, and each of those is affine in s.
     A = [Hn(2,2), -Hn(1,2); -Hn(1,2), Hn(1,1)];
-    den = ratQ.chk(2 * fD * D, 'interior cell denominator');
     ALn = A * Ln;
     numI = [0 0 0 0, ratQ.chk(2*fD^2*A(1,1),'c5'), ratQ.chk(2*fD^2*A(1,2),'c6'), ...
             ratQ.chk(2*fD^2*A(2,2),'c7'), ratQ.chk(-2*fD*ALn(1),'c8'), ...
             ratQ.chk(-2*fD*ALn(2),'c9'), ratQ.chk(Ln.'*ALn - 2*D*kn, 'c10')];
-    conI = zeros(0,7);
-    for i = 1:m
-        n = outwardNormal(Vi, cyc, i);
-        a = Vi(cyc(i), :).';
-        % <n, fD*A*(s - L/fD)/D>  <=  <n, a/vd>
-        %   multiply by D*fD*vd (positive, since D > 0 and fD, vd > 0):
-        %   vd*fD*<n, A s> - vd*<n, A Ln>  -  D*fD*<n,a>  <=  0
-        An = A.' * n;
-        row = [0 0 0, ratQ.chk(vd*fD*An(1), 'i1'), ratQ.chk(vd*fD*An(2), 'i2'), ...
-               ratQ.chk(-vd*(An.'*Ln) - D*(n.'*a), 'i0')];
-        conI(end+1,:) = [ratQ.conic(row), sgnOf(row(4:6), -1)]; %#ok<AGROW>
+    rows = dom;
+    for r = 1:size(sh.hp,1)
+        % hp is [p q c] meaning p*x + q*y + c >= 0 at actual points; substitute x = fD*A*s/D - A*L/D
+        p = sh.hp(r,1:2);
+        Ap = A.' * p.';
+        rows(end+1,:) = [ratQ.chk(fD*Ap(1), 'i1'), ratQ.chk(fD*Ap(2), 'i2'), ...
+                         ratQ.chk(-(Ap.'*Ln) + D*sh.hp(r,3), 'i0')]; %#ok<AGROW>
     end
-    cells(end+1) = struct('num', numI, 'den', den, 'con', conI);
+    [con, ok] = toCon(rows);
+    if ok
+        cells(end+1) = struct('num', numI, 'den', ratQ.chk(2*fD*D,'interior denominator'), ...
+                              'con', con);
+    end
 
     g = assembleQuaConCells(cells);
 end
 
-% --------------------------------------------------------------------------------------------
+function n = outwardNormalOf(sh, j, Vi)
+% objective: the OUTWARD normal of edge j, as an integer column.
+%
+% Built from the edge's own direction and then ORIENTED, rather than matched against the
+% half-plane list. Matching by perpendicularity is AMBIGUOUS whenever two edges are parallel: on
+% the unit square the top and bottom edges have the same normal direction, so the scan returned the
+% first one and the top edge's cell came out as s2 <= 1 where it must be s2 >= 1. Measured: 74 of
+% 307 dual points wrong and 53 in no cell at all.
+%
+% Outward means every point and every recession direction of the piece lies on the NON-positive
+% side: <n, v - a> <= 0 for each vertex v, and <n, r> <= 0 for each recession direction r. That
+% fixes the sign with no reference to any other edge, so parallel edges cannot be confused.
+    d = sh.ed(j).d(:);
+    n = [d(2); -d(1)];
+    a = Vi(sh.ed(j).a, :).';
+    for i = 1:numel(sh.vs)
+        t = ratQ.chk(n.' * (Vi(sh.vs(i), :).' - a), 'orientation');
+        if t > 0, n = -n; return, end
+        if t < 0, return, end
+    end
+    for r = 1:size(sh.rays,1)
+        t = ratQ.chk(n.' * sh.rays(r,:).', 'orientation');
+        if t > 0, n = -n; return, end
+        if t < 0, return, end
+    end
+end
+
+function [con, ok] = toCon(rows)
+% objective: turn [a b c] half-planes into the H-form [conic6, side] rows, dropping the ones that
+%            say nothing and reporting the ones that make the cell EMPTY.
+%
+% A row whose linear part vanishes is not a constraint on s at all: it reads c >= 0, which is
+% either vacuous (c >= 0) or unsatisfiable (c < 0). Dropping BOTH would be wrong -- the second
+% means the cell is empty -- so the two are separated here rather than silently merged.
+    ok = true;  con = zeros(0,7);
+    if isempty(rows), return, end
+    for r = 1:size(rows,1)
+        if all(rows(r,1:2) == 0)
+            if rows(r,3) < 0, ok = false; return, end
+            continue                                   % vacuous
+        end
+        con(end+1,:) = [ratQ.conic([0 0 0, rows(r,:)]), sgnOf(rows(r,:), +1)]; %#ok<AGROW>
+    end
+end
 
 function s = sgnOf(row, want)
 % objective: the H-form sign for a constraint written as `row <= 0` (want = -1) or `row >= 0`
@@ -355,214 +349,220 @@ function s = sgnOf(row, want)
     if r(nz) < 0, s = -want; else, s = want; end
 end
 
-function [Vi, vd, cyc] = polygonExactly(obj, k)
-% objective: FACE k's vertices as integers over ONE denominator, plus the cycle order.
-% [output] Vi : nv x 2 integer (the whole mesh); vd : positive integer;
-%          cyc : 1 x m indices into Vi, in boundary order around face k
+function sh = pieceShape(obj, k, Vi, vd)
+% objective: everything the conjugate needs to know about ONE piece's geometry, bounded or not.
+% [output] sh : struct with
+%     vs    : the piece's true vertex indices (a ray's direction marker is NOT one)
+%     ed    : struct array of edges, each with .a (base vertex index), .d (integer direction),
+%             .b (the other vertex index, 0 for a ray) and .isRay
+%     rays  : r x 2 integer extreme recession directions
+%     hp    : h x 3 half-planes [a b c] meaning a*x + b*y + c >= 0 on the piece, in ACTUAL
+%             coordinates
+%     bounded : logical
 %
-% The cycle is walked from E rather than taken from P, so this does not depend on P's clockwise/
-% counter-clockwise convention -- a convention it would be easy to read backwards, and reading it
-% backwards flips every outward normal, which turns every cell into its complement.
-    [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
+% ONE ROUTINE FOR BOTH SHAPES, replacing the cycle walk. A bounded face was described by walking its
+% boundary in order, which an unbounded face has no way to give -- its boundary is not a cycle. The
+% edge list plus the half-planes is what both shapes DO have, and nothing downstream actually needed
+% the ordering: the vertex normal cones are built from the edges incident to each vertex and the
+% cells from pairwise comparisons.
+%
+% THE SIDE OF EACH EDGE is fixed by requiring every vertex AND every recession direction of the
+% piece to satisfy it, so no orientation convention is consulted and none can be read backwards. A
+% recession direction imposes a condition on the LINEAR PART only: the constraint must survive
+% travelling to infinity along it, which is <n, d> >= 0.
+%
+% TWO COORDINATE SYSTEMS, NOT TO BE MIXED. Vi holds NUMERATORS over vd, so one line reads
+% n.X + c0 = 0 at numerators and vd*n.x + c0 = 0 at actual points. The side is decided at
+% numerators, where the vertices live; the row is emitted for actual points, where eval reads it.
+% Using one where the other belongs rescales the offset into a PARALLEL line -- the defect measured
+% in biconjQ on a triangle with half-integer vertices, which excluded two of its own three vertices.
     own = find(any(obj.F == k, 2));
-    E = obj.E(own, :);
-    if isempty(E)
+    if isempty(own)
         error('PLQ:conjQ:noFace', 'face %d has no edges.', k);
     end
-    % An INTERNAL INVARIANT since caseE landed: conjPieceQ tests boundedness first and routes an
-    % unbounded piece elsewhere, so this cannot fire from there. Kept because the routine's own
-    % contract is about its input -- walking a cycle that does not close would otherwise build a
-    % silently wrong polygon rather than raise.
-    if any(E(:,3) == 0)
-        error('PLQ:conjQ:unbounded', ...
-            ['the exact conjugate needs a BOUNDED piece; face %d has a ray (edge %d). The ' ...
-             'unbounded polyhedral pieces -- wedges and half-strips -- are a real case and a ' ...
-             'separate one: the sup can be +inf, so dom f* stops being the whole plane.'], ...
-            k, own(find(E(:,3) == 0, 1)));
-    end
-    m = size(E,1);
-    adj = zeros(size(Vi,1), 2);
-    for j = 1:m
-        for c = 1:2
-            v = E(j,c);
-            if adj(v,1) == 0, adj(v,1) = E(j,3-c); else, adj(v,2) = E(j,3-c); end
+    E = obj.E(own, :);
+
+    sh.vs = [];
+    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {});
+    sh.rays = zeros(0,2);
+    for j = 1:size(E,1)
+        a = E(j,1);  b = E(j,2);
+        d = ratQ.chk(Vi(b,:) - Vi(a,:), 'edge direction');
+        if E(j,3) ~= 0
+            sh.vs = [sh.vs; a; b];
+            sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false); %#ok<AGROW>
+        else
+            sh.vs = [sh.vs; a];
+            sh.ed(end+1) = struct('a', a, 'b', 0, 'd', d, 'isRay', true); %#ok<AGROW>
+            sh.rays(end+1,:) = d; %#ok<AGROW>
         end
     end
-    cyc = zeros(1, m);
-    cyc(1) = E(1,1);  cyc(2) = E(1,2);
-    for k = 3:m
-        nxt = adj(cyc(k-1), :);
-        cyc(k) = nxt(nxt ~= cyc(k-2));
-    end
-    if numel(unique(cyc)) ~= m
-        error('PLQ:conjQ:notSimple', ...
-            'the boundary of face %d is not a single simple cycle of %d edges.', k, m);
-    end
-end
+    sh.vs = unique(sh.vs);
+    sh.bounded = isempty(sh.rays);
 
-function dirs = edgeDirsAtVertex(Vi, cyc, i)
-% objective: the two edge directions leaving cycle position i, as integer column vectors.
-    m = numel(cyc);
-    v  = Vi(cyc(i), :).';
-    p  = Vi(cyc(mod(i-2, m) + 1), :).';
-    n  = Vi(cyc(mod(i,   m) + 1), :).';
-    dirs = {ratQ.chk(n - v, 'edge direction'), ratQ.chk(p - v, 'edge direction')};
-end
-
-function n = outwardNormal(Vi, cyc, i)
-% objective: the OUTWARD normal of the edge from cycle position i to i+1, as an integer vector.
-%
-% The direction is fixed by testing against the polygon's own centroid, exactly: the outward side
-% is the one the centroid is NOT on. Orientation conventions are not consulted, so this cannot be
-% read backwards -- and reading it backwards would turn every cell into its complement.
-    m = numel(cyc);
-    a = Vi(cyc(i), :).';
-    b = Vi(cyc(mod(i, m) + 1), :).';
-    d = b - a;
-    n = [d(2); -d(1)];
-    ctr = sum(Vi(cyc, :), 1).';                 % m * centroid, same denominator
-    if ratQ.chk(n.' * (ctr - m*a), 'centroid side') > 0
-        n = -n;
-    end
-end
-
-function g = maxOverVerticesQuaCon(fN, fD, Vi, vd, cyc)
-% objective: the max of the AFFINE functions <s,v> - q(v) over the polygon's vertices, as a QuaCon.
-%
-% RENAMED 2026-09-04 from caseCConcaveOnPolygon, because the construction was never about
-% concavity: it is the max of finitely many affine functions and is meaningful for any q. What
-% concavity supplied was the THEOREM that this max IS the conjugate -- and caseDBoundaryMax now
-% owns that reasoning, in the more general form that also covers the indefinite and PSD-singular
-% cases. For a concave q that routine finds no qualifying edge and returns exactly this object, so
-% the concave case is unchanged, not merely similar.
-%
-% WHY THIS CASE IS EASY, AND IT IS THE MATHEMATICS THAT MAKES IT SO. If q is concave then -q is
-% convex, so the objective <s,x> - q(x) is CONVEX in x, and a convex function attains its maximum
-% over a polytope at an EXTREME POINT. Hence
-%       q*(s) = max_i [ <s, v_i> - q(v_i) ],
-% a maximum of finitely many AFFINE functions of s -- no normal cones, no multipliers, no interior
-% cell, and no curvature anywhere in the answer. The affine case is the same statement with a zero
-% Hessian, which is why one branch serves both.
-%
-% This is the conjugate half of what ALGORITHM.md calls the concave envelope: co q on the polygon
-% is the affine interpolant over the LOWER HULL of the lifted vertices, and the cells below are
-% exactly that hull's normal fan. The vertices NOT on the lower hull are the ones whose cell comes
-% out empty -- so assembleQuaCon's feasibility filter is doing real work here rather than tidying,
-% and that is why it had to be exact.
-    Hn = [fN(5) fN(6); fN(6) fN(7)];
-    Ln = [fN(8); fN(9)];
-    kn = fN(10);
-    m  = numel(cyc);
-
-    % q(v_i), over the common denominator 2*fD*vd^2 -- the same clearing as Case B's vertex cells
-    qv = zeros(m,1);
-    for i = 1:m
-        v = Vi(cyc(i), :).';
-        qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
-    end
-
-    den = ratQ.chk(2 * fD * vd^2, 'cell denominator');
-    cells = struct('num', {}, 'den', {}, 'con', {});
-    for i = 1:m
-        vi = Vi(cyc(i), :).';
-        num = [0 0 0 0, 0, 0, 0, ...
-               ratQ.chk(2*fD*vd*vi(1), 'c8'), ratQ.chk(2*fD*vd*vi(2), 'c9'), -qv(i)];
-
-        % cell i:  <s,v_i> - q(v_i) >= <s,v_j> - q(v_j)  for every other vertex j, cleared by the
-        % same positive 2*fD*vd^2:
-        %       2*fD*vd*<s, Vi_i - Vi_j>  -  (qv_i - qv_j)  >= 0
-        con = zeros(0,7);
-        for j = 1:m
-            if j == i, continue, end
-            vj = Vi(cyc(j), :).';
-            row = [0 0 0, ratQ.chk(2*fD*vd*(vi(1)-vj(1)), 'd1'), ...
-                          ratQ.chk(2*fD*vd*(vi(2)-vj(2)), 'd2'), ...
-                          ratQ.chk(-(qv(i) - qv(j)), 'd0')];
-            if all(row(4:6) == 0)
-                % Two DISTINCT vertices cannot give a zero direction, so this can only be reached
-                % if the polygon carried a repeated vertex. Refuse rather than skip: a repeated
-                % vertex means the caller's mesh is malformed, and silently ignoring it would put
-                % a duplicated affine piece into the answer.
-                error('PLQ:conjQ:repeatedVertex', ...
-                    'polygon vertices %d and %d coincide, so the domain is not a simple polygon.', ...
-                    cyc(i), cyc(j));
+    % ---- the half-planes -----------------------------------------------------------------------
+    sh.hp = zeros(0,3);
+    for j = 1:numel(sh.ed)
+        p = Vi(sh.ed(j).a, :);
+        n = [sh.ed(j).d(2), -sh.ed(j).d(1)];          % a normal to this edge
+        c0 = ratQ.chk(-(n * p.'), 'offset');
+        sgn = 0;
+        for i = 1:numel(sh.vs)
+            v = Vi(sh.vs(i), :);
+            t = ratQ.chk(n(1)*v(1) + n(2)*v(2) + c0, 'vertex side');
+            if t ~= 0, sgn = sign(t); break, end
+        end
+        if sgn == 0
+            for r = 1:size(sh.rays,1)
+                t = ratQ.chk(n * sh.rays(r,:).', 'recession side');
+                if t ~= 0, sgn = sign(t); break, end
             end
-            con(end+1,:) = [ratQ.conic(row), sgnOf(row(4:6), +1)]; %#ok<AGROW>
         end
-        cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
+        if sgn == 0, continue, end                     % everything on the line: degenerate
+        sh.hp(end+1,:) = sgn * [ratQ.chk(vd*n(1), 'edge normal'), ...
+                                ratQ.chk(vd*n(2), 'edge normal'), c0]; %#ok<AGROW>
     end
-
-    g = assembleQuaConCells(cells);
 end
 
-function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
-% objective: the conjugate of a quadratic that is NOT positive definite, over a bounded convex
-%            polygon -- indefinite, negative definite, concave, affine, or PSD-singular.
-%
-% THE ONE FACT THAT MAKES THIS CASE TRACTABLE, and it replaces the whole A.2-A.5 apparatus for the
-% conjugate: when H is not positive DEFINITE, the sup of <s,x> - q(x) over P is attained on the
-% BOUNDARY of P. Suppose it were attained at an interior point x0. Then x0 is a local maximum of
-% the objective, so the objective's Hessian -H must be negative semidefinite there, i.e. H is PSD.
-% If H is PSD but SINGULAR the argument still gives the boundary: there is a direction d with
-% d'Hd = 0, along which the objective is affine, so from any interior maximiser one can travel to
-% the boundary without decreasing. Only a positive DEFINITE H makes the interior stationary point a
-% strict maximiser, and that is Case B.
-%
-% So q*(s) is the largest of finitely many CANDIDATES:
-%
-%   every vertex v          val_v(s) = <s,v> - q(v),  AFFINE in s, always available;
-%   every edge of positive  the clamped stationary point of the edge's 1-D restriction, QUADRATIC
-%   curvature d'Hd > 0      in s, and available only where 0 <= t* <= 1 -- which is a pair of
-%                           AFFINE conditions, since t* = T(s)/alpha is affine.
-%
-% An edge of non-positive curvature has a convex (or affine) restriction, so its maximum sits at an
-% endpoint and it contributes no candidate at all -- both endpoints are already vertices. When H is
-% negative semidefinite NO edge qualifies, the candidate set is just the vertices, and this routine
-% degenerates to exactly maxOverVerticesQuaCon. So the concave case is one branch of this, not a
-% separate algorithm.
-%
-% ------------------------------------------------------------------------------------------------
-% CLASSIFY FIRST, SPLIT LAST -- and here that is worth a measurement, not just a principle.
-%
-% The obvious implementation makes each edge's clamped maximum into a total three-piece function
-% and folds them pairwise with maxQ. That is CORRECT and was the first version, but each fold
-% re-splits cells the previous fold had already separated, and the splits are CONIC, so no exact
-% test available today can tell that the resulting cell is empty. Measured on a PSD-singular
-% pentagon: 501 faces, of which 75 were ever occupied and which carried 10 distinct functions.
-% Three sound filters (linear infeasibility, contradictory sides, constant-sign conics) took it to
-% 274, and exact redundancy elimination shrank the lists from 14 constraints to 6.3 without
-% removing a single cell -- because what separates those cells is curved.
-%
-% This version removes the cause instead of filtering the symptom. EVERY availability condition is
-% AFFINE, so the arrangement they cut the plane into is a LINE arrangement, whose cells
-% ratQ.feasible2 decides exactly and completely. Build that arrangement first, pruning as it grows;
-% only then, inside each cell, ask which of the few surviving candidates is largest -- and that is
-% the only place a conic ever enters. The exponential 3^m enumeration never materialises because an
-% infeasible partial assignment is dropped as soon as it is infeasible.
+function dirs = dirsAtVertex(sh, i)
+% objective: the edge directions leaving vertex index i, as integer column vectors.
+% A ray contributes its direction at its BASE only -- its far end is a marker, not a vertex.
+    dirs = {};
+    for j = 1:numel(sh.ed)
+        e = sh.ed(j);
+        if e.a == i
+            dirs{end+1} = e.d(:); %#ok<AGROW>
+        elseif ~e.isRay && e.b == i
+            dirs{end+1} = -e.d(:); %#ok<AGROW>
+        end
+    end
+end
 
+function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
+% objective: decide whether the sup can be finite on this piece, and return the LINEAR conditions
+%            on s that make it so.
+% [output] ok : false when the sup is +infinity for every s, i.e. dom f* is empty
+%          dom : d x 3 half-planes on s;  why : the reason when ok is false
+%
+% ALONG a recession direction d the objective carries  t*slope(x)  -  (t^2/2) d'Hd, so
+%   d'Hd > 0   the objective falls away: no condition at all;
+%   d'Hd < 0   it rises without bound for every s: dom f* is EMPTY;
+%   d'Hd = 0   it is linear in t and finite exactly when the slope is <= 0 -- for EVERY x of the
+%              piece, since the ray may be based anywhere on it.
+%
+% THE NULL CASE IS STILL A HALF-PLANE, and working that out removed a refusal rather than adding
+% one. The slope is
+%       slope(x) = <s - L, d> - <Hd, x>,
+% so the condition is  <s - L, d>  <=  inf over the piece of <Hd, x>  -- and that infimum is a
+% LINEAR PROGRAM over a polyhedron, hence: minus infinity when some recession direction r has
+% <Hd, r> < 0 (and then no s works at all, so dom f* is empty), and otherwise the minimum over the
+% VERTICES. Both are exact integer computations. When Hd = 0 the infimum is 0 and this reduces to
+% <s - L, d> <= 0, which is the concave case's own condition.
+    ok = true;  dom = zeros(0,3);  why = '';
+    R = sh.rays;
+    if isempty(R), return, end
+
+    for r = 1:size(R,1)
+        if ratQ.chk(R(r,:) * Hn * R(r,:).', 'ray curvature') < 0
+            ok = false;
+            why = sprintf('the piece recedes along (%d,%d), where the objective rises without bound for every s', ...
+                          R(r,1), R(r,2));
+            return
+        end
+    end
+    % THE CONE, NOT ONLY ITS GENERATORS. On cone(d1,d2) the form is a*l1^2 + 2b*l1*l2 + c*l2^2, and
+    % it is nonnegative for every l >= 0 exactly when a >= 0, c >= 0 and (b >= 0 or b^2 <= a*c).
+    % Testing the generators alone would miss a negative direction strictly inside the cone.
+    if size(R,1) >= 2
+        a = ratQ.chk(R(1,:)*Hn*R(1,:).', 'cone a');
+        b = ratQ.chk(R(1,:)*Hn*R(2,:).', 'cone b');
+        c = ratQ.chk(R(2,:)*Hn*R(2,:).', 'cone c');
+        if b < 0 && ratQ.chk(b^2 - a*c, 'cone discriminant') > 0
+            ok = false;
+            why = 'some direction strictly inside the recession cone has negative curvature';
+            return
+        end
+    end
+
+    for r = 1:size(R,1)
+        d = R(r,:).';
+        if ratQ.chk(d.' * Hn * d, 'ray curvature') ~= 0, continue, end
+        Hd = ratQ.chk(Hn * d, 'null direction image');
+
+        % inf over the piece of <Hd, x>: -infinity if it decreases along some recession direction
+        for q = 1:size(R,1)
+            if ratQ.chk(R(q,:) * Hd, 'slope along recession') < 0
+                ok = false;
+                why = sprintf(['the objective''s slope along the null recession direction ' ...
+                               '(%d,%d) is unbounded above on the piece'], d(1), d(2));
+                return
+            end
+        end
+        mu = inf;
+        for i = 1:numel(sh.vs)
+            t = ratQ.chk(Vi(sh.vs(i), :) * Hd, 'slope at vertex');
+            if t < mu, mu = t; end          % over vd, like Vi itself
+        end
+
+        % <s,d> - (Ln.d)/fD <= mu/vd, cleared by fD*vd > 0 and written as a >= 0 half-plane
+        row = [ratQ.chk(-fD*vd*d(1), 'r1'), ratQ.chk(-fD*vd*d(2), 'r2'), ...
+               ratQ.chk(fD*mu + vd*(Ln.'*d), 'r0')];
+        if all(row == 0), continue, end
+        dom(end+1,:) = row; %#ok<AGROW>
+    end
+end
+
+function g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom)
+% objective: the conjugate of a quadratic that is NOT positive definite, over one polyhedral piece,
+%            bounded or not.
+%
+% THE ONE FACT THAT MAKES THIS CASE TRACTABLE, and it replaces the whole A.2-A.5 apparatus: when H
+% is not positive DEFINITE the sup of <s,x> - q(x) over P is attained on the BOUNDARY. An interior
+% maximiser would force the objective's Hessian -H to be negative semidefinite, i.e. H PSD; and if H
+% is PSD but SINGULAR there is a direction of zero curvature along which one can walk to the
+% boundary without decreasing. Only a positive definite H makes the interior stationary point a
+% strict maximiser, and that is caseB.
+%
+% So q*(s) is the largest of finitely many CANDIDATES: every vertex value <s,v> - q(v), which is
+% affine; and for every edge of positive curvature d'Hd > 0, that edge's clamped one-dimensional
+% maximum, which is quadratic and available only where the clamp is inactive -- an AFFINE condition,
+% since t* = T(s)/alpha is affine. An edge of non-positive curvature has a convex restriction whose
+% maximum sits at an endpoint, already carried by the vertices, so it contributes nothing.
+%
+% GENERALISED 2026-09-04 to an unbounded piece. A RAY is clamped only at its base, so its
+% availability is the single condition t* >= 0 rather than 0 <= t* <= 1; and the finiteness
+% conditions on s that an unbounded piece imposes arrive as `dom` and are affine too, so they simply
+% join the arrangement below. When H is negative semidefinite no edge qualifies, the candidate set
+% is the vertices alone, and this returns exactly the vertex max -- so the concave case is one
+% branch of this rather than a separate algorithm.
+%
+% CLASSIFY FIRST, SPLIT LAST. Every availability condition is AFFINE, so they cut the plane into a
+% LINE arrangement whose cells ratQ.feasible2 decides exactly AND completely. Build that first,
+% pruning each partial assignment the moment it is infeasible -- so the 3^(#edges) enumeration never
+% materialises -- and only then ask which of a cell's few surviving candidates is largest, which is
+% the only place a conic ever enters. Measured when this replaced a pairwise maxQ fold: 274 faces
+% to 121, and 10 s to 4 s.
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     Ln = [fN(8); fN(9)];
     kn = fN(10);
-    m  = numel(cyc);
+    m  = numel(sh.vs);
 
-    % ---- the vertex candidates, and the linear cells on which each is the vertex maximum -------
     denV = ratQ.chk(2 * fD * vd^2, 'vertex denominator');
     qv = zeros(m,1);  numV = zeros(m,10);
     for i = 1:m
-        v = Vi(cyc(i), :).';
+        v = Vi(sh.vs(i), :).';
         qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
         numV(i,:) = [0 0 0 0, 0, 0, 0, ...
                      ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv(i)];
     end
 
-    % ---- the edge candidates ------------------------------------------------------------------
-    Ed = struct('Td', {}, 'alpha', {}, 'num', {}, 'den', {});
-    for j = 1:m
-        a = Vi(cyc(j), :).';
-        b = Vi(cyc(mod(j, m) + 1), :).';
-        d = ratQ.chk(b - a, 'edge direction');
+    Ed = struct('Td', {}, 'alpha', {}, 'num', {}, 'den', {}, 'isRay', {});
+    for j = 1:numel(sh.ed)
+        e = sh.ed(j);
+        d = e.d(:);
         alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
         if alpha <= 0, continue, end
+        a  = Vi(e.a, :).';
         ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
         qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'edge base value');
         Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chk(-(ga.'*d),'t0')];
@@ -574,24 +574,21 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
                     ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ...
                     ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
                     ratQ.chk(Td(3)^2 - alpha*qa,'c10')], ...
-            'den', ratQ.chk(2*alpha*fD*vd^2, 'edge denominator')); %#ok<AGROW>
+            'den', ratQ.chk(2*alpha*fD*vd^2, 'edge denominator'), 'isRay', e.isRay); %#ok<AGROW>
     end
 
-    % ---- the LINE arrangement, built incrementally and pruned exactly at every step -------------
-    % A cell records the half-planes defining it, which vertex is the vertex maximum there, and
-    % which edge candidates are available. Every condition here is affine, so feasible2 decides
-    % emptiness exactly -- this is the pruning that keeps 3^(#edges) from ever being enumerated.
+    % ---- the LINE arrangement: which vertex leads, and which edges are available ---------------
     cells0 = struct('lin', {}, 'vi', {}, 'ei', {});
     for i = 1:m
-        rows = zeros(0,3);
+        rows = dom;
         for j = 1:m
             if j == i, continue, end
-            r = [ratQ.chk(2*fD*vd*(Vi(cyc(i),1)-Vi(cyc(j),1)), 'd1'), ...
-                 ratQ.chk(2*fD*vd*(Vi(cyc(i),2)-Vi(cyc(j),2)), 'd2'), ...
+            r = [ratQ.chk(2*fD*vd*(Vi(sh.vs(i),1)-Vi(sh.vs(j),1)), 'd1'), ...
+                 ratQ.chk(2*fD*vd*(Vi(sh.vs(i),2)-Vi(sh.vs(j),2)), 'd2'), ...
                  ratQ.chk(-(qv(i) - qv(j)), 'd0')];
             if all(r == 0)
                 error('PLQ:conjQ:repeatedVertex', ...
-                    'polygon vertices %d and %d coincide.', cyc(i), cyc(j));
+                    'piece vertices %d and %d coincide.', sh.vs(i), sh.vs(j));
             end
             rows(end+1,:) = r; %#ok<AGROW>
         end
@@ -602,16 +599,23 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
 
     for e = 1:numel(Ed)
         Td = Ed(e).Td;  alpha = Ed(e).alpha;
-        regimes = { [-Td(1) -Td(2) -Td(3)], ...                                   % t* <= 0
-                    [Td; -Td(1), -Td(2), alpha - Td(3)], ...                      % 0 <= t* <= 1
-                    [Td(1) Td(2) Td(3)-alpha] };                                  % t* >= 1
+        if Ed(e).isRay
+            % clamped at the base only: available on t* >= 0, unavailable on t* <= 0
+            regimes = { [-Td(1) -Td(2) -Td(3)], Td };
+            avail   = [false, true];
+        else
+            regimes = { [-Td(1) -Td(2) -Td(3)], ...
+                        [Td; -Td(1), -Td(2), alpha - Td(3)], ...
+                        [Td(1) Td(2) Td(3)-alpha] };
+            avail   = [false, true, false];
+        end
         nxt = struct('lin', {}, 'vi', {}, 'ei', {});
         for c = 1:numel(cells0)
-            for r = 1:3
+            for r = 1:numel(regimes)
                 lin = [cells0(c).lin; regimes{r}];
                 if ~ratQ.feasible2(lin, true), continue, end
                 ei = cells0(c).ei;
-                if r == 2, ei = [ei, e]; end
+                if avail(r), ei = [ei, e]; end
                 nxt(end+1) = struct('lin', lin, 'vi', cells0(c).vi, 'ei', ei); %#ok<AGROW>
             end
         end
@@ -619,15 +623,10 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
     end
 
     % ---- inside each linear cell, the winner among its few candidates --------------------------
-    % This is the ONLY place a conic appears: the difference of a vertex affine and an edge
-    % quadratic, or of two edge quadratics.
     out = struct('num', {}, 'den', {}, 'con', {});
     for c = 1:numel(cells0)
-        base = [zeros(size(cells0(c).lin,1), 3), cells0(c).lin, ones(size(cells0(c).lin,1),1)];
-        for k = 1:size(base,1)
-            row = ratQ.conic(base(k,1:6));
-            base(k,:) = [row, sgnOf(base(k,4:6), +1)];
-        end
+        [base, ok] = toCon(cells0(c).lin);
+        if ~ok, continue, end
 
         cand = struct('num', {}, 'den', {});
         cand(1) = struct('num', numV(cells0(c).vi,:), 'den', denV);
@@ -640,7 +639,7 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
             for j = 1:numel(cand)
                 if j == i, continue, end
                 [dn, ~] = ratQ.sub(cand(i).num, cand(i).den, cand(j).num, cand(j).den);
-                if all(dn == 0), continue, end        % the same function: no boundary between them
+                if all(dn == 0), continue, end
                 R = ratQ.chk([dn(5), 2*dn(6), dn(7), 2*dn(8), 2*dn(9), 2*dn(10)], 'winner');
                 con(end+1,:) = [ratQ.conic(R), sgnOf(R, +1)]; %#ok<AGROW>
             end
@@ -649,142 +648,4 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, cyc)
     end
 
     g = assembleQuaConCells(out);
-end
-
-function g = caseEUnboundedConcave(fN, fD, Vi, vd, vs, rays)
-% objective: the conjugate of a CONCAVE or AFFINE quadratic over an UNBOUNDED polyhedral piece.
-% [input]  fN, fD : the piece's function, exactly;  Vi, vd : the mesh vertices over one denominator
-%          vs     : the indices of this piece's own vertices;  rays : k x 2 integer directions
-% [output] g      : QuaCon -- and unlike every case so far, its cells DO NOT COVER THE PLANE
-%
-% ------------------------------------------------------------------------------------------------
-% THIS IS THE FIRST CASE WHERE dom f* IS A PROPER SUBSET, and that is the mathematics, not a gap.
-%
-% Along a recession direction d of the piece, with a any point of it,
-%       <s, a+td> - q(a+td)  =  [ <s,a> - q(a) ]  +  t <s - grad q(a), d>  -  (t^2/2) d'Hd,
-% so the sup is +infinity as soon as the leading behaviour is upward. With H negative semidefinite
-% the quadratic term is -(t^2/2) d'Hd >= 0, so it ALREADY diverges unless d'Hd = 0 -- and for an
-% NSD H that is equivalent to Hd = 0. Two consequences, both exact tests on integers:
-%
-%   * if Hd is nonzero for some recession direction, f* is +infinity EVERYWHERE and dom f* is
-%     empty. Refused by name: a function with no domain has no QuaCon to be stored in, which is a
-%     representational gap this type shares with conjCPLQ (`conjugateHasEmptyDomain`).
-%
-%   * otherwise Hd = 0 makes <grad q(a), d> = <Ha + L, d> = a'Hd + <L,d> = <L,d>, independent of
-%     which point of the ray is used, so the finiteness condition is
-%           <s - L, d>  <=  0
-%     -- LINEAR in s, and linear in d as well, which is why testing it on the EXTREME rays settles
-%     it for the whole recession cone rather than only its generators.
-%
-% dom f* is therefore the polar-type cone { s : <s - L, d> <= 0 for every ray direction d }, and on
-% it the objective is CONVEX in x (its Hessian is -H, positive semidefinite), so the maximum over
-% the piece is attained at an EXTREME POINT -- and the extreme points of a polyhedron are exactly
-% its vertices, unbounded or not. So the value is the same vertex max as the bounded concave case;
-% all that changes is that every cell also carries the domain constraints.
-%
-% WHAT THIS COVERS, and it is the reason to build it before the general unbounded case: q AFFINE is
-% the H = 0 instance, and that is the whole family of elementary unbounded conjugates -- an
-% indicator function, a support function, a norm, max(0,x,y). Those are the inputs a user writes
-% first and the ones the legacy conjAffinePLQ exists for.
-
-    Hn = [fN(5) fN(6); fN(6) fN(7)];
-    Ln = [fN(8); fN(9)];
-    kn = fN(10);
-    m  = numel(vs);
-    if m == 0
-        error('PLQ:conjQ:noVertex', ...
-            ['an unbounded piece with no vertex at all is a half-plane or a slab, whose ' ...
-             'conjugate is supported on a line or a point -- a domain of dimension < 2, which ' ...
-             'this type cannot carry.']);
-    end
-
-    % ---- the finiteness conditions, and the refusal when there are none ----------------------
-    dom = zeros(0,3);
-    for r = 1:size(rays,1)
-        d = rays(r,:).';
-        if any(ratQ.chk(Hn * d, 'recession curvature') ~= 0)
-            error('PLQ:conjQ:emptyDomain', ...
-                ['the piece recedes along (%d,%d), where the objective grows without bound for ' ...
-                 'every s, so f* is +infinity everywhere and dom f* is EMPTY. That is the right ' ...
-                 'answer and there is nowhere to put it -- a QuaCon carries at least one face. ' ...
-                 'Same representational gap conjCPLQ records as conjugateHasEmptyDomain.'], ...
-                d(1), d(2));
-        end
-        % <s - L, d> <= 0, cleared by fD > 0 and written as a >= 0 half-plane
-        row = [ratQ.chk(-fD*d(1), 'r1'), ratQ.chk(-fD*d(2), 'r2'), ratQ.chk(Ln.'*d, 'r0')];
-        if all(row == 0), continue, end            % a zero direction constrains nothing
-        dom(end+1,:) = row; %#ok<AGROW>
-    end
-
-    % ---- the vertex values, exactly ----------------------------------------------------------
-    denV = ratQ.chk(2 * fD * vd^2, 'vertex denominator');
-    qv = zeros(m,1);  numV = zeros(m,10);
-    for i = 1:m
-        v = Vi(vs(i), :).';
-        qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
-        numV(i,:) = [0 0 0 0, 0, 0, 0, ...
-                     ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv(i)];
-    end
-
-    % ---- one cell per vertex that wins somewhere INSIDE dom f* --------------------------------
-    cells = struct('num', {}, 'den', {}, 'con', {});
-    for i = 1:m
-        rows = dom;
-        for j = 1:m
-            if j == i, continue, end
-            r = [ratQ.chk(2*fD*vd*(Vi(vs(i),1)-Vi(vs(j),1)), 'd1'), ...
-                 ratQ.chk(2*fD*vd*(Vi(vs(i),2)-Vi(vs(j),2)), 'd2'), ...
-                 ratQ.chk(-(qv(i) - qv(j)), 'd0')];
-            if all(r == 0)
-                error('PLQ:conjQ:repeatedVertex', ...
-                    'piece vertices %d and %d coincide.', vs(i), vs(j));
-            end
-            rows(end+1,:) = r; %#ok<AGROW>
-        end
-        if ~ratQ.feasible2(rows, true), continue, end     % this vertex never attains the max
-        con = zeros(size(rows,1), 7);
-        for t = 1:size(rows,1)
-            con(t,:) = [ratQ.conic([0 0 0, rows(t,:)]), sgnOf(rows(t,:), +1)];
-        end
-        cells(end+1) = struct('num', numV(i,:), 'den', denV, 'con', con); %#ok<AGROW>
-    end
-
-    g = assembleQuaConCells(cells);
-end
-
-function [vs, rays, bounded] = pieceGeometry(obj, k)
-% objective: face k's own vertices and its recession directions, exactly.
-% [output] vs      : the indices into obj.VN of the vertices on this face
-%          rays    : r x 2 INTEGER directions (over the shared vertex denominator, but a direction
-%                    is scale-free so the denominator never has to be divided out)
-%          bounded : true when the face has no ray edge
-%
-% A ray edge is stored as [v1 v2 0] meaning the ray [V(v1), V(v2)) -- base then a second point
-% giving the direction, both of them real vertices of the mesh (QuaPol.belongToEdge is where that
-% convention is written down). So the direction is simply V(v2) - V(v1), and it is exact.
-    own = find(any(obj.F == k, 2));
-    if isempty(own)
-        error('PLQ:conjQ:noFace', 'face %d has no edges.', k);
-    end
-    E = obj.E(own, :);
-    [Vi, ~] = ratQ.combineDen(obj.VN, obj.VD);
-
-    % A RAY EDGE STORES A DIRECTION MARKER, NOT A SECOND VERTEX. `[v1 v2 0]` means the ray
-    % [V(v1), V(v2)) -- v1 is the base and V(v2) only fixes the direction (QuaPol.belongToEdge is
-    % where that convention is written down). So V(v2) is a point OF the piece but not an extreme
-    % point of it, and putting it in the vertex list would ask the max to consider a point that can
-    % only ever tie. Harmless for the VALUE -- every point of the domain is bounded by the sup --
-    % but it manufactures cells that are empty, which is the thing this pass exists to avoid.
-    vs = [];
-    rays = zeros(0,2);
-    for j = 1:size(E,1)
-        if E(j,3) ~= 0
-            vs = [vs; E(j,1); E(j,2)]; %#ok<AGROW>
-        else
-            vs = [vs; E(j,1)]; %#ok<AGROW>
-            rays(end+1,:) = ratQ.chk(Vi(E(j,2),:) - Vi(E(j,1),:), 'ray direction'); %#ok<AGROW>
-        end
-    end
-    vs = unique(vs);
-    bounded = isempty(rays);
 end

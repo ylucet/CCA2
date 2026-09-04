@@ -37,6 +37,55 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (later) — `conjQ` IS COMPLETE for every 2-D domain. The refusals left are the ANSWER's shape.
+
+Supersedes the "NO" measured earlier the same day, which is kept below for its table. Re-run
+`.claude/coverage-probe.m` rather than reasoning about what it would say.
+
+    domain \ Hessian    PD    PSD-sing  indefinite  ND        NSD-sing  affine
+    full plane          OK    dim<2     dim<2       dim<2     dim<2     dim<2
+    bounded triangle    OK    OK        OK          OK        OK        OK
+    bounded square      OK    OK        OK          OK        OK        OK
+    unbounded wedge     OK    OK        emptyDom    emptyDom  emptyDom  OK
+    half-strip          OK    OK        emptyDom    emptyDom  OK        OK
+
+    multi-face bounded   OK        multi-face unbounded (oneNorm)  OK
+
+**Every OK cell is verified**, not merely non-throwing: 9060 dual points over all six Hessian
+classes at 0 wrong (`.claude/allH-sweep.m`), the unbounded family against a one-sided sampled sup
+plus a growth test (`.claude/unbounded-sweep.m`), and the new cells against separable closed forms.
+
+**Every `emptyDom` cell is CORRECT**, not a gap: the piece recedes along a direction of negative
+curvature, so `f*` really is `+infinity` everywhere and `dom f*` is empty. The only thing missing is
+somewhere to store a function with no domain -- a `QuaCon` carries at least one face. The same
+representational gap `conjCPLQ` records as `conjugateHasEmptyDomain`.
+
+**Every `dim<2` cell is likewise the ANSWER's shape**: a full-plane quadratic that is not strictly
+convex has `dom f*` equal to a point (affine `q`), a line (PSD-singular) or nothing. A needle or
+segment DOMAIN is the same story one level down.
+
+**So what closed the gap**, and it was two things, both of which turned a refusal into a
+computation:
+1. **The piece's geometry became an EDGE LIST plus HALF-PLANES** (`pieceShape`), replacing the
+   vertex-cycle walk that an unbounded face cannot supply. Nothing downstream needed the ordering:
+   normal cones come from the edges incident to a vertex, cells from pairwise comparisons. A ray is
+   then just an edge clamped at ONE end -- `t* >= 0` instead of `0 <= t* <= 1` -- which is one
+   affine condition instead of two, so `caseB` and `caseD` generalised without new machinery.
+2. **The null-recession condition is a linear program, not an obstacle.** Along a recession
+   direction of zero curvature the slope is `<s-L,d> - <Hd,x>`, so finiteness is
+   `<s-L,d> <= inf_P <Hd,x>` -- and that infimum over a polyhedron is minus infinity when some
+   recession direction decreases it (then `dom f*` is empty) and otherwise the MINIMUM OVER THE
+   VERTICES. Exact integer arithmetic throughout. This is what makes `conj(xy)` on the first
+   quadrant come out as the indicator of the third quadrant instead of a refusal.
+
+**One regression was introduced and caught by the existing tests**, worth recording because the
+cause is a classic: the outward normal of an edge was found by matching the half-plane list on
+PERPENDICULARITY, which is ambiguous whenever two edges are PARALLEL -- on the unit square the top
+edge picked up the bottom edge's normal, and its cell came out as `s2 <= 1` where it must be
+`s2 >= 1`. 74 of 307 dual points wrong, 53 in no cell. The normal is now built from the edge's own
+direction and oriented against the piece's vertices and recession directions, which refers to no
+other edge and so cannot confuse two parallel ones.
+
 ## 2026-09-04 — IS `conjQ` COMPLETE? NO. Measured, with the table.
 
 `.claude/coverage-probe.m` enumerates the input space along the axes the dispatch branches on --
