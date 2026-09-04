@@ -87,7 +87,7 @@ FAST_SUITES=(PLQVCTest QuaPolExactTest QuaParCPLQUnitTest QuaParTest RatParTest 
              biconjCPLQUnitTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest
              convEnvCPLQTest
              exactQTest frameAndFanTest infConvTest
-             lasryLionsTest maxQuaParTest mergeSameQuadFacesTest meshPredicateTest
+             lasryLionsTest maxQTest maxQuaParTest mergeSameQuadFacesTest meshPredicateTest
              moreauTest proxAverageTest
              QuaConTest ratQTest regionTest regionUnitTest symbolicFunctionUnitTest
              testSymbolicFunction)

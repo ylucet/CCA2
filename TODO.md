@@ -70,6 +70,20 @@ APC; gold is ~$3,290 and unnecessary.
       set: a collinear vertex under a strictly concave q is DOMINATED, and its cell is empty
       rather than small. Cross-checked against `linprog` on 1939 random systems, 0 disagreements.
 
+- [x] **DONE 2026-09-03: `maxQ` -- Step 3, the exact pointwise max of two `QuaCon`s**, and with it
+      `conjQ` on MULTI-FACE inputs (`f* = max_k (f|P_k)*`, so Step 3 is a fold rather than a
+      special algorithm). The H-form makes the overlay a CONCATENATION of two constraint lists --
+      no geometric intersection, no vertex merging, no arrangement -- against `maxQuaPar.m`'s 4654
+      lines of double geometry. This is also the first thing in the repository that PRODUCES a
+      genuine elliptical edge: the split boundary is `{g_i = g_j}`, whose quadratic part is
+      `(H_i - H_j)/2`. Verified against the pointwise max of its operands, and by asserting that
+      every face of the fold is EXACTLY (as a rational) a face of one operand.
+
+      Two gaps carried forward, both stated in `assembleQuaConCells` and neither able to produce a
+      wrong VALUE: a cell empty only because of a CURVED constraint is not detected (so `nf` is an
+      upper bound -- 38 cells where the true count is smaller), and corners involving a curved edge
+      are not named. Both need Phase 2c's exact degree-4 sign kernel.
+
 - [ ] **Extend `conjQ` past Cases A, B and C**, in this order (its own header repeats it):
       the per-piece closed forms first -- `convEnvCPLQ`, `conjPieceCPLQ`, `conjConvexOverPiece`,
       `conjConvexPolygon`, `conjAffinePLQ` are ALREADY 100% sym-free, so porting them is replacing

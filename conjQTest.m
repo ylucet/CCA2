@@ -113,16 +113,35 @@ classdef conjQTest < matlab.unittest.TestCase
                 'PLQ:conjQ:notStrictlyConvex', 'a concave form is not strictly convex');
         end
 
-        function aCaseNotYetImplementedIsRefusedByNameAndSaysWhy(testCase)
-        % CHANGED 2026-09-03: this used to hand in the unit square, which Case B now covers. The
-        % assertion is unaltered -- an uncovered case must be a NAMED refusal and never a silent
-        % fallback into the symbolic engine -- so the fixture moves to one that is genuinely
-        % uncovered: a MULTI-FACE input, which needs Step 3 (the pointwise max across pieces).
-            V = [0 0; 1 0; 1 1; 0 1];
-            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
-            f = QuaPol(V, E, [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 2 0 2 0 0 0], ...
-                       [1 0; 1 0; 2 0; 2 0; 1 2]);
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
+        function aMultiFaceQuaPolConjugatesByFoldingItsPieces(testCase)
+        % CHANGED TWICE, and the trail is the point. It first pinned the unit square as
+        % unimplemented (Case B covered it), then a MULTI-FACE input as unimplemented -- and the
+        % per-piece fold now covers that too. Rather than hunt for a third uncovered fixture, it
+        % becomes the POSITIVE test of what replaced it: f is q_k on P_k, so
+        %       f*(s) = max_k sup_{x in P_k} <s,x> - q_k(x),
+        % and conjugation turns a union into a max. The remaining refusals are pinned by
+        % anIndefinite... and aSemidefiniteSingular... below.
+            V  = [0 0; 1 0; 1 1; 0 1];
+            E  = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
+            F  = [1 0; 1 0; 2 0; 2 0; 1 2];       % face 1 = edges 1,2,5; face 2 = edges 3,4,5
+            H1 = [1 0; 0 1];  L1 = [0;0];  k1 = 0;
+            H2 = [4 1; 1 3];  L2 = [-2;1]; k2 = 0;
+            f  = QuaPol(V, E, [0 0 0 0, H1(1,1), H1(1,2), H1(2,2), L1(1), L1(2), k1; ...
+                               0 0 0 0, H2(1,1), H2(1,2), H2(2,2), L2(1), L2(2), k2], F);
+            testCase.verifyEqual(f.nf, 2);
+            g = conjQ(f);
+
+            T1 = [0 0; 1 0; 1 1];  T2 = [1 1; 0 1; 0 0];
+            rng(20260903);
+            S = [randn(150,2)*2; 0 0];
+            want = zeros(size(S,1),1);
+            for i = 1:size(S,1)
+                want(i) = max(conjQTest.supOverPolygon(S(i,:).', T1, H1, L1, k1), ...
+                              conjQTest.supOverPolygon(S(i,:).', T2, H2, L2, k2));
+            end
+            [got, idx] = g.eval(S);
+            testCase.verifyTrue(all(idx > 0), 'the folded cells must cover the plane');
+            testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9);
         end
 
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
@@ -260,10 +279,14 @@ classdef conjQTest < matlab.unittest.TestCase
 
         % ---- Case B refuses what it does not cover, by name ---------------------------------
 
-        function anUnboundedPolygonIsRefusedByName(testCase)
+        function anUnboundedPieceIsRefusedByName(testCase)
+        % IDENTIFIER NARROWED 2026-09-03: the per-piece refactor moved this refusal into the
+        % polygon walk, which knows the piece is unbounded and says so, rather than reporting the
+        % generic notImplemented. A wedge or half-strip is a real case and a separate one -- the
+        % sup can be +inf there, so dom f* stops being the whole plane.
             V = [0 0; 1 0; 0 1];
             f = QuaPol(V, [1 2 1; 2 3 0; 3 1 0], [0 0 0 0 1 0 1 0 0 0], [1 0; 1 0; 1 0]);
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:notImplemented');
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:unbounded');
         end
 
         function aSemidefiniteSingularQuadraticOnAPolygonIsRefusedByName(testCase)

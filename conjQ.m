@@ -58,40 +58,49 @@ function g = conjQ(obj)
 
     fN = obj.fN;  fD = obj.fD;  nf = size(fN, 1);
 
-    % ---- Case A: full domain, one face -------------------------------------------------------
-    if obj.nv == 0 && nf == 1
-        g = caseAFullDomain(fN, fD);
-        return
+    % ---- one conjugate per PIECE, then the fold ------------------------------------------------
+    % f is q_k on P_k, so f*(s) = max_k sup_{x in P_k} <s,x> - q_k(x) = max_k (q_k + I_{P_k})*(s).
+    % Conjugation turns a union into a MAX (ALGORITHM.md), which is why the per-piece closed forms
+    % compose at all -- and why Step 3 is a fold rather than a special algorithm.
+    g = conjPieceQ(obj, 1);
+    for k = 2:nf
+        g = maxQ(g, conjPieceQ(obj, k));
     end
-
-    % ---- one quadratic on a bounded convex polygon: classify H EXACTLY and route ---------------
-    if nf == 1 && obj.nv >= 3 && all(obj.E(:,3) == 1)
-        Hn = [fN(5) fN(6); fN(6) fN(7)];
-        D  = ratQ.detExact(Hn);
-        if Hn(1,1) > 0 && D > 0
-            g = caseBConvexOnPolygon(obj);          % strictly convex: vertex/edge/interior cells
-            return
-        elseif Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0
-            g = caseCConcaveOnPolygon(obj);         % concave or affine: the max is at a vertex
-            return
-        end
-        error('PLQ:conjQ:notImplemented', ...
-            ['on a bounded polygon the exact conjugate covers a strictly convex Q (leading minor ' ...
-             'and determinant both positive) and a concave or affine Q (both diagonal entries ' ...
-             'nonpositive and determinant nonnegative). This Q has leading minor %d, second ' ...
-             'diagonal %d and determinant %d, so it is semidefinite-singular or INDEFINITE -- ' ...
-             'the indefinite case needs the x*y frame change and [COAP] A.2-A.5, which is the ' ...
-             'next work item.'], Hn(1,1), Hn(2,2), D);
-    end
-
-    error('PLQ:conjQ:notImplemented', ...
-        ['the exact conjugate is implemented for a full-domain quadratic only; this input has ' ...
-         '%d vertices and %d faces. Use conj(f,''symbolic'') to reach the slow engine ' ...
-         'deliberately, or extend conjQ -- see its header for the order the cases should land.'], ...
-        obj.nv, nf);
 end
 
 % ==================================================================================================
+
+function g = conjPieceQ(obj, k)
+% objective: the exact conjugate of ONE piece -- q_k restricted to its own face P_k -- as a QuaCon.
+% [input]  obj : the exact QuaPol; k : face index
+%
+% Classifying by the EXACT Hessian rather than by eig against a threshold is the whole point: the
+% three branches below are decided by two integer comparisons, and conjCPLQ's floating-point
+% version of the same decision is what silently claims an empty domain on a badly scaled input
+% (DECISIONS.md 2026-09-03).
+    [fN, fD] = obj.faceQ(k);
+    Hn = [fN(5) fN(6); fN(6) fN(7)];
+    D  = ratQ.detExact(Hn);
+
+    if obj.nv == 0
+        g = caseAFullDomain(fN, fD);               % the whole plane: no domain constraints at all
+        return
+    end
+
+    [Vi, vd, cyc] = polygonExactly(obj, k);
+    if Hn(1,1) > 0 && D > 0
+        g = caseBConvexOnPolygon(fN, fD, Vi, vd, cyc);      % strictly convex
+    elseif Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0
+        g = caseCConcaveOnPolygon(fN, fD, Vi, vd, cyc);     % concave, or affine
+    else
+        error('PLQ:conjQ:notImplemented', ...
+            ['piece %d is neither strictly convex (leading minor and determinant both positive) ' ...
+             'nor concave/affine (both diagonal entries nonpositive, determinant nonnegative): ' ...
+             'leading minor %d, second diagonal %d, determinant %d. A semidefinite-SINGULAR Q ' ...
+             'degenerates the interior cell, and an INDEFINITE one needs the x*y frame change ' ...
+             'and [COAP] A.2-A.5. Both are the next work item.'], k, Hn(1,1), Hn(2,2), D);
+    end
+end
 
 function g = caseAFullDomain(fN, fD)
 % objective: the conjugate of f(x) = 1/2 x'H x + L'x + kappa over ALL of R^2, exactly.
@@ -142,7 +151,7 @@ function g = caseAFullDomain(fN, fD)
     g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), gN, gD, zeros(0,2), {zeros(0,2)});
 end
 
-function g = caseBConvexOnPolygon(obj)
+function g = caseBConvexOnPolygon(fN, fD, Vi, vd, cyc)
 % objective: the conjugate of a STRICTLY CONVEX quadratic over one bounded convex polygon,
 %            exactly, as a QuaCon whose faces are the KKT active-set cells.
 %
@@ -175,11 +184,11 @@ function g = caseBConvexOnPolygon(obj)
 % nothing consumes yet, and inventing a plausible-looking incidence would be worse than an honest
 % gap. Vertices ARE named, since a corner of a cell is just two of its own bounding lines meeting.
 
-    [fN, fD] = obj.faceQ(1);
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     Ln = [fN(8); fN(9)];
     kn = fN(10);
     D  = ratQ.detExact(Hn);
+    m  = numel(cyc);
     % AN INTERNAL INVARIANT, not a reachable gap: conjQ's dispatch already classified H exactly
     % and only routes a strictly convex one here. Kept because this function's contract is stated
     % in terms of its own input, and a future caller that forgets should be told loudly.
@@ -190,10 +199,6 @@ function g = caseBConvexOnPolygon(obj)
              'the unconstrained sup is finite only on a measure-zero set -- which is a real case ' ...
              'but a different one.'], Hn(1,1), D);
     end
-
-    % ---- the polygon, exactly, as integer vertices over one denominator --------------------
-    [Vi, vd, cyc] = polygonExactly(obj);
-    m = numel(cyc);
 
     % Everything below is built over these two denominators, and only at the end is each cell's
     % function reduced by `canon`. q(x) = (1/2 x'Hn x + Ln'x + kn)/fD with x = Vi/vd.
@@ -306,7 +311,7 @@ function g = caseBConvexOnPolygon(obj)
     end
     cells(end+1) = struct('num', numI, 'den', den, 'con', conI);
 
-    g = assembleQuaCon(cells);
+    g = assembleQuaConCells(cells);
 end
 
 % --------------------------------------------------------------------------------------------
@@ -326,18 +331,26 @@ function s = sgnOf(row, want)
     if r(nz) < 0, s = -want; else, s = want; end
 end
 
-function [Vi, vd, cyc] = polygonExactly(obj)
-% objective: the domain's vertices as integers over ONE denominator, plus the cycle order.
-% [output] Vi : nv x 2 integer; vd : positive integer; cyc : 1 x m vertex indices, in order
+function [Vi, vd, cyc] = polygonExactly(obj, k)
+% objective: FACE k's vertices as integers over ONE denominator, plus the cycle order.
+% [output] Vi : nv x 2 integer (the whole mesh); vd : positive integer;
+%          cyc : 1 x m indices into Vi, in boundary order around face k
 %
 % The cycle is walked from E rather than taken from P, so this does not depend on P's clockwise/
 % counter-clockwise convention -- a convention it would be easy to read backwards, and reading it
-% backwards flips every outward normal.
+% backwards flips every outward normal, which turns every cell into its complement.
     [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
-    E = obj.E;
+    own = find(any(obj.F == k, 2));
+    E = obj.E(own, :);
+    if isempty(E)
+        error('PLQ:conjQ:noFace', 'face %d has no edges.', k);
+    end
     if any(E(:,3) == 0)
         error('PLQ:conjQ:unbounded', ...
-            'Case B needs a BOUNDED polygon; edge %d is a ray.', find(E(:,3) == 0, 1));
+            ['the exact conjugate needs a BOUNDED piece; face %d has a ray (edge %d). The ' ...
+             'unbounded polyhedral pieces -- wedges and half-strips -- are a real case and a ' ...
+             'separate one: the sup can be +inf, so dom f* stops being the whole plane.'], ...
+            k, own(find(E(:,3) == 0, 1)));
     end
     m = size(E,1);
     adj = zeros(size(Vi,1), 2);
@@ -355,7 +368,7 @@ function [Vi, vd, cyc] = polygonExactly(obj)
     end
     if numel(unique(cyc)) ~= m
         error('PLQ:conjQ:notSimple', ...
-            'the domain boundary is not a single simple cycle of %d edges.', m);
+            'the boundary of face %d is not a single simple cycle of %d edges.', k, m);
     end
 end
 
@@ -385,7 +398,7 @@ function n = outwardNormal(Vi, cyc, i)
     end
 end
 
-function g = caseCConcaveOnPolygon(obj)
+function g = caseCConcaveOnPolygon(fN, fD, Vi, vd, cyc)
 % objective: the conjugate of a CONCAVE or AFFINE quadratic over one bounded convex polygon.
 %
 % WHY THIS CASE IS EASY, AND IT IS THE MATHEMATICS THAT MAKES IT SO. If q is concave then -q is
@@ -401,13 +414,10 @@ function g = caseCConcaveOnPolygon(obj)
 % exactly that hull's normal fan. The vertices NOT on the lower hull are the ones whose cell comes
 % out empty -- so assembleQuaCon's feasibility filter is doing real work here rather than tidying,
 % and that is why it had to be exact.
-    [fN, fD] = obj.faceQ(1);
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     Ln = [fN(8); fN(9)];
     kn = fN(10);
-
-    [Vi, vd, cyc] = polygonExactly(obj);
-    m = numel(cyc);
+    m  = numel(cyc);
 
     % q(v_i), over the common denominator 2*fD*vd^2 -- the same clearing as Case B's vertex cells
     qv = zeros(m,1);
@@ -447,101 +457,5 @@ function g = caseCConcaveOnPolygon(obj)
         cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
     end
 
-    g = assembleQuaCon(cells);
-end
-
-function g = assembleQuaCon(cells)
-% objective: turn the per-cell constraint lists into a QuaCon -- deduplicating the bounding lines
-%            into one canonical edge list, naming the corners, and reducing each face function.
-%
-% DEDUPLICATION IS BITWISE, which is the whole point of ratQ.conic: two cells that share a facet
-% arrived at it by different routes, and in doubles those two spellings differ by an ULP and the
-% shared facet becomes invisible (DECISIONS.md 2026-08-17, measured: 57 cells carrying 10 distinct
-% functions, 4 merges out of 612 attempts). Here they are the same integer row, and `find` on an
-% integer matrix is the whole comparison.
-    % ---- drop the cells that describe the empty set, or no 2-D face ------------------------
-    % A polygon vertex that never attains the maximum contributes a cell that is EMPTY, not small,
-    % and a cell degenerating to a point or a segment carries no face either. Both are decided
-    % exactly by ratQ.feasible2 rather than inferred from a sample. Leaving them in would not make
-    % `eval` wrong -- no point satisfies them -- but it would put faces into the mesh that bound
-    % nothing, and `nf` would stop meaning what it says.
-    live = true(1, numel(cells));
-    for k = 1:numel(cells)
-        rows = cells(k).con;
-        live(k) = ratQ.feasible2(rows(:,7) .* rows(:,4:6), true);
-    end
-    cells = cells(live);
-    if isempty(cells)
-        error('PLQ:conjQ:noCells', ...
-            'every candidate cell is empty, which cannot happen for a bounded domain.');
-    end
-
-    EcQ = zeros(0,6);
-    FC  = cell(numel(cells), 1);
-    for k = 1:numel(cells)
-        rows = cells(k).con;
-        idx  = zeros(size(rows,1), 1);
-        for r = 1:size(rows,1)
-            c = rows(r, 1:6);
-            hit = find(all(EcQ == c, 2), 1);
-            if isempty(hit)
-                EcQ(end+1, :) = c; %#ok<AGROW>
-                hit = size(EcQ, 1);
-            end
-            idx(r) = hit;
-        end
-        FC{k} = [idx, rows(:,7)];
-    end
-
-    fN = zeros(numel(cells), 10);  fD = ones(numel(cells), 1);
-    for k = 1:numel(cells)
-        [fN(k,:), fD(k)] = ratQ.canon(cells(k).num, cells(k).den);
-    end
-
-    % ---- name the corners, and ONLY the corners ---------------------------------------------
-    % A pair of bounding lines names a vertex when their intersection actually satisfies the rest
-    % of that cell's constraints. Two distinct lines meet in at most one point, so the root index
-    % is always 1. Every step here is exact: the intersection comes from ratQ.solve2 (Cramer over
-    % an exact cofactor determinant) and the membership test is the sign of an integer.
-    %
-    % Naming every pair of non-parallel lines instead would be much simpler and WRONG in a way
-    % that matters: it would list points that exist but bound nothing, so `nv` would stop meaning
-    % "corners of this mesh" and any later incidence computation would start from a padded list.
-    seen = false(size(EcQ,1));
-    Vname = zeros(0,3);
-    for k = 1:numel(cells)
-        rows = FC{k};
-        for p1 = 1:size(rows,1)
-            for p2 = p1+1:size(rows,1)
-                i = rows(p1,1);  j = rows(p2,1);
-                if i == j, continue, end
-                A = [EcQ(i,4) EcQ(i,5); EcQ(j,4) EcQ(j,5)];
-                b = [-EcQ(i,6); -EcQ(j,6)];
-                if ratQ.detExact(A) == 0, continue, end       % parallel: they meet nowhere
-                [xn, xd] = ratQ.solve2(A, b);
-                if ~cellHoldsAt(EcQ, rows, xn, xd), continue, end
-                lo = min(i,j);  hi = max(i,j);
-                if ~seen(lo,hi)
-                    seen(lo,hi) = true;
-                    Vname(end+1, :) = [lo hi 1]; %#ok<AGROW>
-                end
-            end
-        end
-    end
-
-    % E and F are left EMPTY on purpose -- see caseBConvexOnPolygon's header. A zero E of the right
-    % shape keeps the constructor's arity checks meaningful without claiming an incidence that has
-    % not been computed.
-    g = QuaCon(Vname, zeros(size(EcQ,1),3), EcQ, fN, fD, zeros(size(EcQ,1),2), FC);
-end
-
-function tf = cellHoldsAt(EcQ, rows, xn, xd)
-% objective: does the point xn/xd satisfy EVERY constraint of this cell. Exact.
-% xd > 0 (ratQ.canon normalises it), so multiplying the constraint through by xd preserves signs.
-    tf = true;
-    for r = 1:size(rows,1)
-        c = EcQ(rows(r,1), :);
-        val = ratQ.chk(c(4)*xn(1) + c(5)*xn(2) + c(6)*xd, 'constraint at corner');
-        if rows(r,2) * val < 0, tf = false; return, end
-    end
+    g = assembleQuaConCells(cells);
 end

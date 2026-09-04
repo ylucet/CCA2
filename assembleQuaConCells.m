@@ -1,0 +1,127 @@
+function g = assembleQuaConCells(cells)
+% assembleQuaConCells  Turn a list of H-form cells into a QuaCon.
+%
+% objective: deduplicate the bounding curves into one canonical edge list, drop the cells that
+%   describe the empty set, name the corners, and reduce each face function -- the last step every
+%   exact producer (conjQ's cases, maxQ) shares.
+%
+% [input]  cells : struct array with fields
+%                    num, den : the face function, as an integer 1x10 numerator over a denominator
+%                    con      : k x 7 rows [a b c d e f  sign], meaning the cell lies where
+%                               sign * (a x^2 + b xy + c y^2 + d x + e y + f) >= 0
+% [output] g     : QuaCon
+%
+% DEDUPLICATION IS BITWISE, and that is the whole reason the conic rows are canonical. Two cells
+% that share a facet reached it by different routes; in doubles those two spellings differ by an
+% ULP and the shared facet becomes invisible to `merge`. DECISIONS.md 2026-08-17 measured the
+% consequence -- 57 cells carrying 10 distinct functions, 4 merges out of 612 attempts, and a cell
+% count that then grew without bound. Here `find(all(EcQ == c, 2), 1)` is the entire comparison.
+%
+% ------------------------------------------------------------------------------------------------
+% TWO THINGS ARE DELIBERATELY INCOMPLETE, AND BOTH ARE STATED RATHER THAN PAPERED OVER.
+%
+% 1. THE EMPTINESS TEST IS SOUND, NOT COMPLETE. A cell is dropped when its LINEAR constraints alone
+%    are already infeasible, which ratQ.feasible2 decides exactly. A cell that is empty only
+%    because of a CURVED constraint survives. That is an over-approximation of the face set, and it
+%    is harmless where it matters -- `eval` never reports such a face, because no point satisfies
+%    its constraints -- but `nf` is then an upper bound rather than the count of faces that carry
+%    area. Deciding it properly means asking whether a conic meets a polygon's interior, which is
+%    Phase 2c's filtered predicate with the exact degree-4 kernel behind it, and that is not built.
+%
+% 2. ONLY LINE-LINE CORNERS ARE NAMED. Two lines meet in a rational point, so membership in the
+%    cell is an exact integer sign test and the corner can be named with certainty. A corner
+%    involving a curved edge is generically irrational (degree up to 4 over Q -- CONJ_FIELD_PROOF.md
+%    Theorem 1), so deciding whether it lies in the cell needs the same exact kernel as (1).
+%    Naming it without that test would put points into the vertex list that bound nothing, which is
+%    worse than a vertex list that is honestly partial -- E and F are empty for the same reason.
+%
+% Neither gap can produce a wrong VALUE: `eval` reads the face functions and the sign conditions,
+% and both are exact.
+
+    if isempty(cells)
+        error('QuaCon:noCells', 'assembleQuaConCells was given no cells.');
+    end
+
+    % ---- drop the cells whose linear part is already infeasible ----------------------------
+    live = true(1, numel(cells));
+    for k = 1:numel(cells)
+        rows = cells(k).con;
+        isLine = all(rows(:,1:3) == 0, 2);
+        P = rows(isLine,7) .* rows(isLine,4:6);
+        live(k) = ratQ.feasible2(P, true);
+    end
+    cells = cells(live);
+    if isempty(cells)
+        error('QuaCon:noCells', ...
+            ['every candidate cell is empty. For a bounded domain the cells must cover the ' ...
+             'plane, so this means the constraint signs are inconsistent -- check that each ' ...
+             'side was taken through sgnOf after ratQ.conic normalised the row.']);
+    end
+
+    % ---- one canonical curve list, shared by every cell that borders it ----------------------
+    EcQ = zeros(0,6);
+    FC  = cell(numel(cells), 1);
+    for k = 1:numel(cells)
+        rows = cells(k).con;
+        idx  = zeros(size(rows,1), 1);
+        for r = 1:size(rows,1)
+            c = rows(r, 1:6);
+            hit = find(all(EcQ == c, 2), 1);
+            if isempty(hit)
+                EcQ(end+1, :) = c; %#ok<AGROW>
+                hit = size(EcQ, 1);
+            end
+            idx(r) = hit;
+        end
+        FC{k} = [idx, rows(:,7)];
+    end
+
+    fN = zeros(numel(cells), 10);  fD = ones(numel(cells), 1);
+    for k = 1:numel(cells)
+        [fN(k,:), fD(k)] = ratQ.canon(cells(k).num, cells(k).den);
+    end
+
+    % ---- name the corners that can be decided exactly ----------------------------------------
+    ne = size(EcQ, 1);
+    seen = false(ne, ne);
+    Vname = zeros(0,3);
+    for k = 1:numel(cells)
+        rows = FC{k};
+        for p1 = 1:size(rows,1)
+            for p2 = p1+1:size(rows,1)
+                i = rows(p1,1);  j = rows(p2,1);
+                if i == j, continue, end
+                if any(EcQ(i,1:3) ~= 0) || any(EcQ(j,1:3) ~= 0), continue, end   % see note 2
+                A = [EcQ(i,4) EcQ(i,5); EcQ(j,4) EcQ(j,5)];
+                if ratQ.detExact(A) == 0, continue, end       % parallel: they meet nowhere
+                [xn, xd] = ratQ.solve2(A, [-EcQ(i,6); -EcQ(j,6)]);
+                if ~cellHoldsAt(EcQ, rows, xn, xd), continue, end
+                lo = min(i,j);  hi = max(i,j);
+                if ~seen(lo,hi)
+                    seen(lo,hi) = true;
+                    Vname(end+1, :) = [lo hi 1]; %#ok<AGROW>
+                end
+            end
+        end
+    end
+
+    % E and F stay EMPTY: recovering which cell borders which along which segment is an
+    % arrangement computation nothing consumes yet, and a plausible-looking invented incidence
+    % would be worse than an honest gap.
+    g = QuaCon(Vname, zeros(ne,3), EcQ, fN, fD, zeros(ne,2), FC);
+end
+
+function tf = cellHoldsAt(EcQ, rows, xn, xd)
+% objective: does the point xn/xd satisfy EVERY constraint of this cell. Exact.
+%
+% xd > 0 (ratQ.canon normalises it), so multiplying a constraint through by xd^2 preserves its
+% sign, and the quadratic terms then need xn's own square -- which keeps this exact for a CURVED
+% constraint too, even though the corner it is testing must itself be a line-line one.
+    tf = true;
+    for r = 1:size(rows,1)
+        c = EcQ(rows(r,1), :);
+        val = ratQ.chk(c(1)*xn(1)^2 + c(2)*xn(1)*xn(2) + c(3)*xn(2)^2 ...
+                     + c(4)*xn(1)*xd + c(5)*xn(2)*xd + c(6)*xd^2, 'constraint at corner');
+        if rows(r,2) * val < 0, tf = false; return, end
+    end
+end
