@@ -129,6 +129,28 @@ APC; gold is ~$3,290 and unnecessary.
       `QuaPol.oneNormConjugate` -- a fixture that predates all of this work and states independently
       that `|x|_1` conjugates to the indicator of the unit infinity-ball.
 
+- [x] **DONE 2026-09-04: `biconjQ` -- the exact BICONJUGATE, first two cases.** DIRECT, not
+      `conj(conj(f))`: `ALGORITHM.md` records that the double conjugation cost 436 s on an input
+      whose answer was "return f", and it would additionally need the conjugate of a `QuaCon`,
+      whose return type is still open (Phase 6).
+      * **f CONVEX -> f itself.** Decided exactly by `ratQ.isPSD2` on every piece.
+      * **a CONCAVE or AFFINE piece on a bounded polygon -> the lower hull of the lifted
+        vertices.** A concave function on a polytope has its whole envelope fixed by the VERTEX
+        VALUES, so this is a hull of m points in R^3 with rational coordinates: a candidate facet
+        is the plane through three of them (an integer cross product) and "is it a lower facet" is
+        the sign of an integer for every other point. No hull library, no orientation predicate,
+        no tolerance.
+      Verified against the definition in three parts -- `co f <= f` with equality at the EXTREME
+      points, convexity, and the largest-convex-minorant property -- over 38 random polygons, 0
+      failures on all three (`.claude/envelope-sweep.m`).
+
+- [ ] **`AlgAlg` is still not built, and its trigger is now precise: the INDEFINITE piece.** Both
+      implemented envelope cases have RATIONAL faces (f itself, or affine functions interpolating
+      rational vertex values), so nothing yet produces a face that must NAME a dual vertex. The
+      indefinite envelope is where the first one appears -- an affine cell of a general `f**` is
+      `<p,x> - f*(p)` with `p` of degree up to 4. Build `AlgAlg` when that case is built, not
+      before, or the type is speculative.
+
 - [ ] **What is left of the DOMAIN gap**: an unbounded piece whose `q` is NOT concave/affine (the
       finiteness test becomes a quadratic form on the recession CONE rather than a linear one --
       `PLQ:conjQ:unbounded`), a piece whose sup diverges everywhere so `dom f*` is EMPTY (correct

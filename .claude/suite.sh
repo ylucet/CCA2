@@ -84,7 +84,7 @@ cd "$CCA2DIR" || exit 1
 # it. Per-job elapsed times are printed, which is what tells you where to shard next.
 FAST_SUITES=(PLQVCTest QuaPolExactTest QuaParCPLQUnitTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
              clipArcByHalfPlaneTest conicMeetTest conjConvexPolygonTest conjEdgeLowerBoundTest
-             biconjCPLQUnitTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest
+             biconjCPLQUnitTest biconjQTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest
              convEnvCPLQTest
              exactQTest frameAndFanTest infConvTest
              lasryLionsTest maxQTest maxQuaParTest mergeSameQuadFacesTest meshPredicateTest

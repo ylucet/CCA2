@@ -589,6 +589,16 @@ classdef ratQ
             end
         end
 
+        function tf = isPSD2(H)
+        % objective: is the 2x2 symmetric integer matrix H positive semidefinite. Exact.
+        %
+        % For 2x2 the principal minors are the two diagonal entries and the determinant, and all
+        % three must be nonnegative. The LEADING minors alone would not do: diag(0,-1) has leading
+        % minors 0 and 0 and is not PSD -- the same trap isPSD3 documents.
+            ratQ.chk(H, 'matrix');
+            tf = H(1,1) >= 0 && H(2,2) >= 0 && ratQ.detExact(H) >= 0;
+        end
+
         function tf = isPSD3(M)
         % objective: is the 3x3 symmetric integer matrix M positive semidefinite. Exact.
         % Every principal minor must be nonnegative -- see conicSign for why the leading ones alone
