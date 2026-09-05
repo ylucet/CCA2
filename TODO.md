@@ -745,6 +745,9 @@ input (`PLQ:QuaPol:notExact`, refused deliberately).
       **What is left is genuinely curved** and needs Phase 2c's kernel: 121 reported against 70
       occupied, and 70 occupied carrying 10 functions. `CLAUDE.md` section 5's ladder, rungs 1-3,
       is what this sequence was.
+      **RE-MEASURED 2026-09-05**, after the overnight half-plane and consistency fixes: unchanged at
+      **121 / 70 / 10, in 1.3 s**. That it did NOT move is the useful part -- it confirms the
+      remaining inflation is the curved-emptiness problem and not a side effect of anything since.
 
 - [x] **DONE 2026-09-04: `conjQ` Case E -- a CONCAVE or AFFINE quadratic on an UNBOUNDED piece.**
       The first case where `dom f*` is a PROPER SUBSET, which is the mathematics rather than a gap.
