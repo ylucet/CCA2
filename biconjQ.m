@@ -197,7 +197,17 @@ function h = concaveEnvelope(obj)
     % From a X + b Y + c Z = d in the lifted coordinates, the function is
     %       l(x,y) = (d - a*Dl*x - b*Dl*y) / (Dl*c)  ... written over the denominator Dl*c.
     nfac = size(facets,1);
-    dom = polygonHalfPlanes(obj, Vi, vd, vs, 1);
+    % THE ENVELOPE'S DOMAIN IS conv(P), NOT P, and for a non-convex face those differ. co f must
+    % be CONVEX, so its domain is convex: the closed convex hull of dom f. For a convex face the
+    % two coincide and nothing changes; for a non-convex one, using the face's own edges produced a
+    % region that was not even the face -- measured on an L, where biconjQ returned +Inf at (2,0),
+    % (2,1), (1,2) and (1.5,0.5), all of which are IN the L and where the envelope is finite.
+    %
+    % The FACE FUNCTIONS needed no change: the lower hull of the lifted vertices is already the
+    % right answer there, reflex vertices included. Checked against an LP over a dense sample of
+    % the true L -- the hull and the LP agree at every probe, inside the L and in conv(L) beyond
+    % it, so only the domain was wrong.
+    dom = hullHalfPlanes(Vi, vd, vs);
     cells = struct('num', {}, 'den', {}, 'con', {});
     for t = 1:nfac
         a = facets(t,1);  b = facets(t,2);  c = facets(t,3);  d = facets(t,4);
@@ -224,6 +234,51 @@ function h = concaveEnvelope(obj)
     end
 
     h = assembleQuaConCells(cells);
+end
+
+function rows = hullHalfPlanes(Vi, vd, vs)
+% objective: the half-planes of the CONVEX HULL of the given vertices, exactly.
+% [output] rows : h x 3, [a b c] meaning a*x + b*y + c >= 0 on the hull, in ACTUAL coordinates
+%
+% A pair of vertices spans a hull edge exactly when every other vertex lies weakly on one side of
+% the line through them -- an integer sign test per vertex, so the hull is DECIDED. O(m^3) for a
+% face's handful of corners, which needs no incremental hull algorithm and has no orientation
+% convention to read backwards.
+%
+% Numerator coordinates decide the side; the emitted row is in actual coordinates (linear part
+% scaled by vd). See conjQ's pieceShape for why mixing the two yields a parallel line.
+    rows = zeros(0,3);
+    m = numel(vs);
+    for a = 1:m
+        for b = 1:m
+            if a == b, continue, end
+            p = Vi(vs(a), :);  q = Vi(vs(b), :);
+            n  = [q(2)-p(2), -(q(1)-p(1))];
+            if all(n == 0), continue, end                 % coincident vertices
+            c0 = ratQ.chk(-(n * p.'), 'offset');
+            sgn = 0;  ok = true;
+            for i = 1:m
+                t = ratQ.chk(n(1)*Vi(vs(i),1) + n(2)*Vi(vs(i),2) + c0, 'hull side');
+                if t == 0, continue, end
+                if sgn == 0, sgn = sign(t);
+                elseif sign(t) ~= sgn, ok = false; break
+                end
+            end
+            if ~ok || sgn == 0, continue, end             % vertices on both sides: not a hull edge
+            row = sgn * [ratQ.chk(vd*n(1), 'hull normal'), ...
+                         ratQ.chk(vd*n(2), 'hull normal'), c0];
+            row = row / gcdRow(row);
+            if ~any(all(rows == row, 2)), rows(end+1,:) = row; end %#ok<AGROW>
+        end
+    end
+end
+
+function g = gcdRow(row)
+    g = 0;
+    for i = 1:numel(row)
+        if row(i) ~= 0, g = gcd(g, abs(row(i))); end
+    end
+    if g == 0, g = 1; end
 end
 
 function rows = polygonHalfPlanes(obj, Vi, vd, vs, k)
@@ -285,6 +340,18 @@ function h = quaPolAsQuaCon(obj)
                 'piece %d is unbounded; re-expressing it in H-form needs its recession cone.', k);
         end
         rows = polygonHalfPlanes(obj, Vi, vd, vs, k);
+        % A convex f is returned UNCHANGED, so its pieces must be re-expressed exactly -- and a
+        % face described by half-planes IS convex. A non-convex face cannot be, so re-expressing it
+        % would silently replace the region by something else. Detected by comparing against the
+        % face's own convex hull: for a convex face the two descriptions have the same rows.
+        hull = hullHalfPlanes(Vi, vd, vs);
+        if size(hull,1) ~= size(rows,1)
+            error('PLQ:biconjQ:nonConvexPiece', ...
+                ['piece %d is NOT CONVEX, and co f = f here, so the answer must carry that same ' ...
+                 'non-convex region -- which an intersection of half-planes cannot express. ' ...
+                 'Unlike the conjugate this cannot be fixed by splitting, because the convex ' ...
+                 'hull of a union is not the union of hulls.'], k);
+        end
         con = zeros(size(rows,1), 7);
         for r = 1:size(rows,1)
             con(r,:) = [ratQ.conic([0 0 0, rows(r,:)]), sgnOfB(rows(r,:), +1)];

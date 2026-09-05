@@ -37,6 +37,50 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 — `biconjQ` audited the same way, and it had the SAME silent defect
+
+`.claude/biconj-probe.m` is the envelope's coverage probe. It found that a NON-CONVEX face was
+answered WRONGLY, exactly the class of defect the `conjQ` audit found -- and for the same root
+cause, a face described by half-planes when half-planes describe only convex sets.
+
+    biconjQ on the L, concave q:  +Inf at (2,0), (2,1), (1,2), (1.5,0.5)
+    every one of those is IN the L, and the envelope there is finite
+
+**The fix is NOT the one that worked for `conj`.** The conjugate decomposes over a union -- `conj`
+turns a union into a max -- so a non-convex face could be triangulated and folded. The ENVELOPE does
+not: the convex hull of a union is not the union of hulls. What was actually wrong was narrower and
+better: **the envelope's DOMAIN is conv(P), not P**, since `co f` is convex and so has a convex
+domain. The FACE FUNCTIONS were already right -- the lower hull of the lifted vertices, reflex
+vertices included.
+
+Verified against an LP over a dense sample of the true L -- `co f(x)` as the least value of
+`sum w_i f(x_i)` over convex combinations reaching `x`, which is the envelope's definition and shares
+nothing with `biconjQ` -- agreeing to **4.4e-16** at every probe, inside the L and in `conv(L)`
+beyond it.
+
+**The mirror case is refused rather than mis-answered:** a CONVEX f on a non-convex face. There
+`co f = f`, so the answer must carry f's own non-convex region, which an intersection of half-planes
+cannot express. `PLQ:biconjQ:nonConvexPiece`.
+
+### Where `biconjQ` stands (probe output, 2026-09-04)
+
+    square PD / PSD-sing / ND / NSD-sing / affine        OK
+    square + triangle, INDEFINITE but edge-concave       OK   (this is McCormick)
+    square, indefinite edge-CONVEX                       notImplemented   <- the AlgAlg trigger
+    NON-CONVEX face, concave                             OK
+    UNBOUNDED piece                                      unbounded
+    MULTI-piece                                          notImplemented
+    needle / segment (dim < 2)                           noFace
+
+**The three open items, in the order they should be taken:**
+1. **dim < 2 input** -- as for `conj`, this is reading work, not representation work: `co f` of a
+   needle is `f` itself (a point is convex) and of a segment is a 1-D envelope.
+2. **MULTI-piece** -- the envelope COUPLES pieces, so it is not a fold. For a genuinely convex
+   multi-piece `f` the `fIsConvex` flag already short-circuits it; the open case is a non-convex
+   subdivision.
+3. **edge-CONVEX** -- needs [COAP] A.2-A.5 and is where the first face that cannot be written
+   rationally appears, i.e. the `AlgAlg` trigger.
+
 ## 2026-09-04 — `biconjQ` widened to EDGE-CONCAVITY, and McCormick falls out of it
 
 The envelope branch required H to be negative semidefinite. The real condition is weaker and is

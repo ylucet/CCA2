@@ -97,6 +97,47 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         % ---- what is refused, by name ------------------------------------------------------
 
+        function aNONCONVEXFaceEnvelopesOverItsCONVEXHULL(testCase)
+        % THE ENVELOPE'S DOMAIN IS conv(P), NOT P -- co f must be convex, so its domain is convex.
+        % For a non-convex face those differ, and using the face's own edges produced a region that
+        % was not even the face: biconjQ returned +Inf at (2,0), (2,1), (1,2) and (1.5,0.5), every
+        % one of which is IN the L and where the envelope is finite.
+        %
+        % The FACE FUNCTIONS needed no change -- the lower hull of the lifted vertices was already
+        % right, reflex vertices included -- so only the domain was wrong. Unlike the conjugate this
+        % could NOT have been fixed by splitting: the convex hull of a union is not the union of
+        % hulls, so the envelope does not decompose over a subdivision the way conj does.
+            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];         % an L, reflex at (1,1)
+            m = size(V,1);
+            f = biconjQTest.polygon(V, [0 0 0 0, -1, 0, -1, 0, 0, 0]);
+            [~, isConv] = f.orderEdges(1);
+            testCase.verifyFalse(logical(isConv), 'the fixture really is non-convex');
+
+            h = biconjQ(f);
+
+            % Every vertex of the L, reflex included, is a point of the domain with a finite value.
+            testCase.verifyTrue(all(isfinite(h.eval(V))), ...
+                'no vertex of the face may fall outside the envelope''s domain');
+            % Points of conv(L) that are NOT in L are still in the envelope's domain.
+            testCase.verifyTrue(all(isfinite(h.eval([1.2 1.2; 1.4 1.4]))), ...
+                'the domain is the convex HULL, so it covers the reflex notch');
+            % And the envelope lies below f wherever f is finite, with equality at the hull corners.
+            qv = -0.5*sum(V.^2, 2);
+            testCase.verifyLessThanOrEqual(h.eval(V), qv + 1e-9, 'co f <= f at every vertex');
+            ext = [1 2 3 5 6];                          % (1,1) is the reflex one, not a hull corner
+            testCase.verifyEqual(h.eval(V(ext,:)), qv(ext), 'AbsTol', 1e-9, ...
+                'and equality at the corners of the hull');
+        end
+
+        function aNonConvexFaceIsRefusedWhenTheAnswerWouldHaveToCarryIt(testCase)
+        % The other side of the same coin. When f is CONVEX the envelope is f itself, so the answer
+        % has to carry f's own non-convex region -- which an intersection of half-planes cannot
+        % express. Refused by name rather than silently replaced by the hull.
+            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];
+            f = biconjQTest.polygon(V, [0 0 0 0, 1, 0, 1, 0, 0, 0]);   % convex on a non-convex face
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:nonConvexPiece');
+        end
+
         function theBILINEAREnvelopeOverABoxIsExactlyMcCORMICK(testCase)
         % THE case ALGORITHM.md singles out, and it now falls out of the concave branch rather than
         % needing one of its own. q = xy on the unit square has H = [0 1; 1 0], which is genuinely
