@@ -1,13 +1,13 @@
 # Morning report — 2026-09-04/05 overnight run
 
-Branch: `overnight/2026-09-04` (12 commits, not merged)
+Branch: `overnight/2026-09-04` (14 commits, not merged)
 
-Everything green: **fast 477/0/0**, **normal 13/0**, **slow 98/0** (the night's daily gate, run once
+Everything green: **fast 478/0/0**, **normal 13/0**, **slow 98/0** (the night's daily gate, run once
 at the start). No red tests, nothing quarantined.
 
 ## What changed
 
-Ten of the twelve commits are defect fixes, and **every defect was found by a differential test
+Eight of the fourteen commits are defect fixes, and **every defect was found by a differential test
 against something independent** — the legacy pipeline, an LP, or a closed form — not by reading code.
 
 **`conjQ` — five real defects, all in the same corner of the input space.**
@@ -88,6 +88,16 @@ samples keep climbing as the reach grows. Recorded, not chased.
 Consolidated rather than starting a large feature late in the run: re-ran every probe and sweep after
 the night's changes, updated the coverage tables in `TODO.md`, and left both operators' status
 written down there rather than in this file.
+
+I stopped short of the three remaining `biconjQ` items on purpose. Each needs machinery that does
+not exist yet — the lower hull of an *unbounded* lifted set, a real convexity test for a piecewise
+function, and [COAP] A.2–A.5 — and a half-built version of any of them at the end of a long run is
+how silent defects get in, which is precisely what tonight was spent removing. They are specified in
+`TODO.md` with what each actually needs.
+
+Also re-measured and unchanged: the cell-count inflation (121 faces reported, 70 occupied, 10
+distinct functions on the worst fixture). None of tonight's fixes touched it, which confirms the
+remaining inflation is the curved-emptiness problem and not a side effect of anything since.
 
 **Two method notes worth keeping**, both about tests rather than code:
 
