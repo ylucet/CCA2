@@ -422,31 +422,24 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
     g = assembleQuaConCells(cells);
 end
 
-function n = outwardNormalOf(sh, j, Vi)
+function n = outwardNormalOf(sh, j, Vi) %#ok<INUSD>
 % objective: the OUTWARD normal of edge j, as an integer column.
 %
-% Built from the edge's own direction and then ORIENTED, rather than matched against the
-% half-plane list. Matching by perpendicularity is AMBIGUOUS whenever two edges are parallel: on
-% the unit square the top and bottom edges have the same normal direction, so the scan returned the
-% first one and the top edge's cell came out as s2 <= 1 where it must be s2 >= 1. Measured: 74 of
-% 307 dual points wrong and 53 in no cell at all.
-%
-% Outward means every point and every recession direction of the piece lies on the NON-positive
-% side: <n, v - a> <= 0 for each vertex v, and <n, r> <= 0 for each recession direction r. That
-% fixes the sign with no reference to any other edge, so parallel edges cannot be confused.
+% Read from the INWARD normal that pieceShape already decided for this edge's half-plane, and
+% negated. Not re-derived: orienting a normal against the piece's own vertices and recession
+% directions says nothing when they all lie ON the edge's line, which is precisely a HALF-PLANE
+% piece -- two opposite rays from one point. The old fallback then returned an unoriented normal,
+% so one of the two rays got the wrong side and its KKT multiplier condition was flipped, leaving
+% two cells overlapping with different values. Measured on QuaPol.examples{11} and {12}, the only
+% two fixtures of that shape in the corpus.
+    if isfield(sh.ed(j), 'nIn') && ~isempty(sh.ed(j).nIn)
+        n = -sh.ed(j).nIn;
+        return
+    end
+    % No half-plane was recorded for this edge (it was skipped as degenerate), so there is no side
+    % to be right about; the raw perpendicular is as good as anything.
     d = sh.ed(j).d(:);
     n = [d(2); -d(1)];
-    a = Vi(sh.ed(j).a, :).';
-    for i = 1:numel(sh.vs)
-        t = ratQ.chk(n.' * (Vi(sh.vs(i), :).' - a), 'orientation');
-        if t > 0, n = -n; return, end
-        if t < 0, return, end
-    end
-    for r = 1:size(sh.rays,1)
-        t = ratQ.chk(n.' * sh.rays(r,:).', 'orientation');
-        if t > 0, n = -n; return, end
-        if t < 0, return, end
-    end
 end
 
 function [con, ok] = toCon(rows)
@@ -529,17 +522,17 @@ function sh = pieceShape(obj, k, Vi, vd)
     E = obj.E(own, :);
 
     sh.vs = [];
-    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {}, 'j', {});
+    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {}, 'j', {}, 'nIn', {});
     sh.rays = zeros(0,2);
     for j = 1:size(E,1)
         a = E(j,1);  b = E(j,2);
         d = ratQ.chk(Vi(b,:) - Vi(a,:), 'edge direction');
         if E(j,3) ~= 0
             sh.vs = [sh.vs; a; b];
-            sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false, 'j', own(j)); %#ok<AGROW>
+            sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false, 'j', own(j), 'nIn', []); %#ok<AGROW>
         else
             sh.vs = [sh.vs; a];
-            sh.ed(end+1) = struct('a', a, 'b', 0, 'd', d, 'isRay', true, 'j', own(j)); %#ok<AGROW>
+            sh.ed(end+1) = struct('a', a, 'b', 0, 'd', d, 'isRay', true, 'j', own(j), 'nIn', []); %#ok<AGROW>
             sh.rays(end+1,:) = d; %#ok<AGROW>
         end
     end
@@ -611,6 +604,12 @@ function sh = pieceShape(obj, k, Vi, vd)
 
         sh.hp(end+1,:) = sgn * [ratQ.chk(vd*n(1), 'edge normal'), ...
                                 ratQ.chk(vd*n(2), 'edge normal'), c0]; %#ok<AGROW>
+        % Remember which way this edge's own half-plane faces. outwardNormalOf used to re-derive it
+        % by orienting against the piece's vertices and recession directions, which says NOTHING
+        % when they all lie ON the edge's line -- exactly the half-plane case. It then fell back to
+        % an unoriented normal, so one of two opposite rays got the wrong side and its KKT
+        % multiplier condition was flipped.
+        sh.ed(j).nIn = [sgn * n(1); sgn * n(2)];
     end
 end
 
@@ -651,6 +650,53 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
     ok = true;  dom = zeros(0,3);  why = '';
     R = sh.rays;
     if isempty(R), return, end
+
+    % ---- IS THE RECESSION CONE A HALF-PLANE? --------------------------------------------------
+    % sh.rays holds the piece's EDGE ray directions, which generate the cone for a wedge but NOT
+    % for a half-plane: a piece bounded by a single line recedes in every direction on one side,
+    % a two-dimensional cone that no two rays generate. Both QuaPol.examples{11} and {12} are of
+    % that shape, and missing it made conj report a FINITE value where the sup is +infinity --
+    % measured at s = (2.503, 0.013), where conjQ said 4.1e-05.
+    %
+    % On a half-plane the test simplifies rather than getting harder. d'Hd is even, so d and -d
+    % give the same value, and a half-plane contains one of every antipodal pair: requiring
+    % d'Hd >= 0 on it is therefore requiring it on the WHOLE plane, i.e. H must be positive
+    % semidefinite. The null directions are then null(H), and each one that lies in the cone
+    % carries the same linear condition as before.
+    if size(sh.hp,1) >= 1
+        Np = unique(sign2(sh.hp(:,1:2)), 'rows');
+        if size(Np,1) == 1                      % one distinct inward normal: the cone is a half-plane
+            p = Np(1,:).';
+            if ~ratQ.isPSD2(Hn)
+                ok = false;
+                why = ['the piece recedes over a HALF-PLANE of directions, on which some ' ...
+                       'direction has negative curvature (H is not positive semidefinite)'];
+                return
+            end
+            if ratQ.detExact(Hn) == 0
+                if any(Hn(:) ~= 0)
+                    if Hn(1,1) ~= 0, d0 = [-Hn(1,2); Hn(1,1)]; else, d0 = [1; 0]; end
+                else
+                    d0 = [];                     % H = 0: every direction is null, handled below
+                end
+                cand = {};
+                if isempty(d0)
+                    cand = {[1;0], [-1;0], [0;1], [0;-1]};
+                else
+                    cand = {d0, -d0};
+                end
+                for c = 1:numel(cand)
+                    d = cand{c};
+                    if ratQ.chk(p.' * d, 'cone membership') < 0, continue, end
+                    row = [ratQ.chk(-fD*vd*d(1), 'r1'), ratQ.chk(-fD*vd*d(2), 'r2'), ...
+                           ratQ.chk(vd*(Ln.'*d), 'r0')];
+                    if all(row == 0), continue, end
+                    dom(end+1,:) = row; %#ok<AGROW>
+                end
+            end
+            return
+        end
+    end
 
     for r = 1:size(R,1)
         if ratQ.chk(R(r,:) * Hn * R(r,:).', 'ray curvature') < 0
@@ -1010,5 +1056,20 @@ function sh = triangleShape(Vi, vd, tri)
         end
         sh.hp(end+1,:) = sign(t) * [ratQ.chk(vd*n(1), 'edge normal'), ...
                                     ratQ.chk(vd*n(2), 'edge normal'), c0]; %#ok<AGROW>
+    end
+end
+
+function P = sign2(N)
+% objective: each row of N reduced to a canonical direction -- primitive integers, first nonzero
+%            entry positive -- so that two rows describing the SAME half-plane normal compare equal.
+    P = zeros(size(N));
+    for i = 1:size(N,1)
+        r = N(i,:);
+        g = gcd(abs(r(1)), abs(r(2)));
+        if g == 0, P(i,:) = r; continue, end
+        r = r / g;
+        nz = find(r ~= 0, 1);
+        if r(nz) < 0, r = -r; end
+        P(i,:) = r;
     end
 end

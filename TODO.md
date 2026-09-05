@@ -37,6 +37,43 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 (overnight) - the quarantined overlap is FIXED. Three defects, all in HALF-PLANE pieces.
+
+The `examples(12)` quarantine is lifted. Chasing it found THREE distinct defects, every one of them
+specific to a piece bounded BY A LINE -- two opposite rays from one point -- where every vertex and
+every recession direction lies ON that line, so the piece's own geometry says nothing:
+
+1. **The edge's SIDE could not be derived**, so no half-plane was recorded at all and the piece's
+   domain was silently the WHOLE PLANE. Only `F` knows; it is now consulted there and nowhere else.
+2. **The OUTWARD normal was re-derived** by orienting against those same vertices and directions,
+   so one of two opposite rays got the wrong side and its KKT multiplier condition was FLIPPED.
+   It is now read from the inward normal `pieceShape` already decided for that edge.
+3. **The RECESSION CONE of a half-plane is two-dimensional** and no two rays generate it, so a null
+   direction pointing INTO it was missed and the sup came out FINITE where it is +infinity. On a
+   half-plane the test simplifies rather than getting harder: `d'Hd` is even and a half-plane
+   contains one of every antipodal pair, so requiring `d'Hd >= 0` there is requiring it on the
+   whole plane -- H must be PSD, and the null directions are `null(H)`.
+
+**Result against the legacy conjugate** (`.claude/legacy-diff.m`): `examples(12)` went from 28 value
+and 91 domain disagreements to **0 and 0**. Across the corpus the worst relative value disagreement
+is now **5.55e-16**; two entries still disagree about the DOMAIN only.
+
+### A new invariant, worth more than the fix
+
+`checkQuaConConsistent.m`: no two cells may overlap while carrying different functions. Such a mesh
+does not define a function at all -- `eval` resolves it by first match, so the answer depends on
+cell ORDER -- and the failure is silent. EXACT for pairs whose constraints are all straight
+(`ratQ.feasible2` decides their intersection), SAMPLED as a backstop for curved pairs.
+
+Measured over the corpus (`.claude/consistency-sweep.m`): **2 of 29 conjugates were inconsistent
+before these fixes, 0 of 29 after**, and BOTH were caught by the exact half, so the check is
+decisive rather than probabilistic. Asserted in `conjQTest` across the corpus.
+
+**Budget note.** Adding the legacy comparison to `conjQTest` took it from 10 s to 128 s, because
+`f.conj()` runs the SYMBOLIC engine. Section 7 budgets the fast bucket in seconds and section 9 puts
+symbolic work in the slow bucket, so the legacy cross-check stays in `.claude/legacy-diff.m` for
+deliberate runs and the fast test asserts the two properties that need no oracle. Back to 10 s.
+
 ## 2026-09-04 (overnight) — DIFFERENTIAL TEST against the LEGACY conjugate: 1 real defect, quarantined
 
 `.claude/legacy-diff.m` runs `conjQ` against `conjCPLQ` over the library's own fixture corpus

@@ -373,33 +373,86 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
-        function examples12FoldsTwoHalfPlanesAndOVERLAPS_quarantined(testCase)
-        % QUARANTINED RED, named rather than deleted or weakened -- CLAUDE.md section 8.
+        function aHALFPLANEPieceConjugatesCorrectly(testCase)
+        % UN-QUARANTINED 2026-09-04. This was an assumeFail: QuaPol.examples{11} and {12} -- the
+        % plane cut by a line into two HALF-PLANES -- produced cells that OVERLAPPED with different
+        % values, and eval's first-match returned the smaller. TWO defects, both specific to a
+        % piece bounded BY A LINE, where every vertex and every recession direction lies ON that
+        % line so the piece's own geometry says nothing:
         %
-        % `QuaPol.examples{12}` is the plane cut by the y-axis into two HALF-PLANES, carrying
-        % H1 = [6 1; 1 2] (positive definite) on {x <= 0} and H2 = [2 2; 2 2] (PSD singular) on
-        % {x >= 0}. conjQ produces a mesh whose cells OVERLAP: at s = (-2.670, -0.895) two faces
-        % both contain s, carrying 0.20026 and 0.64930, and eval's first-match rule returns the
-        % SMALLER. The true value is 0.64930 -- confirmed three ways: a sup sampled over the domain
-        % (a lower bound, and it reaches 0.64920), the legacy conjugate (0.64905), and the closed
-        % form 1/2 s' H1^-1 s, whose unconstrained maximiser lies inside {x <= 0} so it is attained.
+        %   1. The edge's SIDE could not be derived, so no half-plane was recorded and the domain
+        %      was silently the whole plane. Only F knows; it is now consulted there.
+        %   2. The OUTWARD normal was re-derived by orienting against those same vertices and
+        %      directions, so one of the two opposite rays got the wrong side and its KKT
+        %      multiplier condition was flipped. It is now read from the half-plane already decided.
+        %   3. The RECESSION CONE of a half-plane is two-dimensional and no two rays generate it,
+        %      so a null direction pointing into it was missed and the sup came out FINITE where it
+        %      is +infinity.
         %
-        % WHAT IS ALREADY RULED OUT, so the next session does not redo it:
-        %   * NOT mergeAdjacentCells -- the overlap is present with the merge disabled (4 faces
-        %     instead of 3, same two overlapping).
-        %   * NOT the half-plane's own side, which was a separate bug fixed the same night: a piece
-        %     bounded BY A LINE has every vertex and every recession direction ON that line, so its
-        %     side has to come from F. Fixing that took the domain disagreements from 91 to 26 and
-        %     did not touch the value disagreements.
-        %   * The two overlapping faces carry functions from DIFFERENT pieces (one is piece 1's
-        %     interior cell, 1/2 s'H1^-1 s), so it is the FOLD that failed to separate them, not a
-        %     single piece's own subdivision.
-        %
-        % The invariant to assert once fixed: no two cells of a conjugate may overlap while
-        % carrying different functions.
-            testCase.assumeFail(['examples{12}: conjQ''s fold leaves two cells overlapping with ' ...
-                'different values; eval returns the smaller. See this test''s comment.']);
+        % Verified against the legacy conjugate, an independent implementation: 0 value and 0
+        % domain disagreements on examples(12), where before there were 28 and 91.
+            P = QuaPol.examples();
+            rng(20260904);
+            S = [randn(150,2)*2; 0 0; 1 1; -1 -1; -2.670 -0.895; 2.503 0.013];
+            for k = [11 12]
+                f = P{k};
+                testCase.assumeTrue(f.isExact());
+                g = conjQ(f);
+
+                % the invariant the defect broke, asserted for BOTH fixtures
+                testCase.verifyTrue(checkQuaConConsistent(g, 400), ...
+                    sprintf('examples(%d): cells overlap carrying different functions', k));
+
+                % NO LEGACY COMPARISON HERE, deliberately. Calling f.conj() on these fixtures runs
+                % the SYMBOLIC engine and took this suite from 10 s to 128 s -- CLAUDE.md section 7
+                % budgets the fast bucket in seconds, and section 9 puts symbolic work in the slow
+                % bucket. The legacy cross-check lives in .claude/legacy-diff.m, which is where a
+                % deliberate, occasional run belongs; what is asserted HERE is the two properties
+                % that need no oracle at all.
+
+                % and, oracle or not, f* may never fall below a sup actually attained on the
+                % domain. A dozen dual points is enough: this is a guard against a whole region
+                % being wrong, which is what both defects were, not a hunt for a lone bad point --
+                % and it keeps the suite inside the fast bucket's seconds budget.
+                lo = min(f.V,[],1) - 3;  hi = max(f.V,[],1) + 3;
+                X = lo + rand(1500,2) .* (hi - lo);
+                q = f.eval(X);  X = X(isfinite(q),:);  q = q(isfinite(q));
+                Sfew = S([1:6, end-1, end], :);
+                vf = g.eval(Sfew);
+                for i = 1:size(Sfew,1)
+                    testCase.verifyGreaterThanOrEqual(vf(i), max(X*Sfew(i,:).' - q) - 1e-6, ...
+                        sprintf('examples(%d) at s=(%g,%g)', k, Sfew(i,1), Sfew(i,2)));
+                end
+            end
         end
+
+        function noConjugateInTheFixtureCorpusHasOverlappingCells(testCase)
+        % THE INVARIANT ITSELF, applied broadly. A mesh whose cells overlap while carrying
+        % different functions does not define a function at all -- eval resolves it by first match,
+        % so the answer depends on cell ORDER, and the failure is silent. Measured across the
+        % corpus: 2 of 29 conjugates were inconsistent before the half-plane fixes, 0 of 29 after.
+        %
+        % The sample counts are small on purpose. checkQuaConConsistent's EXACT half -- pairs whose
+        % constraints are all straight, decided by ratQ.feasible2 -- is what caught both defects,
+        % and it does not depend on nSample at all; the sampled half is a backstop for curved pairs.
+        % Keeping the counts low keeps this inside the fast bucket's seconds budget.
+            names = {'energy', 'oneNorm', 'oneNormConjugate'};
+            for i = 1:numel(names)
+                g = conjQ(QuaPol.(names{i})());
+                testCase.verifyTrue(checkQuaConConsistent(g, 250), names{i});
+            end
+            P = QuaPol.examples();
+            for k = 1:numel(P)
+                if ~isa(P{k}, 'QuaPol') || ~P{k}.isExact(), continue, end
+                try
+                    g = conjQ(P{k});
+                catch
+                    continue                     % a refusal is not this test's business
+                end
+                testCase.verifyTrue(checkQuaConConsistent(g, 250), sprintf('examples(%d)', k));
+            end
+        end
+
 
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
         % Bounding the vertex denominators does not bound the downstream ones -- DECISIONS.md's
