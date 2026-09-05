@@ -17,6 +17,9 @@ Branch: overnight/2026-09-04
 - **New invariant `checkQuaConConsistent.m`**: no two cells may overlap carrying different
   functions. 2 of 29 conjugates violated it before the fixes, 0 of 29 after -- and both were caught
   by its EXACT half, not by sampling. Now asserted across the corpus in `conjQTest`.
+- **The consistency invariant asked of the ENVELOPE too**, not just the conjugate: 0 of 12
+  envelopes inconsistent, including non-convex faces, multi-piece inputs and both thin domains.
+  Asserted in `biconjQTest`; the wider set is `.claude/biconj-consistency-sweep.m`.
 - **Differential test against the LEGACY conjugate at scale** (`.claude/legacy-diff.m`, new). Over
   the library's own fixture corpus: 16 fixtures both routes answer, 6 the EXACT route reaches and
   the legacy one cannot, 1 the legacy accepts and the exact deliberately refuses (inexact

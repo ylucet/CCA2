@@ -60,6 +60,38 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() biconjQ(r), 'PLQ:biconjQ:unbounded');
         end
 
+        function noEnvelopeInTheFixtureSetHasOverlappingCells(testCase)
+        % The invariant conjQ's half-plane defects broke, asked of the ENVELOPE too rather than
+        % assumed: no two cells may overlap while carrying different functions. Such a mesh does
+        % not define a function at all -- eval resolves it by first match, so the answer depends on
+        % cell ORDER, and the failure is silent. biconjQ shares assembleQuaConCells with conjQ, so
+        % it is exposed to the same class. Measured across the shapes below: 0 of 12 inconsistent
+        % (.claude/biconj-consistency-sweep.m runs the wider set).
+            Hs = {[2 0;0 2], [1 0;0 0], [-2 0;0 -2], [-1 0;0 0], [0 0;0 0], [0 1;1 0]};
+            for i = 1:numel(Hs)
+                H = Hs{i};
+                h = biconjQ(biconjQTest.square([0 0 0 0, H(1,1), H(1,2), H(2,2), 1, -1, 2]));
+                testCase.verifyTrue(checkQuaConConsistent(h, 400), ...
+                    sprintf('square with H = %s', mat2str(H)));
+            end
+            % a non-convex face, a multi-piece input, and both thin domains
+            h = biconjQ(biconjQTest.polygon([0 0; 2 0; 2 1; 1 1; 1 2; 0 2], ...
+                                            [0 0 0 0, -1, 0, -1, 0, 0, 0]));
+            testCase.verifyTrue(checkQuaConConsistent(h, 400), 'non-convex L');
+
+            V = [0 0; 1 0; 1 1; 0 1];
+            h = biconjQ(QuaPol(V, [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1], ...
+                [0 0 0 0 -2 0 0 0 0 0; 0 0 0 0 0 0 -2 0 0 0], [1 0;1 0;2 0;2 0;2 1]));
+            testCase.verifyTrue(checkQuaConConsistent(h, 400), 'two triangles');
+
+            testCase.verifyTrue(checkQuaConConsistent( ...
+                biconjQ(QuaPol([1 2], zeros(0,3), [0 0 0 0 0 0 0 0 0 5], zeros(0,2))), 200), ...
+                'needle');
+            testCase.verifyTrue(checkQuaConConsistent( ...
+                biconjQ(QuaPol([0 0; 2 0], [1 2 1], [0 0 0 0 -1 0 0 0 0 0], [0 0])), 200), ...
+                'segment');
+        end
+
         function aConvexFunctionIsItsOwnEnvelope(testCase)
         % co f = f when f is convex, so there is nothing to compute -- and getting this wrong is
         % the silent failure ALGORITHM.md warns about: biconj returning a non-convex f unchanged.
