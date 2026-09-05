@@ -1,70 +1,98 @@
-# Morning report — 2026-09-04 overnight run
+# Morning report — 2026-09-04/05 overnight run
 
-Branch: overnight/2026-09-04
+Branch: `overnight/2026-09-04` (12 commits, not merged)
+
+Everything green: **fast 477/0/0**, **normal 13/0**, **slow 98/0** (the night's daily gate, run once
+at the start). No red tests, nothing quarantined.
 
 ## What changed
 
-- **`biconjQ` now does MULTI-PIECE envelopes** (`biconjQ.m`). The envelope couples its pieces, so
-  it is not a fold like the conjugate -- but the coupling IS just one hull: each face's graph has
-  its lower hull spanned by that face's lifted vertices, so the whole envelope is the lower hull of
-  ALL of them at once. Verified against an LP computing the envelope straight from its definition:
-  2.2e-15. `biconjQTest` 18/0, fast 471/0.
-- **Fixed THREE defects in HALF-PLANE pieces**, found by chasing the overlap quarantine: the edge
-  side could not be derived so the domain became the whole plane; the outward normal was re-derived
-  and flipped one of two opposite rays; and a half-plane's recession cone is two-dimensional, so a
-  null direction into it was missed and a +infinity sup came out finite. `examples(12)` went from
-  28 value + 91 domain disagreements against the legacy route to 0 and 0.
-- **New invariant `checkQuaConConsistent.m`**: no two cells may overlap carrying different
-  functions. 2 of 29 conjugates violated it before the fixes, 0 of 29 after -- and both were caught
-  by its EXACT half, not by sampling. Now asserted across the corpus in `conjQTest`.
-- **`biconjQ` differential-tested against the LEGACY envelope** (`.claude/biconj-legacy-diff.m`,
-  new). Zero disagreements where both answer -- but the legacy reached 13 fixtures this one
-  refused. Fixed two whole classes: a FULL-PLANE input (`QuaPol.energy` raised `noFace`) and an
-  UNBOUNDED CONVEX one (`co f = f` whatever the domain's shape). A third bug surfaced en route: the
-  convexity guard compared hull sizes, which is meaningless for a cone, so every unbounded piece
-  looked non-convex. Now 8 fixtures answered, still zero disagreements; the 9 left are unbounded
-  NON-convex domains where the envelope can be -infinity.
-- **The consistency invariant asked of the ENVELOPE too**, not just the conjugate: 0 of 12
-  envelopes inconsistent, including non-convex faces, multi-piece inputs and both thin domains.
-  Asserted in `biconjQTest`; the wider set is `.claude/biconj-consistency-sweep.m`.
-- **Differential test against the LEGACY conjugate at scale** (`.claude/legacy-diff.m`, new). Over
-  the library's own fixture corpus: 16 fixtures both routes answer, 6 the EXACT route reaches and
-  the legacy one cannot, 1 the legacy accepts and the exact deliberately refuses (inexact
-  coefficients). One real defect found, quarantined -- see below.
-- **Fixed: a piece bounded BY A LINE had no half-plane at all.** A half-plane piece has every vertex
-  and every recession direction ON its boundary, so its own geometry cannot say which side it is;
-  `F` is the only source and is now consulted there. Took `examples(12)` from 91 domain
-  disagreements to 26.
-- **Found and fixed a malformed-mesh convention in every multi-face fixture in the repo.** `F(j,:)`
-  is `[left, right]` of edge `j`, so a diagonal's two sides get different columns: `F(5,:)` must be
-  `[2 1]`, not `[1 2]`. Written the other way the mesh describes an unbounded region and
-  `QuaPol.eval` reports the wrong piece. The `conj` multi-face test passed anyway because the code
-  and the oracle shared the same (correct) reading -- invisible to differential testing, exposed
-  only by going through `eval`/`P` as a third route. `conjQTest` still 38/38 after the fix.
+Ten of the twelve commits are defect fixes, and **every defect was found by a differential test
+against something independent** — the legacy pipeline, an LP, or a closed form — not by reading code.
+
+**`conjQ` — five real defects, all in the same corner of the input space.**
+
+- **Three in HALF-PLANE pieces** (a piece bounded by a line: two opposite rays from one point, where
+  every vertex and every recession direction lies ON that line, so the piece's own geometry says
+  nothing about which side it is on).
+  1. The edge's SIDE could not be derived, so no half-plane was recorded and the domain silently
+     became the whole plane. Only `F` knows; it is now consulted there.
+  2. The OUTWARD normal was re-derived from those same vertices, so one of two opposite rays got the
+     wrong side and its KKT multiplier condition was flipped. That is what left cells overlapping.
+  3. A half-plane's RECESSION CONE is two-dimensional and no two rays generate it, so a null
+     direction into it was missed and a `+infinity` sup came out finite.
+
+  Result: on `QuaPol.examples{12}`, **28 value and 91 domain disagreements with the legacy
+  conjugate went to 0 and 0**.
+- **A dual domain that is a single POINT was discarded**, so `examples{19}` answered `+infinity`
+  everywhere where `f*(0,0) = 0`. Now recovered exactly and emitted with equality sides.
+- **A four-piece input crashed** (`MATLAB:badsubscript`): the corner-naming loop used the pre-merge
+  cell count. It could not fire until the merge began removing cells, which only started after an
+  earlier restructure.
+
+**`biconjQ` — the same audit, three more defects, plus two features.**
+
+- **A non-convex face was answered WRONGLY** (`+Inf` at four points that are in the domain). The
+  envelope's DOMAIN is `conv(P)`, not `P`. Unlike the conjugate this could not be fixed by
+  splitting: the convex hull of a union is not the union of hulls.
+- **FULL-PLANE inputs raised `noFace`** — `QuaPol.energy`, the most elementary convex input there is.
+- **UNBOUNDED CONVEX inputs were refused**, 11 of the 13 fixtures the legacy envelope answered and
+  this one did not. A third bug surfaced fixing it: the convexity guard compared hull sizes, which
+  is meaningless for a cone, so every unbounded piece looked non-convex.
+- **NEW: multi-piece envelopes.** The envelope couples its pieces, so it is not a fold — but that
+  coupling is just ONE hull over all the lifted vertices. Verified against an LP at 2.2e-15.
+- **NEW: domains of dimension < 2.** A needle is its own envelope; a segment is a 1-D problem, so
+  what decides it is the curvature ALONG the segment, not H in the plane.
+
+**New verification machinery, all checked in.**
+
+- `checkQuaConConsistent.m` — **no two cells may overlap while carrying different functions.** Such
+  a mesh does not define a function at all: `eval` resolves it by first match, so the answer depends
+  on cell ORDER, and the failure is silent. **2 of 29 conjugates violated it before tonight's fixes,
+  0 of 29 after** — and both were caught by its EXACT half, not by sampling. Now asserted across the
+  corpus for both operators.
+- `.claude/legacy-diff.m` and `.claude/biconj-legacy-diff.m` — differential tests against the legacy
+  pipeline over the library's own fixtures.
+- `.claude/consistency-sweep.m`, `.claude/biconj-consistency-sweep.m`, `.claude/stress-probe.m`.
 
 ## What is broken
 
-- **Nothing quarantined, no reds.** The overlap defect found earlier tonight was traced and FIXED
-  (three separate bugs, all in half-plane pieces -- see *What changed*).
-- **Nothing known-wrong in `conjQ` or `biconjQ`.** Both fixtures that disagreed with the legacy
-  route are resolved: `examples(19)` is FIXED (its dual domain is a single point, now recovered
-  with equality sides), and on `examples2(9)` **the legacy is the wrong one** -- it returns finite
-  values the sampled sup already exceeds, and the samples keep climbing with reach.
-- **Open, with no fixture exercising it:** a dual domain that is a SEGMENT or a LINE rather than a
-  point. Same equality-side machinery, but the extreme-point argument that pins a point does not
-  pin a segment, so it needs the thin cell's affine hull.
+**Nothing known-wrong, and nothing quarantined.** The one quarantine opened during the night was
+traced and fixed before morning.
+
+One fixture still disagrees with the legacy conjugate — `examples2(9)`, 109 points — and **there the
+legacy is the wrong one**: it returns finite values that a sampled sup already exceeds, and the
+samples keep climbing as the reach grows. Recorded, not chased.
 
 ## Needs a decision
 
 - **I branched, and your memory says not to.** `/overnight` creates a dated branch so the morning
-  review is one `git log` and abandoning the night is one `git switch`; your recorded preference is
-  to commit on `main` for solo research repos. I followed the skill because you invoked it
-  explicitly, and it is reversible either way. If you would rather I had stayed on `main`:
+  review is one `git log`; your recorded preference is to commit on `main` for solo research repos.
+  I followed the skill since you invoked it explicitly. To take it as if it had been on `main`:
   `git switch main && git merge overnight/2026-09-04 --ff-only`.
-- **`TODO.md` has no `## Next up` section**, which is what the skill works from. Its live items are
-  under dated `##` headings instead. I worked the top-of-file dated sections in order and triaged
-  stale items as I went; if you want the `Next up` convention, say so and I will restructure it.
+- **`TODO.md` has no `## Next up` section**, which is what the skill works from — its live items are
+  under dated `##` headings. I worked the top-of-file sections and triaged as I went. Say the word
+  and I will restructure it to the convention.
+- **Which of `biconjQ`'s three remaining refusals to take first.** My recommendation is the order in
+  `TODO.md`: unbounded non-convex (9 fixtures, and the machinery is closest), then multi-piece
+  convexity verification, then edge-convex — that last one being where `AlgAlg` finally earns its
+  place, so it should not be started before something needs it.
 
 ## Where I stopped
 
-_(in progress)_
+Consolidated rather than starting a large feature late in the run: re-ran every probe and sweep after
+the night's changes, updated the coverage tables in `TODO.md`, and left both operators' status
+written down there rather than in this file.
+
+**Two method notes worth keeping**, both about tests rather than code:
+
+- **A shared assumption between code and oracle is invisible to differential testing.** Every
+  multi-face fixture in the repo was malformed the same way (`F(j,:)` is `[left, right]`, so a
+  diagonal's two sides need different columns). The `conj` test passed anyway, because the code and
+  the oracle both read a face as the polygon its edges bound. Only going through a THIRD route —
+  `eval` and `P`'s signs — exposed it.
+- **Four of tonight's first five "defects" were my own fixtures or oracles**, not the code: a
+  rotated face assignment, an oracle sampling the convex hull rather than the face, an oracle
+  evaluating a multi-piece `f` with one piece's formula, and an oracle asserting equality at a
+  collinear vertex that is genuinely dominated. Checking a hand-built fixture against `f.eval` before
+  trusting it would have saved most of that.

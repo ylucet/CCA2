@@ -37,6 +37,48 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 (overnight, closing) - where `conjQ` and `biconjQ` stand
+
+Both probes re-run after the night's fixes. `.claude/coverage-probe.m` and `.claude/biconj-probe.m`
+reproduce these; do not reason about what they would say.
+
+### `conjQ` -- every 2-D domain answers, and every refusal is by design
+
+    domain \ Hessian    PD    PSD-sing  indefinite  ND    NSD-sing  affine
+    full plane          OK    OK        OK          OK    OK        OK
+    bounded triangle    OK    OK        OK          OK    OK        OK
+    bounded square      OK    OK        OK          OK    OK        OK
+    unbounded wedge     OK    OK        OK          OK    OK        OK
+    half-strip          OK    OK        OK          OK    OK        OK
+    needle OK   segment OK   multi-face bounded OK   multi-face unbounded OK
+    still refused: a CUBIC numerator (out of scope) and an INEXACT input (deliberate)
+
+`nf = 0` in the indefinite/ND/NSD unbounded cells is the ANSWER, not a failure: the sup diverges
+there, so `f*` is `+infinity` everywhere, which a zero-face `QuaCon` says exactly.
+
+### `biconjQ` -- three refusals left, each a distinct piece of mathematics
+
+    square, every Hessian class incl. McCormick        OK
+    triangle, indefinite but edge-concave              OK
+    NON-CONVEX face (envelope over conv(P))            OK
+    MULTI-piece, all pieces edge-concave               OK
+    MULTI-piece, convex + fIsConvex                    OK
+    needle / segment (dim < 2)                         OK
+    -----------------------------------------------------------------
+    edge-CONVEX piece                                  notImplemented   <- the AlgAlg trigger
+    MULTI-piece convex WITHOUT the flag                notImplemented   <- by design
+    UNBOUNDED non-convex domain                        unbounded        <- envelope can be -inf
+
+**The three, in the order they should be taken:**
+1. **UNBOUNDED non-convex** -- 9 of the fixtures the legacy envelope answers. The finiteness test is
+   the same recession analysis `conjQ` already does; what is additionally needed is the lower hull of
+   an UNBOUNDED lifted set, which needs the lifted recession rays alongside the lifted vertices, and
+   `conv(P)` as an unbounded domain.
+2. **MULTI-piece convex without the flag** -- needs a real convexity test for a piecewise function
+   (per-piece PSD plus a consistent gradient jump across every shared edge). By design today.
+3. **edge-CONVEX** -- [COAP] A.2-A.5, and the first face that cannot be written rationally, i.e.
+   where `AlgAlg` finally earns its place.
+
 ## 2026-09-05 (overnight) - `biconjQ` differential-tested against the LEGACY envelope
 
 `.claude/biconj-legacy-diff.m`, the envelope's counterpart to `legacy-diff.m`. First run:

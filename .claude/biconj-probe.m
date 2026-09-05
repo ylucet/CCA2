@@ -34,9 +34,20 @@ function biconj_probe()
 
     E2 = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
     F2 = [1 0; 1 0; 2 0; 2 0; 2 1];
-    run('MULTI-piece, both convex', ...
+    % Both pieces EDGE-CONCAVE, which is what the multi-piece envelope needs: f = -x^2 below the
+    % diagonal and -y^2 above it, continuous across it.
+    run('MULTI-piece, both edge-concave', ...
+        QuaPol(sq, E2, [0 0 0 0 -2 0 0 0 0 0; 0 0 0 0 0 0 -2 0 0 0], F2), [], [], [], []);
+    % Both pieces CONVEX. Refused unless the caller asserts fIsConvex, because for a multi-piece f
+    % per-piece PSD is necessary and NOT sufficient -- the gradient jump across every shared edge
+    % has to be consistent too. That is what the flag is for.
+    run('MULTI-piece, both convex (no flag)', ...
         QuaPol(sq, E2, [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 2 0 2 0 0 0], F2), [], [], [], []);
-    run('MULTI-piece, one concave', ...
+    fcx = QuaPol(sq, E2, [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 1 0 1 0 0 0], F2);
+    fcx.fIsConvex = true;
+    run('MULTI-piece, convex + flag', fcx, [], [], [], []);
+    % One piece curves UP along an edge: not vertex-determined, the AlgAlg trigger.
+    run('MULTI-piece, one edge-CONVEX', ...
         QuaPol(sq, E2, [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 -2 0 -2 0 0 0], F2), [], [], [], []);
 
     run('needle (dim 0)', QuaPol([1 2], zeros(0,3), [0 0 0 0 0 0 0 0 0 5], zeros(0,2)), ...
