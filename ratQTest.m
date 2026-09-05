@@ -455,6 +455,130 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyFalse(ratQ.isPSD3([1 0 0; 0 1 2; 0 2 1]));
         end
 
+        % ---- the exact degree-<=4 real-algebraic kernel -----------------------------------------
+
+        function sturmCountsRootsExactly(testCase)
+        % Sturm's theorem: the number of DISTINCT real roots of p in (a,b] is V(a) - V(b), where V
+        % counts sign changes in the Sturm chain. Checked against polynomials whose roots are known
+        % by construction, so the test does not depend on any root finder.
+            % (x-1)(x-2)(x-3) = x^3 - 6x^2 + 11x - 6
+            p = [1 -6 11 -6];
+            testCase.verifyEqual(ratQ.countRootsIn(p, -10, 10), 3);
+            testCase.verifyEqual(ratQ.countRootsIn(p, 0, 2), 2, '1 and 2 lie in (0,2]');
+            testCase.verifyEqual(ratQ.countRootsIn(p, 2, 10), 1, 'only 3 lies in (2,10]');
+            testCase.verifyEqual(ratQ.countRootsIn(p, 4, 10), 0);
+
+            % x^2 - 2: two irrational roots
+            testCase.verifyEqual(ratQ.countRootsIn([1 0 -2], -2, 2), 2);
+            testCase.verifyEqual(ratQ.countRootsIn([1 0 -2], 0, 2), 1);
+
+            % x^2 + 1: none
+            testCase.verifyEqual(ratQ.countRootsIn([1 0 1], -10, 10), 0);
+
+            % a REPEATED root counts ONCE -- Sturm counts distinct roots, and the chain is built
+            % from the squarefree part, so (x-1)^2 has exactly one.
+            testCase.verifyEqual(ratQ.countRootsIn([1 -2 1], -5, 5), 1);
+        end
+
+        function isolateRootsSeparatesEveryRealRoot(testCase)
+        % Each returned interval must contain exactly one root, and together they must account for
+        % all of them. Both halves are checked with countRootsIn, which is independent of how the
+        % intervals were produced.
+            polys = {[1 -6 11 -6], [1 0 -2], [1 -2 1], [1 0 0 0 -1], [3 -24 10 160 -96]};
+            for i = 1:numel(polys)
+                p = polys{i};
+                I = ratQ.isolateRoots(p);
+                total = 0;
+                for k = 1:size(I,1)
+                    n = ratQ.countRootsIn(p, I(k,1), I(k,2));
+                    testCase.verifyEqual(n, 1, ...
+                        sprintf('poly %d interval %d holds %d roots, not 1', i, k, n));
+                    total = total + n;
+                end
+                lo = min([I(:,1); -1]) - 1;  hi = max([I(:,2); 1]) + 1;
+                testCase.verifyEqual(total, ratQ.countRootsIn(p, lo, hi), ...
+                    sprintf('poly %d: the intervals miss a root', i));
+            end
+        end
+
+        function theS4QuarticFromTheFieldProofIsIsolatedCorrectly(testCase)
+        % CONJ_FIELD_PROOF.md section 6's quartic -- 3t^4 - 24t^3 + 10t^2 + 160t - 96 -- is
+        % irreducible with Galois group S4, and its relevant root is recorded there to 18 digits.
+        % This is the case the whole kernel exists for: a vertex that no tower of square roots can
+        % reach.
+            p = [3 -24 10 160 -96];
+            I = ratQ.isolateRoots(p);
+            want = 0.608050881512364091;
+            hit = find(I(:,1) <= want & want <= I(:,2));
+            testCase.verifyNumElements(hit, 1, 'the recorded root lies in exactly one interval');
+        end
+
+        function signAtDecidesTheSignOfAPolynomialAtAnAlgebraicNumber(testCase)
+        % THE PREDICATE THE MESH NEEDS. Given a root alpha of p isolated in [a,b], decide sign(q(alpha))
+        % EXACTLY -- no tolerance, and correct even when q(alpha) is zero.
+            % alpha = sqrt(2), the positive root of x^2 - 2
+            p = [1 0 -2];
+            I = ratQ.isolateRoots(p);
+            pos = I(I(:,1) >= 0, :);
+            testCase.verifyNumElements(pos(:,1), 1);
+
+            testCase.verifyEqual(ratQ.signAt([1 0 -2], p, pos), 0, ...
+                'q = p vanishes at its own root');
+            testCase.verifyEqual(ratQ.signAt([1 0], p, pos), 1, 'sqrt(2) > 0');
+            testCase.verifyEqual(ratQ.signAt([1 0 -1], p, pos), 1, 'sqrt(2)^2 - 1 = 1 > 0');
+            testCase.verifyEqual(ratQ.signAt([1 0 -3], p, pos), -1, 'sqrt(2)^2 - 3 = -1 < 0');
+            testCase.verifyEqual(ratQ.signAt([1 -2], p, pos), -1, 'sqrt(2) - 2 < 0');
+            testCase.verifyEqual(ratQ.signAt([1 -1], p, pos), 1, 'sqrt(2) - 1 > 0');
+        end
+
+        function signAtIsExactWhereFloatingPointIsAmbiguous(testCase)
+        % The case a tolerance cannot decide: q vanishes at alpha to any precision one cares to
+        % name, because it vanishes EXACTLY. (x^2-2) and (x^4-4) share the root sqrt(2).
+            p = [1 0 -2];
+            I = ratQ.isolateRoots(p);
+            pos = I(I(:,1) >= 0, :);
+            testCase.verifyEqual(ratQ.signAt([1 0 0 0 -4], p, pos), 0, ...
+                'x^4 - 4 vanishes at sqrt(2), and the kernel must say 0 rather than a small number');
+            % and a polynomial that is merely SMALL there is not zero
+            testCase.verifyEqual(ratQ.signAt([1000000 0 -2000001], p, pos), -1, ...
+                '10^6 x^2 - (2*10^6 + 1) is -1 at sqrt(2): small, but negative');
+        end
+
+        function signAtAgreesWithDoubleEvaluationWhereverThatIsSafe(testCase)
+        % Differential test against MATLAB's `roots`, an entirely different algorithm: away from a
+        % zero, the exact sign and the sign of q at the numerically computed root must agree.
+        %
+        % THE COMPARISON POINT IS THE ROOT, NOT THE INTERVAL'S MIDPOINT. Written the other way this
+        % test failed 27 times with the code entirely correct: an isolating interval can be wide --
+        % [0,3] for a root near 0.32 -- and q's sign at the midpoint has nothing to do with its sign
+        % at the root. The signAt answers were right every time; the oracle was evaluating in the
+        % wrong place.
+            rng(20260905);
+            checked = 0;
+            for t = 1:60
+                p = randi([-6 6], 1, 5);
+                if p(1) == 0, continue, end
+                I = ratQ.isolateRoots(p);
+                if isempty(I), continue, end
+                rr = roots(p);
+                rr = real(rr(abs(imag(rr)) < 1e-9));
+                for k = 1:size(I,1)
+                    inIv = rr(rr >= I(k,1) - 1e-9 & rr <= I(k,2) + 1e-9);
+                    if numel(inIv) ~= 1, continue, end      % ambiguous numerically: skip
+                    alpha = inIv(1);
+                    for j = 1:3
+                        q = randi([-5 5], 1, 3);
+                        v = polyval(q, alpha);
+                        if abs(v) < 1e-6, continue, end     % too near a zero for the oracle
+                        testCase.verifyEqual(ratQ.signAt(q, p, I(k,:)), sign(v), ...
+                            sprintf('case %d root %d probe %d', t, k, j));
+                        checked = checked + 1;
+                    end
+                end
+            end
+            testCase.verifyGreaterThan(checked, 50, 'the sweep must actually check something');
+        end
+
         % ---- an independent symbolic cross-check (legitimate in a test, not on the path) --------
 
         function theDifferenceConicAgreesWithTheSymbolicLevelSet(testCase)

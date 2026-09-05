@@ -613,6 +613,230 @@ classdef ratQ
             tf = ratQ.detExact(M) >= 0;
         end
 
+        function chain = sturmChain(p)
+        % objective: the STURM CHAIN of an integer polynomial -- p, p', and the NEGATED remainders.
+        % [input]  p : 1 x (n+1) integer coefficients, highest degree first
+        % [output] chain : cell array of integer polynomials
+        %
+        % Sturm's theorem: for a SQUAREFREE p, the number of distinct real roots in (a,b] is
+        % V(a) - V(b), where V counts sign changes along the chain. That is an exact statement about
+        % integers, which is the whole reason this exists -- it decides how many roots are where,
+        % with no root finder and no tolerance.
+        %
+        % PRIMITIVE PART AT EVERY STEP, and it is not an optimisation. The pseudo-remainder squares
+        % its leading coefficient each round, so a quartic with six-digit entries reaches 1e23 in a
+        % few steps and ratQ.chk raises -- measured in conicMeet's own squarefreePart, which
+        % records the same growth. Dividing out the content keeps the chain integral AND small, and
+        % it changes no SIGN, because the content is positive by construction.
+            p = ratQ.polyTrim(p);
+            p = ratQ.polySquarefree(p);
+            chain = {p};
+            if numel(p) <= 1, return, end
+            chain{2} = ratQ.polyTrim(polyder(p));
+            while numel(chain{end}) > 1
+                r = ratQ.polyPseudoRem(chain{end-1}, chain{end});
+                r = ratQ.polyTrim(r);
+                if isempty(r) || all(r == 0), break, end
+                chain{end+1} = ratQ.polyPrimitive(-r); %#ok<AGROW>
+            end
+        end
+
+        function n = countRootsIn(p, a, b)
+        % objective: the number of DISTINCT real roots of p in the half-open interval (a, b].
+        % [input]  p : integer polynomial; a, b : rational endpoints (doubles that are exact)
+        % [output] n : a nonnegative integer, DECIDED
+        %
+        % Sturm's theorem, applied to the chain above. A repeated root counts ONCE, because the
+        % chain is built from the squarefree part -- which is what the callers want: two coincident
+        % intersections of two conics are one vertex, not two.
+            chain = ratQ.sturmChain(p);
+            n = ratQ.sturmV(chain, a) - ratQ.sturmV(chain, b);
+        end
+
+        function v = sturmV(chain, x)
+        % objective: the number of SIGN CHANGES in the chain evaluated at x, zeros skipped.
+        % Evaluation is in double precision on purpose and it is safe: the count only changes when
+        % a chain member's sign changes, and the callers only ever evaluate at endpoints they chose
+        % -- integers or dyadic rationals from bisection -- where every chain member is bounded away
+        % from zero unless it vanishes exactly, which skipping handles.
+            v = 0;  last = 0;
+            for i = 1:numel(chain)
+                s = sign(polyval(chain{i}, x));
+                if s == 0, continue, end
+                if last ~= 0 && s ~= last, v = v + 1; end
+                last = s;
+            end
+        end
+
+        function I = isolateRoots(p)
+        % objective: one interval per distinct real root of p, each containing exactly that root.
+        % [output] I : k x 2, ascending, with I(j,1) <= root_j <= I(j,2)
+        %
+        % BISECTION DRIVEN BY THE EXACT COUNT. Start from a bound that provably contains every real
+        % root (Cauchy's: 1 + max|a_i|/|a_n|), then split any interval holding more than one root
+        % until each holds exactly one. Sturm decides "how many are in here" at every step, so the
+        % recursion is driven by an exact integer and cannot be fooled by two roots that are close.
+            p = ratQ.polySquarefree(ratQ.polyTrim(p));
+            if numel(p) <= 1, I = zeros(0,2); return, end
+            M = 1 + max(abs(p(2:end))) / abs(p(1));
+            M = ceil(M);
+            chain = ratQ.sturmChain(p);
+            I = bisect(chain, -M, M, ratQ.sturmV(chain,-M) - ratQ.sturmV(chain,M), 0);
+            if ~isempty(I), I = sortrows(I); end
+        end
+
+        function s = signAt(q, p, iv)
+        % objective: the EXACT sign of q at the root of p isolated in the interval iv.
+        % [input]  q : integer polynomial; p : integer polynomial; iv : [lo hi] from isolateRoots
+        % [output] s : -1, 0 or +1
+        %
+        % THE PREDICATE EVERYTHING ELSE IS BUILT ON. A vertex of f* is a root of an exact quartic
+        % (conicMeet returns it), and every mesh question -- is this vertex inside that face, which
+        % of two crossings comes first, do these two cells share a facet -- is the sign of a
+        % rational polynomial AT such a number. CONJ_FIELD_PROOF.md 8.0 lists exactly these.
+        %
+        % TWO STEPS, and the first is what makes the second terminate:
+        %
+        %   1. IS q(alpha) ZERO? Exactly when p and q share the root alpha, i.e. when gcd(p,q) has a
+        %      root in the interval -- an exact Sturm count on the gcd, no evaluation at all. This
+        %      has to come first: without it, step 2 would bisect forever trying to separate alpha
+        %      from a zero of q that IS alpha.
+        %   2. OTHERWISE q has NO root at alpha, so refining the interval until it contains no root
+        %      of q at all leaves q of one sign throughout -- and then evaluating at either endpoint
+        %      gives that sign. Sturm again decides "does q have a root in here", so the loop is
+        %      driven by exact integers and terminates because alpha is isolated from q's roots by a
+        %      positive distance.
+            p = ratQ.polySquarefree(ratQ.polyTrim(p));
+            q = ratQ.polyTrim(q);
+            if isempty(q) || all(q == 0), s = 0; return, end
+
+            g = ratQ.polyGcd(p, q);
+            if numel(g) > 1 && ratQ.countRootsIn(g, iv(1), iv(2)) > 0
+                s = 0;  return                      % alpha is a common root: q(alpha) = 0 exactly
+            end
+
+            chainP = ratQ.sturmChain(p);
+            lo = iv(1);  hi = iv(2);
+            for it = 1:200
+                if ratQ.countRootsIn(q, lo, hi) == 0
+                    % q has no root in [lo,hi], so it holds one sign there; alpha is inside.
+                    v = polyval(q, (lo + hi)/2);
+                    if v ~= 0, s = sign(v); return, end
+                    v = polyval(q, hi);
+                    if v ~= 0, s = sign(v); return, end
+                    s = sign(polyval(q, lo));  return
+                end
+                mid = (lo + hi) / 2;
+                if ratQ.sturmV(chainP, lo) - ratQ.sturmV(chainP, mid) == 1
+                    hi = mid;
+                else
+                    lo = mid;
+                end
+            end
+            error('ratQ:signAtNoConverge', ...
+                ['bisection did not separate the root from q''s zeros in 200 steps. The root and ' ...
+                 'a zero of q are then closer than a dyadic rational of that depth, which for ' ...
+                 'exact integer input means they are equal -- so the gcd test above should have ' ...
+                 'caught it, and this is a defect rather than a precision limit.']);
+        end
+
+        function p = polyTrim(p)
+        % objective: drop leading zeros, so a polynomial has one spelling. [] is the zero polynomial.
+            if isempty(p), return, end
+            k = find(p ~= 0, 1);
+            if isempty(k), p = []; else, p = p(k:end); end
+        end
+
+        function p = polyPrimitive(p)
+        % objective: divide out the integer content, keeping the SIGN of the leading coefficient.
+        % The content is positive, so this changes no sign anywhere -- which is what lets the Sturm
+        % chain be reduced at every step without disturbing the count.
+            p = ratQ.polyTrim(p);
+            if isempty(p), return, end
+            g = 0;
+            for i = 1:numel(p)
+                if p(i) ~= 0, g = gcd(g, abs(p(i))); end
+            end
+            if g > 1, p = p / g; end
+            ratQ.chk(p, 'primitive polynomial');
+        end
+
+        function r = polyPseudoRem(a, b)
+        % objective: the PSEUDO-remainder of a by b -- the remainder of lc(b)^(deg a - deg b + 1) * a,
+        %            which is integral where the ordinary remainder is not.
+        %
+        % The content is removed by the caller at every step; without that the leading coefficients
+        % square each round and a six-digit quartic reaches 1e23 in a few steps.
+            % PRIMITIVE PARTS FIRST. The scaling factor is lc(b)^(deg a - deg b + 1), so a large
+            % leading coefficient is raised to a power: 10^6 x^2 against its own derivative
+            % 2*10^6 x already needs 4e18, past 2^53, and ratQ.chk then raises. Removing the
+            % content of both operands is exact, changes no root, and keeps the factor small --
+            % here it turns 10^6 and 2*10^6 into 10^6 and 2, and the scaling into 4.
+            a = ratQ.polyPrimitive(a);  b = ratQ.polyPrimitive(b);
+            if isempty(b), error('ratQ:divideByZero', 'pseudo-remainder by the zero polynomial.'); end
+            da = numel(a) - 1;  db = numel(b) - 1;
+            if da < db, r = a; return, end
+            r = a * b(1)^(da - db + 1);
+            ratQ.chk(r, 'pseudo-remainder scaling');
+            % THE SCALING IS WHAT MAKES EVERY STEP EXACT, and the loop must rely on that rather
+            % than test for it. Multiplying by lc(b)^(da-db+1) is exactly enough that each
+            % elimination divides evenly, so a non-integral quotient here is a DEFECT, not a case
+            % to break on -- and breaking on it left the degree unreduced, which spun forever.
+            % Measured on 10^6 x^2 - (2*10^6+1) against its own derivative.
+            while true
+                r = ratQ.polyTrim(r);
+                if isempty(r) || numel(r) - 1 < db, break, end
+                c = r(1) / b(1);
+                if c ~= round(c)
+                    error('ratQ:pseudoRemNotIntegral', ...
+                        ['the pseudo-remainder step did not divide evenly, which the ' ...
+                         'lc(b)^(deg a - deg b + 1) scaling guarantees it must.']);
+                end
+                shift = numel(r) - numel(b);
+                r = r - c * [b, zeros(1, shift)];
+                r = ratQ.chk(r, 'pseudo-remainder step');
+                r(1) = 0;                            % force the leading term to vanish exactly
+            end
+            r = ratQ.polyTrim(r);
+        end
+
+        function g = polyGcd(a, b)
+        % objective: the primitive integer GCD of two integer polynomials.
+        % Euclid on pseudo-remainders, taking the primitive part each round so the coefficients
+        % stay bounded -- see polyPseudoRem for what happens without that.
+            a = ratQ.polyPrimitive(a);  b = ratQ.polyPrimitive(b);
+            if isempty(a), g = b; return, end
+            if isempty(b), g = a; return, end
+            while true
+                r = ratQ.polyTrim(ratQ.polyPseudoRem(a, b));
+                if isempty(r), g = ratQ.polyPrimitive(b); return, end
+                a = b;  b = ratQ.polyPrimitive(r);
+                if numel(b) <= 1, g = [1]; return, end   % a nonzero constant: coprime
+            end
+        end
+
+        function s = polySquarefree(p)
+        % objective: p with every repeated root reduced to a simple one, i.e. p / gcd(p, p').
+        %
+        % Sturm's theorem needs a SQUAREFREE polynomial, and a repeated root is the normal case
+        % here rather than an exotic one: two circles meeting tangentially give the resultant a
+        % double root. Falls back to p unchanged when the exact division does not verify -- the
+        % callers' own counts still gate every answer, and a squarefree part that cannot be
+        % confirmed is not worth risking.
+            p = ratQ.polyTrim(p);
+            if numel(p) <= 2, s = p; return, end
+            try
+                g = ratQ.polyGcd(p, polyder(p));
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME); end
+                s = p;  return
+            end
+            if numel(g) <= 1, s = p; return, end
+            q = deconv(p, g);
+            if any(abs(conv(q, g) - p) > 0), s = p; return, end   % exact division did not verify
+            s = ratQ.polyTrim(round(q));
+        end
+
         function [n, d] = fromDouble(x, maxDen)
         % objective: the rational vector a caller MEANT, recovered from the doubles they passed.
         % [input]  x : 1 x k double; maxDen : largest denominator to accept (default 10^6)
@@ -695,4 +919,23 @@ classdef ratQ
             v = QuaPar.evalPoly(n, X) / d;
         end
     end
+end
+
+function I = bisect(chain, lo, hi, n, depth)
+% objective: split [lo,hi], which holds n roots, until every returned interval holds exactly one.
+% The count comes from Sturm at every step, so the recursion is driven by an exact integer and
+% cannot be fooled by two roots that lie close together.
+    if n == 0, I = zeros(0,2); return, end
+    if n == 1, I = [lo hi]; return, end
+    if depth > 200
+        error('ratQ:isolateNoConverge', ...
+            ['bisection did not separate %d roots in 200 levels. For a SQUAREFREE integer ' ...
+             'polynomial the roots are distinct and separated by a positive distance, so this ' ...
+             'is a defect rather than a precision limit.'], n);
+    end
+    mid = (lo + hi) / 2;
+    vL = ratQ.sturmV(chain, lo);
+    vM = ratQ.sturmV(chain, mid);
+    vH = ratQ.sturmV(chain, hi);
+    I = [bisect(chain, lo, mid, vL - vM, depth+1); bisect(chain, mid, hi, vM - vH, depth+1)];
 end
