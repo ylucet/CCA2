@@ -37,6 +37,80 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 - INTEGER OVERFLOW: the options, measured before choosing
+
+`ratQ.chk` raises `ratQ:overflow` past 2^53 rather than returning a rounded value, and 2026-09-05
+was the first time that fired in normal use (`cellHasInterior` calling `conicMeet` on many more
+pairs). Brainstormed with measurements rather than from first principles.
+
+### The four numbers that decide it
+
+**1. THE STORED DATA IS TINY. Only INTERMEDIATES blow up.** Across 28 fixtures the largest integer
+in any finished conjugate -- face numerator, denominator or conic coefficient -- is **531**:
+
+    energy 1 | oneNorm 1 | examples(9) 36 | examples(10) 242 | pentagon 531 | ... | max 531
+
+against 2^53 = 9.0e15. So this is not a storage problem and a wider STORED type buys nothing.
+
+**2. THE GROWTH LAW IS c^4, and the ceiling is input coefficients ~5,500.** `conicMeet`'s resultant
+is a 4x4 determinant of quadratics, so its entries are degree-8 products; measured:
+
+    input coeff   3      10      30     100     300    1000    3000    10000
+    resultant  5.2e3  2.5e4   1.9e6   2.3e8  1.8e10  2.3e12  1.8e14  OVERFLOW
+
+**3. IT IS RARE.** 0 overflows in 822 `conicMeet` calls over the corpus's finished meshes, and 0
+while building 12 random conjugates across all six Hessian classes. It needs conic coefficients
+above ~5,000, which arise only from denominators compounding in a deep fold.
+
+**4. THE BACKENDS, timed on the operation that actually overflows** (a degree-8 product form):
+
+    doubles              15.5 us/op    the floor; silently wrong past 2^53
+    CRT modular half      6.4 us/op    pure MATLAB, no toolbox, no compiler
+    java BigInteger     1876   us/op   121x doubles -- SHIPS WITH MATLAB, no compiler
+    sym                65176   us/op   4201x -- licence + VPN on the compute path
+
+### The options
+
+**A. Do nothing; keep the named refusal.** Where it fires, `cellHasInterior` keeps the cell and the
+vertex is left unnamed -- both sound, costing at most an extra face. Zero work, and the ceiling is
+documented. Against: an input a user legitimately writes (coefficients in the thousands) silently
+gets a fatter mesh, with no signal at the API level.
+
+**B. `java.math.BigInteger` on the COLD PATH only.** MATLAB ships a JVM, so this needs no compiler,
+no licence and no VPN -- the one unbounded option with no new dependency. 121x doubles, which at a
+0-in-822 hit rate is free. This is the same filtered-predicate arrangement the code already uses
+everywhere: fast path with an exactness check, exact fallback when the check fires.
+
+**C. Modular arithmetic + CRT.** Compute modulo several primes below 2^26, where every product fits
+a double exactly, and reconstruct. Fastest exact option measured (6.4 us for the modular half), pure
+MATLAB, and unbounded in principle by adding primes. Against: the reconstruction has to be written
+(Garner, in doubles), a result bound is needed to size the prime set, and it is the most code of the
+three. Worth it only if the exact path stops being cold.
+
+**D. MEX + GMP.** Fastest possible and genuinely unbounded, but adds a C toolchain to a repo whose
+whole point (MPC submission, `TODO.md` 2026-09-03) is that a referee can run it with base MATLAB.
+Rejected for that reason, not on the technical merits.
+
+**E. Reduce the growth instead.** `conicMeet` already shears and takes primitive parts; the pencil
+method would avoid the resultant but its intermediates are not obviously smaller, and it does not
+produce the exact quartic the sign kernel consumes. A real option only alongside one of the above.
+
+### Recommendation: B, and not yet
+
+**`java.math.BigInteger` behind `ratQ`'s existing interface**, entered only when `ratQ.chk` would
+raise -- so the hot path keeps its double arithmetic and its exactness check, and nothing above
+`ratQ` changes. That is exactly the contingency the plan already names, with `java` substituted for
+GMP now that the measurement shows the cold path is cold enough to afford 121x.
+
+**But the trigger has not been met.** 0 in 822 is not a problem to spend a day on, and the two
+places it can fire are both sound today. The honest next step is a REPRODUCER: an input with
+coefficients in the thousands that a user would plausibly write. If one exists, do B; if the only
+way to reach it is a synthetic fixture, leave it documented.
+
+**Not int64.** It saturates SILENTLY -- `intmax('int64')+1` is `intmax('int64')`, no error, no wrap
+-- which is the one failure mode worse than a slow answer, and it buys only 1024x headroom (c^4
+means 5.6x on the input coefficient) for that risk. `ratQ.m`'s own header already records this.
+
 ## 2026-09-05 - CURVED VERTICES are named, and the INCIDENCE arrays are built
 
 Both were blocked on the sign kernel and both are now done, so `QuaCon` is a complete mesh rather
