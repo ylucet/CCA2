@@ -114,7 +114,14 @@ classdef conjQTest < matlab.unittest.TestCase
         % anIndefinite... and aSemidefiniteSingular... below.
             V  = [0 0; 1 0; 1 1; 0 1];
             E  = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
-            F  = [1 0; 1 0; 2 0; 2 0; 1 2];       % face 1 = edges 1,2,5; face 2 = edges 3,4,5
+            % F(5,:) = [2 1], NOT [1 2]. F(j,:) is [left, right] of edge j, and face 1 -- the
+            % triangle BELOW the diagonal -- is on its RIGHT. Written the other way the mesh is
+            % MALFORMED: P{1}'s signs then describe {y >= 0, y >= x, x <= 1}, an unbounded
+            % region whose corners are not the endpoints of face 1's own edges, and QuaPol.eval
+            % reports the wrong piece at interior points. This test passed anyway, because the
+            % code and the oracle both read the face as the polygon its edges bound -- which is
+            % what a user means and what a WELL-FORMED mesh says. Measured 2026-09-04.
+            F  = [1 0; 1 0; 2 0; 2 0; 2 1];       % face 1 = edges 1,2,5; face 2 = edges 3,4,5
             H1 = [1 0; 0 1];  L1 = [0;0];  k1 = 0;
             H2 = [4 1; 1 3];  L2 = [-2;1]; k2 = 0;
             f  = QuaPol(V, E, [0 0 0 0, H1(1,1), H1(1,2), H1(2,2), L1(1), L1(2), k1; ...

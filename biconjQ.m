@@ -89,52 +89,52 @@ function h = biconjQ(obj)
              'semidefinite, which is a free necessary condition for convexity.']);
     end
 
-    if nf ~= 1
-        error('PLQ:biconjQ:notImplemented', ...
-            ['the convex envelope of a %d-piece non-convex f COUPLES its pieces -- the convex ' ...
-             'hull of a union is not determined piecewise -- so it is not a fold like the ' ...
-             'conjugate is. Only a single piece is implemented.'], nf);
-    end
-
-    Hn = [obj.fN(1,5) obj.fN(1,6); obj.fN(1,6) obj.fN(1,7)];
-    D  = ratQ.detExact(Hn);
-    [~, ~, bounded] = pieceGeometryB(obj, 1);
-    if ~bounded
-        error('PLQ:biconjQ:unbounded', ...
-            ['the envelope of a non-convex piece on an UNBOUNDED domain can be -infinity (the ' ...
-             'function may be unbounded below on its own recession cone), which is a correct ' ...
-             'answer with nowhere to be stored -- the same gap conjCPLQ records as ' ...
-             'convEnvUnbounded:minusInfinity.']);
-    end
-    % ---- EDGE-CONCAVITY, which is weaker than concavity and is the real condition -------------
+    % ---- EDGE-CONCAVITY, per face, which is weaker than concavity and is the real condition ----
     % The envelope is the lower hull of the lifted vertices whenever q is concave along every EDGE
-    % DIRECTION of the polygon -- H itself need not be negative semidefinite. Why the weaker
-    % condition suffices, on a triangle and hence on each cell of the hull: q - L vanishes at the
-    % three corners and is concave along each edge, so q >= L on the BOUNDARY; and with H not
-    % positive semidefinite q - L has no interior minimum, so its minimum over the closed triangle
-    % is on that boundary and q >= L throughout. (This is the classical vertex-polyhedral /
-    % edge-concave criterion; it is verified here rather than taken on trust -- see
-    % biconjQTest and .claude/envelope-sweep.m, which check the envelope's three defining
-    % properties on indefinite edge-concave inputs.)
+    % DIRECTION of its face -- H itself need not be negative semidefinite. Why the weaker condition
+    % suffices, on a triangle and hence on each cell of the hull: q - L vanishes at the three
+    % corners and is concave along each edge, so q >= L on the BOUNDARY; and with H not positive
+    % semidefinite q - L has no interior minimum, so its minimum over the closed triangle is on
+    % that boundary. (The classical vertex-polyhedral / edge-concave criterion, verified here
+    % rather than taken on trust -- .claude/edgeconcave-sweep.m checks the envelope's four defining
+    % properties on 124 cases, 48 of them genuinely indefinite.)
     %
-    % IT MATTERS BECAUSE IT IS WHERE McCORMICK LIVES. q = xy on the unit square has H = [0 1; 1 0],
-    % genuinely indefinite, and yet d'Hd = 0 along both edge directions -- so its envelope is the
-    % lower hull of the four corner values, which is exactly max(0, x+y-1), the McCormick /
-    % Al-Khayyal-Falk envelope. ALGORITHM.md lists that as a case worth having in closed form.
-    edgeCurv = [];
-    for j = find(any(obj.F == 1, 2)).'
-        d = obj.VN(obj.E(j,2),:)/obj.VD(obj.E(j,2)) - obj.VN(obj.E(j,1),:)/obj.VD(obj.E(j,1));
-        [dn, ~] = ratQ.fromDouble(d);
-        edgeCurv(end+1) = ratQ.chk(dn * Hn * dn.', 'edge curvature'); %#ok<AGROW>
-    end
-    if any(edgeCurv > 0)
-        error('PLQ:biconjQ:notImplemented', ...
-            ['the envelope is implemented for a CONVEX f (nothing to compute) and for a piece ' ...
-             'that is concave along every EDGE DIRECTION (the lower hull of the lifted ' ...
-             'vertices). This piece curves UPWARD along %d of its %d edges, so its envelope is ' ...
-             'not determined by the vertex values -- it needs [COAP] A.2-A.5, and is where the ' ...
-             'first face that cannot be written rationally appears (see this file''s header on ' ...
-             'AlgAlg).'], sum(edgeCurv > 0), numel(edgeCurv));
+    % IT IS WHERE McCORMICK LIVES. q = xy on the unit square has H = [0 1; 1 0], genuinely
+    % indefinite, yet d'Hd = 0 along both edge directions -- so its envelope is the lower hull of
+    % the four corner values, which is exactly max(0, x+y-1).
+    %
+    % MULTI-PIECE WORKS FOR THE SAME REASON, and this is why the envelope needs no fold. Each
+    % face's graph has its lower hull spanned by that face's lifted vertices, and the convex hull
+    % of a union is the hull of the union of the spanning sets -- so the whole envelope is the
+    % lower hull of ALL the lifted vertices at once. The envelope COUPLES the pieces, which is why
+    % it is not a max like the conjugate; taking one hull over everything is precisely that
+    % coupling, done in one step.
+    for k = 1:nf
+        Hk = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
+        [vsk, ~, bnd] = pieceGeometryB(obj, k);
+        if ~bnd
+            error('PLQ:biconjQ:unbounded', ...
+                ['piece %d is unbounded, where the envelope of a non-convex piece can be ' ...
+                 '-infinity -- a correct answer with nowhere to be stored, the gap conjCPLQ ' ...
+                 'records as convEnvUnbounded:minusInfinity.'], k);
+        end
+        own = find(any(obj.F == k, 2));
+        for j = own.'
+            a = obj.E(j,1);  b = obj.E(j,2);
+            d = obj.VN(b,:)/obj.VD(b) - obj.VN(a,:)/obj.VD(a);
+            [dn, ~] = ratQ.fromDouble(d);
+            if ratQ.chk(dn * Hk * dn.', 'edge curvature') > 0
+                error('PLQ:biconjQ:notImplemented', ...
+                    ['piece %d curves UPWARD along one of its edges, so its envelope is not ' ...
+                     'determined by the vertex values -- it needs [COAP] A.2-A.5, and is where ' ...
+                     'the first face that cannot be written rationally appears (see this ' ...
+                     'file''s header on AlgAlg).'], k);
+            end
+        end
+        if numel(vsk) < 3
+            error('PLQ:biconjQ:degenerate', ...
+                'piece %d has %d vertices; a 2-D face needs at least three.', k, numel(vsk));
+        end
     end
 
     h = concaveEnvelope(obj);
@@ -157,27 +157,46 @@ function h = concaveEnvelope(obj)
 % plane through three of them (an integer cross product), and "is this a LOWER hull facet" is the
 % sign of an integer for every other point. No hull library, no orientation predicate that could be
 % read backwards, and no tolerance.
-    [fN, fD] = obj.faceQ(1);
-    Hn = [fN(5) fN(6); fN(6) fN(7)];
-    Ln = [fN(8); fN(9)];
-    kn = fN(10);
-
     [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
-    [vs, ~, ~] = pieceGeometryB(obj, 1);
-    m = numel(vs);
-    if m < 3
-        error('PLQ:biconjQ:degenerate', 'a 2-D piece needs at least three vertices; got %d.', m);
+    nf = size(obj.fN, 1);
+
+    % ---- the lifted vertices of EVERY face, over ONE denominator --------------------------------
+    % The faces may carry different denominators, so the common one is 2*vd^2*lcm(fD). A vertex
+    % shared by two faces gets the SMALLER of the two values: the envelope is of cl f, and the
+    % lower hull is what the smaller lifted point contributes. For a continuous f they agree, and
+    % where they do not, f is discontinuous there and the lower value is the closure's.
+    Lden = 1;
+    for k = 1:nf, Lden = lcm(Lden, obj.fD(k)); end
+    Dl = ratQ.chk(2 * Lden * vd^2, 'lift denominator');
+
+    lifted = containers.Map('KeyType', 'double', 'ValueType', 'double');
+    for k = 1:nf
+        [fN, fD] = obj.faceQ(k);
+        Hn = [fN(5) fN(6); fN(6) fN(7)];
+        Ln = [fN(8); fN(9)];
+        kn = fN(10);
+        scale = ratQ.chk(Lden / fD, 'denominator scaling');
+        [vsk, ~, ~] = pieceGeometryB(obj, k);
+        for i = 1:numel(vsk)
+            v  = Vi(vsk(i), :).';
+            qv = ratQ.chk(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), 'vertex value');
+            key = vsk(i);
+            if ~isKey(lifted, key) || qv < lifted(key)
+                lifted(key) = qv;
+            end
+        end
     end
 
-    % ---- the lifted vertices, over ONE denominator ---------------------------------------------
-    % x and y are Vi/vd and the value is qv/(2*fD*vd^2), so the common denominator is 2*fD*vd^2 and
-    % the x,y numerators scale up by 2*fD*vd.
-    Dl = ratQ.chk(2 * fD * vd^2, 'lift denominator');
+    vs = cell2mat(keys(lifted)).';
+    m  = numel(vs);
+    if m < 3
+        error('PLQ:biconjQ:degenerate', 'the domain has %d vertices; a 2-D one needs three.', m);
+    end
     Q3 = zeros(m, 3);
     for i = 1:m
         v = Vi(vs(i), :).';
-        qv = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
-        Q3(i,:) = [ratQ.chk(2*fD*vd*v(1), 'lift x'), ratQ.chk(2*fD*vd*v(2), 'lift y'), qv];
+        Q3(i,:) = [ratQ.chk(2*Lden*vd*v(1), 'lift x'), ...
+                   ratQ.chk(2*Lden*vd*v(2), 'lift y'), lifted(vs(i))];
     end
 
     % ---- the LOWER hull facets, by brute force over triples --------------------------------------

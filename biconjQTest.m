@@ -241,15 +241,41 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notImplemented');
         end
 
-        function aMultiPieceNonConvexInputIsRefusedByName(testCase)
-        % The envelope COUPLES pieces -- the convex hull of a union is not determined piecewise --
-        % so unlike the conjugate it is not a fold, and refusing is the honest answer.
+        function aMULTIPIECEEnvelopeIsOneHullOverAllTheLiftedVertices(testCase)
+        % WAS a refusal. The envelope COUPLES its pieces -- the convex hull of a union is not the
+        % union of hulls -- so unlike the conjugate it is not a fold. But that coupling IS just one
+        % hull: each face's graph has its lower hull spanned by that face's lifted vertices, and
+        % the hull of a union is the hull of the union of the spanning sets, so the whole envelope
+        % is the lower hull of ALL the lifted vertices at once. One step, not a fold.
+        %
+        % f = -x^2 below the diagonal and -y^2 above it, on the unit square: continuous, and each
+        % piece edge-concave. The oracle is the envelope's DEFINITION by linear programming --
+        % co f(x) as the least value of sum w_i f(x_i) over convex combinations reaching x -- which
+        % shares no machinery with the lower hull.
             V = [0 0; 1 0; 1 1; 0 1];
             E = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
-            F = [1 0; 1 0; 2 0; 2 0; 1 2];
-            f = QuaPol(V, E, [0 0 0 0, -1, 0, -1, 0, 0, 0; 0 0 0 0, -2, 0, -2, 0, 0, 0], F);
-            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notImplemented');
+            F = [1 0; 1 0; 2 0; 2 0; 2 1];        % see conjQTest for why F(5,:) is [2 1]
+            f = QuaPol(V, E, [0 0 0 0 -2 0 0 0 0 0; 0 0 0 0 0 0 -2 0 0 0], F);
+            testCase.verifyEqual(f.eval([0.8 0.2]), -0.64, 'AbsTol', 1e-12, ...
+                'the fixture must be well formed: -x^2 applies BELOW the diagonal');
+            testCase.verifyEqual(f.eval([0.2 0.8]), -0.64, 'AbsTol', 1e-12);
+
+            h = biconjQ(f);
+
+            [X, Y] = meshgrid(linspace(0, 1, 121));
+            P = [X(:), Y(:)];
+            q = f.eval(P);  keep = isfinite(q);  P = P(keep,:);  q = q(keep);
+            opts = optimoptions('linprog', 'Display', 'none');
+            probes = [0.5 0.5; 0.25 0.75; 0.9 0.1; 0 0; 1 1; 0.5 0.2; 1 0; 0 1];
+            for i = 1:size(probes,1)
+                [~, fv, flag] = linprog(q, [], [], [P.'; ones(1,size(P,1))], ...
+                                        [probes(i,:).'; 1], zeros(size(P,1),1), [], opts);
+                testCase.assumeEqual(flag, 1);
+                testCase.verifyEqual(h.eval(probes(i,:)), fv, 'RelTol', 1e-6, 'AbsTol', 1e-6, ...
+                    sprintf('at (%g,%g)', probes(i,1), probes(i,2)));
+            end
         end
+
 
         function anInexactInputIsRefusedBeforeAnythingElse(testCase)
             testCase.verifyError(@() biconjQ(QuaPol([sqrt(2) 0 1 0 0 0])), 'PLQ:QuaPol:notExact');

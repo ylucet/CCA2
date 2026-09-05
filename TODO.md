@@ -37,6 +37,40 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (overnight) — MULTI-PIECE envelope, and a malformed-mesh convention found
+
+**Item 2 of the three envelope items is done.** The envelope COUPLES its pieces -- the convex hull
+of a union is not the union of hulls -- so unlike the conjugate it is not a fold. But that coupling
+IS just one hull: each face's graph has its lower hull spanned by that face's lifted vertices, and
+the hull of a union is the hull of the union of the spanning sets. So the whole envelope is the
+lower hull of ALL the lifted vertices at once, in one step, provided every piece is edge-concave
+on its own face (checked per face).
+
+A vertex shared by two faces takes the SMALLER of the two values: the envelope is of `cl f`, and the
+lower hull is what the smaller lifted point contributes. For a continuous `f` they agree.
+
+Verified against the envelope's DEFINITION by linear programming -- `co f(x)` as the least value of
+`sum w_i f(x_i)` over convex combinations reaching `x`, which shares no machinery with the lower
+hull -- at **2.2e-15** on a two-triangle fixture.
+
+### The convention that cost four probes: `F(j,:)` is `[left, right]`, and a diagonal's two sides differ
+
+Every multi-face fixture in this repo was MALFORMED, including the one in `conjQTest` that passes.
+For the unit square split by the diagonal `1-3`, `F(5,:)` must be `[2 1]`, not `[1 2]`: face 1, the
+triangle BELOW the diagonal, is on its RIGHT. Written the other way, `P{1}`'s signs describe
+`{y >= 0, y >= x, x <= 1}` -- an UNBOUNDED region whose corners are not the endpoints of face 1's
+own edges -- and `QuaPol.eval` then reports the wrong piece at interior points.
+
+**Why the `conj` test passed anyway, and why that is worth knowing:** the code and the oracle BOTH
+read a face as the polygon its edges bound, which is what a user means and what a well-formed mesh
+says. They agreed with each other while disagreeing with `eval`. A shared assumption between code
+and oracle is invisible to any amount of differential testing -- only reading the mesh through a
+THIRD route (`eval` / `P`) exposed it. Fixed in `conjQTest`, `biconjQTest`, `.claude/coverage-probe.m`
+and `.claude/biconj-probe.m`; `conjQTest` still 38/38 afterwards, which confirms the reading was
+right and only the fixture was wrong.
+
+**One envelope item left**: edge-CONVEX, which needs [COAP] A.2-A.5 and is the `AlgAlg` trigger.
+
 ## 2026-09-04 — `biconjQ` handles domains of dimension < 2
 
 Item 1 of the three open envelope items. `co f` is convex, so its domain is `conv(dom f)` -- and

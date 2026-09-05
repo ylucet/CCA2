@@ -27,7 +27,7 @@ function coverage_probe()
     extra = {};
     V = [0 0; 1 0; 1 1; 0 1];
     extra{end+1} = {'multi-face bounded', QuaPol(V, [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1], ...
-        [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 4 1 3 -2 1 0], [1 0; 1 0; 2 0; 2 0; 1 2])};
+        [0 0 0 0 1 0 1 0 0 0; 0 0 0 0 4 1 3 -2 1 0], [1 0; 1 0; 2 0; 2 0; 2 1])};
     extra{end+1} = {'multi-face unbounded', QuaPol.oneNorm()};
     extra{end+1} = {'needle (dim 0)',   QuaPol([0 0], zeros(0,3), [0 0 0 0 0 0 0 0 0 1], zeros(0,2))};
     extra{end+1} = {'segment (dim 1)',  QuaPol([0 0; 1 0], [1 2 1], [0 0 0 0 0 0 0 0 0 1], [0 0])};
