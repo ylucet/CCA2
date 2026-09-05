@@ -274,10 +274,9 @@ function g = assembleQuaConCells(cells)
         end
     end
 
-    % E and F stay EMPTY: recovering which cell borders which along which segment is an
-    % arrangement computation nothing consumes yet, and a plausible-looking invented incidence
-    % would be worse than an honest gap.
-    g = QuaCon(Vname, zeros(ne,3), EcQ, fN, fD, zeros(ne,2), FC);
+    % ---- the INCIDENCE arrays, E and F ---------------------------------------------------------
+    [E, F] = buildIncidence(EcQ, FC, Vname, fN, fD);
+    g = QuaCon(Vname, E, EcQ, fN, fD, F, FC);
 end
 
 function tf = cellHoldsAt(EcQ, rows, xn, xd)
@@ -359,6 +358,47 @@ function tf = cellHoldsAtDouble(EcQ, rows, x)
             if abs(v) > 1e-9 * scale, tf = false; return, end
         elseif rows(r,2) * v < -1e-9 * scale
             tf = false;  return
+        end
+    end
+end
+
+function [E, F] = buildIncidence(EcQ, FC, Vname, fN, fD) %#ok<INUSD>
+% objective: E (which vertices each curve runs between, and whether it is a segment) and F (which
+%            cell lies on each side of it), derived from data already exact.
+%
+% [output] E : ne x 3, [v1 v2 isSegment]; a 0 vertex means "not named" and isSegment is then 0
+%          F : ne x 2, [left right] cell indices, 0 where no cell claims that side
+%
+% NOTHING HERE IS INVENTED, which is the whole reason it can be built at all. A cell claims a curve
+% exactly when its FC row references it, and the SIDE in that row says which side -- so F is a
+% transcription of FC rather than a geometric computation. E's endpoints are the named vertices
+% that mention the curve, which the vertex layer has already decided exactly (a corner it could not
+% decide is simply not there, and the edge is then recorded with 0s).
+%
+% ORIENTATION. RatCon defines F(j,:) as [left, right] of edge j. For a straight edge the direction
+% is d = (-b, a) from the row [.. a b c], so its LEFT is the +normal side, i.e. the side where the
+% form is POSITIVE -- which is side +1 in FC. Curved edges keep the same convention against the
+% conic's own gradient, and the two agree because a line is the degenerate conic.
+    ne = size(EcQ,1);
+    E = zeros(ne, 3);
+    F = zeros(ne, 2);
+
+    for j = 1:ne
+        vs = find(Vname(:,1) == j | Vname(:,2) == j);
+        if numel(vs) >= 2
+            E(j,:) = [vs(1), vs(2), 1];        % two named corners: a segment between them
+        elseif numel(vs) == 1
+            E(j,:) = [vs(1), 0, 0];            % one named corner: unbounded from it
+        end
+        for k = 1:numel(FC)
+            r = find(FC{k}(:,1) == j, 1);
+            if isempty(r), continue, end
+            side = FC{k}(r,2);
+            if side > 0
+                if F(j,1) == 0, F(j,1) = k; end
+            elseif side < 0
+                if F(j,2) == 0, F(j,2) = k; end
+            end
         end
     end
 end

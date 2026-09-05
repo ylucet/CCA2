@@ -37,6 +37,35 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 - CURVED VERTICES are named, and the INCIDENCE arrays are built
+
+Both were blocked on the sign kernel and both are now done, so `QuaCon` is a complete mesh rather
+than a face list.
+
+**Curved corners.** The name `[edgeA edgeB rootIdx]` was always able to STORE an irrational corner
+-- that is what naming is for. What was missing was deciding whether such a point lies IN the cell,
+which is the sign of a rational polynomial at a degree-4 algebraic number. Measured: a fold with 14
+conic edges went from 0 curved corners named to 18 of 49; a PSD-singular pentagon, 36 of 97.
+**The contract is asserted, not assumed** -- every named vertex must LIE ON BOTH curves it names,
+checked at the realised coordinate. Worst residual over four fixtures: 8.7e-13, none off-curve
+(`.claude/vertex-name-check.m`).
+
+**Incidence.** `E` (which vertices a curve runs between, and whether it is a segment) and `F` (which
+cell lies on each side) are DERIVED from data already exact rather than recomputed: a cell claims a
+curve exactly when its `FC` row references it, and the side in that row says which side, so `F` is a
+transcription of `FC`. Because it is a transcription, the test is a cross-check between two
+representations of one fact -- which is what catches a convention read backwards.
+**0 inconsistencies over 4 fixtures and 77 F entries** (`.claude/incidence-check.m`). An edge whose
+corners could not be decided is recorded with 0s rather than omitted, so the arrays stay indexable
+and honest about what is unknown.
+
+### What this leaves
+
+`QuaCon` now carries exact faces, exact conics, named vertices INCLUDING curved ones, and incidence.
+The one thing still marked in `assembleQuaConCells` is that a corner whose `conicMeet` overflows
+2^53 is left unnamed -- the same ceiling the cell-emptiness test hits, and the same fix: widen
+`ratQ`'s integer backend.
+
 ## 2026-09-05 - the exact degree-<=4 SIGN KERNEL, and the cell count it buys
 
 `CONJ_FIELD_PROOF.md` 8.0 names the operations that must leave Q; `conicMeet` has produced the exact

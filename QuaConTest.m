@@ -142,6 +142,53 @@ classdef QuaConTest < matlab.unittest.TestCase
 
         % ---- the object cannot be made to lie about itself -------------------------------------
 
+        function theINCIDENCEArraysAgreeWithTheCellsTheyDescribe(testCase)
+        % E and F were empty from the day QuaCon was built -- "an arrangement computation nothing
+        % consumes yet", and inventing one would have been worse than a gap. They are now DERIVED
+        % from data that is already exact rather than recomputed: a cell claims a curve exactly
+        % when its FC row references it, and the SIDE in that row says which side, so F is a
+        % transcription of FC. E's endpoints are the named vertices that mention the curve.
+        %
+        % Because it is a transcription, the test is a cross-check between two representations of
+        % the same fact -- which is what would catch a convention read backwards.
+            E3 = [1 2 1; 2 3 1; 3 1 1];  F3 = [1 0; 1 0; 1 0];
+            sq = [0 0; 1 0; 1 1; 0 1];  Esq = [1 2 1; 2 3 1; 3 4 1; 4 1 1];
+            Fsq = [1 0; 1 0; 1 0; 1 0];
+            gs = {maxQ(conjQ(QuaPol([0 0; 1 0; 0 1], E3, [0 0 0 0 1 0 1 0 0 0], F3)), ...
+                       conjQ(QuaPol([1 0; 1 1; 0 1], E3, [0 0 0 0 4 1 3 -2 1 0], F3))), ...
+                  conjQ(QuaPol(sq, Esq, [0 0 0 0 2 0 2 1 -1 2], Fsq)), ...
+                  conjQ(QuaPol(sq, Esq, [0 0 0 0 1 0 -1 1 -1 2], Fsq)), ...
+                  conjQ(QuaPol.oneNorm())};
+
+            for c = 1:numel(gs)
+                g = gs{c};
+                testCase.verifyEqual(size(g.E,1), g.ne, sprintf('case %d: one E row per edge', c));
+                testCase.verifyEqual(size(g.F,1), g.ne, sprintf('case %d: one F row per edge', c));
+
+                for j = 1:g.ne
+                    % F(j,:) is [left, right]; a cell named on the left must carry side +1 on that
+                    % curve and one named on the right side -1.
+                    for col = 1:2
+                        k = g.F(j,col);
+                        if k == 0, continue, end
+                        r = find(g.FC{k}(:,1) == j, 1);
+                        testCase.verifyNotEmpty(r, ...
+                            sprintf('case %d: F says cell %d bounds edge %d, but it does not claim it', ...
+                                    c, k, j));
+                        testCase.verifyEqual(g.FC{k}(r,2), 3 - 2*col, ...
+                            sprintf('case %d: cell %d is on the wrong side of edge %d', c, k, j));
+                    end
+                    % every vertex an edge names must name that edge back
+                    for v = g.E(j,1:2)
+                        if v == 0, continue, end
+                        testCase.verifyTrue(any(g.Vname(v,1:2) == j), ...
+                            sprintf('case %d: edge %d names vertex %d, which does not name it', ...
+                                    c, j, v));
+                    end
+                end
+            end
+        end
+
         function aQuaConReportsItselfAsMeshedAlthoughItsDoubleFieldsAreEmpty(testCase)
         % RatCon.isMeshed tests ~isempty(obj.f), and a QuaCon's f is empty BY DESIGN, so the
         % inherited answer would be exactly backwards and would send callers down QuaParCPLQ's
