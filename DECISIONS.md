@@ -4977,3 +4977,33 @@ this project exists to avoid, and it nearly went into the record as a recommenda
 **Retry only if** the exact path stops being cold, and then only for ZERO-TESTING, where CRT needs
 no reconstruction at all: nonzero modulo any prime proves nonzero. `ratQ.detExact`'s degeneracy
 tests are that shape. Evidence: `.claude/overflow-crt-limit.m`, `.claude/overflow-backends.m`.
+
+## 2026-09-05 — the exact convexity test follows the PAPER, and `examples{16}` is not convex
+
+**The open question, closed.** The handoff asked which algorithm the exact piecewise convexity
+test should follow: Singh & Lucet (SIOPT 2021) or Singh's 2019 thesis Algorithm 3, which
+`QuaPar.isEdgeConvex` cites. Both `SINGH-21.pdf` and `BAUSCHKE-16.pdf` are now in `reference/` and
+have been read; the thesis is still not, so it is no longer cited anywhere. `isConvexQ` implements
+**Theorem 3.7** of the paper, resting on Bauschke–Lucet–Phan Theorem 5.1 (`BAUSCHKE-16.pdf`), which
+is what reduces convexity to a condition on the edges in the first place.
+
+**One deviation from the paper's own phrasing, and it removes a defect rather than adding one.**
+Condition (c) is `(Q_i - Q_j)x_k + l_i - l_j = delta_k a` with `delta_k >= 0`, and the literal
+reading — divide componentwise by `a` and check the quotients agree — is what the legacy
+`isEdgeConvex` does, hence its division by a zero component, its `rmmissing` over the resulting
+NaN, and its `sqrt(eps)`. None of it is needed. Continuity forces `grad(f_i - f_j)` to be parallel
+to `a` already, so all that is left of (c) is `<grad d, a> >= 0`: one integer dot product. Every
+predicate in `isConvexQ` is an integer sign test.
+
+**The measurement that mattered.** TODO.md 2026-09-05 listed 8 fixtures unblocked by asserting
+`fIsConvex`. Only **7** are convex. `examples{16}` — the half-star domain — has a NON-CONVEX
+DOMAIN, and the witness needs neither routine: `(-1,-1)` and `(1,0)` are in the domain, their
+midpoint `(0,-0.5)` is not (`.claude/ex16DomainProbe.m`). The legacy doubles `dom.isConvex`, which
+`orderEdges` computes, says convex — so on that one fixture `biconj` with `fIsConvex = true` was
+returning a non-convex `f` as its own convex envelope, silently, which is precisely the hazard
+ALGORITHM.md attaches to the flag. That is why `isConvexQ` computes domain convexity itself,
+exactly, instead of reading `dom.isConvex`.
+
+**Method note.** The disagreement was found by the differential sweep against the legacy routine
+(20 agree, 1 disagrees) and then decided by the DEFINITION, not by preferring the new code. A
+differential oracle names the case; it does not settle it.

@@ -56,31 +56,31 @@ unblocked by setting `fIsConvex = true` alone.**
 So the whole visible gap is a **convexity TEST**, not an envelope algorithm. `co f = f` is already
 computed correctly for every one of them; the routine simply cannot establish the hypothesis.
 
-### 1. An EXACT convexity test for a piecewise function  (unblocks all 8)
+### 1. ~~An EXACT convexity test for a piecewise function~~  DONE 2026-09-05, 7 of 8 unblocked
 
-**What it needs.** Per-piece PSD is necessary and not sufficient; convexity also needs, across every
-shared edge, that `f` is continuous and lies above each piece's extension. For two quadratics
-meeting on a line, `q_i - q_j` vanishes on that line, so it factors as `l * m` with `l` the edge's
-own linear form -- and convexity is then the SIGN of `m` on the piece's side, which is one exact
-integer test per shared edge. No new machinery: `ratQ` already has everything.
+`isConvexQ.m` + `isConvexQTest.m` (fast bucket, 10 tests), wired into `biconjQ`'s convex branch as
+`nf == 1 || isequal(obj.fIsConvex, true) || isConvexQ(obj)`. Singh & Lucet SIOPT 2021 Theorem 3.7,
+written fresh against the theorem, so neither latent smell below was carried over. Details and the
+one deviation from the paper's phrasing: `DECISIONS.md` 2026-09-05.
 
-**Existing code to read first, and treat with care.** `QuaPol.isConvex` and `isEdgeConvex` already
-implement this in doubles/`sym`, following Singh's thesis Algorithm 3. `isConvex` carries a literal
-`%TO BE TESTED!!!!` and **two code smells were spotted while measuring, both LATENT rather than
-live** -- each is currently masked by a later loop that also returns false, so neither is a known
-wrong answer today:
+**The table above was wrong about one row.** `examples{16}` is NOT convex -- its domain is not --
+so 7 fixtures are unblocked, not 8, and its `OK nf=3` under an asserted flag was a WRONG ANSWER.
+Witness in `.claude/ex16DomainProbe.m` and pinned in `isConvexQTest`.
 
-  * `if ~obj.dom.isConvex, b=false; end` sets `b` and does NOT `return`, so a non-convex domain
-    falls through to the face and edge loops.
-  * `isEdgeConvex`'s `k = sum(obj.F(j,:)>0)` is a COUNT, and the `k==1` branch then calls
-    `obj.isFaceConvex(k(k~=0))` -- using that count as a face INDEX. Accidentally right when the
-    face in question is face 1, wrong otherwise.
+**Still open, and now cheap:**
 
-Write the exact test fresh against the contract rather than porting these, and use them as a
-differential oracle on inputs where they agree.
-
-**Then remove the flag's load-bearing role.** `fIsConvex` stays as a caller's assertion (it is a
-genuine short-circuit) but stops being the only route.
+  * **`fIsConvex = true` is still TRUSTED, and `examples{16}` shows what that costs.** The only
+    guard today is the free per-piece PSD one. `isConvexQ` can now REFUTE a false flag outright;
+    what stops it being run unconditionally is that the flag exists precisely to skip the edge
+    loop. So: run it behind the opt-in assert ALGORITHM.md already describes
+    (`MAXQP_ASSERT` / `QUAPAR_VALIDATE` style), not on every call.
+  * **The two latent smells in `QuaPol`/`QuaPar.isEdgeConvex` are still there** -- the missing
+    `return` after `~obj.dom.isConvex`, and `k = sum(obj.F(j,:)>0)` used as a face INDEX. Neither
+    is on the exact path any more. Fix or delete the legacy routine; it is now second-source only.
+  * **`dom.isConvex` is wrong on `examples{16}`** (`orderEdges`, doubles). Nothing exact reads it
+    now, but `biconjCPLQ` line 246 still does.
+  * **Cubic is out of scope by assertion**, not by omission: this is Theorem 3.7, the PLQ one.
+    Theorem 3.13 covers piecewise cubic and is a different algorithm.
 
 ### 2. The UNBOUNDED NON-CONVEX envelope  (the real algorithmic gap)
 

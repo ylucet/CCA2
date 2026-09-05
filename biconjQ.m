@@ -18,8 +18,9 @@ function h = biconjQ(obj)
 %
 % WHAT IS IMPLEMENTED
 %
-%   * f CONVEX on its own domain -> f itself. Nothing to compute: co f = f. Decided exactly by
-%     testing every piece's Hessian for positive semidefiniteness, which is Sylvester on integers.
+%   * f CONVEX on its own domain -> f itself. Nothing to compute: co f = f. Decided exactly, by
+%     Sylvester on integers per piece plus `isConvexQ` for the multi-piece part (the gradient jump
+%     across every shared edge, and the convexity of the domain).
 %
 %   * a CONCAVE or AFFINE piece on a bounded polygon -> the affine interpolant over the LOWER HULL
 %     of the lifted vertices. This is the case the convex envelope is cleanest for, and the reason
@@ -67,16 +68,22 @@ function h = biconjQ(obj)
 
     % ---- f CONVEX: there is nothing to compute -------------------------------------------------
     % The necessary-and-here-sufficient test for a SINGLE piece is that its Hessian is PSD. For a
-    % multi-piece f that is necessary but not sufficient (the gradient jump across every shared
-    % edge has to be consistent too -- ALGORITHM.md), so a multi-piece input is only accepted on
-    % this branch when the caller has asserted convexity through fIsConvex, which is exactly what
-    % that flag is for.
+    % multi-piece f that is necessary but not sufficient: the gradient jump across every shared
+    % edge has to be consistent too, and the domain has to be convex. `isConvexQ` DECIDES that,
+    % exactly (Singh-Lucet SIOPT 2021 Theorem 3.7), so the multi-piece case is now established
+    % rather than asserted.
+    %
+    % fIsConvex STAYS, and only its role changes. It is a genuine short-circuit -- a caller that
+    % already knows f is convex should not pay for the edge loop -- but it is no longer the only
+    % route, so an honest input no longer has to be trusted to be answered. It is checked FIRST
+    % for exactly that reason: `||` short-circuits, so isConvexQ runs only when nothing cheaper
+    % has settled the question.
     allPSD = true;
     for k = 1:nf
         Hn = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
         if ~ratQ.isPSD2(Hn), allPSD = false; break, end
     end
-    if allPSD && (nf == 1 || isequal(obj.fIsConvex, true))
+    if allPSD && (nf == 1 || isequal(obj.fIsConvex, true) || isConvexQ(obj))
         if obj.nv == 0
             % The whole plane, one face: co f = f with no constraints at all. QuaPol.energy is
             % exactly this, and it used to raise noFace because quaPolAsQuaCon looks for a FACE and

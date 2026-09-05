@@ -142,11 +142,10 @@ classdef biconjQTest < matlab.unittest.TestCase
         % only F does. 11 of the 13 fixtures the LEGACY envelope answered and this one did not were
         % refused for that reason.
         %
-        % fIsConvex is set by the caller here, and that is the design rather than a workaround: for
-        % a MULTI-piece f, per-piece PSD is necessary but not sufficient (the gradient jump across
-        % every shared edge has to be consistent too), so the flag is how a caller asserts what is
-        % expensive to verify. ALGORITHM.md says so, and the free necessary condition is still
-        % checked -- see aFalseConvexityAssertionIsRefusedLoudly.
+        % fIsConvex is set by the caller here to exercise the SHORT-CIRCUIT specifically: it is
+        % checked before isConvexQ and returns the same answer without the edge loop. The flag is
+        % no longer the only route -- the next test is the same fixture without it -- and the free
+        % necessary condition is still checked, see aFalseConvexityAssertionIsRefusedLoudly.
             f = QuaPol.oneNorm();
             f.fIsConvex = true;
             h = biconjQ(f);
@@ -154,6 +153,36 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(h.eval(X), f.eval(X), 'AbsTol', 1e-12, ...
                 'the envelope of a convex function is the function');
             testCase.verifyTrue(checkQuaConConsistent(h, 400), 'and its cells do not overlap');
+        end
+
+        function theConvexBranchIsREACHEDWithNoFlagAtAll(testCase)
+        % The capability isConvexQ adds, stated as the property that used to fail: an honest convex
+        % multi-piece input is answered without the caller asserting anything. Before it, every
+        % fixture here raised PLQ:biconjQ:unbounded unless fIsConvex was set by hand.
+        %
+        % examples{16} is deliberately NOT in this list: its domain is not convex, so it must stay
+        % refused. See DECISIONS.md 2026-09-05.
+            P  = QuaPol.examples();
+            P2 = QuaPol.examples2();
+            L = {'oneNorm', QuaPol.oneNorm(); 'examples{5}', P{5}; 'examples{8}', P{8}; ...
+                 'examples{18}', P{18}; 'examples{19}', P{19}; 'examples2{9}', P2{9}};
+            X = [0 0; 1 1; -1 2; 0.5 -0.5; 3 -4; 2 2; -3 1];
+            for i = 1:size(L,1)
+                f = L{i,2};
+                testCase.verifyEmpty(f.fIsConvex, ...
+                    sprintf('%s must carry no assertion for this test to mean anything', L{i,1}));
+                h = biconjQ(f);
+                testCase.verifyEqual(h.eval(X), f.eval(X), 'AbsTol', 1e-12, ...
+                    sprintf('%s: co f = f, so the envelope must agree with f', L{i,1}));
+            end
+        end
+
+        function aNonConvexDOMAINIsStillRefusedEvenThoughEveryPieceIsPSD(testCase)
+        % The half-star, examples{16}. Every piece is affine, so per-piece PSD passes; only the
+        % domain rules it out, and a convexity test that read the legacy dom.isConvex would let it
+        % through and return a wrong envelope. DECISIONS.md 2026-09-05 carries the witness.
+            P = QuaPol.examples();
+            testCase.verifyError(@() biconjQ(P{16}), 'PLQ:biconjQ:unbounded');
         end
 
         function aConvexFunctionIsItsOwnEnvelope(testCase)
