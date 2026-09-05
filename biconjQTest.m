@@ -92,6 +92,39 @@ classdef biconjQTest < matlab.unittest.TestCase
                 'segment');
         end
 
+        function aFULLPLANEConvexQuadraticIsItsOwnEnvelope(testCase)
+        % QuaPol.energy -- (x^2+y^2)/2 on all of R^2 -- is the most elementary convex input there
+        % is, and it used to RAISE noFace: quaPolAsQuaCon looks for a FACE, and a full-domain mesh
+        % has none. co f = f, with no constraints at all.
+            f = QuaPol.energy();
+            h = biconjQ(f);
+            testCase.verifyEqual(h.nf, 1);
+            testCase.verifyEqual(h.ne, 0, 'the whole plane needs no bounding curve');
+            X = [0 0; 1 1; -1 2; 0.5 -0.5; 7 -3];
+            testCase.verifyEqual(h.eval(X), f.eval(X), 'AbsTol', 1e-12);
+        end
+
+        function anUNBOUNDEDConvexInputIsItsOwnEnvelope(testCase)
+        % QuaPol.oneNorm is |x|_1: four AFFINE pieces on four unbounded cones, and convex. co f = f,
+        % but re-expressing it in H-form was refused, because an unbounded piece's edge SIDE cannot
+        % be read off its vertices -- a recession direction settles it, and for a half-plane piece
+        % only F does. 11 of the 13 fixtures the LEGACY envelope answered and this one did not were
+        % refused for that reason.
+        %
+        % fIsConvex is set by the caller here, and that is the design rather than a workaround: for
+        % a MULTI-piece f, per-piece PSD is necessary but not sufficient (the gradient jump across
+        % every shared edge has to be consistent too), so the flag is how a caller asserts what is
+        % expensive to verify. ALGORITHM.md says so, and the free necessary condition is still
+        % checked -- see aFalseConvexityAssertionIsRefusedLoudly.
+            f = QuaPol.oneNorm();
+            f.fIsConvex = true;
+            h = biconjQ(f);
+            X = [0 0; 1 1; -1 2; 0.5 -0.5; 3 -4];
+            testCase.verifyEqual(h.eval(X), f.eval(X), 'AbsTol', 1e-12, ...
+                'the envelope of a convex function is the function');
+            testCase.verifyTrue(checkQuaConConsistent(h, 400), 'and its cells do not overlap');
+        end
+
         function aConvexFunctionIsItsOwnEnvelope(testCase)
         % co f = f when f is convex, so there is nothing to compute -- and getting this wrong is
         % the silent failure ALGORITHM.md warns about: biconj returning a non-convex f unchanged.

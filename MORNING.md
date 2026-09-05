@@ -17,6 +17,13 @@ Branch: overnight/2026-09-04
 - **New invariant `checkQuaConConsistent.m`**: no two cells may overlap carrying different
   functions. 2 of 29 conjugates violated it before the fixes, 0 of 29 after -- and both were caught
   by its EXACT half, not by sampling. Now asserted across the corpus in `conjQTest`.
+- **`biconjQ` differential-tested against the LEGACY envelope** (`.claude/biconj-legacy-diff.m`,
+  new). Zero disagreements where both answer -- but the legacy reached 13 fixtures this one
+  refused. Fixed two whole classes: a FULL-PLANE input (`QuaPol.energy` raised `noFace`) and an
+  UNBOUNDED CONVEX one (`co f = f` whatever the domain's shape). A third bug surfaced en route: the
+  convexity guard compared hull sizes, which is meaningless for a cone, so every unbounded piece
+  looked non-convex. Now 8 fixtures answered, still zero disagreements; the 9 left are unbounded
+  NON-convex domains where the envelope can be -infinity.
 - **The consistency invariant asked of the ENVELOPE too**, not just the conjugate: 0 of 12
   envelopes inconsistent, including non-convex faces, multi-piece inputs and both thin domains.
   Asserted in `biconjQTest`; the wider set is `.claude/biconj-consistency-sweep.m`.

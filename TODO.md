@@ -37,6 +37,41 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 (overnight) - `biconjQ` differential-tested against the LEGACY envelope
+
+`.claude/biconj-legacy-diff.m`, the envelope's counterpart to `legacy-diff.m`. First run:
+
+    both 4 (disagree 0) | exact only 2 | legacy only 13 | neither 13
+
+**Zero disagreements where both answer** -- but the legacy envelope reached THIRTEEN fixtures this
+one refused, 11 of them with `unbounded` and 2 with `noFace`. Both classes turned out to be easy
+and are now fixed:
+
+- **`noFace` on a FULL-PLANE input.** `QuaPol.energy` -- `(x^2+y^2)/2` on all of `R^2`, the most
+  elementary convex input there is -- raised, because `quaPolAsQuaCon` looks for a FACE and a
+  full-domain mesh has none. `co f = f`, with no constraints at all.
+- **`unbounded` on a CONVEX input.** `co f = f` whatever the shape of the domain; all an unbounded
+  piece changes is how each edge's SIDE is decided -- a recession direction settles it, and for a
+  half-plane piece only `F` does. Exactly the reasoning `conjQ`'s `pieceShape` already used.
+
+**A third bug surfaced while fixing the second**, and it is worth the note: the convexity guard
+compared the face's half-plane count against `hullHalfPlanes` of its vertices, which is MEANINGLESS
+for an unbounded piece -- a cone has one vertex and no hull edges at all -- so every unbounded piece
+looked non-convex and `QuaPol.oneNorm`, which IS convex, was refused. Replaced by the direct test:
+every vertex satisfies every half-plane and every recession direction satisfies their linear parts.
+
+    after:  both 8 (disagree 0) | exact only 2 | legacy only 9 | neither 13
+
+The 9 remaining are unbounded NON-convex domains, where the envelope can be `-infinity` -- a correct
+answer with nowhere to be stored, and the documented refusal.
+
+**A near-miss worth recording as a method note.** One of tonight's edits used
+`s[s.index(A):s.index(B)]` to slice out a block; `B` occurred BEFORE `A`, so the slice was the EMPTY
+string and `str.replace('', new)` inserted the replacement between every character -- a 50 MB,
+784 000-line `biconjQ.m`. Caught immediately because MATLAB refused to parse it, and recovered with
+`git checkout -- biconjQ.m` since the previous step was committed. This is what committing after
+every green step is FOR.
+
 ## 2026-09-05 (overnight) - the last two legacy disagreements, decided. One is the LEGACY's bug.
 
 Both remaining `legacy-diff` entries disagree about the DOMAIN only (0 value disagreements

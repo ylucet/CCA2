@@ -77,6 +77,14 @@ function h = biconjQ(obj)
         if ~ratQ.isPSD2(Hn), allPSD = false; break, end
     end
     if allPSD && (nf == 1 || isequal(obj.fIsConvex, true))
+        if obj.nv == 0
+            % The whole plane, one face: co f = f with no constraints at all. QuaPol.energy is
+            % exactly this, and it used to raise noFace because quaPolAsQuaCon looks for a FACE and
+            % a full-domain mesh has none.
+            h = assembleQuaConCells(struct('num', obj.fN(1,:), 'den', obj.fD(1), ...
+                                           'con', zeros(0,7)));
+            return
+        end
         h = quaPolAsQuaCon(obj);
         return
     end
@@ -320,7 +328,7 @@ function g = gcdRow(row)
     if g == 0, g = 1; end
 end
 
-function rows = polygonHalfPlanes(obj, Vi, vd, vs, k)
+function rows = polygonHalfPlanes(obj, Vi, vd, vs, k, rays)
 % objective: face k's own constraints, as exact half-planes [a b c] meaning a*x + b*y + c >= 0 at
 %            the ACTUAL coordinates (x,y).
 %
@@ -350,7 +358,27 @@ function rows = polygonHalfPlanes(obj, Vi, vd, vs, k)
             t = ratQ.chk(n(1)*v(1) + n(2)*v(2) + c0, 'side');
             if t ~= 0, sgn = sign(t); break, end
         end
-        if sgn == 0, continue, end                  % every vertex on the line: degenerate
+        if sgn == 0 && nargin >= 6
+            % Every vertex is ON this edge's line. A RECESSION direction still distinguishes the
+            % sides: the constraint must survive travelling to infinity along it, a condition on
+            % the LINEAR part alone.
+            for q = 1:size(rays,1)
+                t = ratQ.chk(n * rays(q,:).', 'recession side');
+                if t ~= 0, sgn = sign(t); break, end
+            end
+        end
+        if sgn == 0
+            % Nothing in the piece's own geometry can say, so it is bounded BY A LINE -- a
+            % half-plane. Only F knows, and n = (d2,-d1) is the RIGHT normal, so the inward normal
+            % is +n when the face sits on the right and -n when on the left.
+            if obj.F(j,2) == k
+                sgn = 1;
+            elseif obj.F(j,1) == k
+                sgn = -1;
+            else
+                continue                            % genuinely degenerate: skip the edge
+            end
+        end
         rows(end+1,:) = sgn * [ratQ.chk(vd*n(1), 'edge normal'), ...
                                ratQ.chk(vd*n(2), 'edge normal'), c0]; %#ok<AGROW>
     end
@@ -373,23 +401,41 @@ function h = quaPolAsQuaCon(obj)
     [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
     cells = struct('num', {}, 'den', {}, 'con', {});
     for k = 1:size(obj.fN,1)
-        [vs, ~, bounded] = pieceGeometryB(obj, k);
-        if ~bounded
-            error('PLQ:biconjQ:unbounded', ...
-                'piece %d is unbounded; re-expressing it in H-form needs its recession cone.', k);
-        end
-        rows = polygonHalfPlanes(obj, Vi, vd, vs, k);
+        [vs, rays, ~] = pieceGeometryB(obj, k);
+        % An UNBOUNDED piece is re-expressible after all: co f = f when f is convex, whatever the
+        % shape of its domain. All an unbounded piece changes is how each edge's SIDE is decided --
+        % a recession direction must satisfy the constraint too, and where every vertex and every
+        % ray lies ON the edge's line (a half-plane piece) only F knows. Same reasoning as conjQ's
+        % pieceShape. Before this, 11 of the 13 fixtures the legacy biconj answers and this one did
+        % not were refused here.
+        rows = polygonHalfPlanes(obj, Vi, vd, vs, k, rays);
         % A convex f is returned UNCHANGED, so its pieces must be re-expressed exactly -- and a
         % face described by half-planes IS convex. A non-convex face cannot be, so re-expressing it
         % would silently replace the region by something else. Detected by comparing against the
         % face's own convex hull: for a convex face the two descriptions have the same rows.
-        hull = hullHalfPlanes(Vi, vd, vs);
-        if size(hull,1) ~= size(rows,1)
-            error('PLQ:biconjQ:nonConvexPiece', ...
-                ['piece %d is NOT CONVEX, and co f = f here, so the answer must carry that same ' ...
-                 'non-convex region -- which an intersection of half-planes cannot express. ' ...
-                 'Unlike the conjugate this cannot be fixed by splitting, because the convex ' ...
-                 'hull of a union is not the union of hulls.'], k);
+        % TESTED DIRECTLY, not by comparing against the vertices' convex hull. That comparison is
+        % meaningless for an UNBOUNDED piece -- a cone has one vertex and no hull edges at all, so
+        % every unbounded piece looked non-convex and QuaPol.oneNorm, which IS convex, was refused.
+        % The direct test is conjQ's: every vertex satisfies every half-plane, and every recession
+        % direction satisfies their linear parts.
+        for r = 1:size(rows,1)
+            for i = 1:numel(vs)
+                v = Vi(vs(i), :);
+                if ratQ.chk(rows(r,1)*v(1) + rows(r,2)*v(2) + vd*rows(r,3), 'convexity') < 0
+                    error('PLQ:biconjQ:nonConvexPiece', ...
+                        ['piece %d is NOT CONVEX, and co f = f here, so the answer must carry ' ...
+                         'that same non-convex region -- which an intersection of half-planes ' ...
+                         'cannot express. Unlike the conjugate this cannot be fixed by ' ...
+                         'splitting: the convex hull of a union is not the union of hulls.'], k);
+                end
+            end
+            for q = 1:size(rays,1)
+                if ratQ.chk(rows(r,1)*rays(q,1) + rows(r,2)*rays(q,2), 'convexity') < 0
+                    error('PLQ:biconjQ:nonConvexPiece', ...
+                        'piece %d recedes along (%d,%d), leaving one of its own half-planes.', ...
+                        k, rays(q,1), rays(q,2));
+                end
+            end
         end
         con = zeros(size(rows,1), 7);
         for r = 1:size(rows,1)
