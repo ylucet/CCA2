@@ -45,6 +45,26 @@ function h = biconjQ(obj)
 
     nf = size(obj.fN, 1);
 
+    % ---- a domain of dimension < 2, BEFORE the convex short-circuit -------------------------------------------------------------
+    % co f is convex, so its domain is conv(dom f). For a needle or a single segment that is the
+    % domain itself -- a point or a segment -- and both are THIN, which the H-form now expresses
+    % with an EQUALITY side.
+    %
+    % BEFORE the convex short-circuit, not after, and the ordering is load-bearing: an affine or
+    % PSD q on such a domain IS convex, so that branch would claim it and then read a face through
+    % pieceGeometryB -- and these meshes have nf = 0 and an empty F, so there is no face to read.
+    % Measured: the needle and the convex segment both raised noFace while the CONCAVE segment,
+    % which falls past the short-circuit, worked.
+    if obj.dom.dim < 2
+        if size(obj.fN,1) > 1
+            error('PLQ:biconjQ:ambiguousChain', ...
+                ['a domain of dimension < 2 carrying %d different functions has no F to say ' ...
+                 'which edge takes which.'], size(obj.fN,1));
+        end
+        h = thinEnvelope(obj);
+        return
+    end
+
     % ---- f CONVEX: there is nothing to compute -------------------------------------------------
     % The necessary-and-here-sufficient test for a SINGLE piece is that its Hessian is PSD. For a
     % multi-piece f that is necessary but not sufficient (the gradient jump across every shared
@@ -380,4 +400,86 @@ function [vs, rays, bounded] = pieceGeometryB(obj, k)
     end
     vs = unique(vs);
     bounded = isempty(rays);
+end
+
+function h = thinEnvelope(obj)
+% objective: co f when the DOMAIN itself has dimension < 2 -- a needle or a single segment.
+%
+% co f is convex, so its domain is conv(dom f), and for these inputs that is the domain itself: a
+% point or a segment. Both are THIN, which the H-form expresses with an EQUALITY side (a side of 0
+% on a curve means ON it) -- the same machinery conj uses for a point- or line-supported conjugate.
+%
+%   NEEDLE. dom f is one point p, and a single point is convex, so co f = f: the value q(p) at p
+%   and +infinity elsewhere. Two equalities and a constant face.
+%
+%   SEGMENT. The problem is ONE-dimensional in the segment parameter. Where q curves UP along the
+%   segment (d'Hd >= 0) it is already convex there and co f = f; where it curves DOWN, co f is the
+%   CHORD -- the affine interpolant of the two endpoint values, which is the 1-D lower hull. One
+%   equality for the line, two inequalities for the ends.
+%
+% A CHAIN of edges is not handled here and is not thin: the convex hull of two non-collinear
+% segments is a two-dimensional polygon, so that case belongs with the ordinary envelope, reading
+% its vertices from the whole mesh rather than from a face.
+    [fN, fD] = obj.faceQ(1);
+    Hn = [fN(5) fN(6); fN(6) fN(7)];
+    Ln = [fN(8); fN(9)];
+    kn = fN(10);
+    [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
+
+    if isempty(obj.E)
+        % ---- a NEEDLE ------------------------------------------------------------------------
+        p  = Vi(1,:).';
+        qp = ratQ.chk(p.'*Hn*p + 2*vd*(Ln.'*p) + 2*vd^2*kn, 'needle value');   % over 2*fD*vd^2
+        r1 = [ratQ.chk(vd,'e1'), 0, ratQ.chk(-p(1),'e0')];
+        r2 = [0, ratQ.chk(vd,'e1'), ratQ.chk(-p(2),'e0')];
+        con = [ratQ.conic([0 0 0, r1]), 0; ratQ.conic([0 0 0, r2]), 0];
+        h = assembleQuaConCells(struct('num', [0 0 0 0 0 0 0 0 0 qp], ...
+                                       'den', ratQ.chk(2*fD*vd^2,'needle denominator'), ...
+                                       'con', con));
+        return
+    end
+
+    if size(obj.E,1) ~= 1
+        error('PLQ:biconjQ:chainNotImplemented', ...
+            ['a CHAIN of %d edges is not thin: the convex hull of two non-collinear segments is ' ...
+             'a two-dimensional polygon, so its envelope is the ordinary lower-hull case read ' ...
+             'from the whole mesh rather than from a face.'], size(obj.E,1));
+    end
+    if obj.E(1,3) == 0
+        error('PLQ:biconjQ:unbounded', ...
+            ['the domain is a RAY. Where q curves down along it the envelope runs to -infinity, ' ...
+             'which is a correct answer with nowhere to be stored -- the gap conjCPLQ records as ' ...
+             'convEnvUnbounded:minusInfinity.']);
+    end
+
+    % ---- a SEGMENT --------------------------------------------------------------------------
+    a = Vi(obj.E(1,1),:).';  b = Vi(obj.E(1,2),:).';
+    d = ratQ.chk(b - a, 'segment direction');
+    alpha = ratQ.chk(d.' * Hn * d, 'segment curvature');
+
+    n  = [d(2); -d(1)];
+    c0 = ratQ.chk(-(n.' * a), 'line offset');
+    rows = [ratQ.chk(vd*n(1),'l1'), ratQ.chk(vd*n(2),'l2'), c0];          % ON the line
+    lo   = [ratQ.chk(vd*d(1),'s1'), ratQ.chk(vd*d(2),'s2'), ratQ.chk(-(d.'*a),'s0')];
+    hi   = [ratQ.chk(-vd*d(1),'t1'), ratQ.chk(-vd*d(2),'t2'), ratQ.chk(d.'*b,'t0')];
+    con  = [ratQ.conic([0 0 0, rows]), 0; ...
+            ratQ.conic([0 0 0, lo]), sgnOfB(lo, +1); ...
+            ratQ.conic([0 0 0, hi]), sgnOfB(hi, +1)];
+
+    if alpha >= 0
+        % q is convex along the segment, so it is already its own envelope there.
+        num = fN;  den = fD;
+    else
+        % q curves DOWN along the segment: the envelope is the CHORD, the affine interpolant of the
+        % two endpoint values. Written over 2*fD*vd^2*(d.d), and checked to reproduce q(a) and q(b)
+        % exactly at the ends.
+        qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'endpoint value');
+        qb = ratQ.chk(b.'*Hn*b + 2*vd*(Ln.'*b) + 2*vd^2*kn, 'endpoint value');
+        dd = ratQ.chk(d.'*d, 'segment length squared');
+        num = [0 0 0 0, 0, 0, 0, ...
+               ratQ.chk((qb-qa)*vd*d(1), 'c8'), ratQ.chk((qb-qa)*vd*d(2), 'c9'), ...
+               ratQ.chk(qa*dd - (qb-qa)*(a.'*d), 'c10')];
+        den = ratQ.chk(2*fD*vd^2*dd, 'chord denominator');
+    end
+    h = assembleQuaConCells(struct('num', num, 'den', den, 'con', con));
 end

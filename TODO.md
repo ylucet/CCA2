@@ -37,6 +37,31 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 — `biconjQ` handles domains of dimension < 2
+
+Item 1 of the three open envelope items. `co f` is convex, so its domain is `conv(dom f)` -- and
+for a needle or a single segment that IS the domain, a point or a segment. Both are THIN, which the
+H-form already expresses with an equality side, so this needed no new storage:
+
+- **NEEDLE** -- a single point is convex, so `co f = f`: the value `q(p)` at `p`, `+inf` elsewhere.
+- **SEGMENT** -- a ONE-dimensional problem in the segment parameter, so what decides the answer is
+  the curvature ALONG the segment and not H in the plane. Curving UP, `q` is already convex there
+  and `co f = f`; curving DOWN, `co f` is the CHORD, the affine interpolant of the endpoint values.
+
+**Ordering is load-bearing, and the wrong order was silent about which case it was in.** An affine
+or PSD `q` on such a domain IS convex, so the convex short-circuit claimed it and then tried to read
+a FACE -- and these meshes have `nf = 0` and an empty `F`. Measured: the needle and the convex
+segment both raised `noFace` while the CONCAVE segment, which falls past the short-circuit, worked.
+The dimension check now runs first.
+
+Refused, and correctly: a RAY domain, where `q` curving down makes the envelope `-inf` -- a right
+answer with nowhere to be stored, the gap `conjCPLQ` records as `convEnvUnbounded:minusInfinity`.
+And a CHAIN of edges, which is not thin at all: the convex hull of two non-collinear segments is a
+two-dimensional polygon, so that belongs with the ordinary lower-hull case read from the whole mesh.
+
+**Two envelope items left**: MULTI-piece (the envelope couples pieces, so it is not a fold) and
+edge-CONVEX (needs [COAP] A.2-A.5, and is the `AlgAlg` trigger).
+
 ## 2026-09-04 — `biconjQ` audited the same way, and it had the SAME silent defect
 
 `.claude/biconj-probe.m` is the envelope's coverage probe. It found that a NON-CONVEX face was

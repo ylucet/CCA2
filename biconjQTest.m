@@ -11,6 +11,55 @@ classdef biconjQTest < matlab.unittest.TestCase
 
     methods (Test)
 
+        function aNEEDLEIsItsOwnEnvelope(testCase)
+        % A single point is convex, so co f = f: the value q(p) at p and +infinity elsewhere. The
+        % domain is THIN and is carried by the H-form's equality side, the same machinery conj uses
+        % for a point-supported conjugate.
+            h = biconjQ(QuaPol([1 2], zeros(0,3), [0 0 0 0 0 0 0 0 0 5], zeros(0,2)));
+            testCase.verifyEqual(h.nf, 1);
+            testCase.verifyEqual(h.eval([1 2]), 5, 'AbsTol', 1e-12);
+            testCase.verifyTrue(all(isinf(h.eval([1 2.5; 1.5 2; 0 0]))));
+        end
+
+        function aSEGMENTEnvelopesInOneDimension(testCase)
+        % The problem is one-dimensional in the segment parameter, so the answer turns on the
+        % curvature ALONG the segment and not on H in the plane. Both directions are pinned.
+            X = [0 0; 0.5 0; 1 0; 2 0];
+
+            % q = x^2/2 curves UP along the segment, so it is already convex there: co f = f.
+            up = biconjQ(QuaPol([0 0; 2 0], [1 2 1], [0 0 0 0 1 0 0 0 0 0], [0 0]));
+            testCase.verifyEqual(up.eval(X), X(:,1).^2/2, 'AbsTol', 1e-12);
+
+            % q = -x^2/2 curves DOWN, so co f is the CHORD through (0,0) and (2,-2), i.e. -x.
+            dn = biconjQ(QuaPol([0 0; 2 0], [1 2 1], [0 0 0 0 -1 0 0 0 0 0], [0 0]));
+            testCase.verifyEqual(dn.eval(X), -X(:,1), 'AbsTol', 1e-12);
+            testCase.verifyEqual(dn.eval([0 0; 2 0]), [0; -2], 'AbsTol', 1e-12, ...
+                'the chord interpolates the endpoint values exactly');
+
+            % and the domain really is the segment, not its line and not the plane
+            testCase.verifyTrue(all(isinf(dn.eval([1 0.3; 3 0; -1 0]))), ...
+                'off the line, and beyond either end, the envelope is +infinity');
+        end
+
+        function theDimensionCheckRunsBEFORETheConvexShortCircuit(testCase)
+        % ORDERING IS LOAD-BEARING HERE, and the wrong order is silent about which case it is in:
+        % an affine or PSD q on a low-dimensional domain IS convex, so the convex branch would
+        % claim it and then try to read a FACE -- and such a mesh has nf = 0 and an empty F.
+        % Measured while building this: the needle and the convex segment both raised noFace, while
+        % the CONCAVE segment, which falls past the short-circuit, worked.
+            needle = QuaPol([1 2], zeros(0,3), [0 0 0 0 0 0 0 0 0 5], zeros(0,2));
+            convexSeg = QuaPol([0 0; 2 0], [1 2 1], [0 0 0 0 1 0 0 0 0 0], [0 0]);
+            testCase.verifyEqual(biconjQ(needle).eval([1 2]), 5, 'AbsTol', 1e-12);
+            testCase.verifyEqual(biconjQ(convexSeg).eval([1 0]), 0.5, 'AbsTol', 1e-12);
+        end
+
+        function aRAYDomainIsRefusedByName(testCase)
+        % Where q curves down along a ray the envelope runs to -infinity, a correct answer with
+        % nowhere to be stored -- the gap conjCPLQ records as convEnvUnbounded:minusInfinity.
+            r = QuaPol([0 0; 1 0], [1 2 0], [0 0 0 0 -1 0 0 0 0 0], [0 0]);
+            testCase.verifyError(@() biconjQ(r), 'PLQ:biconjQ:unbounded');
+        end
+
         function aConvexFunctionIsItsOwnEnvelope(testCase)
         % co f = f when f is convex, so there is nothing to compute -- and getting this wrong is
         % the silent failure ALGORITHM.md warns about: biconj returning a non-convex f unchanged.
