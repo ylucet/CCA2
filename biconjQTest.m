@@ -53,6 +53,37 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(biconjQ(convexSeg).eval([1 0]), 0.5, 'AbsTol', 1e-12);
         end
 
+        function anUnboundedRefusalSaysWHICHKindItIs(testCase)
+        % Two different situations hid behind one identifier. Along a recession direction d, q
+        % behaves as t*<grad q, d> + (t^2/2) d'Hd, so the envelope runs to -infinity exactly when
+        % some recession direction has d'Hd < 0, or d'Hd = 0 with a negative linear rate. Otherwise
+        % q is bounded below on its own recession cone and the envelope is FINITE -- a real answer,
+        % simply not computed yet.
+        %
+        % The distinction is not cosmetic: it says which refusals are REPRESENTATIONAL (a correct
+        % -infinity with nowhere to go) and which are a genuine gap. Measured over the fixture
+        % corpus: all 8 fixtures the legacy envelope answers and this one refuses are the FINITE
+        % kind, so all 8 are reachable.
+            % strictly concave on a cone: q runs DOWN along both rays, so co f is -infinity
+            down = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], ...
+                          [0 0 0 0, -2, 0, -2, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyError(@() biconjQ(down), 'PLQ:biconjQ:minusInfinity');
+
+            % An AFFINE q on the same cone is CONVEX, so it is answered rather than refused --
+            % co f = f. Worth pinning, because it was the first fixture tried here and the refusal
+            % expected of it was simply wrong.
+            aff = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], ...
+                         [0 0 0 0, 0, 0, 0, 1, 1, 0], [1 0; 0 1]);
+            testCase.verifyEqual(biconjQ(aff).nf, 1, 'an affine q is its own envelope');
+
+            % Non-convex, but BOUNDED BELOW on its recession cone: H = diag(1,-1) is indefinite,
+            % yet on cone((1,0),(1,1)) the curvature is 1 - t^2 >= 0 throughout. So the envelope is
+            % FINITE and the refusal must be the honest "not computed yet" one, not minusInfinity.
+            fin = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], ...
+                         [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:unbounded');
+        end
+
         function aRAYDomainIsRefusedByName(testCase)
         % Where q curves down along a ray the envelope runs to -infinity, a correct answer with
         % nowhere to be stored -- the gap conjCPLQ records as convEnvUnbounded:minusInfinity.

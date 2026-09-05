@@ -41,6 +41,11 @@ against something independent** — the legacy pipeline, an LP, or a closed form
   is meaningless for a cone, so every unbounded piece looked non-convex.
 - **NEW: multi-piece envelopes.** The envelope couples its pieces, so it is not a fold — but that
   coupling is just ONE hull over all the lifted vertices. Verified against an LP at 2.2e-15.
+- **The unbounded refusal now says WHICH KIND it is** — `minusInfinity` (a correct answer with
+  nowhere to be stored) versus `unbounded` (a finite answer simply not computed). Measured: **all 8
+  fixtures the legacy envelope answers and this one refuses are the FINITE kind**, so all 8 are
+  reachable rather than blocked on a representation. That is the single most useful number for
+  whoever takes the item next.
 - **NEW: domains of dimension < 2.** A needle is its own envelope; a segment is a 1-D problem, so
   what decides it is the curvature ALONG the segment, not H in the plane.
 

@@ -121,10 +121,50 @@ function h = biconjQ(obj)
         Hk = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
         [vsk, ~, bnd] = pieceGeometryB(obj, k);
         if ~bnd
+            % TWO DIFFERENT SITUATIONS, and saying which is which is the point of this branch.
+            % Along a recession direction d, q behaves as t*<grad q, d> + (t^2/2) d'Hd, so the
+            % envelope runs to -infinity exactly when some recession direction has d'Hd < 0, or has
+            % d'Hd = 0 with the linear rate negative somewhere on the piece. Otherwise q is bounded
+            % below on its own recession cone and the envelope is FINITE -- a real answer this
+            % routine does not yet compute, because the lower hull of an UNBOUNDED lifted set needs
+            % the lifted recession rays alongside the lifted vertices, and conv(P) as an unbounded
+            % domain.
+            [~, rays, ~] = pieceGeometryB(obj, k);
+            Lk = [obj.fN(k,8); obj.fN(k,9)];
+            % THE CONE, NOT ONLY ITS GENERATORS. On cone(d1,d2) the curvature is
+            % a*l1^2 + 2b*l1*l2 + c*l2^2, and it is nonnegative for every l >= 0 exactly when
+            % a >= 0, c >= 0 and (b >= 0 or b^2 <= a*c). Checking the generators alone would miss a
+            % direction strictly INSIDE the cone that runs downward -- the same flaw conjQ's
+            % recessionConditions had to fix.
+            diverges = false;
+            for r = 1:size(rays,1)
+                d = rays(r,:).';
+                a = ratQ.chk(d.' * Hk * d, 'recession curvature');
+                if a < 0, diverges = true; break, end
+                if a == 0 && ratQ.chk(Lk.' * d, 'recession slope') < 0
+                    diverges = true;  break
+                end
+            end
+            if ~diverges && size(rays,1) >= 2
+                a = ratQ.chk(rays(1,:)*Hk*rays(1,:).', 'cone a');
+                b = ratQ.chk(rays(1,:)*Hk*rays(2,:).', 'cone b');
+                c = ratQ.chk(rays(2,:)*Hk*rays(2,:).', 'cone c');
+                if b < 0 && ratQ.chk(b^2 - a*c, 'cone discriminant') > 0
+                    diverges = true;
+                end
+            end
+            if diverges
+                error('PLQ:biconjQ:minusInfinity', ...
+                    ['piece %d is unbounded and q runs DOWNWARD along one of its recession ' ...
+                     'directions, so co f is -infinity there. That is the right answer and there ' ...
+                     'is nowhere to put it -- the same representational gap conjCPLQ records as ' ...
+                     'convEnvUnbounded:minusInfinity.'], k);
+            end
             error('PLQ:biconjQ:unbounded', ...
-                ['piece %d is unbounded, where the envelope of a non-convex piece can be ' ...
-                 '-infinity -- a correct answer with nowhere to be stored, the gap conjCPLQ ' ...
-                 'records as convEnvUnbounded:minusInfinity.'], k);
+                ['piece %d is unbounded but q is bounded below on its recession cone, so its ' ...
+                 'envelope is FINITE and simply not computed yet: the lower hull of an unbounded ' ...
+                 'lifted set needs the lifted recession rays alongside the lifted vertices, and ' ...
+                 'conv(P) as an unbounded domain. See TODO.md 2026-09-05.'], k);
         end
         own = find(any(obj.F == k, 2));
         for j = own.'

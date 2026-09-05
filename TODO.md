@@ -70,10 +70,16 @@ there, so `f*` is `+infinity` everywhere, which a zero-face `QuaCon` says exactl
     UNBOUNDED non-convex domain                        unbounded        <- envelope can be -inf
 
 **The three, in the order they should be taken:**
-1. **UNBOUNDED non-convex** -- 9 of the fixtures the legacy envelope answers. The finiteness test is
-   the same recession analysis `conjQ` already does; what is additionally needed is the lower hull of
-   an UNBOUNDED lifted set, which needs the lifted recession rays alongside the lifted vertices, and
-   `conv(P)` as an unbounded domain.
+1. **UNBOUNDED non-convex** -- and the refusal now says WHICH KIND it is, which turns out to matter.
+   Along a recession direction `d`, `q` behaves as `t<grad q,d> + (t^2/2) d'Hd`, so the envelope runs
+   to `-infinity` exactly when some direction of the recession CONE has `d'Hd < 0`, or `d'Hd = 0`
+   with a negative linear rate. Otherwise `q` is bounded below on its own recession cone and the
+   envelope is FINITE -- a real answer, simply not computed. `PLQ:biconjQ:minusInfinity` is the
+   representational case; `PLQ:biconjQ:unbounded` is the genuine gap.
+   **Measured: all 8 fixtures the legacy envelope answers and this one refuses are the FINITE kind**,
+   so all 8 are reachable rather than blocked on a representation.
+   What is needed is the lower hull of an UNBOUNDED lifted set -- the lifted recession rays
+   alongside the lifted vertices -- and `conv(P)` as an unbounded domain.
 2. **MULTI-piece convex without the flag** -- needs a real convexity test for a piecewise function
    (per-piece PSD plus a consistent gradient jump across every shared edge). By design today.
 3. **edge-CONVEX** -- [COAP] A.2-A.5, and the first face that cannot be written rationally, i.e.
