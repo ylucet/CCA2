@@ -37,6 +37,34 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 — `biconjQ` widened to EDGE-CONCAVITY, and McCormick falls out of it
+
+The envelope branch required H to be negative semidefinite. The real condition is weaker and is
+the classical vertex-polyhedral one: **q concave along every EDGE DIRECTION of the polygon**. Then
+the envelope is still the lower hull of the lifted vertices, even when H is indefinite.
+
+Why the weaker condition suffices, on a triangle and hence on each cell of the hull: `q - L` vanishes
+at the three corners and is concave along each edge, so `q >= L` on the BOUNDARY; and with H not
+positive semidefinite `q - L` has no interior minimum, so its minimum over the closed triangle lies
+on that boundary.
+
+**It matters because it is where McCORMICK lives.** `q = xy` on the unit square has `H = [0 1; 1 0]`,
+genuinely INDEFINITE -- the old guard refused it -- yet `d'Hd = 0` along both edge directions, so
+its envelope is the lower hull of the four corner values, which is exactly `max(0, x+y-1)`:
+Al-Khayyal-Falk. `ALGORITHM.md` lists that as case 3, a closed form worth having, and it now falls
+out of the concave branch rather than needing one of its own. Measured: 2 faces, 0 wrong of 500,
+exact at all four corners.
+
+**The criterion is VERIFIED, not taken on trust** (`.claude/edgeconcave-sweep.m`): 124 random
+edge-concave cases, **48 of them genuinely indefinite**, checked against the envelope's four
+defining properties -- `co f <= f`, equality at the extreme points, convexity, and the
+largest-convex-minorant property. 0 failures on all four. The failure mode if the criterion were
+false is specific and would have shown up in the first of those: the lower hull would rise ABOVE f
+somewhere.
+
+**What is refused now is an edge along which q curves UPWARD**, which is the honest boundary of the
+method and remains the trigger for `AlgAlg`.
+
 ## 2026-09-04 (audit, closed) — non-convex faces are SPLIT, so the audit's silent defect is gone
 
 The audit below found two defects; the crash was fixed there and the non-convex face was turned

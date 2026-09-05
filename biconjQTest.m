@@ -97,10 +97,57 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         % ---- what is refused, by name ------------------------------------------------------
 
-        function anIndefinitePieceIsRefusedByName(testCase)
-        % The trigger for AlgAlg: this is where the first face that cannot be written rationally
-        % appears, since an affine cell of a general f** names a dual vertex of degree up to 4.
-            f = biconjQTest.square([0 0 0 0, 1, 0, -1, 0, 0, 0]);
+        function theBILINEAREnvelopeOverABoxIsExactlyMcCORMICK(testCase)
+        % THE case ALGORITHM.md singles out, and it now falls out of the concave branch rather than
+        % needing one of its own. q = xy on the unit square has H = [0 1; 1 0], which is genuinely
+        % INDEFINITE -- so the old H-negative-semidefinite guard refused it -- but d'Hd = 0 along
+        % BOTH edge directions, so q is affine (hence concave) along every edge and its envelope is
+        % the lower hull of the four corner values. That hull is max(0, x+y-1): the McCormick /
+        % Al-Khayyal-Falk envelope, written here independently of anything biconjQ computes.
+            f = biconjQTest.square([0 0 0 0, 0, 1, 0, 0, 0, 0]);
+            h = biconjQ(f);
+            testCase.verifyEqual(h.nf, 2, 'McCormick has exactly two affine pieces');
+            rng(20260904);
+            X = rand(400,2);
+            testCase.verifyEqual(h.eval(X), max(0, X(:,1) + X(:,2) - 1), 'AbsTol', 1e-12);
+            V = [0 0; 1 0; 1 1; 0 1];
+            testCase.verifyEqual(h.eval(V), [0; 0; 1; 0], 'AbsTol', 1e-12, ...
+                'and it interpolates xy at all four corners');
+        end
+
+        function anINDEFINITEButEdgeConcavePieceStillHasAVertexEnvelope(testCase)
+        % The criterion in general, not just for xy. What the envelope needs is concavity along the
+        % polygon's EDGE DIRECTIONS, which is weaker than concavity of H: on a triangle, q - L
+        % vanishes at the corners and is concave along each edge, so q >= L on the boundary, and
+        % with H not positive semidefinite q - L has no interior minimum -- so the minimum over the
+        % closed triangle is on that boundary. Checked here against the DEFINITION rather than
+        % against another implementation.
+            V = [0 0; 2 0; 0 2];
+            H = [-1 2; 2 -1];                       % det = -3: indefinite
+            for j = 1:3
+                d = V(mod(j,3)+1,:) - V(j,:);
+                testCase.verifyLessThanOrEqual(d*H*d.', 0, 'the fixture must be edge-concave');
+            end
+            testCase.verifyLessThan(det(H), 0, 'and genuinely indefinite');
+
+            f = biconjQTest.polygon(V, [0 0 0 0, H(1,1), H(1,2), H(2,2), 1, -1, 2]);
+            h = biconjQ(f);
+
+            qv = 0.5*sum((V*H).*V,2) + V*[1;-1] + 2;
+            testCase.verifyEqual(h.eval(V), qv, 'AbsTol', 1e-9, 'equality at the corners');
+            X = biconjQTest.inHull(V, 400);
+            qx = 0.5*sum((X*H).*X,2) + X*[1;-1] + 2;
+            testCase.verifyLessThanOrEqual(h.eval(X), qx + 1e-9, 'co f <= f');
+            A = biconjQTest.inHull(V, 200);  B = biconjQTest.inHull(V, 200);
+            testCase.verifyLessThanOrEqual(h.eval((A+B)/2), (h.eval(A) + h.eval(B))/2 + 1e-9);
+        end
+
+        function aPieceThatCurvesUPWARDAlongAnEdgeIsRefusedByName(testCase)
+        % The condition is EDGE-concavity, so what is refused is an edge along which q curves
+        % upward -- there the vertex values no longer determine the envelope. This is the trigger
+        % for AlgAlg: the first face that cannot be written rationally appears here, since an
+        % affine cell of a general f** names a dual vertex of degree up to 4.
+            f = biconjQTest.square([0 0 0 0, 1, 0, -1, 0, 0, 0]);   % +1 along (1,0)
             testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notImplemented');
         end
 

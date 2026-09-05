@@ -86,14 +86,35 @@ function h = biconjQ(obj)
              'answer with nowhere to be stored -- the same gap conjCPLQ records as ' ...
              'convEnvUnbounded:minusInfinity.']);
     end
-    if ~(Hn(1,1) <= 0 && Hn(2,2) <= 0 && D >= 0)
+    % ---- EDGE-CONCAVITY, which is weaker than concavity and is the real condition -------------
+    % The envelope is the lower hull of the lifted vertices whenever q is concave along every EDGE
+    % DIRECTION of the polygon -- H itself need not be negative semidefinite. Why the weaker
+    % condition suffices, on a triangle and hence on each cell of the hull: q - L vanishes at the
+    % three corners and is concave along each edge, so q >= L on the BOUNDARY; and with H not
+    % positive semidefinite q - L has no interior minimum, so its minimum over the closed triangle
+    % is on that boundary and q >= L throughout. (This is the classical vertex-polyhedral /
+    % edge-concave criterion; it is verified here rather than taken on trust -- see
+    % biconjQTest and .claude/envelope-sweep.m, which check the envelope's three defining
+    % properties on indefinite edge-concave inputs.)
+    %
+    % IT MATTERS BECAUSE IT IS WHERE McCORMICK LIVES. q = xy on the unit square has H = [0 1; 1 0],
+    % genuinely indefinite, and yet d'Hd = 0 along both edge directions -- so its envelope is the
+    % lower hull of the four corner values, which is exactly max(0, x+y-1), the McCormick /
+    % Al-Khayyal-Falk envelope. ALGORITHM.md lists that as a case worth having in closed form.
+    edgeCurv = [];
+    for j = find(any(obj.F == 1, 2)).'
+        d = obj.VN(obj.E(j,2),:)/obj.VD(obj.E(j,2)) - obj.VN(obj.E(j,1),:)/obj.VD(obj.E(j,1));
+        [dn, ~] = ratQ.fromDouble(d);
+        edgeCurv(end+1) = ratQ.chk(dn * Hn * dn.', 'edge curvature'); %#ok<AGROW>
+    end
+    if any(edgeCurv > 0)
         error('PLQ:biconjQ:notImplemented', ...
-            ['the envelope is implemented for a CONVEX f (nothing to compute) and for a CONCAVE ' ...
-             'or AFFINE piece (the lower hull of the lifted vertices). This piece has leading ' ...
-             'minor %d, second diagonal %d and determinant %d, so it is INDEFINITE -- whose ' ...
-             'envelope needs [COAP] A.2-A.5, and is also where the first face that cannot be ' ...
-             'written rationally appears (see this file''s header on AlgAlg).'], ...
-            Hn(1,1), Hn(2,2), D);
+            ['the envelope is implemented for a CONVEX f (nothing to compute) and for a piece ' ...
+             'that is concave along every EDGE DIRECTION (the lower hull of the lifted ' ...
+             'vertices). This piece curves UPWARD along %d of its %d edges, so its envelope is ' ...
+             'not determined by the vertex values -- it needs [COAP] A.2-A.5, and is where the ' ...
+             'first face that cannot be written rationally appears (see this file''s header on ' ...
+             'AlgAlg).'], sum(edgeCurv > 0), numel(edgeCurv));
     end
 
     h = concaveEnvelope(obj);
