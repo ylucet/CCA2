@@ -85,6 +85,37 @@ classdef QuaConTest < matlab.unittest.TestCase
                 'b^2 - 4ac of the unit circle is exactly -4, decided not estimated');
         end
 
+        function aCURVEDCornerIsNamedAndLiesOnBothItsCurves(testCase)
+        % Until the sign kernel landed, only LINE-LINE corners were named: a corner involving a
+        % curved edge is generically irrational -- degree up to 4 over Q -- so deciding whether it
+        % lies IN the cell needed the sign of a rational polynomial at an algebraic number.
+        %
+        % The irrationality was never the obstacle to STORING it, which is the point of the name:
+        % [edgeA edgeB rootIdx] says which intersection it is without a coordinate. This asserts
+        % the contract that name carries -- the realised point must lie ON BOTH curves it names.
+            E = [1 2 1; 2 3 1; 3 1 1];  F = [1 0; 1 0; 1 0];
+            g = maxQ(conjQ(QuaPol([0 0; 1 0; 0 1], E, [0 0 0 0 1 0 1 0 0 0], F)), ...
+                     conjQ(QuaPol([1 0; 1 1; 0 1], E, [0 0 0 0 4 1 3 -2 1 0], F)));
+
+            curved = 0;
+            V = g.vertexCoords();
+            testCase.verifyTrue(all(isfinite(V(:))), 'every named vertex must be realisable');
+            for i = 1:g.nv
+                a = g.Vname(i,1);  b = g.Vname(i,2);
+                if any(g.EcQ(a,1:3) ~= 0) || any(g.EcQ(b,1:3) ~= 0), curved = curved + 1; end
+                for e = [a b]
+                    c = g.EcQ(e,:);
+                    v = c(1)*V(i,1)^2 + c(2)*V(i,1)*V(i,2) + c(3)*V(i,2)^2 ...
+                      + c(4)*V(i,1) + c(5)*V(i,2) + c(6);
+                    sc = max(1, max(abs(c)) * max(1, max(abs(V(i,:)))^2));
+                    testCase.verifyLessThan(abs(v)/sc, 1e-9, ...
+                        sprintf('vertex %d does not lie on edge %d, which its NAME claims', i, e));
+                end
+            end
+            testCase.verifyGreaterThan(curved, 0, ...
+                'this fold has conic edges, so some corner must involve one');
+        end
+
         function aVertexOnACurvedEdgeIsRealisedFromItsNameAlone(testCase)
         % The half disk's two corners are where the circle meets y = 0, i.e. (-1,0) and (1,0), in
         % conicMeet's canonical (lexicographic) order. Nothing about those coordinates is stored.

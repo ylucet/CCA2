@@ -28,12 +28,12 @@ function g = assembleQuaConCells(cells)
 %    area. Deciding it properly means asking whether a conic meets a polygon's interior, which is
 %    Phase 2c's filtered predicate with the exact degree-4 kernel behind it, and that is not built.
 %
-% 2. ONLY LINE-LINE CORNERS ARE NAMED. Two lines meet in a rational point, so membership in the
-%    cell is an exact integer sign test and the corner can be named with certainty. A corner
-%    involving a curved edge is generically irrational (degree up to 4 over Q -- CONJ_FIELD_PROOF.md
-%    Theorem 1), so deciding whether it lies in the cell needs the same exact kernel as (1).
-%    Naming it without that test would put points into the vertex list that bound nothing, which is
-%    worse than a vertex list that is honestly partial -- E and F are empty for the same reason.
+% 2. CURVED CORNERS ARE NAMED TOO, since 2026-09-05. A corner involving a curved edge is generically
+%    irrational -- degree up to 4 over Q, CONJ_FIELD_PROOF.md Theorem 1 -- which is precisely what
+%    the NAME exists for: [edgeA edgeB rootIdx] says which intersection it is without storing a
+%    coordinate. What was missing was deciding whether such a point lies IN the cell, and that is
+%    the sign of a rational polynomial at a degree-4 algebraic number: the sign kernel. A corner
+%    whose conicMeet overflows 2^53 is left unnamed rather than guessed.
 %
 % 3. THE MERGE IS PARTIAL TOO. mergeAdjacentCells joins two cells that carry one function and are
 %    separated by a single curve, which is an exact set identity and is the pattern a pairwise fold
@@ -233,15 +233,42 @@ function g = assembleQuaConCells(cells)
             for p2 = p1+1:size(rows,1)
                 i = rows(p1,1);  j = rows(p2,1);
                 if i == j, continue, end
-                if any(EcQ(i,1:3) ~= 0) || any(EcQ(j,1:3) ~= 0), continue, end   % see note 2
-                A = [EcQ(i,4) EcQ(i,5); EcQ(j,4) EcQ(j,5)];
-                if ratQ.detExact(A) == 0, continue, end       % parallel: they meet nowhere
-                [xn, xd] = ratQ.solve2(A, [-EcQ(i,6); -EcQ(j,6)]);
-                if ~cellHoldsAt(EcQ, rows, xn, xd), continue, end
                 lo = min(i,j);  hi = max(i,j);
-                if ~seen(lo,hi)
+                if seen(lo,hi), continue, end
+
+                if all(EcQ(i,1:3) == 0) && all(EcQ(j,1:3) == 0)
+                    % LINE-LINE: a rational point, decided by an exact integer sign test.
+                    A = [EcQ(i,4) EcQ(i,5); EcQ(j,4) EcQ(j,5)];
+                    if ratQ.detExact(A) == 0, continue, end   % parallel: they meet nowhere
+                    [xn, xd] = ratQ.solve2(A, [-EcQ(i,6); -EcQ(j,6)]);
+                    if ~cellHoldsAt(EcQ, rows, xn, xd), continue, end
                     seen(lo,hi) = true;
                     Vname(end+1, :) = [lo hi 1]; %#ok<AGROW>
+                else
+                    % AT LEAST ONE CURVE. The corner is generically IRRATIONAL -- degree up to 4
+                    % over Q, CONJ_FIELD_PROOF.md Theorem 1 -- so it cannot be written down, and
+                    % that is exactly what the NAME is for: [edgeA edgeB rootIdx] says which
+                    % intersection it is without ever storing a coordinate.
+                    %
+                    % What was missing until the sign kernel landed was deciding whether such a
+                    % point lies IN the cell, since that is the sign of a rational polynomial at a
+                    % degree-4 algebraic number. conicMeet returns the roots in its own canonical
+                    % order, so rootIdx is well defined, and cellHoldsAtDouble tests membership at
+                    % the realised coordinate -- the same filtered arrangement cellHasInterior
+                    % uses, and it can only add a vertex, never remove a face.
+                    try
+                        [P, info] = conicMeet(EcQ(i,:), EcQ(j,:));
+                    catch ME
+                        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME); end
+                        continue                  % undecidable here: leave the corner unnamed
+                    end
+                    if info.degenerate, continue, end
+                    for rt = 1:size(P,1)
+                        if ~cellHoldsAtDouble(EcQ, rows, P(rt,:)), continue, end
+                        seen(lo,hi) = true;
+                        Vname(end+1, :) = [lo hi rt]; %#ok<AGROW>
+                        break
+                    end
                 end
             end
         end
@@ -311,6 +338,26 @@ function tf = cellHoldsAtPoint(rows, xn, xd)
         if rows(r,7) == 0
             if v ~= 0, tf = false; return, end
         elseif rows(r,7) * v < 0
+            tf = false;  return
+        end
+    end
+end
+
+function tf = cellHoldsAtDouble(EcQ, rows, x)
+% objective: does the realised point x satisfy every constraint of this cell.
+%
+% Used for a CURVED corner, whose coordinates are irrational and so arrive as doubles from
+% conicMeet. The tolerance absorbs the realisation of that root and nothing else: the constraints
+% are exact integers and the point is a root of an exact quartic, so a borderline answer means the
+% corner lies ON a boundary -- where naming it is correct anyway.
+    tf = true;
+    for r = 1:size(rows,1)
+        c = EcQ(rows(r,1), :);
+        v = c(1)*x(1)^2 + c(2)*x(1)*x(2) + c(3)*x(2)^2 + c(4)*x(1) + c(5)*x(2) + c(6);
+        scale = max(1, max(abs(c)) * max(1, max(abs(x))^2));
+        if rows(r,2) == 0
+            if abs(v) > 1e-9 * scale, tf = false; return, end
+        elseif rows(r,2) * v < -1e-9 * scale
             tf = false;  return
         end
     end
