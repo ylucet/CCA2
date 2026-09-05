@@ -189,6 +189,66 @@ classdef QuaConTest < matlab.unittest.TestCase
             end
         end
 
+        % ---- the consistency checker's own FAILURE path ----------------------------------------
+
+        function theConsistencyCheckerDETECTSAnInconsistentMesh(testCase)
+        % A DETECTOR WHOSE DETECTION BRANCH HAS NEVER RUN IS NOT VERIFIED. checkQuaConConsistent is
+        % asserted across the whole fixture corpus, and every fixture passes -- which means its
+        % "found an inconsistency" path was dead code, reported as 13 uncovered lines. Coverage
+        % named it; this test exercises it, on meshes built to BE inconsistent.
+        %
+        % Both halves are driven separately, because they answer different questions: the EXACT
+        % half decides a pair whose constraints are all straight (ratQ.feasible2 on their
+        % intersection), and the SAMPLED half is the backstop for pairs involving a curve. The
+        % report distinguishes them through .exactPairs, so the test can tell which one fired.
+            [V, E, Ec, F, sq] = QuaConTest.overlapParts();
+            fA = [0 0 0 0 0 0 0 0 0 1];          % the constant 1
+            fB = [0 0 0 0 0 0 0 0 0 5];          % the constant 5
+
+            % (a) LINEAR: two cells with identical straight constraints and different functions.
+            g = QuaCon(V, E, Ec, [fA; fB], [1;1], F, {sq; sq});
+            [ok, rep] = checkQuaConConsistent(g, 300);
+            testCase.verifyFalse(ok, 'two cells covering one region with different values');
+            testCase.verifyEqual(rep.pairs, [1 2], 'and it must name WHICH two');
+            testCase.verifyEqual(size(rep.exactPairs,1), 1, ...
+                'an all-straight pair must be caught EXACTLY, not by sampling');
+            testCase.verifyEqual(rep.worst, 4, 'AbsTol', 1e-12, '5 - 1 = 4');
+
+            % (b) CURVED: the same overlap, additionally confined inside the unit circle. The exact
+            % half cannot reach a curved constraint, so only the sampled backstop can catch this --
+            % which is exactly the split the routine documents.
+            cur = [5 -1];                        % edge 5 is the circle; -1 is its inside
+            g2 = QuaCon(V, E, Ec, [fA; fB], [1;1], F, {[sq; cur]; [sq; cur]});
+            [ok2, rep2] = checkQuaConConsistent(g2, 400);
+            testCase.verifyFalse(ok2);
+            testCase.verifyEqual(size(rep2.exactPairs,1), 0, ...
+                'a curved pair is beyond the exact half, so it must come from the sampler');
+            testCase.verifyNotEmpty(rep2.point, 'and the report must carry a witness point');
+            testCase.verifyTrue(all(abs(rep2.point) <= 1 + 1e-9), ...
+                'the witness must lie where the cells actually overlap -- inside the circle');
+        end
+
+        function OVERLAPAloneIsNotADefectAndNorIsADIFFERENTFunctionElsewhere(testCase)
+        % The two controls that stop the previous test from passing for the wrong reason. The
+        % invariant is "overlapping AND carrying different functions" -- neither half alone is a
+        % defect, and a checker that flagged either would fire on every correct mesh.
+            [V, E, Ec, F, sq] = QuaConTest.overlapParts();
+            fA = [0 0 0 0 0 0 0 0 0 1];
+            fB = [0 0 0 0 0 0 0 0 0 5];
+
+            % identical cells carrying the SAME function: redundant, but not inconsistent
+            testCase.verifyTrue(checkQuaConConsistent( ...
+                QuaCon(V, E, Ec, [fA; fA], [1;1], F, {sq; sq}), 300), ...
+                'two cells may coincide as long as they agree');
+
+            % different functions on DISJOINT cells: the ordinary state of every correct mesh
+            left  = [1 1; 2 -1; 3 -1; 4 1];      % x <= 1
+            right = [1 1; 2 1; 3 -1; 4 -1];      % x >= 1
+            testCase.verifyTrue(checkQuaConConsistent( ...
+                QuaCon(V, E, Ec, [fA; fB], [1;1], F, {left; right}), 300), ...
+                'cells that do not meet may carry whatever they like');
+        end
+
         function aQuaConReportsItselfAsMeshedAlthoughItsDoubleFieldsAreEmpty(testCase)
         % RatCon.isMeshed tests ~isempty(obj.f), and a QuaCon's f is empty BY DESIGN, so the
         % inherited answer would be exactly backwards and would send callers down QuaParCPLQ's
@@ -296,6 +356,21 @@ classdef QuaConTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+
+        function [V, E, Ec, F, sq] = overlapParts()
+        % The unit square's four lines plus the unit circle, and the square as sign conditions.
+        % Deliberately shared by the inconsistency tests so the meshes differ ONLY in what is
+        % under test -- which cells exist and what they carry.
+            Ec = [0 0 0 0 1  0;      % y = 0
+                  0 0 0 1 0 -1;      % x = 1
+                  0 0 0 0 1 -1;      % y = 1
+                  0 0 0 1 0  0;      % x = 0
+                  1 0 1 0 0 -1];     % x^2 + y^2 = 1
+            V  = [1 4 1; 1 2 1; 2 3 1; 3 4 1];
+            E  = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 2 1];
+            F  = zeros(5,2);
+            sq = [1 1; 2 -1; 3 -1; 4 1];
+        end
 
         function [qc, qp] = unitSquareBothWays()
         % (x^2+y^2)/2 on the unit square, built exactly and built the legacy way.
