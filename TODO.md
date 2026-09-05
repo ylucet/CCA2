@@ -37,6 +37,41 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (audit, closed) — non-convex faces are SPLIT, so the audit's silent defect is gone
+
+The audit below found two defects; the crash was fixed there and the non-convex face was turned
+into a named refusal. It is now ANSWERED instead.
+
+**conj turns a union into a MAX**, so for `P = union of P_i` we have `f* = max_i (q + I_{P_i})*`:
+triangulating a non-convex face and folding the pieces with `maxQ` is EXACT, not an approximation.
+The triangulation is exact too -- **ear clipping**, whose every decision is the sign of an integer
+cross product (does this corner turn left; does another corner lie inside this candidate triangle).
+A floating-point triangulator could return a different mesh for the same polygon depending on
+rounding, and each triangle's conjugate would then be exact about the wrong thing.
+
+Two details that had to be right:
+- **Collinear vertices are dropped first.** A corner that turns neither way lies on the segment
+  between its neighbours and changes nothing about the region; kept, it becomes a zero-area ear.
+- **The boundary cycle is walked from the EDGES and oriented by its own signed area**, not taken
+  from `P`, so no clockwise/counter-clockwise convention is consulted -- reading one backwards
+  would reverse the orientation the ear test depends on.
+
+Verified two-sided on the L-shaped face against a sup sampled over the TRUE L on a 1201^2 grid:
+**0 below** it and at most **5.8e-07 above**, which is the grid's own resolution error (h = 1.7e-3,
+so h^2/2 ~ 1.4e-6). The fold is convex, as it must be. The answer is FAT -- 133 faces for four
+triangles folded pairwise -- which is the known cell-count item, not a correctness one.
+
+**Still refused, and it is a separate case:** a non-convex piece that is also UNBOUNDED. Ear
+clipping needs a closed boundary, so splitting one means cutting along its recession directions
+first.
+
+**One more oracle bug, the third of this kind today, now fixed in the checked-in probe.**
+`stress-probe.m` sampled convex combinations of the vertices -- i.e. the convex HULL -- which for a
+non-convex face includes points OUTSIDE the domain, so its "sampled sup" was over too large a set
+and a correct `f*` looked too low. That artefact produced the original 44-of-201 and a residual
+1-of-201. It now filters samples through `inpolygon`, which is floating point and fine in an oracle:
+it only has to produce points that really are in the domain.
+
 ## 2026-09-04 (audit) — "can it handle ANY QuaPol?" NO. The table was an ENUMERATION, not a proof.
 
 The coverage table varies DOMAIN SHAPE x HESSIAN CLASS and holds everything else fixed. Asked

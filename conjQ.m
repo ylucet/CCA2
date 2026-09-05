@@ -128,6 +128,32 @@ function g = conjPieceQ(obj, k)
              'cannot carry.'], k);
     end
 
+    % ---- a NON-CONVEX piece is SPLIT, not refused ----------------------------------------------
+    % conj turns a union into a MAX: f restricted to P = union of P_i gives
+    % f* = max_i (q + I_{P_i})*, so triangulating the face and folding the pieces with maxQ is
+    % exact, not an approximation. The triangulation itself is exact too -- ear clipping, whose
+    % every decision is the sign of an integer cross product.
+    if ~sh.convex
+        if ~sh.bounded
+            error('PLQ:conjQ:nonConvexPiece', ...
+                ['face %d is non-convex AND unbounded. Ear clipping needs a closed boundary, so ' ...
+                 'splitting it means cutting along its recession directions first -- a real ' ...
+                 'case, and a separate one.'], k);
+        end
+        tris = earClip(Vi, boundaryCycle(sh, Vi));
+        g = [];
+        for t = 1:size(tris,1)
+            sht = triangleShape(Vi, vd, tris(t,:));
+            if Hn(1,1) > 0 && D > 0
+                gt = caseBConvexOnPiece(fN, fD, Vi, vd, sht, zeros(0,3));
+            else
+                gt = caseDBoundaryMax(fN, fD, Vi, vd, sht, zeros(0,3));
+            end
+            if isempty(g), g = gt; else, g = maxQ(g, gt); end
+        end
+        return
+    end
+
     [okFinite, dom, why] = recessionConditions(sh, Hn, [fN(8); fN(9)], fD, Vi, vd);
     if ~okFinite
         % dom f* is EMPTY -- `why` says which recession direction does it. That is the right
@@ -519,6 +545,7 @@ function sh = pieceShape(obj, k, Vi, vd)
     end
     sh.vs = unique(sh.vs);
     sh.bounded = isempty(sh.rays);
+    sh.convex = true;                 % until an edge below finds a vertex on its far side
 
     % ---- the half-planes -----------------------------------------------------------------------
     sh.hp = zeros(0,3);
@@ -540,30 +567,21 @@ function sh = pieceShape(obj, k, Vi, vd)
         end
         if sgn == 0, continue, end                     % everything on the line: degenerate
 
-        % THE PIECE MUST BE CONVEX, and this is where that is checked rather than assumed. A face
-        % described by half-planes IS an intersection of half-planes, so a REFLEX vertex cannot be
-        % expressed: every other vertex would have to lie on the chosen side of this edge, and at a
-        % reflex corner some do not. Detected exactly here, and refused, because the alternative is
-        % a silent wrong answer -- measured on an L-shaped face, where the half-plane intersection
-        % is strictly SMALLER than the L, so the sup came out BELOW the true one at 54 of 303 dual
-        % points. The mesh already knows: QuaPol.orderEdges reports isConvex = 0 for such a face.
+        % IS THE PIECE CONVEX? A face described by half-planes IS an intersection of half-planes,
+        % so a REFLEX corner cannot be expressed: every other vertex would have to lie on the
+        % chosen side of this edge, and at a reflex corner some do not. Recorded rather than
+        % raised, because a non-convex face is now SPLIT rather than refused -- but it must never
+        % be conjugated through this description, which would silently take the sup over the
+        % smaller set the half-planes cut out (measured on an L: 54 of 303 dual points too low).
         for i = 1:numel(sh.vs)
             v = Vi(sh.vs(i), :);
             if ratQ.chk(sgn * (n(1)*v(1) + n(2)*v(2) + c0), 'convexity') < 0
-                error('PLQ:conjQ:nonConvexPiece', ...
-                    ['face %d is NOT CONVEX -- vertex %d lies on the far side of the edge from ' ...
-                     'vertex %d. A piece is described here as an intersection of half-planes, ' ...
-                     'which cannot express a reflex corner, so conjugating it would silently ' ...
-                     'return the sup over a SMALLER set. Split the face into convex pieces ' ...
-                     'first: conj turns a union into a max, so the pieces recombine by maxQ.'], ...
-                    k, sh.vs(i), sh.ed(j).a);
+                sh.convex = false;
             end
         end
         for r = 1:size(sh.rays,1)
             if ratQ.chk(sgn * (n * sh.rays(r,:).'), 'convexity') < 0
-                error('PLQ:conjQ:nonConvexPiece', ...
-                    ['face %d is NOT CONVEX -- it recedes along (%d,%d), which leaves the ' ...
-                     'half-plane of one of its own edges.'], k, sh.rays(r,1), sh.rays(r,2));
+                sh.convex = false;
             end
         end
 
@@ -796,4 +814,177 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom)
     end
 
     g = assembleQuaConCells(out);
+end
+
+function cyc = boundaryCycle(sh, Vi)
+% objective: the face's boundary as an ORDERED cycle of vertex indices.
+% [output] cyc : 1 x m, consecutive entries joined by an edge, walked from the edge list
+%
+% Walked from the edges rather than taken from P, so it does not depend on P's clockwise /
+% counter-clockwise convention -- a convention easy to read backwards, and reading it backwards
+% reverses the orientation that the ear test below depends on.
+    m = numel(sh.ed);
+    adj = containers.Map('KeyType', 'double', 'ValueType', 'any');
+    for j = 1:m
+        a = sh.ed(j).a;  b = sh.ed(j).b;
+        for pair = [a b; b a].'
+            u = pair(1);  v = pair(2);
+            if isKey(adj, u), adj(u) = [adj(u), v]; else, adj(u) = v; end
+        end
+    end
+    cyc = zeros(1, m);
+    cyc(1) = sh.ed(1).a;  cyc(2) = sh.ed(1).b;
+    for t = 3:m
+        nxt = adj(cyc(t-1));
+        nxt = nxt(nxt ~= cyc(t-2));
+        if isempty(nxt)
+            error('PLQ:conjQ:notSimple', 'the face boundary is not a single closed cycle.');
+        end
+        cyc(t) = nxt(1);
+    end
+    if numel(unique(cyc)) ~= m
+        error('PLQ:conjQ:notSimple', ...
+            'the face boundary revisits a vertex, so it is not a simple polygon.');
+    end
+    % Orient counter-clockwise, exactly: twice the signed area is an integer sum of cross products.
+    if twiceArea(Vi, cyc) < 0, cyc = fliplr(cyc); end
+end
+
+function A2 = twiceArea(Vi, cyc)
+% twice the SIGNED area of the polygon, as an exact integer (over vd^2, but only its sign is used)
+    A2 = 0;
+    m = numel(cyc);
+    for i = 1:m
+        p = Vi(cyc(i), :);  q = Vi(cyc(mod(i, m) + 1), :);
+        A2 = A2 + ratQ.chk(p(1)*q(2) - p(2)*q(1), 'signed area');
+    end
+    A2 = ratQ.chk(A2, 'signed area');
+end
+
+function tris = earClip(Vi, cyc)
+% objective: triangulate a simple polygon EXACTLY, by ear clipping.
+% [input]  cyc : the boundary in counter-clockwise order
+% [output] tris : t x 3 vertex indices, one row per triangle
+%
+% WHY EAR CLIPPING AND NOT A LIBRARY. Every decision is a sign test on an integer: whether a corner
+% turns left (a cross product) and whether another vertex lies inside a candidate triangle (three
+% cross products). So the triangulation is DECIDED rather than estimated, which is the whole
+% premise here -- a floating-point triangulator could return a different mesh for the same polygon
+% depending on rounding, and each triangle's conjugate would then be exact about the wrong thing.
+%
+% Two theorems make the loop terminate: every simple polygon with more than three vertices has at
+% least two ears (Meisters), and clipping one leaves a simple polygon. So the list shrinks by one
+% each pass and the recursion is m - 2 triangles.
+%
+% COLLINEAR VERTICES ARE DROPPED FIRST. A vertex whose corner turns neither left nor right lies on
+% the segment between its neighbours and changes nothing about the region; keeping it would make a
+% degenerate ear of zero area, which is not a face and would divide by zero downstream.
+    cyc = dropCollinear(Vi, cyc);
+    m = numel(cyc);
+    if m < 3
+        error('PLQ:conjQ:degenerate', 'the face collapses to fewer than three corners.');
+    end
+    tris = zeros(0,3);
+    guard = 0;
+    while numel(cyc) > 3
+        guard = guard + 1;
+        if guard > m + 2
+            error('PLQ:conjQ:noEar', ...
+                ['no ear was found on a polygon of %d corners, which cannot happen for a simple ' ...
+                 'polygon -- so the boundary is self-intersecting.'], numel(cyc));
+        end
+        n = numel(cyc);
+        clipped = false;
+        for i = 1:n
+            a = cyc(mod(i-2, n) + 1);  b = cyc(i);  c = cyc(mod(i, n) + 1);
+            if ~isEar(Vi, cyc, a, b, c), continue, end
+            tris(end+1, :) = [a b c]; %#ok<AGROW>
+            cyc(i) = [];
+            clipped = true;
+            break
+        end
+        if ~clipped
+            error('PLQ:conjQ:noEar', ...
+                'no ear was found, so the boundary is self-intersecting or not counter-clockwise.');
+        end
+    end
+    tris(end+1, :) = cyc;
+end
+
+function tf = isEar(Vi, cyc, a, b, c)
+% objective: is the corner at b an EAR of the polygon -- a left turn whose triangle is empty. Exact.
+    if ratQ.chk(cross2(Vi, a, b, c), 'corner turn') <= 0
+        tf = false;  return                  % reflex, or collinear: not an ear
+    end
+    for i = 1:numel(cyc)
+        v = cyc(i);
+        if v == a || v == b || v == c, continue, end
+        if inTriangle(Vi, a, b, c, v)
+            tf = false;  return              % another corner is inside it
+        end
+    end
+    tf = true;
+end
+
+function z = cross2(Vi, a, b, c)
+% the z component of (b-a) x (c-b), as an exact integer: positive means a LEFT turn at b
+    p = Vi(a,:);  q = Vi(b,:);  r = Vi(c,:);
+    z = (q(1)-p(1))*(r(2)-q(2)) - (q(2)-p(2))*(r(1)-q(1));
+end
+
+function tf = inTriangle(Vi, a, b, c, v)
+% objective: does vertex v lie inside the counter-clockwise triangle (a,b,c), boundary included.
+% Boundary INCLUDED on purpose: a vertex sitting exactly on an ear's edge makes the clip produce
+% two pieces that share more than an edge, so such an ear is refused and another is taken instead.
+    tf = ratQ.chk(cross2v(Vi, a, b, v), 'in-triangle') >= 0 && ...
+         ratQ.chk(cross2v(Vi, b, c, v), 'in-triangle') >= 0 && ...
+         ratQ.chk(cross2v(Vi, c, a, v), 'in-triangle') >= 0;
+end
+
+function z = cross2v(Vi, a, b, v)
+% the z component of (b-a) x (v-a): positive means v is to the LEFT of the directed edge a->b
+    p = Vi(a,:);  q = Vi(b,:);  r = Vi(v,:);
+    z = (q(1)-p(1))*(r(2)-p(2)) - (q(2)-p(2))*(r(1)-p(1));
+end
+
+function cyc = dropCollinear(Vi, cyc)
+    changed = true;
+    while changed && numel(cyc) > 3
+        changed = false;
+        n = numel(cyc);
+        for i = 1:n
+            a = cyc(mod(i-2, n) + 1);  b = cyc(i);  c = cyc(mod(i, n) + 1);
+            if ratQ.chk(cross2(Vi, a, b, c), 'collinear test') == 0
+                cyc(i) = [];  changed = true;  break
+            end
+        end
+    end
+end
+
+function sh = triangleShape(Vi, vd, tri)
+% objective: the shape record for one triangle of the split, in the same form pieceShape produces.
+% Convex by construction, so the side of each edge is read straight off the third vertex.
+%
+% The half-plane rows are emitted in ACTUAL coordinates -- linear part scaled by vd, constant not --
+% because that is what eval reads them at, while the SIDE is decided at numerators where the
+% vertices live. pieceShape's header explains why mixing the two produces a parallel line.
+    sh.vs = sort(tri(:));
+    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {});
+    sh.rays = zeros(0,2);
+    sh.hp = zeros(0,3);
+    sh.bounded = true;
+    sh.convex = true;
+    for i = 1:3
+        a = tri(i);  b = tri(mod(i,3) + 1);  o = tri(mod(i+1,3) + 1);
+        d = ratQ.chk(Vi(b,:) - Vi(a,:), 'edge direction');
+        sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false); %#ok<AGROW>
+        n = [d(2), -d(1)];
+        c0 = ratQ.chk(-(n * Vi(a,:).'), 'offset');
+        t  = ratQ.chk(n(1)*Vi(o,1) + n(2)*Vi(o,2) + c0, 'third vertex side');
+        if t == 0
+            error('PLQ:conjQ:degenerate', 'a split triangle has zero area.');
+        end
+        sh.hp(end+1,:) = sign(t) * [ratQ.chk(vd*n(1), 'edge normal'), ...
+                                    ratQ.chk(vd*n(2), 'edge normal'), c0]; %#ok<AGROW>
+    end
 end

@@ -79,7 +79,16 @@ function report(name, f, V, H, L, k0)
 end
 
 function v = supSampled(s, V, H, L, k0)
-% a LOWER bound on the sup: sample the polygon densely (vertices, edge points, interior mixtures)
+% A LOWER bound on the sup: sample the polygon and take the best value found. Because it is a lower
+% bound, `f* below it` is a definite defect while the other direction is expected -- the discipline
+% plqCheck.m uses.
+%
+% THE SAMPLES MUST LIE IN THE FACE, NOT ITS CONVEX HULL. Convex combinations of the vertices sweep
+% the HULL, which for a non-convex face includes points outside the domain, and the "sup" is then
+% over too large a set -- so a correct f* looks too low. That artefact is what made the L-shaped
+% case report 44 of 201 defects when the code was right, and 1 of 201 after it was fixed. inpolygon
+% is floating point, which is fine in an ORACLE: it only has to produce points that really are in
+% the domain, and a point wrongly excluded merely weakens the bound.
     m = size(V,1);
     X = V;
     for a = 1:m
@@ -89,10 +98,10 @@ function v = supSampled(s, V, H, L, k0)
         end
     end
     rng(7);
-    for i = 1:400
-        w = rand(m,1);  w = w/sum(w);
-        X(end+1,:) = w.' * V; %#ok<AGROW>
-    end
+    lo = min(V, [], 1);  hi = max(V, [], 1);
+    G = lo + rand(3000, 2) .* (hi - lo);
+    G = G(inpolygon(G(:,1), G(:,2), V(:,1), V(:,2)), :);
+    X = [X; G];
     q = 0.5*sum((X*H).*X, 2) + X*L + k0;
     v = max(X*s - q);
 end

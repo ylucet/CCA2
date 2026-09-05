@@ -286,24 +286,55 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
-        function aNONCONVEXFaceIsRefusedRatherThanSilentlyAnswered(testCase)
-        % FOUND 2026-09-04 by widening the test axes past the coverage table, which varies domain
-        % SHAPE x Hessian class and holds face CONVEXITY fixed. A piece is described here as an
-        % intersection of half-planes, which cannot express a REFLEX corner, so an L-shaped face
-        % was conjugated as though its domain were the smaller set the half-planes cut out: the sup
-        % came out BELOW the true one at 54 of 303 dual points. Silent, and wrong in the direction
-        % no one-sided oracle would flag as impossible.
-        %
-        % Now refused by name. The message says the remedy, which is exact: split the face into
-        % convex pieces, since conj turns a union into a MAX and maxQ recombines them.
-            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];      % an L, reflex at (1,1)
+        function aNONCONVEXFaceIsSPLITAndConjugatedCorrectly(testCase)
+        % WAS a refusal, now an answer. A piece is described here as an intersection of half-planes,
+        % which cannot express a REFLEX corner -- conjugating an L-shaped face through that
+        % description silently took the sup over the smaller set the half-planes cut out, too low
+        % at 54 of 303 dual points. The fix is not a better description but a SPLIT: conj turns a
+        % union into a MAX, so f* over P = union of P_i is max_i (q + I_{P_i})*, and triangulating
+        % the face is exact rather than approximate. The triangulation is exact too -- ear clipping,
+        % whose every decision is the sign of an integer cross product.
+            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];          % an L, reflex at (1,1)
             m = size(V,1);
             E = [(1:m).', [2:m,1].', ones(m,1)];  F = [ones(m,1), zeros(m,1)];
             f = QuaPol(V, E, [0 0 0 0 1 0 1 0 0 0], F);
             [~, isConv] = f.orderEdges(1);
-            testCase.verifyFalse(logical(isConv), 'the mesh itself already knows it is not convex');
-            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:nonConvexPiece');
+            testCase.verifyFalse(logical(isConv), 'the fixture really is non-convex');
+
+            g = conjQ(f);
+
+            % The oracle is a sup sampled over the TRUE L -- a LOWER bound, so f* below it is a
+            % definite defect, and on a grid this fine the gap above it must be tiny as well.
+            [X, Y] = meshgrid(linspace(0, 2, 501));
+            P = [X(:), Y(:)];
+            P = P((P(:,1) <= 1 & P(:,2) <= 2) | (P(:,2) <= 1 & P(:,1) <= 2), :);
+            rng(20260904);
+            S = [randn(120,2)*2.5; 0 0; 3 3; -3 -3];
+            lo = zeros(size(S,1),1);
+            for i = 1:size(S,1)
+                lo(i) = max(P*S(i,:).' - 0.5*sum(P.^2, 2));
+            end
+            got = g.eval(S);
+            testCase.verifyGreaterThanOrEqual(got, lo - 1e-9, ...
+                'f* may never fall below a sup actually attained on the domain');
+            testCase.verifyLessThan(max(got - lo), 1e-4, ...
+                'nor exceed it by more than the sampling grid can explain');
+
+            A = randn(200,2)*2;  B = randn(200,2)*2;
+            testCase.verifyLessThanOrEqual(g.eval((A+B)/2), (g.eval(A) + g.eval(B))/2 + 1e-9, ...
+                'and the fold of the pieces is still convex');
         end
+
+        function aNonConvexUNBOUNDEDPieceIsStillRefusedByName(testCase)
+        % The split needs a closed boundary to clip ears from, so a non-convex piece that also
+        % recedes is a separate case -- cutting it would mean splitting along its recession
+        % directions first. Refused by name rather than silently mis-described.
+            V = [0 0; 2 0; 1 1; 0 2; 3 0];
+            E = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 2 5 0];
+            testCase.verifyError(@() conjQ(QuaPol(V, E, [0 0 0 0 1 0 1 0 0 0], ...
+                [1 0; 1 0; 1 0; 1 0; 1 0])), ?MException);
+        end
+
 
         function aFOURPieceFanConjugatesCorrectly(testCase)
         % Also found by widening the axes: the corner-naming loop used the PRE-merge cell count, so
