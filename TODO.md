@@ -62,12 +62,34 @@ is a 4x4 determinant of quadratics, so its entries are degree-8 products; measur
 while building 12 random conjugates across all six Hessian classes. It needs conic coefficients
 above ~5,000, which arise only from denominators compounding in a deep fold.
 
-**4. THE BACKENDS, timed on the operation that actually overflows** (a degree-8 product form):
+**4. THE BACKENDS, timed on the operation that actually overflows** (a degree-8 product form).
+CORRECTED 2026-09-05 after the first table was challenged -- both of its non-double rows were
+measured unfairly, in opposite directions:
 
-    doubles              15.5 us/op    the floor; silently wrong past 2^53
-    CRT modular half      6.4 us/op    pure MATLAB, no toolbox, no compiler
-    java BigInteger     1876   us/op   121x doubles -- SHIPS WITH MATLAB, no compiler
-    sym                65176   us/op   4201x -- licence + VPN on the compute path
+    doubles                       15.5 us/op   the floor; silently wrong past 2^53
+    CRT residues + Garner        162.5 us/op   exact, but see below -- the OUTPUT is not a number
+    java BigInteger (valueOf)    878.5 us/op   exact, usable, ships with MATLAB
+    java BigInteger (sprintf)   1184.2 us/op   what the first table measured: string parsing per operand
+    sym                        65176   us/op   4201x, plus licence and VPN
+
+**Why the CRT row is not the answer, although it IS the fastest computation.** The first table's
+6.4 us was the modular half ALONE; the full route with Garner reconstruction is 162 us, still 5.4x
+faster than BigInteger. The problem is not speed, it is the OUTPUT:
+
+* **The reconstructed value cannot live in a double.** Measured directly: a true value of
+  57901237316554180453080 reconstructs to a double that is wrong by **2,956,584**. An earlier check
+  that reported "exact match" was comparing two doubles that had BOTH already been rounded -- the
+  exact trap this project exists to avoid, found by re-testing against `sym` as an integer.
+* **So the result lives in mixed-radix digits, not a number.** To use it, everything downstream --
+  Sturm chains, polynomial GCD, sign comparison -- would have to be reimplemented in that
+  representation. That is not a shortcut past a bignum library; it IS a bignum library, hand-rolled.
+* **And modular arithmetic has no ORDER.** Sturm needs SIGNS at rational points, and residues carry
+  none; recovering a sign means comparing against M/2, which needs the value again.
+
+**Where CRT genuinely does win, and is worth keeping in mind:** deciding whether a determinant is
+ZERO needs no reconstruction at all -- nonzero modulo any prime proves nonzero, and zero modulo
+enough primes to pass the Hadamard bound proves zero. `ratQ.detExact`'s degeneracy tests are exactly
+that shape. If the exact path ever stops being cold, that is the first place to put it.
 
 ### The options
 
