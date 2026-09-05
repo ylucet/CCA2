@@ -529,17 +529,17 @@ function sh = pieceShape(obj, k, Vi, vd)
     E = obj.E(own, :);
 
     sh.vs = [];
-    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {});
+    sh.ed = struct('a', {}, 'b', {}, 'd', {}, 'isRay', {}, 'j', {});
     sh.rays = zeros(0,2);
     for j = 1:size(E,1)
         a = E(j,1);  b = E(j,2);
         d = ratQ.chk(Vi(b,:) - Vi(a,:), 'edge direction');
         if E(j,3) ~= 0
             sh.vs = [sh.vs; a; b];
-            sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false); %#ok<AGROW>
+            sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false, 'j', own(j)); %#ok<AGROW>
         else
             sh.vs = [sh.vs; a];
-            sh.ed(end+1) = struct('a', a, 'b', 0, 'd', d, 'isRay', true); %#ok<AGROW>
+            sh.ed(end+1) = struct('a', a, 'b', 0, 'd', d, 'isRay', true, 'j', own(j)); %#ok<AGROW>
             sh.rays(end+1,:) = d; %#ok<AGROW>
         end
     end
@@ -565,7 +565,31 @@ function sh = pieceShape(obj, k, Vi, vd)
                 if t ~= 0, sgn = sign(t); break, end
             end
         end
-        if sgn == 0, continue, end                     % everything on the line: degenerate
+        if sgn == 0
+            % EVERY vertex and every recession direction lies ON this edge's line, so the piece's
+            % own geometry cannot say which side it is. That is not degenerate -- it is a piece
+            % bounded BY A LINE, i.e. a half-plane, and `examples(12)` is exactly that: two rays
+            % from one vertex forming the y-axis, splitting the plane into two half-planes.
+            %
+            % Only F knows the answer there, so F is consulted HERE and nowhere else. F(j,:) is
+            % [left, right] of edge j, and n = (d2, -d1) is the RIGHT normal, so the face's inward
+            % normal is +n when the face sits on the right and -n when it sits on the left.
+            %
+            % Skipping the edge instead -- which is what "degenerate, continue" did -- left the
+            % piece with NO half-plane at all, so its domain was silently the whole plane. Measured
+            % against the legacy conjugate on examples(12): 28 values wrong and 91 points where the
+            % two disagreed about the domain.
+            jg = sh.ed(j).j;
+            if obj.F(jg,2) == k
+                sgn = 1;
+            elseif obj.F(jg,1) == k
+                sgn = -1;
+            else
+                error('PLQ:conjQ:badMesh', ...
+                    'edge %d lists faces [%d %d], neither of which is face %d.', ...
+                    jg, obj.F(jg,1), obj.F(jg,2), k);
+            end
+        end
 
         % IS THE PIECE CONVEX? A face described by half-planes IS an intersection of half-planes,
         % so a REFLEX corner cannot be expressed: every other vertex would have to lie on the

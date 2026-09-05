@@ -37,6 +37,52 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (overnight) — DIFFERENTIAL TEST against the LEGACY conjugate: 1 real defect, quarantined
+
+`.claude/legacy-diff.m` runs `conjQ` against `conjCPLQ` over the library's own fixture corpus
+(`QuaPol.examples`, `examples2`, and the named factories). `conjCPLQ` is an INDEPENDENT
+implementation -- different algorithm, different arithmetic, written years earlier -- so this is the
+check the exact work had not had at scale.
+
+    both answer 16 (disagree 1 after fixes) | exact only 6 | legacy only 1 | neither 9
+
+**The exact route reaches SIX fixtures the legacy one cannot** (`minusInfinity`, `cplqFailed`,
+`emptyDomain`, and three `notImplemented`), and is refused on ONE the legacy accepts -- `examples(17)`,
+whose coefficients are not exactly rational, which is a deliberate refusal rather than a gap.
+
+### FIXED by this run: a piece bounded BY A LINE had no half-plane at all
+
+A half-plane piece -- two opposite rays from one vertex -- has EVERY vertex and EVERY recession
+direction lying ON its boundary line, so the piece's own geometry cannot say which side it is on.
+`pieceShape` treated that as degenerate and skipped the edge, leaving the piece with NO constraint,
+so its domain was silently the whole plane. `F` is the only thing that knows, and is now consulted
+THERE and nowhere else: `F(j,:)` is `[left, right]` and `n = (d2,-d1)` is the RIGHT normal, so the
+inward normal is `+n` when the face is on the right and `-n` when on the left. Took the
+disagreements on `examples(12)` from 91 domain + 28 value to 26 + 28.
+
+### QUARANTINED: `examples(12)`'s fold leaves cells OVERLAPPING
+
+`conjQTest/examples12FoldsTwoHalfPlanesAndOVERLAPS_quarantined`, an `assumeFail` naming it.
+
+At `s = (-2.670, -0.895)` two cells both contain `s`, carrying **0.20026** and **0.64930**, and
+`eval`'s first-match rule returns the SMALLER. The true value is 0.64930, confirmed three ways: a
+sampled sup over the domain (a lower bound, reaching 0.64920), the legacy conjugate (0.64905), and
+the closed form `1/2 s' H1^-1 s`, whose unconstrained maximiser lies inside `{x <= 0}` so it is
+attained.
+
+**Already ruled out, so the next session does not redo it:**
+- **NOT `mergeAdjacentCells`** -- the overlap survives with the merge disabled (4 faces instead of
+  3, the same two overlapping).
+- **NOT the half-plane side** -- that was the separate bug fixed above; it moved the domain
+  disagreements and left the value ones untouched.
+- The two overlapping faces carry functions from **DIFFERENT pieces** (one is piece 1's interior
+  cell, `1/2 s'H1^-1 s`), so it is the **FOLD** that failed to separate them, not a single piece's
+  own subdivision. That localises the next search to `maxQ`.
+
+**The invariant to assert once fixed:** no two cells of a conjugate may overlap while carrying
+different functions. That check is cheap and would have caught this class immediately; it is worth
+adding whether or not the fix is quick.
+
 ## 2026-09-04 (overnight) — MULTI-PIECE envelope, and a malformed-mesh convention found
 
 **Item 2 of the three envelope items is done.** The envelope COUPLES its pieces -- the convex hull

@@ -373,6 +373,34 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
+        function examples12FoldsTwoHalfPlanesAndOVERLAPS_quarantined(testCase)
+        % QUARANTINED RED, named rather than deleted or weakened -- CLAUDE.md section 8.
+        %
+        % `QuaPol.examples{12}` is the plane cut by the y-axis into two HALF-PLANES, carrying
+        % H1 = [6 1; 1 2] (positive definite) on {x <= 0} and H2 = [2 2; 2 2] (PSD singular) on
+        % {x >= 0}. conjQ produces a mesh whose cells OVERLAP: at s = (-2.670, -0.895) two faces
+        % both contain s, carrying 0.20026 and 0.64930, and eval's first-match rule returns the
+        % SMALLER. The true value is 0.64930 -- confirmed three ways: a sup sampled over the domain
+        % (a lower bound, and it reaches 0.64920), the legacy conjugate (0.64905), and the closed
+        % form 1/2 s' H1^-1 s, whose unconstrained maximiser lies inside {x <= 0} so it is attained.
+        %
+        % WHAT IS ALREADY RULED OUT, so the next session does not redo it:
+        %   * NOT mergeAdjacentCells -- the overlap is present with the merge disabled (4 faces
+        %     instead of 3, same two overlapping).
+        %   * NOT the half-plane's own side, which was a separate bug fixed the same night: a piece
+        %     bounded BY A LINE has every vertex and every recession direction ON that line, so its
+        %     side has to come from F. Fixing that took the domain disagreements from 91 to 26 and
+        %     did not touch the value disagreements.
+        %   * The two overlapping faces carry functions from DIFFERENT pieces (one is piece 1's
+        %     interior cell, 1/2 s'H1^-1 s), so it is the FOLD that failed to separate them, not a
+        %     single piece's own subdivision.
+        %
+        % The invariant to assert once fixed: no two cells of a conjugate may overlap while
+        % carrying different functions.
+            testCase.assumeFail(['examples{12}: conjQ''s fold leaves two cells overlapping with ' ...
+                'different values; eval returns the smaller. See this test''s comment.']);
+        end
+
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
         % Bounding the vertex denominators does not bound the downstream ones -- DECISIONS.md's
         % attempt 3 carried 1e5 to 1e25 in a few squarings and the run hung. So an irrational
