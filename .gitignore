@@ -34,5 +34,5 @@ slprj/
 .claude/coverage/
 
 # scratch files the overnight run may leave
-.claude/commitmsg.tmp
+.claude/*.tmp
 .claude/overnight-slow.log
