@@ -37,6 +37,80 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 - NEXT TASKS FOR `biconjQ`, reordered by measurement
+
+The previous ordering guessed that the unbounded non-convex envelope was the biggest win. Measured
+instead, and it is not: **all 8 fixtures the legacy envelope answers and this one refuses are
+unblocked by setting `fIsConvex = true` alone.**
+
+    fixture        pieces  rays   refusal      with fIsConvex=true
+    oneNorm           4      4    unbounded    OK nf=4
+    examples(1)       4      4    unbounded    OK nf=4
+    examples(5)       4      4    unbounded    OK nf=4
+    examples(8)       2      3    unbounded    OK nf=2
+    examples(16)      4      5    unbounded    OK nf=3
+    examples(18)      4      5    unbounded    OK nf=4
+    examples(19)      9      8    unbounded    OK nf=9
+    examples2(9)      2      3    unbounded    OK nf=2
+
+So the whole visible gap is a **convexity TEST**, not an envelope algorithm. `co f = f` is already
+computed correctly for every one of them; the routine simply cannot establish the hypothesis.
+
+### 1. An EXACT convexity test for a piecewise function  (unblocks all 8)
+
+**What it needs.** Per-piece PSD is necessary and not sufficient; convexity also needs, across every
+shared edge, that `f` is continuous and lies above each piece's extension. For two quadratics
+meeting on a line, `q_i - q_j` vanishes on that line, so it factors as `l * m` with `l` the edge's
+own linear form -- and convexity is then the SIGN of `m` on the piece's side, which is one exact
+integer test per shared edge. No new machinery: `ratQ` already has everything.
+
+**Existing code to read first, and treat with care.** `QuaPol.isConvex` and `isEdgeConvex` already
+implement this in doubles/`sym`, following Singh's thesis Algorithm 3. `isConvex` carries a literal
+`%TO BE TESTED!!!!` and **two code smells were spotted while measuring, both LATENT rather than
+live** -- each is currently masked by a later loop that also returns false, so neither is a known
+wrong answer today:
+
+  * `if ~obj.dom.isConvex, b=false; end` sets `b` and does NOT `return`, so a non-convex domain
+    falls through to the face and edge loops.
+  * `isEdgeConvex`'s `k = sum(obj.F(j,:)>0)` is a COUNT, and the `k==1` branch then calls
+    `obj.isFaceConvex(k(k~=0))` -- using that count as a face INDEX. Accidentally right when the
+    face in question is face 1, wrong otherwise.
+
+Write the exact test fresh against the contract rather than porting these, and use them as a
+differential oracle on inputs where they agree.
+
+**Then remove the flag's load-bearing role.** `fIsConvex` stays as a caller's assertion (it is a
+genuine short-circuit) but stops being the only route.
+
+### 2. The UNBOUNDED NON-CONVEX envelope  (the real algorithmic gap)
+
+Now known to block **no fixture in the corpus** -- it is reachable only by inputs nobody has
+written down yet, which is why it drops below item 1 rather than above it.
+
+`PLQ:biconjQ:minusInfinity` is already separated from `PLQ:biconjQ:unbounded`, so the
+representational case (a correct `-infinity`) is distinguished from the computable one. What the
+computable one needs: the lower hull of an UNBOUNDED lifted set -- the lifted recession rays
+alongside the lifted vertices -- and `conv(P)` as an unbounded domain.
+
+### 3. The EDGE-CONVEX piece  (and only here does `AlgAlg` earn its place)
+
+A piece curving UPWARD along an edge: the vertex values no longer determine the envelope, so it
+needs [COAP] A.2-A.5. This is where the first face appears whose coefficients cannot be written as
+fractions -- an affine cell of a general `f**` is `<p,x> - f*(p)` with `p` a dual vertex of degree
+up to 4, rational only over `Q(p)`. **Do not build `AlgAlg` before this**, or the type is
+speculative.
+
+### 4. Smaller, and worth doing alongside
+
+  * **`biconjQ` has no differential sweep of its own** at the scale `conjQ` has. `.claude/envelope-sweep.m`
+    checks the four defining properties on 26-38 random polygons; there is no equivalent of
+    `allH-sweep.m` covering every Hessian class x domain shape.
+  * **A CHAIN of edges** (dimension < 2, more than one edge) is refused as `chainNotImplemented`.
+    Not thin: the convex hull of two non-collinear segments is a 2-D polygon, so it belongs with the
+    ordinary lower-hull case read from the whole mesh rather than from a face.
+  * **`biconjQ.m` is at 90.7% coverage**, the lowest of the exact files after `QuaCon`; the
+    uncovered lines are worth a look once item 1 lands, since some are the branches item 1 removes.
+
 ## 2026-09-05 - INTEGER OVERFLOW: the options, measured before choosing
 
 `ratQ.chk` raises `ratQ:overflow` past 2^53 rather than returning a rounded value, and 2026-09-05
