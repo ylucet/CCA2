@@ -454,6 +454,37 @@ classdef conjQTest < matlab.unittest.TestCase
         end
 
 
+        function aDualDomainThatIsASINGLEPOINTIsRecoveredNotDiscarded(testCase)
+        % QuaPol.examples{19} is nine AFFINE pieces on a fan whose dual domain is the single point
+        % s = (0,0), where f*(0,0) = -inf f = 0. assembleQuaConCells drops cells with no
+        % two-dimensional interior, so the whole answer came back with ZERO faces -- +infinity
+        % everywhere -- losing a correct finite value.
+        %
+        % The point is now recovered exactly: a thin cell's extreme points are intersections of
+        % pairs of its own bounding LINES, hence rational and computable with ratQ.solve2, and if
+        % every candidate that satisfies its cell is the SAME point, the domain is that point. It
+        % is then emitted with EQUALITY sides, the machinery caseAFullDomain already uses.
+        %
+        % Only the single-point case is recovered, deliberately. Keeping every cell that is merely
+        % nonempty AS A SET was tried and measured WORSE: 982 degenerate cells survived and eval's
+        % tolerance then admitted points genuinely outside the domain, turning one wrong answer into
+        % two. A point is exact, checkable, and cannot over-cover.
+            P = QuaPol.examples();
+            f = P{19};
+            testCase.assumeTrue(f.isExact());
+            g = conjQ(f);
+
+            testCase.verifyEqual(g.nf, 1, 'one cell: the point');
+            testCase.verifyEqual(g.eval([0 0]), 0, 'AbsTol', 1e-12, ...
+                'f*(0,0) = -inf f = 0, which the legacy conjugate also gives');
+            testCase.verifyTrue(all(isinf(g.eval([1 1; 0.01 0; 0 0.01; -1 2; 5 -3]))), ...
+                'and +infinity everywhere else -- the domain really is that one point');
+            for k = 1:g.nf
+                testCase.verifyTrue(all(g.FC{k}(:,2) == 0), ...
+                    'the cell is carried by EQUALITY sides');
+            end
+        end
+
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
         % Bounding the vertex denominators does not bound the downstream ones -- DECISIONS.md's
         % attempt 3 carried 1e5 to 1e25 in a few squarings and the run hung. So an irrational

@@ -116,6 +116,37 @@ function g = assembleQuaConCells(cells)
         isLine = all(rows(:,1:3) == 0, 2);
         live(k) = ratQ.feasible2(rows(isLine,7) .* rows(isLine,4:6), true);   % (b)
     end
+    if ~any(live)
+        % EVERYTHING was filtered away by a test that demands a two-dimensional INTERIOR. Before
+        % concluding "no domain at all", ask whether the domain is a single POINT -- a thin dual
+        % domain, which the H-form CAN carry, using the equality side.
+        %
+        % QuaPol.examples{19} is nine AFFINE pieces whose dual domain is exactly s = (0,0), where
+        % f*(0,0) = -inf f = 0; without this the answer was +infinity everywhere.
+        %
+        % Only the single-point case is recovered here, and deliberately so. Keeping every cell
+        % that is merely nonempty AS A SET was tried and is measurably worse: 982 degenerate cells
+        % survived and eval's tolerance then admitted points genuinely outside the domain, turning
+        % one wrong answer into two. A point is exact, checkable, and cannot over-cover.
+        [pt, den] = singlePointDomain(cells);
+        if ~isempty(pt)
+            best = [];  bestD = [];
+            for k = 1:numel(cells)
+                if ~cellHoldsAtPoint(cells(k).con, pt, den), continue, end
+                if isempty(best) || ratQ.evalFace(cells(k).num, cells(k).den, (pt/den).') > ...
+                                    ratQ.evalFace(best, bestD, (pt/den).')
+                    best = cells(k).num;  bestD = cells(k).den;
+                end
+            end
+            if ~isempty(best)
+                r1 = [ratQ.chk(den,'e1'), 0, ratQ.chk(-pt(1),'e0')];
+                r2 = [0, ratQ.chk(den,'e1'), ratQ.chk(-pt(2),'e0')];
+                con = [ratQ.conic([0 0 0, r1]), 0; ratQ.conic([0 0 0, r2]), 0];
+                cells = struct('num', best, 'den', bestD, 'con', con);
+                live = true;
+            end
+        end
+    end
     cells = cells(live);
     if isempty(cells)
         % Everything filtered away, and the filter demands a two-dimensional INTERIOR. The
@@ -222,6 +253,50 @@ function tf = cellHoldsAt(EcQ, rows, xn, xd)
             if val ~= 0, tf = false; return, end      % an EQUALITY row: the corner must be ON it
         elseif rows(r,2) * val < 0
             tf = false; return
+        end
+    end
+end
+
+function [pt, den] = singlePointDomain(cells)
+% objective: if the union of these cells is a single POINT, return it exactly as pt/den.
+%
+% A thin cell's extreme points are intersections of pairs of its own bounding LINES, so they are
+% rational and computable with ratQ.solve2 -- no tolerance anywhere. If every candidate that
+% actually satisfies its cell's constraints is the SAME point, the domain is that point.
+    pt = [];  den = [];
+    seen = zeros(0,3);
+    for k = 1:numel(cells)
+        rows = cells(k).con;
+        lin = rows(all(rows(:,1:3) == 0, 2), :);
+        for a = 1:size(lin,1)
+            for b = a+1:size(lin,1)
+                A = [lin(a,4) lin(a,5); lin(b,4) lin(b,5)];
+                if ratQ.detExact(A) == 0, continue, end
+                [x, xd] = ratQ.solve2(A, [-lin(a,6); -lin(b,6)]);
+                if ~cellHoldsAtPoint(rows, x, xd), continue, end
+                cand = [x(1)/xd, x(2)/xd, 0];
+                if isempty(seen), seen = [x(1) x(2) xd];
+                elseif abs(seen(1)/seen(3) - cand(1)) > 0 || abs(seen(2)/seen(3) - cand(2)) > 0
+                    return                       % two distinct points: not a single-point domain
+                end
+            end
+        end
+    end
+    if isempty(seen), return, end
+    pt = [seen(1); seen(2)];  den = seen(3);
+end
+
+function tf = cellHoldsAtPoint(rows, xn, xd)
+% does the point xn/xd satisfy every constraint of this cell, exactly. xd > 0 by ratQ.canon.
+    tf = true;
+    for r = 1:size(rows,1)
+        c = rows(r,1:6);
+        v = ratQ.chk(c(1)*xn(1)^2 + c(2)*xn(1)*xn(2) + c(3)*xn(2)^2 ...
+                   + c(4)*xn(1)*xd + c(5)*xn(2)*xd + c(6)*xd^2, 'point test');
+        if rows(r,7) == 0
+            if v ~= 0, tf = false; return, end
+        elseif rows(r,7) * v < 0
+            tf = false;  return
         end
     end
 end

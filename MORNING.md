@@ -39,15 +39,13 @@ Branch: overnight/2026-09-04
 
 - **Nothing quarantined, no reds.** The overlap defect found earlier tonight was traced and FIXED
   (three separate bugs, all in half-plane pieces -- see *What changed*).
-- **`examples(19)`: conjQ answers `+infinity` at `s = (0,0)`, where the truth is 0.** Nine affine
-  pieces whose dual domain is that single POINT. `assembleQuaConCells` drops cells with no
-  two-dimensional interior, so a wholly thin dual domain comes back empty. Relaxing the filter was
-  tried and is worse -- 982 degenerate cells and a second wrong point -- so it is reverted and
-  named. The real fix is to emit a thin dual domain with EQUALITY sides, machinery that already
-  exists for the full-plane point/line cases. One point on one fixture; not a red test.
-- `examples2(9)` also disagrees with the legacy route, and there **the legacy is wrong**: it returns
-  finite values the sampled sup already exceeds, and the samples keep climbing with reach. The exact
-  route's `+infinity` is right.
+- **Nothing known-wrong in `conjQ` or `biconjQ`.** Both fixtures that disagreed with the legacy
+  route are resolved: `examples(19)` is FIXED (its dual domain is a single point, now recovered
+  with equality sides), and on `examples2(9)` **the legacy is the wrong one** -- it returns finite
+  values the sampled sup already exceeds, and the samples keep climbing with reach.
+- **Open, with no fixture exercising it:** a dual domain that is a SEGMENT or a LINE rather than a
+  point. Same equality-side machinery, but the extreme-point argument that pins a point does not
+  pin a segment, so it needs the thin cell's affine hull.
 
 ## Needs a decision
 

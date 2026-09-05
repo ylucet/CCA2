@@ -53,19 +53,32 @@ also raises its own Step-3-against-Step-2 cross-check on `examples(11)` (`SUPPOR
 pieces on a fan; `dom f*` is the single point `s = (0,0)`, where `f*(0,0) = -inf f = 0`. `conjQ`
 answers `+infinity` there.
 
-### KNOWN LIMITATION, now named: a dual domain with EMPTY INTERIOR is reported as EMPTY
+### FIXED: a dual domain that is a single POINT is now recovered, not discarded
 
 `assembleQuaConCells` drops cells with no two-dimensional interior, so a conjugate whose whole
-domain is thin comes back with zero faces, i.e. `+infinity` everywhere.
+domain is thin came back with zero faces -- `+infinity` everywhere -- losing a correct finite value.
 
-**Relaxing the filter to "nonempty as a set" was TRIED and is WORSE, measured:** it kept **982**
-degenerate cells, and `eval`'s tolerance then admitted points genuinely outside the domain, turning
-one wrong point into two (`f*(1,1)` became 2 where it is `+infinity`). Reverted.
+**The point is now recovered exactly.** A thin cell's extreme points are intersections of pairs of
+its own bounding LINES, hence rational and computable with `ratQ.solve2`; if every candidate that
+satisfies its cell is the SAME point, the domain is that point, and it is emitted with EQUALITY
+sides -- the machinery `caseAFullDomain` already uses. `examples(19)` now gives `f*(0,0) = 0` and
+`+infinity` everywhere else, agreeing with the legacy conjugate.
 
-**The real fix** is to detect a thin dual domain and emit it with EQUALITY sides -- the machinery
-already exists and `caseAFullDomain` uses it for the point and line cases. What is missing is
-recognising the situation when it arises from the FOLD rather than from a single full-plane piece.
-That is the next item on this thread.
+**Only the single-point case is recovered, deliberately.** Keeping every cell that is merely
+nonempty AS A SET was tried and measured WORSE: **982** degenerate cells survived and `eval`'s
+tolerance then admitted points genuinely outside the domain, turning one wrong answer into two
+(`f*(1,1)` became 2 where it is `+infinity`). A point is exact, checkable, and cannot over-cover.
+
+**Still open:** a dual domain that is a SEGMENT or a LINE rather than a point. Same machinery
+(equality sides) but the extreme-point argument does not pin it, so it needs the thin cell's
+affine hull instead. No fixture in the corpus exercises it.
+
+### The result: ONE disagreement left with the legacy conjugate, and it is the LEGACY's
+
+`.claude/legacy-diff.m` now reports **16 fixtures both answer, 1 disagreeing, worst relative value
+disagreement 5.55e-16**. The one is `examples2(9)`, where the legacy returns finite values that the
+sampled sup already exceeds and which keep climbing with reach -- so `+infinity` is right and the
+legacy is wrong. The exact route additionally reaches SIX fixtures the legacy cannot.
 
 ## 2026-09-05 (overnight) - the quarantined overlap is FIXED. Three defects, all in HALF-PLANE pieces.
 
