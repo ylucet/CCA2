@@ -4955,3 +4955,25 @@ unknown; both fields go when the float pipeline does.
 **Method note, worth more than the decision.** The earlier entry is a good measurement attached to
 an unexamined premise, and the premise was the part that mattered. Measuring what the code does is
 not the same as checking what the code is FOR.
+
+## 2026-09-05 — CRT/modular arithmetic is REFUTED as the answer to integer overflow
+
+**Tried.** Compute the overflowing quantity modulo several primes below 2^26 (so every product fits
+a double exactly) and reconstruct by Garner. It is the fastest exact option measured — 162 us/op
+against `java.math.BigInteger`'s 878 — and needs no toolbox, licence or compiler.
+
+**Why it fails, and it is not about speed.** The reconstructed VALUE cannot live in a double.
+Measured directly: a true value of 57901237316554180453080 reconstructs to a double wrong by
+**2,956,584**. So the result lives in mixed-radix digits, and using it would mean reimplementing
+Sturm chains, polynomial gcd and sign comparison in that representation — which is not a shortcut
+past a bignum library, it IS one, hand-rolled. Compounding it, modular arithmetic carries no ORDER,
+and Sturm needs signs at rational points.
+
+**Method note worth more than the result.** An earlier check reported "exact match" because it
+compared two doubles that had BOTH already been rounded. It was caught only by re-testing against
+`sym` as an INTEGER. A float-vs-float equality test proves nothing about exactness — the exact trap
+this project exists to avoid, and it nearly went into the record as a recommendation.
+
+**Retry only if** the exact path stops being cold, and then only for ZERO-TESTING, where CRT needs
+no reconstruction at all: nonzero modulo any prime proves nonzero. `ratQ.detExact`'s degeneracy
+tests are that shape. Evidence: `.claude/overflow-crt-limit.m`, `.claude/overflow-backends.m`.
