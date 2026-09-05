@@ -169,7 +169,11 @@ function g = assembleQuaConCells(cells)
     ne = size(EcQ, 1);
     seen = false(ne, ne);
     Vname = zeros(0,3);
-    for k = 1:numel(cells)
+    % numel(FC), NOT numel(cells): mergeAdjacentCells above REMOVES cells, so the two counts differ
+    % as soon as a merge actually fires. It never did until Case D was restructured, and then this
+    % ran off the end of FC -- MATLAB:badsubscript on a four-piece input, an unnamed crash rather
+    % than a named refusal.
+    for k = 1:numel(FC)
         rows = FC{k};
         for p1 = 1:size(rows,1)
             for p2 = p1+1:size(rows,1)

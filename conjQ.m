@@ -539,6 +539,34 @@ function sh = pieceShape(obj, k, Vi, vd)
             end
         end
         if sgn == 0, continue, end                     % everything on the line: degenerate
+
+        % THE PIECE MUST BE CONVEX, and this is where that is checked rather than assumed. A face
+        % described by half-planes IS an intersection of half-planes, so a REFLEX vertex cannot be
+        % expressed: every other vertex would have to lie on the chosen side of this edge, and at a
+        % reflex corner some do not. Detected exactly here, and refused, because the alternative is
+        % a silent wrong answer -- measured on an L-shaped face, where the half-plane intersection
+        % is strictly SMALLER than the L, so the sup came out BELOW the true one at 54 of 303 dual
+        % points. The mesh already knows: QuaPol.orderEdges reports isConvex = 0 for such a face.
+        for i = 1:numel(sh.vs)
+            v = Vi(sh.vs(i), :);
+            if ratQ.chk(sgn * (n(1)*v(1) + n(2)*v(2) + c0), 'convexity') < 0
+                error('PLQ:conjQ:nonConvexPiece', ...
+                    ['face %d is NOT CONVEX -- vertex %d lies on the far side of the edge from ' ...
+                     'vertex %d. A piece is described here as an intersection of half-planes, ' ...
+                     'which cannot express a reflex corner, so conjugating it would silently ' ...
+                     'return the sup over a SMALLER set. Split the face into convex pieces ' ...
+                     'first: conj turns a union into a max, so the pieces recombine by maxQ.'], ...
+                    k, sh.vs(i), sh.ed(j).a);
+            end
+        end
+        for r = 1:size(sh.rays,1)
+            if ratQ.chk(sgn * (n * sh.rays(r,:).'), 'convexity') < 0
+                error('PLQ:conjQ:nonConvexPiece', ...
+                    ['face %d is NOT CONVEX -- it recedes along (%d,%d), which leaves the ' ...
+                     'half-plane of one of its own edges.'], k, sh.rays(r,1), sh.rays(r,2));
+            end
+        end
+
         sh.hp(end+1,:) = sgn * [ratQ.chk(vd*n(1), 'edge normal'), ...
                                 ratQ.chk(vd*n(2), 'edge normal'), c0]; %#ok<AGROW>
     end

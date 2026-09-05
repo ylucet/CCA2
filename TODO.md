@@ -37,6 +37,45 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-04 (audit) — "can it handle ANY QuaPol?" NO. The table was an ENUMERATION, not a proof.
+
+The coverage table varies DOMAIN SHAPE x HESSIAN CLASS and holds everything else fixed. Asked
+whether `conjQ` handles any input at all, the honest move was to vary the other axes --
+`.claude/stress-probe.m` does: face convexity, vertex count, piece count, collinear vertices,
+coefficient magnitude, and vertex denominators. It found **two real defects the table could not
+see**, one of them silent.
+
+**1. A NON-CONVEX face was answered WRONGLY, and silently.** A piece is described here as an
+intersection of half-planes, which cannot express a REFLEX corner: for an L-shaped face the
+half-plane intersection is strictly SMALLER than the L, so the sup was taken over the wrong set and
+came out BELOW the true one at **54 of 303** dual points. Wrong in the direction a one-sided oracle
+treats as impossible, so the existing sweeps would never have caught it -- they all use convex
+polygons. NOW REFUSED by name (`PLQ:conjQ:nonConvexPiece`), detected exactly while building the
+half-planes, with the remedy in the message: split the face into convex pieces, since `conj` turns
+a union into a MAX and `maxQ` recombines them. **The mesh already knew** -- `QuaPol.orderEdges`
+reports `isConvex = 0` for such a face.
+
+**2. A FOUR-PIECE input CRASHED**, `MATLAB:badsubscript`, an unnamed crash rather than a named
+refusal. The corner-naming loop in `assembleQuaConCells` used the PRE-merge cell count while
+reading the POST-merge list. It could not fire until `mergeAdjacentCells` actually started removing
+cells -- which it never did until Case D was restructured, and the merge is recorded above as having
+fired ZERO times before that. Fixed; the four-quadrant fan now conjugates at 0 wrong of 401 against
+a closed form.
+
+**What the probe found CLEAN**, so these are now known rather than assumed: a 12-gon, collinear
+vertices on an edge, coefficients up to 1e7 (no `ratQ` overflow), and vertices with denominators
+7, 11 and 13 (no denominator blow-up).
+
+**So the accurate claim is:** `conjQ` handles any QuaPol whose pieces are CONVEX polyhedra -- which
+is what this toolbox's subdivisions are, since a face is read as an intersection of half-planes
+throughout (`ALGORITHM.md` says so of `eval` too) -- and refuses a non-convex piece by name rather
+than answering it. Splitting non-convex faces automatically is the obvious next item and is not
+built.
+
+**Method note, and it is the general lesson.** A coverage table is an enumeration along the axes
+its author thought of. Both defects lived on axes the table held FIXED, and one was silent. Widening
+the axes is a different activity from filling in the table, and it is the one that found the bugs.
+
 ## 2026-09-04 (closing) — the `conjQ` coverage table is COMPLETE. Every entry is OK.
 
     domain \ Hessian    PD    PSD-sing  indefinite  ND      NSD-sing  affine

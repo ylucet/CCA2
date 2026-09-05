@@ -286,6 +286,55 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
+        function aNONCONVEXFaceIsRefusedRatherThanSilentlyAnswered(testCase)
+        % FOUND 2026-09-04 by widening the test axes past the coverage table, which varies domain
+        % SHAPE x Hessian class and holds face CONVEXITY fixed. A piece is described here as an
+        % intersection of half-planes, which cannot express a REFLEX corner, so an L-shaped face
+        % was conjugated as though its domain were the smaller set the half-planes cut out: the sup
+        % came out BELOW the true one at 54 of 303 dual points. Silent, and wrong in the direction
+        % no one-sided oracle would flag as impossible.
+        %
+        % Now refused by name. The message says the remedy, which is exact: split the face into
+        % convex pieces, since conj turns a union into a MAX and maxQ recombines them.
+            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];      % an L, reflex at (1,1)
+            m = size(V,1);
+            E = [(1:m).', [2:m,1].', ones(m,1)];  F = [ones(m,1), zeros(m,1)];
+            f = QuaPol(V, E, [0 0 0 0 1 0 1 0 0 0], F);
+            [~, isConv] = f.orderEdges(1);
+            testCase.verifyFalse(logical(isConv), 'the mesh itself already knows it is not convex');
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:nonConvexPiece');
+        end
+
+        function aFOURPieceFanConjugatesCorrectly(testCase)
+        % Also found by widening the axes: the corner-naming loop used the PRE-merge cell count, so
+        % once mergeAdjacentCells actually started firing -- which it only did after Case D was
+        % restructured -- it ran off the end of the list and crashed with MATLAB:badsubscript, an
+        % unnamed crash rather than a named refusal. Four pieces is the smallest input that
+        % triggered a merge.
+        %
+        % The oracle is closed form: each quadrant carries a DIAGONAL H, so its own sup separates
+        % into sum over axes of (t>0) t^2/(2h), and f* is the max of the four.
+            V = [0 0; 1 0; 0 1; -1 0; 0 -1];
+            E = [1 2 0; 1 3 0; 1 4 0; 1 5 0];
+            F = [1 4; 2 1; 3 2; 4 3];
+            Hs = {[1 0;0 1], [2 0;0 1], [1 0;0 2], [3 0;0 3]};
+            fc = zeros(4,10);
+            for k = 1:4
+                fc(k,:) = [0 0 0 0, Hs{k}(1,1), Hs{k}(1,2), Hs{k}(2,2), 0, 0, 0];
+            end
+            g = conjQ(QuaPol(V, E, fc, F));
+
+            rng(20260904);
+            S = [randn(300,2)*2; 0 0];
+            sgn = {[1 1], [-1 1], [-1 -1], [1 -1]};
+            want = -inf(size(S,1),1);
+            for k = 1:4
+                u = S(:,1)*sgn{k}(1);  v = S(:,2)*sgn{k}(2);
+                want = max(want, (u>0).*(u.^2/(2*Hs{k}(1,1))) + (v>0).*(v.^2/(2*Hs{k}(2,2))));
+            end
+            testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
+        end
+
         function anInputThatIsNotExactlyRationalIsRefusedRatherThanSnapped(testCase)
         % Bounding the vertex denominators does not bound the downstream ones -- DECISIONS.md's
         % attempt 3 carried 1e5 to 1e25 in a few squarings and the run hung. So an irrational
