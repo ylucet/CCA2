@@ -67,20 +67,29 @@ one deviation from the paper's phrasing: `DECISIONS.md` 2026-09-05.
 so 7 fixtures are unblocked, not 8, and its `OK nf=3` under an asserted flag was a WRONG ANSWER.
 Witness in `.claude/ex16DomainProbe.m` and pinned in `isConvexQTest`.
 
-**Still open, and now cheap:**
+**The follow-ups are DONE 2026-09-05**, except the coverage re-measurement noted below:
 
-  * **`fIsConvex = true` is still TRUSTED, and `examples{16}` shows what that costs.** The only
-    guard today is the free per-piece PSD one. `isConvexQ` can now REFUTE a false flag outright;
-    what stops it being run unconditionally is that the flag exists precisely to skip the edge
-    loop. So: run it behind the opt-in assert ALGORITHM.md already describes
-    (`MAXQP_ASSERT` / `QUAPAR_VALIDATE` style), not on every call.
-  * **The two latent smells in `QuaPol`/`QuaPar.isEdgeConvex` are still there** -- the missing
-    `return` after `~obj.dom.isConvex`, and `k = sum(obj.F(j,:)>0)` used as a face INDEX. Neither
-    is on the exact path any more. Fix or delete the legacy routine; it is now second-source only.
-  * **`dom.isConvex` is wrong on `examples{16}`** (`orderEdges`, doubles). Nothing exact reads it
-    now, but `biconjCPLQ` line 246 still does.
-  * **Cubic is out of scope by assertion**, not by omission: this is Theorem 3.7, the PLQ one.
-    Theorem 3.13 covers piecewise cubic and is a different algorithm.
+  * **`fIsConvex = true` is refuted rather than trusted under `BICONJ_ASSERT`.** Off by default,
+    in the `MAXQP_ASSERT` / `QUAPAR_VALIDATE` style, because verifying on every call would delete
+    the only thing the flag buys. Pinned by
+    `biconjQTest/underBICONJ_ASSERTAFalseFlagIsREFUTEDRatherThanTrusted`, which asserts BOTH
+    halves -- off, the flag is still trusted; on, `examples{16}` is refused.
+  * **Both latent smells in `isEdgeConvex`/`isConvex` are fixed**, in all THREE copies
+    (`QuaPol`, `QuaPar`, `RatPol`). The face-index one was a real wrong answer, not latent, when
+    `isEdgeConvex` is called directly -- red first in
+    `PLQVCTest/testIsEdgeConvexOnABoundaryEdgeReadsTHATEdgesFace`. The missing `return` was
+    genuinely unreachable (`isFaceConvex` re-tests the domain), so no test can go red on it; it
+    was fixed as a claim the code was not making, and that is said in the commit rather than
+    dressed up as a bug fix.
+  * **`dom.isConvex` now comes from `domainIsConvexD`**, not from the boundary walk. A walk cannot
+    decide an unbounded domain at all -- two rays bound two cones. DECISIONS.md 2026-09-05.
+
+**Still open:**
+
+  * **Cubic is out of scope by assertion**, not by omission: `isConvexQ` is Theorem 3.7, the PLQ
+    one. Theorem 3.13 covers piecewise cubic and is a different algorithm.
+  * **The legacy `QuaPol.isConvex` is second-source only** now. It still decides in doubles
+    against `sqrt(eps)`. Deleting it is a separate decision -- `PLQVCTest` exercises it heavily.
 
 ### 2. The UNBOUNDED NON-CONVEX envelope  (the real algorithmic gap)
 
@@ -108,8 +117,15 @@ speculative.
   * **A CHAIN of edges** (dimension < 2, more than one edge) is refused as `chainNotImplemented`.
     Not thin: the convex hull of two non-collinear segments is a 2-D polygon, so it belongs with the
     ordinary lower-hull case read from the whole mesh rather than from a face.
-  * **`biconjQ.m` is at 90.7% coverage**, the lowest of the exact files after `QuaCon`; the
-    uncovered lines are worth a look once item 1 lands, since some are the branches item 1 removes.
+  * **Coverage, RE-MEASURED 2026-09-05** after items 1-3 (fast bucket, `--coverage`):
+    `biconjQ.m` 91.0% (262/288, was 90.7%), `isConvexQ.m` 92.4%, `domainIsConvexD.m` 100%.
+    `QuaCon.m` at 70.7% is now clearly the lowest of the exact files and the next place to look.
+    Item 1 did not remove branches from `biconjQ` -- the convex short-circuit gained a route
+    rather than losing one -- so the earlier guess that it would was wrong.
+    What is left uncovered in `isConvexQ` is four INTERNAL-INVARIANT guards (a degenerate edge, a
+    nonpositive vertex denominator, an edge with +infinity on both sides) plus the `iL == iR`
+    skip, which no fixture exercises. They are assertions, not features; classify them in
+    `SUPPORT_MATRIX.md` rather than chasing the percentage.
 
 ## 2026-09-05 - INTEGER OVERFLOW: the options, measured before choosing
 

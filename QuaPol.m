@@ -304,7 +304,12 @@ classdef QuaPol < RatPol & QuaPar
            end
            %build boundary of domain, which is a face (dim=2)
            dom.dim=2;
-           [dom.P, dom.isConvex] = obj.orderEdges(0);
+           [dom.P, ~] = obj.orderEdges(0);
+           % isConvex comes from domainIsConvexD, NOT from the walk. orderEdges reports convex for
+           % an UNBOUNDED non-convex domain -- QuaPol.examples{16}, the half-star -- because two
+           % boundary rays do not say which of the two cones they bound is the domain. The
+           % half-plane containment test does not have to choose. DECISIONS.md 2026-09-05.
+           dom.isConvex = domainIsConvexD(obj.V, obj.E, obj.F);
            %NEED TO REORDER THE EDGE INDEXES IF WE WANT THE SAME CONVENTION AS P
            %for now the result is a list of edges counter-clockwise with negative edge indicating the face is on the
            %right, i.e. it is the inverse of P
@@ -471,9 +476,13 @@ classdef QuaPol < RatPol & QuaPar
                 return;
             end
             
-            if k==1%case bordering the domain
+            if k==1%case bordering the domain: the ONE finite face is what decides it
+                % obj.F(j, obj.F(j,:)>0), not k. k is the COUNT of finite sides, and using it as a
+                % face INDEX made every boundary edge ask about face 1 -- accidentally right when
+                % the edge's own face was face 1, wrong otherwise. Pinned by
+                % PLQVCTest/testIsEdgeConvexOnABoundaryEdgeReadsTHATEdgesFace.
                 isContinuous = true;
-                isConvex = obj.isFaceConvex(k(k~=0));
+                isConvex = obj.isFaceConvex(obj.F(j, obj.F(j,:)>0));
                 return;
             end
             if k~=2,error("Number of nonzero indexes must be 0, 1, or 2 but found %i.",k);end
@@ -562,13 +571,21 @@ classdef QuaPol < RatPol & QuaPar
             fVal1 = QuaPol.evalPoly(c1,X);fVal2=QuaPol.evalPoly(c2,X);
             b = norm(fVal1-fVal2)<sqrt(eps);
        end
-       function b = isConvex(obj)%TO BE TESTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-       %returns true is the function is convex
-            if ~obj.dom.isConvex, b=false;end
+       function b = isConvex(obj)
+       %returns true if the function is convex.
+       %
+       % THE LEGACY DOUBLES TEST. `isConvexQ` is the exact one and is what the exact pipeline
+       % uses; this stays as a second source and for the cubic/inexact inputs isConvexQ refuses.
+       % It decides in doubles against sqrt(eps), and its `dom.isConvex` is computed by
+       % orderEdges, which is WRONG on QuaPol.examples{16} -- see DECISIONS.md 2026-09-05.
             if obj.nf==0%special cases
                 error("Not implemented yet");
             end
             b=false;
+            % A non-convex DOMAIN settles it. This used to assign b and fall through to the loops
+            % below; that was never a wrong answer, because isFaceConvex re-tests the domain and
+            % returns false for every face, but it was a claim the code did not actually make.
+            if ~obj.dom.isConvex, return; end
             for k=1:obj.nf%interior convexity, i.e. the restriction of the function to each must be convex                
                 if ~obj.isFaceConvex(k), return;end
             end

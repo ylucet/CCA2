@@ -5007,3 +5007,32 @@ exactly, instead of reading `dom.isConvex`.
 **Method note.** The disagreement was found by the differential sweep against the legacy routine
 (20 agree, 1 disagrees) and then decided by the DEFINITION, not by preferring the new code. A
 differential oracle names the case; it does not settle it.
+
+## 2026-09-05 — a boundary WALK cannot decide convexity of an unbounded domain
+
+**Refuted.** `createDom` took `dom.isConvex` from `orderEdges(0)`, which orders the boundary edges
+and judges convexity along the walk. For a BOUNDED domain that is fine. For an unbounded one it is
+not, and the reason is structural rather than a coding slip: the boundary of an unbounded domain is
+a pair of rays, and **two rays bound two cones**. The walk has no information saying which of them
+is the domain, so it assumed the acute one. Measured on `QuaPol.examples{16}`, the half-star: it
+reported convex, while `(-1,-1)` and `(1,0)` are in the domain and their midpoint `(0,-0.5)` is not
+(`.claude/ex16DomainProbe.m`).
+
+**Replaced by an H-representation containment test**, `domainIsConvexD.m` — a polyhedral set is
+convex iff it is the intersection of the closed half-planes of its own boundary edges, and it lies
+inside that intersection iff every vertex and every recession direction does. That formulation
+never has to choose a cone. `isConvexQ` runs the same test over the integers with no tolerance;
+`domainIsConvexD` is the doubles twin for the legacy mesh property, and `createDom` now calls it in
+all three classes.
+
+**What it cost to change, measured before changing it** (`.claude/domConvexDiff.m`, whole corpus):
+5 rows differ, and only one is a 2-dimensional domain — `examples{16}`, where the new answer is the
+right one. The other four are `examples2{5,6,7,10}`, all of dimension < 2, where the containment
+test says nothing at all; `createDom` decides those before reaching it and `domainIsConvexD` now
+refuses them by name (`PLQ:domainIsConvexD:thinMesh`) rather than returning a vacuous true.
+
+**Two golden-value expectations had to change**, and they were recording the OUTPUT rather than the
+property: `PLQVCTest/testCreateDom_isDomBounded` listed all 19 `examples` domains as convex, and
+`testExample16` listed `examples{16}` as convex. Neither is what the code must satisfy — the
+midpoint witness is — so both now say false and both point at the witness test. Exactly the failure
+mode umbrella CLAUDE.md section 7 describes: a golden value blocks the next correct answer.

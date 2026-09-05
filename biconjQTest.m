@@ -406,6 +406,34 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() biconjQ(QuaPol([sqrt(2) 0 1 0 0 0])), 'PLQ:QuaPol:notExact');
         end
 
+        function underBICONJ_ASSERTAFalseFlagIsREFUTEDRatherThanTrusted(testCase)
+        % examples{16} is the case that shows what trusting the flag costs: every piece is affine,
+        % so the free necessary condition passes, but the DOMAIN is not convex, and with the flag
+        % set biconjQ returned that f as its own convex envelope. isConvexQ can refute it, and
+        % under the opt-in global it does.
+        %
+        % Both halves are asserted, because the point is the DIFFERENCE: off, the flag is still
+        % trusted and nothing is raised (that is what makes the flag a short-circuit worth having);
+        % on, the same call is refused.
+            global BICONJ_ASSERT %#ok<GVMIS>
+            prev = BICONJ_ASSERT;
+            testCase.addTeardown(@() biconjQTest.setBiconjAssert(prev));
+
+            f = QuaPol.examples();  f = f{16};
+            f.fIsConvex = true;
+
+            BICONJ_ASSERT = [];
+            err = '';  h = [];
+            try, h = biconjQ(f); catch e, err = e.identifier; end
+            testCase.verifyEmpty(err, ...
+                'with the assert off the flag is trusted, so nothing is raised');
+            testCase.verifyNotEmpty(h, 'and an answer comes back -- the wrong one, which is why');
+
+            BICONJ_ASSERT = 1;
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notConvex', ...
+                'with the assert on the exact test refutes the flag');
+        end
+
         function aFalseConvexityAssertionIsRefusedLoudly(testCase)
         % ALGORITHM.md's rule: the free necessary condition is still checked, because the failure
         % it prevents is silent -- biconj returning a non-convex f as its own convex envelope.
@@ -416,6 +444,13 @@ classdef biconjQTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function setBiconjAssert(v)
+        % Restore the global to whatever it was, including empty. A plain assignment inside the
+        % teardown closure would not reach the global without this declaration.
+            global BICONJ_ASSERT %#ok<GVMIS>
+            BICONJ_ASSERT = v;
+        end
+
         function f = square(fc)
             f = QuaPol([0 0; 1 0; 1 1; 0 1], [1 2 1; 2 3 1; 3 4 1; 4 1 1], fc, ...
                        [1 0; 1 0; 1 0; 1 0]);

@@ -83,7 +83,9 @@ function h = biconjQ(obj)
         Hn = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
         if ~ratQ.isPSD2(Hn), allPSD = false; break, end
     end
-    if allPSD && (nf == 1 || isequal(obj.fIsConvex, true) || isConvexQ(obj))
+    flagged = isequal(obj.fIsConvex, true);
+    if flagged, assertFlagNotRefuted(obj); end
+    if allPSD && (nf == 1 || flagged || isConvexQ(obj))
         if obj.nv == 0
             % The whole plane, one face: co f = f with no constraints at all. QuaPol.energy is
             % exactly this, and it used to raise noFace because quaPolAsQuaCon looks for a FACE and
@@ -196,6 +198,31 @@ function h = biconjQ(obj)
 end
 
 % ==================================================================================================
+
+% ------------------------------------------------------------------------------------------------
+function assertFlagNotRefuted(obj)
+% Under the global BICONJ_ASSERT, REFUTE a false fIsConvex outright instead of trusting it.
+% Off by default, in the established MAXQP_ASSERT / QUAPAR_VALIDATE style: tests and investigations
+% turn it on, production runs pay nothing.
+%
+% WHY IT IS OPT-IN RATHER THAN ALWAYS ON. The flag exists precisely to SKIP the edge loop that
+% isConvexQ runs, so verifying it on every call would delete the only thing it buys. What it costs
+% to leave off is exactly one thing, and it is measured: QuaPol.examples{16} has a non-convex
+% domain, the legacy dom.isConvex says otherwise, and with the flag asserted biconjQ returned that
+% f as its own convex envelope -- silently. DECISIONS.md 2026-09-05 carries the witness.
+%
+% The free necessary condition (every Hessian PSD) is checked on EVERY call regardless, above and
+% below this; this raises the same identifier because to a caller it is the same mistake, only
+% detected by a stronger test.
+    global BICONJ_ASSERT %#ok<GVMIS>
+    if isempty(BICONJ_ASSERT) || BICONJ_ASSERT < 1, return, end
+    [tf, why] = isConvexQ(obj);
+    if ~tf
+        error('PLQ:biconjQ:notConvex', ...
+            ['fIsConvex is asserted true but the exact test refutes it: %s. ' ...
+             '(BICONJ_ASSERT is on; unset it to trust the flag again.)'], why);
+    end
+end
 
 function h = concaveEnvelope(obj)
 % objective: co(q + I_P) for q CONCAVE or AFFINE on a bounded polygon P, exactly.

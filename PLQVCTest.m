@@ -289,6 +289,11 @@ classdef PLQVCTest < matlab.unittest.TestCase
             P2 = {PLQVC.examples(), PLQVC.examples2()};
             D2 = {2*ones(1,19),[0, 1, 1, 1, 1, 1, 1, 2,2,1]};
             isConvex2 = {true(1,19),[true,true,true, true, false, false, false, true, true, false]};
+            % examples{16}, the half-star, is NOT convex -- it used to be listed as convex here
+            % because that is what orderEdges(0) returned, i.e. this row recorded the output
+            % rather than the property. The witness is in
+            % testDomIsConvexIsFalseForAnUNBOUNDEDNonConvexDomain. DECISIONS.md 2026-09-05.
+            isConvex2{1}(16)=false;
             isDB2 = {false(1,19),[true, true, false, false, true, false, false, false, false,true]};
             isDB2{1}(2)=true;isDB2{1}(7)=true;isDB2{1}(9)=true;isDB2{1}(17)=true;
             for i=1:2                
@@ -342,7 +347,8 @@ classdef PLQVCTest < matlab.unittest.TestCase
            Pall=PLQVC.examples();
            nv=10;
            Dim =[2,2,2,2];
-           isConvex =[true,true,true,true];
+           % examples{16} first: not convex, see testDomIsConvexIsFalseForAnUNBOUNDEDNonConvexDomain
+           isConvex =[false,true,true,true];
            isDomBounded = [false, true,false,false];
            entityCount = [6,5,4; nv,nv,1; 9,8,4; 12,12, 9];
            for i=1:length(Pall)-15
@@ -488,6 +494,45 @@ classdef PLQVCTest < matlab.unittest.TestCase
             p = PLQVC.cubic1;
             isConvex = p.isFaceConvex(1);            
             testCase.verifyEqual(isConvex,true);                          
+        end
+        function testDomIsConvexIsFalseForAnUNBOUNDEDNonConvexDomain(testCase)
+        % examples{16}, the half-star: five rays from the origin, sweeping more than a half-turn.
+        % dom.isConvex used to come from orderEdges(0), which WALKS the boundary -- and two boundary
+        % rays do not say which of the two cones they bound is the domain, so the walk assumed the
+        % acute one and reported convex.
+        %
+        % The witness needs no convexity routine at all, which is why it is the assertion: two
+        % points the mesh itself puts in the domain whose midpoint the mesh puts outside it.
+            p = PLQVC.examples();  p = p{16};
+            v = p.eval([-1 -1; 1 0; 0 -0.5]);
+            testCase.verifyTrue(all(isfinite(v(1:2))), 'both witness points are in the domain');
+            testCase.verifyFalse(isfinite(v(3)), 'their midpoint is not, so the domain is not convex');
+            testCase.verifyFalse(logical(p.dom.isConvex), ...
+                'and dom.isConvex must say so');
+        end
+        function testIsEdgeConvexOnABoundaryEdgeReadsTHATEdgesFace(testCase)
+        % A BOUNDARY edge -- one finite face, +infinity on the other side -- is convex exactly when
+        % ITS OWN face is. isEdgeConvex used to count the finite sides and then use the COUNT as a
+        % face index, so every boundary edge asked about face 1 whatever its own face was:
+        % accidentally right for face 1, wrong for every other.
+        %
+        % The mesh is the closed upper half-plane split by the ray x=0, y>=0. Edge 2 (the negative
+        % x-axis) has face 1 on its finite side; edge 3 (the positive x-axis) has face 2. Face 1 is
+        % x^2+y^2 and face 2 is x^2-y^2, so the two edges MUST answer differently -- which is the
+        % whole point of the fixture, and what the count could not express.
+            V = [0 0; 0 1; -1 0; 1 0];
+            E = [1 2 0; 1 3 0; 1 4 0];
+            F = [1 2; 0 1; 2 0];
+            f = [2 0 2 0 0 0; 2 0 -2 0 0 0];      % x^2+y^2 (PSD) and x^2-y^2 (indefinite)
+            p = PLQVC(V, E, f, F);
+
+            testCase.verifyTrue(p.isFaceConvex(1), 'x^2+y^2 is convex');
+            testCase.verifyFalse(p.isFaceConvex(2), 'x^2-y^2 is not');
+
+            testCase.verifyTrue(isEdgeConvex(p, 2), ...
+                'edge 2 borders face 1, which is convex');
+            testCase.verifyFalse(isEdgeConvex(p, 3), ...
+                'edge 3 borders face 2, which is NOT convex, so the edge is not either');
         end
         function testIsEdgeConvex(testCase)
             Pall = PLQVC.examples2();
