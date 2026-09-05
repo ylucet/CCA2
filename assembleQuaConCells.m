@@ -64,6 +64,10 @@ function g = assembleQuaConCells(cells)
     %
     %  (b) INFEASIBLE LINEAR PART. Everything straight, decided exactly by Fourier-Motzkin.
     %
+    %  (d) AN ARRANGEMENT-VERTEX TEST for a cell that still carries curved constraints, exact via
+    %      the degree-<=4 sign kernel (cellHasInterior). This is what the filters below could not
+    %      reach, and what left the face count inflated.
+    %
     %  (c) A CONSTANT-SIGN CONIC. A conic form that is nonnegative (or nonpositive) on the whole
     %      plane -- ratQ.conicSign decides this exactly, by testing the 3x3 form for semi-
     %      definiteness -- makes its condition either VACUOUS, in which case the row is dropped and
@@ -113,8 +117,19 @@ function g = assembleQuaConCells(cells)
             end
         end
         if ~live(k), continue, end
+
+        % (b) and (d): the linear part decided exactly by Fourier-Motzkin, and then -- for a cell
+        %     that still has CURVED constraints -- the arrangement-vertex test, which uses the
+        %     exact degree-<=4 sign kernel. That last one is the filtered predicate of
+        %     CONJ_FIELD_PROOF.md 8.7 in the small: the cheap tests above run first and the exact
+        %     kernel only on what survives, so it is the cold path.
         isLine = all(rows(:,1:3) == 0, 2);
-        live(k) = ratQ.feasible2(rows(isLine,7) .* rows(isLine,4:6), true);   % (b)
+        live(k) = ratQ.feasible2(rows(isLine,7) .* rows(isLine,4:6), true);
+        if live(k) && ~all(isLine)
+            % Build the (EcQ, rows) form cellHasInterior wants: the rows already carry their own
+            % conic inline here, so each is its own "curve list" entry.
+            live(k) = cellHasInterior(rows(:,1:6), [(1:size(rows,1)).', rows(:,7)]);
+        end
     end
     if ~any(live)
         % EVERYTHING was filtered away by a test that demands a two-dimensional INTERIOR. Before

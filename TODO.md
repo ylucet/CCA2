@@ -37,6 +37,51 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 - the exact degree-<=4 SIGN KERNEL, and the cell count it buys
+
+`CONJ_FIELD_PROOF.md` 8.0 names the operations that must leave Q; `conicMeet` has produced the exact
+integer quartic for a vertex since 2026-08-24, with `realRoots` standing in as "the ONE place
+floating point enters ... the placeholder that kernel replaces". Built:
+
+    ratQ.sturmChain / countRootsIn   Sturm: distinct real roots in (a,b] = V(a) - V(b). Exact.
+    ratQ.isolateRoots                bisection DRIVEN BY THAT COUNT, from Cauchy's bound.
+    ratQ.signAt                      the sign of q at a root of p -- the predicate everything
+                                     else is built on.
+
+`signAt` is two steps and the first makes the second terminate: **is `q(alpha)` zero?** exactly when
+`gcd(p,q)` has a root in the interval, an exact Sturm count with no evaluation. Without it, step 2
+bisects forever trying to separate `alpha` from a zero of `q` that IS `alpha`.
+
+**Two real defects found building it, both coefficient growth:** `polyPseudoRem` broke out of its
+elimination loop on a non-integral quotient without reducing the degree (an infinite loop -- the
+scaling GUARANTEES exact division, so that is a defect and now raises); and the scaling raises a
+leading coefficient to a power, so `10^6 x^2` against its own derivative already needs 4e18. Taking
+the PRIMITIVE PART of both operands first is exact and turns that factor into 4.
+
+### Applied: `cellHasInterior`, and the face count drops
+
+The arrangement-vertex test the filters could not reach. A cell's candidate points are the pairwise
+intersections of its own bounding curves -- each a root of `conicMeet`'s exact quartic -- and whether
+one satisfies the other constraints is exactly `signAt`.
+
+    PSD-singular pentagon:  121 faces -> 80    (occupied 69, 10 distinct functions)
+    mean nf, PSD-singular:   78.5  -> 57.4
+    mean nf, PD:              8.4  ->  7.0
+
+**0 wrong and 0 uncovered over 9060 dual points**, so no region was lost.
+
+### THE 2^53 CEILING IS REACHED IN PRACTICE, and this is where it showed up
+
+`conicMeet`'s resultant is a 4x4 determinant of quadratics, so its entries are degree-8 products of
+the inputs: two conics with five-digit coefficients put it past 2^53 and `ratQ.chk` raises. Calling
+it on far more pairs made that routine.
+
+**Handled by KEEPING the cell**, which is the safe direction: `cellHasInterior` only ever REMOVES
+cells, so failing to decide costs one extra face -- the status quo before the test existed -- while
+guessing "empty" would lose a real region. **This is the recorded trigger for widening `ratQ`'s
+integer backend** (the plan's contingency: a MEX kernel over GMP behind the same interface), and the
+first time the overflow has been observed rather than anticipated.
+
 ## 2026-09-05 (overnight, closing) - where `conjQ` and `biconjQ` stand
 
 Both probes re-run after the night's fixes. `.claude/coverage-probe.m` and `.claude/biconj-probe.m`
