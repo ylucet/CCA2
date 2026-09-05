@@ -36,10 +36,15 @@ Branch: overnight/2026-09-04
 
 - **Nothing quarantined, no reds.** The overlap defect found earlier tonight was traced and FIXED
   (three separate bugs, all in half-plane pieces -- see *What changed*).
-- Two fixtures still disagree with the LEGACY conjugate about the DOMAIN only (`examples(19)`, 1
-  point; `examples2(9)`, 109 points), with zero value disagreements anywhere. Not traced yet, and
-  the legacy route is itself unreliable on this family -- it raises its own Step-3-vs-Step-2
-  cross-check on `examples(11)` -- so which side is right is an open question, not a known defect.
+- **`examples(19)`: conjQ answers `+infinity` at `s = (0,0)`, where the truth is 0.** Nine affine
+  pieces whose dual domain is that single POINT. `assembleQuaConCells` drops cells with no
+  two-dimensional interior, so a wholly thin dual domain comes back empty. Relaxing the filter was
+  tried and is worse -- 982 degenerate cells and a second wrong point -- so it is reverted and
+  named. The real fix is to emit a thin dual domain with EQUALITY sides, machinery that already
+  exists for the full-plane point/line cases. One point on one fixture; not a red test.
+- `examples2(9)` also disagrees with the legacy route, and there **the legacy is wrong**: it returns
+  finite values the sampled sup already exceeds, and the samples keep climbing with reach. The exact
+  route's `+infinity` is right.
 
 ## Needs a decision
 

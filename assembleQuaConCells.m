@@ -118,9 +118,17 @@ function g = assembleQuaConCells(cells)
     end
     cells = cells(live);
     if isempty(cells)
-        % Everything filtered away. For a BOUNDED domain the cells must cover the plane, so this
-        % would mean the constraint signs are inconsistent -- but an unbounded piece can legitimately
-        % leave nothing, and the zero-face object says exactly that.
+        % Everything filtered away, and the filter demands a two-dimensional INTERIOR. The
+        % zero-face object -- which evaluates to +infinity everywhere -- is returned, and that is
+        % right whenever the domain really is empty.
+        %
+        % KNOWN LIMITATION, with a fixture: a conjugate whose domain has EMPTY INTERIOR is reported
+        % as empty too. QuaPol.examples{19} is nine AFFINE pieces whose dual domain is the single
+        % point s = (0,0), where f*(0,0) = -inf f = 0; conjQ answers +infinity there. Relaxing the
+        % filter to "nonempty as a set" was tried and is WORSE: it kept 982 degenerate cells, and
+        % eval's tolerance then admitted points that are genuinely outside, turning one wrong point
+        % into two. The real fix is to detect a thin dual domain and emit it with EQUALITY sides,
+        % as caseAFullDomain already does for the point and line cases -- see TODO.md 2026-09-05.
         g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
         return
     end

@@ -1060,16 +1060,23 @@ function sh = triangleShape(Vi, vd, tri)
 end
 
 function P = sign2(N)
-% objective: each row of N reduced to a canonical direction -- primitive integers, first nonzero
-%            entry positive -- so that two rows describing the SAME half-plane normal compare equal.
+% objective: each row of N reduced to a primitive integer direction, SIGN PRESERVED, so that two
+%            rows describing the same INWARD normal compare equal and opposite ones do not.
+%
+% THE SIGN MUST SURVIVE. Making the first nonzero entry positive -- the usual canonical form, and
+% what ratQ.conic does for a CURVE, which has no side -- identifies p with -p. A normal does have a
+% side, and a SLAB is bounded by two parallel lines whose inward normals are exactly p and -p: with
+% the sign discarded it looked like ONE distinct normal, i.e. a half-plane, and the caller then
+% demanded H be positive semidefinite on the whole plane. Measured on QuaPol.examples{19}, whose
+% conjugate came back with ZERO faces -- dom f* declared empty -- where f*(0,0) = 0.
+%
+% A slab's recession cone is a LINE, which the ordinary ray-based test already handles correctly;
+% only a genuine half-plane needs the special branch.
     P = zeros(size(N));
     for i = 1:size(N,1)
         r = N(i,:);
         g = gcd(abs(r(1)), abs(r(2)));
         if g == 0, P(i,:) = r; continue, end
-        r = r / g;
-        nz = find(r ~= 0, 1);
-        if r(nz) < 0, r = -r; end
-        P(i,:) = r;
+        P(i,:) = r / g;
     end
 end

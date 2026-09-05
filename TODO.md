@@ -37,6 +37,36 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-05 (overnight) - the last two legacy disagreements, decided. One is the LEGACY's bug.
+
+Both remaining `legacy-diff` entries disagree about the DOMAIN only (0 value disagreements
+anywhere). Decided with a sup sampled over the domain at two reaches -- a LOWER bound, so a finite
+value below it is impossible, and a claimed +infinity that the samples climb toward is credible.
+
+**`examples2(9)`: the EXACT route is right and the LEGACY is WRONG**, at 109 of 203 points. The
+exact route says `+infinity`; the legacy returns finite values that the sampled sup already exceeds,
+and the samples keep climbing as the reach grows (17 -> 2330, 5 -> 1047, 9 -> 1375). So `f*` really
+does diverge there. Worth knowing: the legacy route is not a reliable oracle on this family -- it
+also raises its own Step-3-against-Step-2 cross-check on `examples(11)` (`SUPPORT_MATRIX.md` 1.2).
+
+**`examples(19)`: the LEGACY is right and the EXACT route is wrong, at ONE point.** Nine AFFINE
+pieces on a fan; `dom f*` is the single point `s = (0,0)`, where `f*(0,0) = -inf f = 0`. `conjQ`
+answers `+infinity` there.
+
+### KNOWN LIMITATION, now named: a dual domain with EMPTY INTERIOR is reported as EMPTY
+
+`assembleQuaConCells` drops cells with no two-dimensional interior, so a conjugate whose whole
+domain is thin comes back with zero faces, i.e. `+infinity` everywhere.
+
+**Relaxing the filter to "nonempty as a set" was TRIED and is WORSE, measured:** it kept **982**
+degenerate cells, and `eval`'s tolerance then admitted points genuinely outside the domain, turning
+one wrong point into two (`f*(1,1)` became 2 where it is `+infinity`). Reverted.
+
+**The real fix** is to detect a thin dual domain and emit it with EQUALITY sides -- the machinery
+already exists and `caseAFullDomain` uses it for the point and line cases. What is missing is
+recognising the situation when it arises from the FOLD rather than from a single full-plane piece.
+That is the next item on this thread.
+
 ## 2026-09-05 (overnight) - the quarantined overlap is FIXED. Three defects, all in HALF-PLANE pieces.
 
 The `examples(12)` quarantine is lifted. Chasing it found THREE distinct defects, every one of them
