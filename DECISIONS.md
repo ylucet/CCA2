@@ -5456,3 +5456,47 @@ EQUATION, never per coefficient of one.** `ratQ.contentOf` was added so callers 
 factor across arrays that share a scale, and the fault was found by checking each intermediate
 against a direct numeric evaluation rather than by guessing which one was wrong — `D` and `C` both
 verified clean first, which is what narrowed it to the substitution.
+
+## 2026-09-06 — CLIPPING: the right parametrisation, and where the prototype actually stands
+
+**The generalisation is settled and it is small.** Everything the elimination needs about a cell is
+its conjugate there, because the tangency point IS the gradient of the conjugate:
+
+        g_k(s) = (s'A_k s/2 + c_k's + d_k)/D_k ,       y_k(s) = grad g_k = (A_k s + c_k)/D_k .
+
+So ONE routine parametrised by `(A_k, c_k, d_k, D_k)` covers every cell pair and clipping stops
+being a special case: an interior cell has `A_k = inv(H_k)`, an EDGE cell has `A_k` of rank 1, and a
+VERTEX cell has `A_k = 0` with `c_k` the vertex, so `g_k` is affine and `y_k` constant.
+
+**CLIPPING TO A VERTEX MAKES THE PROBLEM EASIER, NOT HARDER**, which was not obvious in advance.
+`D = det[x - y1, y2 - y1]` is generically quadratic in `s`; its quadratic part is
+`det[(-A1)s, (D1*A2 - D2*A1)s]`, which vanishes exactly when those two matrices act in parallel.
+With `A2 = 0` the second is `-D2*A1`, always parallel to `A1` — so a vertex cell paired with
+ANYTHING is linear in `s2` and can be substituted rather than resultanted.
+
+**Where the prototype stands** (`.claude/bridgeCellProbe.m`), stated as measured rather than as
+intended:
+
+| cell pair | result |
+|---|---|
+| isotropic, interior/interior | **(10,6,2), residual 1.6e-16 on the face against 6.2e-11 off it** — the general routine reproduces the dedicated probe's answer exactly, which is what validates it |
+| anisotropic, interior/interior | **overflow** at the 5-variable stage, where the tighter hand-built 4-variable form succeeds |
+| vertex-clipped | runs, (10,6,2), but does NOT separate: 5.8e-17 on the face and 2.0e-17 off it |
+| edge-clipped | runs, (5,8,3), separation of only two orders |
+
+So the isotropic pair is verified through the general routine and the CLIPPED pairs are not. A
+polynomial that vanishes on the face AND off it is not a face polynomial; the likely cause is a
+degenerate resultant carrying a factor that covers everything, which is the same failure mode the
+z-content reduction fixes elsewhere — untested here.
+
+**Two oracle lessons, both of which cost a wrong conclusion first.** The tie-curve sampler
+originally bisected along a fixed ray and usually failed to bracket a root, reporting "no tie
+points" for cell pairs whose elimination was perfectly correct — an oracle that silently finds
+nothing looks exactly like an elimination that silently fails. It now SOLVES the tie quadratic.
+And the first vertex fixture chose `q2(v) = 3` when the tie is the circle
+`|s-v|^2 = |v|^2 - 2q2(v)`, needing `q2(v) < 2.5`: the tie was EMPTY, and the routine was blamed for
+it.
+
+**Next on this line:** apply the z-content reduction to the clipped results before judging them, and
+give the 5-variable path the same tightening the 4-variable one has. Neither is a new idea; both are
+already implemented elsewhere in the file.

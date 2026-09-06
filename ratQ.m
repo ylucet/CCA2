@@ -901,6 +901,19 @@ classdef ratQ
             end
         end
 
+        function A = fromBigOrKeep(B)
+        % objective: come back to doubles if the value fits, and STAY BIG if it does not.
+        % For the middle of a chain of eliminations, where an intermediate may not fit but the
+        % final answer will: converting eagerly would raise on a value that was never meant to be
+        % returned, and staying big always would make every later step pay the 121x.
+            try
+                A = ratQ.fromBig(B);
+            catch err
+                if ~strcmp(err.identifier, 'ratQ:overflow'), rethrow(err); end
+                A = B;
+            end
+        end
+
         function A = fromBig(B)
         % objective: come back to doubles, RAISING if any coefficient no longer fits exactly.
         % That raise is the honest outcome: it means the answer itself, not merely the path to it,

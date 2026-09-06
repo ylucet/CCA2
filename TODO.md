@@ -180,13 +180,26 @@ against 8e-4 to 2e-2 off the face. And `(6,6,4)` is exactly what the empirical d
 `s2`, giving a polynomial that ran and was wrong. Content reduction is free per EQUATION, never per
 coefficient of one. `ratQ.contentOf` exists for taking a COMMON factor.
 
-**So what is left on this line:** (a) CLIPPING, still untouched, and now the only real obstacle --
-it changes the tie set cell by cell as the argmins hit edges and vertices, and multiplies the
-number of eliminations; (b) a MODULAR gcd, still the right answer for `polyGcdBiv` though the
-verified shortcut means nothing needs it today; (c) the type decision, whose shape is now
-well-measured -- a face is `(2,2,2)` to `(6,6,4)` with integer coefficients under 1e9, plus a
-branch selector. The lattice question (a third value on `RETURN_TYPE.md`'s function axis, and an
-`eval` that root-solves) is unchanged and still yours.
+**CLIPPING is started, not finished.** The parametrisation is settled -- one routine taking each
+cell's conjugate `(A_k, c_k, d_k, D_k)`, since the tangency point is that conjugate's gradient --
+and a VERTEX cell turns out to make the elimination EASIER, because `A_k = 0` always leaves `D`
+linear and so substitutable. DECISIONS.md 2026-09-06 has the table of what runs.
+
+Measured in `.claude/bridgeCellProbe.m`: the isotropic pair goes through the GENERAL routine and
+reproduces the dedicated probe's answer (residual 1.6e-16 on the face, 6.2e-11 off it), which
+validates the routine. The CLIPPED pairs run but do not SEPARATE -- they vanish off the face as
+well as on it -- so they are not verified, and the anisotropic pair overflows in the 5-variable
+form where the tighter 4-variable one succeeds.
+
+**Next on this line, and neither is a new idea:** apply the z-content reduction to the clipped
+results before judging them, and give the 5-variable path the tightening the 4-variable one
+already has.
+
+**Then:** (a) a MODULAR gcd, still the right answer for `polyGcdBiv` though the verified shortcut
+means nothing needs it today; (b) the type decision, whose shape is now well-measured -- a face is
+`(2,2,2)` to `(6,6,4)` with integer coefficients under 1e9, plus a branch selector. The lattice
+question (a third value on `RETURN_TYPE.md`'s function axis, and an `eval` that root-solves) is
+unchanged and still yours.
 
 ### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 
