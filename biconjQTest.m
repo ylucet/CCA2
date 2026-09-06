@@ -78,10 +78,77 @@ classdef biconjQTest < matlab.unittest.TestCase
 
             % Non-convex, but BOUNDED BELOW on its recession cone: H = diag(1,-1) is indefinite,
             % yet on cone((1,0),(1,1)) the curvature is 1 - t^2 >= 0 throughout. So the envelope is
-            % FINITE and the refusal must be the honest "not computed yet" one, not minusInfinity.
+            % FINITE and the refusal must be an honest "not computed yet", not minusInfinity.
+            %
+            % CHANGED 2026-09-05, when the unbounded envelope landed. This asserted
+            % PLQ:biconjQ:unbounded, which meant exactly "finite but not computed" -- and that is
+            % no longer a thing biconjQ says, because the finite unbounded case IS computed now.
+            % What remains uncomputed here is narrower and is named for what it is: the ray (1,1)
+            % has d'Hd = 0 but H*(1,1)' = (1,-1), so q's rate along it varies across the piece and
+            % the lifted set has no fixed recession ray. The DISTINCTION this test exists for --
+            % a correct -infinity against an honest gap -- is unchanged.
             fin = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], ...
                          [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:unbounded');
+            testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:shearedRecession');
+        end
+
+        function anUNBOUNDEDPieceGetsTheLIFTEDHULLWithItsRECESSIONRaysInIt(testCase)
+        % The unbounded envelope, on a fixture whose answer is known in closed form rather than
+        % only checkable: q = -x^2 on the half-strip {0 <= x <= 1, y >= 0}.
+        %
+        % q is concave in x and FLAT in y, and the strip recedes along (0,1), which is in the
+        % kernel of H = diag(-2,0) -- so the lifted set recedes in the fixed direction (0,1,0) and
+        % the hull is conv(lifted vertices) + cone(lifted rays). Along x the envelope is the chord
+        % from q(0)=0 to q(1)=-1 and it cannot depend on y, so
+        %
+        %       co f(x,y) = -x   on the whole half-strip.
+        %
+        % Getting the recession rays WRONG shows up here twice over: drop them from the hull and
+        % the domain collapses to the bounded segment y = 0, so co f returns +infinity at every
+        % point with y > 0; keep them but lift them to the wrong height and the face tilts in y.
+            f = QuaPol([0 0; 1 0; 0 1; 1 1], [1 2 1; 1 3 0; 2 4 0], ...
+                       [0 0 0 0, -2, 0, 0, 0, 0, 0], [1 0; 0 1; 1 0]);
+            h = biconjQ(f);
+
+            X = [0 0; 1 0; 0.5 0; 0.25 3; 0.5 10; 1 7; 0 100];
+            testCase.verifyEqual(h.eval(X), -X(:,1), 'AbsTol', 1e-12, ...
+                'co f = -x, at y = 0 and far out along the recession direction alike');
+
+            % and it really is the ENVELOPE of this f, not some other convex function
+            fx = f.eval(X);
+            testCase.verifyLessThanOrEqual(h.eval(X), fx + 1e-12, 'co f <= f');
+            testCase.verifyEqual(h.eval([0 0; 1 0]), f.eval([0 0; 1 0]), 'AbsTol', 1e-12, ...
+                'with equality at the two extreme points of the strip');
+
+            % off the domain it is still +infinity: the hull grew a recession cone, not a plane
+            testCase.verifyTrue(all(isinf(h.eval([-1 5; 2 5; 0.5 -3]))), ...
+                'conv(dom f) is the half-strip itself, so x < 0, x > 1 and y < 0 stay +infinity');
+        end
+
+        function theUNBOUNDEDHullIsCHECKEDAgainstTheDefinitionNotOnlyAKnownValue(testCase)
+        % The same machinery on a fixture with no closed form to lean on: the third defining
+        % property, co f(sum lam_i x_i) <= sum lam_i f(x_i), which holds for every convex minorant
+        % and is the one that catches an envelope sitting too HIGH. It needs no vertex enumeration,
+        % so unlike a vertex-equality check it is valid on an unbounded domain.
+            rng(20260905);
+            f = QuaPol([0 0; 2 0; 0 1; 2 1], [1 2 1; 1 3 0; 2 4 0], ...
+                       [0 0 0 0, -2, 0, 0, 1, 3, -1], [1 0; 0 1; 1 0]);
+            h = biconjQ(f);
+
+            X = [2*rand(300,1), 12*rand(300,1)];          % inside the strip by construction
+            fx = f.eval(X);  hx = h.eval(X);
+            testCase.verifyTrue(all(isfinite(fx)) && all(isfinite(hx)), ...
+                'the sample and the envelope are both finite on the strip');
+            testCase.verifyLessThanOrEqual(hx, fx + 1e-9, 'co f <= f');
+
+            for t = 1:200
+                k = randi([2 4]);
+                idx = randi(numel(fx), k, 1);
+                lam = rand(k,1);  lam = lam/sum(lam);
+                z = lam.' * X(idx,:);
+                testCase.verifyLessThanOrEqual(h.eval(z), lam.'*fx(idx) + 1e-9, ...
+                    'co f is a minorant of every convex combination of values of f');
+            end
         end
 
         function theDIVERGENCETestReadsTheRateONThePieceNotAtTheOrigin(testCase)
@@ -105,13 +172,16 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         function theSAMECaseAtTheORIGINIsGenuinelyBoundedBelow(testCase)
         % The control, so the test above is about the TRANSLATION and not about x*y or about cones.
-        % On the first quadrant x*y >= 0, so co f is finite and the honest refusal is the
-        % not-computed-yet one.
+        % On the first quadrant x*y >= 0, so co f is finite -- and the refusal must therefore be an
+        % honest gap rather than minusInfinity, which is the whole point of the pair.
+        %
+        % The identifier is the SHEARED one for the reason x*y always gives: (1,0)'H(1,0) = 0 while
+        % H*(1,0)' = (0,1) is nonzero.
             f = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], ...
                        [0 0 0 0, 0, 1, 0, 0, 0, 0], [1 0; 0 1]);
             testCase.verifyGreaterThanOrEqual(f.eval([1000 3; 7 2; 0 9]), 0, ...
                 'x*y is nonnegative on the first quadrant');
-            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:unbounded');
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:shearedRecession');
         end
 
         function aRAYDomainIsRefusedByName(testCase)
@@ -207,12 +277,29 @@ classdef biconjQTest < matlab.unittest.TestCase
             end
         end
 
-        function aNonConvexDOMAINIsStillRefusedEvenThoughEveryPieceIsPSD(testCase)
-        % The half-star, examples{16}. Every piece is affine, so per-piece PSD passes; only the
-        % domain rules it out, and a convexity test that read the legacy dom.isConvex would let it
-        % through and return a wrong envelope. DECISIONS.md 2026-09-05 carries the witness.
+        function aNonConvexDOMAINIsEnvelopedOverItsHULLNotReturnedUnchanged(testCase)
+        % The half-star, examples{16}: f = 0 on five cones meeting at the origin, whose domain is
+        % NOT convex. Every piece is affine, so per-piece PSD passes, and a convexity test reading
+        % the legacy dom.isConvex would call f convex and hand it back unchanged -- wrong, because
+        % co f must be defined on conv(dom f), which is strictly larger.
+        %
+        % CHANGED 2026-09-05, when the unbounded envelope landed. This used to assert
+        % PLQ:biconjQ:unbounded, which recorded only that biconjQ could not do unbounded domains
+        % yet -- an incidental fact about coverage, not the property the input is here to pin. Now
+        % the case is computed, so the test asserts the PROPERTY: the envelope extends past dom f.
+        %
+        % The five rays sweep from 0 to 225 degrees, MORE than a half turn, so conv(dom f) is the
+        % whole plane and co f = 0 everywhere. (0,-0.5) is the midpoint witness from
+        % isConvexQTest -- outside dom f, where f is +infinity -- and it is exactly where an
+        % envelope that had been handed back unchanged would still say +infinity.
             P = QuaPol.examples();
-            testCase.verifyError(@() biconjQ(P{16}), 'PLQ:biconjQ:unbounded');
+            h = biconjQ(P{16});
+            testCase.verifyTrue(isinf(P{16}.eval([0 -0.5])), ...
+                'f itself is +infinity at the witness, since the domain is not convex there');
+            testCase.verifyEqual(h.eval([0 -0.5]), 0, 'AbsTol', 1e-12, ...
+                'but co f is finite there, because its domain is conv(dom f)');
+            testCase.verifyEqual(h.eval([-1 -1; 1 0; 2 -3; -4 1; 5 5; 0 0]), zeros(6,1), ...
+                'AbsTol', 1e-12, 'and co f = 0 on the whole plane');
         end
 
         function aConvexFunctionIsItsOwnEnvelope(testCase)

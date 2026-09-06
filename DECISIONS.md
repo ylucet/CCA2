@@ -5115,3 +5115,39 @@ them. Split: `PLQ:biconjQ:notImplemented` keeps the single-piece indefinite case
 does cover, and `PLQ:biconjQ:convexPieceCoupling` is new for convex pieces whose COUPLING is
 non-convex — where no piece needs [COAP] at all, since each one's own envelope is itself. Measured
 over `.claude/biconjAllHSweep.m`: the 36 refusals that shared an identifier are 24 and 12.
+
+## 2026-09-05 — the unbounded envelope is the SAME hull, homogenised
+
+**Not a second algorithm.** The bounded case takes the lower hull of the lifted vertices. The
+unbounded case takes the lower hull of the lifted vertices AND the lifted RECESSION RAYS — and once
+a ray is admitted as a generator, every other part follows mechanically:
+
+* a facet is spanned by three generators, at least one of which must be a vertex (a plane needs a
+  point to fix its offset), and the two in-plane directions come from vertex differences and ray
+  directions interchangeably;
+* "no vertex undercuts the plane" (`n.p >= d`) gains its homogeneous twin, "no ray undercuts it at
+  infinity" (`n.r >= 0`);
+* `hullHalfPlanes` gains the same twin, so the domain comes out as `conv(V) + cone(D)`.
+
+With no rays present every test reduces to the bounded one verbatim, so this is ONE code path. That
+mattered more than the elegance: a separate unbounded routine would have needed its own copy of the
+facet predicate, which is where a hull gets its orientation conventions backwards.
+
+**The condition is forced, not chosen.** The lifted set recedes in a FIXED direction `(d, L'd)`
+only when `H*d = 0`; otherwise `q`'s rate along `d` is `(Hx + L)'d`, which varies with `x`. Since
+`d'Hd = 0` is already forced here (negative is a divergence, positive is edge-convexity), and
+`d'Hd = 0` implies `H*d = 0` for any SEMIDEFINITE `H`, the leftover case is reachable only by an
+INDEFINITE piece. It is refused as `PLQ:biconjQ:shearedRecession`; `q = x*y` on the first quadrant
+is the smallest instance, and its envelope is plainly `0`, so it is a genuine gap.
+
+**`PLQ:biconjQ:unbounded` is retired for 2-D domains.** It meant "finite but not computed", and
+that is now computed. Three expectations that asserted it changed, and each was recording the ORDER
+two checks ran in rather than a property of its input — stated per test at the call site.
+
+**Method note.** The sweep needed two new shapes before it could see any of this: every unbounded
+shape it already had recedes along a direction an indefinite `H` shears, so it exercised the new
+path only through refusals. Adding half-strips found nine wrong answers immediately — and they were
+a fixture bug of mine, the split edge's two faces swapped, caught by asking whether `f.eval` was
+even the intended function before looking at `biconjQ` (`.claude/strip2MeshProbe.m`). Corrected:
+187 answered, 187 checked, 0 wrong. **A sweep that reports a defect is worth as much when the
+defect is in the sweep, but only if the fixture is checked before the code.**

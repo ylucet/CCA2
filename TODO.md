@@ -125,11 +125,38 @@ second-order-cone face type (affine + sqrt of a quadratic). Building it is a new
 own arithmetic, `eval`, and tests, and it changes what every downstream operator must accept --
 so it wants to be decided, not drifted into.
 
-### 3. The UNBOUNDED NON-CONVEX envelope
+### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 
-Unchanged, and now the top item that is NOT blocked. Blocks no fixture in the corpus. What it
-needs: the lower hull of an UNBOUNDED lifted set -- the lifted recession rays alongside the lifted
-vertices -- and `conv(P)` as an unbounded domain.
+Implemented by HOMOGENISING the existing hull rather than writing a second one: a lifted RECESSION
+RAY joins the lifted vertices as a generator, a facet is spanned by three generators of which at
+least one must be a vertex, and "no vertex undercuts it" gains its homogeneous twin "no ray
+undercuts it at infinity". `hullHalfPlanes` gains the same treatment, so the domain comes out as
+`conv(V) + cone(D)`. With no rays present every test reduces to the bounded one verbatim -- one
+code path, not two.
+
+**The condition, and it is not a restriction anyone chose:** each recession direction `d` must have
+`d'Hd = 0` (else the envelope is either -infinity or the piece is edge-convex) and `H*d = 0`, which
+makes the lifted set recede in the FIXED direction `(d, L'd)`. `H*d = 0` is automatic for a
+semidefinite `H`, so only an INDEFINITE piece can fail it, and that is refused as
+`PLQ:biconjQ:shearedRecession`.
+
+`PLQ:biconjQ:unbounded` no longer exists for a 2-D domain -- it meant "finite but not computed",
+and that is now computed. (`thinEnvelope` still raises it for a 1-D unbounded domain, which is a
+different case.)
+
+**Verified**: `.claude/biconjAllHSweep.m` gained two half-strip shapes, because every other
+unbounded shape in it recedes along a direction an indefinite `H` shears -- so before them the
+sweep exercised this path only through its refusals. 187 answered, 187 checked, **0 wrong**, worst
+1.9e-15. Plus a closed-form fixture in `biconjQTest`: `-x^2` on `{0<=x<=1, y>=0}` has
+`co f = -x`, which catches both a dropped ray (the domain collapses to `y = 0`) and a mislifted
+one (the face tilts in `y`).
+
+### 3b. STILL OPEN, and it is what is left of the unbounded case
+
+`shearedRecession`: `d'Hd = 0` but `H*d` nonzero, so `q`'s rate along `d` varies across the piece
+and the lifted set has no fixed recession ray. `q = x*y` on the first quadrant is the smallest
+instance and its envelope is plainly 0, so this is a real gap rather than a representational one.
+Only an indefinite piece reaches it.
 
 ### 4. A CHAIN of edges
 

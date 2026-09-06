@@ -29,7 +29,12 @@ function biconjAllHSweep(nRep)
     if nargin < 1, nRep = 3; end
     rng(20260905);
 
-    shapes = {'square1', 'square2', 'poly1', 'poly2', 'cone1', 'cone2', 'halfplane'};
+    % strip1/strip2 exist because every OTHER unbounded shape here recedes along a direction that
+    % an indefinite H shears, so before they were added the sweep exercised the unbounded envelope
+    % only through its refusals. A half-strip recedes along (0,1) alone, which is in the kernel of
+    % a diagonal H, so the lifted recession ray is a fixed direction and the hull is computed.
+    shapes = {'square1', 'square2', 'poly1', 'poly2', 'cone1', 'cone2', 'halfplane', ...
+              'strip1', 'strip2'};
     classes = {'PD', 'PSDsing', 'zero', 'indef', 'NSDsing', 'ND'};
     tally = containers.Map();          % "shape|class" -> [nOK nRefused nBad]
     refusals = containers.Map();       % identifier -> count
@@ -160,6 +165,18 @@ function f = buildFixture(shape, H, L, k0, c)
             E = [1 2 0; 1 3 0; 1 4 0];
             F = [1 0; 2 1; 0 2];
             f = QuaPol(V, E, [q0; addLin(q0, c, [-1 1 0])], F);
+        case 'strip1'       % one piece on the half-strip {0 <= x <= 1, y >= 0}
+            f = QuaPol([0 0; 1 0; 0 1; 1 1], [1 2 1; 1 3 0; 2 4 0], q0, [1 0; 0 1; 1 0]);
+        case 'strip2'       % the same half-strip split by the horizontal y = 1; l = y - 1
+            V = [0 0; 1 0; 0 1; 1 1; 0 2; 1 2];
+            E = [1 2 1; 1 3 1; 2 4 1; 3 4 1; 3 5 0; 4 6 0];
+            % Edge 4 runs (0,1) -> (1,1), so its direction is (1,0) and its LEFT is +y -- the
+            % UPPER face. F(j,1) is the left face, so face 2 goes in column 1. Written [1 2] at
+            % first, which silently swapped the two quadratics and made the sweep report 9 bad
+            % answers against a mesh that was not the intended function at all
+            % (.claude/strip2MeshProbe.m).
+            F = [1 0; 0 1; 1 0; 2 1; 0 2; 2 0];
+            f = QuaPol(V, E, [q0; addLin(q0, c, [0 1 -1])], F);
         case 'halfplane'    % the closed upper half-plane split by the ray x=0, y>=0; l = x
             V = [0 0; 0 1; -1 0; 1 0];
             E = [1 2 0; 1 3 0; 1 4 0];

@@ -22,12 +22,19 @@ function h = biconjQ(obj)
 %     Sylvester on integers per piece plus `isConvexQ` for the multi-piece part (the gradient jump
 %     across every shared edge, and the convexity of the domain).
 %
-%   * a CONCAVE or AFFINE piece on a bounded polygon -> the affine interpolant over the LOWER HULL
-%     of the lifted vertices. This is the case the convex envelope is cleanest for, and the reason
-%     is that a concave function on a polytope has its whole envelope determined by the VERTEX
-%     VALUES: the graph of co f is the lower convex hull of {(v, q(v))}, so the computation is a
-%     hull of m points in R^3 with rational coordinates -- no calculus, no calls to an optimiser,
-%     and every predicate an integer sign test.
+%   * an EDGE-CONCAVE piece -> the affine interpolant over the LOWER HULL of the lifted vertices.
+%     This is the case the convex envelope is cleanest for, and the reason is that such a function
+%     on a polytope has its whole envelope determined by the VERTEX VALUES: the graph of co f is
+%     the lower convex hull of {(v, q(v))}, so the computation is a hull of m points in R^3 with
+%     rational coordinates -- no calculus, no calls to an optimiser, and every predicate an integer
+%     sign test.
+%
+%   * UNBOUNDED pieces too, since 2026-09-05, by homogenising that hull: a lifted RECESSION RAY
+%     joins the lifted vertices as a generator, and conv(vertices) + cone(rays) is the answer. It
+%     is one code path rather than two -- with no rays every test below reduces to the bounded one
+%     verbatim. The condition is that each recession direction d has d'Hd = 0 AND H*d = 0, which
+%     makes the lifted set recede in the FIXED direction (d, L'd); H*d = 0 is automatic whenever H
+%     is semidefinite, so only an indefinite piece can fail it, and that is refused by name.
 %
 % WHY THE ANSWER IS A QuaCon, AND WHAT THE MISSING TYPE ACTUALLY IS. Both implemented cases have
 % RATIONAL face coefficients: the convex case returns f, and the concave case returns affine
@@ -145,17 +152,15 @@ function h = biconjQ(obj)
     % coupling, done in one step.
     for k = 1:nf
         Hk = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
-        [vsk, ~, bnd] = pieceGeometryB(obj, k);
+        [vsk, rays, bnd] = pieceGeometryB(obj, k);
         if ~bnd
             % TWO DIFFERENT SITUATIONS, and saying which is which is the point of this branch.
             % Along a recession direction d, q behaves as t*<grad q, d> + (t^2/2) d'Hd, so the
             % envelope runs to -infinity exactly when some recession direction has d'Hd < 0, or has
             % d'Hd = 0 with the linear rate negative somewhere on the piece. Otherwise q is bounded
-            % below on its own recession cone and the envelope is FINITE -- a real answer this
-            % routine does not yet compute, because the lower hull of an UNBOUNDED lifted set needs
-            % the lifted recession rays alongside the lifted vertices, and conv(P) as an unbounded
-            % domain.
-            [~, rays, ~] = pieceGeometryB(obj, k);
+            % below on its own recession cone and the envelope is FINITE -- and since 2026-09-05
+            % it is COMPUTED, by concaveEnvelope's homogenised hull, provided the lifted recession
+            % ray is a fixed direction (the shear test below).
             Lk = [obj.fN(k,8); obj.fN(k,9)];
             % THE CONE, NOT ONLY ITS GENERATORS. On cone(d1,d2) the curvature is
             % a*l1^2 + 2b*l1*l2 + c*l2^2, and it is nonnegative for every l >= 0 exactly when
@@ -207,11 +212,34 @@ function h = biconjQ(obj)
                      'is nowhere to put it -- the same representational gap conjCPLQ records as ' ...
                      'convEnvUnbounded:minusInfinity.'], k);
             end
-            error('PLQ:biconjQ:unbounded', ...
-                ['piece %d is unbounded but q is bounded below on its recession cone, so its ' ...
-                 'envelope is FINITE and simply not computed yet: the lower hull of an unbounded ' ...
-                 'lifted set needs the lifted recession rays alongside the lifted vertices, and ' ...
-                 'conv(P) as an unbounded domain. See TODO.md 2026-09-05.'], k);
+            % ---- the piece is unbounded and q is bounded below on it. IS ITS LIFTED RECESSION
+            % RAY A FIXED DIRECTION? ------------------------------------------------------------
+            % q(x + t d) = q(x) + t*(H x + L)'d + (t^2/2) d'Hd, and d'Hd = 0 here. So the lifted
+            % point rises at rate (H x + L)'d, and the epigraph recedes in a direction that does
+            % not depend on x exactly when H*d = 0 -- and then the rate is the constant L'd.
+            %
+            % H*d = 0 is automatic for a semidefinite H (d'Hd = 0 forces it), so this only ever
+            % refuses an INDEFINITE piece whose recession direction is sheared by H. There the
+            % rate varies across the piece while staying nonnegative, the lifted set recedes in a
+            % direction that turns as x moves, and the hull's recession cone is no longer generated
+            % by the pieces' own rays -- a different computation, not a harder version of this one.
+            for r = 1:size(rays,1)
+                d = rays(r,:).';
+                if ratQ.chk(d.'*Hk*d, 'recession curvature') ~= 0
+                    % Necessarily > 0 here, since < 0 was ruled a divergence above. Then q grows
+                    % QUADRATICALLY along that ray, the piece is not edge-concave along it, and the
+                    % edge-curvature test below is the one that should speak -- it names the
+                    % obstruction, where a boundedness-first refusal would only name the order the
+                    % two checks happen to run in.
+                    continue
+                end
+                if any(ratQ.chk(Hk * d, 'recession shear') ~= 0)
+                    error('PLQ:biconjQ:shearedRecession', ...
+                        ['piece %d recedes along a direction d with d''Hd = 0 but H*d nonzero, ' ...
+                         'so q''s rate along d varies across the piece and the lifted set has no ' ...
+                         'fixed recession ray. Only an INDEFINITE piece can do this.'], k);
+                end
+            end
         end
         own = find(any(obj.F == k, 2));
         for j = own.'
@@ -246,9 +274,19 @@ function h = biconjQ(obj)
                      'case is [COAP] A.2-A.5.'], k);
             end
         end
-        if numel(vsk) < 3
+        % A 2-D face needs three affinely independent GENERATORS, and for an unbounded piece two of
+        % them may be recession directions -- a cone has one vertex and two rays and is perfectly
+        % 2-dimensional, so counting vertices alone would refuse it.
+        if bnd
+            if numel(vsk) < 3
+                error('PLQ:biconjQ:degenerate', ...
+                    'piece %d has %d vertices; a 2-D bounded face needs at least three.', ...
+                    k, numel(vsk));
+            end
+        elseif numel(vsk) + size(rays,1) < 3
             error('PLQ:biconjQ:degenerate', ...
-                'piece %d has %d vertices; a 2-D face needs at least three.', k, numel(vsk));
+                'piece %d has %d vertices and %d rays; a 2-D face needs three generators.', ...
+                k, numel(vsk), size(rays,1));
         end
     end
 
@@ -310,13 +348,28 @@ function h = concaveEnvelope(obj)
     Dl = ratQ.chk(2 * Lden * vd^2, 'lift denominator');
 
     lifted = containers.Map('KeyType', 'double', 'ValueType', 'double');
+    R3 = zeros(0,3);
     for k = 1:nf
         [fN, fD] = obj.faceQ(k);
         Hn = [fN(5) fN(6); fN(6) fN(7)];
         Ln = [fN(8); fN(9)];
         kn = fN(10);
         scale = ratQ.chk(Lden / fD, 'denominator scaling');
-        [vsk, ~, ~] = pieceGeometryB(obj, k);
+        [vsk, raysk, ~] = pieceGeometryB(obj, k);
+        % THE LIFTED RECESSION RAYS. Reaching here, every recession direction d of every piece has
+        % d'Hd = 0 AND H*d = 0 (the piece loop refuses the sheared case by name), so
+        % q(x + t d) = q(x) + t*(L'd) exactly -- the lifted set recedes in the FIXED direction
+        % (d, L'd), independent of x. That is what makes conv(lifted vertices) + cone(lifted rays)
+        % the whole hull.
+        %
+        % The scaling matches Q3's below: both are the true (x, y, q) multiplied by the positive
+        % 2*Lden*vd^2, and for a DIRECTION only the positive multiple matters.
+        for r = 1:size(raysk,1)
+            d = raysk(r,:).';
+            R3(end+1,:) = [ratQ.chk(2*Lden*vd*d(1), 'lift ray x'), ...
+                           ratQ.chk(2*Lden*vd*d(2), 'lift ray y'), ...
+                           ratQ.chk(2*scale*vd*(Ln.'*d), 'lift ray z')]; %#ok<AGROW>
+        end
         for i = 1:numel(vsk)
             v  = Vi(vsk(i), :).';
             qv = ratQ.chk(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), 'vertex value');
@@ -329,8 +382,12 @@ function h = concaveEnvelope(obj)
 
     vs = cell2mat(keys(lifted)).';
     m  = numel(vs);
-    if m < 3
-        error('PLQ:biconjQ:degenerate', 'the domain has %d vertices; a 2-D one needs three.', m);
+    R3 = unique(R3, 'rows');
+    nr = size(R3, 1);
+    if m + nr < 3 || m < 1
+        error('PLQ:biconjQ:degenerate', ...
+            'the domain has %d vertices and %d recession rays; a 2-D one needs three generators.', ...
+            m, nr);
     end
     Q3 = zeros(m, 3);
     for i = 1:m
@@ -339,24 +396,56 @@ function h = concaveEnvelope(obj)
                    ratQ.chk(2*Lden*vd*v(2), 'lift y'), lifted(vs(i))];
     end
 
-    % ---- the LOWER hull facets, by brute force over triples --------------------------------------
-    % m is the number of vertices of one polygon -- three to a handful -- so O(m^4) is a few hundred
-    % integer operations and needs no incremental hull. Every test below is exact.
+    % ---- the LOWER hull facets, by brute force over triples of GENERATORS -----------------------
+    % A generator is a lifted VERTEX or a lifted RECESSION RAY, and the hull is
+    % conv(vertices) + cone(rays). Homogenising that way is the whole extension to unbounded
+    % domains: a facet is spanned by three generators of which at least one must be a vertex (a
+    % plane needs a point to fix its offset), and the two IN-PLANE DIRECTIONS come from differences
+    % of vertices and from ray directions interchangeably.
+    %
+    % The validity test splits the same way. A supporting plane must have every lifted vertex on or
+    % above it -- n.p >= d -- and must not be undercut at infinity, which is the HOMOGENEOUS form
+    % of the same condition: n.r >= 0 for every lifted ray. With no rays present both reduce to the
+    % bounded test that was here before, so this is one code path rather than two.
+    %
+    % m + nr is a handful, so O((m+nr)^4) is a few hundred integer operations and needs no
+    % incremental hull. Every test is exact.
+    G   = [Q3; R3];
+    isP = [true(m,1); false(nr,1)];
+    ng  = m + nr;
     facets = zeros(0, 4);                       % rows [a b c d] with a X + b Y + c Z = d, c > 0
-    for i = 1:m
-        for j = i+1:m
-            for k = j+1:m
-                u = Q3(j,:) - Q3(i,:);
-                w = Q3(k,:) - Q3(i,:);
-                n = ratQ.chk(cross(u, w), 'facet normal');
+    for i = 1:ng
+        for j = i+1:ng
+            for k = j+1:ng
+                idx = [i j k];
+                pts = idx(isP(idx));
+                if isempty(pts), continue, end   % three rays fix no offset: not a facet
+                dirs = zeros(0,3);
+                base = pts(1);
+                for t = idx
+                    if t == base, continue, end
+                    if isP(t)
+                        dirs(end+1,:) = G(t,:) - G(base,:); %#ok<AGROW>
+                    else
+                        dirs(end+1,:) = G(t,:);             %#ok<AGROW>
+                    end
+                end
+                n = ratQ.chk(cross(dirs(1,:), dirs(2,:)), 'facet normal');
                 if n(3) == 0, continue, end     % vertical plane: not the graph of a function
                 if n(3) < 0, n = -n; end        % orient upward, so "above" is n.p >= d
-                d = ratQ.chk(n * Q3(i,:).', 'facet offset');
+                d = ratQ.chk(n * G(base,:).', 'facet offset');
                 below = false;
                 for p = 1:m
                     if ratQ.chk(n * Q3(p,:).' - d, 'facet side') < 0, below = true; break, end
                 end
-                if below, continue, end          % some vertex lies UNDER it: not a lower facet
+                if ~below
+                    for p = 1:nr
+                        if ratQ.chk(n * R3(p,:).', 'facet side at infinity') < 0
+                            below = true;  break
+                        end
+                    end
+                end
+                if below, continue, end          % undercut by a vertex or at infinity
                 % Reduce to a primitive integer row so that one plane found through several
                 % different triples is ONE row and `unique` collapses it -- the same canonical-form
                 % argument ratQ.conic makes for curves.
@@ -386,7 +475,9 @@ function h = concaveEnvelope(obj)
     % right answer there, reflex vertices included. Checked against an LP over a dense sample of
     % the true L -- the hull and the LP agree at every probe, inside the L and in conv(L) beyond
     % it, so only the domain was wrong.
-    dom = hullHalfPlanes(Vi, vd, vs);
+    % conv(dom f) INCLUDING ITS RECESSION CONE. R3(:,1:2) are the lifted rays' shadows, which are
+    % exactly the primal recession directions, so the same list serves both halves of the hull.
+    dom = hullHalfPlanes(Vi, vd, vs, R3(:,1:2));
     cells = struct('num', {}, 'den', {}, 'con', {});
     for t = 1:nfac
         a = facets(t,1);  b = facets(t,2);  c = facets(t,3);  d = facets(t,4);
@@ -415,25 +506,42 @@ function h = concaveEnvelope(obj)
     h = assembleQuaConCells(cells);
 end
 
-function rows = hullHalfPlanes(Vi, vd, vs)
-% objective: the half-planes of the CONVEX HULL of the given vertices, exactly.
+function rows = hullHalfPlanes(Vi, vd, vs, dirs)
+% objective: the half-planes of conv(vertices) + cone(dirs), exactly.
+% [input]  dirs : (optional) r x 2 integer recession directions over the same denominator vd.
+%                 Empty or omitted gives the bounded hull.
 % [output] rows : h x 3, [a b c] meaning a*x + b*y + c >= 0 on the hull, in ACTUAL coordinates
 %
-% A pair of vertices spans a hull edge exactly when every other vertex lies weakly on one side of
-% the line through them -- an integer sign test per vertex, so the hull is DECIDED. O(m^3) for a
-% face's handful of corners, which needs no incremental hull algorithm and has no orientation
-% convention to read backwards.
+% A candidate line is spanned either by TWO VERTICES or by one vertex and a RECESSION DIRECTION,
+% and it bounds the hull exactly when every vertex lies weakly on one side of it AND every
+% recession direction points weakly to that same side. The direction test is the HOMOGENEOUS form
+% of the vertex test -- the offset drops out -- which is the whole of the extension to unbounded
+% domains; with no directions it reduces to the bounded test verbatim.
+%
+% Omitting the direction test would keep only the lines through vertex PAIRS and would accept ones
+% the cone crosses, so an unbounded domain would come back as its bounded hull: a domain strictly
+% too small, and +infinity returned where the envelope is finite.
+%
+% Every test is an integer sign, so the hull is DECIDED. O((m+r)*m^2) for a handful of corners,
+% which needs no incremental hull algorithm and has no orientation convention to read backwards.
 %
 % Numerator coordinates decide the side; the emitted row is in actual coordinates (linear part
 % scaled by vd). See conjQ's pieceShape for why mixing the two yields a parallel line.
+    if nargin < 4, dirs = zeros(0,2); end
     rows = zeros(0,3);
     m = numel(vs);
+    r = size(dirs,1);
     for a = 1:m
-        for b = 1:m
-            if a == b, continue, end
-            p = Vi(vs(a), :);  q = Vi(vs(b), :);
-            n  = [q(2)-p(2), -(q(1)-p(1))];
-            if all(n == 0), continue, end                 % coincident vertices
+        for b = 1:(m + r)
+            p = Vi(vs(a), :);
+            if b <= m
+                if a == b, continue, end
+                n = [Vi(vs(b),2)-p(2), -(Vi(vs(b),1)-p(1))];
+            else
+                e = dirs(b-m, :);
+                n = [e(2), -e(1)];
+            end
+            if all(n == 0), continue, end                 % coincident vertices, or a null direction
             c0 = ratQ.chk(-(n * p.'), 'offset');
             sgn = 0;  ok = true;
             for i = 1:m
@@ -443,7 +551,16 @@ function rows = hullHalfPlanes(Vi, vd, vs)
                 elseif sign(t) ~= sgn, ok = false; break
                 end
             end
-            if ~ok || sgn == 0, continue, end             % vertices on both sides: not a hull edge
+            if ok
+                for i = 1:r
+                    t = ratQ.chk(n * dirs(i,:).', 'hull side at infinity');
+                    if t == 0, continue, end
+                    if sgn == 0, sgn = sign(t);
+                    elseif sign(t) ~= sgn, ok = false; break
+                    end
+                end
+            end
+            if ~ok || sgn == 0, continue, end             % generators on both sides: not a facet
             row = sgn * [ratQ.chk(vd*n(1), 'hull normal'), ...
                          ratQ.chk(vd*n(2), 'hull normal'), c0];
             row = row / gcdRow(row);
