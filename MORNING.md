@@ -114,8 +114,6 @@ it is needed whichever way the type decision goes. I would start there.
 seeing its output — my recommendation; (b) commit to the type now and build both together;
 (c) leave both, and keep `convexPieceCoupling` refused.
 
-## Needs a decision
-
 ## Where I stopped
 
 Items 2, 3, 4 and 5 are done, committed and green. Item 6 is spiked and parked on your decision --
