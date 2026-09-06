@@ -5063,3 +5063,55 @@ is the reusable part of this entry.
 **Everything else the sweep refuses is already named**: the indefinite piece
 (`notImplemented`, 36), a concave piece on an unbounded domain (`minusInfinity`, 55, a correct
 `-infinity`), and the unbounded finite case (`unbounded`, 11).
+
+## 2026-09-05 — `AlgAlg` as specified is REFUTED: the missing face is a NORM, not an affine cell
+
+**The claim being overturned**, from `biconjQ.m`'s header and repeated through `TODO.md`: the faces
+of `f**` that cannot be written rationally are AFFINE cells `<p,x> - f*(p)` naming a dual vertex
+`p` of degree up to 4, so a type that carries an affine form plus a named algebraic point
+(`AlgAlg`) would hold them.
+
+**It is true only for the three-piece tie**, where three pieces are active at one isolated dual
+point. The commoner case is TWO pieces tying along a dual CURVE, and then `p` varies with `x`, so
+the face is not affine at all.
+
+**Derived, and checked against a definition that shares no algebra with the derivation**
+(`.claude/bridgeFaceProbe.m`). For `q1(v) = |v|^2/2` and `q2(v) = |v-a|^2 + c` on the plane, the
+conjugates are `|s|^2/2` and `<s,a> + |s|^2/4 - c`, so the two pieces tie on the CIRCLE
+`|s|^2/4 - <s,a> + c = 0` — centre `2a`, radius `R = 2*sqrt(|a|^2-c)`. On that tie
+`co f(x) = <s, x-2a> + 2c`, and the sup of a LINEAR function over a circle is attained at the far
+point, giving
+
+        co f(x) = <2a, x - 2a> + R*|x - 2a| + 2c .
+
+The oracle is the primal definition — `inf` over `t` in `[0,1]` of `|x - t a|^2/(2-t) + t c`, from
+the perspective inf-convolution, minimised by brute force on a grid. **Agreement 1.5e-11**, below
+the grid floor. **Best affine fit to that face: off by 2.9. Best quadratic fit: off by 0.36.** So
+the face is neither, and the closed form says why — it carries `|x - 2a|`, the square root of a
+quadratic. What this needs is a SECOND-ORDER-CONE face.
+
+**The rational boundary is sharp, and the same script pins the other side.** The bridge is
+quadratic exactly when the two tying cells have the SAME Hessian: the conjugates then differ by an
+affine function, the tie set is a LINE rather than a conic, and the sup of a concave quadratic over
+a line is quadratic again (measured residual 4.6e-12).
+
+**Why that does not yield an implementable sub-case.** Domain clipping breaks the equal-Hessian
+condition even between pieces that share one: an interior cell tying against a VERTEX cell has
+effective Hessians `H` and `0`, because over a vertex cell the conjugate is affine in `s`. Measured
+on the corpus fixture (`.claude/kinkDualProbe.m`): `conjQ` of the square-with-a-diagonal-kink, whose
+two pieces have the SAME Hessian `2I`, returns `f*` with 10 line edges but also 2 elliptic, 2
+hyperbolic and 2 parabolic ones. Every one of those conics is a tie that yields a square-root
+bridge. So the fixture cannot be answered by the rational sub-case alone, and a routine must answer
+its whole input or refuse it.
+
+**This also closes the double-conjugation route for these inputs**, which is worth recording
+because it is the obvious alternative and was raised in session: `f** = (f*)*` needs the conjugate
+of a `QuaCon` whose edges are genuinely curved, not of a polyhedral one. Same wall, reached from
+the other side — which is evidence that the wall is the mathematics and not the route.
+
+**What was fixed rather than parked.** One edge-curvature test in `biconjQ` was raising ONE
+identifier for two unrelated situations, with a message ([COAP] A.2-A.5) that fits only one of
+them. Split: `PLQ:biconjQ:notImplemented` keeps the single-piece indefinite case that [COAP] really
+does cover, and `PLQ:biconjQ:convexPieceCoupling` is new for convex pieces whose COUPLING is
+non-convex — where no piece needs [COAP] at all, since each one's own envelope is itself. Measured
+over `.claude/biconjAllHSweep.m`: the 36 refusals that shared an identifier are 24 and 12.

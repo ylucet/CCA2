@@ -29,13 +29,30 @@ function h = biconjQ(obj)
 %     hull of m points in R^3 with rational coordinates -- no calculus, no calls to an optimiser,
 %     and every predicate an integer sign test.
 %
-% WHY THE ANSWER IS A QuaCon AND NOT YET THE PLANNED AlgAlg. Both implemented cases have RATIONAL
-% face coefficients: the convex case returns f, and the concave case returns affine functions
-% interpolating rational vertex values. AlgAlg exists for the faces that CANNOT be written
-% rationally -- an affine cell of a general f** is <p,x> - f*(p) with p a dual vertex of degree up
-% to 4, so it is rational only over Q(p) and the cell has to NAME the dual vertex instead. Nothing
-% here produces one, so introducing the type now would be speculative; the trigger is the
-% INDEFINITE piece, which is refused by name below and is where the first such face appears.
+% WHY THE ANSWER IS A QuaCon, AND WHAT THE MISSING TYPE ACTUALLY IS. Both implemented cases have
+% RATIONAL face coefficients: the convex case returns f, and the concave case returns affine
+% functions interpolating rational vertex values.
+%
+% CORRECTED 2026-09-05. This header used to say the missing faces were AFFINE cells
+% `<p,x> - f*(p)` naming a dual vertex p of degree up to 4, and that the planned AlgAlg would hold
+% them. That is true only for the case where THREE pieces tie at one isolated dual point. The
+% commoner case is TWO pieces tying along a dual CURVE, and there p varies with x, so the face is
+% not affine at all. Derived in closed form and checked against the primal definition by
+% `.claude/bridgeFaceProbe.m`: for q1 = |v|^2/2 and q2 = |v-a|^2 + c the bridge face is
+%
+%       co f(x) = <2a, x - 2a> + 2*sqrt(|a|^2 - c) * |x - 2a| + 2c ,
+%
+% a NORM -- the square root of a quadratic. Measured there: the best affine fit to that face is off
+% by 2.9 and the best quadratic fit by 0.36, against an oracle agreement of 1.5e-11. So the type
+% this needs is a second-order-cone face, and `AlgAlg` as specified would not hold it.
+%
+% THE RATIONAL/IRRATIONAL BOUNDARY IS SHARP, and the same script pins the other side of it: the
+% bridge is quadratic exactly when the two tying cells have the SAME Hessian, because then the two
+% conjugates differ by an affine function, the dual tie set is a LINE rather than a conic, and the
+% sup of a concave quadratic over a line is again quadratic (measured residual 4.6e-12). Domain
+% clipping breaks that condition even between pieces that share a Hessian -- an interior cell tying
+% against a vertex cell has effective Hessians H and 0 -- which is why no sub-case of the coupling
+% problem is rational enough to implement on its own. See DECISIONS.md 2026-09-05.
 
     if ~isa(obj, 'QuaPol')
         error('PLQ:biconjQ:input', ...
@@ -181,11 +198,31 @@ function h = biconjQ(obj)
             d = obj.VN(b,:)/obj.VD(b) - obj.VN(a,:)/obj.VD(a);
             [dn, ~] = ratQ.fromDouble(d);
             if ratQ.chk(dn * Hk * dn.', 'edge curvature') > 0
+                % TWO DIFFERENT SITUATIONS TRIP THIS ONE TEST, and until 2026-09-05 they shared a
+                % message that was right about only one of them. Which it is turns on whether THIS
+                % piece is convex, so that is what selects the identifier.
+                if allPSD
+                    % EVERY piece is convex, so no piece needs [COAP] at all -- each one's own
+                    % envelope is itself. What is missing is the hull ACROSS pieces: f is not
+                    % convex (isConvexQ said so above), so co f has to bridge the gradient jump,
+                    % and a bridge is not determined by the vertex values either.
+                    %
+                    % The bridge face is NOT rational, and it is not affine either -- see
+                    % DECISIONS.md 2026-09-05 and .claude/bridgeFaceProbe.m, which derive it in
+                    % closed form for two convex pieces and check it against the primal
+                    % definition. It is affine PLUS THE NORM of an affine image of x, so the type
+                    % that would hold it does not exist yet and is not the planned AlgAlg.
+                    error('PLQ:biconjQ:convexPieceCoupling', ...
+                        ['every piece is convex but f is not, so co f must BRIDGE the gradient ' ...
+                         'jump across a shared edge (piece %d curves upward along one of its ' ...
+                         'own edges, so its vertex values do not determine the bridge). The ' ...
+                         'bridge face carries the square root of a quadratic, which no CCA2 ' ...
+                         'type can hold -- see DECISIONS.md 2026-09-05.'], k);
+                end
                 error('PLQ:biconjQ:notImplemented', ...
-                    ['piece %d curves UPWARD along one of its edges, so its envelope is not ' ...
-                     'determined by the vertex values -- it needs [COAP] A.2-A.5, and is where ' ...
-                     'the first face that cannot be written rationally appears (see this ' ...
-                     'file''s header on AlgAlg).'], k);
+                    ['piece %d is not convex AND curves UPWARD along one of its edges, so its ' ...
+                     'own envelope is not determined by the vertex values -- that single-piece ' ...
+                     'case is [COAP] A.2-A.5.'], k);
             end
         end
         if numel(vsk) < 3

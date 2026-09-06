@@ -91,35 +91,51 @@ Witness in `.claude/ex16DomainProbe.m` and pinned in `isConvexQTest`.
   * **The legacy `QuaPol.isConvex` is second-source only** now. It still decides in doubles
     against `sqrt(eps)`. Deleting it is a separate decision -- `PLQVCTest` exercises it heavily.
 
-### 2. The NON-CONVEX MULTI-PIECE envelope with CONVEX pieces  (new, and it is BOUNDED)
+### 2. BLOCKED ON A TYPE DECISION -- the envelope's missing face is a NORM
 
-Found by `.claude/biconjAllHSweep.m` 2026-09-05 and reproduced by `.claude/biconjKinkProbe.m`: the
-unit square split by its diagonal, both pieces positive definite, a non-convex kink across the
-shared edge. Bounded, continuous, and refused as `PLQ:biconjQ:notImplemented`. This was believed
-to be part of the unbounded item and it is not.
+Items 2 and 4 as they read on 2026-09-05 (the bounded convex-piece coupling, and the edge-convex
+piece) were investigated and are **one blocked item, not two open ones**. The blocker is external:
+it is a decision about CCA2's return types, which `RETURN_TYPE.md` treats as an architectural
+question and which is not mine to take.
 
-The envelope is not the lifted hull -- a PD piece is not edge-concave -- so it needs the general
-construction: the curved part of each piece plus an affine bridge across the kink. **That bridge
-is the first irrational face**, so this and item 4 below are ONE trigger for `AlgAlg`, not two.
-Do this one first: its fixture is two lines of setup, and item 4's is not.
+**What was established** (DECISIONS.md 2026-09-05, reproducers `.claude/bridgeFaceProbe.m` and
+`.claude/kinkDualProbe.m`):
+
+  * The face that `co f` needs where two CONVEX pieces bridge is
+    `<2a, x-2a> + R*|x-2a| + 2c` -- affine PLUS A NORM. Verified against the primal definition to
+    1.5e-11; the best affine fit to it is off by 2.9 and the best quadratic fit by 0.36.
+  * So **`AlgAlg` as specified is refuted.** Affine-plus-a-named-algebraic-point covers only the
+    three-piece tie at an isolated dual vertex. The two-piece tie sweeps a dual CURVE and its face
+    is not affine. What is needed is a SECOND-ORDER-CONE face.
+  * The rational boundary is sharp: the bridge is quadratic exactly when the two tying cells share
+    a Hessian. **Domain clipping breaks that even for pieces that do share one** (an interior cell
+    tying against a vertex cell has effective Hessians `H` and `0`), so there is no rational
+    sub-case big enough to answer a whole input.
+  * `f** = (f*)*` does not route around it: `conjQ` of the corpus fixture returns an `f*` with 2
+    elliptic, 2 hyperbolic and 2 parabolic edges, so that route needs the conjugate of a genuinely
+    CURVED `QuaCon`. Same wall from the other side.
+
+**Landed anyway, because it did not depend on the decision:** one edge-curvature test was raising
+one identifier for two unrelated situations under a message ([COAP] A.2-A.5) that fits only one.
+`notImplemented` now means the single-piece indefinite case [COAP] really covers;
+`convexPieceCoupling` is new. Over the sweep the 36 shared refusals are 24 and 12.
+
+**THE DECISION NEEDED, and it is the only thing blocking both items:** whether CCA2 gains a
+second-order-cone face type (affine + sqrt of a quadratic). Building it is a new class with its
+own arithmetic, `eval`, and tests, and it changes what every downstream operator must accept --
+so it wants to be decided, not drifted into.
 
 ### 3. The UNBOUNDED NON-CONVEX envelope
 
-Now known to block **no fixture in the corpus** -- it is reachable only by inputs nobody has
-written down yet, which is why it drops below item 1 rather than above it.
+Unchanged, and now the top item that is NOT blocked. Blocks no fixture in the corpus. What it
+needs: the lower hull of an UNBOUNDED lifted set -- the lifted recession rays alongside the lifted
+vertices -- and `conv(P)` as an unbounded domain.
 
-`PLQ:biconjQ:minusInfinity` is already separated from `PLQ:biconjQ:unbounded`, so the
-representational case (a correct `-infinity`) is distinguished from the computable one. What the
-computable one needs: the lower hull of an UNBOUNDED lifted set -- the lifted recession rays
-alongside the lifted vertices -- and `conv(P)` as an unbounded domain.
+### 4. A CHAIN of edges
 
-### 4. The EDGE-CONVEX piece  (same `AlgAlg` trigger as item 2)
-
-A piece curving UPWARD along an edge: the vertex values no longer determine the envelope, so it
-needs [COAP] A.2-A.5. This is where the first face appears whose coefficients cannot be written as
-fractions -- an affine cell of a general `f**` is `<p,x> - f*(p)` with `p` a dual vertex of degree
-up to 4, rational only over `Q(p)`. **Do not build `AlgAlg` before this**, or the type is
-speculative.
+Refused as `chainNotImplemented`. Not thin: the convex hull of two non-collinear segments is a 2-D
+polygon, so it belongs with the ordinary lower-hull case read from the whole mesh rather than from
+a face.
 
 ### 5. Smaller, and worth doing alongside
 
@@ -130,9 +146,6 @@ speculative.
     HIGH and needs no vertex enumeration, so it works on unbounded domains too).
     **150 answered, 150 checked, 0 wrong, worst 2.2e-15.** It found no defect and one GAP -- see
     the new top item below and DECISIONS.md 2026-09-05.
-  * **A CHAIN of edges** (dimension < 2, more than one edge) is refused as `chainNotImplemented`.
-    Not thin: the convex hull of two non-collinear segments is a 2-D polygon, so it belongs with the
-    ordinary lower-hull case read from the whole mesh rather than from a face.
   * **Coverage, RE-MEASURED 2026-09-05** (fast bucket, `--coverage`). `QuaCon.m` **70.7% -> 100%**:
     what was missing was its five constructor VALIDATORS and `disp`, and an untested validator is
     the worst state a check can be in -- it passes forever whatever it does, and the constructor's

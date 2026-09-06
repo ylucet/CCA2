@@ -359,11 +359,33 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         function aPieceThatCurvesUPWARDAlongAnEdgeIsRefusedByName(testCase)
         % The condition is EDGE-concavity, so what is refused is an edge along which q curves
-        % upward -- there the vertex values no longer determine the envelope. This is the trigger
-        % for AlgAlg: the first face that cannot be written rationally appears here, since an
-        % affine cell of a general f** names a dual vertex of degree up to 4.
+        % upward -- there the vertex values no longer determine the envelope. This piece is
+        % INDEFINITE, so its own single-piece envelope is the unimplemented one, and that case is
+        % [COAP] A.2-A.5.
             f = biconjQTest.square([0 0 0 0, 1, 0, -1, 0, 0, 0]);   % +1 along (1,0)
             testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notImplemented');
+        end
+
+        function CONVEXPiecesWithANonConvexKinkGetTheirOWNRefusal(testCase)
+        % The same edge-curvature test trips here, and until 2026-09-05 it gave the same message --
+        % which was wrong about this case. Every piece is convex, so NO piece needs [COAP]: each
+        % one's own envelope is itself. What is missing is the hull ACROSS pieces.
+        %
+        % The fixture is the unit square split by its diagonal, both pieces x^2+y^2 up to a
+        % multiple of the diagonal's own linear form l = y-x. l vanishes on the diagonal, so f is
+        % continuous there for EVERY c, and the sign of c alone decides convexity -- which is what
+        % makes the pair below differ in exactly one thing.
+            convex = biconjQTest.diagonalKink(2);
+            testCase.verifyTrue(isConvexQ(convex), 'c > 0 is the convex side of the knob');
+            h = biconjQ(convex);
+            X = [0.2 0.1; 0.9 0.4; 0.3 0.8; 0.5 0.5];
+            testCase.verifyEqual(h.eval(X), convex.eval(X), 'AbsTol', 1e-12, ...
+                'and there co f = f, so it is answered rather than refused');
+
+            kinked = biconjQTest.diagonalKink(-2);
+            testCase.verifyFalse(isConvexQ(kinked), 'c < 0 is the non-convex side');
+            testCase.verifyError(@() biconjQ(kinked), 'PLQ:biconjQ:convexPieceCoupling', ...
+                'convex pieces with a non-convex coupling get their own identifier');
         end
 
         function aMULTIPIECEEnvelopeIsOneHullOverAllTheLiftedVertices(testCase)
@@ -444,6 +466,17 @@ classdef biconjQTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function f = diagonalKink(c)
+        % The unit square split by the diagonal (0,0)-(1,1). Face 1 (below it) carries x^2+y^2 and
+        % face 2 (above) carries x^2+y^2 + c*(y-x). Edge 5 is the diagonal; its direction is (1,1)
+        % so its LEFT is the upper triangle, which is why F(5,:) = [2 1].
+            q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];
+            q1 = q0;  q1(8) = q1(8) - c;  q1(9) = q1(9) + c;      % + c*(y - x)
+            f = QuaPol([0 0; 1 0; 1 1; 0 1], ...
+                       [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1], [q0; q1], ...
+                       [1 0; 1 0; 2 0; 2 0; 2 1]);
+        end
+
         function setBiconjAssert(v)
         % Restore the global to whatever it was, including empty. A plain assignment inside the
         % teardown closure would not reach the global without this declaration.
