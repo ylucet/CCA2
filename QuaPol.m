@@ -574,10 +574,18 @@ classdef QuaPol < RatPol & QuaPar
        function b = isConvex(obj)
        %returns true if the function is convex.
        %
-       % THE LEGACY DOUBLES TEST. `isConvexQ` is the exact one and is what the exact pipeline
-       % uses; this stays as a second source and for the cubic/inexact inputs isConvexQ refuses.
-       % It decides in doubles against sqrt(eps), and its `dom.isConvex` is computed by
-       % orderEdges, which is WRONG on QuaPol.examples{16} -- see DECISIONS.md 2026-09-05.
+       % UNIT TESTS ONLY. `isConvexQ` is the exact test and is the only one any production path
+       % may call; this one stays as a differential SECOND SOURCE for it, and for the cubic and
+       % inexact inputs isConvexQ refuses by design. Measured 2026-09-05: no production caller
+       % remains -- `meshPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
+       %
+       % Why it is not simply deleted: as a second source it earns its keep. The differential
+       % sweep against it is what found the `examples{16}` domain defect, and a second
+       % implementation that disagrees is worth more than one that is merely absent.
+       %
+       % Why it may not be trusted: it decides in DOUBLES against sqrt(eps), and it inherits
+       % `isFaceConvex`'s tolerance-based Hessian test. Its `dom.isConvex` is now correct
+       % (domainIsConvexD, 2026-09-05), but the rest of the routine is unchanged.
             if obj.nf==0%special cases
                 error("Not implemented yet");
             end

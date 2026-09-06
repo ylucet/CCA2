@@ -91,7 +91,19 @@ Witness in `.claude/ex16DomainProbe.m` and pinned in `isConvexQTest`.
   * **The legacy `QuaPol.isConvex` is second-source only** now. It still decides in doubles
     against `sqrt(eps)`. Deleting it is a separate decision -- `PLQVCTest` exercises it heavily.
 
-### 2. The UNBOUNDED NON-CONVEX envelope  (the real algorithmic gap)
+### 2. The NON-CONVEX MULTI-PIECE envelope with CONVEX pieces  (new, and it is BOUNDED)
+
+Found by `.claude/biconjAllHSweep.m` 2026-09-05 and reproduced by `.claude/biconjKinkProbe.m`: the
+unit square split by its diagonal, both pieces positive definite, a non-convex kink across the
+shared edge. Bounded, continuous, and refused as `PLQ:biconjQ:notImplemented`. This was believed
+to be part of the unbounded item and it is not.
+
+The envelope is not the lifted hull -- a PD piece is not edge-concave -- so it needs the general
+construction: the curved part of each piece plus an affine bridge across the kink. **That bridge
+is the first irrational face**, so this and item 4 below are ONE trigger for `AlgAlg`, not two.
+Do this one first: its fixture is two lines of setup, and item 4's is not.
+
+### 3. The UNBOUNDED NON-CONVEX envelope
 
 Now known to block **no fixture in the corpus** -- it is reachable only by inputs nobody has
 written down yet, which is why it drops below item 1 rather than above it.
@@ -101,7 +113,7 @@ representational case (a correct `-infinity`) is distinguished from the computab
 computable one needs: the lower hull of an UNBOUNDED lifted set -- the lifted recession rays
 alongside the lifted vertices -- and `conv(P)` as an unbounded domain.
 
-### 3. The EDGE-CONVEX piece  (and only here does `AlgAlg` earn its place)
+### 4. The EDGE-CONVEX piece  (same `AlgAlg` trigger as item 2)
 
 A piece curving UPWARD along an edge: the vertex values no longer determine the envelope, so it
 needs [COAP] A.2-A.5. This is where the first face appears whose coefficients cannot be written as
@@ -109,19 +121,26 @@ fractions -- an affine cell of a general `f**` is `<p,x> - f*(p)` with `p` a dua
 up to 4, rational only over `Q(p)`. **Do not build `AlgAlg` before this**, or the type is
 speculative.
 
-### 4. Smaller, and worth doing alongside
+### 5. Smaller, and worth doing alongside
 
-  * **`biconjQ` has no differential sweep of its own** at the scale `conjQ` has. `.claude/envelope-sweep.m`
-    checks the four defining properties on 26-38 random polygons; there is no equivalent of
-    `allH-sweep.m` covering every Hessian class x domain shape.
+  * **~~`biconjQ` has no differential sweep of its own`~~ DONE 2026-09-05.**
+    `.claude/biconjAllHSweep.m`: every Hessian class x seven domain shapes, single- and
+    multi-piece, against three definition checks (`co f <= f`; `co f` convex; and
+    `co f(sum lam x) <= sum lam f(x)`, which is the part that catches an envelope that is too
+    HIGH and needs no vertex enumeration, so it works on unbounded domains too).
+    **150 answered, 150 checked, 0 wrong, worst 2.2e-15.** It found no defect and one GAP -- see
+    the new top item below and DECISIONS.md 2026-09-05.
   * **A CHAIN of edges** (dimension < 2, more than one edge) is refused as `chainNotImplemented`.
     Not thin: the convex hull of two non-collinear segments is a 2-D polygon, so it belongs with the
     ordinary lower-hull case read from the whole mesh rather than from a face.
-  * **Coverage, RE-MEASURED 2026-09-05** after items 1-3 (fast bucket, `--coverage`):
-    `biconjQ.m` 91.0% (262/288, was 90.7%), `isConvexQ.m` 92.4%, `domainIsConvexD.m` 100%.
-    `QuaCon.m` at 70.7% is now clearly the lowest of the exact files and the next place to look.
-    Item 1 did not remove branches from `biconjQ` -- the convex short-circuit gained a route
+  * **Coverage, RE-MEASURED 2026-09-05** (fast bucket, `--coverage`). `QuaCon.m` **70.7% -> 100%**:
+    what was missing was its five constructor VALIDATORS and `disp`, and an untested validator is
+    the worst state a check can be in -- it passes forever whatever it does, and the constructor's
+    own header says the validation is the point. `domainIsConvexD.m` 100%, `isConvexQ.m` 92.4%,
+    `biconjQ.m` 91.0% (was 90.7%).
+    Item 1 did not REMOVE branches from `biconjQ` -- the convex short-circuit gained a route
     rather than losing one -- so the earlier guess that it would was wrong.
+    **`conjQ.m` 88.4% and `ratQ.m` 88.1% are now the lowest of the exact files.**
     What is left uncovered in `isConvexQ` is four INTERNAL-INVARIANT guards (a degenerate edge, a
     nonpositive vertex denominator, an edge with +infinity on both sides) plus the `iL == iR`
     skip, which no fixture exercises. They are assertions, not features; classify them in

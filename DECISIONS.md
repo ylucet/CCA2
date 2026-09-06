@@ -5036,3 +5036,30 @@ property: `PLQVCTest/testCreateDom_isDomBounded` listed all 19 `examples` domain
 `testExample16` listed `examples{16}` as convex. Neither is what the code must satisfy — the
 midpoint witness is — so both now say false and both point at the witness test. Exactly the failure
 mode umbrella CLAUDE.md section 7 describes: a golden value blocks the next correct answer.
+
+## 2026-09-05 — the BOUNDED non-convex multi-piece envelope is a gap, and now has a fixture
+
+**Found by sweeping**, not by reasoning: `.claude/biconjAllHSweep.m` runs `biconjQ` over every
+Hessian class x seven domain shapes, single- and multi-piece, and tabulates refusals alongside the
+three definition checks. 150 answers, 150 checked, 0 wrong, worst residual 2.2e-15 — so nothing
+`biconjQ` answers today is wrong. What the table shows instead is WHERE it declines.
+
+**The new one.** `PLQ:biconjQ:notImplemented` on a **bounded**, continuous, two-piece `f` whose
+pieces are both positive definite and whose kink across the shared edge is non-convex
+(`.claude/biconjKinkProbe.m`: the unit square split by its diagonal, `q0` and `q0 + c*l` with
+`c < 0`). This was believed to be covered by "the unbounded non-convex envelope" and it is not —
+the domain is a square. The envelope is not the lifted hull either, because a positive definite
+piece is not edge-concave, so it needs the general algorithm: a curved part from each piece plus an
+affine bridge across the kink. That bridge is where the irrational face lives, so this fixture and
+the edge-convex item are the same trigger for `AlgAlg` rather than two.
+
+**Why the corpus never showed it.** Every multi-piece fixture in `examples`/`examples2` is either
+convex or has an affine or negative semidefinite piece. The sweep's multi-piece fixtures are
+continuous BY CONSTRUCTION — `q0` on one side and `q0 + c*l` on the other, with `l` the shared
+edge's own linear form, so `l` vanishes there for every `c` — which is what let one knob sweep
+convex, flat and non-convex without ever producing a mesh that is not a function. That construction
+is the reusable part of this entry.
+
+**Everything else the sweep refuses is already named**: the indefinite piece
+(`notImplemented`, 36), a concave piece on an unbounded domain (`minusInfinity`, 55, a correct
+`-infinity`), and the unbounded finite case (`unbounded`, 11).

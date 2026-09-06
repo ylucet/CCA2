@@ -275,6 +275,75 @@ classdef QuaConTest < matlab.unittest.TestCase
 
         % ---- the constructor refuses what it cannot represent, by name --------------------------
 
+        function theSHAPEChecksRefuseAMalformedCallByName(testCase)
+        % The constructor's own header says the validation IS the point -- every downstream
+        % routine assumes canonical forms and in-range names, so a QuaCon that lies about either
+        % is a silent wrong answer rather than a crash. These five checks had no test, which for a
+        % validator is the worst state to be in: it passes forever whatever it does.
+        %
+        % Each mutation changes ONE thing about a mesh that is otherwise valid, so a failure names
+        % the check rather than the fixture.
+            [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
+
+            testCase.verifyError(@() QuaCon(V, E, Ec), 'QuaCon:nargin', ...
+                'seven arguments or none');
+
+            testCase.verifyError(@() QuaCon(V, E(:,1:2), Ec, fN, fD, F, FC), 'QuaCon:size', ...
+                'E must be ne x 3');
+            testCase.verifyError(@() QuaCon(V, E, Ec(1:2,:), fN, fD, F, FC), 'QuaCon:size', ...
+                'one conic per edge');
+            testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F(1:2,:), FC), 'QuaCon:size', ...
+                'one face pair per edge');
+
+            testCase.verifyError(@() QuaCon(V, E, Ec, fN, [fD; 1], F, FC), 'QuaCon:size', ...
+                'one denominator per face');
+            testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, [FC, FC]), 'QuaCon:size', ...
+                'one constraint list per face');
+
+            Ebad = E;  Ebad(1,1) = size(V,1) + 5;
+            testCase.verifyError(@() QuaCon(V, Ebad, Ec, fN, fD, F, FC), 'QuaCon:badEdge', ...
+                'an edge may not name a vertex that does not exist');
+
+            Vbad = V;  Vbad(1,1) = size(E,1) + 5;
+            testCase.verifyError(@() QuaCon(Vbad, E, Ec, fN, fD, F, FC), 'QuaCon:badVertexName', ...
+                'a vertex may not name an edge that does not exist');
+        end
+
+        function aFaceConstraintListIsCHECKEDBeforeItIsStored(testCase)
+        % The other two badConstraint arms: the wrong SHAPE, and an edge index out of range. The
+        % third arm (an unrecognised side) has its own test below.
+            [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
+
+            FCbad = FC;  FCbad{1} = [1 1 1];                 % three columns, not two
+            testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, FCbad), 'QuaCon:badConstraint');
+
+            FCbad = FC;  FCbad{1}(1,1) = size(E,1) + 5;      % an edge that does not exist
+            testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, FCbad), 'QuaCon:badConstraint');
+
+            FCbad = FC;  FCbad{1}(1,1) = 0;                  % ...and below the range too
+            testCase.verifyError(@() QuaCon(V, E, Ec, fN, fD, F, FCbad), 'QuaCon:badConstraint');
+        end
+
+        function dispSaysWhatIsThereAndNeverPretendsAVertexIsANumber(testCase)
+        % disp is the one routine a person reads when something is wrong, so it must survive the
+        % empty object and must not print vertex COORDINATES -- a QuaCon vertex is a NAME, and
+        % realising it is a quartic solve that disp has no business doing.
+            s0 = evalc('disp(QuaCon())');
+            testCase.verifySubstring(s0, 'empty', 'an empty QuaCon says so');
+
+            [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
+            qc = QuaCon(V, E, Ec, fN, fD, F, FC);
+            s1 = evalc('disp(qc)');
+            testCase.verifySubstring(s1, sprintf('%d vertices', qc.nv));
+            testCase.verifySubstring(s1, 'face 1:');
+            testCase.verifyEmpty(regexp(s1, '\d+\.\d', 'once'), ...
+                'no decimal coordinates: the vertices are names, not numbers');
+
+            % more than eight faces, so the tail is summarised rather than printed
+            big = QuaCon(V, E, Ec, repmat(fN(1,:), 10, 1), ones(10,1), F, repmat(FC(1), 10, 1));
+            testCase.verifySubstring(evalc('disp(big)'), 'more faces');
+        end
+
         function anUnrealisableVertexNameIsRefusedRatherThanStored(testCase)
         % Two lines meet in ONE point, so asking for the second is not a rounding question.
             [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
