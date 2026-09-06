@@ -608,6 +608,56 @@ classdef ratQTest < matlab.unittest.TestCase
                     sprintf('case %d: the conic is not a nonzero constant multiple of g1-g2', k));
             end
         end
+        % ---- the SYLVESTER RESULTANT -----------------------------------------------------------
+        % The oracle is what a resultant MEANS -- R(x0) = 0 exactly when the two polynomials share
+        % a root in y at x = x0 -- checked by exhibiting the shared root, not by comparing against
+        % another implementation of the same formula.
+
+        function theRESULTANTVanishesExactlyWhereTheyShareARootInY(testCase)
+        % P = y^2 - x  and  Q = y - x. They share a root in y when x = x^2, i.e. at x = 0 and
+        % x = 1, and nowhere else. So the resultant must be a nonzero multiple of x^2 - x.
+        %   P(i+1,j+1) = coeff of x^i y^j:  y^2 -> (1,3);  -x -> (2,1)
+            P = [0 0 1; -1 0 0];
+            Q = [0 1; -1 0];                       % y - x
+            R = ratQ.resultantY(P, Q);
+            testCase.verifyEqual(numel(R), 3, 'a quadratic in x');
+            testCase.verifyEqual(R/R(end), [0 -1 1], 'AbsTol', 0, 'proportional to x^2 - x');
+
+            % and the meaning, checked directly: at x = 2 the two have no common y
+            rootsP = roots([1 0 -2]);              % y^2 - 2
+            testCase.verifyGreaterThan(min(abs(rootsP - 2)), 0.1, ...
+                'y = x = 2 is not a root of y^2 - 2, so the resultant must not vanish at x = 2');
+            val = R(1) + R(2)*2 + R(3)*4;
+            testCase.verifyNotEqual(val, 0);
+        end
+
+        function theRESULTANTOfTwoCIRCLESIsTheirRadicalAxisCondition(testCase)
+        % Two unit circles, centres (0,0) and (2,0): x^2 + y^2 - 1 and (x-2)^2 + y^2 - 1. They meet
+        % only where the radical axis x = 1 crosses them, and there y^2 = 0 -- a double root. So the
+        % resultant in y must vanish only at x = 1, to order 2, i.e. be proportional to (x-1)^2.
+            P = [-1 0 1; 0 0 0; 1 0 0];            % x^2 + y^2 - 1
+            Q = [3 0 1; -4 0 0; 1 0 0];            % (x-2)^2 + y^2 - 1 = x^2 - 4x + 3 + y^2
+            R = ratQ.trim1(ratQ.resultantY(P, Q));
+            testCase.verifyEqual(numel(R), 3, 'quadratic in x');
+            testCase.verifyEqual(R/R(end), [1 -2 1], 'AbsTol', 0, 'proportional to (x-1)^2');
+        end
+
+        function theRESULTANTIsZeroWhenTheySHAREAFactor(testCase)
+        % A common factor means a common root for EVERY x, so the resultant vanishes identically.
+        % This is the degenerate case a caller has to handle, so it must be reported as the zero
+        % polynomial rather than as an error.
+            P = ratQ.polyMulBiv([0 1; 1 0], [0 1; 2 0]);   % (y+x)(y+2x)
+            Q = ratQ.polyMulBiv([0 1; 1 0], [0 1; 5 0]);   % (y+x)(y+5x)
+            R = ratQ.resultantY(P, Q);
+            testCase.verifyTrue(all(R == 0), 'a shared factor gives the zero resultant');
+        end
+
+        function theRESULTANTRefusesWhatItCannotEliminate(testCase)
+            testCase.verifyError(@() ratQ.resultantY([1 2 3].', [0 1]), 'ratQ:resultantDegree');
+            big = zeros(1, 6);  big(end) = 1;             % y^5
+            testCase.verifyError(@() ratQ.resultantY(big, big), 'ratQ:resultantTooLarge');
+        end
+
         % ---- the ARGUMENT VALIDATORS, which had no test ------------------------------------
         % Added 2026-09-05. ratQ is the layer everything exact rests on, and its guards are what
         % stand between an exact answer and a plausible wrong one -- but an untested validator is

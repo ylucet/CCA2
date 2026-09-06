@@ -108,9 +108,13 @@ function h = biconjQ(obj)
         % Two non-collinear segments have a 2-DIMENSIONAL convex hull, so co f is an ordinary
         % lower-hull answer read from the whole mesh. That is concaveEnvelope, unchanged; only the
         % GATHER differs, iterating edges instead of faces.
-        if isChain(obj)
+        if isChainMesh(obj)
             assertChainEdgeConcave(obj);
-            h = concaveEnvelope(obj);
+            if isChain(obj)
+                h = concaveEnvelope(obj);       % non-collinear: a 2-D hull
+            else
+                h = collinearChainEnvelope(obj); % collinear: a 1-D hull along its own span
+            end
             return
         end
         h = thinEnvelope(obj);
@@ -748,6 +752,13 @@ function h = quaPolAsQuaCon(obj)
     h = assembleQuaConCells(cells);
 end
 
+function tf = isChainMesh(obj)
+% objective: is this mesh a CHAIN at all -- two or more edges and no faces -- collinear or not?
+    tf = ~isempty(obj.F) && ~any(obj.F(:) ~= 0) && ~isempty(obj.E) && size(obj.E,1) >= 2 ...
+         && obj.nv >= 3;
+end
+
+% ------------------------------------------------------------------------------------------------
 function tf = isChain(obj)
 % objective: is this mesh a CHAIN -- a domain of dimension < 2 made of two or more edges whose
 %   convex hull is 2-dimensional?
@@ -809,6 +820,112 @@ function [vs, rays, bounded] = pieceGeometryB(obj, k)
     bounded = isempty(rays);
 end
 
+% ------------------------------------------------------------------------------------------------
+function h = collinearChainEnvelope(obj)
+% objective: co f when the domain is a COLLINEAR chain -- several segments on one line, each
+%   carrying its own quadratic.
+%
+% The hull of such a domain is still a SEGMENT, so the answer is thin and the problem is
+% one-dimensional in the line's parameter: co f is the 1-D lower convex hull of the lifted
+% vertices, which is piecewise AFFINE. Every edge has already been checked edge-concave, so each
+% sub-segment's lifted arc lies above its own chord and contributes only its endpoints -- the same
+% argument the 2-D case makes, one dimension down.
+%
+% EVERY CELL CARRIES THE LINE AS AN EQUALITY, exactly as thinEnvelope's single-segment case does (a
+% side of 0 means ON the curve), plus two inequalities cutting it to that hull piece's own parameter
+% range. So a k-piece hull is k cells, and thinEnvelope's segment is the k = 1 case.
+    [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
+    ne = size(obj.E,1);
+
+    % ---- the line, and a parameter along it ----------------------------------------------------
+    % Any two distinct vertices fix the direction; the chain is collinear, so the rest lie on it.
+    % The parameter t(x) = <x - A, d> is taken at NUMERATOR coordinates, so it is an integer and
+    % monotone along the line.
+    A = Vi(1,:).';
+    d = [];
+    for i = 2:size(Vi,1)
+        cand = ratQ.chk(Vi(i,:).' - A, 'chain direction');
+        if any(cand ~= 0), d = cand; break, end
+    end
+    if isempty(d)
+        error('PLQ:biconjQ:degenerate', 'every vertex of the chain is the same point.');
+    end
+    g = gcd(abs(d(1)), abs(d(2)));  if g > 1, d = d / g; end
+
+    % ---- the lifted vertices, over ONE denominator ---------------------------------------------
+    % A vertex shared by two edges takes the SMALLER of the two values, for the reason
+    % concaveEnvelope gives: the envelope is of cl f, and the lower hull is what the smaller lifted
+    % point contributes.
+    Lden = 1;
+    for j = 1:ne, Lden = lcm(Lden, obj.fD(j)); end
+    Dl = ratQ.chk(2 * Lden * vd^2, 'lift denominator');
+
+    lifted = containers.Map('KeyType', 'double', 'ValueType', 'double');
+    for j = 1:ne
+        [fN, fD] = obj.faceQ(j);
+        Hn = [fN(5) fN(6); fN(6) fN(7)];
+        Ln = [fN(8); fN(9)];  kn = fN(10);
+        scale = ratQ.chk(Lden / fD, 'denominator scaling');
+        for e = 1:2
+            iv = obj.E(j,e);
+            v  = Vi(iv,:).';
+            qv = ratQ.chk(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), 'vertex value');
+            if ~isKey(lifted, iv) || qv < lifted(iv), lifted(iv) = qv; end
+        end
+    end
+
+    vs = cell2mat(keys(lifted)).';
+    m  = numel(vs);
+    T  = zeros(m,1);  Z = zeros(m,1);
+    for i = 1:m
+        T(i) = ratQ.chk((Vi(vs(i),:).' - A).' * d, 'chain parameter');
+        Z(i) = lifted(vs(i));
+    end
+    [T, ord] = sort(T);  Z = Z(ord);
+
+    % ---- the 1-D LOWER hull of (T, Z), by integer cross products --------------------------------
+    % Monotone chain: walk in increasing T and pop while the last two and the new point do not turn
+    % upward. Every predicate is an integer sign, so the hull is DECIDED.
+    st = zeros(0,1);
+    for i = 1:m
+        while numel(st) >= 2
+            o = st(end-1);  a1 = st(end);
+            cr = ratQ.chk((T(a1)-T(o))*(Z(i)-Z(o)) - (Z(a1)-Z(o))*(T(i)-T(o)), 'hull turn');
+            if cr <= 0, st(end) = []; else, break, end
+        end
+        st(end+1) = i; %#ok<AGROW>
+    end
+    if numel(st) < 2
+        error('PLQ:biconjQ:degenerate', 'the collinear chain produced fewer than two hull points.');
+    end
+
+    % ---- one cell per hull piece ----------------------------------------------------------------
+    n0 = [d(2); -d(1)];                                    % normal to the line
+    c0 = ratQ.chk(-(n0.' * A), 'line offset');
+    onLine = [ratQ.chk(vd*n0(1),'l1'), ratQ.chk(vd*n0(2),'l2'), c0];
+    Ad = ratQ.chk(A.' * d, 'anchor parameter');
+
+    cells = struct('num', {}, 'den', {}, 'con', {});
+    for k = 1:numel(st)-1
+        p = st(k);  q = st(k+1);
+        DT = ratQ.chk(T(q) - T(p), 'hull run');
+        DZ = ratQ.chk(Z(q) - Z(p), 'hull rise');
+        % Z(x)*DT = DZ*vd*<d,x> + (Z_p*DT - DZ*(A.d + T_p)),  over Dl*DT.
+        num = [0 0 0 0, 0, 0, 0, ...
+               ratQ.chk(DZ*vd*d(1), 'c8'), ratQ.chk(DZ*vd*d(2), 'c9'), ...
+               ratQ.chk(Z(p)*DT - DZ*(Ad + T(p)), 'c10')];
+        den = ratQ.chk(Dl * DT, 'cell denominator');
+        % t(x) >= T_p and t(x) <= T_q, at ACTUAL coordinates (linear part scaled by vd).
+        lo = [ratQ.chk(vd*d(1),'s1'),  ratQ.chk(vd*d(2),'s2'),  ratQ.chk(-(Ad + T(p)),'s0')];
+        hi = [ratQ.chk(-vd*d(1),'t1'), ratQ.chk(-vd*d(2),'t2'), ratQ.chk(Ad + T(q),'t0')];
+        con = [ratQ.conic([0 0 0, onLine]), 0; ...
+               ratQ.conic([0 0 0, lo]), sgnOfB(lo, +1); ...
+               ratQ.conic([0 0 0, hi]), sgnOfB(hi, +1)];
+        cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
+    end
+    h = assembleQuaConCells(cells);
+end
+
 function h = thinEnvelope(obj)
 % objective: co f when the DOMAIN itself has dimension < 2 -- a needle or a single segment.
 %
@@ -847,15 +964,14 @@ function h = thinEnvelope(obj)
     end
 
     if size(obj.E,1) ~= 1
-        % Only a COLLINEAR chain reaches this now: a non-collinear one has a 2-D hull and is routed
-        % to concaveEnvelope before thinEnvelope is called at all. A collinear chain is genuinely
-        % thin -- its hull is still a segment -- so it wants this routine's H-form equality side
-        % over the whole span, with the pieces folded along it. That is a 1-D envelope of several
-        % quadratics, not the 2-D hull, and it is not written.
+        % UNREACHABLE, and kept as an assertion rather than deleted. Every chain -- collinear or
+        % not -- is routed before thinEnvelope is called: a non-collinear one to concaveEnvelope's
+        % 2-D hull, a collinear one to collinearChainEnvelope's 1-D hull along its own span. So a
+        % multi-edge mesh arriving HERE means the routing above let one through.
         error('PLQ:biconjQ:chainNotImplemented', ...
-            ['a COLLINEAR chain of %d edges is thin, so its envelope is the 1-D fold along its ' ...
-             'own span rather than a 2-D hull. A non-collinear chain is handled by ' ...
-             'concaveEnvelope and never reaches here.'], size(obj.E,1));
+            ['a chain of %d edges reached thinEnvelope, which handles only a single segment. ' ...
+             'Chains are routed before this point, so this is a defect in that routing.'], ...
+            size(obj.E,1));
     end
     if obj.E(1,3) == 0
         error('PLQ:biconjQ:unbounded', ...

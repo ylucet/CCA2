@@ -268,13 +268,52 @@ classdef biconjQTest < matlab.unittest.TestCase
             end
         end
 
-        function aCOLLINEARChainIsStillThinAndIsRefusedByName(testCase)
-        % The boundary of the case above. examples2{4} is three collinear points, so its hull is
-        % still a SEGMENT -- the answer is thin, wants an H-form equality side, and is a 1-D fold
-        % of two quadratics along one span rather than a 2-D lower hull. Refused by its own name so
-        % that the reachable and unreachable halves of the chain case stay distinguishable.
+        function aCOLLINEARChainIsTheONEDIMENSIONALHullAlongItsOwnSpan(testCase)
+        % A collinear chain's hull is still a SEGMENT, so the answer is thin: the 1-D lower convex
+        % hull of the lifted vertices, piecewise affine, every cell carrying the line as an H-form
+        % EQUALITY. thinEnvelope's single segment is the one-piece case of exactly this.
+        %
+        % Fixture, whose hull can be read off by hand: (-1,0)-(0,0) carries -x^2 and (0,0)-(2,0)
+        % carries 0, so the lifted points are (-1,-1), (0,0) and (2,0) in (t,z). The middle one
+        % lies ABOVE the chord from (-1,-1) to (2,0) -- that chord is at -2/3 when t = 0 -- so it
+        % is dominated and the hull is the single chord
+        %
+        %       co f(x,0) = -1 + (x+1)/3   on  -1 <= x <= 2.
+            f = QuaPol([-1 0; 0 0; 2 0], [1 2 1; 2 3 1], ...
+                       [0 0 0 0, -2, 0, 0, 0, 0, 0; 0 0 0 0, 0, 0, 0, 0, 0, 0], [0 0; 0 0]);
+            h = biconjQ(f);
+            testCase.verifyEqual(h.nf, 1, 'the middle vertex is dominated, so one cell');
+
+            X = [-1 0; -0.5 0; 0 0; 1 0; 2 0];
+            testCase.verifyEqual(h.eval(X), -1 + (X(:,1)+1)/3, 'AbsTol', 1e-12, ...
+                'co f is the chord');
+            testCase.verifyLessThanOrEqual(h.eval(X), f.eval(X) + 1e-12, 'co f <= f');
+            testCase.verifyEqual(h.eval([-1 0; 2 0]), f.eval([-1 0; 2 0]), 'AbsTol', 1e-12, ...
+                'with equality at the two extreme points of the span');
+
+            testCase.verifyTrue(all(isinf(h.eval([0 1; -0.5 0.2; 3 0]))), ...
+                'the domain stays THIN: off the line, and beyond either end, +infinity');
+        end
+
+        function aCOLLINEARChainWhoseHullHasTWOPiecesGetsTWOCells(testCase)
+        % The multi-cell path. Two affine edges meeting in a V: -2x on [0,1] and 2x-4 on [1,2],
+        % so the lifted points are (0,0), (1,-2), (2,0) and ALL THREE are on the lower hull. f is
+        % already convex, so co f = f, and the answer must be two cells rather than one chord.
+            f = QuaPol([0 0; 1 0; 2 0], [1 2 1; 2 3 1], ...
+                       [0 0 0 0, 0, 0, 0, -2, 0,  0; ...
+                        0 0 0 0, 0, 0, 0,  2, 0, -4], [0 0; 0 0]);
+            h = biconjQ(f);
+            testCase.verifyEqual(h.nf, 2, 'both hull pieces survive');
+            X = [0 0; 0.5 0; 1 0; 1.5 0; 2 0];
+            testCase.verifyEqual(h.eval(X), f.eval(X), 'AbsTol', 1e-12, ...
+                'f is already convex along the span, so co f = f');
+        end
+
+        function aCOLLINEARChainCurvingUPWARDIsStillRefused(testCase)
+        % examples2{4}, which carries x^2 along both its edges: the lifted arcs dip below their own
+        % chords, so the vertex values do not determine the envelope, exactly as in the 2-D case.
             P = QuaPol.examples2();
-            testCase.verifyError(@() biconjQ(P{4}), 'PLQ:biconjQ:chainNotImplemented');
+            testCase.verifyError(@() biconjQ(P{4}), 'PLQ:biconjQ:notImplemented');
         end
 
         function aRAYDomainIsRefusedByName(testCase)

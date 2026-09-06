@@ -189,13 +189,18 @@ answer; only the GATHER changes, iterating edges instead of faces. Row *j* of `f
 function -- `QuaPol.eval` already reads it that way -- so the `ambiguousChain` refusal, which said
 there was no `F` to decide which edge took which, rested on a false premise.
 
-**`chainNotImplemented` was unreachable**: `ambiguousChain` fired first for every well-formed
-chain, since a chain must carry one row per edge for `eval` to work. It now names the COLLINEAR
-chain, which is genuinely thin (its hull is still a segment) and wants thinEnvelope's H-form
-equality side over the whole span -- a 1-D fold of several quadratics, still unwritten.
+**The COLLINEAR chain landed too, 2026-09-06.** Its hull is still a SEGMENT, so the answer is thin:
+the 1-D lower convex hull of the lifted vertices, piecewise affine, every cell carrying the line as
+an H-form EQUALITY. `thinEnvelope`'s single segment is the one-piece case of exactly that, and
+`collinearChainEnvelope` is the k-piece one. Pinned by two fixtures whose hulls are readable by
+hand -- one where the middle vertex is dominated (one cell, the chord) and one V where all three
+survive (two cells).
+
+`chainNotImplemented` is now UNREACHABLE and kept as an assertion: every chain is routed before
+`thinEnvelope` is called, so a multi-edge mesh arriving there is a routing defect.
 
 Every chain in `examples2` carries `x^2` or `y^2` along its edges, so all of them curve UPWARD and
-are correctly refused; the corpus cannot exercise the new path and a fixture was written for it.
+are correctly refused; the corpus cannot exercise either new path and fixtures were written for both.
 
 ### 5. Smaller, and worth doing alongside
 

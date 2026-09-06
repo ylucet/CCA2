@@ -470,6 +470,131 @@ classdef ratQ
             C = ratQ.chk(C, 'polynomial product');
         end
 
+        function R = resultantY(P, Q)
+        % objective: the SYLVESTER RESULTANT of two bivariate integer polynomials with respect to
+        %            y, exactly. R vanishes at exactly those x for which P(x,.) and Q(x,.) have a
+        %            common root in y -- which is what ELIMINATION means.
+        %
+        % [input]  P, Q : integer matrices with P(i+1,j+1) the coefficient of x^i y^j. The two need
+        %                 not have the same size; trailing zero rows/columns are trimmed.
+        % [output] R    : 1 x k integer row, ASCENDING in x (R(i+1) is the coefficient of x^i).
+        %
+        % WHY THIS EXISTS. The convex envelope's bridge face is defined by a system in the dual
+        % variable s that has no closed-form solution: the tie conic and the collinearity conic meet
+        % in up to four points, and the face is the relation between x and the value that survives
+        % eliminating s. `.claude/bridgeEliminationSpike.m` establishes that both conics are exact
+        % over Z; this is the routine that turns them into that relation. Nothing else in ratQ can:
+        % polyGcd decides whether two UNIVARIATE polynomials share a root, and the question here is
+        % for WHICH x two bivariate ones do.
+        %
+        % HOW. Written as polynomials in y whose coefficients are polynomials in x, the two have a
+        % common root in y exactly when the (m+n) x (m+n) Sylvester matrix is singular. Its entries
+        % are x-polynomials, so its determinant is an x-polynomial, and that determinant IS the
+        % resultant. Expanded by cofactors, which uses only integer multiply and add -- so the
+        % result is exact and no division, exact or otherwise, is ever performed.
+        %
+        % Cofactor expansion is factorial in the matrix size and that is deliberate: the sizes here
+        % are 4 (two conics) and the alternative, fraction-free Bareiss elimination, needs exact
+        % polynomial division, which is a second thing to get right for no benefit at n = 4. The
+        % size is capped rather than left to grow silently.
+            ratQ.chk(P, 'first polynomial');  ratQ.chk(Q, 'second polynomial');
+            P = ratQ.trim2(P);  Q = ratQ.trim2(Q);
+            m = size(P,2) - 1;              % degree in y
+            n = size(Q,2) - 1;
+            if m < 1 || n < 1
+                error('ratQ:resultantDegree', ...
+                    ['resultantY eliminates y, so both arguments must have degree >= 1 in it; ' ...
+                     'got %d and %d. A polynomial free of y has no root to share.'], m, n);
+            end
+            N = m + n;
+            if N > 8
+                error('ratQ:resultantTooLarge', ...
+                    ['the Sylvester matrix is %dx%d, and cofactor expansion is factorial in that. ' ...
+                     'Above 8 this wants Bareiss elimination instead.'], N, N);
+            end
+
+            % Sylvester matrix, entries are x-polynomials held as ASCENDING rows in a cell array.
+            S = cell(N, N);
+            [S{:}] = deal(0);
+            for r = 1:n                      % n shifted copies of P's y-coefficients, high to low
+                for j = 0:m
+                    S{r, r+j} = P(:, m-j+1).';
+                end
+            end
+            for r = 1:m                      % m shifted copies of Q's
+                for j = 0:n
+                    S{n+r, r+j} = Q(:, n-j+1).';
+                end
+            end
+            R = ratQ.polyDet(S);
+            R = ratQ.trim1(R);
+            R = ratQ.chk(R, 'resultant');
+        end
+
+        function d = polyDet(S)
+        % objective: the determinant of a square cell array whose entries are integer polynomials
+        %            (ASCENDING rows), by cofactor expansion along the first row. Exact.
+            n = size(S,1);
+            if n == 1, d = S{1,1}; return, end
+            d = 0;
+            for j = 1:n
+                if isscalar(S{1,j}) && S{1,j} == 0, continue, end
+                M = S([2:n], [1:j-1, j+1:n]); %#ok<NBRAK>
+                t = ratQ.polyMul1(S{1,j}, ratQ.polyDet(M));
+                if mod(j,2) == 0, t = -t; end
+                d = ratQ.polyAdd1(d, t);
+            end
+        end
+
+        function c = polyMul1(a, b)
+        % objective: multiply two UNIVARIATE integer polynomials held as ascending rows. Exact.
+        % Separate from polyMul, which is the BIVARIATE cubic-basis product and caps total degree.
+            if (isscalar(a) && a == 0) || (isscalar(b) && b == 0), c = 0; return, end
+            c = ratQ.chk(conv(a(:).', b(:).'), 'polynomial product');
+        end
+
+        function c = polyAdd1(a, b)
+        % objective: add two UNIVARIATE integer polynomials held as ascending rows, of any lengths.
+            a = a(:).';  b = b(:).';
+            k = max(numel(a), numel(b));
+            c = [a, zeros(1, k-numel(a))] + [b, zeros(1, k-numel(b))];
+        end
+
+        function C = polyMulBiv(A, B)
+        % objective: multiply two bivariate integer polynomials with NO degree cap, in the same
+        %            (i+1,j+1) = coeff of x^i y^j layout resultantY uses.
+        %
+        % Separate from polyMul, which is the CUBIC-BASIS product and raises above total degree 3 --
+        % correct for substAffine's fixed basis, and useless for building resultant test fixtures.
+            ratQ.chk(A, 'first factor');  ratQ.chk(B, 'second factor');
+            C = zeros(size(A,1)+size(B,1)-1, size(A,2)+size(B,2)-1);
+            for i1 = 1:size(A,1)
+                for j1 = 1:size(A,2)
+                    if A(i1,j1) == 0, continue, end
+                    for i2 = 1:size(B,1)
+                        for j2 = 1:size(B,2)
+                            if B(i2,j2) == 0, continue, end
+                            C(i1+i2-1, j1+j2-1) = C(i1+i2-1, j1+j2-1) + A(i1,j1)*B(i2,j2);
+                        end
+                    end
+                end
+            end
+            C = ratQ.chk(C, 'bivariate product');
+        end
+
+        function A = trim2(A)
+        % objective: drop trailing all-zero rows and columns of a bivariate coefficient matrix, so
+        %            that its size states its actual degrees. Always leaves at least a 1x1.
+            while size(A,1) > 1 && all(A(end,:) == 0), A(end,:) = []; end
+            while size(A,2) > 1 && all(A(:,end) == 0), A(:,end) = []; end
+        end
+
+        function a = trim1(a)
+        % objective: the same for a univariate ascending row.
+            a = a(:).';
+            while numel(a) > 1 && a(end) == 0, a(end) = []; end
+        end
+
         function Ps = polyPow(A, kmax)
         % objective: the powers A^0 ... A^kmax of a bivariate polynomial, as a cell array with
         %            Ps{k+1} = A^k. A^0 is the constant 1.

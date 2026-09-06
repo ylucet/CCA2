@@ -93,6 +93,34 @@ classdef isConvexQTest < matlab.unittest.TestCase
                 'and rejected for the domain, which is what the witness exhibits');
         end
 
+        function aDomainNonConvexONLYATINFINITYIsRejectedByTheRECESSIONTest(testCase)
+        % The one branch of domainIsConvex that no corpus fixture reaches: a domain whose every
+        % VERTEX satisfies every boundary half-plane, while a recession DIRECTION does not. Without
+        % the homogeneous half of the test such a domain would be called convex, and `biconjQ`
+        % would hand a non-convex f back as its own envelope.
+        %
+        % The bottom edge (0,0)-(4,0) carries the face above it, so its half-plane is y >= 0. The
+        % ray based at (0,5) through (3,2) has DIRECTION (3,-3), which leaves that half-plane --
+        % but its direction POINT (3,2) satisfies y >= 0, and so does every other vertex. So the
+        % vertex loop cannot be what rejects this, which is what the first assertion below pins.
+            V = [0 0; 4 0; 0 5; 3 2; 5 0];
+            E = [1 2 1; 1 3 1; 3 4 0; 2 5 0];
+            F = [1 0; 0 1; 0 1; 1 0];
+            f = QuaPol(V, E, [0 0 0 0, 0, 0, 0, 0, 0, 0], F);
+
+            testCase.verifyEqual(f.dom.dim, 2, 'the fixture must be 2-dimensional');
+            testCase.verifyTrue(all(V(:,2) >= 0), ...
+                'every vertex satisfies edge 1''s half-plane, so the vertex loop passes');
+
+            [tf, why] = isConvexQ(f);
+            testCase.verifyFalse(tf);
+            testCase.verifySubstring(why, 'domain', 'rejected for the domain');
+            testCase.verifySubstring(why, 'edge 1', 'and specifically on the bottom edge');
+
+            % the doubles twin must agree -- it is the same algorithm over the same data
+            testCase.verifyFalse(domainIsConvexD(f.V, f.E, f.F));
+        end
+
         function everyNonconvexFixtureIsRejected(testCase)
             L = QuaPol.examplesNonconvex();
             for k = 1:numel(L)

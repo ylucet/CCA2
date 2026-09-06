@@ -5225,3 +5225,34 @@ MINIMISING `|D|` rather than a root of it, which is not the same thing and retur
 point of the circle (`z = -21.1` against `0.683`). And the sample `x` was picked rather than
 constructed, so it was not a bridge point; constructing `x` from a chosen `s` made the test
 self-validating (`t` comes back as the 0.5 it was built with).
+
+## 2026-09-06 — a SYLVESTER RESULTANT in `ratQ`, and why `polyGcd` could not serve
+
+**Built** (`ratQ.resultantY`, with `polyDet`, `polyMul1`, `polyAdd1`, `polyMulBiv`, `trim1`,
+`trim2`). It takes two bivariate integer polynomials, eliminates `y`, and returns the resultant as
+a univariate polynomial in `x` — which vanishes at exactly those `x` where the two share a root in
+`y`.
+
+**Why the existing machinery could not.** `polyGcd` decides whether two UNIVARIATE polynomials
+share a root. The question the envelope asks is different in kind: *for which `x`* do two BIVARIATE
+ones share a root? That is elimination, and nothing in `ratQ` did it.
+
+**How, and why cofactor expansion rather than Bareiss.** Written as polynomials in `y` whose
+coefficients are polynomials in `x`, the two share a root exactly when the Sylvester matrix is
+singular; its entries are `x`-polynomials, so its determinant is one, and that determinant IS the
+resultant. Cofactor expansion uses only integer multiply and add — **no division at all, exact or
+otherwise** — so exactness is immediate. It is factorial in the matrix size, which is why the size
+is capped at 8 rather than left to grow silently: the sizes this is for are 4 (two conics), and
+fraction-free Bareiss elimination would need exact polynomial division, a second thing to get right
+for no benefit at n = 4.
+
+**The oracle is what a resultant MEANS**, not another implementation of the same formula: `y^2 - x`
+and `y - x` share a root exactly at `x = 0` and `x = 1`, and the resultant comes out proportional to
+`x^2 - x`; two unit circles at distance 2 meet only on their radical axis, and the resultant comes
+out proportional to `(x-1)^2`; a shared factor gives the zero polynomial, which is the degenerate
+case a caller must handle and so is returned rather than raised.
+
+**This does not by itself build the implicit face.** The face needs `s1` AND `s2` eliminated from
+three equations, which is two successive resultants whose coefficients are polynomials in the
+REMAINING variables — so the next step is the same routine lifted to trivariate coefficients. That
+lifting is now the only algebraic piece missing.
