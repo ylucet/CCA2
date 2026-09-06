@@ -1,30 +1,28 @@
 # Session Handoff
 
-_2026-09-05_
+_2026-09-06_
 
 ## Blocked
-Nothing.
+- The IMPLICIT-FACE TYPE (`p(x,y,z)=0` + branch selector). External: your call on
+  adding a third value to `RETURN_TYPE.md`'s function axis. DECISIONS 2026-09-06.
 
 ## State
-- Branch `main` @ `1a4185c` — "docs: record the CRT refutation in DECISIONS.md"
-- Pushed: yes
-- Tests (2026-09-05): fast 488/0 (35 suites, ~190 s) · normal 13/0 (324 s) ·
-  slow 98/0 (963 s, run once overnight)
-- Known reds: none. Coverage, exact pipeline, fast bucket: 88.8%.
+- Branch `main` @ `ca208da` — "measure: ASSEMBLY's cost is the cell-pair count"
+- Pushed: no — 22 commits ahead of `origin/main`
+- Tests: fast 563/0 (09-06) · normal 13/0 (09-05) · slow 98/0 (09-06, **stale**:
+  predates the `ratQ` big-layer rewrite)
+- Known reds: none
 
 ## Next
-1. **UNANSWERED QUESTION, answer it first.** Which algorithm for the exact
-   piecewise convexity test, and does it follow Singh & Lucet (SIOPT 2021) or
-   Singh's 2019 thesis Algorithm 3, which `QuaPol.isEdgeConvex` cites? NEITHER
-   IS IN `reference/` — I have not read them. Do not restate the derivation
-   sketched in TODO.md as if it were theirs.
-2. `biconjQ` exact convexity test — unblocks all 8 fixtures the legacy envelope
-   answers and this one refuses. See TODO.md 2026-09-05 (biconj tasks), which
-   also names two LATENT smells in the existing `isConvex`/`isEdgeConvex`.
-3. Then: unbounded non-convex envelope; then edge-convex + `AlgAlg`.
+1. `bash .claude/suite.sh --slow -j 4` (~13 min). Stale gate, run it first.
+2. REGION LOGIC — which primal region a bridge face owns. Untouched, and the
+   only part of assembly with real content. Then one full envelope on a triangle
+   pair (~24 eliminations x 1-19 s each).
+3. If that is too slow: second filter (does `g1-g2` change sign on the cell
+   intersection), then cache cells by type. First filter cut only 1/3 to 1/2.
 
 ## Files
-- `TODO.md` 2026-09-05 — biconj tasks, overflow options, coverage
-- `conjQ.m` `biconjQ.m` — the exact operators
-- `ratQ.m` — arithmetic + degree-4 sign kernel (Sturm, signAt)
-- `.claude/*-probe.m` `*-sweep.m` `*-diff.m` — reproduce every number quoted
+- `ratQ.m` — resultant, BigInteger fallback, exact division
+- `.claude/bridgeCellProbe.m` — all four cell-pair kinds, verified
+- `.claude/cellPairFilterProbe.m` — cell-pair counts and the filter
+- `DECISIONS.md` — six refutations recorded this session
