@@ -69,6 +69,9 @@ function run1(name, A1, c1, d1, D1, A2, c2, d2, D2, ~, ~, ~)
         p = reduceZbig(p);
     catch e
         fprintf('%-28s %-9s %s (in the reduction)\n', name, sprintf('%.1f s', toc(t0)), e.identifier);
+        for q = 1:numel(e.stack)
+            disp(sprintf('        %-26s line %d', e.stack(q).name, e.stack(q).line)); %#ok<DSPS>
+        end
         return
     end
     deg = sprintf('(%d,%d,%d)', size(p,3)-1, size(p,4)-1, size(p,5)-1);
@@ -291,9 +294,9 @@ function q = reduceZbig(P)
     C = cell(1, nz);
     for k = 1:nz
         S.sz = [sz(1:4), 1];
-        S.c  = repmat({java.math.BigInteger.ZERO}, prod(S.sz), 1);
+        S.c  = cell(prod(S.sz), 1);      % empty IS zero -- ratQ's big convention since 2026-09-06
         for i = 1:numel(P.c)
-            if P.c{i}.signum() == 0, continue, end
+            if isempty(P.c{i}) || P.c{i}.signum() == 0, continue, end
             e = ratQ.linToSub(i, sz);
             if e(5) ~= k, continue, end
             S.c{ratQ.subToLin([e(1:4), 1], S.sz)} = P.c{i};

@@ -5572,3 +5572,37 @@ guessed: an implicit polynomial in `(x,y,z)` of degree between `(2,2,2)` and `(6
 coefficients, plus a branch selector (`t` in `[0,1]`). What remains before it can be built into
 `biconjQ` is assembly -- enumerating the cell pairs of two pieces, computing each face, and working
 out which primal region each one owns -- not algebra.
+
+## 2026-09-06 — the big layer's cost was ALLOCATION, not arithmetic; and BAREISS is refuted here
+
+**Item 3, measured before and after.** Profiling put 121 s of 124 in the determinant, and inside it
+`bigAdd` and `bigMul` at roughly 10 ms per call — for operations that do almost no arithmetic. The
+cause was representational: every result array was preallocated with
+`repmat({java.math.BigInteger.ZERO}, n, 1)`, creating tens of thousands of Java object references
+per call, when a 5-variable result is almost entirely zeros.
+
+**Zero is now the EMPTY CELL.** `cell(n,1)` allocates the same array for free. Measured on the same
+four cell pairs (shared machine, so treat the ratios rather than the seconds):
+
+| cell pair | before | after |
+|---|---|---|
+| isotropic | 1.1 s | 1.0 s |
+| anisotropic | 64 s | **19.4 s** |
+| vertex-clipped | 0.4 s | 0.2 s |
+| edge-clipped | 11.3 s | **2.6 s** |
+
+Same degrees, same residuals, same root gaps -- it is the same computation, allocated differently.
+
+**The invariant that convention needs, and it bit immediately:** a cancelling sum must be normalised
+back to EMPTY. Leaving a `BigInteger.ZERO` in a cell made `bigLeadTerm` read it as a term, so the
+leading exponent stopped decreasing and `bigDivExact` spun until its guard fired. `bigAdd` and
+`bigMul` now zero-normalise, and the readers check both conditions.
+
+**BAREISS IS REFUTED FOR THIS SHAPE, which is worth recording because it is the obvious idea.**
+Fraction-free elimination is O(n^3) against cofactor expansion's n!, so it looks like the answer at
+the 8x8 this needs. Measured, it was SLOWER on three of four cell pairs (anisotropic 51 s -> 82 s)
+for two compounding reasons: a Sylvester matrix is SPARSE and banded, so cofactor expansion skips
+most of its branches while Bareiss fills in; and every Bareiss step is an exact polynomial DIVISION,
+which profiling put at 115 s of 121. Cofactor expansion divides not at all. The implementation was
+removed rather than kept behind a flag -- an alternative that is slower everywhere it was tried is
+not a fallback, it is dead weight.

@@ -572,6 +572,13 @@ classdef ratQ
             for r = 1:N
                 for j = 1:N, Sb{r,j} = ratQ.toBig(S{r,j}); end
             end
+            % COFACTOR EXPANSION, NOT BAREISS, and that is measured rather than assumed. Bareiss is
+            % O(n^3) against cofactor's n!, so it looks like the obvious choice at the 8x8 this
+            % needs -- but it was SLOWER on three of four cell pairs (the anisotropic one 51 s ->
+            % 82 s) for two compounding reasons. A Sylvester matrix is SPARSE and banded, so
+            % cofactor expansion skips most of its n! branches, while Bareiss fills in. And every
+            % Bareiss step is an exact polynomial DIVISION, which profiling put at 115 s of 121 --
+            % cofactor expansion divides not at all.
             B = ratQ.bigContentFree(ratQ.polyDetBig(Sb));
         end
 
@@ -580,9 +587,9 @@ classdef ratQ
             sa = [A.sz, ones(1, nv - numel(A.sz))];
             sb = sa(ord);
             B.sz = sb;
-            B.c  = repmat({java.math.BigInteger.ZERO}, prod(sb), 1);
+            B.c  = cell(prod(sb), 1);
             for i = 1:numel(A.c)
-                if A.c{i}.signum() == 0, continue, end
+                if isempty(A.c{i}), continue, end
                 e = ratQ.linToSub(i, sa);
                 B.c{ratQ.subToLin(e(ord), sb)} = A.c{i};
             end
@@ -893,11 +900,14 @@ classdef ratQ
         function B = toBig(A)
         % objective: promote a double coefficient array to the big representation. Exact.
             ratQ.chk(A, 'value to promote');
+            % ZERO IS THE EMPTY CELL, not a BigInteger.ZERO object. Measured: filling a result
+            % array with Java zero-references cost 10 ms per add or multiply and dominated the whole
+            % elimination, because a 5-variable result has tens of thousands of slots and almost all
+            % of them are zero. cell(n,1) allocates them empty for free.
             B.sz = size(A);
             B.c  = cell(numel(A), 1);
-            Z = java.math.BigInteger.ZERO;
             for i = 1:numel(A)
-                if A(i) == 0, B.c{i} = Z; else, B.c{i} = java.math.BigInteger.valueOf(int64(A(i))); end
+                if A(i) ~= 0, B.c{i} = java.math.BigInteger.valueOf(int64(A(i))); end
             end
         end
 
@@ -921,7 +931,7 @@ classdef ratQ
             A = zeros(B.sz);
             for i = 1:numel(B.c)
                 v = B.c{i};
-                if v.signum() == 0, continue, end
+                if isempty(v) || v.signum() == 0, continue, end
                 if v.abs().bitLength() > 52
                     error('ratQ:overflow', ...
                         ['a coefficient needs %d bits, past the 53 a double holds exactly. The ' ...
@@ -940,15 +950,17 @@ classdef ratQ
             sb = [B.sz, ones(1, nd - numel(B.sz))];
             sc = sa + sb - 1;
             C.sz = sc;
-            C.c  = repmat({java.math.BigInteger.ZERO}, prod(sc), 1);
-            ia = find(~cellfun(@(v) v.signum() == 0, A.c));
-            ib = find(~cellfun(@(v) v.signum() == 0, B.c));
+            C.c  = cell(prod(sc), 1);
+            ia = find(~cellfun(@isempty, A.c));
+            ib = find(~cellfun(@isempty, B.c));
             for p1 = ia(:).'
                 ea = ratQ.linToSub(p1, sa);
                 for p2 = ib(:).'
                     eb = ratQ.linToSub(p2, sb);
                     k  = ratQ.subToLin(ea + eb - 1, sc);
-                    C.c{k} = C.c{k}.add(A.c{p1}.multiply(B.c{p2}));
+                    t  = A.c{p1}.multiply(B.c{p2});
+                    if isempty(C.c{k}), C.c{k} = t; else, C.c{k} = C.c{k}.add(t); end
+                    if C.c{k}.signum() == 0, C.c{k} = []; end
                 end
             end
         end
@@ -960,32 +972,36 @@ classdef ratQ
             sb = [B.sz, ones(1, nd - numel(B.sz))];
             sc = max(sa, sb);
             C.sz = sc;
-            C.c  = repmat({java.math.BigInteger.ZERO}, prod(sc), 1);
+            C.c  = cell(prod(sc), 1);
             for i = 1:numel(A.c)
-                if A.c{i}.signum() == 0, continue, end
+                if isempty(A.c{i}), continue, end
                 k = ratQ.subToLin(ratQ.linToSub(i, sa), sc);
-                C.c{k} = C.c{k}.add(A.c{i});
+                if isempty(C.c{k}), C.c{k} = A.c{i}; else, C.c{k} = C.c{k}.add(A.c{i}); end
+                if C.c{k}.signum() == 0, C.c{k} = []; end
             end
             for i = 1:numel(B.c)
-                if B.c{i}.signum() == 0, continue, end
+                if isempty(B.c{i}), continue, end
                 k = ratQ.subToLin(ratQ.linToSub(i, sb), sc);
-                C.c{k} = C.c{k}.add(B.c{i});
+                if isempty(C.c{k}), C.c{k} = B.c{i}; else, C.c{k} = C.c{k}.add(B.c{i}); end
+                if C.c{k}.signum() == 0, C.c{k} = []; end
             end
         end
 
         function A = bigNeg(A)
-            for i = 1:numel(A.c), A.c{i} = A.c{i}.negate(); end
+            for i = 1:numel(A.c)
+                if ~isempty(A.c{i}), A.c{i} = A.c{i}.negate(); end
+            end
         end
 
         function A = bigContentFree(A)
         % objective: divide a big polynomial by the gcd of its coefficients.
             g = java.math.BigInteger.ZERO;
             for i = 1:numel(A.c)
-                if A.c{i}.signum() ~= 0, g = g.gcd(A.c{i}); end
+                if ~isempty(A.c{i}), g = g.gcd(A.c{i}); end
             end
             if g.signum() == 0 || g.equals(java.math.BigInteger.ONE), return, end
             for i = 1:numel(A.c)
-                if A.c{i}.signum() ~= 0, A.c{i} = A.c{i}.divide(g); end
+                if ~isempty(A.c{i}), A.c{i} = A.c{i}.divide(g); end
             end
         end
 
@@ -1012,7 +1028,7 @@ classdef ratQ
             sz = e + 1;
             if numel(sz) < 2, sz = [sz 1]; end
             B.sz = sz;
-            B.c  = repmat({java.math.BigInteger.ZERO}, prod(sz), 1);
+            B.c  = cell(prod(sz), 1);
             B.c{ratQ.subToLin(e + 1, sz)} = c;
         end
 
@@ -1023,8 +1039,12 @@ classdef ratQ
             e = [];  c = java.math.BigInteger.ZERO;
             sz = [A.sz, ones(1, nv - numel(A.sz))];
             best = [];
+            % EMPTY *OR* AN EXPLICIT ZERO. bigAdd normalises a cancelling sum back to empty, and
+            % this is the reader that depends on it: a BigInteger.ZERO left in a cell would be read
+            % as a term, the leading exponent would stop decreasing, and bigDivExact would spin --
+            % which is exactly what it did until the invariant was restored.
             for i = 1:numel(A.c)
-                if A.c{i}.signum() == 0, continue, end
+                if isempty(A.c{i}) || A.c{i}.signum() == 0, continue, end
                 ee = ratQ.linToSub(i, sz) - 1;
                 if isempty(best) || ratQ.lexGreater(ee, best)
                     best = ee;  c = A.c{i};
@@ -1052,7 +1072,7 @@ classdef ratQ
                 error('ratQ:divideByZero', 'the divisor is the zero polynomial.');
             end
             R = P;
-            Q = struct('sz', ones(1, max(2,nv)), 'c', {{java.math.BigInteger.ZERO}});
+            Q = struct('sz', ones(1, max(2,nv)), 'c', {{[]}});
             guard = 0;
             while true
                 [eR, cR] = ratQ.bigLeadTerm(R, nv);
@@ -1080,13 +1100,20 @@ classdef ratQ
             R = ratQ.resultantCore(P, Q, k, nv, true);
         end
 
+        function tf = bigIsZero(A)
+            tf = true;
+            for i = 1:numel(A.c)
+                if ~isempty(A.c{i}) && A.c{i}.signum() ~= 0, tf = false; return, end
+            end
+        end
+
         function d = polyDetBig(S)
         % objective: polyDetN in BigInteger. Same cofactor expansion, same recursion, no ceiling.
             n = size(S,1);
             if n == 1, d = S{1,1}; return, end
-            d = struct('sz', [1 1], 'c', {{java.math.BigInteger.ZERO}});
+            d = struct('sz', [1 1], 'c', {{[]}});
             for j = 1:n
-                if all(cellfun(@(v) v.signum() == 0, S{1,j}.c)), continue, end
+                if all(cellfun(@isempty, S{1,j}.c)), continue, end
                 M = S(2:n, [1:j-1, j+1:n]);
                 t = ratQ.bigMul(S{1,j}, ratQ.polyDetBig(M));
                 if mod(j,2) == 0, t = ratQ.bigNeg(t); end
