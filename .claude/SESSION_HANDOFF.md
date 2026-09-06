@@ -8,7 +8,7 @@ _2026-09-06_
 
 ## State
 - Branch `main` @ `ca208da` — "measure: ASSEMBLY's cost is the cell-pair count"
-- Pushed: no — 22 commits ahead of `origin/main`
+- Pushed: yes
 - Tests: fast 563/0 (09-06) · normal 13/0 (09-05) · slow 98/0 (09-06, **stale**:
   predates the `ratQ` big-layer rewrite)
 - Known reds: none
