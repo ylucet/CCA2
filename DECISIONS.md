@@ -5500,3 +5500,41 @@ it.
 **Next on this line:** apply the z-content reduction to the clipped results before judging them, and
 give the 5-variable path the same tightening the 4-variable one has. Neither is a new idea; both are
 already implemented elsewhere in the file.
+
+## 2026-09-06 (correction) — CLIPPING WORKS. The previous entry's failure was in the MEASUREMENT
+
+**Correcting the entry above, which reported the clipped cell pairs as "not verified" and
+speculated about a degenerate resultant.** That reading was wrong, and both causes were in the test
+rather than in the elimination:
+
+1. **`p` was judged before it was REDUCED.** The resultant carries a factor free of `z`, so the raw
+   `p` is the face polynomial times something that vanishes elsewhere too — which is exactly what
+   "vanishes on AND off the face" looks like. The z-content reduction was already implemented and
+   simply had not been applied on this path.
+2. **A fixed perturbation of `z` by 0.05 measures nothing** when the polynomial's terms nearly
+   cancel at that scale: both on and off the face read as ~1e-17. Replaced by a ROOT GAP — solve
+   `p(x,y,.) = 0` in `z` and ask how far the true face value is from the nearest root.
+
+With both corrected:
+
+| cell pair | degrees | on the face | root gap |
+|---|---|---|---|
+| isotropic, interior/interior | **(2,2,2)** | 1.7e-16 | **0.00e+00** |
+| **vertex-clipped**, interior/vertex | **(2,2,2)** | 1.5e-16 | **0.00e+00** |
+| **edge-clipped**, interior/edge | (5,4,3) | 5.4e-17 | 3.3e-15 |
+| anisotropic, interior/interior | — | overflow in the 5-variable form | — |
+
+**So clipping is done for three of the four cell-pair kinds, including BOTH clipped ones**, through
+the single general routine parametrised by each cell's conjugate. The isotropic pair comes out at
+`(2,2,2)` — the minimal quadric, matching the hand-derived closed form — straight from the general
+path, which is the strongest validation available for it.
+
+**Method note, and it is the third time this session.** Two consecutive readings of "the code is
+broken" were both the oracle. The tie sampler bisected along a ray and missed the conic; the
+separation test perturbed at a scale the polynomial could not resolve; and before either, `p` was
+being judged unreduced. **When a result looks wrong, check the measurement before the mathematics**
+— here that would have saved two rounds.
+
+**What is left on this line:** only the anisotropic pair in the 5-variable form, which overflows
+where the tighter hand-built 4-variable form succeeds. That is a tightening problem, not a
+correctness one, and the 4-variable form already shows what the tightening looks like.

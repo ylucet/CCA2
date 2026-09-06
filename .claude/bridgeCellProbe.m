@@ -30,7 +30,7 @@ function bridgeCellProbe()
 %   Z:  s'A1 s + 2c1's + 2d1 - 2*D1*<s,x> + 2*D1*z = 0
 
     a = [13; -7]/10;  c = -1/2;
-    fprintf('%-28s %-9s %-16s %-12s %s\n', 'cell pair', 'time', 'degrees(x,y,z)', 'on face', 'off face');
+    fprintf('%-28s %-9s %-16s %-12s %s\n', 'cell pair', 'time', 'degrees(x,y,z)', 'on face', 'root gap');
     fprintf('%s\n', repmat('-', 1, 86));
 
     % 1. isotropic, both interior. g1 = |s|^2/2; g2 = <s,a> + |s|^2/4 - c, cleared by 20.
@@ -60,6 +60,11 @@ function run1(name, A1, c1, d1, D1, A2, c2, d2, D2, ~, ~, ~)
         return
     end
     el  = toc(t0);
+
+    % REDUCE BEFORE JUDGING. The resultant carries a factor free of z, and until it comes off, p is
+    % not the face polynomial -- it is the face polynomial times something that vanishes elsewhere
+    % too. That is exactly what a "vanishes on AND off the face" reading looks like.
+    p = reduceZ(p);
     deg = sprintf('(%d,%d,%d)', size(p,3)-1, size(p,4)-1, size(p,5)-1);
 
     % ORACLE: points ON the bridge by construction -- s on the tie curve, x the midpoint of the two
@@ -74,7 +79,11 @@ function run1(name, A1, c1, d1, D1, A2, c2, d2, D2, ~, ~, ~)
         x  = 0.5*y1 + 0.5*y2;
         z  = s.'*x - (s.'*A1*s/2 + c1.'*s + d1)/D1;
         worstOn  = max(worstOn,  relAt(p, x(1), x(2), z));
-        worstOff = min(worstOff, relAt(p, x(1), x(2), z + 0.05));
+        % A SHARPER TEST THAN A FIXED PERTURBATION. Solve p(x,y,.) = 0 in z and ask whether the true
+        % face value is among its roots. A perturbation of 0.05 says nothing when the polynomial's
+        % terms nearly cancel at that scale -- both on and off the face read as ~0, which is how the
+        % clipped pairs first looked like failures.
+        worstOff = min(worstOff, rootGap(p, x(1), x(2), z));
         n = n + 1;
         if n >= 60, break, end
     end
@@ -206,4 +215,55 @@ end
 function s = sz(A)
     d = size(A);
     s = sprintf('%dx%dx%dx%dx%d', [d, ones(1,5-numel(d))]);
+end
+
+% ------------------------------------------------------------------------------------------------
+function q = reduceZ(p)
+% Remove p's content with respect to z, using the shortcut that is verified rather than assumed:
+% the content is contentFree of the LEADING z-coefficient, and it must divide every other one
+% exactly. If it does not, p is returned unchanged and the caller sees the unreduced numbers.
+    nz = size(p,5);
+    if nz < 2, q = p; return, end
+    C = cell(1,nz);
+    for k = 1:nz
+        C{k} = ratQ.trimN(reshape(p(1,1,:,:,k), size(p,3), size(p,4)));
+    end
+    g = ratQ.trimN(ratQ.contentFree(C{nz}));
+    Q = cell(1,nz);
+    try
+        for k = 1:nz, Q{k} = ratQ.polyDivExact(C{k}, g, 2); end
+    catch
+        q = p;  return                     % the shortcut's hypothesis does not hold here
+    end
+    w = 0;  h = 0;
+    for k = 1:nz, w = max(w, size(Q{k},1));  h = max(h, size(Q{k},2)); end
+    q = zeros(1, 1, w, h, nz);
+    for k = 1:nz
+        q(1, 1, 1:size(Q{k},1), 1:size(Q{k},2), k) = Q{k};
+    end
+    q = ratQ.trimN(ratQ.contentFree(q));
+end
+
+function gap = rootGap(p, x, y, ztrue)
+% The distance from the true face value to the NEAREST root of p(x,y,.) in z, relative to |ztrue|.
+% Small means p really does cut the face out there; large means it does not.
+    nz = size(p,5);
+    co = zeros(1, nz);
+    for l = 1:nz
+        v = 0;
+        for j = 1:size(p,3)
+            for k = 1:size(p,4)
+                cf = p(1,1,j,k,l);
+                if cf ~= 0, v = v + cf * x^(j-1) * y^(k-1); end
+            end
+        end
+        co(l) = v;
+    end
+    co = fliplr(co);                       % descending, for roots()
+    co = co(find(abs(co) > 0, 1):end);     %#ok<FNDSB>
+    if numel(co) < 2, gap = inf; return, end
+    r = roots(co);
+    r = r(abs(imag(r)) < 1e-8 * max(1, abs(real(r))));
+    if isempty(r), gap = inf; return, end
+    gap = min(abs(real(r) - ztrue)) / max(1, abs(ztrue));
 end
