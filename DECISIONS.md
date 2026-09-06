@@ -5538,3 +5538,37 @@ being judged unreduced. **When a result looks wrong, check the measurement befor
 **What is left on this line:** only the anisotropic pair in the 5-variable form, which overflows
 where the tighter hand-built 4-variable form succeeds. That is a tightening problem, not a
 correctness one, and the 4-variable form already shows what the tightening looks like.
+
+## 2026-09-06 — the bridge elimination is COMPLETE for every cell-pair kind
+
+**All four kinds now go through ONE routine**, parametrised only by each cell's conjugate
+`(A_k, c_k, d_k, D_k)`:
+
+| cell pair | degrees (x,y,z) | on the face | root gap | time |
+|---|---|---|---|---|
+| isotropic, interior/interior | (2,2,2) | 1.7e-16 | **0** | 1.1 s |
+| anisotropic, interior/interior | **(6,6,4)** | 1.4e-16 | **0** | 51 s |
+| vertex-clipped, interior/vertex | (2,2,2) | 1.5e-16 | **0** | 0.4 s |
+| edge-clipped, interior/edge | (5,4,3) | 5.4e-17 | 3.3e-15 | 11 s |
+
+The "root gap" is the distance from the true face value to the nearest root of `p(x,y,.)` in `z`.
+Zero means the face value IS a root, exactly.
+
+**The last failure was the same mistake as the one before it**, in a different place: the result was
+being converted to doubles BEFORE the z-content reduction, so `fromBig` was asked for the UNREDUCED
+answer — which needs more than 53 bits — when the reduced one fits comfortably. `bridgeAnisoBuild`
+already had this the right way round; the general routine did not. **Stay big until after the
+reduction** is now the rule in both places.
+
+**The anisotropic degrees are confirmed three ways.** `(6,6,4)` comes out of (i) the empirical
+degree scan in `.claude/bridgeAlgebraicProbe.m`, which found it by watching a singular value
+collapse and knew nothing about resultants; (ii) the hand-built 4-variable elimination in
+`.claude/bridgeAnisoBuild.m`; and (iii) this general 5-variable routine. Three unrelated methods,
+one answer.
+
+**What this means for the type decision.** The elimination that feeds it is now done for every cell
+pair the envelope can present, so the shape of a stored face is settled and MEASURED rather than
+guessed: an implicit polynomial in `(x,y,z)` of degree between `(2,2,2)` and `(6,6,4)`, with integer
+coefficients, plus a branch selector (`t` in `[0,1]`). What remains before it can be built into
+`biconjQ` is assembly -- enumerating the cell pairs of two pieces, computing each face, and working
+out which primal region each one owns -- not algebra.

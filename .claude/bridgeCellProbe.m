@@ -61,10 +61,16 @@ function run1(name, A1, c1, d1, D1, A2, c2, d2, D2, ~, ~, ~)
     end
     el  = toc(t0);
 
-    % REDUCE BEFORE JUDGING. The resultant carries a factor free of z, and until it comes off, p is
-    % not the face polynomial -- it is the face polynomial times something that vanishes elsewhere
-    % too. That is exactly what a "vanishes on AND off the face" reading looks like.
-    p = reduceZ(p);
+    % REDUCE BEFORE JUDGING, AND REDUCE IN BIG. The resultant carries a factor free of z, and until
+    % it comes off, p is not the face polynomial -- it is the face polynomial times something that
+    % vanishes elsewhere too, which is exactly what a "vanishes on AND off the face" reading looks
+    % like. The reduction happens in BigInteger because the unreduced answer need not fit a double.
+    try
+        p = reduceZbig(p);
+    catch e
+        fprintf('%-28s %-9s %s (in the reduction)\n', name, sprintf('%.1f s', toc(t0)), e.identifier);
+        return
+    end
     deg = sprintf('(%d,%d,%d)', size(p,3)-1, size(p,4)-1, size(p,5)-1);
 
     % ORACLE: points ON the bridge by construction -- s on the tie curve, x the midpoint of the two
@@ -186,7 +192,11 @@ function p = eliminateCellPair(A1, c1, d1, D1, A2, c2, d2, D2)
                 sz(C), sz(Dp), sz(Zp), sz(As), sz(Bs), sz(Ct), sz(Zt));
     end
 
-    p = ratQ.trimN(ratQ.fromBig(ratQ.bigContentFree(ratQ.resultantVarBig(Ct, Zt, 1, nv))));
+    % STAY BIG UNTIL AFTER THE REDUCTION. Converting here was what made the anisotropic pair
+    % "overflow": the UNREDUCED answer needs more than 53 bits while the reduced one does not, so
+    % fromBig was being asked for a number that was never meant to be returned. bridgeAnisoBuild
+    % already had this the right way round.
+    p = ratQ.bigContentFree(ratQ.resultantVarBig(Ct, Zt, 1, nv));
 end
 
 function T = subst(P, As, Bs, As2, Bs2, AB, nv)
@@ -266,4 +276,37 @@ function gap = rootGap(p, x, y, ztrue)
     r = r(abs(imag(r)) < 1e-8 * max(1, abs(real(r))));
     if isempty(r), gap = inf; return, end
     gap = min(abs(real(r) - ztrue)) / max(1, abs(ztrue));
+end
+
+% ------------------------------------------------------------------------------------------------
+function q = reduceZbig(P)
+% Remove the z-content in BigInteger and only then come back to doubles. The content is contentFree
+% of the LEADING z-coefficient -- a guess, VERIFIED by requiring it to divide every other one, with
+% bigDivExact raising if it does not.
+    nv = 5;
+    sz = [P.sz, ones(1, nv - numel(P.sz))];
+    nz = sz(5);
+    if nz < 2, q = ratQ.trimN(ratQ.fromBig(P)); return, end
+
+    C = cell(1, nz);
+    for k = 1:nz
+        S.sz = [sz(1:4), 1];
+        S.c  = repmat({java.math.BigInteger.ZERO}, prod(S.sz), 1);
+        for i = 1:numel(P.c)
+            if P.c{i}.signum() == 0, continue, end
+            e = ratQ.linToSub(i, sz);
+            if e(5) ~= k, continue, end
+            S.c{ratQ.subToLin([e(1:4), 1], S.sz)} = P.c{i};
+        end
+        C{k} = S;
+    end
+
+    g = ratQ.bigContentFree(C{nz});
+    M = struct('sz', ones(1,nv), 'c', {{java.math.BigInteger.ZERO}});
+    for k = 1:nz
+        Q = ratQ.bigDivExact(C{k}, g, nv);
+        e = zeros(1, nv);  e(5) = k - 1;
+        M = ratQ.bigAdd(M, ratQ.bigMul(Q, ratQ.bigMono(e, java.math.BigInteger.ONE, nv)));
+    end
+    q = ratQ.trimN(ratQ.fromBig(ratQ.bigContentFree(M)));
 end

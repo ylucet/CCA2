@@ -180,28 +180,29 @@ against 8e-4 to 2e-2 off the face. And `(6,6,4)` is exactly what the empirical d
 `s2`, giving a polynomial that ran and was wrong. Content reduction is free per EQUATION, never per
 coefficient of one. `ratQ.contentOf` exists for taking a COMMON factor.
 
-**CLIPPING WORKS for three of the four cell-pair kinds, including BOTH clipped ones.** One general
-routine parametrised by each cell's conjugate `(A_k, c_k, d_k, D_k)` -- the tangency point is that
-conjugate's gradient, so interior, EDGE (rank-1 `A_k`) and VERTEX (`A_k = 0`) are all the same
-code. A vertex cell is the EASY case, because `A_k = 0` always leaves `D` linear and substitutable.
+**THE BRIDGE ELIMINATION IS COMPLETE for every cell-pair kind**, through ONE routine parametrised
+only by each cell's conjugate `(A_k, c_k, d_k, D_k)` -- the tangency point is that conjugate's
+gradient, so interior, EDGE (rank-1 `A_k`) and VERTEX (`A_k = 0`) are all the same code, and a
+vertex cell is the EASY case because `A_k = 0` always leaves `D` linear and substitutable.
 
-| cell pair | degrees | on the face | root gap |
-|---|---|---|---|
-| isotropic, interior/interior | **(2,2,2)** | 1.7e-16 | **0** |
-| vertex-clipped | **(2,2,2)** | 1.5e-16 | **0** |
-| edge-clipped | (5,4,3) | 5.4e-17 | 3.3e-15 |
-| anisotropic, interior/interior | -- | overflows in the 5-variable form | -- |
+| cell pair | degrees | on the face | root gap | time |
+|---|---|---|---|---|
+| isotropic, int/int | (2,2,2) | 1.7e-16 | **0** | 1.1 s |
+| anisotropic, int/int | **(6,6,4)** | 1.4e-16 | **0** | 51 s |
+| vertex-clipped | (2,2,2) | 1.5e-16 | **0** | 0.4 s |
+| edge-clipped | (5,4,3) | 5.4e-17 | 3.3e-15 | 11 s |
 
-The isotropic pair comes out at `(2,2,2)` -- the minimal quadric, matching the hand-derived closed
-form -- straight from the GENERAL path.
+The root gap is the distance from the true face value to the nearest root of `p(x,y,.)` in `z`;
+zero means the face value IS a root, exactly. `(6,6,4)` is confirmed THREE ways -- the empirical
+degree scan, the hand-built 4-variable elimination, and this general 5-variable one.
 
-**An earlier entry called the clipped pairs unverified; that was the measurement, not the code.**
-`p` was being judged before the z-content reduction, and the separation test perturbed `z` at a
-scale the polynomial could not resolve. DECISIONS.md 2026-09-06 (correction) has both.
+**Two entries above called parts of this unverified; both were the MEASUREMENT.** Judging `p`
+before the z-content reduction, perturbing `z` at a scale the polynomial could not resolve, and
+converting to doubles before reducing. DECISIONS.md 2026-09-06 has all three.
 
-**What is left on this line:** only the anisotropic pair in the 5-variable form, which overflows
-where the tighter hand-built 4-variable form succeeds -- a tightening problem, not a correctness
-one, and the 4-variable form already shows what the tightening looks like.
+**What is left is ASSEMBLY, not algebra:** enumerate the cell pairs of two pieces, compute each
+face, and work out which primal region each one owns. Plus the type decision below, whose shape is
+now measured rather than guessed.
 
 **Then:** (a) a MODULAR gcd, still the right answer for `polyGcdBiv` though the verified shortcut
 means nothing needs it today; (b) the type decision, whose shape is now well-measured -- a face is
