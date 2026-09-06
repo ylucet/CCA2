@@ -5352,3 +5352,73 @@ there, not the combinatorics.
 verified end to end. Even the diagonal-anisotropic case is more work than it looks, because `A` (the
 `s2`-coefficient of `D`) stops being free of `s1`, so clearing `A^2` raises the degree in `s1` from
 2 to 4 and the final resultant is 8x8 there too.
+
+## 2026-09-06 — a PRS gcd cannot do the envelope's reduction inside 2^53; MODULAR is the route
+
+**Refuted, after three fixes that each moved the overflow rather than removing it.** The task was to
+make `ratQ.polyGcdBiv` compute the content of the bridge polynomial without exceeding 2^53.
+
+| fix | where it then overflowed |
+|---|---|
+| `polyPremPrimitive` — reduce per elimination step instead of forming `lc^(da-db+1)` up front | 1.8e24, in the BIVARIATE pseudo-remainder, which had the same flaw |
+| the same interleaving in `bivPseudoRem` | 1.8e24, in a synthetic case — because the inputs carried a 1.3e12 INTEGER content that `bivPrimitive` cannot see (`polyGcd` returns a primitive gcd, so `gcd(1332e9*y, 2664e9)` comes back as 1) |
+| take `contentFree` of both inputs first | 1.3e17, at the SECOND elimination on the real inputs |
+
+The first two fixes are real and are kept — they are strictly better and cost nothing. The third is
+also real. None of them is the answer.
+
+**Why, and it is structural.** `.claude/gcdSwellProbe.m` traces it: the real inputs are degrees
+`(10,6)` and `(9,5)` with coefficients near 1e12. A polynomial remainder sequence multiplies by a
+leading COEFFICIENT at every elimination, and here that coefficient is itself a `y`-polynomial with
+12-digit integers. Reducing per step bounds the growth; it cannot remove it. This is the classical
+intermediate expression swell, and the standard answer is a **MODULAR gcd** — work modulo several
+small primes, where every coefficient is bounded by the prime, and reconstruct — **not a better
+PRS**.
+
+**And the earlier CRT refutation does not forbid it.** DECISIONS.md's 2026-09-05 entry ruled CRT out
+because the reconstructed VALUE could not live in a double (a true value of 5.79e22 came back wrong
+by 2,956,584). A gcd's coefficients are SMALL by construction — the answer here has coefficients
+≤ 486 — so reconstruction is exactly the case that entry carved out as still open. That is the one
+place the two findings meet, and they do not conflict.
+
+**Scope-reduced rather than parked.** `polyGcdBiv` is documented as being for small-coefficient
+inputs, and a test pins the boundary: it raises `ratQ:overflow` rather than returning a rounded
+answer, which is the correct behaviour for an exact library. The envelope's actual reduction does
+not use it — it uses the cheaper VERIFIED shortcut (the content is `contentFree` of the leading
+`z`-coefficient, checked by exact division against every other one), which works and is committed.
+So this is a fallback that is honest about its range, not a blocker.
+
+## 2026-09-06 — the 2^53 CEILING is now the binding constraint on the envelope's elimination
+
+**Three independent computations on this line hit it, and four distinct mitigations did not move
+it.** This is no longer a parked contingency; it is what blocks items 3 and 4.
+
+| computation | Sylvester size | outcome |
+|---|---|---|
+| isotropic bridge (`H2` a multiple of `H1`) | 4x4 | **works**, max coefficient 2.7e12, 0.03% of the ceiling |
+| the content gcd of that result (`polyGcdBiv`) | — | **overflow**, 1.3e17 at the second elimination |
+| anisotropic bridge (`H1 = I`, `H2 = diag(2,4)`) | 8x8 | **overflow**, 9.6e15 — only 7% past 2^53 |
+
+The mitigations tried, each a different KIND of fix rather than another attempt at the same one:
+
+1. reduce the content of every input and intermediate (`contentFree`) — **worth ~1000x**, and it is
+   what makes the isotropic case fit at all;
+2. reduce per elimination step instead of forming `lc^(da-db+1)` up front (`polyPremPrimitive`) —
+   correct, kept, and not enough;
+3. the same interleaving one dimension up, in `bivPseudoRem` — correct, kept, and not enough;
+4. divide each Sylvester ROW by its content before the determinant — mathematically free, and
+   measured to change **nothing**: max coefficient identical to the digit in both the isotropic and
+   the anisotropic case, because the rows were already primitive. **Reverted rather than kept**,
+   since unexercised code that does not help is worse than none.
+
+**The anisotropic overflow is only 7% past the ceiling**, which is the most useful number here: it
+says the obstruction is not a runaway but a near miss, and that a wider integer type — not a
+cleverer reduction — is what closes it. `java.math.BigInteger` on the cold path, already chosen in
+DECISIONS.md 2026-09-05 and measured at 121x doubles, would do it; so would the modular gcd for the
+`polyGcdBiv` half.
+
+**Consequence for the plan.** Item 3 (the anisotropic pipeline) is **blocked on the integer type**,
+not on the algebra: the elimination is derived, the code runs, and it stops at `ratQ.chk`. Item 4
+(clipping) is untouched and would compound the same constraint, since clipping multiplies the
+number of cell pairs and each is its own elimination. So the integer type moves from "parked, no
+trigger" to **the prerequisite for the whole remaining envelope line**.

@@ -162,11 +162,27 @@ pair needs the 8x8 Sylvester, and that is affordable (cofactor expansion measure
 case is more work than it looks, because `A` stops being free of `s1`, so clearing `A^2` takes the
 degree in `s1` from 2 to 4 and the final resultant is 8x8 there too.
 
-**So the order from here:** (a) the anisotropic pipeline, reusing everything above; (b) CLIPPING,
-which changes the tie set cell by cell and is untouched; (c) the type decision, whose shape is now
-known -- a face is `(2,2,2)`-ish with small integer coefficients plus a branch selector. The
-lattice question (a third value on `RETURN_TYPE.md`'s function axis, and an `eval` that
-root-solves) is unchanged and still yours.
+**BLOCKED ON THE INTEGER TYPE as of 2026-09-06, and that is a change of status.** Three
+computations on this line hit the 2^53 ceiling and four distinct mitigations did not move it:
+
+  * isotropic bridge, 4x4 resultant -- **works**, 2.7e12, 0.03% of the ceiling;
+  * the content gcd of that result -- overflow at 1.3e17 (PRS is the wrong algorithm; a MODULAR
+    gcd is the route, and the 2026-09-05 CRT refutation does not forbid it because a gcd's
+    coefficients are small);
+  * **anisotropic bridge, 8x8 resultant -- overflow at 9.6e15, only 7% past 2^53.**
+
+That last number is the useful one: a near miss, not a runaway. So a WIDER INTEGER TYPE closes it,
+and no amount of further reduction will. `java.math.BigInteger` on the cold path is already the
+chosen answer (DECISIONS.md 2026-09-05, measured at 121x doubles) and the trigger it was waiting
+for has now fired three times.
+
+**So the order from here:** (a) the integer type, which everything else now waits on;
+(b) the anisotropic pipeline, which is derived and coded and stops only at `ratQ.chk`;
+(c) CLIPPING, untouched, and which compounds the same constraint since it multiplies the number of
+cell pairs and each is its own elimination; (d) the type decision, whose shape is known -- a face
+is `(2,2,2)`-ish with small integer coefficients plus a branch selector. The lattice question (a
+third value on `RETURN_TYPE.md`'s function axis, and an `eval` that root-solves) is unchanged and
+still yours.
 
 ### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 

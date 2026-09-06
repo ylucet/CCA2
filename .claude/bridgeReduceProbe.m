@@ -43,6 +43,18 @@ function bridgeReduceProbe()
     end
     fprintf('   verified: it divides every z-coefficient exactly\n');
 
+    % AND THE GENERAL ROUTE, which is the point of polyPremPrimitive. Before it, polyGcdBiv
+    % overflowed here at 3.3e16; it should now agree with the shortcut instead of failing.
+    t0 = tic;
+    try
+        gg = C{1};
+        for k = 2:nz, gg = ratQ.polyGcdBiv(gg, C{k}); end
+        gg = ratQ.trimN(ratQ.contentFree(gg));
+        fprintf('   polyGcdBiv also succeeds (%.2f s) and agrees: %d\n', toc(t0), isequal(gg, g));
+    catch e
+        fprintf('   polyGcdBiv still fails (%.2f s): %s\n', toc(t0), e.identifier);
+    end
+
     % divide it out, coefficient by coefficient
     M = zeros(1, size(p,2), size(p,3), nz);
     for k = 1:nz

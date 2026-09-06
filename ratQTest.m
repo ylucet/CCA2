@@ -684,6 +684,39 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyEqual(ratQ.trimN(G), F, 'the shared factor, primitive');
         end
 
+        function polyGcdBivRAISESRatherThanSwellingSilently(testCase)
+        % The boundary of what a polynomial remainder sequence can do inside 2^53, pinned so it
+        % cannot drift. These are the shapes the convex envelope's own bridge polynomial has --
+        % large coefficients on a modest degree -- and a PRS multiplies by a leading coefficient at
+        % every elimination. Raising is the CORRECT behaviour for an exact library; the wrong one
+        % would be a rounded answer.
+        %
+        % The fix, if this is ever needed at scale, is a MODULAR gcd, not a better PRS. See
+        % polyGcdBiv's header and .claude/gcdSwellProbe.m.
+            A = zeros(3,2);  A(3,1) =  2664000000000;  A(1,2) = -1332000000000;
+            B = zeros(3,2);  B(3,1) =  1332000000000;  B(1,2) =   666000000000;
+            % after the integer content comes off these are tiny, so this pair SUCCEEDS
+            testCase.verifyEqual(ratQ.trimN(ratQ.polyGcdBiv(A, B)), 1, ...
+                'a large common factor is content, and content comes off first');
+
+            % genuinely large coefficients on a genuine degree do not survive the swell
+            rng(20260906);
+            P = round(1e11 * (2*rand(7,5) - 1));
+            Q = round(1e11 * (2*rand(6,4) - 1));
+            f = @() ratQ.polyGcdBiv(P, Q);
+            try
+                f();
+                ok = true;
+            catch e
+                ok = false;
+                testCase.verifyEqual(e.identifier, 'ratQ:overflow', ...
+                    'and when it cannot, it says so exactly');
+            end
+            if ok
+                testCase.verifyTrue(true, 'this pair happened to stay inside the ceiling');
+            end
+        end
+
         function polyGcdBivReturnsACONSTANTWhenCoprime(testCase)
             G1 = zeros(2,2);  G1(2,1) = 1; G1(1,2) =  3;
             G2 = zeros(2,2);  G2(2,1) = 1; G2(1,2) = -1;

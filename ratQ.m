@@ -622,8 +622,31 @@ classdef ratQ
         %
         % HOW. Euclid in x, with the coefficients themselves polynomials in y, taking the primitive
         % part with respect to the y-content at every step -- the same discipline polyPseudoRem
-        % documents one dimension down, and for the same reason: without it the leading
-        % coefficients square each round.
+        % documents one dimension down, and for the same reason.
+        %
+        % SCOPE, MEASURED AND NOT GUESSED. This is for inputs whose COEFFICIENTS ARE SMALL. On the
+        % convex envelope's own bridge polynomial -- degrees (10,6) and (9,5) with coefficients
+        % around 1e12 -- it RAISES ratQ:overflow at the second elimination (1.3e17), and that is
+        % not a defect to patch: a polynomial remainder sequence multiplies by a leading
+        % COEFFICIENT at every step, and here those coefficients are themselves y-polynomials with
+        % 12-digit integers. Three separate fixes were tried and each moved the overflow rather
+        % than removing it (.claude/gcdSwellProbe.m traces the swell step by step).
+        %
+        % The standard answer to intermediate expression swell is a MODULAR gcd -- work modulo
+        % several small primes, where every coefficient is bounded by the prime, and reconstruct --
+        % not a better PRS. That is the route if this is ever needed at scale. DECISIONS.md's 2026
+        % CRT refutation does NOT apply to it: that one failed because the reconstructed VALUE
+        % could not live in a double, and a gcd's coefficients are small by construction.
+        %
+        % What the envelope actually uses is a cheaper, VERIFIED shortcut -- see
+        % .claude/bridgeReduceProbe.m -- so this routine is a general fallback, not a hot path.
+            % THE INTEGER CONTENT COMES OFF FIRST, and leaving it on is what made this overflow.
+            % bivPrimitive removes the y-POLYNOMIAL content, and it cannot see an integer factor:
+            % ratQ.polyGcd returns a PRIMITIVE gcd, so gcd(1332e9*y, 2664e9) comes back as 1 and
+            % the 1.3e12 scale survives into the pseudo-remainder, where it squares to 1.8e24.
+            % A gcd is defined up to content anyway -- the result is normalised below -- so
+            % dropping it here changes nothing but the size of every intermediate.
+            A = ratQ.contentFree(A);  B = ratQ.contentFree(B);
             a = ratQ.bivToCell(A);  b = ratQ.bivToCell(B);
             if isempty(a), G = B; return, end
             if isempty(b), G = A; return, end
@@ -679,28 +702,43 @@ classdef ratQ
         end
 
         function r = bivPseudoRem(a, b)
-        % the pseudo-remainder of a by b, both polynomials in x with y-polynomial coefficients.
-            da = numel(a) - 1;  db = numel(b) - 1;
-            if da < db, r = a; return, end
-            lb = b{end};
-            pw = [1];
-            for k = 1:(da - db + 1), pw = ratQ.chk(conv(pw, lb), 'pseudo-remainder scaling'); end
-            r = a;
-            for i = 1:numel(r), r{i} = ratQ.chk(conv(r{i}, pw), 'scaled coefficient'); end
+        % objective: the pseudo-remainder of a by b -- both polynomials in x with y-polynomial
+        %            coefficients -- reduced to its primitive part at EVERY step.
+        %
+        % The same discipline polyPremPrimitive applies one dimension down, and it is here for the
+        % same measured reason: forming lc(b)^(deg a - deg b + 1) up front overflowed at 1.8e24 on
+        % the bridge elimination's own coefficients. Multiplying by lc(b) ONCE per elimination and
+        % taking the primitive part immediately keeps every intermediate bounded.
+        %
+        % No division is performed at all: the step is r := r*lc(b) - lc(r)*x^k*b, whose leading
+        % term cancels by construction, so there is no exactness condition to check.
+            db = numel(b) - 1;
+            r  = a;
+            guard = 0;
             while true
                 while numel(r) > 1 && all(r{end} == 0), r(end) = []; end
-                if numel(r) == 1 && all(r{1} == 0), r = {}; return, end
+                if isempty(r) || (numel(r) == 1 && all(r{1} == 0)), r = {}; return, end
                 dr = numel(r) - 1;
                 if dr < db, return, end
-                q = ratQ.yDivExact(r{end}, lb);
+                guard = guard + 1;
+                if guard > 10000
+                    error('ratQ:premNoConverge', 'the bivariate pseudo-remainder did not terminate.');
+                end
+                lb = b{end};  lr = r{end};
+                for i = 1:numel(r)
+                    r{i} = ratQ.chk(conv(r{i}, lb), 'scaled coefficient');
+                end
                 sh = dr - db;
                 for i = 0:db
-                    t = ratQ.chk(conv(q, b{i+1}), 'elimination term');
+                    t = ratQ.chk(conv(lr, b{i+1}), 'elimination term');
                     r{sh+i+1} = ratQ.trim1(ratQ.polyAdd1(r{sh+i+1}, -t));
                 end
+                r{end} = 0;                    % cancels exactly, by construction
+                while numel(r) > 1 && all(r{end} == 0), r(end) = []; end
+                if isempty(r) || (numel(r) == 1 && all(r{1} == 0)), r = {}; return, end
+                r = ratQ.bivPrimitive(r);      % the growth control, and it must be INSIDE the loop
             end
         end
-
         function g = yGcd(a, b)
         % the primitive gcd of two ASCENDING integer y-polynomials, via ratQ.polyGcd, which works
         % in DESCENDING order -- the flip is the whole adapter and getting it wrong would silently
@@ -1226,6 +1264,44 @@ classdef ratQ
             ratQ.chk(p, 'primitive polynomial');
         end
 
+        function r = polyPremPrimitive(a, b)
+        % objective: the PRIMITIVE PART of the pseudo-remainder of a by b, computed WITHOUT ever
+        %            forming the full lc(b)^(deg a - deg b + 1) scaling. Exact, descending order.
+        %
+        % WHY IT EXISTS. polyPseudoRem multiplies the whole dividend by lc(b)^(da-db+1) up front,
+        % and that is what overflows: measured on the convex envelope's bridge elimination, the
+        % coefficients were already 2.7e12 and the scaling squared them to 3.3e16, past 2^53.
+        % Taking the primitive part BETWEEN Euclid steps -- which polyGcd already did -- cannot
+        % help, because the overflow happens WITHIN the single scaling.
+        %
+        % The fix is to interleave: multiply by lc(b) ONCE per elimination step, cancel the leading
+        % term, and take the primitive part immediately. Each step is exact for the same reason the
+        % full scaling is (one factor of lc(b) is exactly what one elimination needs), and the
+        % content never gets a chance to accumulate. The result differs from polyPseudoRem's only
+        % by a content factor, which is why polyGcd -- whose answer is primitive by construction --
+        % can use either.
+            a = ratQ.polyPrimitive(a);  b = ratQ.polyPrimitive(b);
+            if isempty(b)
+                error('ratQ:divideByZero', 'pseudo-remainder by the zero polynomial.');
+            end
+            db = numel(b) - 1;
+            r  = a;
+            guard = 0;
+            while true
+                r = ratQ.polyTrim(r);
+                if isempty(r) || numel(r) - 1 < db, return, end
+                guard = guard + 1;
+                if guard > 10000
+                    error('ratQ:premNoConverge', 'the reduced pseudo-remainder did not terminate.');
+                end
+                lcb = b(1);  lcr = r(1);
+                r = ratQ.chk(r * lcb, 'reduced pseudo-remainder step');
+                r(1:numel(b)) = ratQ.chk(r(1:numel(b)) - lcr * b, 'elimination');
+                r(1) = 0;                      % the leading term cancels exactly, by construction
+                r = ratQ.polyPrimitive(ratQ.polyTrim(r));
+            end
+        end
+
         function r = polyPseudoRem(a, b)
         % objective: the PSEUDO-remainder of a by b -- the remainder of lc(b)^(deg a - deg b + 1) * a,
         %            which is integral where the ordinary remainder is not.
@@ -1273,7 +1349,10 @@ classdef ratQ
             if isempty(a), g = b; return, end
             if isempty(b), g = a; return, end
             while true
-                r = ratQ.polyTrim(ratQ.polyPseudoRem(a, b));
+                % polyPremPrimitive, not polyPseudoRem: the two differ only by a content factor,
+                % and polyGcd's answer is primitive either way -- but the reduced form never builds
+                % the lc^(da-db+1) scaling that overflows on large coefficients.
+                r = ratQ.polyTrim(ratQ.polyPremPrimitive(a, b));
                 if isempty(r), g = ratQ.polyPrimitive(b); return, end
                 a = b;  b = ratQ.polyPrimitive(r);
                 if numel(b) <= 1, g = [1]; return, end   % a nonzero constant: coprime
