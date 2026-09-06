@@ -652,6 +652,46 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(R == 0), 'a shared factor gives the zero resultant');
         end
 
+        function polyDivExactDIVIDESOrRAISES(testCase)
+        % Exact multivariate division. The oracle is a product built on purpose: (x+y)(x-2y)
+        % divided by (x+y) must give back (x-2y) exactly.
+            A = zeros(2,2);  A(2,1) = 1;  A(1,2) =  1;      % x + y
+            B = zeros(2,2);  B(2,1) = 1;  B(1,2) = -2;      % x - 2y
+            P = ratQ.polyMulN(A, B);
+            testCase.verifyEqual(ratQ.trimN(ratQ.polyDivExact(P, A, 2)), B);
+            testCase.verifyEqual(ratQ.trimN(ratQ.polyDivExact(P, B, 2)), A);
+        end
+
+        function polyDivExactREFUSESRatherThanRounding(testCase)
+        % A remainder or a non-integral quotient coefficient raises. Nothing here truncates, which
+        % is the whole reason this layer exists.
+            A = zeros(2,2);  A(2,1) = 1;  A(1,2) =  1;
+            B = zeros(2,2);  B(2,1) = 1;  B(1,2) = -2;
+            testCase.verifyError(@() ratQ.polyDivExact(A, B, 2), 'ratQ:notDivisible');
+            testCase.verifyError(@() ratQ.polyDivExact(A, 0, 2), 'ratQ:divideByZero');
+            % 2x + 2y over x + y is exact; 2x + 3y over x + y is not
+            testCase.verifyEqual(ratQ.trimN(ratQ.polyDivExact(2*A, A, 2)), 2);
+            C = zeros(2,2);  C(2,1) = 2;  C(1,2) = 3;
+            testCase.verifyError(@() ratQ.polyDivExact(C, A, 2), 'ratQ:notDivisible');
+        end
+
+        function polyGcdBivFindsASHAREDFactor(testCase)
+        % Two products built on a common factor: the gcd must be that factor, primitive.
+            F  = zeros(3,2);  F(3,1) = 1;  F(1,2) =  1;     % x^2 + y
+            G1 = zeros(2,2);  G1(2,1) = 1; G1(1,2) =  3;    % x + 3y
+            G2 = zeros(2,2);  G2(2,1) = 1; G2(1,2) = -1;    % x - y
+            G  = ratQ.polyGcdBiv(ratQ.polyMulN(F,G1), ratQ.polyMulN(F,G2));
+            testCase.verifyEqual(ratQ.trimN(G), F, 'the shared factor, primitive');
+        end
+
+        function polyGcdBivReturnsACONSTANTWhenCoprime(testCase)
+            G1 = zeros(2,2);  G1(2,1) = 1; G1(1,2) =  3;
+            G2 = zeros(2,2);  G2(2,1) = 1; G2(1,2) = -1;
+            G = ratQ.trimN(ratQ.polyGcdBiv(G1, G2));
+            testCase.verifyTrue(isscalar(G), 'coprime inputs give a constant gcd');
+            testCase.verifyEqual(abs(G), 1);
+        end
+
         function contentFreeDividesOutTheCOMMONFactorAndNothingElse(testCase)
         % A polynomial EQUATION has no scale, and in a resultant the scale is not free: an NxN
         % Sylvester determinant multiplies the content roughly N times over. Measured on the bridge

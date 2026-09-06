@@ -139,15 +139,34 @@ one identifier for two unrelated situations under a message ([COAP] A.2-A.5) tha
   * `ratQ.contentFree` is what keeps it exact: reduction is worth a factor of ~1000, taking the
     computation from an overflow at 1.3e16 down to 2.7e12.
 
-**What is left is NOT algebra: `p` is not MINIMAL.** A resultant carries extraneous factors, which
-is why degree 10 in `x` appears where the face's own implicit form is a quadric. Reducing it needs
-SQUAREFREE FACTORISATION over Q, which `ratQ` does not have. Storing the unreduced `p` would
-evaluate correctly but would make the stored degree, and every downstream cost, far larger than the
-geometry warrants.
+**THE REDUCTION IS DONE, 2026-09-06.** `p` reduces to the face's MINIMAL polynomial and the result
+is bitwise identical to the quadric derived by hand: from `(10,6,2)` and 134 terms with
+coefficients to 2.7e12, down to **`(2,2,2)`, 10 terms, max coefficient 486**. The extraneous part
+is exactly `p`'s CONTENT with respect to `z`, established by dividing `p` by the known quadric and
+finding the quotient free of `z` -- after two guesses at the factor had each divided in zero times.
 
-**So the next step is factorisation, and the type decision comes after it** -- the shape of what
-gets stored depends on how small `p` reduces. The lattice question (a third value on
-`RETURN_TYPE.md`'s function axis, and an `eval` that root-solves) is unchanged and still yours.
+`ratQ` gained `polyDivExact` (exact multivariate division), `polyGcdBiv` (bivariate gcd),
+`contentFree`, and the `polyMulN`/`polyAddN`/`trimN`/`monoN`/`leadTerm` support under them.
+
+**THE OVERFLOW TRIGGER IS MET -- see DECISIONS.md 2026-09-06.** `polyGcdBiv` overflows on this
+input (3.3e16), because `polyPseudoRem`'s scaling squares coefficients that are already 2.7e12. The
+working reduction sidesteps it with a VERIFIED shortcut (the content is `contentFree` of the
+leading `z`-coefficient, checked by exact division against every other one). That makes the
+parked overflow item live: it is not a large INPUT that overflows, it is a large INTERMEDIATE.
+
+**Item 3, PARTIAL.** `.claude/bridgeAnisoProbe.m` maps when the cheap elimination applies: `D` is
+linear in `s2` -- and so substitutable -- for every Hessian pair that is simultaneously DIAGONAL or
+PROPORTIONAL, which is much wider than the isotropic case it was derived on. Only a fully general
+pair needs the 8x8 Sylvester, and that is affordable (cofactor expansion measured at 0.37 s for
+7x7, so ~3 s for 8x8). What is NOT built is the anisotropic pipeline end to end: even the diagonal
+case is more work than it looks, because `A` stops being free of `s1`, so clearing `A^2` takes the
+degree in `s1` from 2 to 4 and the final resultant is 8x8 there too.
+
+**So the order from here:** (a) the anisotropic pipeline, reusing everything above; (b) CLIPPING,
+which changes the tie set cell by cell and is untouched; (c) the type decision, whose shape is now
+known -- a face is `(2,2,2)`-ish with small integer coefficients plus a branch selector. The
+lattice question (a third value on `RETURN_TYPE.md`'s function axis, and an `eval` that
+root-solves) is unchanged and still yours.
 
 ### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 

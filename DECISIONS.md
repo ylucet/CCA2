@@ -5294,3 +5294,61 @@ implicit form is a quadric. Reducing `p` needs squarefree factorisation over Q, 
 not have. Storing the unreduced `p` would work for evaluation (the face is one of its branches) but
 would make the stored degree, and hence every downstream cost, far larger than the geometry
 warrants.
+
+## 2026-09-06 — the face's MINIMAL polynomial, and the overflow trigger is MET
+
+**Item 2 delivered.** The eliminated polynomial `p` reduces to the face's minimal polynomial
+exactly, and the result is **bitwise identical to the quadric derived by hand** —
+`(z - <2a,x-2a> - 2c)^2 - R^2|x-2a|^2` cleared to integers. From `(10,6,2)` and 134 terms with
+coefficients to 2.7e12, down to **`(2,2,2)`, 10 terms, max coefficient 486**. It vanishes on the
+face to 1e-16 and does not vanish 0.05 away in `z`.
+
+**What the reduction IS.** `.claude/bridgeDivideProbe.m` settled it by asking the question backwards
+rather than guessing a third time: the first two guesses at the extraneous factor (`A`, and the
+leading `s1^2` coefficient) each divided `p` **zero** times. So instead, build the known quadric and
+divide `p` by IT — that worked, and the quotient came out `(8,4,0)`, **free of `z`**. The extraneous
+part is therefore exactly the CONTENT of `p` with respect to `z`.
+
+**THE OVERFLOW TRIGGER IS MET — the first time in this project.** `ratQ.polyGcdBiv` is the general
+way to compute that content, and on this input it **overflows**: `p`'s coefficients are already
+~2.7e12, and `polyPseudoRem`'s `lc^(da-db+1)` scaling squares them to **3.3e16**, past 2^53. The
+primitive-part discipline reduces BETWEEN steps and cannot help WITHIN the scaling. TODO.md's
+overflow item asked for "an input a user would plausibly write" that overflows; it is not the input
+that is large here, it is the intermediate — which is the same conclusion with a different cause.
+
+**Worked around, not papered over.** The answer is tiny (coefficients ≤ 486), so the size is in the
+path, not the destination. If the face's leading `z`-coefficient is a CONSTANT then the content is
+just `contentFree(c_top)` — a guess, so it is **verified**: the candidate must divide every other
+`z`-coefficient exactly, and `polyDivExact` raises if it does not. That is what the working
+reduction uses. `polyGcdBiv` stays as the general fallback and as the thing to make robust if the
+shortcut's hypothesis ever fails.
+
+## 2026-09-06 — item 3: WHEN the cheap elimination applies, and what the general case costs
+
+**Mapped rather than assumed** (`.claude/bridgeAnisoProbe.m`). The isotropic elimination worked
+because `D = det[x - y_1(s), y_2(s) - y_1(s)]` came out LINEAR in `s2`, so it could be solved and
+substituted instead of resultanted. Both entries are affine in `s`, so `D` is generically a CONIC;
+it degenerates to linear exactly when the two `s`-parts are parallel.
+
+Measured over five Hessian pairs:
+
+| `H1, H2` | `D` in `s2` |
+|---|---|
+| both multiples of `I` | linear — substitute |
+| diagonal, different (`I`, `diag(2,4)`) | **linear** — substitute |
+| proportional, non-diagonal | linear — substitute |
+| general (non-diagonal, non-proportional) | a genuine conic |
+
+So the cheap route covers every pair that is **simultaneously diagonal or proportional**, which is
+much wider than the isotropic case it was derived on. Only the fully general pair needs eliminating
+`s2` from two conics (4x4, degree 4 in `s1`) and then `s1` from two quartics — an **8x8** Sylvester,
+exactly `resultantVar`'s cap.
+
+**And 8x8 is affordable.** Cofactor expansion measured on small polynomial entries: N=6 0.06 s,
+N=7 0.37 s, so N=8 lands around 3 s. The cap is not a wall; coefficient growth is the thing to watch
+there, not the combinatorics.
+
+**Still open, and this is what item 3 has NOT delivered:** the anisotropic pipeline is not built or
+verified end to end. Even the diagonal-anisotropic case is more work than it looks, because `A` (the
+`s2`-coefficient of `D`) stops being free of `s1`, so clearing `A^2` raises the degree in `s1` from
+2 to 4 and the final resultant is 8x8 there too.

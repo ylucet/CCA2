@@ -540,6 +540,194 @@ classdef ratQ
             R = permute(cat(nv, R), back);
         end
 
+        function Q = polyDivExact(P, D, nv)
+        % objective: divide the integer polynomial array P by D, EXACTLY. Raises unless the
+        %            division leaves no remainder and an integral quotient.
+        %
+        % [input]  P, D : coefficient arrays, index (i1+1,...,inv+1) = coeff of v1^i1...vnv^inv
+        %          nv   : the number of variables (see resultantVar for why it is passed)
+        % [output] Q    : the quotient
+        %
+        % WHY EXACT DIVISION AND NOT FACTORISATION. A resultant carries extraneous factors, and
+        % removing them LOOKS like a factorisation problem -- but it is not, when the factors are
+        % already known. The elimination multiplies by A^2 to clear a denominator, and a Sylvester
+        % determinant multiplies by powers of the leading coefficients; dividing by what one
+        % multiplied by is a division, not a factorisation.
+        %
+        % Lexicographic leading-term division, first variable most significant. It terminates
+        % because the leading exponent of the remainder strictly decreases, and it is exact because
+        % a non-integral quotient coefficient or a stuck remainder RAISES rather than rounding.
+            ratQ.chk(P, 'dividend');  ratQ.chk(D, 'divisor');
+            [eD, cD] = ratQ.leadTerm(D, nv);
+            if isempty(eD)
+                error('ratQ:divideByZero', 'the divisor is the zero polynomial.');
+            end
+            R = P;  Q = 0;  guard = 0;
+            while true
+                [eR, cR] = ratQ.leadTerm(R, nv);
+                if isempty(eR), break, end
+                guard = guard + 1;
+                if guard > 100000
+                    error('ratQ:divideNoConverge', 'exact division did not terminate.');
+                end
+                eQ = eR - eD;
+                if any(eQ < 0) || mod(cR, cD) ~= 0
+                    error('ratQ:notDivisible', ...
+                        ['the division is not exact: the remainder''s leading term is not a ' ...
+                         'multiple of the divisor''s. Nothing is truncated or rounded here.']);
+                end
+                T = ratQ.monoN(eQ, cR/cD, nv);
+                Q = ratQ.polyAddN(Q, T);
+                R = ratQ.chk(ratQ.polyAddN(R, -ratQ.polyMulN(T, D)), 'division remainder');
+            end
+            Q = ratQ.chk(Q, 'quotient');
+        end
+
+        function [e, c] = leadTerm(A, nv)
+        % objective: the LEXICOGRAPHICALLY largest exponent vector carrying a nonzero coefficient,
+        %            and that coefficient. Empty when A is the zero polynomial.
+        % The first variable is most significant, which is what makes polyDivExact terminate.
+            e = [];  c = 0;
+            idx = find(A ~= 0);
+            if isempty(idx), return, end
+            sz = arrayfun(@(d) size(A,d), 1:nv);
+            subs = cell(1, nv);
+            [subs{:}] = ind2sub([sz 1], idx);
+            E = zeros(numel(idx), nv);
+            for d = 1:nv, E(:,d) = subs{d}(:) - 1; end
+            [~, best] = sortrows(E, -(1:nv));
+            e = E(best(1), :);
+            c = A(idx(best(1)));
+        end
+
+        function A = monoN(e, c, nv) %#ok<INUSD>
+        % objective: the single monomial c * v1^e1 ... vnv^env, as a coefficient array.
+            sz = e + 1;
+            if numel(sz) < 2, sz = [sz 1]; end
+            A = zeros(sz);
+            ii = num2cell(e + 1);
+            A(ii{:}) = c;
+        end
+        function G = polyGcdBiv(A, B)
+        % objective: the GCD of two bivariate integer polynomials, primitive and up to sign.
+        % [input]  A, B : arrays with (i+1,j+1) the coefficient of x^i y^j
+        % [output] G    : their gcd, in the same layout
+        %
+        % WHAT IT IS FOR. The convex envelope's bridge face comes out of resultantVar multiplied by
+        % an extraneous factor that is FREE OF z -- measured on the worked instance, p has degrees
+        % (10,6,2) while the face's own polynomial has (2,2,2), and the quotient (8,4,0) carries no
+        % z at all. Removing it is exactly dividing by the CONTENT of p with respect to z, which is
+        % the gcd of its z-coefficients as polynomials in (x,y). polyGcd answers that question for
+        % UNIVARIATE polynomials only.
+        %
+        % HOW. Euclid in x, with the coefficients themselves polynomials in y, taking the primitive
+        % part with respect to the y-content at every step -- the same discipline polyPseudoRem
+        % documents one dimension down, and for the same reason: without it the leading
+        % coefficients square each round.
+            a = ratQ.bivToCell(A);  b = ratQ.bivToCell(B);
+            if isempty(a), G = B; return, end
+            if isempty(b), G = A; return, end
+            [a, ca] = ratQ.bivPrimitive(a);
+            [b, cb] = ratQ.bivPrimitive(b);
+            cg = ratQ.yGcd(ca, cb);
+            guard = 0;
+            while true
+                guard = guard + 1;
+                if guard > 200
+                    error('ratQ:gcdNoConverge', 'the bivariate gcd did not terminate.');
+                end
+                if numel(b) == 1
+                    G = ratQ.contentFree(ratQ.cellToBiv({cg}));  return   % coprime in x
+                end
+                r = ratQ.bivPseudoRem(a, b);
+                if isempty(r)
+                    b = ratQ.bivScale(b, cg);
+                    G = ratQ.contentFree(ratQ.cellToBiv(b));  return
+                end
+                a = b;
+                b = ratQ.bivPrimitive(r);
+            end
+        end
+
+        function c = bivToCell(A)
+        % a bivariate array as a cell of y-polynomials, one per power of x, ASCENDING and trimmed.
+            A = ratQ.trimN(A);
+            c = cell(1, size(A,1));
+            for i = 1:size(A,1), c{i} = ratQ.trim1(A(i,:)); end
+            while numel(c) > 1 && all(c{end} == 0), c(end) = []; end
+            if numel(c) == 1 && all(c{1} == 0), c = {}; end
+        end
+
+        function A = cellToBiv(c)
+            if isempty(c), A = 0; return, end
+            w = max(cellfun(@numel, c));
+            A = zeros(numel(c), w);
+            for i = 1:numel(c), A(i, 1:numel(c{i})) = c{i}; end
+            A = ratQ.trimN(A);
+        end
+
+        function [c, cont] = bivPrimitive(c)
+        % divide out the y-polynomial content -- the gcd of the x-coefficients.
+            cont = [0];
+            for i = 1:numel(c), cont = ratQ.yGcd(cont, c{i}); end
+            if numel(cont) == 1 && abs(cont) == 1, cont = [1]; return, end
+            for i = 1:numel(c), c{i} = ratQ.yDivExact(c{i}, cont); end
+        end
+
+        function c = bivScale(c, m)
+            for i = 1:numel(c), c{i} = ratQ.trim1(conv(c{i}, m)); end
+        end
+
+        function r = bivPseudoRem(a, b)
+        % the pseudo-remainder of a by b, both polynomials in x with y-polynomial coefficients.
+            da = numel(a) - 1;  db = numel(b) - 1;
+            if da < db, r = a; return, end
+            lb = b{end};
+            pw = [1];
+            for k = 1:(da - db + 1), pw = ratQ.chk(conv(pw, lb), 'pseudo-remainder scaling'); end
+            r = a;
+            for i = 1:numel(r), r{i} = ratQ.chk(conv(r{i}, pw), 'scaled coefficient'); end
+            while true
+                while numel(r) > 1 && all(r{end} == 0), r(end) = []; end
+                if numel(r) == 1 && all(r{1} == 0), r = {}; return, end
+                dr = numel(r) - 1;
+                if dr < db, return, end
+                q = ratQ.yDivExact(r{end}, lb);
+                sh = dr - db;
+                for i = 0:db
+                    t = ratQ.chk(conv(q, b{i+1}), 'elimination term');
+                    r{sh+i+1} = ratQ.trim1(ratQ.polyAdd1(r{sh+i+1}, -t));
+                end
+            end
+        end
+
+        function g = yGcd(a, b)
+        % the primitive gcd of two ASCENDING integer y-polynomials, via ratQ.polyGcd, which works
+        % in DESCENDING order -- the flip is the whole adapter and getting it wrong would silently
+        % take the gcd of two reversed polynomials.
+            a = ratQ.trim1(a);  b = ratQ.trim1(b);
+            if all(a == 0), g = b; return, end
+            if all(b == 0), g = a; return, end
+            g = fliplr(ratQ.polyGcd(fliplr(a), fliplr(b)));
+            g = ratQ.trim1(g);
+        end
+
+        function q = yDivExact(a, b)
+        % exact division of ASCENDING integer y-polynomials; raises if it does not divide evenly.
+            a = ratQ.trim1(a);  b = ratQ.trim1(b);
+            if numel(b) == 1
+                if b == 0, error('ratQ:divideByZero', 'y-division by zero.'); end
+                if any(mod(a, b) ~= 0)
+                    error('ratQ:notDivisible', 'the y-division is not exact.');
+                end
+                q = a / b;  return
+            end
+            [qq, rr] = deconv(fliplr(a), fliplr(b));
+            if any(abs(ratQ.trim1(fliplr(rr))) > 0) || any(qq ~= round(qq))
+                error('ratQ:notDivisible', 'the y-division is not exact.');
+            end
+            q = ratQ.trim1(fliplr(qq));
+        end
         function A = contentFree(A)
         % objective: divide an integer coefficient array by the gcd of its entries -- its PRIMITIVE
         %            PART. An all-zero array is returned unchanged.
