@@ -652,6 +652,67 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(R == 0), 'a shared factor gives the zero resultant');
         end
 
+        % ---- the BIG-INTEGER fallback ----------------------------------------------------------
+        % Added 2026-09-06. It is entered only where the double path would RAISE, so the tests have
+        % to reach it deliberately: the whole point is that ordinary work never sees it.
+
+        function bigIntegersROUNDTRIPAndRefuseWhatWillNotFit(testCase)
+            A = [3 0 5; 0 7 0];
+            testCase.verifyEqual(ratQ.fromBig(ratQ.toBig(A)), A, 'exact round trip');
+
+            % a product past 2^53 is computed exactly and REFUSES to come back as a double
+            D = ratQ.toBig([9007199254740991 0]);
+            E = ratQ.bigMul(D, D);
+            testCase.verifyEqual(char(E.c{1}.toString()), '81129638414606663681390495662081', ...
+                'the big product is exact');
+            testCase.verifyError(@() ratQ.fromBig(E), 'ratQ:overflow', ...
+                'and coming back is refused rather than rounded');
+        end
+
+        function bigARITHMETICAgreesWithTheDoublePathWhereBothApply(testCase)
+        % The differential check that matters for a fallback: on inputs the fast path handles, the
+        % two must give the same answer, or the fallback is computing something else.
+            rng(20260906);
+            for t = 1:5
+                A = randi([-6 6], 3, 2);   B = randi([-6 6], 2, 3);
+                fast = ratQ.polyMulN(A, B);
+                big  = ratQ.fromBig(ratQ.bigMul(ratQ.toBig(A), ratQ.toBig(B)));
+                testCase.verifyEqual(big, fast, sprintf('product %d', t));
+                testCase.verifyEqual(ratQ.fromBig(ratQ.bigAdd(ratQ.toBig(A), ratQ.toBig(A))), 2*A);
+            end
+        end
+
+        function theRESULTANTFallsBackAndStillAgrees(testCase)
+        % resultantVarBig returns the big form; on an input the double path handles, converting it
+        % must reproduce resultantVar exactly.
+            P = [0 0 1; -1 0 0];   Q = [0 1; -1 0];
+            fast = ratQ.trimN(ratQ.resultantVar(P, Q, 2, 2));
+            big  = ratQ.trimN(ratQ.fromBig(ratQ.resultantVarBig(P, Q, 2, 2)));
+            testCase.verifyEqual(big, fast);
+        end
+
+        function bigDivExactDIVIDESOrRAISES(testCase)
+            A = zeros(2,2);  A(2,1) = 1;  A(1,2) =  1;      % x + y
+            B = zeros(2,2);  B(2,1) = 1;  B(1,2) = -2;      % x - 2y
+            P = ratQ.toBig(ratQ.polyMulN(A, B));
+            Q = ratQ.fromBig(ratQ.bigDivExact(P, ratQ.toBig(A), 2));
+            testCase.verifyEqual(ratQ.trimN(Q), B);
+            testCase.verifyError(@() ratQ.bigDivExact(ratQ.toBig(A), ratQ.toBig(B), 2), ...
+                'ratQ:notDivisible');
+        end
+
+        function contentOfIsTheGCDAndComposesAcrossARRAYS(testCase)
+        % contentOf exists because coefficients that share a scale must be reduced TOGETHER. Two
+        % coefficients of one polynomial in an eliminated variable are exactly that case, and
+        % reducing them independently moves the polynomial's roots -- measured, it made a
+        % substituted root come out at half its true value.
+            testCase.verifyEqual(ratQ.contentOf([20 -104 56 -40]), 4);
+            testCase.verifyEqual(ratQ.contentOf([0 0 0]), 0, 'zero is gcd''s identity');
+            testCase.verifyEqual(ratQ.contentOf([7 0 0]), 7);
+            % the composing case: a common factor of two arrays that each have more of their own
+            testCase.verifyEqual(gcd(ratQ.contentOf([6 12]), ratQ.contentOf([10 20])), 2);
+        end
+
         function polyDivExactDIVIDESOrRAISES(testCase)
         % Exact multivariate division. The oracle is a product built on purpose: (x+y)(x-2y)
         % divided by (x+y) must give back (x-2y) exactly.

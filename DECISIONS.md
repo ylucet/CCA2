@@ -5422,3 +5422,37 @@ not on the algebra: the elimination is derived, the code runs, and it stops at `
 (clipping) is untouched and would compound the same constraint, since clipping multiplies the
 number of cell pairs and each is its own elimination. So the integer type moves from "parked, no
 trigger" to **the prerequisite for the whole remaining envelope line**.
+
+## 2026-09-06 — the BIG-INTEGER fallback lands, and the anisotropic elimination with it
+
+**Item 1 built, in the shape DECISIONS.md 2026-09-05 chose:** `java.math.BigInteger`, entered ONLY
+where the double path raises. `ratQ` gains `toBig` / `fromBig` / `bigMul` / `bigAdd` / `bigNeg` /
+`bigContentFree` / `bigDivExact` / `polyDetBig` / `bigPermute`, and `resultantVar` now tries doubles
+first and redoes the whole determinant in big on `ratQ:overflow`. The hot path keeps its double
+arithmetic and its exactness check; nothing above `ratQ` changed.
+
+**The shape that makes it work is compute big, reduce, come back.** Every overflow measured on this
+line has large intermediates and a small answer, so `fromBig` raises only if the REDUCED result
+still does not fit — a different and honest failure. `resultantVarBig` exists for callers that will
+reduce before they need doubles, which is every use here.
+
+**Item 2 done: the anisotropic elimination now runs end to end and is CORRECT.** For `H1 = I`
+against `H2 = diag(2,4)` the 8x8 Sylvester determinant needs 59 bits, computes in big, and reduces
+to `p` with degrees `(x,y,z) = (6,6,4)`, 67 terms, max coefficient 5.7e8. Against the primal oracle
+on 140 bridge points: **worst relative residual 5.4e-12**, against 8e-4 to 2e-2 when `z` is moved by
+0.05 — eight to ten orders of separation.
+
+**Those degrees are an independent confirmation.** `.claude/bridgeAlgebraicProbe.m` had measured,
+empirically and months of reasoning earlier in this session, that the anisotropic face satisfies a
+relation of degree `<= 4` in `z` with coefficients of degree 6 in `(x,y)` — found by watching a
+singular value collapse. The elimination produces exactly `(6,6,4)`. Two completely different
+methods, same answer.
+
+**A REAL TRAP, and it cost a wrong answer that ran.** `D = As*s2 + Bs` is ONE polynomial, and the
+substitution uses the RATIO `-Bs/As`. Reducing `As` and `Bs` each by its OWN content moves that
+root — measured, it came out at exactly HALF the true `s2`, and the elimination then produced a
+polynomial that completed in 50 s and did not vanish on the face. **Content reduction is free per
+EQUATION, never per coefficient of one.** `ratQ.contentOf` was added so callers can take a COMMON
+factor across arrays that share a scale, and the fault was found by checking each intermediate
+against a direct numeric evaluation rather than by guessing which one was wrong — `D` and `C` both
+verified clean first, which is what narrowed it to the substitution.

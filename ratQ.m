@@ -470,7 +470,7 @@ classdef ratQ
             C = ratQ.chk(C, 'polynomial product');
         end
 
-        function R = resultantVar(P, Q, k, nv)
+        function R = resultantCore(P, Q, k, nv, wantBig)
         % objective: the SYLVESTER RESULTANT of two nv-variate integer polynomials with respect to
         %            variable k, exactly. The general form; resultantY is the nv = 2 case.
         %
@@ -529,15 +529,63 @@ classdef ratQ
             for r = 1:m
                 for j = 0:n, S{n+r, r+j} = Qc{n-j+1}; end
             end
-            R = ratQ.trimN(ratQ.polyDetN(S));
-            R = ratQ.chk(R, 'resultant');
+            % FAST PATH FIRST, BIG INTEGERS ONLY IF IT RAISES. The determinant is where every
+            % measured overflow on this line happens, and the shape is always the same: the
+            % intermediates are large while the reduced ANSWER is small. So on ratQ:overflow the
+            % whole determinant is redone in BigInteger, the content is taken THERE, and only then
+            % does it come back to doubles -- which raises again only if the answer itself does not
+            % fit, which is a different and honest failure.
+            big = [];
+            if wantBig
+                big = ratQ.detInBig(S, N);
+            else
+                try
+                    R = ratQ.chk(ratQ.trimN(ratQ.polyDetN(S)), 'resultant');
+                catch err
+                    if ~strcmp(err.identifier, 'ratQ:overflow'), rethrow(err); end
+                    big = ratQ.detInBig(S, N);
+                    R = ratQ.trimN(ratQ.fromBig(big));
+                end
+            end
 
             % Put the remaining variables back where they were, with a singleton in slot k.
             back = zeros(1, nv);
             rest = setdiff(1:nv, k);
             for t = 1:numel(rest), back(rest(t)) = t; end
             back(k) = nv;
-            R = permute(cat(nv, R), back);
+            if wantBig
+                R = ratQ.bigPermute(big, back, nv);
+            else
+                R = permute(cat(nv, R), back);
+            end
+        end
+
+        function R = resultantVar(P, Q, k, nv)
+        % objective: the Sylvester resultant, returned as DOUBLES. See resultantCore for the
+        % mathematics and resultantVarBig for the form that does not insist the answer fit.
+            R = ratQ.resultantCore(P, Q, k, nv, false);
+        end
+
+        function B = detInBig(S, N)
+        % objective: the Sylvester determinant in BigInteger, content removed.
+            Sb = cell(N, N);
+            for r = 1:N
+                for j = 1:N, Sb{r,j} = ratQ.toBig(S{r,j}); end
+            end
+            B = ratQ.bigContentFree(ratQ.polyDetBig(Sb));
+        end
+
+        function B = bigPermute(A, ord, nv)
+        % objective: permute a big polynomial's variables, the counterpart of MATLAB's permute.
+            sa = [A.sz, ones(1, nv - numel(A.sz))];
+            sb = sa(ord);
+            B.sz = sb;
+            B.c  = repmat({java.math.BigInteger.ZERO}, prod(sb), 1);
+            for i = 1:numel(A.c)
+                if A.c{i}.signum() == 0, continue, end
+                e = ratQ.linToSub(i, sa);
+                B.c{ratQ.subToLin(e(ord), sb)} = A.c{i};
+            end
         end
 
         function Q = polyDivExact(P, D, nv)
@@ -766,6 +814,23 @@ classdef ratQ
             end
             q = ratQ.trim1(fliplr(qq));
         end
+        function g = contentOf(A)
+        % objective: the gcd of an integer array's entries -- its CONTENT. Zero for an all-zero
+        %            array, which is the identity for gcd and so composes correctly.
+        %
+        % Separate from contentFree because a caller sometimes needs the content of SEVERAL arrays
+        % that must be scaled TOGETHER: the coefficients of one polynomial in a variable being
+        % eliminated share a scale, and reducing them independently moves the polynomial's roots.
+        % That is not hypothetical -- it made an elimination return a polynomial that ran and was
+        % wrong, with the substituted root exactly half its true value.
+            ratQ.chk(A, 'coefficient array');
+            g = 0;
+            for i = 1:numel(A)
+                if A(i) ~= 0, g = gcd(g, abs(A(i))); end
+                if g == 1, return, end
+            end
+        end
+
         function A = contentFree(A)
         % objective: divide an integer coefficient array by the gcd of its entries -- its PRIMITIVE
         %            PART. An all-zero array is returned unchanged.
@@ -807,6 +872,213 @@ classdef ratQ
             if isempty(sz), sz = 1; end
             if numel(sz) == 1, sz = [sz 1]; end
             A = reshape(A, sz);
+        end
+
+        % ---- THE BIG-INTEGER FALLBACK ------------------------------------------------------------
+        % Entered only where the double path would RAISE, which is the arrangement DECISIONS.md
+        % 2026-09-05 chose after measuring the options: java.math.BigInteger is 121x doubles but
+        % needs no compiler, no licence and no network, and MATLAB ships the JVM. The hot path keeps
+        % its double arithmetic and its exactness check; nothing above ratQ changes.
+        %
+        % WHY IT IS THE POLYNOMIAL LAYER AND NOT ratQ AS A WHOLE. Every overflow measured on the
+        % convex envelope's elimination is in a polynomial PRODUCT or a determinant built from
+        % them -- and in each the intermediates are large while the ANSWER is small (the isotropic
+        % bridge reduces to coefficients of 486). So the useful shape is: compute big, reduce, come
+        % back to doubles, and raise only if the REDUCED result is still too large.
+        %
+        % A big polynomial is a struct with `sz` (the size vector) and `c` (a cell of BigInteger in
+        % linear order). Cells rather than a javaArray because MATLAB indexes them naturally, and
+        % the arrays here are sparse enough that the loops skip most entries.
+
+        function B = toBig(A)
+        % objective: promote a double coefficient array to the big representation. Exact.
+            ratQ.chk(A, 'value to promote');
+            B.sz = size(A);
+            B.c  = cell(numel(A), 1);
+            Z = java.math.BigInteger.ZERO;
+            for i = 1:numel(A)
+                if A(i) == 0, B.c{i} = Z; else, B.c{i} = java.math.BigInteger.valueOf(int64(A(i))); end
+            end
+        end
+
+        function A = fromBig(B)
+        % objective: come back to doubles, RAISING if any coefficient no longer fits exactly.
+        % That raise is the honest outcome: it means the answer itself, not merely the path to it,
+        % is past what a double can hold.
+            A = zeros(B.sz);
+            for i = 1:numel(B.c)
+                v = B.c{i};
+                if v.signum() == 0, continue, end
+                if v.abs().bitLength() > 52
+                    error('ratQ:overflow', ...
+                        ['a coefficient needs %d bits, past the 53 a double holds exactly. The ' ...
+                         'big path computed it; the RESULT itself is too large to return.'], ...
+                        v.abs().bitLength());
+                end
+                A(i) = double(v.doubleValue());
+            end
+        end
+
+        function C = bigMul(A, B)
+        % objective: multiply two big polynomials -- dense convolution, skipping zeros.
+            if isempty(A.c) || isempty(B.c), C = A; return, end
+            nd = max(numel(A.sz), numel(B.sz));
+            sa = [A.sz, ones(1, nd - numel(A.sz))];
+            sb = [B.sz, ones(1, nd - numel(B.sz))];
+            sc = sa + sb - 1;
+            C.sz = sc;
+            C.c  = repmat({java.math.BigInteger.ZERO}, prod(sc), 1);
+            ia = find(~cellfun(@(v) v.signum() == 0, A.c));
+            ib = find(~cellfun(@(v) v.signum() == 0, B.c));
+            for p1 = ia(:).'
+                ea = ratQ.linToSub(p1, sa);
+                for p2 = ib(:).'
+                    eb = ratQ.linToSub(p2, sb);
+                    k  = ratQ.subToLin(ea + eb - 1, sc);
+                    C.c{k} = C.c{k}.add(A.c{p1}.multiply(B.c{p2}));
+                end
+            end
+        end
+
+        function C = bigAdd(A, B)
+        % objective: add two big polynomials, zero-padding to the union of their shapes.
+            nd = max(numel(A.sz), numel(B.sz));
+            sa = [A.sz, ones(1, nd - numel(A.sz))];
+            sb = [B.sz, ones(1, nd - numel(B.sz))];
+            sc = max(sa, sb);
+            C.sz = sc;
+            C.c  = repmat({java.math.BigInteger.ZERO}, prod(sc), 1);
+            for i = 1:numel(A.c)
+                if A.c{i}.signum() == 0, continue, end
+                k = ratQ.subToLin(ratQ.linToSub(i, sa), sc);
+                C.c{k} = C.c{k}.add(A.c{i});
+            end
+            for i = 1:numel(B.c)
+                if B.c{i}.signum() == 0, continue, end
+                k = ratQ.subToLin(ratQ.linToSub(i, sb), sc);
+                C.c{k} = C.c{k}.add(B.c{i});
+            end
+        end
+
+        function A = bigNeg(A)
+            for i = 1:numel(A.c), A.c{i} = A.c{i}.negate(); end
+        end
+
+        function A = bigContentFree(A)
+        % objective: divide a big polynomial by the gcd of its coefficients.
+            g = java.math.BigInteger.ZERO;
+            for i = 1:numel(A.c)
+                if A.c{i}.signum() ~= 0, g = g.gcd(A.c{i}); end
+            end
+            if g.signum() == 0 || g.equals(java.math.BigInteger.ONE), return, end
+            for i = 1:numel(A.c)
+                if A.c{i}.signum() ~= 0, A.c{i} = A.c{i}.divide(g); end
+            end
+        end
+
+        function e = linToSub(i, sz)
+            e = zeros(1, numel(sz));
+            i = i - 1;
+            for d = 1:numel(sz)
+                e(d) = mod(i, sz(d)) + 1;
+                i = floor(i / sz(d));
+            end
+        end
+
+        function i = subToLin(e, sz)
+            i = 0;  m = 1;
+            for d = 1:numel(sz)
+                i = i + (e(d) - 1) * m;
+                m = m * sz(d);
+            end
+            i = i + 1;
+        end
+
+        function B = bigMono(e, c, nv) %#ok<INUSD>
+        % objective: the single big monomial c * v1^e1 ... vnv^env.
+            sz = e + 1;
+            if numel(sz) < 2, sz = [sz 1]; end
+            B.sz = sz;
+            B.c  = repmat({java.math.BigInteger.ZERO}, prod(sz), 1);
+            B.c{ratQ.subToLin(e + 1, sz)} = c;
+        end
+
+        function [e, c] = bigLeadTerm(A, nv)
+        % objective: the LEXICOGRAPHICALLY largest exponent carrying a nonzero coefficient, and
+        %            that coefficient. Empty when A is zero. First variable most significant, so
+        %            that bigDivExact terminates -- the same order leadTerm uses.
+            e = [];  c = java.math.BigInteger.ZERO;
+            sz = [A.sz, ones(1, nv - numel(A.sz))];
+            best = [];
+            for i = 1:numel(A.c)
+                if A.c{i}.signum() == 0, continue, end
+                ee = ratQ.linToSub(i, sz) - 1;
+                if isempty(best) || ratQ.lexGreater(ee, best)
+                    best = ee;  c = A.c{i};
+                end
+            end
+            e = best;
+        end
+
+        function tf = lexGreater(a, b)
+            tf = false;
+            for d = 1:numel(a)
+                if a(d) > b(d), tf = true; return, end
+                if a(d) < b(d), return, end
+            end
+        end
+
+        function Q = bigDivExact(P, D, nv)
+        % objective: divide big polynomial P by D, EXACTLY, raising if it does not divide evenly.
+        % The BigInteger counterpart of polyDivExact, and it exists for the same reason the big
+        % determinant does: on the anisotropic bridge the intermediates need 59 bits while the
+        % reduced answer needs far fewer, so the reduction has to happen BEFORE coming back to
+        % doubles.
+            [eD, cD] = ratQ.bigLeadTerm(D, nv);
+            if isempty(eD)
+                error('ratQ:divideByZero', 'the divisor is the zero polynomial.');
+            end
+            R = P;
+            Q = struct('sz', ones(1, max(2,nv)), 'c', {{java.math.BigInteger.ZERO}});
+            guard = 0;
+            while true
+                [eR, cR] = ratQ.bigLeadTerm(R, nv);
+                if isempty(eR), break, end
+                guard = guard + 1;
+                if guard > 100000
+                    error('ratQ:divideNoConverge', 'big exact division did not terminate.');
+                end
+                eQ = eR - eD;
+                qr = cR.divideAndRemainder(cD);
+                if any(eQ < 0) || qr(2).signum() ~= 0
+                    error('ratQ:notDivisible', ...
+                        'the big division is not exact; nothing is truncated or rounded here.');
+                end
+                T = ratQ.bigMono(eQ, qr(1), nv);
+                Q = ratQ.bigAdd(Q, T);
+                R = ratQ.bigAdd(R, ratQ.bigNeg(ratQ.bigMul(T, D)));
+            end
+        end
+
+        function R = resultantVarBig(P, Q, k, nv)
+        % objective: resultantVar returning the BIG result, without insisting it fit in a double.
+        % For callers that will REDUCE the answer before they need it as doubles -- which is the
+        % shape every use on the envelope line has.
+            R = ratQ.resultantCore(P, Q, k, nv, true);
+        end
+
+        function d = polyDetBig(S)
+        % objective: polyDetN in BigInteger. Same cofactor expansion, same recursion, no ceiling.
+            n = size(S,1);
+            if n == 1, d = S{1,1}; return, end
+            d = struct('sz', [1 1], 'c', {{java.math.BigInteger.ZERO}});
+            for j = 1:n
+                if all(cellfun(@(v) v.signum() == 0, S{1,j}.c)), continue, end
+                M = S(2:n, [1:j-1, j+1:n]);
+                t = ratQ.bigMul(S{1,j}, ratQ.polyDetBig(M));
+                if mod(j,2) == 0, t = ratQ.bigNeg(t); end
+                d = ratQ.bigAdd(d, t);
+            end
         end
 
         function d = polyDetN(S)

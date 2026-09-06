@@ -114,7 +114,13 @@ function [p, degS1] = buildAniso(h1, h2, k1, k2, pn, qn, ad, cn, cd)
     As = ratQ.polyAddN(ratQ.polyMulN(F1x, one*e2), ratQ.polyMulN(ratQ.polyAddN(one*a1n, S1*e1), one*A2));
     Bs = ratQ.polyAddN(ratQ.polyMulN(F1x, one*a2n), ...
                        ratQ.polyMulN(ratQ.polyAddN(one*a1n, S1*e1), Y*(-L)));
-    As = ratQ.contentFree(As);   Bs = ratQ.contentFree(Bs);
+    % NO SEPARATE contentFree ON As AND Bs. They are the two coefficients of ONE polynomial,
+    % D = As*s2 + Bs, and the substitution uses their RATIO -- so scaling them independently moves
+    % the root. Measured: reducing each by its own content made -Bs/As come out exactly HALF the
+    % true s2, and the elimination then produced a polynomial that ran but did not vanish on the
+    % face. Content reduction is free per EQUATION, never per coefficient of one.
+    g = gcd(ratQ.contentOf(As), ratQ.contentOf(Bs));
+    if g > 1, As = As / g;  Bs = Bs / g; end
     degS1 = max(size(As,1), size(Bs,1)) - 1;
 
     % ---- substitute s2 = -Bs/As into C and Z, clearing As^2 -----------------------------------
@@ -133,7 +139,49 @@ function [p, degS1] = buildAniso(h1, h2, k1, k2, pn, qn, ad, cn, cd)
     Ct = ratQ.contentFree(Ct);   Zt = ratQ.contentFree(Zt);
     degS1 = max(size(Ct,1), size(Zt,1)) - 1;
 
-    p = ratQ.trimN(ratQ.contentFree(ratQ.resultantVar(Ct, Zt, 1, nv)));
+    % THE RESULTANT IS TAKEN IN BIG INTEGERS AND REDUCED THERE. Measured: the 8x8 determinant's
+    % coefficients need 59 bits, past what a double holds -- but the REDUCED polynomial does not,
+    % exactly as in the isotropic case where 2.7e12 came down to 486. So the z-content is removed
+    % before coming back to doubles, and only then is the answer required to fit.
+    Rb = ratQ.resultantVarBig(Ct, Zt, 1, nv);
+    p  = reduceBig(Rb, nv);
+end
+
+% ------------------------------------------------------------------------------------------------
+function p = reduceBig(Rb, nv)
+% Remove the z-content in BigInteger, then come back to doubles.
+% The content is contentFree of the LEADING z-coefficient -- a guess, so it is VERIFIED by
+% requiring it to divide every other z-coefficient exactly; bigDivExact raises if it does not.
+    sz = [Rb.sz, ones(1, nv - numel(Rb.sz))];
+    nz = sz(4);
+    C  = cell(1, nz);
+    for k = 1:nz
+        C{k} = sliceZ(Rb, k, sz);
+    end
+    g = ratQ.bigContentFree(C{nz});
+    Q = cell(1, nz);
+    for k = 1:nz
+        Q{k} = ratQ.bigDivExact(C{k}, g, nv);      % raises unless the candidate content is right
+    end
+    % reassemble, in big, then reduce once more and convert
+    M = struct('sz', ones(1,nv), 'c', {{java.math.BigInteger.ZERO}});
+    for k = 1:nz
+        e = zeros(1, nv);  e(4) = k - 1;
+        M = ratQ.bigAdd(M, ratQ.bigMul(Q{k}, ratQ.bigMono(e, java.math.BigInteger.ONE, nv)));
+    end
+    p = ratQ.trimN(ratQ.fromBig(ratQ.bigContentFree(M)));
+end
+
+function S = sliceZ(Rb, k, sz)
+% the coefficient of z^(k-1), as a big polynomial with a singleton in the z slot
+    S.sz = [sz(1:3), 1];
+    S.c  = repmat({java.math.BigInteger.ZERO}, prod(S.sz), 1);
+    for i = 1:numel(Rb.c)
+        if Rb.c{i}.signum() == 0, continue, end
+        e = ratQ.linToSub(i, sz);
+        if e(4) ~= k, continue, end
+        S.c{ratQ.subToLin([e(1:3), 1], S.sz)} = Rb.c{i};
+    end
 end
 
 function A = S2_placeholder(nv)

@@ -162,27 +162,31 @@ pair needs the 8x8 Sylvester, and that is affordable (cofactor expansion measure
 case is more work than it looks, because `A` stops being free of `s1`, so clearing `A^2` takes the
 degree in `s1` from 2 to 4 and the final resultant is 8x8 there too.
 
-**BLOCKED ON THE INTEGER TYPE as of 2026-09-06, and that is a change of status.** Three
-computations on this line hit the 2^53 ceiling and four distinct mitigations did not move it:
+**UNBLOCKED 2026-09-06: the integer type landed and the anisotropic elimination works.**
 
-  * isotropic bridge, 4x4 resultant -- **works**, 2.7e12, 0.03% of the ceiling;
-  * the content gcd of that result -- overflow at 1.3e17 (PRS is the wrong algorithm; a MODULAR
-    gcd is the route, and the 2026-09-05 CRT refutation does not forbid it because a gcd's
-    coefficients are small);
-  * **anisotropic bridge, 8x8 resultant -- overflow at 9.6e15, only 7% past 2^53.**
+`ratQ` gained a `java.math.BigInteger` fallback, entered only where the double path raises --
+`toBig`/`fromBig`/`bigMul`/`bigAdd`/`bigContentFree`/`bigDivExact`/`polyDetBig`, with
+`resultantVar` trying doubles first and `resultantVarBig` for callers that reduce before they need
+doubles. The hot path is untouched.
 
-That last number is the useful one: a near miss, not a runaway. So a WIDER INTEGER TYPE closes it,
-and no amount of further reduction will. `java.math.BigInteger` on the cold path is already the
-chosen answer (DECISIONS.md 2026-09-05, measured at 121x doubles) and the trigger it was waiting
-for has now fired three times.
+On that, the ANISOTROPIC case (`H1 = I` against `H2 = diag(2,4)`) runs end to end: the 8x8
+determinant needs 59 bits, computes in big, and reduces to degrees `(6,6,4)`, 67 terms, max
+coefficient 5.7e8. **Worst relative residual 5.4e-12 on 140 oracle-selected bridge points**,
+against 8e-4 to 2e-2 off the face. And `(6,6,4)` is exactly what the empirical degree scan in
+`.claude/bridgeAlgebraicProbe.m` predicted by a completely different method.
 
-**So the order from here:** (a) the integer type, which everything else now waits on;
-(b) the anisotropic pipeline, which is derived and coded and stops only at `ratQ.chk`;
-(c) CLIPPING, untouched, and which compounds the same constraint since it multiplies the number of
-cell pairs and each is its own elimination; (d) the type decision, whose shape is known -- a face
-is `(2,2,2)`-ish with small integer coefficients plus a branch selector. The lattice question (a
-third value on `RETURN_TYPE.md`'s function axis, and an `eval` that root-solves) is unchanged and
-still yours.
+**A trap worth carrying forward:** `D = As*s2 + Bs` is ONE polynomial and the substitution uses
+`-Bs/As`, so reducing `As` and `Bs` separately moves the root -- measured, to exactly half the true
+`s2`, giving a polynomial that ran and was wrong. Content reduction is free per EQUATION, never per
+coefficient of one. `ratQ.contentOf` exists for taking a COMMON factor.
+
+**So what is left on this line:** (a) CLIPPING, still untouched, and now the only real obstacle --
+it changes the tie set cell by cell as the argmins hit edges and vertices, and multiplies the
+number of eliminations; (b) a MODULAR gcd, still the right answer for `polyGcdBiv` though the
+verified shortcut means nothing needs it today; (c) the type decision, whose shape is now
+well-measured -- a face is `(2,2,2)` to `(6,6,4)` with integer coefficients under 1e9, plus a
+branch selector. The lattice question (a third value on `RETURN_TYPE.md`'s function axis, and an
+`eval` that root-solves) is unchanged and still yours.
 
 ### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 
