@@ -316,6 +316,41 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() biconjQ(P{4}), 'PLQ:biconjQ:notImplemented');
         end
 
+        function biconjQREFUSESANonQuaPolByName(testCase)
+            testCase.verifyError(@() biconjQ(42), 'PLQ:biconjQ:input');
+            testCase.verifyError(@() biconjQ('x'), 'PLQ:biconjQ:input');
+        end
+
+        function aDirectionINSIDETheConeCanDivergeWhileBothGeneratorsDoNot(testCase)
+        % The cone test, which exists because checking the two GENERATORS is not enough. On
+        % cone(d1,d2) the curvature is a*l1^2 + 2b*l1*l2 + c*l2^2, nonnegative for every l >= 0
+        % exactly when a >= 0, c >= 0 and (b >= 0 or b^2 <= a*c).
+        %
+        % q = x*y on the FOURTH quadrant, cone((1,0),(0,-1)): both generators have d'Hd = 0, so
+        % neither is refused on its own, and both rates vanish at the apex. But b = -1 < 0 with
+        % b^2 - a*c = 1 > 0, and indeed x*y -> -infinity along (1,-1). The witness needs no
+        % machinery: f(t,-t) = -t^2.
+            f = QuaPol([0 0; 1 0; 0 -1], [1 2 0; 1 3 0], ...
+                       [0 0 0 0, 0, 1, 0, 0, 0, 0], [0 1; 1 0]);
+            testCase.verifyEqual(f.eval([10 -10]), -100, 'AbsTol', 1e-9, ...
+                'x*y marches to -infinity along the cone''s interior direction (1,-1)');
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:minusInfinity');
+        end
+
+        function aCHAINWithARAYEdgeIsEnvelopedOverItsUnboundedHull(testCase)
+        % The chain gather's ray branch. A chain of a SEGMENT (0,0)-(2,0) and a RAY (0,0)->(0,2),
+        % both carrying 0: not collinear, so the hull is 2-D, and unbounded, so it needs the lifted
+        % recession ray as well as the lifted vertices. co f = 0 on that hull.
+            f = QuaPol([0 0; 2 0; 0 2], [1 2 1; 1 3 0], ...
+                       [0 0 0 0, 0, 0, 0, 0, 0, 0; 0 0 0 0, 0, 0, 0, 0, 0, 0], [0 0; 0 0]);
+            h = biconjQ(f);
+            X = [0 0; 1 0; 2 0; 0 5; 1 40; 0.5 1];
+            testCase.verifyEqual(h.eval(X), zeros(size(X,1),1), 'AbsTol', 1e-12, ...
+                'co f = 0 on the hull, far out along the ray included');
+            testCase.verifyTrue(all(isinf(h.eval([-1 1; 3 -1]))), ...
+                'and +infinity outside it');
+        end
+
         function aRAYDomainIsRefusedByName(testCase)
         % Where q curves down along a ray the envelope runs to -infinity, a correct answer with
         % nowhere to be stored -- the gap conjCPLQ records as convEnvUnbounded:minusInfinity.

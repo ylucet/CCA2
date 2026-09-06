@@ -5256,3 +5256,41 @@ case a caller must handle and so is returned rather than raised.
 three equations, which is two successive resultants whose coefficients are polynomials in the
 REMAINING variables — so the next step is the same routine lifted to trivariate coefficients. That
 lifting is now the only algebraic piece missing.
+
+## 2026-09-06 — the bridge's IMPLICIT POLYNOMIAL, computed exactly; and what still blocks the type
+
+**Built and checked** (`.claude/bridgeImplicitProbe.m`, on `ratQ.resultantVar`). For the isotropic
+instance the elimination produces `p(x,y,z)` with **integer** coefficients — 134 terms, degrees
+`(x,y,z) = (10,6,2)`, max coefficient 2.7e12. It vanishes on the face to a **relative residual of
+6.8e-17** at four independently constructed bridge points, and is **nine orders larger** (8.5e-8)
+when `z` is moved by 0.05. So the face really is cut out by a rational polynomial, and the
+resultant computes it.
+
+**ONE resultant, not two, and this is the method.** Eliminating `s2` from `(C,D)` and from `(C,Z)`
+and then `s1` needs a Sylvester matrix of size 12 — far past what cofactor expansion can afford.
+But `D` is LINEAR in `s2`, so it is SOLVED instead (`s2 = -B/A`), substituted, and cleared by `A^2`,
+leaving two polynomials of degree 2 in `s1` and a single 4x4 resultant. **An equation linear in one
+of the eliminated variables should be substituted, never resultanted** — here that is the
+difference between impossible and a 4x4 determinant.
+
+**CONTENT REDUCTION IS WORTH A FACTOR OF A THOUSAND, and it is not an optimisation.** A Sylvester
+determinant of NxN entries multiplies a common factor roughly N times over. Measured on the same
+instance:
+
+| what is reduced | max coefficient |
+|---|---|
+| nothing (the tie conic left with a factor of 4) | **overflow at 1.3e16** |
+| the tie conic reduced to its primitive part | 2.7e15 — within a factor of 3.3 of 2^53 |
+| every intermediate reduced (`ratQ.contentFree`) | **2.7e12**, 0.03% of the ceiling |
+
+**So the parked integer-overflow item's trigger is still NOT met**, and this says why: the answer to
+growth in an elimination is reduction, not a wider integer type. Scanning the instance's denominator
+from 4 to 20 keeps every result at or below 0.1% of 2^53.
+
+**What still blocks the implicit-face TYPE, and it is no longer the algebra.** `p` is not MINIMAL: a
+resultant carries extraneous factors, both from clearing `A^2` and from the roots of the system that
+are not on the bridge — which is why degree 10 in `x` appears where the isotropic face's own
+implicit form is a quadric. Reducing `p` needs squarefree factorisation over Q, which `ratQ` does
+not have. Storing the unreduced `p` would work for evaluation (the face is one of its branches) but
+would make the stored degree, and hence every downstream cost, far larger than the geometry
+warrants.

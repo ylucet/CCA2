@@ -470,6 +470,158 @@ classdef ratQ
             C = ratQ.chk(C, 'polynomial product');
         end
 
+        function R = resultantVar(P, Q, k, nv)
+        % objective: the SYLVESTER RESULTANT of two nv-variate integer polynomials with respect to
+        %            variable k, exactly. The general form; resultantY is the nv = 2 case.
+        %
+        % [input]  P, Q : arrays whose (i1+1,...,inv+1) entry is the coefficient of v1^i1...vnv^inv.
+        %                 MATLAB drops trailing singleton dimensions, so nv is passed rather than
+        %                 inferred -- a polynomial of degree 0 in its last variable is indexed the
+        %                 same as one with no last variable at all, and guessing which would be a
+        %                 silent wrong answer.
+        %          k    : which variable to eliminate; nv : how many there are.
+        % [output] R    : an nv-variate array whose k-th dimension is a singleton -- the resultant,
+        %                 a polynomial in the REMAINING variables.
+        %
+        % WHY IT IS NEEDED IN THIS GENERALITY. The convex envelope's bridge face is cut out by three
+        % equations in the dual variable s = (s1,s2) whose coefficients involve x, y and the value z.
+        % Eliminating s takes TWO resultants, and the first one's output already has coefficients in
+        % three remaining variables -- so a bivariate routine cannot chain. See DECISIONS.md
+        % 2026-09-06 and .claude/bridgeEliminationSpike.m.
+        %
+        % The mechanics are resultantY's: the Sylvester matrix's entries are polynomials in the
+        % remaining variables, its determinant is one too, and cofactor expansion uses only multiply
+        % and add -- no division, so exactness is immediate.
+            ratQ.chk(P, 'first polynomial');  ratQ.chk(Q, 'second polynomial');
+            if ~ismember(k, 1:nv)
+                error('ratQ:badVariable', 'cannot eliminate variable %d of %d.', k, nv);
+            end
+            ord = [setdiff(1:nv, k), k];                 % put the eliminated variable last
+            Pp  = permute(P, [ord, nv+1]);
+            Qp  = permute(Q, [ord, nv+1]);
+            m = size(Pp, nv) - 1;
+            n = size(Qp, nv) - 1;
+            if m < 1 || n < 1
+                error('ratQ:resultantDegree', ...
+                    ['the resultant eliminates a variable, so both arguments must have degree ' ...
+                     '>= 1 in it; got %d and %d. A polynomial free of it has no root to share.'], ...
+                     m, n);
+            end
+            N = m + n;
+            if N > 8
+                error('ratQ:resultantTooLarge', ...
+                    ['the Sylvester matrix is %dx%d, and cofactor expansion is factorial in that. ' ...
+                     'Above 8 this wants Bareiss elimination instead.'], N, N);
+            end
+
+            % Slice out the coefficient of each power of the eliminated variable. Each slice is a
+            % polynomial in the remaining nv-1 variables.
+            Pc = cell(1, m+1);  Qc = cell(1, n+1);
+            idx = repmat({':'}, 1, nv);
+            for j = 0:m, ii = idx; ii{nv} = j+1; Pc{j+1} = ratQ.squeezeLast(Pp(ii{:}), nv); end
+            for j = 0:n, ii = idx; ii{nv} = j+1; Qc{j+1} = ratQ.squeezeLast(Qp(ii{:}), nv); end
+
+            S = cell(N, N);
+            [S{:}] = deal(0);
+            for r = 1:n
+                for j = 0:m, S{r, r+j} = Pc{m-j+1}; end
+            end
+            for r = 1:m
+                for j = 0:n, S{n+r, r+j} = Qc{n-j+1}; end
+            end
+            R = ratQ.trimN(ratQ.polyDetN(S));
+            R = ratQ.chk(R, 'resultant');
+
+            % Put the remaining variables back where they were, with a singleton in slot k.
+            back = zeros(1, nv);
+            rest = setdiff(1:nv, k);
+            for t = 1:numel(rest), back(rest(t)) = t; end
+            back(k) = nv;
+            R = permute(cat(nv, R), back);
+        end
+
+        function A = contentFree(A)
+        % objective: divide an integer coefficient array by the gcd of its entries -- its PRIMITIVE
+        %            PART. An all-zero array is returned unchanged.
+        %
+        % This is `conic`'s argument one dimension up, and it matters for the same reason plus one
+        % more. A polynomial EQUATION has no scale: {p = 0} and {k*p = 0} are the same set. And in a
+        % resultant the scale is not free -- a Sylvester determinant of NxN entries multiplies the
+        % content roughly N times over, so carrying an avoidable factor of 4 into a 4x4 determinant
+        % costs a factor of 256 against the 2^53 ceiling. Measured: leaving C unreduced took the
+        % bridge elimination from 2.7e15 to an overflow at 1.3e16.
+            ratQ.chk(A, 'coefficient array');
+            g = 0;
+            for i = 1:numel(A)
+                if A(i) ~= 0, g = gcd(g, abs(A(i))); end
+                if g == 1, return, end
+            end
+            if g > 1, A = A / g; end
+        end
+
+        function A = trimN(A)
+        % objective: drop trailing all-zero slices in every dimension, so an array's size states
+        %            its actual degrees. Always leaves at least a scalar.
+            for d = 1:ndims(A)
+                while size(A,d) > 1
+                    idx = repmat({':'}, 1, ndims(A));
+                    idx{d} = size(A,d);
+                    if any(A(idx{:}) ~= 0, 'all'), break, end
+                    idx{d} = 1:size(A,d)-1;
+                    A = A(idx{:});
+                end
+            end
+        end
+
+        function A = squeezeLast(A, nv)
+        % objective: drop the trailing singleton left by slicing dimension nv, without disturbing
+        %            the leading dimensions -- `squeeze` would also collapse a genuine singleton in
+        %            the middle, which changes which variable is which.
+            sz = arrayfun(@(d) size(A,d), 1:nv-1);
+            if isempty(sz), sz = 1; end
+            if numel(sz) == 1, sz = [sz 1]; end
+            A = reshape(A, sz);
+        end
+
+        function d = polyDetN(S)
+        % objective: the determinant of a square cell array whose entries are integer polynomial
+        %            ARRAYS, by cofactor expansion along the first row. Exact.
+        % The N-dimensional counterpart of polyDet; multiplication is convn, which IS dense
+        % polynomial multiplication in any number of variables.
+            n = size(S,1);
+            if n == 1, d = S{1,1}; return, end
+            d = 0;
+            for j = 1:n
+                if isscalar(S{1,j}) && S{1,j} == 0, continue, end
+                M = S(2:n, [1:j-1, j+1:n]);
+                t = ratQ.polyMulN(S{1,j}, ratQ.polyDetN(M));
+                if mod(j,2) == 0, t = -t; end
+                d = ratQ.polyAddN(d, t);
+            end
+        end
+
+        function c = polyMulN(a, b)
+        % objective: multiply two integer polynomials held as dense coefficient ARRAYS, in any
+        %            number of variables. convn is exactly that product.
+            if (isscalar(a) && a == 0) || (isscalar(b) && b == 0), c = 0; return, end
+            c = ratQ.chk(convn(a, b), 'polynomial product');
+        end
+
+        function c = polyAddN(a, b)
+        % objective: add two integer polynomial arrays of any sizes, zero-padding to the union.
+            if isscalar(a) && a == 0, c = b; return, end
+            if isscalar(b) && b == 0, c = a; return, end
+            na = ndims(a);  nb = ndims(b);  nd = max(na, nb);
+            sa = arrayfun(@(d) size(a,d), 1:nd);
+            sb = arrayfun(@(d) size(b,d), 1:nd);
+            sc = max(sa, sb);
+            A = zeros(sc);  B = zeros(sc);
+            ia = arrayfun(@(d) 1:sa(d), 1:nd, 'UniformOutput', false);
+            ib = arrayfun(@(d) 1:sb(d), 1:nd, 'UniformOutput', false);
+            A(ia{:}) = a;  B(ib{:}) = b;
+            c = A + B;
+        end
+
         function R = resultantY(P, Q)
         % objective: the SYLVESTER RESULTANT of two bivariate integer polynomials with respect to
         %            y, exactly. R vanishes at exactly those x for which P(x,.) and Q(x,.) have a

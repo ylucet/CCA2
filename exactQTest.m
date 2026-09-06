@@ -387,5 +387,49 @@ classdef exactQTest < matlab.unittest.TestCase
                 end
             end
         end
+
+        % ---- the constructor's argument forms, and the operators with no test -----------------
+        % Added 2026-09-06. Same finding as ratQ's and QuaCon's: these are validators and thin
+        % operators that no test touched, and an untested guard passes forever whatever it does.
+
+        function theEMPTYConstructorGivesExactZero(testCase)
+        % The nargin == 0 path, which every default-constructed exactQ takes.
+            z = exactQ();
+            testCase.verifyTrue(z == exactQ(0));
+            testCase.verifyEqual(sign(z), 0);
+        end
+
+        function theConstructorREFUSESAnArgumentCountItCannotMean(testCase)
+            testCase.verifyError(@() exactQ(1,2,3,4), 'exactQ:args');
+            testCase.verifyError(@() exactQ(1,2,3,4,5,6), 'exactQ:args');
+        end
+
+        function NOTEQUALIsTheNegationOfEQUAL(testCase)
+        % ne is one line and delegates, which is exactly the kind of operator that goes untested
+        % and then turns out to compare the wrong pair.
+            a = exactQ(1, 2);  b = exactQ(1, 3);
+            testCase.verifyTrue(a ~= b);
+            testCase.verifyFalse(a ~= exactQ(1, 2));
+            testCase.verifyEqual(a ~= b, ~(a == b));
+        end
+
+        function dispPrintsTheSameStringCharDoes(testCase)
+            a = exactQ(3, 4);
+            testCase.verifyEqual(strtrim(evalc('disp(a)')), strtrim(char(a)));
+        end
+
+        function fromDoubleREFUSESWhatIsNotAFiniteScalar(testCase)
+            testCase.verifyError(@() exactQ.fromDouble([1 2]), 'exactQ:fromDouble');
+            testCase.verifyError(@() exactQ.fromDouble(Inf),   'exactQ:fromDouble');
+            testCase.verifyError(@() exactQ.fromDouble(NaN),   'exactQ:fromDouble');
+        end
+
+        function canonREFUSESMismatchedOrNegativeRadicands(testCase)
+        % The three-argument form is (radicands, numerators, denominators), so a length mismatch
+        % means the caller has lost track of which list is which -- refused rather than truncated.
+            testCase.verifyError(@() exactQ([2 3], [1], [1]), 'exactQ:args');
+            testCase.verifyError(@() exactQ([-2], [1], [1]),  'exactQ:negativeRadicand');
+        end
+
     end
 end

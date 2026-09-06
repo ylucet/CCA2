@@ -652,6 +652,55 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(R == 0), 'a shared factor gives the zero resultant');
         end
 
+        function contentFreeDividesOutTheCOMMONFactorAndNothingElse(testCase)
+        % A polynomial EQUATION has no scale, and in a resultant the scale is not free: an NxN
+        % Sylvester determinant multiplies the content roughly N times over. Measured on the bridge
+        % elimination -- leaving a factor of 4 in one conic took it from 2.7e15 to an overflow at
+        % 1.3e16, and reducing every intermediate brought it down to 2.7e12.
+            testCase.verifyEqual(ratQ.contentFree([20 -104 56 -40]), [5 -26 14 -10]);
+            testCase.verifyEqual(ratQ.contentFree([5 -26 14 -10]), [5 -26 14 -10], ...
+                'already primitive, so unchanged');
+            testCase.verifyEqual(ratQ.contentFree([0 0 0]), [0 0 0], ...
+                'an all-zero array has no content to remove');
+            testCase.verifyEqual(ratQ.contentFree([-4 -8]), [-4 -8]/4, ...
+                'the SIGN is left alone: this is content, not orientation');
+            A = zeros(2,2,2);  A(1,1,1) = 6;  A(2,2,2) = -9;
+            R = ratQ.contentFree(A);
+            testCase.verifyEqual(R(1,1,1), 2);
+            testCase.verifyEqual(R(2,2,2), -3);
+        end
+
+        function theGENERALResultantAgreesWithTheBivariateOne(testCase)
+        % resultantY is the nv = 2 case of resultantVar, so on a bivariate input they must agree.
+        % Written as a test rather than a comment because the general one PERMUTES its arrays, and
+        % a permutation read backwards would eliminate the wrong variable and still return
+        % something plausible.
+            P = [0 0 1; -1 0 0];              % y^2 - x
+            Q = [0 1; -1 0];                  % y - x
+            R1 = ratQ.trim1(ratQ.resultantY(P, Q));
+            R2 = ratQ.trimN(ratQ.resultantVar(P, Q, 2, 2));
+            testCase.verifyEqual(R2(:).', R1, 'the two routines must give the same polynomial');
+        end
+
+        function theGENERALResultantEliminatesTheNAMEDVariable(testCase)
+        % Three variables (x,y,z), eliminating the MIDDLE one: y - x and y - z share a root in y
+        % exactly when x = z, so the resultant must be x - z up to sign. Eliminating the wrong
+        % variable would give x - y or y - z instead, all three of which look equally reasonable --
+        % which is why the answer is checked and not the shape.
+            A = zeros(2,2,1);  A(1,2,1) =  1;  A(2,1,1) = -1;     % y - x
+            B = zeros(1,2,2);  B(1,2,1) =  1;  B(1,1,2) = -1;     % y - z
+            R = ratQ.trimN(ratQ.resultantVar(A, B, 2, 3));
+            testCase.verifyEqual(size(R,2), 1, 'y is gone');
+            M = reshape(R, size(R,1), size(R,3));                 % rows x, cols z
+            testCase.verifyEqual(M/M(2,1), [0 -1; 1 0], 'AbsTol', 0, 'proportional to x - z');
+        end
+
+        function theGENERALResultantRefusesAVariableThatIsNotThere(testCase)
+            A = zeros(2,2);  A(1,2) = 1;  A(2,1) = -1;
+            testCase.verifyError(@() ratQ.resultantVar(A, A, 3, 2), 'ratQ:badVariable');
+            testCase.verifyError(@() ratQ.resultantVar(A, A, 0, 2), 'ratQ:badVariable');
+        end
+
         function theRESULTANTRefusesWhatItCannotEliminate(testCase)
             testCase.verifyError(@() ratQ.resultantY([1 2 3].', [0 1]), 'ratQ:resultantDegree');
             big = zeros(1, 6);  big(end) = 1;             % y^5

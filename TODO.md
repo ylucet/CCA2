@@ -128,12 +128,26 @@ one identifier for two unrelated situations under a message ([COAP] A.2-A.5) tha
 `notImplemented` now means the single-piece indefinite case [COAP] really covers;
 `convexPieceCoupling` is new. Over the sweep the 36 shared refusals are 24 and 12.
 
-**THE DECISION NEEDED, and it is the only thing blocking both items:** whether CCA2 gains an
-IMPLICIT ALGEBRAIC face -- a face stored as `p(x,y,z) = 0` with `p` rational and a branch
-selector, rather than as `z = <expression>`. It is a new class with its own `eval` (a root-solve
-with a sign, not a formula) and it changes what every downstream operator must accept, so it wants
-to be decided rather than drifted into. It is CHEAPER than this entry first claimed -- see the
-addendum in DECISIONS.md 2026-09-05 -- because the coefficients stay rational.
+**WHERE IT STANDS 2026-09-06.** The algebra is done and the blocker has moved.
+
+  * `ratQ.resultantVar` exists -- the Sylvester resultant in any number of variables -- and the
+    bridge's implicit polynomial `p(x,y,z)` is COMPUTED exactly for the isotropic instance: 134
+    integer terms, degrees (10,6,2), vanishing on the face to a relative 6.8e-17 and nine orders
+    larger off it. `.claude/bridgeImplicitProbe.m`.
+  * The elimination is ONE 4x4 resultant, not two 12x12 ones, because `D` is linear in `s2` and is
+    substituted rather than resultanted.
+  * `ratQ.contentFree` is what keeps it exact: reduction is worth a factor of ~1000, taking the
+    computation from an overflow at 1.3e16 down to 2.7e12.
+
+**What is left is NOT algebra: `p` is not MINIMAL.** A resultant carries extraneous factors, which
+is why degree 10 in `x` appears where the face's own implicit form is a quadric. Reducing it needs
+SQUAREFREE FACTORISATION over Q, which `ratQ` does not have. Storing the unreduced `p` would
+evaluate correctly but would make the stored degree, and every downstream cost, far larger than the
+geometry warrants.
+
+**So the next step is factorisation, and the type decision comes after it** -- the shape of what
+gets stored depends on how small `p` reduces. The lattice question (a third value on
+`RETURN_TYPE.md`'s function axis, and an `eval` that root-solves) is unchanged and still yours.
 
 ### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 
