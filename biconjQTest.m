@@ -84,6 +84,36 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:unbounded');
         end
 
+        function theDIVERGENCETestReadsTheRateONThePieceNotAtTheOrigin(testCase)
+        % Along a recession direction d with d'H d = 0, q(x + t d) is AFFINE in t with rate
+        % (H x + L)'d -- which depends on x whenever H*d is nonzero, i.e. whenever H is indefinite.
+        % The test used to read L'd, the rate at the ORIGIN, and so missed every piece whose apex
+        % is not there.
+        %
+        % q = x*y on the TRANSLATED quadrant {x >= 0, y >= -5}. Both recession directions have
+        % d'H d = 0 and L = 0, so the curvature and the origin-rate tests both pass it; the cone
+        % test has a = c = 0 and b = +1, so that passes it too. But f(t,-5) = -5t, so f is
+        % unbounded BELOW on its own domain and co f is -infinity -- which needs no envelope
+        % machinery to see, and is what makes this a WITNESS rather than an opinion.
+            f = QuaPol([0 -5; 1 -5; 0 -4], [1 2 0; 1 3 0], ...
+                       [0 0 0 0, 0, 1, 0, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyEqual(f.eval([1000 -5]), -5000, 'AbsTol', 1e-9, ...
+                'the witness: f marches to -infinity along its own recession ray');
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:minusInfinity', ...
+                'so the refusal must be minusInfinity, not the finite-but-uncomputed one');
+        end
+
+        function theSAMECaseAtTheORIGINIsGenuinelyBoundedBelow(testCase)
+        % The control, so the test above is about the TRANSLATION and not about x*y or about cones.
+        % On the first quadrant x*y >= 0, so co f is finite and the honest refusal is the
+        % not-computed-yet one.
+            f = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], ...
+                       [0 0 0 0, 0, 1, 0, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyGreaterThanOrEqual(f.eval([1000 3; 7 2; 0 9]), 0, ...
+                'x*y is nonnegative on the first quadrant');
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:unbounded');
+        end
+
         function aRAYDomainIsRefusedByName(testCase)
         % Where q curves down along a ray the envelope runs to -infinity, a correct answer with
         % nowhere to be stored -- the gap conjCPLQ records as convEnvUnbounded:minusInfinity.

@@ -162,13 +162,34 @@ function h = biconjQ(obj)
             % a >= 0, c >= 0 and (b >= 0 or b^2 <= a*c). Checking the generators alone would miss a
             % direction strictly INSIDE the cone that runs downward -- the same flaw conjQ's
             % recessionConditions had to fix.
+            %
+            % AND THE RATE IS READ ON THE PIECE, NOT AT THE ORIGIN. With d'Hd = 0 the function
+            % along the ray is AFFINE in t with rate (H x + L)'d, which depends on x as soon as
+            % H*d is nonzero -- and H*d can be nonzero here precisely because this branch is the
+            % NON-convex one, so H may be indefinite (for a semidefinite H, d'Hd = 0 forces
+            % H*d = 0 and the rate is the constant L'd). This test used to read L'd, the rate at
+            % the ORIGIN, which is the right number only for a piece whose apex sits there.
+            % Measured witness: q = x*y on {x >= 0, y >= -5} has f(t,-5) = -5t, so co f is
+            % -infinity, and every other test here passes it -- .claude/recessionRateProbe.m and
+            % biconjQTest/theDIVERGENCETestReadsTheRateONThePieceNotAtTheOrigin.
+            %
+            % The rate is affine in x, so its infimum over the piece is attained at a VERTEX unless
+            % it also falls along a recession direction -- and that second possibility is exactly
+            % what the cone test below decides, since d'H e is the rate's own slope along e.
+            [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
             diverges = false;
             for r = 1:size(rays,1)
                 d = rays(r,:).';
                 a = ratQ.chk(d.' * Hk * d, 'recession curvature');
                 if a < 0, diverges = true; break, end
-                if a == 0 && ratQ.chk(Lk.' * d, 'recession slope') < 0
-                    diverges = true;  break
+                if a == 0
+                    % (H*v + L)'d at every vertex v of the piece, cleared by the POSITIVE vd.
+                    for i = 1:numel(vsk)
+                        v = Vi(vsk(i), :).';
+                        rate = ratQ.chk((Hk*v + vd*Lk).' * d, 'recession slope at a vertex');
+                        if rate < 0, diverges = true; break, end
+                    end
+                    if diverges, break, end
                 end
             end
             if ~diverges && size(rays,1) >= 2
