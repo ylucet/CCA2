@@ -99,10 +99,19 @@ function h = biconjQ(obj)
     % Measured: the needle and the convex segment both raised noFace while the CONCAVE segment,
     % which falls past the short-circuit, worked.
     if obj.dom.dim < 2
-        if size(obj.fN,1) > 1
-            error('PLQ:biconjQ:ambiguousChain', ...
-                ['a domain of dimension < 2 carrying %d different functions has no F to say ' ...
-                 'which edge takes which.'], size(obj.fN,1));
+        % A CHAIN of edges is NOT thin, and this used to refuse it as `ambiguousChain` on the
+        % grounds that several function rows with no F left it undecided which edge took which.
+        % That premise was simply wrong: for a chain, ROW j IS EDGE j's function -- QuaPol.eval
+        % reads exactly obj.f(i,:) for edge i, and a chain must carry one row per edge for eval to
+        % work at all. So the convention exists and is already relied on.
+        %
+        % Two non-collinear segments have a 2-DIMENSIONAL convex hull, so co f is an ordinary
+        % lower-hull answer read from the whole mesh. That is concaveEnvelope, unchanged; only the
+        % GATHER differs, iterating edges instead of faces.
+        if isChain(obj)
+            assertChainEdgeConcave(obj);
+            h = concaveEnvelope(obj);
+            return
         end
         h = thinEnvelope(obj);
         return
@@ -230,34 +239,17 @@ function h = biconjQ(obj)
                      'is nowhere to put it -- the same representational gap conjCPLQ records as ' ...
                      'convEnvUnbounded:minusInfinity.'], k);
             end
-            % ---- the piece is unbounded and q is bounded below on it. IS ITS LIFTED RECESSION
-            % RAY A FIXED DIRECTION? ------------------------------------------------------------
-            % q(x + t d) = q(x) + t*(H x + L)'d + (t^2/2) d'Hd, and d'Hd = 0 here. So the lifted
-            % point rises at rate (H x + L)'d, and the epigraph recedes in a direction that does
-            % not depend on x exactly when H*d = 0 -- and then the rate is the constant L'd.
+            % NOTHING MORE IS NEEDED HERE. The lifted recession ray is (d, rho) with rho the
+            % MINIMUM of q's rate over the piece, and concaveEnvelope computes that minimum -- see
+            % the derivation there. This used to raise PLQ:biconjQ:shearedRecession whenever H*d
+            % was nonzero, i.e. whenever the rate varied; that refusal was unnecessary, since a
+            % varying rate needs a minimum rather than a new algorithm.
             %
-            % H*d = 0 is automatic for a semidefinite H (d'Hd = 0 forces it), so this only ever
-            % refuses an INDEFINITE piece whose recession direction is sheared by H. There the
-            % rate varies across the piece while staying nonnegative, the lifted set recedes in a
-            % direction that turns as x moves, and the hull's recession cone is no longer generated
-            % by the pieces' own rays -- a different computation, not a harder version of this one.
-            for r = 1:size(rays,1)
-                d = rays(r,:).';
-                if ratQ.chk(d.'*Hk*d, 'recession curvature') ~= 0
-                    % Necessarily > 0 here, since < 0 was ruled a divergence above. Then q grows
-                    % QUADRATICALLY along that ray, the piece is not edge-concave along it, and the
-                    % edge-curvature test below is the one that should speak -- it names the
-                    % obstruction, where a boundedness-first refusal would only name the order the
-                    % two checks happen to run in.
-                    continue
-                end
-                if any(ratQ.chk(Hk * d, 'recession shear') ~= 0)
-                    error('PLQ:biconjQ:shearedRecession', ...
-                        ['piece %d recedes along a direction d with d''Hd = 0 but H*d nonzero, ' ...
-                         'so q''s rate along d varies across the piece and the lifted set has no ' ...
-                         'fixed recession ray. Only an INDEFINITE piece can do this.'], k);
-                end
-            end
+            % A recession direction with d'Hd > 0 is NOT handled here and must not be: q then grows
+            % quadratically along that ray, the piece is not edge-concave along it, and the
+            % edge-curvature test below is the one that should speak. It names the obstruction,
+            % where a boundedness-first refusal would only name the order two checks happen to run
+            % in.
         end
         own = find(any(obj.F == k, 2));
         for j = own.'
@@ -355,6 +347,9 @@ function h = concaveEnvelope(obj)
 % read backwards, and no tolerance.
     [Vi, vd] = ratQ.combineDen(obj.VN, obj.VD);
     nf = size(obj.fN, 1);
+    % For a CHAIN the loop below runs over EDGES rather than faces -- see the gather. nf is a count
+    % of function ROWS either way, and a chain carries one per edge, so the loop bound is the same.
+    chain = isChain(obj);
 
     % ---- the lifted vertices of EVERY face, over ONE denominator --------------------------------
     % The faces may carry different denominators, so the common one is 2*vd^2*lcm(fD). A vertex
@@ -373,20 +368,60 @@ function h = concaveEnvelope(obj)
         Ln = [fN(8); fN(9)];
         kn = fN(10);
         scale = ratQ.chk(Lden / fD, 'denominator scaling');
-        [vsk, raysk, ~] = pieceGeometryB(obj, k);
-        % THE LIFTED RECESSION RAYS. Reaching here, every recession direction d of every piece has
-        % d'Hd = 0 AND H*d = 0 (the piece loop refuses the sheared case by name), so
-        % q(x + t d) = q(x) + t*(L'd) exactly -- the lifted set recedes in the FIXED direction
-        % (d, L'd), independent of x. That is what makes conv(lifted vertices) + cone(lifted rays)
-        % the whole hull.
+        if chain
+            % A CHAIN's units are EDGES, not faces: row k of fN is edge k's function (QuaPol.eval
+            % reads it that way), the edge's own endpoints are its vertices, and a ray edge
+            % contributes its direction. pieceGeometryB cannot be asked, since it looks up F and a
+            % chain's F is all zeros.
+            if obj.E(k,3) ~= 0
+                vsk = [obj.E(k,1); obj.E(k,2)];  raysk = zeros(0,2);
+            else
+                vsk = obj.E(k,1);
+                raysk = ratQ.chk(Vi(obj.E(k,2),:) - Vi(obj.E(k,1),:), 'chain ray direction');
+            end
+        else
+            [vsk, raysk, ~] = pieceGeometryB(obj, k);
+        end
+        % THE LIFTED RECESSION RAYS, AND THE HEIGHT IS A MINIMUM. Along a recession direction d,
+        % q(x + t d) = q(x) + t*r(x,d) with r(x,d) = (H x + L)'d, since d'Hd = 0 is already forced
+        % here. The lifted RAY of the epigraph is then (d, rho) for any rho >= r(x,d) at SOME x of
+        % the piece -- and a direction that recedes from one point of a convex set recedes from all
+        % of them, so the smallest admissible height is
+        %
+        %       rho = min over the piece of r(.,d),
+        %
+        % which is a MINIMUM OVER THE PIECE'S VERTICES because r is affine in x and (the cone test
+        % in the piece loop) does not fall along either recession direction.
+        %
+        % WHY THIS IS THE WHOLE HULL, and not merely a minorant. Writing x = sum(lam_i v_i) +
+        % sum(mu_j d_j),
+        %
+        %   q(x) = q(sum lam v) + sum_j mu_j * r(sum lam v, d_j) + sum_{j,k} mu_j mu_k d_j'H d_k / 2
+        %
+        % using d_j'H d_j = 0. The last sum is >= 0 because the cone test established d_1'H d_2 >= 0;
+        % r is affine so r(sum lam v, d) >= min_v r(v,d) = rho; and q(sum lam v) is above the lower
+        % hull of the lifted vertices by the edge-concavity argument. So q >= the hull everywhere,
+        % with equality attained -- which makes the hull the envelope rather than a bound.
+        %
+        % REPLACED the constant L'd on 2026-09-05. That was the special case H*d = 0, where r does
+        % not vary; the general one used to be refused as PLQ:biconjQ:shearedRecession, and the
+        % refusal was unnecessary -- the varying rate needs a minimum, not a new algorithm.
+        % q = x*y on the first quadrant is the smallest instance: r((0,0),(1,0)) = 0 gives the
+        % lifted rays (1,0,0) and (0,1,0) and hence co f = 0, which is right.
         %
         % The scaling matches Q3's below: both are the true (x, y, q) multiplied by the positive
         % 2*Lden*vd^2, and for a DIRECTION only the positive multiple matters.
         for r = 1:size(raysk,1)
             d = raysk(r,:).';
+            rho = [];
+            for i = 1:numel(vsk)
+                v = Vi(vsk(i), :).';
+                ri = ratQ.chk((Hn*v + vd*Ln).' * d, 'lifted ray height');
+                if isempty(rho) || ri < rho, rho = ri; end
+            end
             R3(end+1,:) = [ratQ.chk(2*Lden*vd*d(1), 'lift ray x'), ...
                            ratQ.chk(2*Lden*vd*d(2), 'lift ray y'), ...
-                           ratQ.chk(2*scale*vd*(Ln.'*d), 'lift ray z')]; %#ok<AGROW>
+                           ratQ.chk(2*scale*rho, 'lift ray z')]; %#ok<AGROW>
         end
         for i = 1:numel(vsk)
             v  = Vi(vsk(i), :).';
@@ -713,6 +748,46 @@ function h = quaPolAsQuaCon(obj)
     h = assembleQuaConCells(cells);
 end
 
+function tf = isChain(obj)
+% objective: is this mesh a CHAIN -- a domain of dimension < 2 made of two or more edges whose
+%   convex hull is 2-dimensional?
+%
+% Collinear chains are excluded deliberately: their hull is still 1-dimensional, so the answer is a
+% THIN one and belongs to thinEnvelope's machinery (an H-form equality side), not to a lower hull
+% that assumes a 2-D domain.
+    tf = false;
+    % NO FACES is the defining property and must be tested FIRST. Without it every ordinary 2-D
+    % mesh with two edges and three vertices answers yes, and concaveEnvelope then reads its
+    % geometry from edges instead of faces -- which is how leaving this out broke eleven tests at
+    % once rather than none.
+    if isempty(obj.F) || any(obj.F(:) ~= 0), return, end
+    if isempty(obj.E) || size(obj.E,1) < 2, return, end
+    if obj.nv < 3, return, end
+    tf = ~QuaPol.isCollinear(obj.V, sqrt(eps));
+end
+
+% ------------------------------------------------------------------------------------------------
+function assertChainEdgeConcave(obj)
+% objective: refuse a chain edge along which q curves UPWARD, by the same rule and for the same
+%   reason as a face edge.
+%
+% The lifted graph over one edge is a parabolic ARC. Curving downward it lies above its own chord,
+% so it contributes only its two ENDPOINTS to the lower hull and the vertex values decide the
+% envelope. Curving upward it bulges BELOW the chord, and then the hull needs the arc itself.
+    [Vi, ~] = ratQ.combineDen(obj.VN, obj.VD);
+    for j = 1:size(obj.E,1)
+        [fN, ~] = obj.faceQ(j);
+        Hn = [fN(5) fN(6); fN(6) fN(7)];
+        d = ratQ.chk(Vi(obj.E(j,2),:) - Vi(obj.E(j,1),:), 'chain edge direction').';
+        if ratQ.chk(d.' * Hn * d, 'chain edge curvature') > 0
+            error('PLQ:biconjQ:notImplemented', ...
+                ['chain edge %d curves UPWARD along itself, so its lifted arc dips below its ' ...
+                 'own chord and the envelope is not determined by the vertex values.'], j);
+        end
+    end
+end
+
+% ------------------------------------------------------------------------------------------------
 function [vs, rays, bounded] = pieceGeometryB(obj, k)
 % face k's true vertices and recession directions -- see conjQ's pieceGeometry, which this mirrors.
     own = find(any(obj.F == k, 2));
@@ -772,10 +847,15 @@ function h = thinEnvelope(obj)
     end
 
     if size(obj.E,1) ~= 1
+        % Only a COLLINEAR chain reaches this now: a non-collinear one has a 2-D hull and is routed
+        % to concaveEnvelope before thinEnvelope is called at all. A collinear chain is genuinely
+        % thin -- its hull is still a segment -- so it wants this routine's H-form equality side
+        % over the whole span, with the pieces folded along it. That is a 1-D envelope of several
+        % quadratics, not the 2-D hull, and it is not written.
         error('PLQ:biconjQ:chainNotImplemented', ...
-            ['a CHAIN of %d edges is not thin: the convex hull of two non-collinear segments is ' ...
-             'a two-dimensional polygon, so its envelope is the ordinary lower-hull case read ' ...
-             'from the whole mesh rather than from a face.'], size(obj.E,1));
+            ['a COLLINEAR chain of %d edges is thin, so its envelope is the 1-D fold along its ' ...
+             'own span rather than a 2-D hull. A non-collinear chain is handled by ' ...
+             'concaveEnvelope and never reaches here.'], size(obj.E,1));
     end
     if obj.E(1,3) == 0
         error('PLQ:biconjQ:unbounded', ...

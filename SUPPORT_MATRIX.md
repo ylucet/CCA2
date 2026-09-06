@@ -457,6 +457,54 @@ branch (affine, convex, concave, indefinite with 0/1, 2 and 3 convex edges — i
 
 ---
 
+## 3.1 The EXACT envelope — `biconjQ` / `isConvexQ` / `domainIsConvexD` (2026-09-05)
+
+§3 above documents the LEGACY `biconjCPLQ`. This is the exact path, whose guards are a different
+set. Every row cites a live `error(...)`; the classification follows §0's four values.
+
+### `biconjQ.m`
+
+| Guard | Class | Why |
+|---|---|---|
+| `input` | internal invariant | argument type; no caller can reach it with a `QuaPol` |
+| `notConvex` (x2) | **OK** | the caller's `fIsConvex` contradicts a free necessary condition, or (under `BICONJ_ASSERT`) the exact test. Refusing loudly is the design |
+| `minusInfinity` | **N/R** | `co f` really is `-infinity`; a correct answer with nowhere to be stored |
+| `convexPieceCoupling` | **GAP** | every piece convex, `f` not; needs the implicit algebraic face — DECISIONS.md 2026-09-05 |
+| `notImplemented` (piece) | **GAP** | a non-convex piece that curves UP along one of its own edges; the single-piece case [COAP] A.2-A.5 covers |
+| `notImplemented` (chain edge) | **GAP** | same obstruction on a chain edge: the lifted arc dips below its own chord |
+| `chainNotImplemented` | **GAP** | a COLLINEAR chain, which is thin: a 1-D fold along its own span, not a 2-D hull |
+| `degenerate` (x3) | internal invariant | a face with too few generators; a well-formed mesh has three |
+| `noFacet` | internal invariant | no lower-hull facet from three non-collinear lifted points |
+| `noFace` | internal invariant | a face index with no edges |
+| `nonConvexPiece` (x2) | internal invariant | in `quaPolAsQuaCon`, reached only if the convex short-circuit admitted a piece it should not have |
+| `unbounded` | **GAP** | a RAY domain in `thinEnvelope`, where `q` curving down gives `-infinity`. NOT the 2-D unbounded case, which is computed since 2026-09-05 |
+
+### `isConvexQ.m` — four of its five guards are INTERNAL INVARIANTS, and that is why they are uncovered
+
+Coverage 92.4%; the uncovered lines are 121, 132-133, 180, 228-229 and 248. Classified here rather
+than chased, per §0: an assertion that no well-formed input can reach is not a coverage gap.
+
+| Guard / line | Class | Why unreachable from a well-formed `QuaPol` |
+|---|---|---|
+| `input` | internal invariant | argument type |
+| `thinDomain` | **OK, by assertion** | `biconjQ` routes a dimension < 2 domain to `thinEnvelope` or the chain path before asking about convexity |
+| `degenerateEdge` (132-133) | internal invariant | an edge whose two endpoints are the same vertex has no normal; the constructor cannot build one |
+| `badVertex` (180) | internal invariant | `ratQ.combineDen` returns positive denominators by construction |
+| `danglingEdge` (228-229) | internal invariant | `+infinity` on BOTH sides of an edge is not a subdivision |
+| `iL == iR` skip (121) | not reachable | one face on both sides of an edge; `createP` does not build such a mesh |
+| recession half-plane (248) | not reachable **today** | needs a domain whose non-convexity is visible only at infinity while every VERTEX satisfies the half-plane. `domainIsConvexDTest` has such a fixture at the mesh level; no `QuaPol` in the corpus is one |
+
+The last row is the only one worth revisiting: it is a genuine branch, exercised through
+`domainIsConvexD` (100% covered) but not through `isConvexQ`'s integer twin.
+
+### `domainIsConvexD.m` — 100% covered
+
+| Guard | Class | Why |
+|---|---|---|
+| `thinMesh` | **OK, by assertion** | every edge `+infinity` on both sides means dimension < 2, where the containment test says nothing; refusing beats a vacuous `true` |
+
+---
+
 ## 4. Pointwise max of conjugates — `maxQuaPar` (Step 3)
 
 Line numbers below were re-derived from the source on 2026-08-14; the ones this table carried

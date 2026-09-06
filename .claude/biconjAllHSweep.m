@@ -35,7 +35,11 @@ function biconjAllHSweep(nRep)
     % a diagonal H, so the lifted recession ray is a fixed direction and the hull is computed.
     shapes = {'square1', 'square2', 'poly1', 'poly2', 'cone1', 'cone2', 'halfplane', ...
               'strip1', 'strip2'};
-    classes = {'PD', 'PSDsing', 'zero', 'indef', 'NSDsing', 'ND'};
+    % indefXY is x*y, and it is NOT redundant with indef. indef is diag(2,-2), whose recession
+    % directions along the axes have d'Hd = +-2, so it never produces a ray of ZERO curvature --
+    % the case whose lifted height is a genuine minimum rather than a constant. x*y has d'Hd = 0
+    % along both axes, so it is the class that exercises it.
+    classes = {'PD', 'PSDsing', 'zero', 'indef', 'indefXY', 'NSDsing', 'ND'};
     tally = containers.Map();          % "shape|class" -> [nOK nRefused nBad]
     refusals = containers.Map();       % identifier -> count
     tot = 0; bad = 0; worst = 0; nOK = 0;
@@ -129,6 +133,7 @@ function H = hessOfClass(cls)
         case 'PSDsing', H = [2 0; 0 0];
         case 'zero',    H = [0 0; 0 0];
         case 'indef',   H = [2 0; 0 -2];
+        case 'indefXY', H = [0 1; 1 0];
         case 'NSDsing', H = [-2 0; 0 0];
         case 'ND',      H = [-2 0; 0 -2];
     end

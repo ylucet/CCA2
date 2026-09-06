@@ -80,16 +80,17 @@ classdef biconjQTest < matlab.unittest.TestCase
             % yet on cone((1,0),(1,1)) the curvature is 1 - t^2 >= 0 throughout. So the envelope is
             % FINITE and the refusal must be an honest "not computed yet", not minusInfinity.
             %
-            % CHANGED 2026-09-05, when the unbounded envelope landed. This asserted
-            % PLQ:biconjQ:unbounded, which meant exactly "finite but not computed" -- and that is
-            % no longer a thing biconjQ says, because the finite unbounded case IS computed now.
-            % What remains uncomputed here is narrower and is named for what it is: the ray (1,1)
-            % has d'Hd = 0 but H*(1,1)' = (1,-1), so q's rate along it varies across the piece and
-            % the lifted set has no fixed recession ray. The DISTINCTION this test exists for --
-            % a correct -infinity against an honest gap -- is unchanged.
+            % CHANGED TWICE on 2026-09-05, and it is worth saying why rather than only that. It
+            % first asserted PLQ:biconjQ:unbounded, meaning "finite but not computed"; the
+            % unbounded envelope removed that. It then asserted shearedRecession; the minimum-rate
+            % lifted ray removed that too. What is left is the REAL obstruction and it was there
+            % all along: the ray (1,0) has d'Hd = +1, so q grows QUADRATICALLY along it, the piece
+            % is not edge-concave, and its own envelope is the unimplemented single-piece case.
+            % The distinction this test exists for -- a correct -infinity against an honest gap --
+            % is unchanged through all three.
             fin = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], ...
                          [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:shearedRecession');
+            testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:notImplemented');
         end
 
         function anUNBOUNDEDPieceGetsTheLIFTEDHULLWithItsRECESSIONRaysInIt(testCase)
@@ -170,18 +171,110 @@ classdef biconjQTest < matlab.unittest.TestCase
                 'so the refusal must be minusInfinity, not the finite-but-uncomputed one');
         end
 
-        function theSAMECaseAtTheORIGINIsGenuinelyBoundedBelow(testCase)
+        function theSAMECaseAtTheORIGINIsANSWEREDBecauseItIsBoundedBelow(testCase)
         % The control, so the test above is about the TRANSLATION and not about x*y or about cones.
-        % On the first quadrant x*y >= 0, so co f is finite -- and the refusal must therefore be an
-        % honest gap rather than minusInfinity, which is the whole point of the pair.
+        % On the first quadrant x*y >= 0, and co f is not merely finite -- it is ZERO, which is the
+        % smallest instance of a lifted ray whose height is a MINIMUM rather than a constant.
         %
-        % The identifier is the SHEARED one for the reason x*y always gives: (1,0)'H(1,0) = 0 while
-        % H*(1,0)' = (0,1) is nonzero.
+        % r(x,(1,0)) = y and r(x,(0,1)) = x, both minimised at the apex (0,0) where they vanish. So
+        % the lifted rays are (1,0,0) and (0,1,0), the hull is the quadrant at height 0, and
+        % co f = 0. Reading the rate at any other point would tilt the answer upward, and reading
+        % L'd -- which is also 0 here -- would be right by accident, which is what the shifted
+        % fixture below is for.
             f = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], ...
                        [0 0 0 0, 0, 1, 0, 0, 0, 0], [1 0; 0 1]);
             testCase.verifyGreaterThanOrEqual(f.eval([1000 3; 7 2; 0 9]), 0, ...
                 'x*y is nonnegative on the first quadrant');
-            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:shearedRecession');
+            h = biconjQ(f);
+            X = [0 0; 1 0; 0 1; 3 4; 100 0.5; 0.25 80];
+            testCase.verifyEqual(h.eval(X), zeros(size(X,1),1), 'AbsTol', 1e-12, ...
+                'co f = 0 on the whole quadrant');
+            testCase.verifyLessThanOrEqual(h.eval(X), f.eval(X) + 1e-12, 'co f <= f');
+        end
+
+        function aSHIFTEDApexMakesTheLiftedRayHeightNONZERO(testCase)
+        % The fixture that separates the minimum-rate rule from the old constant-L'd one, since
+        % L = 0 in both and only the apex moves. q = x*y on {x >= 0, y >= 2}: r(x,(1,0)) = y is
+        % minimised at the apex (0,2) where it is 2, and r(x,(0,1)) = x is minimised there at 0.
+        % So the lifted rays are (1,0,2) and (0,1,0), and
+        %
+        %       co f(x,y) = 2x   on {x >= 0, y >= 2}.
+        %
+        % L'd would have given height 0 for BOTH rays and hence co f = 0 -- a strict underestimate,
+        % and one that is still a convex minorant, so only a tightness check catches it. That is
+        % why equality along y = 2 is asserted and not just co f <= f.
+            f = QuaPol([0 2; 1 2; 0 3], [1 2 0; 1 3 0], ...
+                       [0 0 0 0, 0, 1, 0, 0, 0, 0], [1 0; 0 1]);
+            h = biconjQ(f);
+            X = [0 2; 1 2; 5 2; 0.5 2; 3 9; 0 40; 7 100];
+            testCase.verifyEqual(h.eval(X), 2*X(:,1), 'AbsTol', 1e-12, 'co f = 2x');
+            testCase.verifyLessThanOrEqual(h.eval(X), f.eval(X) + 1e-12, 'co f <= f');
+            testCase.verifyEqual(h.eval([0 2; 1 2; 5 2]), f.eval([0 2; 1 2; 5 2]), ...
+                'AbsTol', 1e-12, 'and it is TIGHT along y = 2, where f is already affine');
+        end
+
+        function aCHAINOfEdgesIsEnvelopedOverIts2DHull(testCase)
+        % A chain of two non-collinear segments is NOT thin: its convex hull is a triangle, so co f
+        % is an ordinary lower-hull answer over a 2-D domain. This used to be refused as
+        % `ambiguousChain`, on the stated grounds that several function rows with no F left it
+        % undecided which edge took which -- but for a chain ROW j IS EDGE j's function, which is
+        % what QuaPol.eval already reads, so there was never an ambiguity.
+        %
+        % The fixture has a closed form. Edge 1 is (0,0)-(2,0) carrying -x^2, which is CONCAVE
+        % along itself, so its lifted arc contributes only its endpoints: (0,0,0) and (2,0,-4).
+        % Edge 2 is (0,0)-(0,2) carrying 0, contributing (0,2,0). Three lifted points span one
+        % plane, so
+        %
+        %       co f(x,y) = -2x   on conv{(0,0), (2,0), (0,2)}.
+        %
+        % The interior point (0.5,0.5) is the load-bearing one: f is +infinity there, because it is
+        % off the chain, while co f is finite -- which is what makes this a 2-D answer and not a
+        % thin one.
+            f = biconjQTest.chainL();
+            testCase.verifyTrue(isinf(f.eval([0.5 0.5])), ...
+                'f is +infinity off the chain');
+
+            h = biconjQ(f);
+            X = [0 0; 2 0; 0 2; 1 0; 0.5 0.5; 0.25 1.5; 1 0.5];
+            testCase.verifyEqual(h.eval(X), -2*X(:,1), 'AbsTol', 1e-12, ...
+                'co f = -2x on the triangle');
+            testCase.verifyEqual(h.eval([0 0; 2 0; 0 2]), [0; -4; 0], 'AbsTol', 1e-12, ...
+                'and it interpolates the three lifted vertices exactly');
+
+            % co f <= f wherever f is finite, i.e. on the chain itself
+            C = [0 0; 0.5 0; 1 0; 2 0; 0 0.5; 0 2];
+            testCase.verifyLessThanOrEqual(h.eval(C), f.eval(C) + 1e-12, 'co f <= f on the chain');
+
+            % and outside the hull it is still +infinity
+            testCase.verifyTrue(all(isinf(h.eval([-1 0; 0 -1; 2 2]))), ...
+                'the envelope lives on conv(dom f), not on the whole plane');
+        end
+
+        function aCHAINThatCurvesUPWARDAlongAnEdgeIsRefusedByName(testCase)
+        % The companion, and the reason the previous fixture uses -x^2. A chain edge carrying +x^2
+        % has a lifted arc that dips BELOW its own chord, so the vertex values no longer determine
+        % the envelope -- the same obstruction as a face edge, and the same refusal.
+        %
+        % Every chain in examples2 is of this kind (they carry x^2 or y^2 along their edges), which
+        % is why the corpus alone cannot exercise the case above.
+            f = QuaPol([0 0; 2 0; 0 2], [1 2 1; 1 3 1], ...
+                       [0 0 0 0, 2, 0, 0, 0, 0, 0; 0 0 0 0, 0, 0, 0, 0, 0, 0], [0 0; 0 0]);
+            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notImplemented');
+
+            P = QuaPol.examples2();
+            for k = [5 6 7 10]
+                testCase.verifyError(@() biconjQ(P{k}), 'PLQ:biconjQ:notImplemented', ...
+                    sprintf('examples2{%d} carries x^2 or y^2 along its edges', k));
+            end
+        end
+
+        function aCOLLINEARChainIsStillThinAndIsRefusedByName(testCase)
+        % The boundary of the case above. examples2{4} is three collinear points, so its hull is
+        % still a SEGMENT -- the answer is thin, wants an H-form equality side, and is a 1-D fold
+        % of two quadratics along one span rather than a 2-D lower hull. Refused by its own name so
+        % that the reachable and unreachable halves of the chain case stay distinguishable.
+            P = QuaPol.examples2();
+            testCase.verifyError(@() biconjQ(P{4}), 'PLQ:biconjQ:chainNotImplemented');
         end
 
         function aRAYDomainIsRefusedByName(testCase)
@@ -583,6 +676,15 @@ classdef biconjQTest < matlab.unittest.TestCase
     end
 
     methods (Static)
+        function f = chainL(c) %#ok<INUSD>
+        % Two non-collinear segments meeting at the origin, with NO faces (F all zero, which is
+        % what makes the constructor call it a chain). Edge 1 carries -x^2 and edge 2 carries 0.
+        % A chain needs one function row PER EDGE -- QuaPol.eval indexes f(i,:) by edge -- and that
+        % convention is the whole content of the case.
+            f = QuaPol([0 0; 2 0; 0 2], [1 2 1; 1 3 1], ...
+                       [0 0 0 0, -2, 0, 0, 0, 0, 0; 0 0 0 0, 0, 0, 0, 0, 0, 0], [0 0; 0 0]);
+        end
+
         function f = diagonalKink(c)
         % The unit square split by the diagonal (0,0)-(1,1). Face 1 (below it) carries x^2+y^2 and
         % face 2 (above) carries x^2+y^2 + c*(y-x). Edge 5 is the diagonal; its direction is (1,1)

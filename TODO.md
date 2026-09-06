@@ -161,18 +161,41 @@ sweep exercised this path only through its refusals. 187 answered, 187 checked, 
 `co f = -x`, which catches both a dropped ray (the domain collapses to `y = 0`) and a mislifted
 one (the face tilts in `y`).
 
-### 3b. STILL OPEN, and it is what is left of the unbounded case
+### 3b. ~~`shearedRecession`~~  DONE 2026-09-05 (overnight)
 
-`shearedRecession`: `d'Hd = 0` but `H*d` nonzero, so `q`'s rate along `d` varies across the piece
-and the lifted set has no fixed recession ray. `q = x*y` on the first quadrant is the smallest
-instance and its envelope is plainly 0, so this is a real gap rather than a representational one.
-Only an indefinite piece reaches it.
+It was never a separate algorithm. Along a recession direction `d` the rate is `r(x,d) = (Hx+L)'d`,
+and the lifted RAY of the epigraph is `(d, rho)` for any `rho >= r(x,d)` at SOME `x` -- a direction
+that recedes from one point of a convex set recedes from all of them. So the smallest admissible
+height is the MINIMUM of `r` over the piece, which is a minimum over its VERTICES because `r` is
+affine and the cone test already rules out its falling along a recession direction.
 
-### 4. A CHAIN of edges
+The old code used the constant `L'd`, which is that minimum only in the special case `H*d = 0`;
+the general case was refused. Now it takes the minimum, and the refusal is gone.
 
-Refused as `chainNotImplemented`. Not thin: the convex hull of two non-collinear segments is a 2-D
-polygon, so it belongs with the ordinary lower-hull case read from the whole mesh rather than from
-a face.
+**Verified against two closed forms**, both in `biconjQTest`: `x*y` on the first quadrant has
+`co f = 0` (rays lifted to height 0), and `x*y` on `{x>=0, y>=2}` has `co f = 2x` (rays lifted to
+heights 2 and 0). The second is the discriminating one -- `L'd` is 0 for both rays there, so the
+old rule would return `co f = 0`, a strict UNDERESTIMATE that is still a convex minorant and so is
+invisible to a `co f <= f` check. Tightness along `y = 2` is what catches it.
+
+The sweep gained an `indefXY` Hessian class for the same reason: its `indef` is `diag(2,-2)`, whose
+axis rays have `d'Hd = +-2`, so it never produced a zero-curvature ray and could not see this path
+at all. 196 answered, 196 checked, 0 wrong.
+
+### 4. ~~A CHAIN of edges~~  DONE 2026-09-05 (overnight) for the reachable case
+
+A chain of two NON-COLLINEAR segments has a 2-D convex hull, so co f is an ordinary lower-hull
+answer; only the GATHER changes, iterating edges instead of faces. Row *j* of `f` is edge *j*'s
+function -- `QuaPol.eval` already reads it that way -- so the `ambiguousChain` refusal, which said
+there was no `F` to decide which edge took which, rested on a false premise.
+
+**`chainNotImplemented` was unreachable**: `ambiguousChain` fired first for every well-formed
+chain, since a chain must carry one row per edge for `eval` to work. It now names the COLLINEAR
+chain, which is genuinely thin (its hull is still a segment) and wants thinEnvelope's H-form
+equality side over the whole span -- a 1-D fold of several quadratics, still unwritten.
+
+Every chain in `examples2` carries `x^2` or `y^2` along its edges, so all of them curve UPWARD and
+are correctly refused; the corpus cannot exercise the new path and a fixture was written for it.
 
 ### 5. Smaller, and worth doing alongside
 
