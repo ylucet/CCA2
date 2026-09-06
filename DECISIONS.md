@@ -5606,3 +5606,35 @@ most of its branches while Bareiss fills in; and every Bareiss step is an exact 
 which profiling put at 115 s of 121. Cofactor expansion divides not at all. The implementation was
 removed rather than kept behind a flag -- an alternative that is slower everywhere it was tried is
 not a fallback, it is dead weight.
+
+## 2026-09-06 — ASSEMBLY is viable for small pieces and not for wide ones, and the filter only halves it
+
+**Item 2, measured before building.** A bridge lives on a PAIR of dual cells, one per piece, so the
+assembly loop is over all such pairs and that loop IS the cost — each pair is an elimination, 1 s to
+19 s measured. A convex quadratic on an n-gon has about `2n+1` dual cells (one per vertex, one per
+edge, one interior), so:
+
+| piece pair | cells | pairs | pairs whose cells MEET |
+|---|---|---|---|
+| two triangles, disjoint | 7 x 7 | 49 | 24 |
+| two triangles, overlapping cones | 7 x 7 | 49 | 32 |
+| triangle vs square | 7 x 9 | 63 | 42 |
+| square vs square | 9 x 9 | 81 | 35 |
+
+**The cheap exact filter — do the two cells MEET in dual space, one integer feasibility test on a
+handful of half-planes — removes only a third to a half.** That is worth having and it is not a
+change of order: a triangle pair still needs ~24 eliminations, so 30 s to 8 minutes per PIECE pair,
+and the corpus's wider fixtures reach 34 cells each, i.e. over 1000 pairs and hours.
+
+**So assembly is viable for triangles and squares and is not, as it stands, for a general polygon.**
+That is a real constraint on the design rather than a reason to stop: `biconjQ` already triangulates
+elsewhere, and the number that matters is cells per PIECE, which triangulation bounds at 7.
+
+**What would change the picture**, in the order worth trying: a second filter (does `g1 - g2`
+actually change sign on the intersection -- no sign change, no tie, no bridge, and it is cheap);
+caching by cell TYPE, since many vertex cells differ only by translation; and only then making the
+elimination itself faster.
+
+**What is NOT yet built:** the assembly proper -- walking the pairs, computing each face, and
+deciding which primal region each one owns. The region question is the genuinely unexplored part;
+everything above is about how many times it has to be asked.
