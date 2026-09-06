@@ -5191,3 +5191,37 @@ narrower than recorded: what is needed is an IMPLICIT algebraic face over the ra
 branch selector — a quadric in the isotropic case, degree `(4, 6)` in general — rather than
 anything requiring irrational stored data. `AlgAlg`'s affine-plus-a-named-point shape remains
 refuted.
+
+## 2026-09-05 (overnight) — the bridge's data is EXACT over Z; only the resultant is missing
+
+**A spike, not a build** (`.claude/bridgeEliminationSpike.m`). Before deciding whether CCA2 gains an
+implicit algebraic face, one question had to be answered: can the bridge's data be produced exactly
+over the rationals from the pieces' own integer coefficients? If not, the type would have nothing
+exact to hold and the decision would be moot.
+
+**It can.** For two pieces strictly convex on the plane:
+
+* the TIE conic `C(s) = q_1*(s) - q_2*(s) = 0` has exact integer coefficients — clearing
+  `inv(H_k)` costs a factor `det(H_k)`, an integer, so nothing leaves Q. Checked: `C` comes out as
+  the primitive integer vector `[5 0 5 -26 14 -10]`, and it vanishes on the derived circle to
+  6.0e-14 against a coefficient scale of 26.
+* the second conic `D(s;x) = det[x - y_1(s), y_2(s) - y_1(s)] = 0` likewise.
+* solving the pair and reading `z = <s,x> - q_1*(s)` reproduces the closed form **exactly**
+  (difference 0.000e+00 at a constructed bridge point).
+
+**The BRANCH SELECTOR is `t` in `[0,1]`** — `x` must lie BETWEEN the two tangency points. Two conics
+meet in up to four points and the rest are not the bridge. That test is what an implicit face would
+have to store alongside `p`, and it is not decoration: the first sample point tried here returned
+both roots with `t` outside `[0,1]`, which is the selector correctly reporting that the point is not
+on the bridge at all (there `co f = q_1(x)`).
+
+**What is missing is one routine: a bivariate RESULTANT.** `ratQ` has univariate machinery —
+`polyMul`, `polyPseudoRem`, `polyGcd`, Sturm — and no way to eliminate `s` between two conics
+symbolically. That is the first thing to build if the type goes ahead, and it is self-contained,
+testable on its own, and useful independently of the type decision.
+
+**Method note.** Two wrong turns, both worth the record. The root search first took the sample
+MINIMISING `|D|` rather than a root of it, which is not the same thing and returned the opposite
+point of the circle (`z = -21.1` against `0.683`). And the sample `x` was picked rather than
+constructed, so it was not a bridge point; constructing `x` from a chosen `s` made the test
+self-validating (`t` comes back as the 0.5 it was built with).

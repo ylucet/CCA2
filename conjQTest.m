@@ -871,6 +871,25 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.nf, 1, ...
                 'one extreme point, so one cell -- not one per direction marker as well');
         end
+
+        % ---- the input guards, which had no test ---------------------------------------------
+        % Added 2026-09-05 alongside ratQ's. conjQ's remaining uncovered lines are dominated by
+        % INTERNAL INVARIANTS of the ear-clipping triangulation (notSimple, noEar, repeatedVertex,
+        % degenerate) which a well-formed mesh cannot reach; those are classified in
+        % SUPPORT_MATRIX.md rather than chased. These two are reachable by a caller.
+
+        function conjQREFUSESANonQuaPolByName(testCase)
+            testCase.verifyError(@() conjQ(42), 'PLQ:conjQ:input');
+            testCase.verifyError(@() conjQ(struct('a',1)), 'PLQ:conjQ:input');
+        end
+
+        function conjQREFUSESAChainCarryingSeveralFunctions(testCase)
+        % A domain of dimension < 2 with one function row per edge. conjQ has no convention for
+        % which edge takes which -- unlike biconjQ, whose envelope reads them per edge -- so it
+        % refuses rather than picking one.
+            P = QuaPol.examples2();
+            testCase.verifyError(@() conjQ(P{5}), 'PLQ:conjQ:ambiguousChain');
+        end
     end
 
     methods (Static)

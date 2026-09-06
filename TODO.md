@@ -206,18 +206,19 @@ are correctly refused; the corpus cannot exercise the new path and a fixture was
     HIGH and needs no vertex enumeration, so it works on unbounded domains too).
     **150 answered, 150 checked, 0 wrong, worst 2.2e-15.** It found no defect and one GAP -- see
     the new top item below and DECISIONS.md 2026-09-05.
-  * **Coverage, RE-MEASURED 2026-09-05** (fast bucket, `--coverage`). `QuaCon.m` **70.7% -> 100%**:
-    what was missing was its five constructor VALIDATORS and `disp`, and an untested validator is
-    the worst state a check can be in -- it passes forever whatever it does, and the constructor's
-    own header says the validation is the point. `domainIsConvexD.m` 100%, `isConvexQ.m` 92.4%,
-    `biconjQ.m` 91.0% (was 90.7%).
+  * **Coverage, RE-MEASURED twice on 2026-09-05** (fast bucket, `--coverage`).
+    `QuaCon.m` **70.7% -> 100%**, then overnight `ratQ.m` **88.1% -> 93.8%** and
+    `conjQ.m` **88.4% -> 89.6%**. In all three the gap was ARGUMENT VALIDATORS with no test, which
+    is the worst state a check can be in -- it passes forever whatever it does, and these are the
+    layer standing between an exact answer and a plausible wrong one.
+    `domainIsConvexD.m` 100%, `biconjQ.m` 92.5%, `isConvexQ.m` 92.4%, `exactQ.m` 94.2%.
+    What is left uncovered in `ratQ` and `conjQ` is dominated by INTERNAL INVARIANTS --
+    `signAtNoConverge`, `isolateNoConverge`, `pseudoRemNotIntegral`, and `conjQ`'s ear-clipping
+    guards (`notSimple`, `noEar`, `repeatedVertex`) -- whose own comments argue they cannot fire
+    for a squarefree integer polynomial or a well-formed mesh. Classified in `SUPPORT_MATRIX.md`
+    section 3.1 rather than chased.
     Item 1 did not REMOVE branches from `biconjQ` -- the convex short-circuit gained a route
     rather than losing one -- so the earlier guess that it would was wrong.
-    **`conjQ.m` 88.4% and `ratQ.m` 88.1% are now the lowest of the exact files.**
-    What is left uncovered in `isConvexQ` is four INTERNAL-INVARIANT guards (a degenerate edge, a
-    nonpositive vertex denominator, an edge with +infinity on both sides) plus the `iL == iR`
-    skip, which no fixture exercises. They are assertions, not features; classify them in
-    `SUPPORT_MATRIX.md` rather than chasing the percentage.
 
 ## 2026-09-05 - INTEGER OVERFLOW: the options, measured before choosing
 

@@ -608,6 +608,88 @@ classdef ratQTest < matlab.unittest.TestCase
                     sprintf('case %d: the conic is not a nonzero constant multiple of g1-g2', k));
             end
         end
+        % ---- the ARGUMENT VALIDATORS, which had no test ------------------------------------
+        % Added 2026-09-05. ratQ is the layer everything exact rests on, and its guards are what
+        % stand between an exact answer and a plausible wrong one -- but an untested validator is
+        % the worst state a check can be in: it passes forever whatever it does. The same
+        % measurement that took QuaCon from 70.7% to 100% pointed here next.
+        %
+        % Only guards a CALLER can reach are tested. The rest are internal invariants and are
+        % classified in SUPPORT_MATRIX.md rather than chased -- notably signAtNoConverge,
+        % isolateNoConverge and pseudoRemNotIntegral, which the file's own comments argue cannot
+        % fire for a squarefree integer polynomial.
+
+        function aDenominatorMustBeANONZEROSCALAR(testCase)
+            testCase.verifyError(@() ratQ.canon([1 2], [1 2]), 'ratQ:badDenominator');
+            testCase.verifyError(@() ratQ.canon([1 2], 0),     'ratQ:badDenominator');
+            testCase.verifyError(@() ratQ.signQ([1 2], [1 2]), 'ratQ:badDenominator');
+            testCase.verifyError(@() ratQ.signQ([1 2], 0),     'ratQ:badDenominator');
+        end
+
+        function divideByAVECTORIsRefusedBecauseItIsNotDefined(testCase)
+            testCase.verifyError(@() ratQ.div([1 2], 1, [1 2], 1), 'ratQ:badDivisor');
+            testCase.verifyError(@() ratQ.div([1 2], 1, 0, 1),     'ratQ:divideByZero');
+        end
+
+        function combineDenNeedsONEDenominatorPerROW(testCase)
+            testCase.verifyError(@() ratQ.combineDen([1 2; 3 4], [1 1 1]), 'ratQ:sizeMismatch');
+            testCase.verifyError(@() ratQ.combineDen([1 2; 3 4], [1; 0]),  'ratQ:badDenominator');
+        end
+
+        function solve2TakesA2x2OrA3x3AndNothingElse(testCase)
+            testCase.verifyError(@() ratQ.solve2([1 2; 3 4], [1; 2; 3]), 'ratQ:badSystem');
+            testCase.verifyError(@() ratQ.solve2([1 2 3], [1; 2]),       'ratQ:badSystem');
+            testCase.verifyError(@() ratQ.solve2(eye(4), ones(4,1)),     'ratQ:badSystem');
+        end
+
+        function detExactCoversOneByOneAndRefusesAboveThree(testCase)
+        % The 1x1 case is a real branch, not a guard, and was the one uncovered line here that
+        % returns a value rather than raising.
+            testCase.verifyEqual(ratQ.detExact(7), 7);
+            testCase.verifyError(@() ratQ.detExact(eye(4)), 'ratQ:badSystem');
+        end
+
+        function aCUBICHasNoConstantHessianAndNoAffineGradient(testCase)
+        % The documented contract of hessQ/gradQ: a cubic's Hessian varies with the point, so
+        % returning one would be a wrong ANSWER rather than a missing feature.
+            cubic = [1 0 0 0, 0, 0, 0, 0, 0, 0];      % x^3 term present
+            testCase.verifyError(@() ratQ.hessQ(cubic, 1), 'ratQ:cubicFace');
+            testCase.verifyError(@() ratQ.gradQ(cubic, 1), 'ratQ:cubicFace');
+        end
+
+        function substAffineChecksTheSHAPEOfItsMap(testCase)
+            q = [0 0 0 0, 2, 0, 2, 0, 0, 0];
+            testCase.verifyError(@() ratQ.substAffine(q, 1, eye(3), [0;0]), 'ratQ:badMap');
+            testCase.verifyError(@() ratQ.substAffine(q, 1, eye(2), [0;0;0]), 'ratQ:badMap');
+            testCase.verifyError(@() ratQ.substAffine(q, 1, eye(2), [0;0], 0), ...
+                'ratQ:badDenominator');
+            testCase.verifyError(@() ratQ.substAffine(q, 1, zeros(2), [0;0]), 'ratQ:singular');
+        end
+
+        function aPRODUCTAboveTheCUBICBasisIsRefusedRatherThanTruncated(testCase)
+        % Truncating would silently change the function, which is the one failure this layer is
+        % built to prevent. x^2 * x^2 is degree 4 and has nowhere to go.
+            A = zeros(4); A(3,1) = 1;                  % x^2 in the (i,j) degree grid
+            testCase.verifyError(@() ratQ.polyMul(A, A), 'ratQ:degreeOverflow');
+        end
+
+        function fromDoubleREFUSESWhatItCannotRepresentExactly(testCase)
+        % The counting argument in fromDouble's header, exercised: an irrational is rejected
+        % because the best rational with denominator <= maxDen is off by ~1/q^2, four orders
+        % coarser than the window it accepts.
+            testCase.verifyError(@() ratQ.fromDouble(sqrt(2)), 'ratQ:notExact');
+            [n, d] = ratQ.fromDouble(50/11);
+            testCase.verifyEqual([n d], [50 11], 'and a genuine rational still converts');
+        end
+
+        function chkREFUSESAnythingThatIsNotAnExactInteger(testCase)
+        % The single thing standing between an exact answer and a plausible wrong one.
+            testCase.verifyError(@() ratQ.chk(1.5), 'ratQ:notInteger');
+            testCase.verifyError(@() ratQ.chk(Inf), 'ratQ:notFinite');
+            testCase.verifyError(@() ratQ.chk(NaN), 'ratQ:notFinite');
+            testCase.verifyError(@() ratQ.chk(2^53), 'ratQ:overflow');
+            testCase.verifyEqual(ratQ.chk(2^53 - 1), 2^53 - 1, 'and one below it is fine');
+        end
     end
 
     methods (Static)
@@ -629,5 +711,7 @@ classdef ratQTest < matlab.unittest.TestCase
         function s = symOf(c, x, y)
             s = c(5)*x^2/2 + c(6)*x*y + c(7)*y^2/2 + c(8)*x + c(9)*y + c(10);
         end
+
+
     end
 end
