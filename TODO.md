@@ -106,7 +106,15 @@ question and which is not mine to take.
     1.5e-11; the best affine fit to it is off by 2.9 and the best quadratic fit by 0.36.
   * So **`AlgAlg` as specified is refuted.** Affine-plus-a-named-algebraic-point covers only the
     three-piece tie at an isolated dual vertex. The two-piece tie sweeps a dual CURVE and its face
-    is not affine. What is needed is a SECOND-ORDER-CONE face.
+    is not affine.
+  * **But the face IS algebraic, with RATIONAL implicit coefficients** -- `sqrt(Q)` satisfies
+    `z^2 = Q`, and "not a polynomial in x" is not "not algebraic". Implicitly the face above is
+    `(z - <2a,x-2a> - 2c)^2 - R^2*|x-2a|^2 = 0` with `R^2 = 4(|a|^2-c)` RATIONAL: a quadric cone,
+    holding to 1.8e-10, and the same shape `QuaCon` already stores for edge conics one dimension
+    up. The general (different-Hessian) case is degree `<= 4` in `z` with degree-6 coefficients in
+    `(x,y)` -- measured as a collapse from 1.2e-9 to 5.4e-14. So what is needed is an IMPLICIT
+    algebraic face plus a branch selector, over the rationals; no irrational stored data, and no
+    new number field.
   * The rational boundary is sharp: the bridge is quadratic exactly when the two tying cells share
     a Hessian. **Domain clipping breaks that even for pieces that do share one** (an interior cell
     tying against a vertex cell has effective Hessians `H` and `0`), so there is no rational
@@ -120,10 +128,12 @@ one identifier for two unrelated situations under a message ([COAP] A.2-A.5) tha
 `notImplemented` now means the single-piece indefinite case [COAP] really covers;
 `convexPieceCoupling` is new. Over the sweep the 36 shared refusals are 24 and 12.
 
-**THE DECISION NEEDED, and it is the only thing blocking both items:** whether CCA2 gains a
-second-order-cone face type (affine + sqrt of a quadratic). Building it is a new class with its
-own arithmetic, `eval`, and tests, and it changes what every downstream operator must accept --
-so it wants to be decided, not drifted into.
+**THE DECISION NEEDED, and it is the only thing blocking both items:** whether CCA2 gains an
+IMPLICIT ALGEBRAIC face -- a face stored as `p(x,y,z) = 0` with `p` rational and a branch
+selector, rather than as `z = <expression>`. It is a new class with its own `eval` (a root-solve
+with a sign, not a formula) and it changes what every downstream operator must accept, so it wants
+to be decided rather than drifted into. It is CHEAPER than this entry first claimed -- see the
+addendum in DECISIONS.md 2026-09-05 -- because the coefficients stay rational.
 
 ### 3. ~~The UNBOUNDED NON-CONVEX envelope~~  DONE 2026-09-05
 

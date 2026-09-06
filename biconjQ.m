@@ -50,8 +50,26 @@ function h = biconjQ(obj)
 %       co f(x) = <2a, x - 2a> + 2*sqrt(|a|^2 - c) * |x - 2a| + 2c ,
 %
 % a NORM -- the square root of a quadratic. Measured there: the best affine fit to that face is off
-% by 2.9 and the best quadratic fit by 0.36, against an oracle agreement of 1.5e-11. So the type
-% this needs is a second-order-cone face, and `AlgAlg` as specified would not hold it.
+% by 2.9 and the best quadratic fit by 0.36, against an oracle agreement of 1.5e-11. So `AlgAlg` as
+% specified would not hold it.
+%
+% BUT THE FACE IS STILL ALGEBRAIC, AND THAT IS THE USABLE PART -- `.claude/bridgeAlgebraicProbe.m`.
+% "Not a polynomial in x" is not "not algebraic": sqrt(Q) satisfies z^2 = Q. Written IMPLICITLY the
+% face above is
+%
+%       (z - <2a, x-2a> - 2c)^2 - R^2*|x - 2a|^2 = 0 ,     R^2 = 4(|a|^2 - c),
+%
+% a QUADRIC CONE whose coefficients are RATIONAL, since R^2 is rational even though R is not; it
+% holds to 1.8e-10 there. That is the same shape QuaCon already stores for its edge CONICS, one
+% dimension up -- so the isotropic case needs an implicit quadric face plus a branch choice, not a
+% new arithmetic.
+%
+% The general case is bigger but still implicit and still rational. With DIFFERENT Hessians
+% (H2 = diag(2,4)) no quadric fits at all, yet a polynomial relation does exist: degree <= 4 in z
+% -- which is what eliminating the minimiser t predicts, since dval/dt = 0 clears to a quartic in t
+% -- with coefficients of degree 6 in (x,y). Measured as a COLLAPSE, the smallest singular value
+% dropping from 1.2e-9 at degree 5 to 5.4e-14 at degree 6 and staying flat after, which is an
+% identity rather than a better fit.
 %
 % THE RATIONAL/IRRATIONAL BOUNDARY IS SHARP, and the same script pins the other side of it: the
 % bridge is quadratic exactly when the two tying cells have the SAME Hessian, because then the two

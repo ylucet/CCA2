@@ -5151,3 +5151,43 @@ a fixture bug of mine, the split edge's two faces swapped, caught by asking whet
 even the intended function before looking at `biconjQ` (`.claude/strip2MeshProbe.m`). Corrected:
 187 answered, 187 checked, 0 wrong. **A sweep that reports a defect is worth as much when the
 defect is in the sweep, but only if the fixture is checked before the code.**
+
+## 2026-09-05 (addendum) — the bridge face IS algebraic, with RATIONAL implicit coefficients
+
+**Correcting the previous entry's framing, not its measurements.** It concluded that the bridge
+face "carries the square root of a quadratic, which no CCA2 type can hold", and called for a
+second-order-cone face. The measurements stand; the conclusion drawn from them was too strong,
+and the question that exposed it was simply *is the square root of a quadratic algebraic?*
+
+It is. `sqrt(Q)` satisfies `z^2 = Q`. "Not a polynomial in `x`" is not "not algebraic", and the
+difference decides how expensive the missing type is.
+
+**Written implicitly, the isotropic bridge face is a QUADRIC CONE with RATIONAL coefficients**
+(`.claude/bridgeAlgebraicProbe.m`):
+
+        (z - <2a, x-2a> - 2c)^2 - R^2*|x - 2a|^2 = 0 ,      R^2 = 4(|a|^2 - c)
+
+`R` is irrational but `R^2` is not, so every coefficient is rational. Holds to **1.8e-10** against
+the same primal oracle. That is the shape `QuaCon` already stores for its edge conics, one
+dimension up — so this case wants an implicit face plus a branch choice, not a new arithmetic and
+not a new number field.
+
+**The general case is bigger and still implicit and still rational.** With different Hessians
+(`H2 = diag(2,4)`) no quadric fits — but a polynomial relation does exist, of degree `<= 4` in `z`
+with coefficients of degree `6` in `(x,y)`. Degree 4 in `z` is exactly what eliminating the
+minimiser `t` predicts: `dval/dt = 0`, cleared of its two squared denominators, is a quartic in
+`t`. Measured as a COLLAPSE rather than a trend — the smallest singular value falls from `1.2e-9`
+at degree 5 to `5.4e-14` at degree 6 and stays flat at degree 7, which is an identity appearing,
+not a better approximation on a bounded box.
+
+**Method note.** The first search for the relation used a TOTAL-degree basis and found nothing
+through degree 5, whose residuals decreased smoothly — the signature of approximation. That is a
+false negative produced by the wrong basis: the elimination bounds the degree in `z`, not in
+`(x,y)`, and the coefficient polynomials turned out to be degree 6. **Read the collapse, not the
+trend**, and choose the basis from the elimination rather than from convenience.
+
+**What this changes for the type decision.** The blocker in TODO.md item 2 stands, but its shape is
+narrower than recorded: what is needed is an IMPLICIT algebraic face over the rationals with a
+branch selector — a quadric in the isotropic case, degree `(4, 6)` in general — rather than
+anything requiring irrational stored data. `AlgAlg`'s affine-plus-a-named-point shape remains
+refuted.
