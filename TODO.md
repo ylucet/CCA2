@@ -37,6 +37,33 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## 2026-09-06 - BRIDGE ASSEMBLY: filters DONE, region logic is all that is left
+
+Both cell-pair filters are built, exact and verified. What remains on this line is one item, and
+it is the one with actual mathematical content.
+
+1. **REGION LOGIC -- which primal region a bridge face owns.** Untouched. The elimination says what
+   a bridge face IS (an implicit polynomial); nothing yet says WHERE it is the envelope. Every face
+   of `f**` needs the set of `x` it is valid on, and elsewhere another piece or another bridge wins.
+2. Then one full envelope on a triangle pair: 4 eliminations after filtering, not 24.
+3. `.claude/bridgeCellProbe.m`'s anisotropic 5-variable form still overflows where the hand-built
+   4-variable one succeeds. A tightening problem, not a correctness one.
+
+**DONE 2026-09-06, and it reversed the viability verdict.** Filter 1 (do the two dual cells meet,
+in TWO dimensions -- `ratQ.feasible2` in strict mode) and filter 2 (`ratQ.quadSignOnPoly`: does
+`g1 - g2` change sign on the intersection). Measured on a fixture ladder up to a 16-gon pair: 1089
+candidate pairs -> 235 after filter 1 -> **38 eliminations** after filter 2. The earlier "assembly
+is not viable for a wide polygon" is superseded; see DECISIONS 2026-09-06.
+
+**NOT worth doing now, and the measurement says why.** Caching cells by TYPE and making the
+elimination itself faster are each a constant factor on a count the filters already cut by an
+order. Revisit only if the region logic turns out to be cheap and the eliminations dominate again.
+
+**Open question, raised in session and not yet answered:** Locatelli has pruning strategies for
+pairs that produce no active region. They have never been read here, and the one citation in
+`DESIGN.md` is still a placeholder that was never looked up. Worth a literature pass before any
+further filter work -- but NOT before the region logic, which nothing in the literature replaces.
+
 ## 2026-09-05 - NEXT TASKS FOR `biconjQ`, reordered by measurement
 
 The previous ordering guessed that the unbounded non-convex envelope was the biggest win. Measured
