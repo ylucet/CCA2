@@ -5870,3 +5870,64 @@ takes 197 of the 235 available.
   named (on an extreme ray it is settled by `flatRaySign`)
 - an integer overflow while forming a candidate: that candidate is declined towards `+1`, which can
   only lose a prune, never cause one
+
+## 2026-09-06 — A BRIDGE FACE'S DOMAIN IS NOT POLYHEDRAL. Its boundaries are CONICS, and the type estimate survives anyway
+
+**The measurement the type decision was waiting on** (`.claude/bridgeRegionProbe.m`). The open
+question was whether adding an implicit face costs one new value on `RETURN_TYPE.md`'s FUNCTION
+axis, or a change on both axes at once. It is one axis — but not for the reason hoped, and the
+domain answer is the opposite of the one the project's other Locatelli note would suggest.
+
+**What the region is.** `f**(x) = sup_s <s,x> - f*(s)` with `f* = max(g1, g2)`, and `x` is in the
+bridge exactly when the maximiser `s*(x)` lies on the TIE `{g1 = g2}` rather than strictly inside
+one piece's cell. At a tie point the subdifferential of a max is the segment between the two
+gradients, so
+
+        bridge region  =  union over s on the tie of  conv{ grad g1(s), grad g2(s) } .
+
+**Each `grad g_k` is AFFINE and the tie is a CONIC, so each boundary is an affine image of a conic
+— a conic.** Straight only in the degenerate case where the tie itself is a line, which is exactly
+the equal-Hessian case DECISIONS 2026-09-05 already pins.
+
+**Measured without using any of that**, by maximising and classifying by where the maximiser landed:
+
+| instance | boundary | best LINE residual | best CONIC residual |
+|---|---|---|---|
+| isotropic | inner | 7.07e-01 | **6.79e-14** |
+| isotropic | outer | 7.07e-01 | **6.79e-14** |
+| anisotropic | inner | 3.62e-01 | **2.40e-14** |
+| anisotropic | outer | 3.02e-01 | **1.84e-14** |
+
+**Thirteen orders between the two models on the same points**, both fits least squares on the same
+data. The domain is not polyhedral, and it is not close.
+
+**The isotropic case comes out on the closed form exactly, which is what validates the classifier.**
+Predicted from `grad g1(s) = s` and `grad g2(s) = a + s/2` on the tie circle of centre `2a` and
+radius `R`: two CONCENTRIC CIRCLES about `2a` of radii `R/2` and `R`, i.e. an ANNULUS. Measured
+radii **1.224745 and 2.449490** against predicted 1.224745 and 2.449490, with the radius varying
+over 240 rays by **8.6e-12 and 1.7e-11**. The anisotropic instance keeps the conic fit (1.8e-14)
+and loses the constant radius (spread 1.35 and 3.65), i.e. it is a genuine non-circular conic.
+
+**WHY THIS DOES NOT CONTRADICT THE LOCATELLI NOTE IN `DESIGN.md`**, which treats an empirically
+curved transition boundary as proof of an INCOMPLETE SEARCH. That theorem is about the envelope of
+ONE quadratic over ONE polyhedron. A bridge spans TWO quadratics across a kink, so the theorem does
+not apply and a curved boundary is the expected answer rather than an artifact. The two findings
+are about different objects and neither weakens the other.
+
+### What this does to the type decision: it is still ONE axis
+
+**The subdivision axis already has the value this needs.** `Par` exists precisely for curved cell
+boundaries, and `QuaCon` stores faces in H-FORM — `FC{k}` is a list of `[edge, side]` sign
+conditions on conics — so an annulus is TWO rows, inside the outer circle and outside the inner
+one. No new subdivision value, no new face representation.
+
+**But one concrete combinatorial gap is exposed, and it is not the type.** The mesh's edge table
+`E` is inherited from `RatCon` and stores each edge as its two endpoint VERTEX INDICES plus a
+segment/ray flag. **A closed conic edge has no endpoints**, and the isotropic bridge region is
+bounded by two of them. The face itself is representable; the edge table cannot currently name the
+curve that bounds it. That is a bounded, specific piece of work on the combinatorial half of the
+mesh — a third flag value, or a convention for naming a closed curve — and it is independent of the
+function-axis decision rather than part of it.
+
+**So the option as put stands**: a third value on the function axis, plus this one edge-table
+convention. The estimate is not wrong, and it is now measured rather than assumed.
