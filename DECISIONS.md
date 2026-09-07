@@ -6032,3 +6032,55 @@ wired symbolic path to settle it and had not finished when this was written.
 `biconjQ` refuses with only `convexPieceCoupling` (6 fixtures) and `notImplemented` (the
 single-piece indefinite) — both already classified GAP, neither N/R. So the reachability damage is
 confined to the symbolic Step-3 path, which is the one whose rows this entry reclassifies.
+
+## 2026-09-06 (overnight, item 2) — the bridge region's BOUNDARY CURVES, built exactly in one substitution
+
+**Item 2's first half, and it is smaller than it looked** (`.claude/bridgeRegionBuild.m`). The
+previous entry established by tracing and fitting THAT the region's boundaries are conics. They can
+be CONSTRUCTED instead, in integers, with no fitting and no sampling.
+
+**The construction.** At a tie point the subdifferential of a max is the segment between the two
+gradients, so the region is `union over s on the tie of conv{grad g1(s), grad g2(s)}`, and each
+`grad g_k(s) = A_k s + b_k` is AFFINE. The image of a conic under an invertible affine map is a
+conic, and its coefficients are one exact substitution away:
+
+        image of { q = 0 } under x = A s + b   is   { q(A^-1 (x - b)) = 0 }
+
+— which is `ratQ.substAffine` with `M = adj(A)`, `t = -adj(A) b`, map denominator `det(A)`, all
+integral because `A` is. **So the region's boundaries cost one existing routine per curve.**
+
+| instance | boundary 1 | boundary 2 | max relative residual on the mapped tie |
+|---|---|---|---|
+| isotropic | elliptic | elliptic | **7.8e-17 / 5.1e-17** |
+| anisotropic | elliptic | elliptic | **8.6e-17 / 8.6e-17** |
+| vertex cell (`A_2 = 0`) | elliptic | **a single POINT** | 4.9e-17 / spread exactly **0** |
+
+**The verification is differential and shares no arithmetic with the construction**: take points on
+the tie, map them through the gradient, and evaluate the constructed conic there — it must vanish.
+
+**AND IT REPRODUCES THE ANNULUS FROM A COMPLETELY DIFFERENT ROUTE.** The isotropic boundaries come
+out as `3x^2+3y^2-16x-8y-16` and `3x^2+3y^2-16x-8y+24`: same quadratic part, so **concentric
+circles**, centre `(8/3, 4/3)`, radii `sqrt(128)/3` and `sqrt(8)/3` — a ratio of exactly 4, which
+is the ratio of the two maps' scalings. The earlier entry got the annulus by classifying a grid and
+fitting; this gets it by an integer substitution. Two methods sharing nothing agreeing on the same
+figure is the strongest evidence available here.
+
+**THE VERTEX CELL IS THE EASY CASE, and it is not rare.** Over a vertex cell a conjugate is AFFINE,
+so `A_k = 0`, `grad g_k` is the CONSTANT `b_k`, and the whole boundary collapses to one point: the
+region is a FAN from that point over the other boundary. Measured image spread exactly zero.
+`substAffine` refuses a singular map by name — correctly, since it is not a change of variables —
+so this case is detected before the call rather than by catching its error.
+
+**WHAT IS NOT YET BUILT, stated as the residue rather than as a gap: the SIDES.** The two curves
+are known; which side of each the region occupies is not, and an H-form face needs it. The route is
+identified and uses machinery that exists: the inward direction at a boundary point
+`x = grad g1(s)` is `d = (A2 - A1)s + (b2 - b1)`, so the side is the sign of the directional
+derivative of the boundary conic along `d` — a rational expression in `s`, whose sign has to be
+decided **on the curve `{q = 0}`** rather than at a point. That is a "sign of one conic on another"
+question, and `ratQ.signAt`/`sturmChain`/`isolateRoots` are the exact tools for it. Deliberately not
+guessed by evaluating at a sampled point: a tolerance there would decide which side of a face the
+envelope lives on, which is the one place this project has never accepted one.
+
+**One guard fired and was right.** Converting a face back to a conic by halving the squared terms
+produced a non-integer vector and `ratQ.conic` refused it. A conic has no scale, so the conversion
+takes TWICE the face instead and stays integral.
