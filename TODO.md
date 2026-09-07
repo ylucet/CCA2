@@ -42,7 +42,10 @@ APC; gold is ~$3,290 and unnecessary.
 All three items from the previous list are DONE. What is left on the envelope line is one item, and
 it is bookkeeping rather than new mathematics.
 
-- [ ] **RETURN THE WINNING CANDIDATE'S IDENTITY, not just its value.** `.claude/cellFaceExactProbe.m`
+- [x] **RETURN THE WINNING CANDIDATE'S IDENTITY** — DONE 2026-09-06 overnight 2. `who.kind` /
+  `who.facet` / `who.tn,td`, with all four kinds measured to occur (endpoint 413, vertex 74,
+  constant 9, stationary 6) and the hard-point check asserting the label as well as the value.
+- [ ] ~~(superseded) RETURN THE WINNING CANDIDATE'S IDENTITY.~~ `.claude/cellFaceExactProbe.m`
   decides every candidate exactly, but returns the winning VALUE. The assembly needs to know WHICH
   facet and which endpoint won, to name the face it is building. A return-value change rather than
   new mathematics, and the next step on this line.

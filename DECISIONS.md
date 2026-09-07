@@ -6701,3 +6701,37 @@ stationary vertex.
 winning CANDIDATE's identity. The assembly needs the latter — which facet, which endpoint — to
 name the face it is building. That is a return-value change rather than new mathematics, and it is
 the next step on this line.
+
+## 2026-09-06 (overnight 2) — the evaluator now names its WINNER, and all four kinds really occur
+
+**The step the previous entry named.** The exact evaluator returned the winning VALUE; an assembly
+needs the winning CANDIDATE. `exactCellFace` now returns a fourth output:
+
+        who.kind    'stationary' | 'vertex' | 'endpoint' | 'constant'
+        who.facet   the facet index, 0 for the interior stationary point
+        who.tn/.td  the winning parameter along that facet, exactly
+
+**THE VALUE CANNOT NAME A FACE, which is why this is not cosmetic.** Two different candidates can
+give the same number at one point and different FUNCTIONS away from it, so the label is what says
+which formula the face carries and over which region.
+
+**All four kinds win somewhere, measured over the sampled points:**
+
+        endpoint x413    vertex x74    constant x9    stationary x6
+
+That distribution is the check that matters. **A routine that always answered `stationary` would
+pass every value test and be useless to an assembly**, and the value comparison alone could not
+tell the difference. The `constant` count being nonzero is the branch that only exists because an
+endpoint-only loop cannot see a facet whose objective is constant with both endpoints at infinity —
+9 points land on it.
+
+**The hard-point check now asserts the LABEL as well as the value.** At a constructed hard point
+the maximiser is a vertex of the cell, i.e. on the BOUNDARY, so a label of `stationary` there would
+mean the routine took the interior branch where the maximiser is on the boundary — exactly the
+mis-selection a tolerance causes, and exactly what the value alone cannot reveal. 52 of 52 pass
+both.
+
+**Ties are resolved to the FIRST candidate, deliberately.** The comparison is strict, so `who` does
+not depend on facet order. That matters at precisely the hard points: when a facet parabola's
+vertex sits on its own endpoint, both spellings name the same point of the plane, so either label
+is correct and only stability is at stake.
