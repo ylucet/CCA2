@@ -6084,3 +6084,36 @@ envelope lives on, which is the one place this project has never accepted one.
 **One guard fired and was right.** Converting a face back to a conic by halving the squared terms
 produced a non-integer vector and `ratQ.conic` refused it. A conic has no scale, so the conversion
 takes TWICE the face instead and stays integral.
+
+## 2026-09-06 (overnight, item 2) — there is NO ENVELOPE ARC: the region is exactly two sign conditions
+
+**The question that had to be asked before believing the previous entry.** The two constructed
+conics are certainly IN the boundary — they are the two ends of every sweeping segment. But the
+region is the union of a ONE-PARAMETER FAMILY of conics,
+
+        x = M_t s + v_t ,   M_t = (1-t) A1 + t A2 ,   v_t = (1-t) b1 + t b2 ,   t in [0,1] ,
+
+and the union of a family of curves is bounded by its extreme members **and, in general, by the
+family's ENVELOPE**. An envelope arc would mean the region is not the intersection of two sign
+conditions, an H-form face could not hold it, and **the type decision would change** — so it was
+tested rather than assumed (`.claude/bridgeRegionCross.m`).
+
+**Traced the boundary with the independent classifier and evaluated the CONSTRUCTED conics there:**
+
+| instance | traced boundary points | max relative residual to the nearer constructed conic | median |
+|---|---|---|---|
+| isotropic | 720 over 360 rays | **5.5e-13** | 1.9e-13 |
+| anisotropic | 632 over 360 rays | **4.0e-13** | 4.3e-15 |
+
+**Every traced point lies on one of the two constructed conics. No envelope arc.** So the bridge
+region IS bounded by exactly those two curves, and an H-form face over two sign conditions can hold
+it — which is what keeps the implicit-face type decision at ONE axis.
+
+**The two probes share no arithmetic.** One maximises `<s,x> - max(g1,g2)` and bisects in doubles;
+the other substitutes an integer matrix into an integer conic. They agree on the isotropic figure
+to every printed digit: **centre (2.000000, 1.000000) = 2a, radii 2.449490 and 1.224745**, which
+are the numbers the tracing probe reported before the construction existed.
+
+**What is left of item 2 is now exactly one thing, and it is well posed:** two curves are known,
+and each needs a SIGN. Since there is no envelope, the two conics do not cross, so each sign is
+constant on the whole region and the problem is finite.
