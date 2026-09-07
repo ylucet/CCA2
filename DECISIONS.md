@@ -6615,3 +6615,42 @@ still carries the per-check flags it promises. With the mask gone the real refus
 
 **This is a defect class worth grepping for**: any `error()` call passing a non-scalar to a format
 specifier is a guard that will report something else instead of itself.
+
+## 2026-09-06 (overnight 2) — REFUTED: a static lint for "guards that cannot report themselves"
+
+**The idea, and it was mine.** Having found that `QuaPar`'s size guard raised
+`MATLAB:error:nonScalarInput` instead of its own identifier — `error` does not expand an array
+across format specifiers the way `sprintf` does — I named it a defect class worth grepping for and
+built a static audit for it: count the format specifiers in each `error()` message, count the
+arguments, flag any mismatch or any argument whose spelling suggests a non-scalar.
+
+**It does not work, and the failure is quantified.** The audit reported **94 mismatches out of 302
+named `error()` calls**, and reading them showed almost all were the parser's own bug: it said
+`ratQ:singular` had 1 argument when it has none, and `ratQ:resultantDegree` had 1 when it has two
+on a continuation line. **A lint whose false-positive rate is that high reports nothing at all** —
+94 suspects nobody will read is indistinguishable from no audit.
+
+**The second attempt was the right method and still lost.** The line-based parser was replaced by
+one balancing parentheses over the raw character stream, which is the correct way to do it and
+handles continuations, bracketed message concatenation and nested calls uniformly. It could not be
+landed through the tooling in this environment — MATLAB's escaped-quote spelling inside a
+Python-generated MATLAB source defeated three attempts — and at that point the ladder says change
+the method, not make a fourth edit of the same kind.
+
+**MATLAB's own linter does not cover it either**, which was worth checking before writing anything:
+`checkcode` over the whole project root returns exactly one format-related finding, `LTARG` at
+`symbolicFunction.m:312` ("Function might be called with too few arguments"), and **no
+printf-style argument-count check for `error` at all**. So there is no off-the-shelf detector to
+lean on.
+
+**What was done instead, and it is sound.** A targeted grep for the actual defect SHAPE — an
+`error()` argument that is a bare `ok`/`sz`/`flags`/`idx`/`rows`/`cols`/`bad`, or a `size(...)`,
+or an `x(:)` — over every file in the project root, on the call line and on continuation lines.
+**Zero hits.** So the one instance that existed is the one that was fixed, and the probe is deleted
+rather than left as a 94-false-positive fixture.
+
+**What a real detector would need**, recorded so the next attempt starts further along: not a
+parser but an EXERCISE. Every guard's identifier is already asserted somewhere by a
+`verifyError`-style test for the guards that have tests; the gap is the guards that have none, and
+closing it means constructing an input per guard. That is a session of work with a real payoff
+(every named refusal proven to be reachable AND self-reporting), and it is not a lint.
