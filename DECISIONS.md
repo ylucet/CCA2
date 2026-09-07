@@ -5704,3 +5704,52 @@ the right order by luck rather than by design: the small fixtures ALONE would ha
 linear reading (13, 16, 14, 15 against `cells_A + cells_B` of 14, 14, 16, 18 — a near-perfect fit)
 and it is wrong. Four small, symmetric fixtures agreeing with a law is not evidence for the law;
 one fixture chosen because the two laws disagree there by 4x is.
+
+## 2026-09-06 — FILTER 2 IS THE ORDER, and the number of REAL bridges is small
+
+**The ceiling measured before the filter is built** (`.claude/cellPairSignProbe.m`). Deciding
+exactly whether `g1 - g2` changes sign on a cell intersection needs the polyhedron's vertices,
+edges and recession directions plus the exact extremum of a quadratic on each — a bounded job, but
+not a small one, and worth doing only if the prune rate justifies it. So the prune rate was
+estimated first, by sampling: `QuaCon.eval` reports which cell supplied each value, so every grid
+point falls into one `(cellA, cellB)` bucket and contributes a sign.
+
+| piece pair | full-dim pairs | sampled | **both signs** | one sign | ceiling |
+|---|---|---|---|---|---|
+| two triangles, shifted | 13 | 14 | **4** | 10 | 71% |
+| two triangles, cones overlap | 16 | 21 | **4** | 17 | 81% |
+| triangle vs square | 14 | 14 | **0** | 14 | 100% |
+| square vs square | 15 | 15 | **3** | 12 | 80% |
+| hexagon vs hexagon | 49 | 49 | **5** | 44 | 90% |
+| octagon vs octagon | 59 | 41 | **5** | 36 | 88% |
+| **16-gon vs 16-gon** | 235 | 147 | **11** | 136 | 93% |
+
+**The column that matters is "both signs", and it is nearly CONSTANT.** 4, 4, 0, 3, 5, 5, 11 —
+while the candidate count runs 13 to 235. **The quadratic is entirely in the CANDIDATES; the
+genuine bridges are few and grow roughly linearly.** That is the design fact this line of work was
+looking for, and it says filter 2 is not an optimisation but the thing that makes assembly finish:
+for the 16-gon pair it is ~11 eliminations rather than 235, i.e. under four minutes rather than up
+to 75.
+
+**Two independent perturbations of the MEASUREMENT, same answer**, which is the only reason to
+trust a sampled number here. (i) The grid was refined 3x, 401 to 1201 — every count identical
+except one fixture reaching two more buckets. (ii) The sign tolerance was changed from a single
+global scale to a POINTWISE one; a global scale is the box's largest value, which would suppress
+genuine sign changes in the small-value cells and inflate exactly the number being claimed. Both
+runs agree to the digit.
+
+**The direction of the error is stated and is the safe one.** Sampling can only MISS a tie, never
+invent one, so "both signs" is a LOWER bound on the real bridge count and the ceiling is an UPPER
+bound on what filter 2 can remove. A ceiling that says "do not build" would have been a sound
+conclusion on its own; a ceiling that says "build" still has to be confirmed by the exact filter,
+and this one says build.
+
+**What is NOT established.** For the wide fixtures the grid reached only 147 of 235 pairs (octagon
+41 of 59). The unreached ones are the far unbounded cells, where a tie is least likely, but that is
+an expectation and not a measurement — the exact filter will settle them, and the count it returns
+is the one to record.
+
+**What this changes in the plan.** Filter 2 moves ahead of both remaining ideas: caching by cell
+type and speeding up the elimination are each a constant factor on a count that filter 2 cuts by an
+order. The earlier verdict "viable for triangles and squares, not for a wide polygon" was measured
+against the CANDIDATE count and is superseded by the bridge count, which is small everywhere tested.
