@@ -49,6 +49,12 @@ function g = conjCPLQ(obj, idx, route)
 %   Case C uses cPLQ's own exact symbolic + rational arithmetic directly. Upgrading Case A/B to
 %   symbolic/rational coefficients (or Case C to closed-form numerics, Phase 2) is a follow-up.
 
+    % A CLOSED conic edge (E(:,3) = 2) has no endpoints, and the edge handling below is
+    % written as "ray or segment". Refuse it by name rather than reading flag 2 as a
+    % segment and indexing vertex 0. See RatCon.assertEdgeFlags. Nothing produces one
+    % today, so this fires on nothing; it is here for when a bridge face is first stored.
+    RatCon.assertNoClosedEdges(obj.E, 'conjCPLQ');
+
     if nargin >= 2 && ~isempty(idx)
         error('PLQ:conjCPLQ:partialNotImplemented', ...
             'Partial conjugate (''cplq'' engine) is not implemented yet.');

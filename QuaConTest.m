@@ -499,5 +499,55 @@ classdef QuaConTest < matlab.unittest.TestCase
             FC = { [1 -1; 2 -1] };   % x^2 - y <= 0  and  y - 1 <= 0
             qc = QuaCon(V, E, Ec, fN, fD, F, FC);
         end
+
+        % ---- the CLOSED conic edge convention (E(:,3) = 2) ------------------------------------
+
+        function edgeFlagsAcceptSegmentRayAndCLOSEDAndNothingElse(testCase)
+        % The convention, asserted where it is defined. A closed conic edge -- a whole ellipse --
+        % has no endpoints, and the bridge face's own domain is bounded by two of them
+        % (DECISIONS.md 2026-09-06), so column 3 gained a third value rather than the mesh gaining
+        % a class. That is the same move FC's side column made when it gained 0 for "ON the curve".
+            testCase.verifyEqual(RatCon.assertEdgeFlags([1 2 1; 3 4 0; 0 0 2]), ...
+                                 [1 2 1; 3 4 0; 0 0 2], 'all three values are legal');
+            testCase.verifyError(@() RatCon.assertEdgeFlags([1 2 3]), 'RatCon:badEdgeFlag');
+        end
+
+        function aCLOSEDEdgeMayNotNameEndpointsBecauseNoVertexCanBeNamedOnIt(testCase)
+        % Not a style rule. A vertex is NAMED as the meeting of two edge conics (`Vname`), and a
+        % lone closed curve meets none, so there is no exact name for a point on it. Storing an
+        % endpoint index there would be storing a coordinate the class cannot justify.
+            testCase.verifyError(@() RatCon.assertEdgeFlags([1 2 2]), ...
+                                 'RatCon:closedEdgeHasEndpoints');
+            testCase.verifyEqual(RatCon.assertEdgeFlags([0 0 2]), [0 0 2], ...
+                                 'and with no endpoints it is fine');
+        end
+
+        function everyRoutineThatAssumesTwoEndpointsREFUSESAClosedEdgeByName(testCase)
+        % THE POINT OF THE WHOLE CONVENTION. Every consumer in the toolbox reads the flag as
+        % `E(j,3) == 0` (a ray) or `~= 0` (assumed a segment), so a 2 arriving unannounced would be
+        % read as a SEGMENT and the routine would index vertex 0 -- a silent wrong answer, which is
+        % the outcome this codebase exists to prevent. The refusal must be NAMED instead.
+            f = QuaPol([0 0; 1 0; 0 1], [1 2 1; 2 3 1; 3 1 1], ...
+                       [0 0 0 0, 2, 0, 2, 0, 0, 0], [1 0; 1 0; 1 0]);
+            testCase.verifyClass(conjQ(f), 'QuaCon', 'the untouched fixture still answers');
+
+            g = f;  g.E(1,1:2) = 0;  g.E(1,3) = 2;      % the same mesh with one CLOSED edge
+            testCase.verifyError(@() conjQ(g),   'RatCon:closedEdge');
+            testCase.verifyError(@() biconjQ(g), 'RatCon:closedEdge');
+        end
+
+        function assertNoClosedEdgesPassesEverythingTheToolboxActuallyBuildsToday(testCase)
+        % The guard must cost nothing on real meshes: no routine produces a closed edge yet, so it
+        % has to fire on none of them. A guard that fired on ordinary input would be a regression
+        % dressed as a safety check.
+            f = QuaPol([0 0; 1 0; 1 1; 0 1], [1 2 1; 2 3 1; 3 4 1; 4 1 1], ...
+                       [0 0 0 0, 2, 0, 2, 0, 0, 0], [1 0; 1 0; 1 0; 1 0]);
+            g = conjQ(f);
+            testCase.verifyWarningFree(@() RatCon.assertNoClosedEdges(f.E, 'test'));
+            testCase.verifyWarningFree(@() RatCon.assertNoClosedEdges(g.E, 'test'));
+            testCase.verifyWarningFree(@() RatCon.assertEdgeFlags(g.E, 'test'), ...
+                'and a real conjugate satisfies the convention as it stands');
+        end
+
     end
 end

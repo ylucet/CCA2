@@ -82,7 +82,12 @@ classdef (Abstract) RatCon < Rat & Conic
         nf {mustBeInteger,mustBeNonnegative}%number of faces
         V (:,2){mustBeNumeric} % nv x 2 matrix storing unique vertices
         E (:,3){mustBeInteger,mustBeNonnegative} % ne x 3 matrix storing edge indices where Edge j is [V(E(j,1)), V(E(j,2))]
-            %and E(j,3) = 1 for a segment and 0 for a ray.
+            %and E(j,3) = 1 for a segment, 0 for a ray, and 2 for a CLOSED conic edge -- a whole
+            %ellipse, which has NO endpoints, so E(j,1:2) must be 0 there. See
+            %RatCon.assertEdgeFlags for the convention and why the third value exists; a closed
+            %edge bounds the bridge face domain (DECISIONS.md 2026-09-06). Nothing in the toolbox
+            %produces one yet, and every consumer whose edge handling assumes two endpoints calls
+            %RatCon.assertNoClosedEdges so the refusal is named rather than silent.
         f (:,10){mustBeNumeric} % nf x 10 matrix storing the coefficients of the cubic
             %f(k,:)=c means at the point (x,y) in the face k  the function value
             % is C*([x^3; x^2 y; x y^2; y^3; x^2; x y; y^2; x; y; 1] .* [1/6; 1/2; 1/2; 1/6; 1/2; 1; 1/2; 1; 1; 1]
@@ -173,6 +178,71 @@ classdef (Abstract) RatCon < Rat & Conic
    % `ClassName.empty`, object arrays and `load`, so it is a gain rather than a concession.
    % ---------------------------------------------------------------------------------------
 
+   methods (Static)
+      function E = assertEdgeFlags(E, who)
+      % objective: validate the segment/ray/CLOSED flag in column 3 of an edge table.
+      % [input]  E : ne x 3 edge table; who : (optional) name used in the error message
+      % [output] E : unchanged, so this can wrap an expression
+      %
+      % THE THIRD VALUE, AND WHY IT HAD TO EXIST (2026-09-06). Column 3 has always been 1 for a
+      % SEGMENT and 0 for a RAY, and both spellings name their endpoints in columns 1 and 2. A
+      % CLOSED conic edge -- a whole ellipse -- has NO endpoints, and the bridge face's own domain
+      % is bounded by two of them: the isotropic bridge region is an ANNULUS between two concentric
+      % circles (DECISIONS.md 2026-09-06). There is nothing to put in columns 1 and 2, and there is
+      % no way to NAME such a point either, because `Vname` names a vertex as the meeting of TWO
+      % edge conics and a lone closed curve meets none.
+      %
+      % So the convention is:
+      %
+      %       E(j,3) = 1   segment, endpoints E(j,1:2)
+      %       E(j,3) = 0   ray, apex E(j,1) and direction through E(j,2)
+      %       E(j,3) = 2   CLOSED, no endpoints, and E(j,1:2) MUST be 0
+      %
+      % ONE MORE VALUE IN A COLUMN THAT ALREADY EXISTED, which is the same move `FC`'s side column
+      % made when it gained 0 for "ON the curve" to let a face be thin -- QuaCon.m's header records
+      % that choice and the reason: it costs one value rather than a new class.
+      %
+      % WHY THIS VALIDATOR IS THE WHOLE POINT. Every consumer in the toolbox reads the flag as
+      % `E(j,3) == 0` (a ray) or `~= 0` (assumed a segment), so a 2 arriving unannounced is read as
+      % a SEGMENT and the routine then indexes vertex 0. Nothing today produces a 2, so this fires
+      % on nothing and costs nothing -- it exists so that when a bridge face is first stored, the
+      % failure is a named refusal at the boundary instead of a silent wrong answer deep inside.
+         if nargin < 2, who = 'edge table'; end
+         if isempty(E), return, end
+         bad = ~ismember(E(:,3), [0 1 2]);
+         if any(bad)
+            error('RatCon:badEdgeFlag', ...
+               ['%s: edge %d has flag %g in column 3. The only values are 1 (segment), ' ...
+                '0 (ray) and 2 (CLOSED, no endpoints).'], who, find(bad,1), E(find(bad,1),3));
+         end
+         cl = E(:,3) == 2;
+         if any(cl & any(E(:,1:2) ~= 0, 2))
+            j = find(cl & any(E(:,1:2) ~= 0, 2), 1);
+            error('RatCon:closedEdgeHasEndpoints', ...
+               ['%s: edge %d is CLOSED (flag 2) but names endpoints [%g %g]. A closed conic has ' ...
+                'no endpoints and no vertex can be named on it, so columns 1 and 2 must be 0.'], ...
+               who, j, E(j,1), E(j,2));
+         end
+      end
+
+      function assertNoClosedEdges(E, who)
+      % objective: refuse, BY NAME, an edge table containing a CLOSED edge.
+      % [input]  E : ne x 3 edge table; who : the routine that cannot handle one
+      %
+      % Called at the entry of every routine whose edge handling is written as "ray or segment".
+      % Those routines are not wrong -- a closed edge is genuinely new geometry and each will need
+      % its own answer -- but they must not treat flag 2 as a segment and index vertex 0. One
+      % definition site, so the message and the convention stay in one place.
+         if isempty(E), return, end
+         if any(E(:,3) == 2)
+            error('RatCon:closedEdge', ...
+               ['%s cannot yet handle a CLOSED edge (E(:,3) = 2): its edge handling assumes ' ...
+                'every edge names two endpoints. A closed conic bounds the bridge face domain ' ...
+                '(DECISIONS.md 2026-09-06) and each consumer needs its own answer for one. ' ...
+                'Edge(s): %s.'], who, mat2str(find(E(:,3) == 2).'));
+         end
+      end
+   end
    methods
        % NOTE ON THE ERROR IDENTIFIERS BELOW. They still read `RatPar:...` although the
        % validators now live on RatCon. That is deliberate: an error identifier is a public,

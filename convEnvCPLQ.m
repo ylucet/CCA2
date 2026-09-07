@@ -37,6 +37,12 @@ function r = convEnvCPLQ(obj)
 % Not implemented yet: non-convex over a single non-triangular face (nf==1; pass nf>1 or a
 % triangle), non-convex full domain, and unbounded faces. See DESIGN.md II.5.1 and codeOld/cPLQ.
 
+    % A CLOSED conic edge (E(:,3) = 2) has no endpoints, and the edge handling below is
+    % written as "ray or segment". Refuse it by name rather than reading flag 2 as a
+    % segment and indexing vertex 0. See RatCon.assertEdgeFlags. Nothing produces one
+    % today, so this fires on nothing; it is here for when a bridge face is first stored.
+    RatCon.assertNoClosedEdges(obj.E, 'convEnvCPLQ');
+
     obj.assertOperable();
     if obj.nf > 1
         r = convEnvMultiFace(obj);   % triangulate each face, envelope per triangle, assemble

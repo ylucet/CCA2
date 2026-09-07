@@ -6192,3 +6192,52 @@ small-magnitude witness did not move it further.
 fallback for exactly this shape of growth (`resultantVarBig`, `bigDivExact`, `polyDetBig`), entered
 only where the double path raises. `polyPseudoRem`/`sturmChain` need the same treatment. That is
 the residue, and it is back on the list rather than parked: nothing external blocks it.
+
+## 2026-09-06 (overnight, item 4) — the CLOSED conic edge: one more value in a column that already existed
+
+**The gap item 4 named.** `RatCon`'s edge table stores each edge as its two endpoint VERTEX INDICES
+plus a flag — 1 segment, 0 ray. A **closed conic edge, a whole ellipse, has no endpoints**, and the
+bridge face's own domain is bounded by two of them: the isotropic bridge region is an ANNULUS
+between two concentric circles. So a bridge face could not be stored, and the failure would not
+have been loud.
+
+**AND THERE IS NO WAY TO NAME A POINT ON ONE EITHER**, which is why "just split the curve at a
+vertex" is not the answer. `Vname` names a vertex as the meeting of TWO edge conics; a lone closed
+curve meets none, so an endpoint index on it would be storing a coordinate the class exists to
+refuse. Splitting would require inventing a second curve that bounds nothing.
+
+**The convention, and it costs one value rather than a class.**
+
+        E(j,3) = 1   segment, endpoints E(j,1:2)
+        E(j,3) = 0   ray, apex E(j,1) and direction through E(j,2)
+        E(j,3) = 2   CLOSED, no endpoints, and E(j,1:2) MUST be 0
+
+This is the same move `FC`'s side column made when it gained `0` for "ON the curve" so a face could
+be thin — `QuaCon.m`'s header records that choice and its reason in the same words.
+
+**WHY THE VALIDATORS ARE THE ACTUAL DELIVERABLE.** `E(:,3)` had **no validator at all** — the
+property is only `mustBeInteger, mustBeNonnegative` — and **every consumer in the toolbox reads the
+flag as `== 0` (a ray) or `~= 0` (assumed a segment)**. A 2 arriving unannounced is therefore read
+as a SEGMENT, and the routine indexes vertex 0. That is a silent wrong answer, which is the outcome
+this codebase is built to prevent. So:
+
+- `RatCon.assertEdgeFlags` validates the convention: only 0, 1, 2, and a closed edge must name no
+  endpoints.
+- `RatCon.assertNoClosedEdges` refuses one BY NAME, from a single definition site, and is called at
+  the entry of `conjQ`, `biconjQ`, `conjCPLQ`, `convEnvCPLQ`, `addQuaPar` and `addQuaPol`.
+
+**Nothing produces a closed edge today, so the guard fires on nothing and costs nothing.** That is
+deliberate: it exists so that when a bridge face is first stored, the failure is a named refusal at
+the boundary instead of a wrong answer deep inside. A test asserts exactly that — the guard passes
+on every mesh the toolbox actually builds, including a real `conjQ` output.
+
+**One ordering mistake, caught by the fast bucket, worth recording.** The assertion was first
+inserted BEFORE `conjQ`/`biconjQ`'s input-type check, and two tests went red
+(`conjQREFUSESANonQuaPolByName`, `biconjQREFUSESANonQuaPolByName`): a non-`QuaPol` has no mesh to
+read, so touching `obj.E` first replaced the routine's own named type refusal with an access error.
+**A guard placed above the type check breaks the type refusal.** Moved below it; 569/0 again.
+
+**Verified:** `QuaConTest` 23/0 with four new tests, fast 569/0, normal 13/0. The end-to-end test
+takes a real `QuaPol`, flips one edge to the closed spelling, and asserts `conjQ` and `biconjQ` both
+raise `RatCon:closedEdge` — so the guard is exercised through the real entry points, not only as a
+unit.

@@ -56,6 +56,15 @@ function g = conjQ(obj)
         error('PLQ:conjQ:input', ...
             'conjQ takes a QuaPol (quadratic on polyhedral); got a %s.', class(obj));
     end
+
+    % A CLOSED conic edge (E(:,3) = 2) has no endpoints, and the edge handling below is
+    % written as "ray or segment". Refuse it by name rather than reading flag 2 as a
+    % segment and indexing vertex 0. See RatCon.assertEdgeFlags. Nothing produces one
+    % today, so this fires on nothing; it is here for when a bridge face is first stored.
+    %
+    % AFTER the input-type check, deliberately: a non-QuaPol has no mesh to inspect, and
+    % reading obj.E first replaced this routine's named type refusal with an access error.
+    RatCon.assertNoClosedEdges(obj.E, 'conjQ');
     obj.assertOperable();
     obj.assertExact();          % refuses a QuaPol the legacy float pipeline computed -- see there
 

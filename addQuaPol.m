@@ -29,6 +29,13 @@ function h = addQuaPol(f, g)
 %   need a common-denominator sum) -- see DESIGN.md's Implementation status section.
 
     % --- degenerate/trivial full-domain cases: no geometry needed at all ---
+    % A CLOSED conic edge (E(:,3) = 2) has no endpoints, and the edge handling below is
+    % written as "ray or segment". Refuse it by name rather than reading flag 2 as a
+    % segment and indexing vertex 0. See RatCon.assertEdgeFlags. Nothing produces one
+    % today, so this fires on nothing; it is here for when a bridge face is first stored.
+    RatCon.assertNoClosedEdges(f.E, 'addQuaPol');
+    RatCon.assertNoClosedEdges(g.E, 'addQuaPol');
+
     if f.nv == 0 && g.nv == 0        % both finite everywhere: h is the single summed quadratic
         h = QuaPol(f.f + g.f);
         return

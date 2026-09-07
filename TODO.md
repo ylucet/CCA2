@@ -59,7 +59,8 @@ APC; gold is ~$3,290 and unnecessary.
   not `QuaPar`.
 - [ ] **3. ONE FULL ENVELOPE on a triangle pair.** After both filters that is ~4 eliminations, not
   24. The end-to-end check that the whole bridge pipeline works.
-- [ ] **4. CLOSED CONIC EDGES have no endpoints.** `RatCon`'s edge table names an edge by its two
+- [x] **4. CLOSED CONIC EDGES have no endpoints.** DONE 2026-09-06 overnight: `E(:,3) = 2` means CLOSED with no endpoints, validated by `RatCon.assertEdgeFlags` and refused by name in six consumers via `RatCon.assertNoClosedEdges`. See DECISIONS 2026-09-06.
+- [ ] **4. (old text)** `RatCon`'s edge table names an edge by its two
   endpoint vertex indices plus a segment/ray flag, and the isotropic bridge region is bounded by
   two closed circles. Needs a convention before a bridge face can be stored.
 
