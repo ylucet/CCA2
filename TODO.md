@@ -68,6 +68,14 @@ it is bookkeeping rather than new mathematics.
   was a cheap substitute for (DECISIONS 2026-09-06). The `notDegenerate` row below is exactly the
   case it would settle.
 
+- [ ] **ARE THE NON-BRIDGE CANDIDATE REGIONS POLYHEDRAL?** Scope-reduced 2026-09-07, not
+  established. KKT predicts yes (the winning condition is affine in `x`), and if so the non-bridge
+  faces need no curved subdivision at all. The probe still reports 23 of 26 boundaries curved after
+  two measurement defects were fixed in it. **The next step is ONE diagnostic**: print the per-arc
+  line residuals for a single cell and see whether they are bimodal (still pooling two distinct
+  straight boundaries under one label pair — the named suspect) or uniform (a real property).
+  Nothing from `.claude/cellFaceRegionProbe.m` should be cited until then.
+
 ### Blocked (external)
 
 - **The implicit-face TYPE** — a third value on `RETURN_TYPE.md`'s function axis, `p(x,y,z)=0` plus

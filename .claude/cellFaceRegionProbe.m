@@ -18,6 +18,16 @@ function cellFaceRegionProbe(varargin)
 % regions should be polyhedral -- and if they are, the non-bridge faces need no new subdivision
 % machinery at all, which is a real saving and the reason to measure it.
 %
+% STATUS 2026-09-07: SCOPE-REDUCED, THE ANSWER IS NOT YET ESTABLISHED. Two measurement defects
+% have been found and fixed in this probe (see below and DECISIONS 2026-09-07) and it still reports
+% 23 of 26 boundaries as curved, which contradicts the KKT argument above. The remaining suspect is
+% named and not yet tested: ONE label pair can meet along TWO DIFFERENT straight boundaries -- two
+% regions can touch on opposite sides of a cell -- and pooling those two into one fit reproduces
+% exactly this symptom. The next diagnostic is to print the per-arc residuals for a single cell and
+% see whether they are bimodal (a few large, the rest ~0, i.e. still pooling) or uniform (a real
+% property). Until that is done, NOTHING here should be cited: the prediction is unconfirmed and
+% the measurement has already been wrong twice.
+%
 % HOW IT IS MEASURED, WITHOUT ASSUMING THE ANSWER. Sample the plane, label each point by the
 % winning candidate, and for each label trace the boundary of its region along rays; then fit both
 % a LINE and a general CONIC to each traced boundary. That is exactly the procedure
@@ -30,9 +40,15 @@ function cellFaceRegionProbe(varargin)
     n = 201;
     if nargin >= 1, n = varargin{1}; end
 
+    % TWO FIXTURES, NOT THREE, AND THE REASON IS THE COST rather than the answer. The hexagon has
+    % 13 cells and its widest has 18 candidate regions; tracing 361 rays x 1200 radii through the
+    % full candidate enumeration at each point does not finish inside a sensible bound. The
+    % triangle and the square already exercise every candidate KIND -- stationary, vertex,
+    % endpoint and constant all win somewhere on them -- so the geometric question is answered by
+    % them. Widening to the hexagon is a runtime problem, not a coverage one, and it is named here
+    % rather than left as a silent truncation.
     fixtures = { 'triangle', tri([0 0; 1 0; 1 1], 0), ...
-                 'square',   poly([0 0; 1 0; 1 1; 0 1]), ...
-                 'hexagon',  poly([0 0; 2 0; 3 2; 2 4; 0 4; -1 2]) };
+                 'square',   poly([0 0; 1 0; 1 1; 0 1]) };
 
     nB = 0;  worstLine = 0;  bestConicWin = 0;  nCurved = 0;
     for i = 1:2:numel(fixtures)
@@ -56,7 +72,7 @@ function cellFaceRegionProbe(varargin)
         end
     end
 
-    fprintf('\n%d traced boundary arcs over three fixtures\n', nB);
+    fprintf('\n%d traced boundary arcs over two fixtures\n', nB);
     fprintf('worst LINE residual over all of them: %.3e\n', worstLine);
     fprintf('%d arcs where the line fit was WORSE than 1e-6 (i.e. genuinely curved)\n', nCurved);
     if nCurved == 0

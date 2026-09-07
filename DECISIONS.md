@@ -6771,3 +6771,39 @@ session was the checker, not the thing checked. Four times the checker under-rep
 was right; once the checker over-reported a property the code does not have. **The uniform-number
 tell is the cheapest detector for the fifth kind**: a residual, ratio or count that is identical
 across unrelated fixtures is measuring the harness.
+
+## 2026-09-07 (overnight 2) — SCOPE-REDUCED: are the non-bridge candidate regions polyhedral? Not established
+
+**The question, and it is the non-bridge analogue of one already answered.** For the BRIDGE faces
+the primal region's boundaries were measured and came out CONIC — which is what forced `QuaCon`
+rather than `QuaPar`. For the non-bridge faces the KKT conditions predict the opposite: candidate
+`s0` wins exactly when `y - H s0` lies in the normal cone of `P` at `s0`, and both are AFFINE in
+`x`, so each region should be an intersection of half-planes — POLYHEDRAL. If so, the non-bridge
+faces need no curved subdivision at all, which is a real saving and the reason to measure it.
+
+**IT IS NOT ESTABLISHED, and the item is scope-reduced rather than parked.** Two measurement
+defects were found and fixed in the probe along the way — pooling all of a cell's boundaries into
+one fit (recorded separately; it manufactured a "22 of 22 curved" finding), and a per-arc minimum
+of eight points so a two-point "arc" is not fitted at all. After both, it still reports **23 of 26
+boundaries as curved with a worst line residual of 0.266**, which contradicts the prediction.
+
+**THE REMAINING SUSPECT IS NAMED AND UNTESTED, which is what makes this a reduced scope rather
+than a failure.** One label PAIR can meet along TWO DIFFERENT straight boundaries — two regions can
+touch on opposite sides of a cell — and pooling those two into a single fit reproduces exactly this
+symptom, for the same reason the first defect did. **The next diagnostic is one print**: the
+per-arc residuals for a single cell, bimodal (a few large, the rest ~0, i.e. still pooling) versus
+uniform (a real property).
+
+**Nothing from this probe should be cited until that is done.** The prediction is unconfirmed AND
+the measurement has already been wrong twice on this exact question, which is the strongest
+possible reason not to believe its third answer without the diagnostic.
+
+**One thing IS established and is worth keeping**: the candidate regions per cell were counted —
+3 to 9 on a triangle and a square, and 18 on the hexagon's widest cell. So a non-bridge cell
+carries a HANDFUL of faces, not one, whatever their boundaries turn out to be. Any assembly has to
+expect that.
+
+**Also recorded: the hexagon does not finish.** 13 cells, its widest with 18 candidate regions,
+361 rays x 1200 radii through the full candidate enumeration per point. The fixture list is
+narrowed to the triangle and square, which exercise every candidate KIND, and the narrowing is
+named in the probe rather than left as a silent truncation.
