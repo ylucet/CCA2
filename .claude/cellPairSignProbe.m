@@ -31,22 +31,23 @@ function cellPairSignProbe(varargin)
     if nargin >= 1, n = varargin{1}; end
 
     fprintf('grid %d x %d over the dual box each pair needs\n\n', n, n);
-    fprintf('%-34s %8s %8s %8s %8s %8s\n', 'piece pair', 'full-dim', 'sampled', 'both', ...
-            'one-sign', 'ceiling');
-    fprintf('%s\n', repmat('-', 1, 82));
+    fprintf('%-34s %8s %8s %8s %8s %8s %8s\n', 'piece pair', 'full-dim', 'plane', ...
+            'sampled', 'both', 'one-sign', 'ceiling');
+    fprintf('%s\n', repmat('-', 1, 92));
 
     cases = fixtures();
     for i = 1:numel(cases)
         nm = cases{i}{1};  fA = cases{i}{2};  fB = cases{i}{3};
         gA = conjQ(fA);  gB = conjQ(fB);
-        nFull = countFullDim(gA, gB);
+        [nFull, nPlane] = countFullDim(gA, gB);
         [nSamp, nBoth, nOne] = signBuckets(gA, gB, n);
         if nSamp == 0
             ceil_ = NaN;
         else
             ceil_ = 100 * nOne / nSamp;
         end
-        fprintf('%-34s %8d %8d %8d %8d %7.0f%%\n', nm, nFull, nSamp, nBoth, nOne, ceil_);
+        fprintf('%-34s %8d %8d %8d %8d %8d %7.0f%%\n', nm, nFull, nPlane, nSamp, ...
+                nBoth, nOne, ceil_);
     end
 
     fprintf(['\n"sampled" is how many of filter 1''s pairs the grid actually reached; a pair it\n' ...
@@ -108,18 +109,50 @@ function V = vertsOf(g)
     V = V(all(isfinite(V), 2), :);
 end
 
-function nFull = countFullDim(gA, gB)
-% Filter 1's answer, recomputed here so the two columns are from the same run.
-    nFull = 0;
+function [nFull, nPlane] = countFullDim(gA, gB)
+% Filter 1's answer, recomputed here so the columns are from the same run -- plus the FREE version
+% of filter 2 alongside it.
+%
+% THE FREE VERSION. Filter 2 asks whether g1 - g2 changes sign on the cell INTERSECTION, which needs
+% the polyhedron. ratQ.conicSign already answers the cruder question exactly and for nothing: does
+% the difference conic take one sign over the WHOLE PLANE? One sign on the plane implies one sign on
+% any subset, so every pair it catches is a sound prune. It can only be weaker than the real filter,
+% and how much weaker is the number that decides whether the polyhedral version has to be built.
+    nFull  = 0;
+    nPlane = 0;
     for i = 1:gA.nf
         RA = cellRows(gA, i);
         if isempty(RA), continue, end
         for j = 1:gB.nf
             RB = cellRows(gB, j);
             if isempty(RB), continue, end
-            if ratQ.feasible2([RA; RB], true), nFull = nFull + 1; end
+            if ratQ.feasible2([RA; RB], true)
+                nFull = nFull + 1;
+                if planePrunes(gA, i, gB, j), nPlane = nPlane + 1; end
+            end
         end
     end
+end
+
+function c = diffConicOf(gA, i, gB, j)
+% The exact conic of gA''s face i minus gB''s face j. QuaCon guarantees fN(:,1:4) is zero -- a face
+% of a conjugate is a quadratic, never a genuine cubic -- so columns 5:10 ARE the conic, and the
+% subtraction is one cross-multiplication over the two integer denominators.
+    cA = gA.fN(i, 5:10);  dA = gA.fD(i);
+    cB = gB.fN(j, 5:10);  dB = gB.fD(j);
+    c = cA * dB - cB * dA;
+end
+
+function tf = planePrunes(gA, i, gB, j)
+% Does the whole-plane test SOUNDLY remove this pair?
+%
+% An ALL-ZERO difference is not a curve and ratQ.conic refuses it by name, correctly -- but it is
+% also the one case that must not be read as "one sign, therefore prune". The two faces are then
+% IDENTICAL, so the pieces tie on the entire cell intersection rather than along a curve in it.
+% That is a degenerate tie, not the absence of one, and it is reported as not-prunable.
+    c = diffConicOf(gA, i, gB, j);
+    if all(c == 0), tf = false; return, end
+    tf = ratQ.conicSign(ratQ.conic(c)) ~= 0;
 end
 
 function rows = cellRows(g, k)

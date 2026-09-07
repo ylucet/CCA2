@@ -5753,3 +5753,40 @@ is the one to record.
 type and speeding up the elimination are each a constant factor on a count that filter 2 cuts by an
 order. The earlier verdict "viable for triangles and squares, not for a wide polygon" was measured
 against the CANDIDATE count and is superseded by the bridge count, which is small everywhere tested.
+
+## 2026-09-06 — the FREE version of filter 2 is not a substitute, and it fails worst where it matters
+
+**Measured before building the expensive version, and it says build it.** `ratQ.conicSign` already
+decides exactly, and for nothing, whether a conic takes ONE SIGN OVER THE WHOLE PLANE. One sign on
+the plane implies one sign on any subset, so every pair it catches is a sound prune with no
+polyhedron, no vertex enumeration and no extremum. The question was how much of the ceiling it
+reaches.
+
+| piece pair | full-dim pairs | **whole-plane prunes** | ceiling (sampled) |
+|---|---|---|---|
+| two triangles, shifted | 13 | 5 (38%) | 71% |
+| two triangles, cones overlap | 16 | 2 (13%) | 81% |
+| triangle vs square | 14 | 4 (29%) | 100% |
+| square vs square | 15 | 6 (40%) | 80% |
+| hexagon vs hexagon | 49 | 11 (22%) | 90% |
+| octagon vs octagon | 59 | 14 (24%) | 88% |
+| **16-gon vs 16-gon** | 235 | **29 (12%)** | 93% |
+
+**It captures an eighth of what is available on the widest fixture, and its share FALLS as the
+polygon widens** — 38% at a triangle down to 12% at a 16-gon. That is the wrong direction: the free
+test is weakest exactly where the candidate count is largest and the pruning is needed. So it is
+worth keeping as a first pass (it costs one PSD test on a 3x3 integer matrix) and it is **not** a
+substitute for the polyhedral filter.
+
+**Why it is weak, which also says what the real filter must do.** Two cells' conjugates differ by a
+quadratic that is genuinely indefinite over the plane in most pairs — it has to be, since the two
+pieces do tie SOMEWHERE — but that tie curve usually lies OUTSIDE the cell intersection. The
+whole-plane test cannot see the intersection at all, so it can only catch the minority of pairs
+whose difference is globally definite. The information is entirely in the restriction, which is
+what makes the vertex/edge/recession enumeration unavoidable.
+
+**One degenerate case found on the way, and it must not be mis-read.** An ALL-ZERO difference conic
+means the two faces are IDENTICAL, so the pieces tie on the whole cell intersection rather than
+along a curve in it. `ratQ.conic` refuses an all-zero conic by name, correctly, and the probe now
+reports that case as NOT prunable. Reading it as "one sign, therefore prune" would discard a
+genuine (indeed maximal) tie.
