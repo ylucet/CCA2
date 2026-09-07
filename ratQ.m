@@ -1774,6 +1774,272 @@ classdef ratQ
         % PREDICATES that decide the mesh; the mesh once built is evaluated in doubles.
             v = QuaPar.evalPoly(n, X) / d;
         end
+
+        function s = quadSignOnPoly(c, P)
+        % objective: does the quadratic c take ONE SIGN on the polyhedron P, and which. Exact.
+        % [input]  c : 1 x 6 integer conic [a b c d e f] for a x^2 + b xy + c y^2 + d x + e y + f
+        %          P : k x 3 integer rows [p1 p2 p0] meaning p1*x + p2*y + p0 >= 0
+        % [output] s : +1 if c >= 0 on P, -1 if c <= 0 on P, 0 if it takes BOTH signs or if this
+        %              routine cannot decide
+        %
+        % WHY THIS EXISTS -- FILTER 2 OF THE BRIDGE ASSEMBLY. A bridge face lives where two pieces'
+        % conjugates TIE, so a cell pair whose difference g1 - g2 never changes sign carries no
+        % bridge and its elimination (1 to 20 s) never has to run. DECISIONS 2026-09-06 measured
+        % the stakes: the candidate count is quadratic in the cell count (235 pairs on a 16-gon
+        % pair) while the number of pairs that genuinely tie is small and roughly linear (11), and
+        % the free whole-plane test -- ratQ.conicSign -- reaches only an eighth of that on the same
+        % fixture, its share FALLING as the polygon widens. The information is in the restriction
+        % to the cell, which is what this routine adds.
+        %
+        % 0 MEANS "NOT PRUNABLE", NEVER "PRUNE ANYWAY". A wrong +1 or -1 discards a real bridge
+        % face and produces a wrong envelope with no symptom; a wrong 0 costs one elimination. So
+        % every case this cannot decide exactly -- a non-pointed recession cone, a direction along
+        % which the quadratic is exactly flat, an integer overflow -- returns 0. The filter is
+        % SOUND and deliberately not complete, and each incompleteness is named at its own guard.
+        %
+        % THE METHOD. s is read off the signs of the min and the max, and sign is monotone, so
+        % sign(min) is the MIN OF THE SIGNS over a candidate set -- no rational is ever compared
+        % against another, only against zero. That is what keeps the whole routine inside signQ.
+        %
+        %   min of a quadratic on a polyhedron is attained at a point whose FACE it lies in the
+        %   relative interior of, so the candidates are exactly: the unconstrained stationary point
+        %   (the 2-D face), the stationary point of the restriction to each facet LINE (the 1-D
+        %   faces), and the vertices (the 0-D faces) -- each kept only if it lies in P.
+        %
+        % Every one of those is the solution of a 2 x 2 INTEGER system, so the whole enumeration is
+        % ratQ.solve2 plus one membership test plus one sign. Extra candidates are harmless and
+        % missing ones are not: an extra point can only pull the computed min DOWN, which loses a
+        % prune, while a missing one could push it up and prune a pair that ties. So the stationary
+        % point is kept without first asking whether it is a minimum or a saddle.
+        %
+        % NON-ATTAINMENT IS HANDLED FIRST, because a min of -infinity would otherwise be read off a
+        % finite candidate and give exactly the unsound +1 this must never return. See recCone2.
+            ratQ.chk(c, 'conic'); ratQ.chk(P, 'half-plane');
+            if numel(c) ~= 6 || size(P,2) ~= 3
+                error('ratQ:badQuadSignInput', ...
+                    'quadSignOnPoly takes a 1 x 6 conic and k x 3 half-plane rows.');
+            end
+            mn = ratQ.quadMinSign(c, P);
+            if ~isnan(mn) && mn >= 0, s = 1; return, end     % q >= 0 on P
+            mx = ratQ.quadMinSign(-c, P);
+            if ~isnan(mx) && mx >= 0, s = -1; return, end    % -q >= 0 on P, i.e. q <= 0
+
+            % NEVER WEAKER THAN THE FREE TEST. conicSign asks the cruder question -- one sign over
+            % the WHOLE plane -- and one sign on the plane implies one sign on any subset of it, so
+            % it is a sound answer wherever it fires. It is kept as the last word because the
+            % polyhedral route DECLINES on degenerate configurations that the plane test happens to
+            % settle, and a filter that is sometimes weaker than the test it replaces is a
+            % regression however much stronger it is on average. Measured on the corpus fixtures
+            % this recovers pairs the polyhedral route alone loses (DECISIONS 2026-09-06).
+            % c IS PASSED RAW, NOT THROUGH ratQ.conic. That routine returns the canonical
+            % spelling of a CURVE, and a curve has no scale -- it makes the first nonzero
+            % coefficient positive, which NEGATES half of all inputs. For a curve that is
+            % identity; for a SIGN it is the wrong answer, and it read q <= 0 as q >= 0 on two of
+            % four thousand random cases before the oracle caught it. conicSign needs only
+            % integrality, which chk gives it.
+            if any(c ~= 0)
+                s = ratQ.conicSign(c);
+                return
+            end
+            s = 0;
+        end
+
+        function s = quadMinSign(c, P)
+        % objective: the SIGN of the minimum of the quadratic c over the polyhedron P.
+        % [output] s : -1 if the min is negative or -infinity, 0 if it is exactly zero, +1 if it is
+        %              positive, NaN if this routine declines to decide
+        %
+        % NaN IS THE CONSERVATIVE ANSWER and the caller must treat it as "unknown", never as 0.
+        % The declines are named where they are taken; all of them are degenerate configurations,
+        % and each costs at most one elimination that did not have to run.
+            H  = [2*c(1), c(2); c(2), 2*c(3)];     % the Hessian, integral because the halves clear
+            g0 = [c(4); c(5)];                     % grad q = H*x + g0
+
+            % ---- 1. IS THE MINIMUM ATTAINED AT ALL? ---------------------------------------
+            [rec, ok] = ratQ.recCone2(P);
+            if ~ok, s = NaN; return, end           % declined: see recCone2
+            switch size(rec, 1)
+                case 0
+                    % P is bounded: the min is attained, and every direction is irrelevant.
+                case 1
+                    a = rec(1,:) * H * rec(1,:).';
+                    if a < 0, s = -1; return, end  % q -> -infinity along the one recession ray
+                    if a == 0
+                        r = ratQ.flatRaySign(H, g0, P, rec(1,:).');
+                        if r < 0 || isnan(r), s = r; return, end
+                    end
+                case 2
+                    u1 = rec(1,:).';  u2 = rec(2,:).';
+                    t = ratQ.coneFormMinSign(H, u1, u2);
+                    if t < 0, s = -1; return, end  % q -> -infinity inside the recession cone
+                    if t == 0
+                        % The form touches zero somewhere in the cone. Where matters: on an
+                        % EXTREME RAY the flat direction is known explicitly and flatRaySign
+                        % settles it, and every other direction then has a strictly positive form
+                        % and cannot send q to -infinity. A zero attained strictly INSIDE the cone
+                        % names no single direction here and is declined -- a named incompleteness.
+                        f1 = (u1.'*H*u1 == 0);  f2 = (u2.'*H*u2 == 0);
+                        if ~f1 && ~f2, s = NaN; return, end
+                        if f1
+                            r = ratQ.flatRaySign(H, g0, P, u1);
+                            if r < 0 || isnan(r), s = r; return, end
+                        end
+                        if f2
+                            r = ratQ.flatRaySign(H, g0, P, u2);
+                            if r < 0 || isnan(r), s = r; return, end
+                        end
+                    end
+                otherwise
+                    s = NaN; return
+            end
+
+            % ---- 2. THE CANDIDATE POINTS, EACH A 2 x 2 INTEGER SOLVE ----------------------
+            s = 1;                                  % min of the signs, started at the top
+            k = size(P, 1);
+
+            % (a) the 2-D face: grad q = 0.
+            s = min(s, ratQ.quadSignAtSolve(c, P, H, -g0));
+
+            % (b) the 1-D faces: on facet line n'x + p0 = 0 the restriction is stationary where the
+            %     gradient is orthogonal to the line's direction u = [n2; -n1]. Two linear
+            %     equations, so the same solve as everything else.
+            for i = 1:k
+                n = P(i,1:2).';
+                if all(n == 0), continue, end
+                u = [n(2); -n(1)];
+                s = min(s, ratQ.quadSignAtSolve(c, P, [(u.'*H); n.'], [-(u.'*g0); -P(i,3)]));
+            end
+
+            % (c) the 0-D faces: every pair of boundary lines that meets.
+            for i = 1:k-1
+                for j = i+1:k
+                    s = min(s, ratQ.quadSignAtSolve(c, P, [P(i,1:2); P(j,1:2)], ...
+                                                          [-P(i,3); -P(j,3)]));
+                end
+            end
+        end
+
+        function s = quadSignAtSolve(c, P, A, b)
+        % objective: solve A*x = b and return the sign of the quadratic c THERE, or +1 if the
+        %            system is singular or the point is outside P.
+        % [output] s : -1, 0 or +1, to be folded into a running MIN of signs
+        %
+        % +1 IS THE NEUTRAL ELEMENT of that fold, so "no candidate here" and "a candidate whose
+        % value is positive" are correctly indistinguishable to the caller.
+        %
+        % A SINGULAR SYSTEM IS NOT AN ERROR HERE, unlike in ratQ.solve2 where it means a caller has
+        % handed over a degenerate configuration. It is the ordinary case that the facet's
+        % restriction has no stationary point (the quadratic is affine along that line) or that two
+        % boundary lines are parallel; the minimum is then at some other candidate, which the fold
+        % already visits. Likewise an OVERFLOW declines this candidate rather than the whole
+        % question -- and it declines it towards +1, which can only lose a prune.
+            s = 1;
+            try
+                if ratQ.detExact(A) == 0, return, end
+                [xn, xd] = ratQ.solve2(A, b);
+                if any(P(:,1:2) * xn + P(:,3) * xd < 0), return, end   % outside P; xd > 0
+                s = sign(c(1)*xn(1)^2 + c(2)*xn(1)*xn(2) + c(3)*xn(2)^2 + ...
+                         c(4)*xn(1)*xd  + c(5)*xn(2)*xd  + c(6)*xd^2);
+                ratQ.chk([xn; xd], 'candidate point');
+            catch e
+                if strcmp(e.identifier, 'ratQ:overflow'), s = 1; return, end
+                rethrow(e)
+            end
+        end
+
+        function r = flatRaySign(H, g0, P, u)
+        % objective: along a recession direction u on which the quadratic form is EXACTLY FLAT
+        %            (u'Hu = 0), does the quadratic go to -infinity somewhere in P?
+        % [output] r : -1 if it does, 0 if it does not, NaN if undecided
+        %
+        % WHY THIS CASE IS NOT RARE, and why it had to be built rather than declined. Over a VERTEX
+        % cell a conjugate is AFFINE, so a pair involving one contributes a difference whose
+        % Hessian is that of the other piece alone -- singular in the vertex cell's own directions.
+        % Measured on the square-vs-square fixture, every pair the polyhedral route declined but the
+        % whole-plane test settled was exactly this case (DECISIONS 2026-09-06).
+        %
+        % THE TEST IS LINEAR, which is the whole point. With u'Hu = 0,
+        %       q(x + t*u) = q(x) + t * ((H*u)'x + g0'u),
+        % exactly -- the t^2 term is gone -- so the slope along u is an AFFINE function of x, and q
+        % is unbounded below exactly when that slope is negative somewhere in P. A constant slope
+        % (H*u = 0) is read off directly; otherwise it is one feasibility test on P plus one row.
+            a = H * u;
+            b = g0.' * u;
+            if all(a == 0)
+                if b < 0, r = -1; else, r = 0; end
+                return
+            end
+            % { x in P : slope(x) < 0 } is an open half-plane meeting a full-dimensional P, so it
+            % is nonempty exactly when the closed system has a nonempty INTERIOR -- which is what
+            % feasible2's strict mode decides, in integers.
+            if ratQ.feasible2([P; -a.', -b], true), r = -1; else, r = 0; end
+        end
+
+        function [U, ok] = recCone2(P)
+        % objective: the extreme rays of the recession cone { u : P(:,1:2)*u >= 0 }.
+        % [output] U  : m x 2 integer directions, m = 0 (the cone is {0}), 1 (a ray) or 2 (a
+        %               pointed 2-D cone); ok : false if the cone is NOT POINTED and the caller
+        %               must decline
+        %
+        % WHY POINTEDNESS IS THE DIVIDING LINE. A pointed 2-D cone is the set of nonnegative
+        % combinations of its two extreme rays, which is what lets coneFormMinSign decide the sign
+        % of u'Hu over the whole cone from three integers. A cone containing a LINE -- P a slab, a
+        % half-plane, or a single half-plane's worth of constraints -- is not spanned that way, and
+        % rather than add a second parametrisation for a configuration a dual cell does not
+        % produce, this declines. It is one of the named incompleteness of quadSignOnPoly.
+        %
+        % THE ENUMERATION. Every extreme ray of a pointed polyhedral cone in the plane lies on the
+        % boundary of one of its own constraints, so the candidates are the two directions along
+        % each constraint line, and an extreme ray is exactly a candidate that satisfies every
+        % constraint. Directions are compared up to POSITIVE scaling, by cross product and sign.
+            N = P(:,1:2);
+            N = N(any(N ~= 0, 2), :);
+            U = zeros(0,2);  ok = true;
+            if isempty(N), ok = false; return, end          % nothing constrains: the cone is R^2
+            C = zeros(0,2);
+            for i = 1:size(N,1)
+                C = [C; N(i,2), -N(i,1); -N(i,2), N(i,1)]; %#ok<AGROW>
+            end
+            keep = false(size(C,1),1);
+            for i = 1:size(C,1)
+                keep(i) = all(N * C(i,:).' >= 0);
+            end
+            C = C(keep,:);
+            for i = 1:size(C,1)
+                new = true;
+                for j = 1:size(U,1)
+                    if U(j,1)*C(i,2) - U(j,2)*C(i,1) == 0 && U(j,:) * C(i,:).' > 0
+                        new = false; break                  % same direction, different length
+                    end
+                end
+                if new, U = [U; C(i,:)]; end %#ok<AGROW>
+            end
+            if size(U,1) == 2 && U(1,1)*U(2,2) - U(1,2)*U(2,1) == 0
+                ok = false; U = zeros(0,2); return          % opposite rays: the cone holds a line
+            end
+            if size(U,1) > 2, ok = false; U = zeros(0,2); end
+        end
+
+        function s = coneFormMinSign(H, u1, u2)
+        % objective: the sign of the minimum of the quadratic FORM u'Hu over the pointed cone
+        %            spanned by u1 and u2, excluding the origin.
+        % [output] s : -1, 0 or +1
+        %
+        % The form is homogeneous of degree 2, so its sign on the cone is decided on the SEGMENT
+        % from u1 to u2: with u = lambda*u1 + (1-lambda)*u2 it becomes the one-variable quadratic
+        %       psi(lambda) = a2*lambda^2 + a1*lambda + a0,
+        %       a2 = A - 2B + C,  a1 = 2*(B - C),  a0 = C,   A = u1'Hu1, B = u1'Hu2, C = u2'Hu2,
+        % and psi's minimum over [0,1] is at an endpoint -- psi(0) = C, psi(1) = A -- or, when the
+        % parabola opens upwards and its vertex lies strictly inside, at that vertex, where
+        % 4*a2*psi = 4*a2*a0 - a1^2. Only signs are needed, so the vertex value never has to be
+        % formed as a rational: with a2 > 0 the sign of psi there is the sign of that integer.
+            A = u1.' * H * u1;   B = u1.' * H * u2;   C = u2.' * H * u2;
+            a2 = A - 2*B + C;    a1 = 2*(B - C);
+            s = min(sign(A), sign(C));
+            if a2 > 0 && a1 < 0 && -a1 < 2*a2                 % vertex -a1/(2*a2) lies in (0,1)
+                s = min(s, sign(ratQ.chk(4*a2*C - a1^2, 'cone form vertex')));
+            end
+        end
     end
 end
 

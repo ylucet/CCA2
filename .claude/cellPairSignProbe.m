@@ -31,23 +31,23 @@ function cellPairSignProbe(varargin)
     if nargin >= 1, n = varargin{1}; end
 
     fprintf('grid %d x %d over the dual box each pair needs\n\n', n, n);
-    fprintf('%-34s %8s %8s %8s %8s %8s %8s\n', 'piece pair', 'full-dim', 'plane', ...
-            'sampled', 'both', 'one-sign', 'ceiling');
+    fprintf('%-34s %8s %8s %8s %8s %8s %8s %8s\n', 'piece pair', 'full-dim', ...
+            'plane', 'POLY', 'sampled', 'both', 'one-sign', 'ceiling');
     fprintf('%s\n', repmat('-', 1, 92));
 
     cases = fixtures();
     for i = 1:numel(cases)
         nm = cases{i}{1};  fA = cases{i}{2};  fB = cases{i}{3};
         gA = conjQ(fA);  gB = conjQ(fB);
-        [nFull, nPlane] = countFullDim(gA, gB);
+        [nFull, nPlane, nPoly] = countFullDim(gA, gB);
         [nSamp, nBoth, nOne] = signBuckets(gA, gB, n);
         if nSamp == 0
             ceil_ = NaN;
         else
             ceil_ = 100 * nOne / nSamp;
         end
-        fprintf('%-34s %8d %8d %8d %8d %8d %7.0f%%\n', nm, nFull, nPlane, nSamp, ...
-                nBoth, nOne, ceil_);
+        fprintf('%-34s %8d %8d %8d %8d %8d %8d %7.0f%%\n', nm, nFull, nPlane, ...
+                nPoly, nSamp, nBoth, nOne, ceil_);
     end
 
     fprintf(['\n"sampled" is how many of filter 1''s pairs the grid actually reached; a pair it\n' ...
@@ -109,7 +109,7 @@ function V = vertsOf(g)
     V = V(all(isfinite(V), 2), :);
 end
 
-function [nFull, nPlane] = countFullDim(gA, gB)
+function [nFull, nPlane, nPoly] = countFullDim(gA, gB)
 % Filter 1's answer, recomputed here so the columns are from the same run -- plus the FREE version
 % of filter 2 alongside it.
 %
@@ -120,6 +120,7 @@ function [nFull, nPlane] = countFullDim(gA, gB)
 % and how much weaker is the number that decides whether the polyhedral version has to be built.
     nFull  = 0;
     nPlane = 0;
+    nPoly  = 0;
     for i = 1:gA.nf
         RA = cellRows(gA, i);
         if isempty(RA), continue, end
@@ -129,6 +130,10 @@ function [nFull, nPlane] = countFullDim(gA, gB)
             if ratQ.feasible2([RA; RB], true)
                 nFull = nFull + 1;
                 if planePrunes(gA, i, gB, j), nPlane = nPlane + 1; end
+                cd = diffConicOf(gA, i, gB, j);
+                if any(cd ~= 0) && ratQ.quadSignOnPoly(cd, [RA; RB]) ~= 0
+                    nPoly = nPoly + 1;
+                end
             end
         end
     end

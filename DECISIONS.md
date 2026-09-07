@@ -5790,3 +5790,83 @@ means the two faces are IDENTICAL, so the pieces tie on the whole cell intersect
 along a curve in it. `ratQ.conic` refuses an all-zero conic by name, correctly, and the probe now
 reports that case as NOT prunable. Reading it as "one sign, therefore prune" would discard a
 genuine (indeed maximal) tie.
+
+## 2026-09-06 — FILTER 2 IS BUILT AND EXACT, and it takes the 16-gon pair from 235 eliminations to 38
+
+**`ratQ.quadSignOnPoly(c, P)`** decides exactly whether a quadratic takes one sign on a 2-D
+polyhedron, in integers, with no tolerance anywhere. It is the filter the previous two entries
+measured the case for.
+
+**THE ASYMMETRY THAT SHAPES THE WHOLE ROUTINE.** Answering 0 ("both signs, or undecided") on a
+quadratic that is really one-signed costs ONE elimination that did not have to run. Answering +1 or
+-1 on one that changes sign DISCARDS A BRIDGE FACE, and the envelope is then wrong with no symptom
+at all. So the routine is SOUND and deliberately NOT complete: every configuration it cannot settle
+exactly returns 0, and each such decline is named at its own guard.
+
+**THE METHOD, and why it stays inside `signQ`.** `sign` is monotone, so `sign(min)` is the MIN OF
+THE SIGNS over a candidate set — no rational is ever compared against another, only against zero.
+The minimum of a quadratic on a polyhedron is attained at a point lying in the relative interior of
+some face, so the candidates are exactly the unconstrained stationary point (the 2-D face), the
+stationary point of the restriction to each facet LINE (the 1-D faces), and the vertices (the 0-D
+faces). **Every one of those is the solution of a 2x2 integer system**, so the whole enumeration is
+`solve2` plus a membership test plus a sign.
+
+**EXTRA CANDIDATES ARE FREE, MISSING ONES ARE NOT** — which is why the stationary point is kept
+without first asking whether it is a minimum or a saddle. An extra point can only pull the computed
+min DOWN, losing a prune; a missing one could push it up and prune a pair that ties.
+
+**NON-ATTAINMENT IS HANDLED FIRST**, because a minimum of -infinity read off a finite candidate is
+exactly the unsound +1 that must never happen. `recCone2` returns the extreme rays of the recession
+cone; the form's sign over a pointed 2-D cone is decided from three integers (`coneFormMinSign`),
+since a homogeneous form's sign on a cone is its sign on the segment joining the two rays.
+
+**THE FLAT DIRECTION HAD TO BE BUILT, NOT DECLINED, and the fixture said so.** When `u'Hu = 0` on a
+recession ray the quadratic term vanishes and `q(x + t u) = q(x) + t((Hu)'x + g0'u)` EXACTLY, so
+the slope along `u` is AFFINE in `x` and `q` is unbounded below precisely when that slope is
+negative somewhere in `P` — one feasibility test on `P` plus one row (`flatRaySign`). This is not a
+rare case: over a VERTEX cell a conjugate is affine, so any pair involving one has a singular
+difference Hessian. Measured on square-vs-square, **every** pair the polyhedral route declined but
+the whole-plane test settled was exactly this.
+
+### What it prunes, on the same fixture ladder
+
+| piece pair | pairs | filter 1 (full-dim) | whole-plane | **filter 2** | eliminations left |
+|---|---|---|---|---|---|
+| two triangles, shifted | 49 | 13 | 5 | **9** | 4 |
+| two triangles, cones overlap | 49 | 16 | 2 | **8** | 8 |
+| triangle vs square | 63 | 14 | 4 | **6** | 8 |
+| square vs square | 81 | 15 | 6 | **12** | 3 |
+| hexagon vs hexagon | 169 | 49 | 11 | **37** | 12 |
+| octagon vs octagon | 289 | 59 | 14 | **45** | 14 |
+| **16-gon vs 16-gon** | 1089 | 235 | 29 | **197** | **38** |
+
+**THE DESIGN VERDICT IS REVERSED.** Two entries ago the conclusion was "viable for triangles and
+squares and not for a wide polygon": a 33-cell pair meant ~235 eliminations at 1 to 19 s, i.e. up
+to 75 minutes for ONE piece pair. It is now **38**, i.e. 38 s to 12 minutes. Two fixtures land
+exactly on the sampled bridge count (13 -> 4 against `both` = 4; 15 -> 3 against `both` = 3), so on
+those the filter is not merely good but tight.
+
+### The defect the oracle caught, and it would have been silent
+
+`ratQ.conic` returns the canonical spelling of a CURVE, and a curve has no scale, so it makes the
+leading nonzero coefficient positive — **negating half of all inputs**. For a curve that is the
+identity; for a SIGN it is the opposite answer. Feeding `conicSign(conic(c))` reported `-(y-1)^2`
+as nonnegative on 2 of 4000 random cases. Caught by `.claude/quadSignOracle.m`, not by reading:
+**the fallback was added to make the routine never weaker than the free test, and it made it wrong
+instead.** Pinned by a test that states the reason.
+
+**What the oracle establishes and what it does not.** 60000 random (conic, polyhedron) pairs, of
+which ~16000 got a decided one-sign answer: **zero violations** of the unsafe direction, where the
+sample includes each polyhedron's vertices and points pushed 1e2, 1e4 and 1e6 along every recession
+direction — a sign change that only happens far out is exactly what a box sample misses and exactly
+what the recession analysis is for. **44% of the one-signed random cases are still DECLINED**, but
+that number is about the random generator, not the application: on the real cell pairs the filter
+takes 197 of the 235 available.
+
+### The named incompleteness, all of them declines to 0
+
+- a recession cone that is not pointed (`P` a slab or a half-plane): `recCone2` returns `ok = false`
+- the form touching zero strictly INSIDE a 2-D recession cone, where no single flat direction is
+  named (on an extreme ray it is settled by `flatRaySign`)
+- an integer overflow while forming a candidate: that candidate is declined towards `+1`, which can
+  only lose a prune, never cause one

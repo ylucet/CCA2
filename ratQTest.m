@@ -923,6 +923,122 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyError(@() ratQ.chk(2^53), 'ratQ:overflow');
             testCase.verifyEqual(ratQ.chk(2^53 - 1), 2^53 - 1, 'and one below it is fine');
         end
+
+        % ---- quadSignOnPoly: filter 2 of the bridge assembly ---------------------------------
+
+        function quadSignOnPolyAnswersTheThreeOutcomesOnKnownGeometry(testCase)
+        % The contract, on cases whose answer is arithmetic rather than a stored value.
+            sq = [1 0 0; 0 1 0; -1 0 1; 0 -1 1];               % the unit square
+            testCase.verifyEqual(ratQ.quadSignOnPoly([1 0 1 0 0 1], sq), 1, ...
+                'x^2 + y^2 + 1 is positive everywhere, so certainly on the square');
+            testCase.verifyEqual(ratQ.quadSignOnPoly([-1 0 -1 0 0 -1], sq), -1, ...
+                'and its negative is negative everywhere');
+            testCase.verifyEqual(ratQ.quadSignOnPoly([1 0 1 0 0 -1], sq), 0, ...
+                ['x^2 + y^2 - 1 is negative at the origin and positive at (1,1), both corners ' ...
+                 'of the square, so it must be reported as changing sign']);
+            testCase.verifyEqual(ratQ.quadSignOnPoly([0 0 0 1 -1 0], sq), 0, ...
+                'x - y changes sign across the square''s diagonal');
+        end
+
+        function quadSignOnPolyIsNotFooledByAMinimumOFF_theVertices(testCase)
+        % THE CASE A VERTEX-ONLY TEST GETS WRONG, and the reason the facet stationary points are
+        % enumerated at all. On the square [0,1]^2 the quadratic (x - 1/2)^2 - 1/16 is positive at
+        % all four corners (1/4 - 1/16 = 3/16) and negative along the whole line x = 1/2. Anything
+        % that inspected only the vertices would answer +1 and discard a genuine sign change.
+        %
+        % Written as 16x^2 - 16x + 3 so the coefficients stay integral.
+            sq = [1 0 0; 0 1 0; -1 0 1; 0 -1 1];
+            q  = [16 0 0 -16 0 3];
+            testCase.verifyEqual(ratQ.quadSignOnPoly(q, sq), 0);
+            testCase.verifyEqual(sign(16*(1/2)^2 - 16*(1/2) + 3), -1, ...
+                'the interior value really is negative, so 0 is the right answer and not a decline');
+        end
+
+        function quadSignOnPolySeesUNBOUNDEDNESSRatherThanOnlyTheNearbyPoints(testCase)
+        % The recession analysis, which is what separates this from sampling. On the first quadrant
+        % the affine form 1 - x is positive near the origin and negative far along the x axis; a
+        % routine that enumerated only the vertices of an unbounded cell would answer +1.
+            quad = [1 0 0; 0 1 0];                              % x >= 0, y >= 0
+            testCase.verifyEqual(ratQ.quadSignOnPoly([0 0 0 -1 0 1], quad), 0, ...
+                '1 - x goes negative far along a recession direction');
+            testCase.verifyEqual(ratQ.quadSignOnPoly([0 0 0 1 0 1], quad), 1, ...
+                'while 1 + x stays positive on the whole quadrant, including at infinity');
+        end
+
+        function quadSignOnPolyNEVERClaimsOneSignWhenTheQuadraticChangesSign(testCase)
+        % THE PROPERTY THAT MATTERS, asserted rather than sampled for a value.
+        %
+        % The two errors this routine can make are not symmetric. Answering 0 on a quadratic that
+        % is really one-signed costs one elimination in the bridge assembly. Answering +1 or -1 on
+        % one that changes sign DISCARDS A BRIDGE FACE, and the envelope is then wrong with no
+        % symptom. So the test asserts only the unsafe direction, over random integer cases, and
+        % says nothing about how often the safe direction is taken -- that is a rate, not a
+        % contract, and .claude/quadSignOracle.m reports it.
+        %
+        % Small coefficients on purpose: they are what make the degenerate configurations the
+        % guards exist for -- an exactly flat recession direction, exactly parallel constraints --
+        % actually occur. A wide random range would test only the generic case.
+            rng(2026);
+            for it = 1:400
+                c = randi([-4 4], 1, 6);
+                k = randi([2 5]);
+                P = randi([-3 3], k, 3);
+                P(all(P(:,1:2) == 0, 2), 1) = 1;
+                if ~ratQ.feasible2(P, true), continue, end
+                s = ratQ.quadSignOnPoly(c, P);
+                if s == 0, continue, end
+                X = ratQTest.pointsIn(P);
+                if isempty(X), continue, end
+                v = c(1)*X(:,1).^2 + c(2)*X(:,1).*X(:,2) + c(3)*X(:,2).^2 + ...
+                    c(4)*X(:,1)      + c(5)*X(:,2)        + c(6);
+                tol = 1e-9 * max(1, max(abs(v)));
+                if s > 0
+                    testCase.verifyGreaterThanOrEqual(min(v), -tol, ...
+                        sprintf('claimed q >= 0 on P for c = [%s]', num2str(c)));
+                else
+                    testCase.verifyLessThanOrEqual(max(v), tol, ...
+                        sprintf('claimed q <= 0 on P for c = [%s]', num2str(c)));
+                end
+            end
+        end
+
+        function quadSignOnPolyIsNeverWeakerThanTheWholePlaneTest(testCase)
+        % A REGRESSION GUARD WITH A HISTORY. One sign over the whole plane implies one sign on any
+        % subset, so conicSign is a sound answer wherever it fires -- but the polyhedral route
+        % DECLINES on degenerate configurations, and before the fallback was added it lost pairs
+        % that the free test settled (DECISIONS 2026-09-06). A filter that is sometimes weaker than
+        % the test it replaces is a regression however much stronger it is on average.
+            rng(7);
+            for it = 1:300
+                c = randi([-4 4], 1, 6);
+                if all(c == 0), continue, end
+                P = randi([-3 3], randi([2 5]), 3);
+                P(all(P(:,1:2) == 0, 2), 1) = 1;
+                if ~ratQ.feasible2(P, true), continue, end
+                sp = ratQ.conicSign(c);
+                if sp ~= 0
+                    testCase.verifyEqual(ratQ.quadSignOnPoly(c, P), sp, ...
+                        sprintf('the plane says %d for c = [%s]; the cell must not say less', ...
+                                sp, num2str(c)));
+                end
+            end
+        end
+
+        function conicSignMustNotBeFedThroughConicBecauseConicNormalisesTheSIGN(testCase)
+        % THE DEFECT THE ORACLE CAUGHT, pinned so it cannot come back.
+        %
+        % ratQ.conic returns the canonical spelling of a CURVE, and a curve has no scale, so it
+        % makes the leading nonzero coefficient positive -- negating half of all inputs. For a
+        % curve that is the identity; for a SIGN it is the opposite answer. -(y-1)^2 is <= 0
+        % everywhere, and conic() turns it into (y-1)^2.
+            c = [0 0 -1 0 2 -1];                                % -(y - 1)^2
+            testCase.verifyEqual(ratQ.conicSign(c), -1, 'the form itself is nonpositive');
+            testCase.verifyEqual(ratQ.conicSign(ratQ.conic(c)), 1, ...
+                'and conic() flips it, which is correct for a curve and wrong for a sign');
+            halfPlane = [-1 -1 2; -3 -3 0];
+            testCase.verifyEqual(ratQ.quadSignOnPoly(c, halfPlane), -1, ...
+                'so quadSignOnPoly must report the nonpositive sign on this half-plane');
+        end
     end
 
     methods (Static)
@@ -939,6 +1055,26 @@ classdef ratQTest < matlab.unittest.TestCase
         % symOf below is the quadratic special case, kept because most tests only need it.
             s = c(1)*x^3/6 + c(2)*x^2*y/2 + c(3)*x*y^2/2 + c(4)*y^3/6 ...
               + c(5)*x^2/2 + c(6)*x*y + c(7)*y^2/2 + c(8)*x + c(9)*y + c(10);
+        end
+
+        function X = pointsIn(P)
+        % Points of the polyhedron P for a TEST oracle: a rejection sample from a box, plus points
+        % pushed far along each recession direction. The far ones are the point of it -- a
+        % quadratic that only dips negative at distance is exactly what a box sample calls
+        % one-signed, and exactly what the recession analysis in quadSignOnPoly exists to catch.
+            X = (rand(4000, 2) * 2 - 1) * 6;
+            X = X(all(X * P(:,1:2).' + P(:,3).' >= 0, 2), :);
+            D = zeros(0,2);
+            for i = 1:size(P,1)
+                for u = [[P(i,2), -P(i,1)]; [-P(i,2), P(i,1)]].'
+                    if any(u ~= 0) && all(P(:,1:2) * u >= 0), D = [D; u.']; end %#ok<AGROW>
+                end
+            end
+            if isempty(X) || isempty(D), return, end
+            base = X(1:min(end,10), :);
+            for t = [1e2 1e4 1e6]
+                for i = 1:size(D,1), X = [X; base + t * D(i,:)]; end %#ok<AGROW>
+            end
         end
 
         function s = symOf(c, x, y)
