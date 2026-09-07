@@ -1024,6 +1024,43 @@ classdef ratQTest < matlab.unittest.TestCase
             end
         end
 
+        function quadSignOnPolySaysWhetherTheSignIsSTRICTBecauseATANGENTIALTieIsStillATie(testCase)
+        % THE DEFECT THE END-TO-END RUN CAUGHT, pinned so it cannot come back.
+        %
+        % `+1` from this routine means `q >= 0`, which ALLOWS q = 0 somewhere. Two conjugate cells
+        % whose difference touches zero without crossing are TANGENTIALLY tied, and a tangential
+        % tie carries a bridge face exactly as a transversal one does. The bridge assembly used
+        % `s ~= 0` as its prune test and therefore dropped a real bridge -- cell pair (5,5) of the
+        % diagonal-kink triangle pair, where the definition's own maximiser ties. Only the second
+        % output licenses a prune.
+            sq = [1 0 0; 0 1 0; -1 0 1; 0 -1 1];               % the unit square
+            [s, strict] = ratQ.quadSignOnPoly([1 0 1 0 0 1], sq);
+            testCase.verifyEqual(s, 1);
+            testCase.verifyTrue(strict, 'x^2 + y^2 + 1 never reaches zero');
+
+            [s, strict] = ratQ.quadSignOnPoly([1 0 1 0 0 0], sq);
+            testCase.verifyEqual(s, 1, 'x^2 + y^2 is nonnegative on the square');
+            testCase.verifyFalse(strict, ...
+                'but it VANISHES at the corner (0,0), so the sign is not strict and a tie is possible');
+
+            [s, strict] = ratQ.quadSignOnPoly([1 0 1 0 0 -1], sq);
+            testCase.verifyEqual(s, 0);
+            testCase.verifyFalse(strict, 'a sign change is never strict');
+        end
+
+        function conicDefiniteIsTheLEADINGMinorTestNotTheSemidefiniteOne(testCase)
+        % Two different questions with two different criteria, and using one for the other is the
+        % classic error. Semidefinite needs EVERY principal minor (ratQ.conicSign); definite needs
+        % only the LEADING ones (Sylvester). A parabola touching the axis is PSD and does vanish,
+        % so it must not be called definite.
+            testCase.verifyTrue(ratQ.conicDefinite([1 0 1 0 0 1]), 'x^2 + y^2 + 1 is definite');
+            testCase.verifyTrue(ratQ.conicDefinite([-1 0 -1 0 0 -1]), 'and so is its negative');
+            testCase.verifyFalse(ratQ.conicDefinite([1 0 0 0 -1 0]), ...
+                'y = x^2 is PSD as a form and vanishes along the parabola, so it is NOT definite');
+            testCase.verifyFalse(ratQ.conicDefinite([1 0 1 0 0 -1]), ...
+                'and a form that changes sign is not definite either');
+        end
+
         function conicSignMustNotBeFedThroughConicBecauseConicNormalisesTheSIGN(testCase)
         % THE DEFECT THE ORACLE CAUGHT, pinned so it cannot come back.
         %

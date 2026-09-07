@@ -6241,3 +6241,80 @@ read, so touching `obj.E` first replaced the routine's own named type refusal wi
 takes a real `QuaPol`, flips one edge to the closed spelling, and asserts `conjQ` and `biconjQ` both
 raise `RatCon:closedEdge` — so the guard is exercised through the real entry points, not only as a
 unit.
+
+## 2026-09-06 (overnight, item 3) — the END-TO-END RUN FOUND TWO DEFECTS THE UNIT PROBES COULD NOT
+
+**This is the entry to read if you only read one from tonight.** Every stage of the bridge pipeline
+had been verified on its own and all of them passed. Running them IN SEQUENCE on a real triangle
+pair (`.claude/bridgeEnvelopeProbe.m`) found two defects, both in the joins between stages, and one
+of them had already produced published numbers.
+
+### DEFECT 1 — `quadSignOnPoly ~= 0` is the WRONG PRUNE TEST: a TANGENTIAL tie is still a tie
+
+`+1` from that routine means `q >= 0`, which **allows `q = 0` somewhere**. Two cells whose
+difference touches zero without crossing are tangentially tied, and a tangential tie carries a
+bridge face exactly as a transversal one does. The assembly pruned on `s ~= 0` and therefore
+**dropped a real bridge** — cell pair (5,5) of the diagonal-kink triangle pair, where the
+definition's own maximiser ties.
+
+**Fixed in the routine, not at the call site**, because a second caller would make the same
+mistake: `quadSignOnPoly` now returns `[s, strict]`, `strict` true only when the quadratic NEVER
+vanishes on the polyhedron. Only that licenses a prune, and the header says so in those words. The
+strictness of the `conicSign` fallback needed its own criterion — semidefinite permits zeros, so
+the new `ratQ.conicDefinite` is the LEADING-minor (Sylvester) test rather than the all-principal-
+minors one `conicSign` needs. Two different questions, two different criteria; using one for the
+other is the classic error and is now pinned by a test.
+
+### DEFECT 2 — the WEIGHTED BASIS CARRIES HALVES, and both probes ignored them
+
+A face is stored in `RatCon`'s 10-wide basis, whose value is
+`n5 x^2/2 + n6 xy + n7 y^2/2 + n8 x + n9 y + n10`. **The raw slice `n(5:10)` is therefore NOT the
+conic `[a b c d e f]`** — the squared terms are half what that spelling means. The conic of the
+same function is `[n5, 2*n6, n7, 2*n8, 2*n9, 2*n10]`, integral because doubling a conic is free.
+
+Both filter probes fed the raw slice to `conicSign` and `quadSignOnPoly`, so **the difference conic
+they tested named a different curve from the one where the two faces actually agree.** Found the
+same way: a cell pair the definition said was NOT tied came back tied, and the two disagreed by
+`q(s*) = -10.2` where a tie needs zero.
+
+### The corrected filter table, superseding the one two entries above
+
+| piece pair | full-dim | whole-plane (was) | **filter 2** (was) |
+|---|---|---|---|
+| two triangles, shifted | 13 | 4 (5) | **8** (9) |
+| two triangles, cones overlap | 16 | 2 (2) | **6** (8) |
+| triangle vs square | 14 | 3 (4) | **3** (6) |
+| square vs square | 15 | 6 (6) | **12** (12) |
+| hexagon vs hexagon | 49 | 10 (11) | **36** (37) |
+| octagon vs octagon | 59 | 10 (14) | **44** (45) |
+| **16-gon vs 16-gon** | 235 | 10 (29) | **196** (197) |
+
+**The design conclusion is unchanged and that is worth saying plainly.** The 16-gon pair still
+drops from 235 candidate eliminations to **39**, so filter 2 is still the thing that makes assembly
+viable for a wide polygon. What moved is the whole-plane column, which loses two thirds of its
+claim on the widest fixture — the free test was even weaker than reported.
+
+### What the end-to-end run establishes, and what it does not
+
+On the diagonal-kink triangle pair: 49 cell pairs, **16 meet in 2-D, 8 survive filter 2**, and of
+150 sampled primal points, **5 had a tied maximiser and all 5 were claimed by a pair the filters
+kept — none dropped**. The tie-restricted sup reproduced the envelope's value to **3.8e-8**, and
+refining the probe's own tie walk tenfold cut that from 4.7e-6 by a factor of 125, which is what a
+quadratic maximum's sampling error does — so the residual is the probe, not the pipeline.
+
+**NOT established: the whole envelope.** A NON-bridge face needs the Legendre value of one cell
+RESTRICTED to that cell, and over a vertex or edge cell the conjugate is affine or rank-deficient,
+so that is a constrained problem this pipeline does not solve. The first draft of this probe tried
+to rebuild the full envelope anyway, took unconstrained maximisers and skipped the singular cells,
+and disagreed with the definition by 1.94 — **a wrong answer from the checker, not from the thing
+being checked**, which is worth recording because it looked exactly like a real defect for an hour.
+
+### A tie is not yet a bridge, and the fixture is where that became clear
+
+Cells 1 of the two conjugates have **IDENTICAL** face functions: both pieces share the primal
+vertex `(0,0)` and take the same value there, so their conjugates agree on a whole 2-D CELL rather
+than crossing along a curve. The maximiser then ties everywhere in that cell — 149 of the first
+150 sampled points. **No new face arises**: the common function is already a face of each
+conjugate, so the envelope there is an ordinary vertex face with nothing to eliminate. This also
+settles, in the safe direction, the all-zero difference case that an earlier entry left flagged as
+"a degenerate tie, not the absence of one, reported as NOT prunable": it is genuinely not a bridge.

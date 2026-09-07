@@ -57,7 +57,17 @@ APC; gold is ~$3,290 and unnecessary.
   bridge face IS; nothing says WHERE it is the envelope. Measured 2026-09-06: the region's
   boundaries are CONICS (line fits 0.30-0.71 against conic fits 1.8e-14), so this needs `QuaCon`,
   not `QuaPar`.
-- [ ] **3. ONE FULL ENVELOPE on a triangle pair.** After both filters that is ~4 eliminations, not
+- [x] **3. THE BRIDGE PIPELINE END TO END on a triangle pair.** DONE 2026-09-06 overnight, and it
+  found two real defects the unit probes could not: `quadSignOnPoly ~= 0` was the wrong prune test
+  (a TANGENTIAL tie is still a tie -- the routine now returns `[s, strict]`), and both filter probes
+  ignored the weighted basis's halves, so the difference conic named the wrong curve. On the
+  diagonal-kink triangle pair: 49 pairs -> 16 meet -> 8 survive, all 5 sampled bridge points
+  claimed, value to 3.8e-8. See DECISIONS 2026-09-06.
+- [ ] **3. (residue) THE NON-BRIDGE FACES.** The full envelope still needs the Legendre value of
+  ONE cell RESTRICTED to that cell, and over a vertex or edge cell the conjugate is affine or rank
+  deficient, so that is a constrained problem nothing solves yet. This is what stands between the
+  bridge machinery and a complete `f**`.
+- [ ] **3. (old text) ONE FULL ENVELOPE on a triangle pair.** After both filters that is ~4 eliminations, not
   24. The end-to-end check that the whole bridge pipeline works.
 - [x] **4. CLOSED CONIC EDGES have no endpoints.** DONE 2026-09-06 overnight: `E(:,3) = 2` means CLOSED with no endpoints, validated by `RatCon.assertEdgeFlags` and refused by name in six consumers via `RatCon.assertNoClosedEdges`. See DECISIONS 2026-09-06.
 - [ ] **4. (old text)** `RatCon`'s edge table names an edge by its two

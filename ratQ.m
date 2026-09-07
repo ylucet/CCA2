@@ -1775,12 +1775,20 @@ classdef ratQ
             v = QuaPar.evalPoly(n, X) / d;
         end
 
-        function s = quadSignOnPoly(c, P)
+        function [s, strict] = quadSignOnPoly(c, P)
         % objective: does the quadratic c take ONE SIGN on the polyhedron P, and which. Exact.
         % [input]  c : 1 x 6 integer conic [a b c d e f] for a x^2 + b xy + c y^2 + d x + e y + f
         %          P : k x 3 integer rows [p1 p2 p0] meaning p1*x + p2*y + p0 >= 0
-        % [output] s : +1 if c >= 0 on P, -1 if c <= 0 on P, 0 if it takes BOTH signs or if this
-        %              routine cannot decide
+        % [output] s      : +1 if c >= 0 on P, -1 if c <= 0 on P, 0 if it takes BOTH signs or if
+        %                   this routine cannot decide
+        %          strict : true only when that sign is STRICT, i.e. c never VANISHES on P
+        %
+        % READ THE SECOND OUTPUT. A CALLER THAT IGNORES IT WILL BE WRONG, and this is not
+        % hypothetical -- the bridge assembly used `s ~= 0` as its prune test and dropped a real
+        % bridge (DECISIONS 2026-09-06, cell pair (5,5) of the diagonal-kink triangle pair). `+1`
+        % means `c >= 0`, which ALLOWS c = 0 somewhere: the two pieces then touch without crossing,
+        % which is a TANGENTIAL TIE and carries a bridge face just as a transversal one does. Only
+        % `strict` says the quadratic never reaches zero, and only that licenses a prune.
         %
         % WHY THIS EXISTS -- FILTER 2 OF THE BRIDGE ASSEMBLY. A bridge face lives where two pieces'
         % conjugates TIE, so a cell pair whose difference g1 - g2 never changes sign carries no
@@ -1820,9 +1828,9 @@ classdef ratQ
                     'quadSignOnPoly takes a 1 x 6 conic and k x 3 half-plane rows.');
             end
             mn = ratQ.quadMinSign(c, P);
-            if ~isnan(mn) && mn >= 0, s = 1; return, end     % q >= 0 on P
+            if ~isnan(mn) && mn >= 0, s = 1;  strict = (mn > 0); return, end   % q >= 0 on P
             mx = ratQ.quadMinSign(-c, P);
-            if ~isnan(mx) && mx >= 0, s = -1; return, end    % -q >= 0 on P, i.e. q <= 0
+            if ~isnan(mx) && mx >= 0, s = -1; strict = (mx > 0); return, end   % q <= 0 on P
 
             % NEVER WEAKER THAN THE FREE TEST. conicSign asks the cruder question -- one sign over
             % the WHOLE plane -- and one sign on the plane implies one sign on any subset of it, so
@@ -1839,9 +1847,29 @@ classdef ratQ
             % integrality, which chk gives it.
             if any(c ~= 0)
                 s = ratQ.conicSign(c);
+                % conicSign is built on POSITIVE SEMIDEFINITENESS, so its +1 permits zeros -- a
+                % parabola touching the axis is PSD and does vanish. The sign is strict exactly
+                % when the 3x3 form is positive (or negative) DEFINITE, which is the leading-minor
+                % test rather than the all-principal-minors one semidefiniteness needs.
+                strict = (s ~= 0) && ratQ.conicDefinite(c);
                 return
             end
-            s = 0;
+            s = 0;  strict = false;
+        end
+
+        function tf = conicDefinite(c)
+        % objective: is the conic's 3x3 form DEFINITE, i.e. does the quadratic never vanish?
+        % [input]  c : 1 x 6 integer conic
+        % [output] tf : logical, decided exactly
+        %
+        % Definite is the LEADING-minor test (Sylvester), unlike semidefinite which needs every
+        % principal minor -- see ratQ.conicSign, which needs the other one for the other question.
+        % Either sign counts: a form that is negative definite never vanishes either.
+            ratQ.chk(c, 'conic');
+            M = [2*c(1),   c(2),   c(4); ...
+                   c(2), 2*c(3),   c(5); ...
+                   c(4),   c(5), 2*c(6)];
+            tf = leadingPositive(M) || leadingPositive(-M);
         end
 
         function s = quadMinSign(c, P)
@@ -2041,6 +2069,14 @@ classdef ratQ
             end
         end
     end
+end
+
+function tf = leadingPositive(M)
+% All three LEADING principal minors of a 3x3 integer symmetric matrix strictly positive, decided
+% in exact integer arithmetic. Sylvester's criterion for POSITIVE DEFINITE.
+    tf = M(1,1) > 0 ...
+      && ratQ.detExact(M(1:2,1:2)) > 0 ...
+      && ratQ.detExact(M) > 0;
 end
 
 function I = bisect(chain, lo, hi, n, depth)

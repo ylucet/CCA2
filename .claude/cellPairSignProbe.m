@@ -130,9 +130,16 @@ function [nFull, nPlane, nPoly] = countFullDim(gA, gB)
             if ratQ.feasible2([RA; RB], true)
                 nFull = nFull + 1;
                 if planePrunes(gA, i, gB, j), nPlane = nPlane + 1; end
+                % THE SECOND OUTPUT IS LOAD-BEARING. quadSignOnPoly's +1 means "q >= 0", which
+                % ALLOWS q = 0 somewhere -- the two pieces touching without crossing, a TANGENTIAL
+                % tie, which carries a bridge face exactly as a transversal one does. Only `strict`
+                % says the quadratic never reaches zero on the cell, and only that licenses a
+                % prune. An earlier version of this column used `s ~= 0` and was optimistic;
+                % DECISIONS 2026-09-06 records the bridge it dropped.
                 cd = diffConicOf(gA, i, gB, j);
-                if any(cd ~= 0) && ratQ.quadSignOnPoly(cd, [RA; RB]) ~= 0
-                    nPoly = nPoly + 1;
+                if any(cd ~= 0)
+                    [sgn, strict] = ratQ.quadSignOnPoly(cd, [RA; RB]);
+                    if sgn ~= 0 && strict, nPoly = nPoly + 1; end
                 end
             end
         end
@@ -143,9 +150,20 @@ function c = diffConicOf(gA, i, gB, j)
 % The exact conic of gA''s face i minus gB''s face j. QuaCon guarantees fN(:,1:4) is zero -- a face
 % of a conjugate is a quadratic, never a genuine cubic -- so columns 5:10 ARE the conic, and the
 % subtraction is one cross-multiplication over the two integer denominators.
-    cA = gA.fN(i, 5:10);  dA = gA.fD(i);
-    cB = gB.fN(j, 5:10);  dB = gB.fD(j);
-    c = cA * dB - cB * dA;
+%
+% THE WEIGHTED BASIS CARRIES HALVES, and forgetting that mis-weights the curve. A face is stored
+% in RatCon's 10-wide basis, whose value is
+%       n5 x^2/2 + n6 xy + n7 y^2/2 + n8 x + n9 y + n10 ,
+% so the raw slice n(5:10) is NOT the conic [a b c d e f]: the squared terms are half what that
+% spelling means. The conic of the same function, cleared to integers by doubling -- free, since a
+% conic has no scale -- is [n5, 2*n6, n7, 2*n8, 2*n9, 2*n10].
+%
+% This was wrong here until 2026-09-06 and it moved real numbers: the difference conic passed to
+% quadSignOnPoly named a DIFFERENT CURVE from the one where the two faces actually agree, so both
+% filter-2 columns were measured against the wrong tie. Found by the end-to-end run, where a cell
+% pair the definition said was NOT tied came back tied. DECISIONS 2026-09-06.
+    D = gA.fN(i,:) * gB.fD(j) - gB.fN(j,:) * gA.fD(i);
+    c = [D(5), 2*D(6), D(7), 2*D(8), 2*D(9), 2*D(10)];
 end
 
 function tf = planePrunes(gA, i, gB, j)
