@@ -6374,3 +6374,51 @@ validate it; only a check whose answer depends on it does.**
 big against double, bitwise equal wherever both run, with an assertion that the generator actually
 produced comparable cases) and a Sturm count on an input that overflows the double path, asserted
 against the roots of `(x^2-2)(x^2-3)` rather than a stored value. Plus fast 573/0 and normal 13/0.
+
+## 2026-09-06 (overnight) — the NON-BRIDGE faces are "Case B minus two hypotheses", and the counts are exactly regular
+
+**Item 3's residue, measured before anything is built** (`.claude/cellFaceClassProbe.m`).
+
+**THE USEFUL OBSERVATION FIRST.** Over a single dual cell with no tie, the envelope face is
+`h_k(x) = sup over s in P_k of <s,x> - g_k(s)` — **the conjugate of a quadratic over a
+POLYHEDRON**, which is exactly what `conjQ`'s Case B already computes. The cells of a convex
+quadratic's conjugate are polyhedral (every cell boundary is a straight line, which is what
+`cellRows` has relied on throughout this line of work), so **no new geometry is involved**. Only
+two of Case B's hypotheses fail: it takes a BOUNDED polygon, and it takes a STRICTLY CONVEX
+quadratic. So the residue is not a new algorithm, it is Case B with two hypotheses lifted.
+
+**The counts, and they are exactly regular:**
+
+| piece | cells | bounded | unbounded | rank 2 | rank 1 | rank 0 | Case-B ready |
+|---|---|---|---|---|---|---|---|
+| triangle (kink piece A) | 7 | 1 | 6 | 1 | 3 | 3 | **1** |
+| triangle (kink piece B) | 7 | 1 | 6 | 1 | 3 | 3 | **1** |
+| unit square | 9 | 1 | 8 | 1 | 4 | 4 | **1** |
+| hexagon | 13 | 1 | 12 | 1 | 6 | 6 | **1** |
+| **total** | 36 | 4 | **32** | 4 | 16 | 16 | **4** |
+
+**For an n-gon it is exactly 1 + n + n.** One bounded rank-2 cell (the interior one, the only one
+Case B can take as it stands), `n` unbounded rank-1 cells (the edge cells), and `n` unbounded
+rank-0 cells (the vertex cells, where the conjugate is AFFINE). That is the normal-cone
+decomposition read off through the Hessian rank, and it means **Case B covers 1 cell of `2n+1`** —
+one thirteenth of a hexagon's conjugate.
+
+**THE ORDER TO BUILD IT IN, and the first sub-case needs no conjugation machinery at all.** With
+Hessian 0 the face is affine, `g_k(s) = <b,s> + c`, so
+
+        h_k(x) = sup over s in P_k of <s, x - b>  -  c ,
+
+the **SUPPORT FUNCTION** of the cell at `x - b`. For a polyhedral cone that is piecewise LINEAR,
+with the pieces given by the cone's own normal fan — and `ratQ.recCone2`, written for filter 2
+earlier today, already returns the extreme rays that fan is built from. So:
+
+1. **rank 0 (vertex cells), `n` of `2n+1`** — a support function of a polyhedral cone. Elementary,
+   and the ingredient already exists.
+2. **rank 1 (edge cells), `n` of `2n+1`** — quadratic in one direction and a support function in
+   the other. The mixed case, and the real work.
+3. **rank 2 (the interior cell), 1 of `2n+1`** — bounded and already Case-B-ready.
+
+**Which also says what the type decision does NOT need to wait for.** Every one of these faces is
+quadratic or piecewise affine in `x`; none of them is implicit. The implicit-face type is needed
+for the BRIDGE faces alone, so the non-bridge residue and the type decision are independent and can
+proceed in either order.

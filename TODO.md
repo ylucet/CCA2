@@ -47,10 +47,18 @@ internal — nothing external blocks either. See DECISIONS.md 2026-09-06 for eac
   path rather than the site where the overflow was first seen. It also exposed a scaling bug in the
   region-membership quartic that the isotropic instance had been hiding, because the sides never
   read `Phi`. Both instances now decide: 81/81 exact membership and 4000/4000 sides on each.
-- [ ] **THE NON-BRIDGE FACES** (item 3's residue). A complete `f**` still needs the Legendre value
-  of ONE cell RESTRICTED to that cell, and over a vertex or edge cell the conjugate is affine or
-  rank deficient, so that is a constrained problem nothing here solves. This is now the only thing
-  between the bridge machinery and a complete envelope.
+- [ ] **THE NON-BRIDGE FACES** (item 3's residue) — now SCOPED and ordered, 2026-09-06. Each is
+  the conjugate of a quadratic over a POLYHEDRAL dual cell, i.e. `conjQ`'s Case B minus two
+  hypotheses (bounded polygon, strictly convex quadratic). For an n-gon the cells are exactly
+  `1 + n + n`, so Case B covers 1 of `2n+1` today. Build in this order:
+  - [ ] **rank 0, the VERTEX cells (`n` of `2n+1`).** The face is affine, so `h_k` is the SUPPORT
+    FUNCTION of a polyhedral cone at `x - b` — piecewise linear, pieces given by the cone's normal
+    fan, and `ratQ.recCone2` already returns the extreme rays. No conjugation machinery needed.
+  - [ ] **rank 1, the EDGE cells (`n` of `2n+1`).** Quadratic in one direction, a support function
+    in the other. The real work.
+  - [ ] **rank 2, the INTERIOR cell (1 of `2n+1`).** Bounded and already Case-B-ready.
+  Independent of the implicit-face type decision: every one of these faces is quadratic or
+  piecewise affine in `x`, so none of them is implicit. See DECISIONS 2026-09-06.
 - [ ] **CONFIRM THE TWO RECLASSIFIED GUARDS THROUGH THE WIRED PATH** (item 1's residue).
   `.claude/guardConditionProbe.m` shows the CONDITION occurs in real `conjQ` output; running the
   symbolic Step-3 pipeline would show the guard itself firing.
