@@ -39,7 +39,7 @@ APC; gold is ~$3,290 and unnecessary.
 
 ## Next up — 2026-09-06 (from Yves, for the overnight run)
 
-- [ ] **1. Re-check the `notReachable` guards against MULTI-PIECE input.** `SUPPORT_MATRIX.md`
+- [x] **1. Re-check the `notReachable` guards against MULTI-PIECE input.** DONE 2026-09-06 overnight: 2 rows refuted (curved ray edge, irreducible ellipse/hyperbola), 1 survives (>1 curved edge per face). Residue: the wired symbolic path confirmation, and the rows not testable by shape. **1. (residue)** `SUPPORT_MATRIX.md`
   section 0's basis for classifying a guard as unreachable was refuted 2026-09-06: `conjQ` returns
   hyperbolic edges on every two-piece KINK fixture. Every N/R classification that rests on that
   claim has to be re-tested with a kink fixture rather than a single piece. Output: the list of

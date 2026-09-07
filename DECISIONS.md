@@ -5987,3 +5987,48 @@ against a multi-piece input. This entry does not re-check them; it records that 
 by any test — every number in the previous entry is still correct, and only the name attached to
 them was wrong. It surfaced because the claim was questioned, and re-reading the class to answer is
 what turned up the much larger scope defect underneath it.
+
+## 2026-09-06 (overnight, item 1) — TWO `N/R` GUARDS ARE REACHABLE, one survives the re-check
+
+**The re-check the previous entry called for.** `SUPPORT_MATRIX.md` section 0's scope claim was
+refuted, so every guard classified **N/R** on the strength of it was unverified. Two probes settle
+the ones that can be settled by shape.
+
+**METHOD, and why it is not "run the pipeline and see".** Running `conjCPLQ` to watch a guard fire
+costs the better part of an hour per fixture, and a guard that does not fire proves nothing. But
+most `N/R` rows are conditions on the SHAPE of a conjugate's subdivision, and `conjQ` produces that
+subdivision exactly in seconds. So the condition is tested where it lives
+(`.claude/guardConditionProbe.m`), on the eight two-piece KINK fixtures plus both single-piece ones
+as a control.
+
+| condition (a `SUPPORT_MATRIX` N/R row) | over 8 KINK fixtures | 1-piece control | verdict |
+|---|---|---|---|
+| curved **ray** edge | **52** (2 to 12 each) | **0** | **REACHABLE** |
+| difference of the two candidates is an **irreducible** ellipse/hyperbola | **44** | **0** | **REACHABLE** |
+| face with **more than one** curved edge | **0** | 0 | **survives** |
+
+**The control column is the point of the table.** Both single-piece fixtures score zero on every
+condition, and every kink fixture scores nonzero on two of them. That is the refuted scope claim
+seen from the other side: the classifications were right about the input they were tested on and
+were never re-tested on the input that breaks them.
+
+**"An edge conic IS the difference of the two candidate quadratics"**, by construction — edge `j`
+of a `QuaCon` is the locus where the faces on its two sides agree. So `maxQuaPar:notDegenerate`'s
+condition and "an irreducible non-degenerate edge conic" are one object, and irreducibility is the
+exact integer test `det(M) ~= 0` on the conic's 3x3 matrix, `M` singular being precisely the
+degenerate conic the guard is named after.
+
+**The `Curved ray edge` row's REASON was never wrong — only its scope was.** "`QuaPar` has no
+unbounded curved edge" is a true statement about that representation. What is false is the
+inference that a `QuaPol` conjugate therefore never produces one: `QuaCon` does, 52 times over
+eight ordinary fixtures. The row is reclassified without deleting its reason.
+
+**What is deliberately NOT claimed.** Finding the condition in a `QuaCon` shows the SHAPE is
+reachable; it does not by itself prove the specific `maxQuaPar` guard fires, since that also needs
+the pipeline to hand that shape to that routine. `.claude/reachabilityProbe.m('slow')` runs the
+wired symbolic path to settle it and had not finished when this was written.
+
+**The exact operators reach no new guard.** Over all ten fixtures `conjQ` answers every one, and
+`biconjQ` refuses with only `convexPieceCoupling` (6 fixtures) and `notImplemented` (the
+single-piece indefinite) — both already classified GAP, neither N/R. So the reachability damage is
+confined to the symbolic Step-3 path, which is the one whose rows this entry reclassifies.
