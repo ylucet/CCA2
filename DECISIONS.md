@@ -6422,3 +6422,40 @@ earlier today, already returns the extreme rays that fan is built from. So:
 quadratic or piecewise affine in `x`; none of them is implicit. The implicit-face type is needed
 for the BRIDGE faces alone, so the non-bridge residue and the type decision are independent and can
 proceed in either order.
+
+## 2026-09-06 (overnight) — the RANK-0 non-bridge face, in closed form, verified
+
+**The first of the three sub-cases the previous entry ordered, and it needed no conjugation
+machinery at all** (`.claude/vertexCellFaceProbe.m`).
+
+Over a VERTEX cell the conjugate is AFFINE, `g_k(s) = <b,s> + c`, so the envelope face is the
+SUPPORT FUNCTION of the cell at `x - b`. A vertex cell is a pointed polyhedral cone with a single
+apex `a` — it is a polygon vertex's normal cone pushed through the gradient map, and an affine
+image of a cone is a cone — so with `P_k = a + C`,
+
+        h_k(x) = <a, x - b> - c      on   { x : <u_i, x - b> <= 0 for every extreme ray u_i of C }
+
+**ONE AFFINE FUNCTION ON ONE POLYHEDRAL CONE**, and both ingredients already existed:
+`ratQ.recCone2` for the extreme rays (written for filter 2 earlier the same day) and `ratQ.solve2`
+for the apex. Every number stays exact — a rational apex from an integer 2x2 solve, integer rays,
+integer combinations.
+
+**It comes out as the supporting affine function at the primal vertex, which is the sanity check
+that costs nothing.** On the triangle with `q = x^2 + y^2`, vertex `(1,1)` gives
+`h(x) = <(2,2), x> - 2`, i.e. `<grad q(v), x> - q(v)`, and `h(v) = q(v)`. Same for every vertex of
+every fixture.
+
+**Verified on 13 rank-0 cells over three fixtures: 1498 finite points matched the closed form to a
+worst relative error of 3.6e-15, and 0 cells were declined.**
+
+**One check had to be replaced rather than tuned, and the distinction matters.** The `+infinity`
+side was first tested by comparing sampled sups at two sample radii and calling the ratio a growth
+factor. It came out **4.3 where a linear function on a cone must give 10** — because the sample is
+drawn in a DISC and rejected against the cone, so a larger radius wins a smaller share of hits.
+Lowering the threshold would have made it pass and measured nothing. Replaced with a walk along the
+offending recession ray, where `<a + t u, y>` is affine in `t` and the increment ratio must be
+**exactly 1**; measured 1.0000.
+
+**Where this leaves the non-bridge residue:** `n` of the `2n+1` cells per piece are now in closed
+form. What remains is the `n` rank-1 edge cells — quadratic in one direction and a support function
+in the other — and the single bounded rank-2 interior cell, which Case B already handles.

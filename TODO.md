@@ -51,9 +51,10 @@ internal — nothing external blocks either. See DECISIONS.md 2026-09-06 for eac
   the conjugate of a quadratic over a POLYHEDRAL dual cell, i.e. `conjQ`'s Case B minus two
   hypotheses (bounded polygon, strictly convex quadratic). For an n-gon the cells are exactly
   `1 + n + n`, so Case B covers 1 of `2n+1` today. Build in this order:
-  - [ ] **rank 0, the VERTEX cells (`n` of `2n+1`).** The face is affine, so `h_k` is the SUPPORT
-    FUNCTION of a polyhedral cone at `x - b` — piecewise linear, pieces given by the cone's normal
-    fan, and `ratQ.recCone2` already returns the extreme rays. No conjugation machinery needed.
+  - [x] **rank 0, the VERTEX cells (`n` of `2n+1`)** — DONE 2026-09-06 overnight, in closed form:
+    `h_k(x) = <a, x - b> - c` on the polar of the cell's recession cone, one affine function on one
+    polyhedral cone. Verified on 13 cells over three fixtures, 1498 points to 3.6e-15, 0 declined.
+    It comes out as the supporting affine function at the primal vertex.
   - [ ] **rank 1, the EDGE cells (`n` of `2n+1`).** Quadratic in one direction, a support function
     in the other. The real work.
   - [ ] **rank 2, the INTERIOR cell (1 of `2n+1`).** Bounded and already Case-B-ready.
