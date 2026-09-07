@@ -44,6 +44,44 @@ classdef maxQuaParTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+
+        function aCURVEDRAYEdgeIsREFUSEDByNameAndThatRowIsTHEREFOREReachable(testCase)
+        % THE WIRED CONFIRMATION of a SUPPORT_MATRIX row, not just of a routine.
+        %
+        % `SUPPORT_MATRIX.md` classified "curved ray edge" as N/R -- not reachable from a QuaPol
+        % conjugate -- on a scope claim refuted 2026-09-06. The CONDITION was then measured in
+        % real `conjQ` output (52 occurrences over eight two-piece kink fixtures, 0 on both
+        % single-piece controls), and this test closes the gap between "the condition occurs" and
+        % "the guard fires": it fires, on an input that violates no other mesh invariant.
+        %
+        % The mesh is built valid and then MUTATED, deliberately. A hand-written mesh carrying a
+        % lone curved ray is refused earlier by `orderEdges`, because a ray edge does not bound a
+        % face -- so constructing one means satisfying every invariant at once for an object that
+        % exists only to be refused. Mutating one edge of a valid triangle reaches exactly the
+        % state the guard is about. `QuaConTest` reaches the CLOSED-edge refusal the same way.
+            V = [0 0; 1 0; 0 1];
+            E = [1 2 1; 2 3 1; 3 1 1];
+            f = [0 0 0 0, 2, 0, 2, 0, 0, 0];
+            F = [1 0; 1 0; 1 0];
+            g = QuaPar(V, E, f, F);
+            other = QuaPar([0 0 0 0, 2, 0, 2, 0, 0, 0]);
+
+            g.Ec(1,:) = [1 0 0 0 -1 0];        % y = x^2: parabolic, so a legal QuaPar conic
+            g.E(1,3)  = 0;                     % ...but on a RAY, which QuaPar cannot represent
+            testCase.verifyError(@() maxQuaPar(g, other), 'maxQuaPar:notImplemented', ...
+                'a curved RAY must be refused by name, not silently treated as an arc');
+
+            % The SAME conic on a SEGMENT must NOT be refused for this reason -- otherwise the test
+            % would pass for a routine that rejects every curved edge, which is not the contract.
+            g.E(1,3) = 1;
+            try
+                maxQuaPar(g, other);
+            catch e
+                testCase.verifyNotEqual(e.identifier, 'maxQuaPar:notImplemented', ...
+                    'with the arc flag restored, the curved-RAY guard must not be the refusal');
+            end
+        end
+
         function stepTwoProducesSixFaceEnvelopeConjugatesForBothSubTriangles(testCase)
             [g1, g2] = maxQuaParTest.buildG1G2();
             testCase.verifyClass(g1, 'QuaPar');

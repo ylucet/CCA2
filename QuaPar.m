@@ -86,8 +86,16 @@ classdef QuaPar < RatPar & Qua
             [nv,c2]=size(V); [ne,c3]=size(E); [nf,c6]=size(obj.f); [ne1,c22]=size(F); [neC,c7]=size(Ec);
             ok = [(c2==2), (c3==3)&&(ne==ne1), ((c6==6)||(c6==10))&&(nf>0), (c22==2)&&(ne==ne1), (c7==6)&&(neC==ne)];
             if ~all(ok)
+                % mat2str, NOT five %i against a 1x5 array. `error` does not expand an array
+                % across several format specifiers the way `sprintf` does -- it requires SCALAR
+                % arguments -- so the array form raised MATLAB:error:nonScalarInput, "Formatted
+                % arguments must be scalar", INSTEAD of this guard's own identifier. A named guard
+                % that cannot report itself is worse than no guard: the caller saw an unrelated
+                % error whose message said nothing about sizes. Found 2026-09-06 while trying to
+                % make a maxQuaPar guard fire, where it masked the real refusal completely.
                 error('QuaPar:size', ...
-                    'Invalid matrix sizes in QuaPar constructor. [V,E,f,F,Ec] ok = [%i %i %i %i %i].', ok);
+                    ['Invalid matrix sizes in QuaPar constructor. ' ...
+                     '[V,E,f,F,Ec] ok = %s (1 = that check passed).'], mat2str(double(ok)));
             end
             QuaPar.assertParabolicEdges(obj.Ec); % each nonzero conic row must satisfy b^2-4ac=0
             obj.nv=nv; obj.ne=ne; obj.nf=nf;

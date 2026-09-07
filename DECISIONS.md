@@ -6562,3 +6562,56 @@ compress.
 **The residue is unchanged and still doubles.** Every candidate is a rational in the cell's own
 data, so exactness is bookkeeping; it is not done, and no mesh is being decided yet, which is the
 only reason that is acceptable.
+
+## 2026-09-06 (overnight 2, item 3) — ONE guard confirmed by firing, one NOT, and a guard that could not report itself
+
+**Item 3 asked for the wired confirmation of two reclassified `SUPPORT_MATRIX` rows. The answer is
+split, and the split is the finding** (`.claude/guardWiredProbe.m`).
+
+**The route, which cost seconds rather than hours.** `.claude/reachabilityProbe.m('slow')` runs the
+symbolic pipeline and takes hours — and a guard that does not fire in it proves nothing either,
+since the pipeline may simply have taken another branch. **Calling the routine directly with an
+input carrying the condition settles reachability outright**: a guard that fires on an input
+violating no other invariant IS reachable, whatever route reaches it.
+
+### CONFIRMED: the curved RAY edge
+
+`assertCurvedEdgesAreArcs` raises `maxQuaPar:notImplemented` on a `QuaPar` whose nonzero `Ec` row
+sits on an edge with flag 0. A PARABOLIC ray is a legal `QuaPar` spelling — `assertParabolicEdges`
+accepts any `b^2-4ac = 0` conic — so the input violates nothing else. **It fires.** The row is
+reachable on the guard's own behaviour, not merely on a shape count, and a test in
+`maxQuaParTest` pins it.
+
+**The mesh is built VALID and then MUTATED, deliberately.** A hand-written mesh carrying a lone
+curved ray is refused earlier by `orderEdges`, because a ray edge does not bound a face — so
+constructing one means satisfying every mesh invariant at once for an object that exists only to be
+refused. The test also restores the arc flag and asserts the refusal is then a DIFFERENT one, so it
+cannot pass for a routine that rejects every curved edge.
+
+### NOT CONFIRMED: the irreducible ellipse/hyperbola, and the guard's own message says why
+
+`maxQuaPar:notDegenerate`'s message states the condition "should never happen for two conjugates of
+adjacent sub-pieces of the same originally-nonconvex domain — the input pair violates that". **So
+any pair built to make the difference an irreducible ellipse is OUT OF CONTRACT, and making it fire
+that way would prove nothing about reachability.** An in-contract pair needs the symbolic pipeline.
+
+**Its row therefore still rests on the CONDITION count** — 44 irreducible elliptic/hyperbolic edges
+in real `conjQ` output — which is weaker evidence than the other row now has. **Recorded as a
+difference rather than smoothed over**, and `SUPPORT_MATRIX.md` is annotated to say which row rests
+on which kind of evidence.
+
+### The defect the attempt found, which is why it was worth making
+
+`QuaPar`'s size guard **could not report itself**. It passed a 1x5 logical against five `%i`
+specifiers, and **`error` does not expand an array across format specifiers the way `sprintf` does**
+— it requires scalar arguments — so it raised `MATLAB:error:nonScalarInput`, *"Formatted arguments
+must be scalar"*, INSTEAD of `QuaPar:size`. **A named guard that cannot report itself is worse than
+no guard**: the caller sees an unrelated error whose message says nothing about what was wrong, and
+here it masked the real refusal so completely that the actual defect could not be read off at all.
+
+Fixed with `mat2str`, and pinned by a test that asserts both the identifier and that the message
+still carries the per-check flags it promises. With the mask gone the real refusal reads
+`ok = [1 1 0 1 1]` — the `f` check — which is what let the attempt be understood at all.
+
+**This is a defect class worth grepping for**: any `error()` call passing a non-scalar to a format
+specifier is a guard that will report something else instead of itself.

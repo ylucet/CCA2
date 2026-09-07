@@ -207,5 +207,36 @@ classdef QuaParTest < matlab.unittest.TestCase
             r = p.negate();
             testCase.verifyEqual(r.eval(S), -p.eval(S), 'AbsTol', 1e-12);
         end
+
+        function theSIZEGuardMustReportITSELFAndNotAFormattingError(testCase)
+        % A NAMED GUARD THAT CANNOT REPORT ITSELF is worse than no guard: the caller sees an
+        % unrelated MATLAB error whose message says nothing about what was wrong.
+        %
+        % `error` does NOT expand an array across several format specifiers the way `sprintf`
+        % does -- it requires scalar arguments -- so passing a 1x5 logical against five `%i`
+        % raised `MATLAB:error:nonScalarInput`, "Formatted arguments must be scalar", in place of
+        % `QuaPar:size`. Found while trying to make a maxQuaPar guard fire: the real refusal was
+        % masked, so the actual defect could not be read off at all (DECISIONS.md 2026-09-06).
+            V = [0 0; 1 0; 0 1];
+            E = [1 2 1; 2 3 1; 3 1 1];
+            f = [0 0 0 0, 2, 0, 2, 0, 0, 0];
+            F = [1 0; 1 0; 1 0];
+            testCase.verifyWarningFree(@() QuaPar(V, E, f, F), 'the well-formed mesh still builds');
+
+            % F with the wrong number of ROWS is the ordinary way to reach this guard.
+            testCase.verifyError(@() QuaPar(V, E, f, F(1:2,:)), 'QuaPar:size', ...
+                'a size mismatch must raise QuaPar:size, not a formatting error');
+
+            % And the message must actually name the five checks, so it can be acted on.
+            try
+                QuaPar(V, E, f, F(1:2,:));
+                testCase.verifyFail('the guard did not fire at all');
+            catch e
+                testCase.verifyEqual(e.identifier, 'QuaPar:size');
+                testCase.verifySubstring(e.message, 'ok = [', ...
+                    'the message must carry the per-check flags it promises');
+            end
+        end
+
     end
 end
