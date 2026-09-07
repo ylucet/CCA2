@@ -6507,3 +6507,58 @@ lesson each time was that the oracle could not reach the boundary where the answ
 data, so making it exact is bookkeeping rather than new mathematics — but it is not done, and the
 formula being verified must not be read as the routine being exact. No mesh is being decided yet,
 which is the only reason doubles are acceptable here at all.
+
+## 2026-09-06 (overnight 2, item 2) — ALL THREE non-bridge sub-cases are ONE routine, not three
+
+**Item 2 turned out not to be a build at all** (`.claude/cellFaceProbe.m`). Writing the rank-2
+interior cell the way the previous two entries wrote rank 0 and rank 1 would have produced a third
+copy of the same enumeration — **because it is the same enumeration.** For any PSD `H`, bounded
+cell or not,
+
+        h_k(x) = sup over s in P_k of  <s,y> - s'Hs/2 - c ,      y = x - b ,
+
+is a CONCAVE maximisation over a polyhedron, so the maximiser lies in the relative interior of some
+face and the candidates are exactly: the STATIONARY SET where it meets `P_k`, one 1-D concave
+quadratic per FACET, and the vertices, which arrive free as those facets' endpoints.
+
+**THE RANK CHANGES ONLY WHAT THE STATIONARY SET IS**, and that is the entire difference between the
+three sub-cases the earlier entry listed as three jobs:
+
+| rank | stationary set | which cell |
+|---|---|---|
+| 2 | a single POINT, `H \ y` | the interior cell |
+| 1 | a LINE, and only when `y` is parallel to `v` | the edge cells |
+| 0 | everything, and only when `y = 0` | the vertex cells |
+
+**The facet coefficients are RANK-FREE, which is what let the three collapse.** On `s = p + t*d`,
+
+        a2 = -d'Hd/2 ,     a1 = <d,y> - p'Hd ,     a0 = <p,y> - p'Hp/2 - c
+
+and `a2 = 0` is precisely the degenerate direction — there is no special-casing on the rank
+anywhere in the facet loop. So "rank 2 is already Case-B-ready" was true in a stronger sense than
+intended: it is this routine's easiest branch, the one where the stationary set is a point and
+every facet parabola opens downwards.
+
+**ONE BRANCH THAT AN ENDPOINT-ONLY LOOP CANNOT SEE, and it had to be added.** When `a2 = a1 = 0`
+the objective is CONSTANT along the facet, so its value counts even though both endpoints may be at
+infinity. Omitting it loses the whole facet.
+
+**Verified over EVERY cell of five fixtures — 53 cells, all three ranks, bounded and unbounded:**
+
+| rank | cells | finite points checked | unbounded points |
+|---|---|---|---|
+| 0 | 24 | 826 | 1094 |
+| 1 | 24 | 1275 | 645 |
+| 2 | 5 | 400 | **0** |
+
+**Worst relative error 3.5e-11**, against projected gradient ascent seeded at every feasible
+vertex. The rank-2 column's zero unbounded points is itself a check: the interior cell is the only
+bounded one, so it is the only cell whose face is finite everywhere.
+
+**This supersedes the two separate probes** as the thing to build the assembly on. Both remain,
+because each carries the derivation of its own sub-case in a form the unified routine's comments
+compress.
+
+**The residue is unchanged and still doubles.** Every candidate is a rational in the cell's own
+data, so exactness is bookkeeping; it is not done, and no mesh is being decided yet, which is the
+only reason that is acceptable.
