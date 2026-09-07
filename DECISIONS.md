@@ -6117,3 +6117,78 @@ are the numbers the tracing probe reported before the construction existed.
 **What is left of item 2 is now exactly one thing, and it is well posed:** two curves are known,
 and each needs a SIGN. Since there is no envelope, the two conics do not cross, so each sign is
 constant on the whole region and the problem is finite.
+
+## 2026-09-06 (overnight) — the VERYLONG gate caught a six-day-old regression: an OPERATOR OVERLOAD is never called by name
+
+**The daily gate earning its place.** `--verylong -j 4` came back **20 failed, 28 incomplete of 45
+jobs**, every one in `testMaxMultiRegion`, all with the same error:
+
+        Undefined function 'times' for input arguments of type 'functionNDomain'
+        in functionNDomain/maxEqFun:   [eqDom,indexD] = eqFun.*eqFun;
+
+**ROOT CAUSE, diffed rather than guessed.** `dec3d7b` (2026-08-31, *"delete 18 uncovered functions
+with no caller"*) removed 191 lines from `functionNDomain.m`, and comparing the function lists
+across that commit shows exactly two deletions from this file: `conjugateExprEdgesT1Poly`, whose
+only callers are commented out — correct — and **`times`, which has a caller twice in that same
+file**.
+
+**THE LESSON, and it generalises past this repo.** An OPERATOR OVERLOAD is invoked by its SYMBOL,
+never by its identifier. A caller scan that greps for the name finds `times` nowhere and reports it
+dead, while `eqFun.*eqFun` sits two hundred lines below it. Any future coverage-driven deletion has
+to treat `times`, `mtimes`, `plus`, `eq`, `subsref` and friends as called-by-symbol, or it will do
+this again. The restored method now carries a header saying so.
+
+**WHY IT SURVIVED SIX DAYS, and this is the part worth keeping.** The only caller sits behind the
+**verylong** bucket, which umbrella rule 9 runs at most daily and which the session handoff's test
+line records no date for at all. **fast, normal and slow were green the whole time** — 569/0, 13/0
+and 98/0 — so nothing in the ordinary development loop could have caught it. That is the cost of a
+bucket that is a gate rather than a loop, and the answer is not to move the tests but to run the
+gate.
+
+**Fixed** by restoring the method verbatim from `dec3d7b^`. `testMaxMultiRegion/testConvex` went
+from Errored to passing on the same command, and the fast bucket stayed 569/0.
+
+## 2026-09-06 (overnight, item 2) — the region's SIDES, decided exactly by a STURM COUNT
+
+**The last piece of item 2, and it needed a different idea rather than a better estimate.** The two
+boundary conics are known and there is no envelope, so the region is two sign conditions — but
+reading those signs off a SAMPLED interior point would let a tolerance decide **which side of a
+face the envelope lives on**, which is the one question this project has never let a tolerance
+answer.
+
+**THE ROUTE IS THE PROJECT'S OWN IDIOM — screen with a tolerance, decide exactly.** Propose a
+candidate interior point in floating point; VERIFY it exactly; then read the two signs as integer
+evaluations at a rational point. The verification is where the new idea was needed:
+
+        x is in the region  <=>  x = M_t s + v_t  for some t in [0,1], s on the tie
+                            <=>  Phi(x, .)  has a root in [0,1] ,
+
+        Phi(x,t) = q2( adj(M_t)(x - v_t) ) + D_t * q1( adj(M_t)(x - v_t) ) + D_t^2 * q0 ,
+
+with `M_t = (1-t)A1 + tA2`, `v_t = (1-t)b1 + tb2`, `D_t = det(M_t)`. `adj(M_t)` is AFFINE in `t` and
+`D_t` quadratic, so **Phi is a QUARTIC in `t`** once `x` is rational — and `ratQ.countRootsIn`
+decides how many roots it has in `[0,1]` by Sturm, with no root finder and no tolerance anywhere.
+**The floating point only ever proposes; every decision is integer.** This also hands over what
+item 2 needed anyway: an exact MEMBERSHIP test for the region.
+
+**Verified on the isotropic instance.** Witness `(0,0)`; Sturm finds **1 root in [0,1]**, so the
+witness is in the region, exactly. Signs read there give
+
+        region = { x : -C1(x) >= 0  and  C2(x) >= 0 } ,
+        C1 = [1 0 1 -4 -2 -1] ,   C2 = [2 0 2 -8 -4 7]
+
+— inside the outer circle and outside the inner one, i.e. the annulus. Checked against the
+independent classifier on 4000 random points: **4000 agree, 0 disagree.**
+
+**SCOPE-REDUCED, with the boundary named. The anisotropic instance OVERFLOWS in
+`ratQ.sturmChain`**, at 3.7e18 against the 2^53 ceiling — about 400x over. This is not a defect in
+the method and not a new problem: `sturmChain`'s own header records that its pseudo-remainder
+squares the leading coefficient each step and that a quartic with six-digit entries reaches 1e23 in
+a few steps. Two cheap handles were tried and measured: rationalising the witness at 1e6 overflowed
+at **4.0e30**, moving it to a coarse integer grid brought that to **3.7e18**, and preferring a
+small-magnitude witness did not move it further.
+
+**The answer is already in this codebase, one routine away.** `ratQ` grew a `java.math.BigInteger`
+fallback for exactly this shape of growth (`resultantVarBig`, `bigDivExact`, `polyDetBig`), entered
+only where the double path raises. `polyPseudoRem`/`sturmChain` need the same treatment. That is
+the residue, and it is back on the list rather than parked: nothing external blocks it.

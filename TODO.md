@@ -44,7 +44,16 @@ APC; gold is ~$3,290 and unnecessary.
   hyperbolic edges on every two-piece KINK fixture. Every N/R classification that rests on that
   claim has to be re-tested with a kink fixture rather than a single piece. Output: the list of
   guards that are actually reachable, and `SUPPORT_MATRIX.md` reclassified.
-- [ ] **2. REGION LOGIC — which primal region a bridge face owns.** The elimination says what a
+- [x] **2. REGION LOGIC** DONE 2026-09-06 overnight, except one named residue: boundary conics
+  constructed exactly via `ratQ.substAffine`; no envelope arc, so the region is two sign conditions;
+  the SIDES decided exactly by a Sturm count on a quartic, verified 4000/4000 on the isotropic
+  instance. See DECISIONS 2026-09-06.
+- [ ] **2. (residue) A BIG-INTEGER STURM CHAIN.** `ratQ.sturmChain` overflows at 3.7e18 on the
+  anisotropic region-membership quartic, so the sides are exact for the isotropic instance and
+  refuse for the anisotropic one. `ratQ` already has the BigInteger fallback pattern for exactly
+  this growth (`resultantVarBig`, `bigDivExact`, `polyDetBig`); `polyPseudoRem`/`sturmChain` need
+  the same. Nothing external blocks it.
+- [ ] **2. (old text) REGION LOGIC — which primal region a bridge face owns.** The elimination says what a
   bridge face IS; nothing says WHERE it is the envelope. Measured 2026-09-06: the region's
   boundaries are CONICS (line fits 0.30-0.71 against conic fits 1.8e-14), so this needs `QuaCon`,
   not `QuaPar`.
