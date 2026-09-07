@@ -6459,3 +6459,51 @@ offending recession ray, where `<a + t u, y>` is affine in `t` and the increment
 **Where this leaves the non-bridge residue:** `n` of the `2n+1` cells per piece are now in closed
 form. What remains is the `n` rank-1 edge cells — quadratic in one direction and a support function
 in the other — and the single bounded rank-2 interior cell, which Case B already handles.
+
+## 2026-09-06 (overnight 2, item 1) — the RANK-1 face, and the fourth oracle defect of the night
+
+**The mixed sub-case, and it has a clean structure** (`.claude/edgeCellFaceProbe.m`). Over an EDGE
+cell the face's Hessian has rank 1, so writing `H = v*v'/h11` with `v = [h11; h12]`,
+
+        h_k(x) = sup over s in P_k of  <s,y> - <v,s>^2/(2*h11) - c ,     y = x - b .
+
+**ALONG THE NULL DIRECTION THE OBJECTIVE IS LINEAR**, and that is what makes it tractable: a linear
+function on a polyhedron is maximised on the BOUNDARY, so **the maximiser lies on a FACET or on the
+stationary line and nowhere else**. A 2-D degenerate problem collapses into one 1-D concave
+quadratic per facet, each with a closed form. No elimination and no conjugation machinery.
+
+**THE STATIONARY CASE IS A LINE, NOT A POINT**, which is where a rank-2 intuition goes wrong.
+`grad = y - Hs = 0` needs `Hs = y` and `range(H) = span(v)`, so there is no stationary point at all
+unless `y` is PARALLEL to `v`. When it is, the maximisers form a whole line and the value collapses
+to `mu^2*h11/2 - c`, independent of which point is taken.
+
+**Verified on 13 rank-1 cells over three fixtures: 1554 finite points, worst relative error
+6.0e-13.**
+
+### The oracle was wrong again, and this is the fourth time tonight
+
+The first oracle rejection-sampled a square and polished with a backtracking gradient step. It
+reported **-0.3650** on hexagon cell 9 where the closed form said **+0.0950** — and the closed
+form's point, the VERTEX `s = (4, 8)`, is exactly feasible, two facet residuals of zero. Worked by
+hand: on that facet `<v,d> = 0`, so the objective is LINEAR along it with slope 11.49 and the max
+is at the finite endpoint, which is that vertex.
+
+**Two causes, both about reaching boundaries rather than about precision.** A rejection sample
+never lands exactly on a vertex; and a backtracking step that only accepts strictly feasible points
+**cannot slide ALONG a boundary** to reach one. Replaced by projected gradient ascent — cyclic
+projection onto violated half-planes, which does slide along a facet — **seeded at every feasible
+vertex of P**, because a degenerate quadratic very often attains its max exactly there. That is not
+a coincidence, it is the same fact as above: the objective is linear along the null direction.
+
+**The count for the night is now four.** The 4000/4000 sides agreement that did not validate `Phi`;
+the "growth factor" of 4.3 where a linear function on a cone must give 10; the end-to-end probe's
+first draft disagreeing by 1.94 from its own unconstrained maximisers; and this one. **Every single
+disagreement this session turned out to be the checker, not the thing checked.** DECISIONS
+2026-09-06 already records "when a result looks wrong, check the measurement before the
+mathematics" from an earlier session — tonight is four more data points for it, and the specific
+lesson each time was that the oracle could not reach the boundary where the answer lived.
+
+**Named residue: this probe computes in DOUBLES.** Every candidate is a rational in the cell's own
+data, so making it exact is bookkeeping rather than new mathematics — but it is not done, and the
+formula being verified must not be read as the routine being exact. No mesh is being decided yet,
+which is the only reason doubles are acceptable here at all.
