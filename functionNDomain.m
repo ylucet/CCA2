@@ -154,6 +154,149 @@ classdef functionNDomain
 
 
 
+          function [objL,index] = times (objL1, objL2)
+%
+% RESTORED 2026-09-06. This method was deleted by dec3d7b (2026-08-31, "delete 18 uncovered
+% functions with no caller") and it HAS a caller -- maxEqFun, twice, in this very file:
+%
+%       [eqDom,indexD] = eqFun.*eqFun;
+%
+% An OPERATOR OVERLOAD is called by its SYMBOL, never by its name, so a caller scan that greps for
+% the identifier finds nothing and reports it dead. The only caller sits behind the VERYLONG
+% bucket, which umbrella rule 9 runs at most daily, so the break survived from 2026-08-31 to
+% 2026-09-06 without any faster suite noticing: fast, normal and slow were green throughout.
+%
+% Restored verbatim from dec3d7b^. See DECISIONS.md 2026-09-06.
+             n = 0;
+             objL=functionNDomain.empty();
+             for i = 1:size(objL1,2)
+                 markedi(i) = false;
+             end
+             for i = 1:size(objL1,2)
+               for j = i+1:size(objL1,2)
+                %   i,j
+                 rf = objL1(i).d + objL2(j).d;
+                 if size(rf.ineqs,2) < 3
+                     rf = region.empty;
+                 end
+                  if isempty(rf)
+                   continue
+                 end
+                 
+                
+                 % disp('b4 simplify')
+                 % rf.print
+                 %rf = rf.simplify;
+                 if rf.nv <= 2
+                     rf = region.empty;
+                 end
+                  if isempty(rf)
+                   continue
+                  end
+                  rf = rf.simplify;
+                 markedi(i) = true;
+                 markedi(j) = true;
+                 % i,j
+                 % rf.print
+                 n = n + 1;
+                 objL(n) = functionNDomain([objL1(i).f(1), objL2(j).f(1)],rf);
+                 index(n,1:2) = [i,j];
+
+                   r = objL1(i).d - rf;
+                 if ~ isempty(r)
+                   for k = 1:size(r,2) 
+                     if size(r(k).ineqs,2) < 3
+                         continue
+                     end
+                     if r(k).nv < 3
+                         continue
+                     end
+                     
+                     n = n + 1;  
+                     %  for iv = 1:r(k).nv
+                     % 
+                     % 
+                     %      if (r(k).nv==3 & size(r(k).ineqs,2)==4)
+                     %         disp('error1')
+                     %         objL1(i).d.print
+                     %         rf.print
+                     %         r(k).print
+                     %     end
+                     % 
+                     %      if (abs(r(k).vx(iv))==intmax)
+                     %         disp('open in minus')
+                     %         r(k).print
+                     %         objL1(i).d.print
+                     %         rf.print
+                     % 
+                     %     end
+                     %     if (abs(r(k).vy(iv))==intmax)
+                     %         disp('open in minus')
+                     %         r(k).print
+                     %         objL1(i).d.print
+                     %         rf.print
+                     % 
+                     %     end
+                     % end
+                     
+                     objL(n) = functionNDomain([objL1(i).f(1)],r(k));
+                     index(n,1) = [i];
+                   end
+                 end
+                  
+                  r = objL2(j).d - rf;
+                 
+                 if ~ isempty(r)
+                   for k = 1:size(r,2)  
+                           if size(r(k).ineqs,2) < 3
+                         continue
+                     end
+                     if r(k).nv < 3
+                         continue
+                     end
+                 
+                     n = n + 1  ;
+                     
+                         % disp("t2")
+                         % r(k).print
+                     % for iv = 1:r(k).nv
+                     %     if (r(k).nv==3 & size(r(k).ineqs,2)==4)
+                     %         disp('error2')
+                     %         objL2(i).d.print
+                     %         rf.print
+                     %         r(k).print
+                     %     end
+                     %     if (abs(r(k).vx(iv))==intmax)
+                     %         disp('open in minus')
+                     %         r(k).print
+                     %     end
+                     %     if (abs(r(k).vy(iv))==intmax)
+                     %         disp('open in minus')
+                     %         r(k).print
+                     %     end
+                     % end
+                     objL(n) = functionNDomain([objL2(j).f(1)],r(k));
+                     index(n,1) = [j];
+                   end
+                 end
+               end
+             end
+             for i = 1:size(objL1,2)
+                 if markedi(i) 
+                     continue
+                 end
+                 % disp('in times')
+                 % i
+                 n = n + 1;
+                 % objL1(i).print
+                 objL(n) = objL1(i);
+                 index(n,1) = [i];
+
+             end
+             
+                      
+          end
+
           function [objR,index2] = maximumPC(objL, index) %, f, r2)
            n = 0;
            for i = 1:size(objL,2)
