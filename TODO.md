@@ -37,6 +37,25 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
+## Next up — 2026-09-06 (from Yves, for the overnight run)
+
+- [ ] **1. Re-check the `notReachable` guards against MULTI-PIECE input.** `SUPPORT_MATRIX.md`
+  section 0's basis for classifying a guard as unreachable was refuted 2026-09-06: `conjQ` returns
+  hyperbolic edges on every two-piece KINK fixture. Every N/R classification that rests on that
+  claim has to be re-tested with a kink fixture rather than a single piece. Output: the list of
+  guards that are actually reachable, and `SUPPORT_MATRIX.md` reclassified.
+- [ ] **2. REGION LOGIC — which primal region a bridge face owns.** The elimination says what a
+  bridge face IS; nothing says WHERE it is the envelope. Measured 2026-09-06: the region's
+  boundaries are CONICS (line fits 0.30-0.71 against conic fits 1.8e-14), so this needs `QuaCon`,
+  not `QuaPar`.
+- [ ] **3. ONE FULL ENVELOPE on a triangle pair.** After both filters that is ~4 eliminations, not
+  24. The end-to-end check that the whole bridge pipeline works.
+- [ ] **4. CLOSED CONIC EDGES have no endpoints.** `RatCon`'s edge table names an edge by its two
+  endpoint vertex indices plus a segment/ray flag, and the isotropic bridge region is bounded by
+  two closed circles. Needs a convention before a bridge face can be stored.
+
+### Done recently
+
 ## 2026-09-06 - BRIDGE ASSEMBLY: filters DONE, region logic is all that is left
 
 Both cell-pair filters are built, exact and verified. What remains on this line is one item, and
