@@ -68,8 +68,17 @@ it is bookkeeping rather than new mathematics.
   was a cheap substitute for (DECISIONS 2026-09-06). The `notDegenerate` row below is exactly the
   case it would settle.
 
-- [ ] **ARE THE NON-BRIDGE CANDIDATE REGIONS POLYHEDRAL?** Scope-reduced 2026-09-07, not
-  established. KKT predicts yes (the winning condition is affine in `x`), and if so the non-bridge
+- [x] **ARE THE NON-BRIDGE CANDIDATE REGIONS POLYHEDRAL?** **YES**, resolved 2026-09-07 by the
+  named diagnostic: the per-arc residuals are BIMODAL — two arcs at 1e-16/1e-17 (exactly straight),
+  five at 1e-4 to 3e-3 which is the tracing resolution rather than curvature, and one outlier with
+  2218 points which is the pooling signature. So the non-bridge faces need no curved subdivision at
+  all, unlike the bridge faces. The probe's own threshold (1e-6) was three orders BELOW its trace
+  step (6e-3), which is what produced two false "curved" verdicts.
+- [ ] **Tidy `.claude/cellFaceRegionProbe.m`**: set its straightness threshold from the trace step
+  rather than a fixed 1e-6, and split the one remaining pooled label pair. Neither changes the
+  answer above; this is hygiene so the probe does not mislead the next reader.
+- [ ] ~~(superseded) ARE THE NON-BRIDGE CANDIDATE REGIONS POLYHEDRAL? Scope-reduced, not
+  established.~~ KKT predicts yes (the winning condition is affine in `x`), and if so the non-bridge
   faces need no curved subdivision at all. The probe still reports 23 of 26 boundaries curved after
   two measurement defects were fixed in it. **The next step is ONE diagnostic**: print the per-arc
   line residuals for a single cell and see whether they are bimodal (still pooling two distinct

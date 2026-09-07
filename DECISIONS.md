@@ -6807,3 +6807,53 @@ expect that.
 361 rays x 1200 radii through the full candidate enumeration per point. The fixture list is
 narrowed to the triangle and square, which exercise every candidate KIND, and the narrowing is
 named in the probe rather than left as a silent truncation.
+
+## 2026-09-07 (overnight 2) — RESOLVED: the non-bridge candidate regions ARE polyhedral, and the "curved" verdict was the measurement for the THIRD time
+
+**The one diagnostic the previous entry named, run.** Per-arc line residuals for the triangle's
+interior cell, with each arc also split in two and refitted:
+
+| label pair | points | line residual | split halves |
+|---|---|---|---|
+| 1&#124;6 | 96 | **9.2e-17** | 1.3e-16 / 8.1e-17 |
+| 6&#124;7 | 104 | **2.3e-16** | 1.5e-16 / 1.6e-16 |
+| 2&#124;8 | 53 | 2.8e-04 | 1.5e-03 / 2.8e-04 |
+| 3&#124;4 | 20 | 2.4e-04 | 1.6e-04 / 1.2e-04 |
+| 4&#124;6 | 39 | 3.3e-04 | 3.6e-04 / 1.6e-03 |
+| 5&#124;6 | 11 | 7.2e-04 | 8.1e-04 / 4.2e-03 |
+| 1&#124;3 | 29 | 2.7e-03 | 4.9e-03 / 6.9e-03 |
+| **4&#124;5** | **2218** | **2.1e-01** | 2.6e-01 / 1.8e-01 |
+
+**The distribution is BIMODAL, which is exactly what the named suspect predicted, and it settles
+the question three ways at once.**
+
+1. **Two arcs come out at 1e-16 and 1e-17** — machine zero. Those are exactly straight, so a
+   straight answer is attainable by this measurement and the method is not systematically biased.
+2. **Five arcs sit at 1e-4 to 3e-3, and that is the TRACING RESOLUTION, not curvature.** The radial
+   step is `(5.5 - 0.05)/900 ≈ 6e-3` and each crossing is recorded 3e-3 before the flip, so a
+   boundary's location is only known to about 6e-3 — which over an extent of a few units is a
+   normalised residual of exactly this order. **The 1e-6 threshold the probe used was three orders
+   BELOW its own resolution**, so it was guaranteed to call every traced arc curved.
+3. **The single 2.1e-01 outlier carries 2218 points**, against 11 to 104 for every other arc. That
+   is 20x more crossings than a boundary arc can produce and it is the POOLING signature again —
+   the same defect as before, surviving in one label pair because two regions there meet along more
+   than one straight boundary, or because the two candidates tie over a 2-D area so the label flips
+   back and forth along every ray.
+
+**So the prediction is CONFIRMED: the non-bridge candidate regions are polyhedral.** The KKT
+reasoning holds — candidate `s0` wins exactly when `y - H s0` lies in the normal cone of `P` at
+`s0`, both affine in `x` — and **the non-bridge faces need no curved subdivision at all.** That is
+the opposite of the bridge faces, whose boundaries are genuinely conic, and the reason for the
+difference is structural: a bridge region is a union over a tie CONIC, while these come from affine
+conditions only.
+
+**THE THIRD MEASUREMENT DEFECT ON ONE QUESTION, and the pattern is now unmistakable.** Pooling
+manufactured "22 of 22 curved"; a resolution-blind threshold manufactured "23 of 26 curved"; and
+under both, two arcs were sitting at 1e-16 the whole time. **A threshold must be compared against
+the measurement's own resolution before it is used** — 1e-6 against a 6e-3 grid is not a strict
+test, it is a guaranteed positive. The session's running count is now five measurement defects,
+four under-reporting and one over-reporting, and every single disagreement was the checker.
+
+**What is left, and it is small:** the probe's threshold should be set from the trace step rather
+than fixed, and the `4|5` pooling case wants the same label-pair split applied twice. Neither
+changes the answer, which is why this entry states it as resolved rather than as another reduction.
