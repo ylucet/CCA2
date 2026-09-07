@@ -10,10 +10,10 @@ Toolbox. Alpha; API still changing.
 
 **The design target is the conjugate and biconjugate of a `QuaPol`.** Everything
 downstream is a special case, and the special-ness is load-bearing: cases that
-can never arise from a `QuaPol` conjugate — hyperbolic edges, for instance — are
-**out of scope, not gaps**. Several `notImplemented` guards protect unreachable
-branches; they are assertions, not missing features. `SUPPORT_MATRIX.md`
-classifies every one.
+can never arise from a `QuaPol` conjugate are **out of scope, not gaps**.
+(Hyperbolic edges were the stock example of that and are NOT one: measured
+2026-09-06, `conjQ` returns them on every two-piece KINK fixture, and only
+single-piece input comes back all-lines. `SUPPORT_MATRIX.md` section 0.)
 
 ## Running it
 

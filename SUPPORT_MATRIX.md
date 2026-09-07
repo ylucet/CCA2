@@ -207,9 +207,13 @@ Everything downstream of a `QuaPol` is a **special case**, and that special-ness
 - the conjugate of those triangles is a very special case of `QuaPar` — e.g. a parabolic edge only
   ever occurs **surrounded by two parallel rays**.
 
-Consequently **hyperbolic edges never need to be stored**: they never arise from a `QuaPol`
-conjugate/biconjugate, nor from any intermediate computation ([COAP]/[JOGO], Karmarkar & Lucet
-2026 — see `DESIGN.md`'s reference list).
+~~Consequently **hyperbolic edges never need to be stored**: they never arise from a `QuaPol`
+conjugate/biconjugate, nor from any intermediate computation.~~ **REFUTED 2026-09-06, and it holds
+only for a SINGLE piece.** Re-measured on `.claude/kinkDualProbe.m`: both one-piece fixtures return
+`f*` with line edges only, and all three two-piece KINK fixtures return hyperbolic edges — 2, 4 and
+4 of them, alongside elliptic and parabolic ones. These are ordinary corpus inputs. **Any guard
+classified N/R below on the strength of the struck-through claim must be re-checked against a
+multi-piece input**; that re-check has not been done. DECISIONS.md 2026-09-06.
 
 This is why the table below separates **"unreachable by design"** from **"gap"**. A guard that
 fires only on an input the wired pipeline cannot produce is an *assertion protecting an invariant*,

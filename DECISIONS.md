@@ -5931,3 +5931,59 @@ function-axis decision rather than part of it.
 
 **So the option as put stands**: a third value on the function axis, plus this one edge-table
 convention. The estimate is not wrong, and it is now measured rather than assumed.
+
+## 2026-09-06 (correction) — `Par` MEANS PARABOLIC, and the "hyperbolic edges never arise" scope claim is REFUTED
+
+**Two corrections in one entry, the second much more serious than the first, and the second was
+found only because the first was challenged.**
+
+### 1. The bridge region's boundaries are conics, and `Par` is the wrong home for them
+
+The previous entry concluded that a curved bridge domain costs no new subdivision value because
+"`Par` exists precisely for curved cell boundaries". **That is wrong. `Par` is PARABOLIC**, not
+conic — `DESIGN.md` names the axis `Par` parabolic ⊃ `Pol` polyhedral, and `QuaPar` ENFORCES it:
+`QuaPar.assertParabolicEdges` raises `QuaPar:notParabola` on any row with `b^2 - 4ac ~= 0`. Its own
+error message already says where such a function belongs — "**such a function is a `QuaCon`, not a
+`QuaPar`**".
+
+**The measured bridge boundaries are circles (isotropic) and non-circular ellipses (anisotropic),
+so `QuaPar` would refuse every one of them by name.** The right home is `QuaCon`, whose `EcQ` rows
+are general integer conics and whose `edgeKind` already names all four kinds. That is the class
+`conjQ` returns, and it is NOT a cell of `RETURN_TYPE.md`'s `Rat`/`Qua` x `Par`/`Pol` lattice — it
+sits in the exact H-form hierarchy (`QuaCon < RatCon & Qua`). **So the lattice quoted while framing
+the type decision was the wrong lattice**; the decision lives on the `RatCon`/`QuaCon` side.
+
+The conclusion "no new subdivision value is needed" happens to survive, because `QuaCon` already
+stores general conics. The reasoning that reached it did not.
+
+### 2. `conjQ` DOES produce HYPERBOLIC edges, on ordinary two-piece input
+
+`SUPPORT_MATRIX.md` section 0 states that "hyperbolic edges never need to be stored: they never
+arise from a `QuaPol` conjugate/biconjugate, nor from any intermediate computation", and uses that
+to classify guards as *unreachable by design* rather than as *gaps*. The same claim is repeated in
+the project's `CLAUDE.md`.
+
+**Re-run this session on the project's own `.claude/kinkDualProbe.m`:**
+
+| fixture | edge kinds of `f*` |
+|---|---|
+| square2, `c = -2` (PD kink) | line x10, **hyperbolic x2**, elliptic x2, parabola x2 |
+| poly2, `c = +2` (PD kink) | line x18, **hyperbolic x4**, elliptic x1, parabola x6 |
+| poly2, `c = -2` (PD kink) | line x18, **hyperbolic x4**, elliptic x1, parabola x8 |
+| square1, indefinite (ONE piece) | line x4 |
+| square1, PD (ONE piece) | line x4 |
+
+**The scope claim holds for a SINGLE piece and fails for a KINK.** Both one-piece fixtures come
+back all-lines; all three two-piece fixtures carry hyperbolic edges. So the claim is not wholly
+wrong, it is stated without the hypothesis that makes it true, and the fixtures that break it are
+ordinary corpus inputs rather than exotic ones.
+
+**Why this matters beyond the wording.** Section 0's separation of "unreachable by design" from
+"gap" is what the project's status reporting rests on, and it explicitly names hyperbolic edges as
+the example of the former. Any guard classified N/R *on that basis* now has to be re-checked
+against a multi-piece input. This entry does not re-check them; it records that they need it.
+
+**Method note, the fourth this session.** The `Par` error was mine and would not have been caught
+by any test — every number in the previous entry is still correct, and only the name attached to
+them was wrong. It surfaced because the claim was questioned, and re-reading the class to answer is
+what turned up the much larger scope defect underneath it.
