@@ -6735,3 +6735,39 @@ both.
 not depend on facet order. That matters at precisely the hard points: when a facet parabola's
 vertex sits on its own endpoint, both spellings name the same point of the plane, so either label
 is correct and only stability is at stake.
+
+## 2026-09-07 (overnight 2) — POOLING SEPARATE BOUNDARIES INTO ONE FIT: the fifth measurement defect, and the only one that manufactured a finding
+
+**Recorded on its own because it is the worst of the five.** The other four measurement defects
+this session made a check report NOTHING (a growth ratio that could not grow, an agreement that
+did not depend on the value it claimed to validate, an oracle that could not reach a boundary, an
+unconstrained maximiser used where the problem is constrained). **This one made a check report
+something FALSE, in the direction of a positive finding.**
+
+**What it did.** `.claude/cellFaceRegionProbe.m` asks whether each non-bridge candidate's primal
+region is polyhedral, by tracing boundaries and fitting a line and a conic to each. The first
+version POOLED every crossing point of a cell into ONE point set and fitted a single line to it. A
+cell has SEVERAL distinct boundaries, one per pair of neighbouring candidates, so no single line
+fits their union — and the residual came out **0.355 on every cell of every fixture**, reported as
+**"22 of 22 arcs genuinely curved"** when nothing had been established about any individual
+boundary at all.
+
+**The comment justifying it claimed the pooling was CONSERVATIVE** — that pooling could only make
+a line fit worse, so a small residual would be stronger evidence. That reasoning is exactly
+backwards for the conclusion being drawn: it is conservative for concluding STRAIGHT and
+anti-conservative for concluding CURVED, and the run concluded curved.
+
+**Why it was caught.** The number was too clean. A worst line residual of 0.3555 identical across
+three fixtures and every cell is not what a geometric property looks like; it is what a fixed
+artefact looks like. **The tell was the uniformity, not the magnitude.**
+
+**The fix, and it is the measurement rather than a threshold.** Crossings are keyed by the ORDERED
+pair (label before, label after), which separates the boundaries — two different boundaries of one
+region have different neighbours across them — and each pair's points are fitted alone, with fewer
+than eight points reported as "not evidence" rather than fitted.
+
+**THE PATTERN ACROSS ALL FIVE, which is the thing to carry forward.** Every disagreement this
+session was the checker, not the thing checked. Four times the checker under-reported and the code
+was right; once the checker over-reported a property the code does not have. **The uniform-number
+tell is the cheapest detector for the fifth kind**: a residual, ratio or count that is identical
+across unrelated fixtures is measuring the harness.
