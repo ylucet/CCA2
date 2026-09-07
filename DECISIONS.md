@@ -6654,3 +6654,50 @@ parser but an EXERCISE. Every guard's identifier is already asserted somewhere b
 `verifyError`-style test for the guards that have tests; the gap is the guards that have none, and
 closing it means constructing an input per guard. That is a session of work with a real payoff
 (every named refusal proven to be reachable AND self-reporting), and it is not a lint.
+
+## 2026-09-06 (overnight 2) — the non-bridge face evaluator is EXACT, and the hard points are constructed
+
+**The last piece of the envelope line, and it is the one that makes the faces usable in a mesh**
+(`.claude/cellFaceExactProbe.m`). The formula was verified in doubles two entries ago; this decides
+every candidate over Q.
+
+**WHY IT MATTERS, and it is not decoration.** The VALUE at a point is allowed to be a double —
+`CONJ_FIELD_PROOF.md` 8.0 lists the operations that must leave Q and evaluating a finished function
+is not among them. But **the candidate SELECTION is a predicate**: which facet wins, whether a
+parabola's vertex lies inside its interval, whether a stationary point is in the cell. Those decide
+the MESH, and a tolerance there picks the wrong face and returns a plausible wrong number.
+
+**Every decision is the sign of a rational, and no division is ever performed:**
+
+- the cell's rows are integer half-planes; `x` is supplied as `xn/xd`, so nothing is rounded going in
+- a facet's parameter interval is a set of bounds `-B/A`, compared PAIRWISE by cross multiplication
+- a parabola's vertex `-a1/(2*a2)` is placed in its interval the same way
+- the stationary point is `ratQ.solve2` on an integer 2x2 system, exact by construction
+
+**AN INFINITE ENDPOINT IS SPELLED AS AN INFINITE DENOMINATOR** with a sign in the numerator, so the
+comparison routine needs no NaN case and an unbounded facet is not a special branch. That is the
+one representational choice in the routine and it removes three others.
+
+**NO RANK-1 BRANCH IS NEEDED, which is worth stating because the previous entry's derivation
+suggests one.** When `H` is singular the objective is LINEAR along the null direction, so any
+stationary point in `P` is matched in value by a point on a facet — and the facet loop already
+visits those. The rank-deficient stationary sets therefore need no code at all.
+
+**Verified two ways, and the second is the one that matters.**
+
+| check | result |
+|---|---|
+| exact vs the verified double routine, random rational points | **502 agree, 0 disagree**, worst gap 3.6e-15 |
+| **CONSTRUCTED hard points** — a candidate exactly on an interval endpoint | **52 of 52 right** |
+
+**The hard points are the point of the exercise.** A random sample never lands on a tie: at a
+vertex `s0` of the cell, choosing `x = H*s0 + b` makes `s0` stationary, so the facet parabolas
+through it have their vertex EXACTLY at that endpoint — and "is the vertex strictly inside the
+interval" is then deciding a tie. That is precisely where a tolerance picks the wrong candidate,
+and it is why the check had to be constructed rather than sampled. All 52 return the value at the
+stationary vertex.
+
+**What is left before this can decide a real mesh:** the routine returns the winning VALUE, not the
+winning CANDIDATE's identity. The assembly needs the latter — which facet, which endpoint — to
+name the face it is building. That is a return-value change rather than new mathematics, and it is
+the next step on this line.

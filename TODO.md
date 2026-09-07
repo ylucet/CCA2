@@ -37,53 +37,57 @@ APC; gold is ~$3,290 and unnecessary.
   does not depend on the convexdb paper's own fate.
 
 
-## Next up — 2026-09-06 (from Yves, for the overnight run)
+## Next up — 2026-09-06 (second overnight run)
 
-All four items Yves listed are DONE. Two left a named residue, both back on this list, and both
-internal — nothing external blocks either. See DECISIONS.md 2026-09-06 for each.
+All three items from the previous list are DONE. What is left on the envelope line is one item, and
+it is bookkeeping rather than new mathematics.
 
-- [x] **A BIG-INTEGER STURM CHAIN** (item 2's residue) — DONE 2026-09-06 overnight.
-  `polyPseudoRem` now falls back to `polyPseudoRemBig` on `ratQ:overflow`, around the WHOLE double
-  path rather than the site where the overflow was first seen. It also exposed a scaling bug in the
-  region-membership quartic that the isotropic instance had been hiding, because the sides never
-  read `Phi`. Both instances now decide: 81/81 exact membership and 4000/4000 sides on each.
-- [ ] **THE NON-BRIDGE FACES** (item 3's residue) — now SCOPED and ordered, 2026-09-06. Each is
-  the conjugate of a quadratic over a POLYHEDRAL dual cell, i.e. `conjQ`'s Case B minus two
-  hypotheses (bounded polygon, strictly convex quadratic). For an n-gon the cells are exactly
-  `1 + n + n`, so Case B covers 1 of `2n+1` today. Build in this order:
-  - [x] **rank 0, the VERTEX cells (`n` of `2n+1`)** — DONE 2026-09-06 overnight, in closed form:
-    `h_k(x) = <a, x - b> - c` on the polar of the cell's recession cone, one affine function on one
-    polyhedral cone. Verified on 13 cells over three fixtures, 1498 points to 3.6e-15, 0 declined.
-    It comes out as the supporting affine function at the primal vertex.
-  - [ ] **rank 1, the EDGE cells (`n` of `2n+1`).** Quadratic in one direction, a support function
-    in the other. The real work.
-  - [ ] **rank 2, the INTERIOR cell (1 of `2n+1`).** Bounded and already Case-B-ready.
-  Independent of the implicit-face type decision: every one of these faces is quadratic or
-  piecewise affine in `x`, so none of them is implicit. See DECISIONS 2026-09-06.
-- [ ] **CONFIRM THE TWO RECLASSIFIED GUARDS THROUGH THE WIRED PATH** (item 1's residue).
-  `.claude/guardConditionProbe.m` shows the CONDITION occurs in real `conjQ` output; running the
-  symbolic Step-3 pipeline would show the guard itself firing.
-  `.claude/reachabilityProbe.m('slow')` does that and takes hours.
+- [ ] **RETURN THE WINNING CANDIDATE'S IDENTITY, not just its value.** `.claude/cellFaceExactProbe.m`
+  decides every candidate exactly, but returns the winning VALUE. The assembly needs to know WHICH
+  facet and which endpoint won, to name the face it is building. A return-value change rather than
+  new mathematics, and the next step on this line.
+- [x] **MAKE THE NON-BRIDGE FACE EVALUATOR EXACT** — DONE 2026-09-06 overnight 2. Every candidate
+  decision is the sign of a rational, by cross multiplication, with no division performed and an
+  infinite endpoint spelled as an infinite denominator so unbounded facets need no branch. 502
+  agreements with the double routine and 0 disagreements, plus **52 of 52 CONSTRUCTED hard points**
+  where a candidate sits exactly on an interval endpoint. No rank-1 branch is needed: when H is
+  singular the objective is linear along the null direction, so the facet loop already covers it.
+- [ ] ~~(superseded) MAKE THE NON-BRIDGE FACE EVALUATOR EXACT.~~ `.claude/cellFaceProbe.m` answers every
+  non-bridge face for every rank, bounded or unbounded, verified against a constrained solver on 53
+  cells over five fixtures — but it computes in DOUBLES. Every candidate is a rational in the
+  cell's own data: the stationary point is a 2x2 solve (`ratQ.solve2`), each facet's parameter
+  interval is a comparison of rationals, and each facet parabola's vertex is `-a1/(2*a2)` with
+  integer `a1`, `a2`. So this is `ratQ` bookkeeping, and it is what a mesh-deciding predicate
+  needs. Nothing external blocks it.
+- [ ] **AN EXERCISE HARNESS FOR EVERY NAMED GUARD** — one constructed input per guard, asserting
+  the guard fires AND reports its own identifier. Worth a session: it would prove reachability and
+  self-reporting for every refusal in the toolbox at once, and it is what the refuted static lint
+  was a cheap substitute for (DECISIONS 2026-09-06). The `notDegenerate` row below is exactly the
+  case it would settle.
+
+### Blocked (external)
+
+- **The implicit-face TYPE** — a third value on `RETURN_TYPE.md`'s function axis, `p(x,y,z)=0` plus
+  a branch selector. Yves's call. Independent of everything above: every non-bridge face is
+  quadratic or piecewise affine in `x`, so none of them is implicit.
+- **`maxQuaPar:notDegenerate`'s reachability** cannot be settled by a direct call — the guard's own
+  message says the condition cannot arise for an in-contract pair, so any input built to trigger it
+  proves nothing. An in-contract pair needs the symbolic pipeline, hours per fixture. Its
+  `SUPPORT_MATRIX` row rests on the condition count, and says so.
 
 ### Done recently
 
-- [x] **1. Re-check the `notReachable` guards against MULTI-PIECE input** — 2 rows refuted (curved
-  ray edge 52 occurrences, irreducible ellipse/hyperbola 44), 1 survives (>1 curved edge per face,
-  0 occurrences). Both single-piece controls scored 0 on every condition.
-- [x] **2. REGION LOGIC** — boundary conics built exactly by one `ratQ.substAffine` call each; no
-  envelope arc, so the region is two sign conditions; the SIDES by an exact Sturm count,
-  4000/4000 against the independent classifier on the isotropic instance.
-- [x] **3. THE BRIDGE PIPELINE END TO END on a triangle pair** — and it found two real defects the
-  unit probes could not. `quadSignOnPoly` now returns `[s, strict]` because a TANGENTIAL tie is
-  still a tie, and both filter probes had ignored the weighted basis's halves so the difference
-  conic named the wrong curve. 49 pairs -> 16 meet -> 8 survive; all 5 sampled bridge points
-  claimed; value to 3.8e-8.
-- [x] **4. CLOSED CONIC EDGES have no endpoints** — `E(:,3) = 2` means CLOSED with no endpoints,
-  validated by `RatCon.assertEdgeFlags` and refused by name in six consumers via
-  `RatCon.assertNoClosedEdges`.
-- [x] **A SIX-DAY-OLD REGRESSION**, caught by the verylong gate: `dec3d7b` deleted
-  `functionNDomain.times`, whose only caller writes it as `eqFun.*eqFun`. An operator overload is
-  called by its symbol, never its name. verylong went 20 failed -> 0 failed.
+- [x] **rank 1, the EDGE cells** — derived and verified: along the Hessian's null direction the
+  objective is LINEAR, so the maximiser is on a facet or the stationary LINE and nowhere else.
+  1554 points to 6.0e-13.
+- [x] **rank 2, the INTERIOR cell** — not a separate build. All three ranks are ONE routine
+  (`.claude/cellFaceProbe.m`): the candidates are the stationary set, one 1-D concave quadratic per
+  facet, and the vertices, and the RANK only changes what the stationary set is. 53 cells, all
+  ranks, worst relative error 3.5e-11.
+- [x] **CONFIRM THE TWO RECLASSIFIED GUARDS** — split. The curved-RAY row now rests on the guard
+  FIRING (`maxQuaParTest`), which is stronger than a condition count; the `notDegenerate` row
+  cannot be settled that way and is moved to Blocked with the reason. The attempt found and fixed a
+  guard that could not report itself (`QuaPar:size`, five `%i` against a 1x5 logical).
 
 ## 2026-09-06 - BRIDGE ASSEMBLY: filters DONE, region logic is all that is left
 
