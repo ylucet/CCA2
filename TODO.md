@@ -74,6 +74,11 @@ it is bookkeeping rather than new mathematics.
   2218 points which is the pooling signature. So the non-bridge faces need no curved subdivision at
   all, unlike the bridge faces. The probe's own threshold (1e-6) was three orders BELOW its trace
   step (6e-3), which is what produced two false "curved" verdicts.
+- [ ] **THE ASSEMBLY** — walk the cell pairs, build each face, and stitch the bridge and
+  non-bridge faces into one mesh. Every ingredient is now built and verified: both filters, the
+  bridge elimination for all four cell-pair kinds, the bridge region (conic boundaries, sides by an
+  exact Sturm count), and the non-bridge faces (exact, self-naming, polyhedral regions). This is
+  the join, and it is now the only thing between the pieces and a complete `f**`.
 - [ ] **Tidy `.claude/cellFaceRegionProbe.m`**: set its straightness threshold from the trace step
   rather than a fixed 1e-6, and split the one remaining pooled label pair. Neither changes the
   answer above; this is hygiene so the probe does not mislead the next reader.
