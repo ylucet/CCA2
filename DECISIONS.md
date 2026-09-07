@@ -6318,3 +6318,59 @@ than crossing along a curve. The maximiser then ties everywhere in that cell —
 conjugate, so the envelope there is an ordinary vertex face with nothing to eliminate. This also
 settles, in the safe direction, the all-zero difference case that an earlier entry left flagged as
 "a degenerate tie, not the absence of one, reported as NOT prunable": it is genuinely not a bridge.
+
+## 2026-09-06 (overnight) — the BIG-INTEGER STURM CHAIN, and the scaling bug it exposed
+
+**Item 2's residue, closed.** `ratQ.sturmChain` overflowed 2^53 on the bridge region's membership
+quartic, so the region's SIDES could be decided for the isotropic instance and not the anisotropic
+one. `ratQ` already had a `java.math.BigInteger` fallback for exactly this growth in the resultant
+path; `polyPseudoRem` now has the same.
+
+**WHERE THE OVERFLOW IS, and it is never in the answer.** The pseudo-remainder scales by
+`lc(b)^(deg a - deg b + 1)`, which reached **3.7e18** on this input while the reduced remainder fits
+comfortably. Content reduction cannot help WITHIN a step, only between steps, so the middle has to
+be computed wide and reduced before coming back. `polyPseudoRemBig` computes the whole elimination
+in BigInteger, divides out the content THERE, and only then converts — raising by name if the
+REDUCED result still does not fit, because the Sturm chain is consumed by `sturmV` in doubles and a
+chain entry that is not a double is not usable by the thing that asked for it.
+
+**THE FALLBACK HAD TO COVER THE WHOLE DOUBLE PATH, NOT THE SITE WHERE THE OVERFLOW WAS SEEN.** The
+first version guarded only the `lc^(da-db+1)` product. **The very next fixture overflowed one line
+further down**, at 1.7e16, inside the elimination loop. So the double body moved into
+`polyPseudoRemDouble` and the caller catches `ratQ:overflow` around all of it — and only that
+identifier, since `ratQ:pseudoRemNotIntegral` means the scaling identity failed, which is a defect
+and would be hidden by retrying wider. **Guarding the site instead of the computation is how a
+fallback ends up needing a second fallback.**
+
+**A CONTRACT CHANGE THE DIFFERENTIAL TEST FORCED.** The big path MUST reduce to the primitive part
+before it can return doubles — that reduction is the only reason the answer fits. The double path
+did not reduce, so the two returned different vectors for the same input and **the differential test
+that is the only reason to trust the big path could not exist**. Both now return the primitive part.
+It costs nothing: `sturmChain` is the sole caller and takes `polyPrimitive` on the very next line,
+and a positive content changes no root and no sign.
+
+**THE SCALING BUG THIS EXPOSED, which is the more valuable half of the entry.** With the big path in
+place the anisotropic instance ran — and REJECTED a witness the numeric classifier accepted. The
+cause was in `Phi`: with `U = den^2 * xd * adj(M_t)(x - v_t)` and `Dc = den^2 * det(M_t)`, the true
+argument is `s = U/(xd*Dc)`, so clearing by `lambda = xd*Dc` gives
+`Phi = q2(U) + lambda*q1(U) + lambda^2*q0`. The code used `den*xd` for `lambda` — off by `den` in
+the linear term and `den^2` in the constant.
+
+**AND THE ISOTROPIC INSTANCE HAD BEEN HIDING IT.** That instance still reported a root and still
+produced the right sides, because **the sides come from evaluating C1 and C2 and never touch
+`Phi`** — so the 4000/4000 agreement reported two entries ago did NOT validate `Phi` at all. A
+membership check was added that does test it directly, exact Sturm against the numeric classifier
+on a grid of small rationals. Lesson worth keeping: **a check that passes through a value does not
+validate it; only a check whose answer depends on it does.**
+
+**Both instances now decide, with both checks green:**
+
+| instance | H-form | exact membership vs classifier | sides vs classifier |
+|---|---|---|---|
+| isotropic | `{-C1 >= 0} & {C2 >= 0}` | **81/81** | **4000/4000** |
+| **anisotropic** | `{-C1 >= 0} & {C2 >= 0}` | **81/81** | **4000/4000** |
+
+**Verified:** `ratQTest` 80/0 with two new tests — a differential one (300 random polynomial pairs,
+big against double, bitwise equal wherever both run, with an assertion that the generator actually
+produced comparable cases) and a Sturm count on an input that overflows the double path, asserted
+against the roots of `(x^2-2)(x^2-3)` rather than a stored value. Plus fast 573/0 and normal 13/0.

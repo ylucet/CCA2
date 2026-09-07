@@ -80,6 +80,22 @@ function sides(g1, g2, ctr)
     fprintf('  H-form: region = { x : %d*C1(x) >= 0  and  %d*C2(x) >= 0 }\n', s1, s2);
     fprintf('    C1 = [%s]\n    C2 = [%s]\n', num2str(C1), num2str(C2));
 
+    % ---- cross-check MEMBERSHIP itself, which is what the earlier scaling bug slipped past.
+    % The sides check below evaluates C1 and C2 and never touches Phi, so it cannot see a wrong
+    % Phi. This one does: the exact Sturm membership test against the numeric classifier, on
+    % points chosen on a coarse rational grid so the Sturm chain stays small.
+    okM = 0;  badM = 0;
+    for a1 = -6:2:10
+        for a2 = -6:2:10
+            xg = [a1; a2] / 2;
+            [xg_n, xg_d] = rationalise(xg, 2);
+            exact = memberExact(q, g1, g2, xg_n, xg_d);
+            if exact == onTie(g1, g2, xg), okM = okM + 1; else, badM = badM + 1; end
+        end
+    end
+    fprintf('  exact Sturm membership vs the classifier on %d grid points: %d agree, %d disagree\n', ...
+            okM + badM, okM, badM);
+
     % ---- cross-check the H-form against the independent classifier, on fresh points.
     agree = 0;  tested = 0;  wrong = 0;
     rng(11);
@@ -116,9 +132,22 @@ function [inR, n] = memberExact(q, g1, g2, xn, xd)
     u2 = padd(pmul(adj21, w1), pmul(adj22, w2));
 
     % q's parts, with the scalings that make every term the same degree in the carried factors.
+    % THE SCALING, WRITTEN OUT, because getting it wrong is invisible. With
+    %       U = u_computed = den^2 * xd * adj(M_t) * (x - v_t)   and   Dc = den^2 * det(M_t),
+    % the true argument is
+    %       s = adj(M_t)(x - v_t) / det(M_t) = U / (xd * Dc) ,
+    % so with lambda = xd * Dc, clearing q(s) = 0 by lambda^2 gives
+    %       Phi = q2(U) + lambda * q1(U) + lambda^2 * q0 .
+    % An earlier version used `den*xd` for lambda instead of `xd`, i.e. it was off by `den` in the
+    % linear term and `den^2` in the constant. The ISOTROPIC instance still reported a root and
+    % still produced the right sides, because the sides come from evaluating C1 and C2 rather than
+    % from Phi -- so the 4000/4000 agreement did NOT validate Phi at all. Only the anisotropic
+    % instance, once the BigInteger Sturm path let it run, showed the error by rejecting a witness
+    % the classifier accepted.
+    lam  = pmul(D, [0, xd]);                          % lambda = xd * Dc, degree 2 in t
     quad = padd(padd(pmul([q(1)], pmul(u1,u1)), pmul([q(2)], pmul(u1,u2))), pmul([q(3)], pmul(u2,u2)));
-    linr = pmul(pmul(D, [0, den*xd]), padd(pmul([q(4)], u1), pmul([q(5)], u2)));
-    cons = pmul([q(6)], pmul(pmul(D,D), [0, 0, (den*xd)^2]));
+    linr = pmul(lam, padd(pmul([q(4)], u1), pmul([q(5)], u2)));
+    cons = pmul([q(6)], pmul(lam, lam));
     Phi  = padd(padd(quad, linr), cons);
 
     Phi = Phi / gcdAll(Phi);

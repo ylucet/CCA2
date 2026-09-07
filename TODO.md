@@ -39,42 +39,42 @@ APC; gold is ~$3,290 and unnecessary.
 
 ## Next up — 2026-09-06 (from Yves, for the overnight run)
 
-- [x] **1. Re-check the `notReachable` guards against MULTI-PIECE input.** DONE 2026-09-06 overnight: 2 rows refuted (curved ray edge, irreducible ellipse/hyperbola), 1 survives (>1 curved edge per face). Residue: the wired symbolic path confirmation, and the rows not testable by shape. **1. (residue)** `SUPPORT_MATRIX.md`
-  section 0's basis for classifying a guard as unreachable was refuted 2026-09-06: `conjQ` returns
-  hyperbolic edges on every two-piece KINK fixture. Every N/R classification that rests on that
-  claim has to be re-tested with a kink fixture rather than a single piece. Output: the list of
-  guards that are actually reachable, and `SUPPORT_MATRIX.md` reclassified.
-- [x] **2. REGION LOGIC** DONE 2026-09-06 overnight, except one named residue: boundary conics
-  constructed exactly via `ratQ.substAffine`; no envelope arc, so the region is two sign conditions;
-  the SIDES decided exactly by a Sturm count on a quartic, verified 4000/4000 on the isotropic
-  instance. See DECISIONS 2026-09-06.
-- [ ] **2. (residue) A BIG-INTEGER STURM CHAIN.** `ratQ.sturmChain` overflows at 3.7e18 on the
-  anisotropic region-membership quartic, so the sides are exact for the isotropic instance and
-  refuse for the anisotropic one. `ratQ` already has the BigInteger fallback pattern for exactly
-  this growth (`resultantVarBig`, `bigDivExact`, `polyDetBig`); `polyPseudoRem`/`sturmChain` need
-  the same. Nothing external blocks it.
-- [ ] **2. (old text) REGION LOGIC — which primal region a bridge face owns.** The elimination says what a
-  bridge face IS; nothing says WHERE it is the envelope. Measured 2026-09-06: the region's
-  boundaries are CONICS (line fits 0.30-0.71 against conic fits 1.8e-14), so this needs `QuaCon`,
-  not `QuaPar`.
-- [x] **3. THE BRIDGE PIPELINE END TO END on a triangle pair.** DONE 2026-09-06 overnight, and it
-  found two real defects the unit probes could not: `quadSignOnPoly ~= 0` was the wrong prune test
-  (a TANGENTIAL tie is still a tie -- the routine now returns `[s, strict]`), and both filter probes
-  ignored the weighted basis's halves, so the difference conic named the wrong curve. On the
-  diagonal-kink triangle pair: 49 pairs -> 16 meet -> 8 survive, all 5 sampled bridge points
-  claimed, value to 3.8e-8. See DECISIONS 2026-09-06.
-- [ ] **3. (residue) THE NON-BRIDGE FACES.** The full envelope still needs the Legendre value of
-  ONE cell RESTRICTED to that cell, and over a vertex or edge cell the conjugate is affine or rank
-  deficient, so that is a constrained problem nothing solves yet. This is what stands between the
-  bridge machinery and a complete `f**`.
-- [ ] **3. (old text) ONE FULL ENVELOPE on a triangle pair.** After both filters that is ~4 eliminations, not
-  24. The end-to-end check that the whole bridge pipeline works.
-- [x] **4. CLOSED CONIC EDGES have no endpoints.** DONE 2026-09-06 overnight: `E(:,3) = 2` means CLOSED with no endpoints, validated by `RatCon.assertEdgeFlags` and refused by name in six consumers via `RatCon.assertNoClosedEdges`. See DECISIONS 2026-09-06.
-- [ ] **4. (old text)** `RatCon`'s edge table names an edge by its two
-  endpoint vertex indices plus a segment/ray flag, and the isotropic bridge region is bounded by
-  two closed circles. Needs a convention before a bridge face can be stored.
+All four items Yves listed are DONE. Two left a named residue, both back on this list, and both
+internal — nothing external blocks either. See DECISIONS.md 2026-09-06 for each.
+
+- [x] **A BIG-INTEGER STURM CHAIN** (item 2's residue) — DONE 2026-09-06 overnight.
+  `polyPseudoRem` now falls back to `polyPseudoRemBig` on `ratQ:overflow`, around the WHOLE double
+  path rather than the site where the overflow was first seen. It also exposed a scaling bug in the
+  region-membership quartic that the isotropic instance had been hiding, because the sides never
+  read `Phi`. Both instances now decide: 81/81 exact membership and 4000/4000 sides on each.
+- [ ] **THE NON-BRIDGE FACES** (item 3's residue). A complete `f**` still needs the Legendre value
+  of ONE cell RESTRICTED to that cell, and over a vertex or edge cell the conjugate is affine or
+  rank deficient, so that is a constrained problem nothing here solves. This is now the only thing
+  between the bridge machinery and a complete envelope.
+- [ ] **CONFIRM THE TWO RECLASSIFIED GUARDS THROUGH THE WIRED PATH** (item 1's residue).
+  `.claude/guardConditionProbe.m` shows the CONDITION occurs in real `conjQ` output; running the
+  symbolic Step-3 pipeline would show the guard itself firing.
+  `.claude/reachabilityProbe.m('slow')` does that and takes hours.
 
 ### Done recently
+
+- [x] **1. Re-check the `notReachable` guards against MULTI-PIECE input** — 2 rows refuted (curved
+  ray edge 52 occurrences, irreducible ellipse/hyperbola 44), 1 survives (>1 curved edge per face,
+  0 occurrences). Both single-piece controls scored 0 on every condition.
+- [x] **2. REGION LOGIC** — boundary conics built exactly by one `ratQ.substAffine` call each; no
+  envelope arc, so the region is two sign conditions; the SIDES by an exact Sturm count,
+  4000/4000 against the independent classifier on the isotropic instance.
+- [x] **3. THE BRIDGE PIPELINE END TO END on a triangle pair** — and it found two real defects the
+  unit probes could not. `quadSignOnPoly` now returns `[s, strict]` because a TANGENTIAL tie is
+  still a tie, and both filter probes had ignored the weighted basis's halves so the difference
+  conic named the wrong curve. 49 pairs -> 16 meet -> 8 survive; all 5 sampled bridge points
+  claimed; value to 3.8e-8.
+- [x] **4. CLOSED CONIC EDGES have no endpoints** — `E(:,3) = 2` means CLOSED with no endpoints,
+  validated by `RatCon.assertEdgeFlags` and refused by name in six consumers via
+  `RatCon.assertNoClosedEdges`.
+- [x] **A SIX-DAY-OLD REGRESSION**, caught by the verylong gate: `dec3d7b` deleted
+  `functionNDomain.times`, whose only caller writes it as `eqFun.*eqFun`. An operator overload is
+  called by its symbol, never its name. verylong went 20 failed -> 0 failed.
 
 ## 2026-09-06 - BRIDGE ASSEMBLY: filters DONE, region logic is all that is left
 

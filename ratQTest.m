@@ -915,6 +915,51 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyEqual([n d], [50 11], 'and a genuine rational still converts');
         end
 
+        function theBigPseudoRemainderAGREESWithTheDoubleOneWhereverBothCanRun(testCase)
+        % THE ORACLE FOR THE BIG PATH, and the only reason to trust it. The thing being replaced is
+        % the thing that checks the replacement: wherever the double path can run at all, the
+        % BigInteger path must return the SAME vector, bitwise. Random small integer polynomials,
+        % because the interesting behaviour is the elimination bookkeeping and small coefficients
+        % are what let the double path run for comparison.
+            rng(2026);
+            n = 0;
+            for it = 1:300
+                da = randi([1 5]);  db = randi([1 da]);
+                a = randi([-6 6], 1, da + 1);
+                b = randi([-6 6], 1, db + 1);
+                if a(1) == 0 || b(1) == 0, continue, end
+                ap = ratQ.polyPrimitive(a);  bp = ratQ.polyPrimitive(b);
+                try
+                    rd = ratQ.polyPseudoRemDouble(ap, bp, numel(ap)-1, numel(bp)-1);
+                catch
+                    continue                        % the double path cannot run: nothing to compare
+                end
+                rb = ratQ.polyPseudoRemBig(a, b);
+                testCase.verifyEqual(ratQ.polyTrim(rd), ratQ.polyTrim(rb), ...
+                    sprintf('a = [%s], b = [%s]', num2str(a), num2str(b)));
+                n = n + 1;
+            end
+            testCase.verifyGreaterThan(n, 100, ...
+                'the generator must actually produce comparable cases, or this test asserts nothing');
+        end
+
+        function theSturmChainSURVIVESAnInputThatOverflowsTheDoublePath(testCase)
+        % THE CASE THAT MOTIVATED THE BIG PATH. ratQ.sturmChain squares its leading coefficient at
+        % every pseudo-remainder step, so a quartic with large coefficients overflowed 2^53 and the
+        % Sturm count could not be taken at all -- which is what blocked the bridge region's exact
+        % membership test on the anisotropic instance (DECISIONS.md 2026-09-06).
+        %
+        % The root count is asserted against a property, not a stored value: this quartic is
+        % (x^2 - 2)*(x^2 - 3) scaled, whose roots are +-sqrt(2) and +-sqrt(3), so exactly two lie
+        % in (0, 2] and exactly one in (0, 1.5].
+            p = 10^6 * [1 0 -5 0 6];
+            testCase.verifyEqual(ratQ.countRootsIn(p, 0, 2), 2, ...
+                'sqrt(2) and sqrt(3) both lie in (0,2]');
+            testCase.verifyEqual(ratQ.countRootsIn(p, 0, 1.5), 1, ...
+                'only sqrt(2) lies in (0,1.5]');
+            testCase.verifyEqual(ratQ.countRootsIn(p, -2, 2), 4, 'and all four are in (-2,2]');
+        end
+
         function chkREFUSESAnythingThatIsNotAnExactInteger(testCase)
         % The single thing standing between an exact answer and a plausible wrong one.
             testCase.verifyError(@() ratQ.chk(1.5), 'ratQ:notInteger');

@@ -1614,6 +1614,88 @@ classdef ratQ
             end
         end
 
+        function r = polyPseudoRemBig(a, b)
+        % objective: the pseudo-remainder of a by b, computed in java.math.BigInteger and returned
+        %            as DOUBLES once its content is removed.
+        % [input]  a, b : integer coefficient vectors, highest degree first
+        % [output] r    : the reduced pseudo-remainder, integral and within 2^53
+        %
+        % WHY THE BIG PATH IS ONLY THE MIDDLE. The overflow is never in the ANSWER, it is in the
+        % scaling: lc(b)^(deg a - deg b + 1) times a, which for the region-membership quartic
+        % reaches 3.7e18 while the reduced remainder is small. So this computes the whole
+        % elimination in BigInteger, divides out the content THERE, and only then comes back to
+        % doubles -- the same "try doubles, fall back, reduce, return" shape ratQ.resultantVar
+        % already uses for the Sylvester determinant, and for the same reason.
+        %
+        % IF THE REDUCED RESULT STILL DOES NOT FIT, this raises rather than returning a big form.
+        % The Sturm chain is consumed by sturmV, which evaluates in doubles, so a chain entry that
+        % is not a double is not usable by the thing that asked for it; a named refusal is the
+        % honest answer and no caller is left holding a value it cannot read.
+            a = ratQ.polyPrimitive(a);  b = ratQ.polyPrimitive(b);
+            if isempty(b), error('ratQ:divideByZero', 'pseudo-remainder by the zero polynomial.'); end
+            da = numel(a) - 1;  db = numel(b) - 1;
+            if da < db, r = a; return, end
+
+            A  = ratQ.bigVec(a);
+            Bv = ratQ.bigVec(b);
+            lc = Bv{1};
+            f  = lc.pow(da - db + 1);
+            for i = 1:numel(A), A{i} = A{i}.multiply(f); end
+
+            while true
+                A = ratQ.bigVecTrim(A);
+                if isempty(A) || numel(A) - 1 < db, break, end
+                qr = A{1}.divideAndRemainder(lc);
+                if qr(2).signum() ~= 0
+                    error('ratQ:pseudoRemNotIntegral', ...
+                        ['the pseudo-remainder step did not divide evenly, which the ' ...
+                         'lc(b)^(deg a - deg b + 1) scaling guarantees it must.']);
+                end
+                c = qr(1);
+                for k = 1:numel(Bv)
+                    A{k} = A{k}.subtract(c.multiply(Bv{k}));
+                end
+                A{1} = java.math.BigInteger.ZERO;    % force the leading term to vanish exactly
+            end
+
+            A = ratQ.bigVecTrim(A);
+            if isempty(A), r = []; return, end
+            g = java.math.BigInteger.ZERO;
+            for i = 1:numel(A), g = g.gcd(A{i}); end
+            if g.signum() ~= 0 && ~g.equals(java.math.BigInteger.ONE)
+                for i = 1:numel(A), A{i} = A{i}.divide(g); end
+            end
+
+            r = zeros(1, numel(A));
+            for i = 1:numel(A)
+                if A{i}.bitLength() > 53
+                    error('ratQ:overflow', ...
+                        ['the pseudo-remainder is still %d bits after its content is removed, so ' ...
+                         'it is not an exact double and the Sturm chain cannot hold it. This is ' ...
+                         'the answer being large, not the intermediate.'], A{i}.bitLength());
+                end
+                r(i) = double(A{i}.longValue());
+            end
+            r = ratQ.polyTrim(ratQ.chk(r, 'big pseudo-remainder'));
+        end
+
+        function C = bigVec(v)
+        % objective: a univariate integer coefficient vector as a cell of BigInteger.
+        % Kept separate from ratQ.toBig, which carries a size for MULTIVARIATE arrays and stores
+        % zeros as EMPTY cells -- a representation the arithmetic here would have to special-case
+        % on every access, for no gain at the handful of coefficients a Sturm chain entry has.
+            ratQ.chk(v, 'coefficient vector');
+            C = cell(1, numel(v));
+            for i = 1:numel(v), C{i} = java.math.BigInteger.valueOf(int64(v(i))); end
+        end
+
+        function C = bigVecTrim(C)
+        % objective: drop leading zero coefficients from a big coefficient vector.
+            k = 1;
+            while k <= numel(C) && C{k}.signum() == 0, k = k + 1; end
+            C = C(k:end);
+        end
+
         function r = polyPseudoRem(a, b)
         % objective: the PSEUDO-remainder of a by b -- the remainder of lc(b)^(deg a - deg b + 1) * a,
         %            which is integral where the ordinary remainder is not.
@@ -1629,6 +1711,31 @@ classdef ratQ
             if isempty(b), error('ratQ:divideByZero', 'pseudo-remainder by the zero polynomial.'); end
             da = numel(a) - 1;  db = numel(b) - 1;
             if da < db, r = a; return, end
+            % DOUBLES FIRST, BIG ONLY WHERE THEY RUN OUT -- the same shape resultantVar uses. The
+            % REDUCED remainder is usually small even when the middle is not: measured on the
+            % bridge region's membership quartic, the scaling reaches 3.7e18 and an elimination
+            % step 1.7e16, while the answer fits comfortably. Content reduction cannot help WITHIN
+            % a step, only between steps, so the middle has to be computed wide.
+            %
+            % THE FALLBACK COVERS THE WHOLE DOUBLE PATH, NOT JUST THE SCALING. A first version
+            % guarded only the lc^(da-db+1) product, because that is where the first overflow was
+            % seen -- and the very next fixture overflowed one line further down, inside the
+            % elimination loop. Guarding the site rather than the computation is how a fallback
+            % ends up needing a second fallback.
+            %
+            % ONLY ratQ:overflow IS CAUGHT. ratQ:pseudoRemNotIntegral means the scaling identity
+            % failed, which is a defect in this routine, and retrying it wider would only hide it.
+            try
+                r = ratQ.polyPseudoRemDouble(a, b, da, db);
+            catch e
+                if ~strcmp(e.identifier, 'ratQ:overflow'), rethrow(e), end
+                r = ratQ.polyPseudoRemBig(a, b);
+            end
+        end
+
+        function r = polyPseudoRemDouble(a, b, da, db)
+        % objective: the double-precision pseudo-remainder body, split out so its overflow can be
+        %            caught as a whole rather than site by site. Assumes primitive, trimmed inputs.
             r = a * b(1)^(da - db + 1);
             ratQ.chk(r, 'pseudo-remainder scaling');
             % THE SCALING IS WHAT MAKES EVERY STEP EXACT, and the loop must rely on that rather
@@ -1650,7 +1757,15 @@ classdef ratQ
                 r = ratQ.chk(r, 'pseudo-remainder step');
                 r(1) = 0;                            % force the leading term to vanish exactly
             end
-            r = ratQ.polyTrim(r);
+            % THE PRIMITIVE PART IS RETURNED, and that is a contract rather than a convenience.
+            % The BigInteger path MUST reduce before it can come back to doubles -- reduction is
+            % the only reason the answer fits when the middle does not -- so if the double path
+            % returned the unreduced remainder the two paths would return different vectors for
+            % the same input, and the differential test that is the only reason to trust the big
+            % path could not exist. It costs nothing: sturmChain is the sole caller and takes
+            % polyPrimitive of the result on the very next line. A positive content changes no
+            % root and no sign, which is what makes it safe here.
+            r = ratQ.polyPrimitive(ratQ.polyTrim(r));
         end
 
         function g = polyGcd(a, b)
