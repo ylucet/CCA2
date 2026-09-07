@@ -5638,3 +5638,69 @@ elimination itself faster.
 **What is NOT yet built:** the assembly proper -- walking the pairs, computing each face, and
 deciding which primal region each one owns. The region question is the genuinely unexplored part;
 everything above is about how many times it has to be asked.
+
+## 2026-09-06 — the cell-pair count is QUADRATIC in the cell count, and the strict filter only pays on SYMMETRIC fixtures
+
+**Two claims measured, one of them mine and refuted** (`.claude/cellPairFilterProbe.m`, extended
+this session with a full-dimensionality column and with polygons wide enough to separate the two
+scaling laws).
+
+**Claim 1, refuted: the surviving pair count is NOT linear in the cell count.** The reasoning that
+predicted linear was that the overlay of two planar subdivisions is itself a planar subdivision, so
+Euler bounds its faces by `O(cells_A + cells_B + crossings)`. That bound is correct and the
+conclusion drawn from it was not: **here the crossings themselves are quadratic**, because each
+conjugate's subdivision is UNBOUNDED — `2n` rays leaving in all directions — so edges of A cross
+edges of B a number of times proportional to the product. Measured:
+
+| piece pair | cells | pairs | meeting | full-dim | full-dim / product |
+|---|---|---|---|---|---|
+| two triangles, disjoint | 7 x 7 | 49 | 24 | **13** | 0.27 |
+| two triangles, overlapping cones | 7 x 7 | 49 | 32 | **16** | 0.33 |
+| triangle vs square | 7 x 9 | 63 | 42 | **14** | 0.22 |
+| square vs square | 9 x 9 | 81 | 35 | **15** | 0.19 |
+| hexagon vs hexagon | 13 x 13 | 169 | 49 | **49** | 0.29 |
+| octagon vs octagon | 17 x 17 | 289 | 79 | **59** | 0.20 |
+| octagon vs triangle | 17 x 7 | 119 | 45 | **34** | 0.29 |
+| **16-gon vs 16-gon** | 33 x 33 | 1089 | 255 | **235** | 0.22 |
+| 16-gon vs triangle | 33 x 7 | 231 | 88 | **84** | 0.36 |
+
+**The 16-gon row is the decisive one and it was chosen to be.** At 33 cells apiece a linear law
+predicts about 66 surviving pairs and a quarter-of-the-product law predicts about 272. Measured
+**235**. Across the whole table the ratio to the product stays in **0.19 to 0.36 with no trend in
+the size**, while the ratio to `cells_A + cells_B` runs 0.83 to 3.6 and **grows with the size** —
+which is what a quadratic looks like when it is divided by a linear.
+
+So the earlier verdict stands unchanged: **assembly is viable for triangles and squares and is not,
+as it stands, for a wide polygon.** A 33-cell pair is ~235 eliminations at 1 to 19 s, i.e. 4 minutes
+to 75 minutes for ONE piece pair. Triangulating to 7 cells per piece is not an optimisation here,
+it is the thing that makes assembly finish.
+
+**The 16-gon fixture is reusable and worth naming.** `latV(k)` builds a convex LATTICE polygon by
+taking every primitive integer vector with entries in `[-k,k]` in angular order and cumulating:
+`k=1` gives an octagon, `k=2` a 16-gon. Exact integer vertices, arbitrary width, and edge normals in
+general position — which is exactly what the earlier fixtures were not.
+
+**Claim 2, confirmed but much narrower than it looked: the STRICT feasibility test is free and
+mostly does not pay.** `ratQ.feasible2` already takes a `strict` flag that demands a nonempty
+INTERIOR, and the filter was calling it non-strict, so a pair of cells touching only along a shared
+segment or at a single point counted as surviving. Those carry no two-dimensional bridge face and
+would cost a full elimination to discover it. Flipping the flag costs one more Fourier-Motzkin pass
+on the same rows.
+
+**But the win is an artifact of SYMMETRY, not a general factor.** On the small fixtures it looks
+enormous (triangle vs square 42 -> 14, a third), and on the generic ones it nearly vanishes
+(hexagon 49 -> 49, no cut at all; 16-gon 255 -> 235, 8%). The reason is visible in the fixtures:
+triangles and axis-aligned squares have parallel and collinear cell boundaries, so a large fraction
+of their cell meetings are boundary-only degeneracies. A polygon whose edge normals are in general
+position has almost none.
+
+**Which is still a reason to turn it on** — the corpus's real inputs come from triangulation and
+are therefore the symmetric, degenerate kind, and the test is free — but **not** a reason to expect
+it on a general input, and **not** a change of order. The order still has to come from somewhere
+else: the sign-change filter on `g1 - g2`, or caching by cell type.
+
+**Method note.** The full-dim column and the wide fixtures were added in the same pass, and that was
+the right order by luck rather than by design: the small fixtures ALONE would have supported the
+linear reading (13, 16, 14, 15 against `cells_A + cells_B` of 14, 14, 16, 18 — a near-perfect fit)
+and it is wrong. Four small, symmetric fixtures agreeing with a law is not evidence for the law;
+one fixture chosen because the two laws disagree there by 4x is.
