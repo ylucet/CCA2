@@ -18,15 +18,26 @@ function cellFaceRegionProbe(varargin)
 % regions should be polyhedral -- and if they are, the non-bridge faces need no new subdivision
 % machinery at all, which is a real saving and the reason to measure it.
 %
-% STATUS 2026-09-07: SCOPE-REDUCED, THE ANSWER IS NOT YET ESTABLISHED. Two measurement defects
-% have been found and fixed in this probe (see below and DECISIONS 2026-09-07) and it still reports
-% 23 of 26 boundaries as curved, which contradicts the KKT argument above. The remaining suspect is
-% named and not yet tested: ONE label pair can meet along TWO DIFFERENT straight boundaries -- two
-% regions can touch on opposite sides of a cell -- and pooling those two into one fit reproduces
-% exactly this symptom. The next diagnostic is to print the per-arc residuals for a single cell and
-% see whether they are bimodal (a few large, the rest ~0, i.e. still pooling) or uniform (a real
-% property). Until that is done, NOTHING here should be cited: the prediction is unconfirmed and
-% the measurement has already been wrong twice.
+% STATUS 2026-09-07: RESOLVED, THE REGIONS ARE POLYHEDRAL, and the three measurement defects that
+% stood between the prediction and that answer are all fixed here (DECISIONS 2026-09-07):
+%
+%   1. POOLING every crossing of a cell into one fit -- fixed earlier; see the note in
+%      traceBoundaries.
+%   2. A THRESHOLD BELOW THE MEASUREMENT'S OWN RESOLUTION. The straightness test was a fixed 1e-6
+%      while the radial trace step is 4.5e-3, so a perfectly straight boundary located to +-dr/2
+%      lands three orders ABOVE the threshold and is reported curved. The threshold is now DERIVED
+%      from the trace step, and both numbers are printed, so the comparison can be read.
+%   3. ONE POINT WITH TWO NAMES, which is what the "remaining pooled label pair" actually was. A
+%      cell VERTEX is an endpoint of the two facets meeting there, and the label spelled the facet
+%      it came from, so the same point -- the same affine face -- carried two labels and floating
+%      point decided which appeared. The "boundary" between them is not a curve but NOISE OVER A
+%      2-D REGION: those were the arcs with 2000 and 4400 points, fitted by neither a line (0.20,
+%      0.71) nor a conic (1.6e-2, 5.2e-2), and a conic residual that large should have been the
+%      tell. An endpoint is now named by its COORDINATES. The label pair was also made ORDERED and
+%      each key split into connected components, so two distinct boundaries can never share a fit.
+%
+% With all three fixed: 25 arcs, worst line residual 1.3e-3 against a trace step of 4.5e-3, and
+% NOTHING above the tolerance. The regions are polyhedral.
 %
 % HOW IT IS MEASURED, WITHOUT ASSUMING THE ANSWER. Sample the plane, label each point by the
 % winning candidate, and for each label trace the boundary of its region along rays; then fit both
@@ -39,6 +50,7 @@ function cellFaceRegionProbe(varargin)
 
     n = 201;
     if nargin >= 1, n = varargin{1}; end
+    verbose = nargin >= 2;                 % per-arc listing: key, points, extent, residual
 
     % TWO FIXTURES, NOT THREE, AND THE REASON IS THE COST rather than the answer. The hexagon has
     % 13 cells and its widest has 18 candidate regions; tracing 361 rays x 1200 radii through the
@@ -50,6 +62,15 @@ function cellFaceRegionProbe(varargin)
     fixtures = { 'triangle', tri([0 0; 1 0; 1 1], 0), ...
                  'square',   poly([0 0; 1 0; 1 1; 0 1]) };
 
+    % THE THRESHOLD IS THE MEASUREMENT'S OWN RESOLUTION, not a constant. A crossing is detected
+    % between two consecutive radii and placed at the midpoint, so its position carries an error of
+    % up to dr/2 whatever the boundary really is; a straight boundary therefore fits a line only to
+    % about that. `strTol = dr` is that bound with one factor of two of room, and it is printed
+    % beside the worst residual so the comparison is legible rather than asserted. A curved
+    % boundary is not near this scale: the bridge regions' line fits missed by 0.30 to 0.71.
+    dr = traceStep();
+    strTol = dr;
+
     nB = 0;  worstLine = 0;  bestConicWin = 0;  nCurved = 0;
     for i = 1:2:numel(fixtures)
         nm = fixtures{i};  g = conjQ(fixtures{i+1});
@@ -60,21 +81,31 @@ function cellFaceRegionProbe(varargin)
             [H, b, c] = cellData(g, k);
             B = traceBoundaries(H, b, c, P, n);
             if isempty(B), continue, end
+            worstHere = 0;
             for t = 1:numel(B)
-                [eL, eC] = fitBoth(B{t}.pts);
+                [eL, eC, sc] = fitBoth(B{t}.pts);
+                eAbs = eL * sc;                       % back in the plane's own units
+                if verbose
+                    fprintf(['    cell %2d arc %2d  key %-8s  %4d pts  extent %.3f  ' ...
+                             'line %.2e  conic %.2e\n'], ...
+                            k, t, B{t}.pair, size(B{t}.pts,1), sc, eAbs, eC*sc);
+                end
                 nB = nB + 1;
-                worstLine = max(worstLine, eL);
+                worstLine = max(worstLine, eAbs);
+                worstHere = max(worstHere, eAbs);
                 if eC > 0, bestConicWin = max(bestConicWin, eL / max(eC, 1e-18)); end
-                if eL > 1e-6, nCurved = nCurved + 1; end
+                if eAbs > strTol, nCurved = nCurved + 1; end
             end
-            fprintf('  cell %2d: %d candidate region(s), %d traced boundary arc(s)\n', ...
-                    k, B{1}.nLab, numel(B));
+            fprintf('  cell %2d: %d candidate region(s), %d traced boundary arc(s), worst line %.2e\n', ...
+                    k, B{1}.nLab, numel(B), worstHere);
         end
     end
 
     fprintf('\n%d traced boundary arcs over two fixtures\n', nB);
+    fprintf('radial trace step dr = %.3e, so the straightness tolerance is %.3e\n', dr, strTol);
     fprintf('worst LINE residual over all of them: %.3e\n', worstLine);
-    fprintf('%d arcs where the line fit was WORSE than 1e-6 (i.e. genuinely curved)\n', nCurved);
+    fprintf('%d arcs where the line fit was WORSE than the tolerance (i.e. genuinely curved)\n', ...
+            nCurved);
     if nCurved == 0
         fprintf(['\nEvery candidate region is bounded by STRAIGHT lines. So the non-bridge faces\n' ...
                  'need no curved subdivision at all -- the opposite of the bridge faces, whose\n' ...
@@ -115,17 +146,25 @@ function B = traceBoundaries(H, b, c, P, n)
     %
     % Keying on the ORDERED pair (label before, label after) separates the boundaries, since two
     % different boundaries of the same region have different neighbours across them.
+    %
+    % THE KEY WAS UNORDERED, WHICH IS THE SECOND HALF OF THE SAME DEFECT. `min|max` merges the
+    % crossing INTO a region with the crossing OUT of it, so two regions that touch on OPPOSITE
+    % sides of a cell shared one key and one fit -- the pooling signature all over again, one label
+    % pair at a time, and the residual it produced was the 2218-point outlier of 2026-09-07. The
+    % key is now the ordered pair, which is what the paragraph above always claimed it was.
+    [rLo, rHi, nR] = traceRadii();
+    dr = traceStep();
     byPair = containers.Map('KeyType','char','ValueType','any');
     for a = linspace(0, 2*pi, 361)
         u = [cos(a); sin(a)];
         prev = 0;
-        for r = linspace(0.05, 5.5, 1200)
+        for r = linspace(rLo, rHi, nR)
             x = ctr + r*u;
             w = winner(H, b, c, P, x);
             if isempty(w), cur = 0; elseif ~isKey(keys, w), cur = -1; else, cur = keys(w); end
             if prev > 0 && cur > 0 && cur ~= prev
-                key = sprintf('%d|%d', min(prev,cur), max(prev,cur));
-                pt  = (ctr + (r - 0.0023)*u).';
+                key = sprintf('%d>%d', prev, cur);
+                pt  = (ctr + (r - dr/2)*u).';       % the crossing is in [r-dr, r]; take the middle
                 if isKey(byPair, key), byPair(key) = [byPair(key); pt];
                 else,                  byPair(key) = pt;
                 end
@@ -134,13 +173,55 @@ function B = traceBoundaries(H, b, c, P, n)
         end
     end
 
+    % AND THEN SPLIT EACH KEY INTO CONNECTED COMPONENTS, because an ordered key is not a proof of
+    % one boundary either: a boundary that curls round the centre can be crossed in both senses, and
+    % two far-apart straight boundaries would still share a key. Single linkage with a gap of
+    % `gapTol` separates them. The gap is not a free parameter: consecutive rays are 2*pi/360 apart,
+    % so two crossings of the SAME boundary are at most about rHi*dA apart, and anything beyond a
+    % few times that is a different boundary. Splitting too eagerly is safe here -- a subset of a
+    % straight boundary is still straight, and a component too small to fit is dropped and counted.
+    gapTol = 4 * rHi * (2*pi/360);
+
     B = {};
     ks = keys_of(byPair);
     for i = 1:numel(ks)
-        pts = byPair(ks{i});
-        if size(pts,1) < 8, continue, end          % too few to fit anything; not evidence
-        B{end+1} = struct('pts', pts, 'nLab', nLab, 'pair', ks{i}); %#ok<AGROW>
+        for comp = components(byPair(ks{i}), gapTol)
+            pts = comp{1};
+            if size(pts,1) < 8, continue, end      % too few to fit anything; not evidence
+            B{end+1} = struct('pts', pts, 'nLab', nLab, 'pair', ks{i}); %#ok<AGROW>
+        end
     end
+end
+
+function [rLo, rHi, nR] = traceRadii()
+% The radial trace, in ONE place, so the straightness tolerance and the crossing midpoint are both
+% derived from the same numbers rather than restated as constants.
+    rLo = 0.05;  rHi = 5.5;  nR = 1200;
+end
+
+function dr = traceStep()
+    [rLo, rHi, nR] = traceRadii();
+    dr = (rHi - rLo) / (nR - 1);
+end
+
+function C = components(pts, gapTol)
+% Single-linkage components of a point set at scale `gapTol`, returned as a cell row. Written out
+% rather than taken from a toolbox: the sets are a few hundred points, and one fewer dependency in
+% a probe is worth more than the speed.
+    m = size(pts,1);
+    lab = zeros(m,1);  nc = 0;
+    for i = 1:m
+        if lab(i) > 0, continue, end
+        nc = nc + 1;  lab(i) = nc;  stack = i;
+        while ~isempty(stack)
+            j = stack(end);  stack(end) = [];
+            d = vecnorm(pts - pts(j,:), 2, 2);
+            nb = find(d <= gapTol & lab == 0);
+            lab(nb) = nc;  stack = [stack; nb]; %#ok<AGROW>
+        end
+    end
+    C = cell(1, nc);
+    for k = 1:nc, C{k} = pts(lab == k, :); end
 end
 
 function ks = keys_of(m)
@@ -149,6 +230,15 @@ end
 
 function w = winner(H, b, c, P, x)
 % The winning candidate's LABEL at x, as a string. Empty when the sup is unbounded.
+%
+% THE LABEL NAMES THE FACE, NOT THE SPELLING, and that distinction was the third measurement defect
+% of this probe. An ENDPOINT candidate is a FIXED point of the plane -- a vertex of the cell -- so
+% the face it carries is the affine function `<v,x> - g(v)`, and it does not matter which of the two
+% facets meeting at `v` produced it. Labelling it `end<facet>_<t>` gave that one point TWO names,
+% and where it won, floating point decided which name came out. The "boundary" between those two
+% names is then not a curve at all but NOISE SCATTERED OVER A 2-D REGION -- which is what the arcs
+% with 2000 and 4400 points were, and why neither a line nor a conic fitted them. Naming an
+% endpoint by its COORDINATES merges the two spellings, because they are the same face.
     y = x - b;  best = -inf;  w = '';
     if abs(det(H)) > 1e-12
         s = H \ y;
@@ -178,7 +268,8 @@ function w = winner(H, b, c, P, x)
         for q = [lo hi]
             if isinf(q), continue, end
             v = a0 + a1*q + a2*q^2;
-            if v > best, best = v; w = sprintf('end%d_%.6f', i, q); end
+            sq = p + q*d;                              % the endpoint itself, which IS the face
+            if v > best, best = v; w = sprintf('pt(%.6f,%.6f)', sq(1), sq(2)); end
         end
     end
     if isinf(best), w = ''; end
@@ -197,14 +288,17 @@ function [lo, hi, empty] = lineRange(P, p, d)
     if lo > hi + 1e-9, empty = true; end
 end
 
-function [eL, eC] = fitBoth(Pts)
+function [eL, eC, sc] = fitBoth(Pts)
 % Least-squares residuals of the best LINE and the best general CONIC through Pts, normalised by
 % the extent so the two are comparable and scale-free -- the same measure bridgeRegionProbe used,
-% so the two answers can be read side by side.
-    if size(Pts,1) < 6, eL = 0; eC = 0; return, end
+% so the two answers can be read side by side. `sc` is that extent, and it is RETURNED because the
+% straightness test needs the residual in the ORIGINAL units: the tolerance comes from the trace
+% step, which is a distance in the plane, and comparing it against a scale-free number is how this
+% probe reported straight boundaries as curved.
+    if size(Pts,1) < 6, eL = 0; eC = 0; sc = 1; return, end
     Pts = Pts - mean(Pts,1);
     sc = max(vecnorm(Pts, 2, 2));
-    if sc == 0, eL = 0; eC = 0; return, end
+    if sc == 0, eL = 0; eC = 0; sc = 1; return, end
     Pts = Pts / sc;
     ML = [Pts, ones(size(Pts,1),1)];
     eL = min(svd(ML)) / sqrt(size(Pts,1));

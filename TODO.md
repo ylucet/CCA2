@@ -91,9 +91,15 @@ it is bookkeeping rather than new mathematics.
   - What is NOT done: the per-piece evaluation is in doubles. The exact candidate enumeration
     already exists (`.claude/cellFaceExactProbe.m`) and swapping it in is a substitution; the
     quartic's roots would need the same treatment. The MESH decisions are already exact.
-- [ ] **Tidy `.claude/cellFaceRegionProbe.m`**: set its straightness threshold from the trace step
-  rather than a fixed 1e-6, and split the one remaining pooled label pair. Neither changes the
-  answer above; this is hygiene so the probe does not mislead the next reader.
+- [x] **Tidy `.claude/cellFaceRegionProbe.m`** — DONE 2026-09-07, and it was not only hygiene. The
+  threshold is now derived from the trace step (dr = 4.5e-3) and the residual is compared in the
+  plane's own units rather than scale-free. The "remaining pooled label pair" turned out to be a
+  THIRD measurement defect: a cell VERTEX is an endpoint of two facets, so one point carried two
+  labels and floating point chose between them — the boundary between the two names was noise over
+  a 2-D region, which is what the 2218-point outlier was. Endpoints are now named by their
+  coordinates; the pair key is ordered and split into connected components as well. Result: **25
+  arcs, worst line residual 1.3e-3 against a 4.5e-3 tolerance, nothing above it** — the regions are
+  polyhedral, now with no outlier left to explain.
 - [ ] ~~(superseded) ARE THE NON-BRIDGE CANDIDATE REGIONS POLYHEDRAL? Scope-reduced, not
   established.~~ KKT predicts yes (the winning condition is affine in `x`), and if so the non-bridge
   faces need no curved subdivision at all. The probe still reports 23 of 26 boundaries curved after

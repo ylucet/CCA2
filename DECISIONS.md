@@ -6885,3 +6885,27 @@ tie is real but has to be CONSTRUCTED: take `s0` in the relative interior of a f
 `x = grad(s0)`. 128 such points, all right, all attained by a facet candidate. The facet loop's
 other measured role is what makes `dom f**` come out right: it is what detects an unbounded
 direction.
+
+## 2026-09-07 — the non-bridge region probe: the third defect was ONE POINT WITH TWO NAMES
+
+The tidy-up of `.claude/cellFaceRegionProbe.m` was booked as hygiene — a threshold from the trace
+step, and a split of the one label pair still pooled. The threshold half was hygiene. The other
+half was a real measurement defect, and it is the one that had been producing the leftover outlier.
+
+**A cell VERTEX is an endpoint of the two facets that meet there.** The winner label spelled which
+facet the endpoint came from, so the same point — carrying the same affine face `<v,x> - g(v)` —
+had two labels, and where it won, floating point decided which one came out. The "boundary" between
+those two names is therefore not a curve at all but NOISE SCATTERED OVER A 2-D REGION. That is what
+the arcs with 2000 and 4400 points were: line residuals 0.20 and 0.71, and **conic residuals of
+1.6e-2 and 5.2e-2 — which should have been the tell.** A boundary that fits no conic either is not
+a curved boundary; it is not a boundary.
+
+Fixed by naming an endpoint with its COORDINATES: two spellings of one point are one face. The key
+was also made ordered and each key split into connected components, so two distinct boundaries can
+never share one fit.
+
+**Measured after:** 25 arcs, worst line residual 1.3e-3, trace step 4.5e-3, nothing above the
+tolerance. The regions are polyhedral, and now with nothing left unexplained.
+
+**The tell to keep:** when a line fit is bad, READ THE CONIC FIT. A genuine curve fits a conic to
+1e-14 (the bridge regions did). A "boundary" that fits neither is a labelling artefact.
