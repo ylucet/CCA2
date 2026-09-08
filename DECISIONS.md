@@ -6857,3 +6857,31 @@ four under-reporting and one over-reporting, and every single disagreement was t
 **What is left, and it is small:** the probe's threshold should be set from the trace step rather
 than fixed, and the `4|5` pooling case wants the same label-pair split applied twice. Neither
 changes the answer, which is why this entry states it as resolved rather than as another reduction.
+
+## 2026-09-07 — THE ASSEMBLY works, and two more measurement defects in its own checker
+
+`.claude/assemblyProbe.m` stitches the bridge and non-bridge faces into one mesh and reproduces
+`f**` on four fixtures. The construction is a partition plus a max, and the reason it needs no
+gluing argument is worth keeping: **every candidate the evaluator forms is `<s,x> - G(s)` at a
+point feasible for its own piece, so no candidate can exceed `f**(x)`.** The assembly can only
+undershoot, so the entire correctness question reduces to "is every maximiser some piece's
+candidate" — and that is an enumeration, not an argument about how the pieces meet.
+
+Both defects were in the CHECKER again, which is now five sessions running.
+
+**1. Sampling outside `dom f**` measures nothing.** The first run drew `x` from `[-1.5, 2.5]^2` and
+reported a worst gap of 1.1e-16. That was TWO surviving points out of 40: `dom f** = conv(dom f)`
+is the unit square, so 38 draws were infinite on both sides and skipped. The tell was the one
+MORNING.md named the night before — **the same worst-case point in all three fixtures is measuring
+the harness, not the fixture**. Fixed by sampling the primal box and by checking the DOMAIN
+separately, on a grid, as its own statement: finite exactly inside, infinite exactly outside.
+
+**2. "It ties but never wins" was assumed, and it is false.** No facet candidate is ever the strict
+winner, and the first explanation written into the probe said facet candidates tie with the winner.
+Measured: they attain the winning value at **0 of 150** random points in every fixture. The reason
+is that `gA` and `gB` are conjugates of strictly convex quadratics, so each is `C^1` across its own
+cell edges and a facet maximiser occurs only for `x` on the image of a curve — measure zero. The
+tie is real but has to be CONSTRUCTED: take `s0` in the relative interior of a facet and set
+`x = grad(s0)`. 128 such points, all right, all attained by a facet candidate. The facet loop's
+other measured role is what makes `dom f**` come out right: it is what detects an unbounded
+direction.

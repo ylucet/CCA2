@@ -74,11 +74,23 @@ it is bookkeeping rather than new mathematics.
   2218 points which is the pooling signature. So the non-bridge faces need no curved subdivision at
   all, unlike the bridge faces. The probe's own threshold (1e-6) was three orders BELOW its trace
   step (6e-3), which is what produced two false "curved" verdicts.
-- [ ] **THE ASSEMBLY** — walk the cell pairs, build each face, and stitch the bridge and
-  non-bridge faces into one mesh. Every ingredient is now built and verified: both filters, the
-  bridge elimination for all four cell-pair kinds, the bridge region (conic boundaries, sides by an
-  exact Sturm count), and the non-bridge faces (exact, self-naming, polyhedral regions). This is
-  the join, and it is now the only thing between the pieces and a complete `f**`.
+- [x] **THE ASSEMBLY** — DONE 2026-09-07, `.claude/assemblyProbe.m`. The join is a PARTITION plus a
+  MAX: over each cell pair `P_ij` the max `G = max(gA_i, gB_j)` is one quadratic (a non-bridge
+  piece) or splits along the tie conic (a bridge pair, three faces), and `f** = max over pieces of
+  sup over the piece`. **Every candidate is FEASIBLE for its own piece, so the assembly cannot
+  overshoot** whatever the mesh looks like — the whole correctness question is whether every
+  maximiser is some piece's candidate, and that is checked directly. Four fixtures (unit square at
+  c = 0, -1, -2 and an anisotropic 2x1 rectangle): **600 sample points, 0 overshoot, 0 undershoot**,
+  worst gap to the definition 4.0e-9 (`fminsearch`'s own accuracy); **coverage 1600/1600** random
+  `s` in some piece; **dom f\*\* right at 3782 grid points** — finite exactly inside, infinite
+  exactly outside; the convex fixture reproduces `f` itself to 0.0e0; and **128 CONSTRUCTED points
+  whose maximiser is on a cell edge, all right and all attained by a facet candidate**.
+  - Two measurements corrected on the way, both recorded in `DECISIONS.md` 2026-09-07: sampling `x`
+    outside `dom f**` measured nothing (38 of 40 points skipped), and the facet candidates do not
+    even TIE at a random point — they need constructed points, which is the check above.
+  - What is NOT done: the per-piece evaluation is in doubles. The exact candidate enumeration
+    already exists (`.claude/cellFaceExactProbe.m`) and swapping it in is a substitution; the
+    quartic's roots would need the same treatment. The MESH decisions are already exact.
 - [ ] **Tidy `.claude/cellFaceRegionProbe.m`**: set its straightness threshold from the trace step
   rather than a fixed 1e-6, and split the one remaining pooled label pair. Neither changes the
   answer above; this is hygiene so the probe does not mislead the next reader.
