@@ -62,11 +62,26 @@ it is bookkeeping rather than new mathematics.
   interval is a comparison of rationals, and each facet parabola's vertex is `-a1/(2*a2)` with
   integer `a1`, `a2`. So this is `ratQ` bookkeeping, and it is what a mesh-deciding predicate
   needs. Nothing external blocks it.
-- [ ] **AN EXERCISE HARNESS FOR EVERY NAMED GUARD** — one constructed input per guard, asserting
-  the guard fires AND reports its own identifier. Worth a session: it would prove reachability and
-  self-reporting for every refusal in the toolbox at once, and it is what the refuted static lint
-  was a cheap substitute for (DECISIONS 2026-09-06). The `notDegenerate` row below is exactly the
-  case it would settle.
+- [x] **AN EXERCISE HARNESS FOR EVERY NAMED GUARD** — LANDED 2026-09-07 as `guardExerciseTest.m`
+  (fast bucket, 17 tests, in `suite.sh`). **113 named identifiers, 57 with no assertion anywhere;
+  15 of those are now exercised** — the guard fires AND `verifyError` proves it reports its own
+  identifier, so the `QuaPar:size` defect class is now a red rather than a mask. The remaining 42
+  are PINNED BY NAME with a reason class (`symbolic-input` 17, `internal` 11, `loop-safety` 6,
+  `todo` 6, `shadowed` 2, `contract` 1), and the pin is bidirectional: a guard added without an
+  exercise is a red, and so is a remainder entry naming a guard that no longer exists.
+  - **A finding, not a gap: two guards are DEAD CODE.** `quaPolToPlq:cubic` and `ratPolToPlq:cubic`
+    cannot fire — both routines call `assertOperable` first, so a cubic is always refused with
+    `PLQ:op:unsupportedType`. Measured, pinned by a test, and recorded in `SUPPORT_MATRIX.md`.
+- [ ] **`conjConvexPolygon` with a DUPLICATE VERTEX raises an unnamed error** —
+  `MATLAB:catenate:dimensionMismatch`, not `conjConvexPolygon:degenerateEdge`, which is the defect
+  class the harness above exists for (a refusal that cannot report itself). Found while trying to
+  fire that guard, 2026-09-07. Small: either the duplicate is rejected by name up front, or
+  `outwardNormal`'s zero check has to run before the concatenation.
+- [ ] **The rest of the guard exercises**, in the order the harness's own reason classes give:
+  the 6 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a
+  SLOW-bucket file (they need a symbolic `region`/`plq_1p`, so they do not belong in the fast one).
+  The `internal` and `loop-safety` classes are a deliberate stop, not a backlog: firing them needs
+  an input their own site argues cannot exist, so the firing would prove self-reporting only.
 
 - [x] **ARE THE NON-BRIDGE CANDIDATE REGIONS POLYHEDRAL?** **YES**, resolved 2026-09-07 by the
   named diagnostic: the per-arc residuals are BIMODAL — two arcs at 1e-16/1e-17 (exactly straight),

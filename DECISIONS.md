@@ -6909,3 +6909,39 @@ tolerance. The regions are polyhedral, and now with nothing left unexplained.
 
 **The tell to keep:** when a line fit is bad, READ THE CONIC FIT. A genuine curve fits a conic to
 1e-14 (the bridge regions did). A "boundary" that fits neither is a labelling artefact.
+
+## 2026-09-07 — the guard exercise harness, and two guards that are DEAD CODE
+
+`guardExerciseTest.m` is the replacement the refuted static lint's entry called for — "not a parser
+but an EXERCISE" (DECISIONS 2026-09-06). Fast bucket, 17 tests, in `suite.sh`; fast is now 592/0.
+
+**The inventory, measured rather than assumed:** 113 named `error('pkg:id', ...)` identifiers in the
+project root, of which **57 had no assertion anywhere** in any test. Fifteen of those are now
+exercised by a constructed input, and `verifyError` is what makes the exercise worth having: it
+fails if any OTHER error comes out, so the `QuaPar:size` defect class — a guard masked by
+`MATLAB:error:nonScalarInput` — is now a red instead of a silent mask.
+
+**The remaining 42 are pinned BY NAME with a reason class**, not left as a count: `symbolic-input`
+17 (the input is a symbolic `region`/`plq_1p`, so it belongs in a slow-bucket file), `internal` 11,
+`loop-safety` 6, `todo` 6, `shadowed` 2, `contract` 1. The pin is **bidirectional** — a guard added
+without an exercise is a red, and a remainder entry naming a guard that no longer exists is also a
+red. A skip list that cannot rot is the difference between a quarantine and a permanently passing
+test.
+
+**The finding: `quaPolToPlq:cubic` and `ratPolToPlq:cubic` CANNOT FIRE.** Both routines call
+`assertOperable` at the top (line 52 and line 30), which refuses degree > 2 with
+`PLQ:op:unsupportedType`; the per-face cubic checks sit at line 76 and line 38 and are unreachable.
+Found by sending a cubic in and reading which identifier came out, which is the whole method: an
+exercise answers "does this guard fire" and a shadowed guard answers "no, and here is who fired
+instead". Pinned by `cubicIsRefusedBeforeThePerFaceGuard` and recorded in `SUPPORT_MATRIX.md`.
+
+**A second, smaller finding, filed in `TODO.md` rather than fixed:** `conjConvexPolygon` with a
+DUPLICATE VERTEX raises `MATLAB:catenate:dimensionMismatch`, not its own
+`conjConvexPolygon:degenerateEdge` — the same defect class the harness exists for, found while
+trying to fire that guard.
+
+**One method note for the next such file.** Reading which guards this file itself asserts is a
+regexp over its own source, and two obvious patterns are both wrong: stopping the match at the
+first `)` matches nothing, because the call's function handle carries parentheses; stopping it at
+the first `;` misses exactly the calls whose input holds a column vector `[0;0]`. Reassemble the
+statement from its continuation lines and take the LAST identifier in it.
