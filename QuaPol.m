@@ -710,12 +710,28 @@ classdef QuaPol < RatPol & QuaPar
        function g = conj(obj, engine)
        % objective: Legendre-Fenchel conjugate f*(s) = sup_x <s,x> - f(x)
        % [input]  obj   : QuaPol (quadratic on polyhedral); must be operable (degree<=2)
-       %          engine: 'cplq' (default, symbolic per-piece) | 'pqp' | 'graph'
-       % [output] g     : the conjugate (QuaPol when quadratic-on-polyhedral; otherwise QuaPar)
+       %          engine: 'cplq' (default) | 'symbolic' (alias of 'cplq') | 'exact' | 'pqp' |
+       %                  'graph'
+       % [output] g     : the conjugate. 'cplq' returns a RatPar (QuaPol / QuaPar / QuaParCPLQ --
+       %                  see RETURN_TYPE.md); 'exact' returns a QuaCon. Both are RatCon, which is
+       %                  the level of the lattice every operator return shares.
+       %
+       % THE TWO ENGINES, and why both are reachable. `conjQ` is the exact, sym-free route
+       % (CONJ_FIELD_PROOF.md 8.6/8.7): every coefficient a rational, every decision an integer
+       % predicate, and a NAMED refusal where it cannot answer -- it never falls back on its own,
+       % because falling back silently is how an exact pipeline starts returning tolerance-decided
+       % answers. `conjCPLQ` is the legacy symbolic route and answers a strictly different set of
+       % inputs (an INEXACT QuaPol, which the exact one refuses by design).
+       %
+       % WHY 'cplq' IS STILL THE DEFAULT even though conjQ answers every 2-D domain and is orders
+       % faster: changing it changes the RETURN TYPE of an unqualified `f.conj()` from RatPar to
+       % QuaCon, and that is the breaking change RETURN_TYPE.md treats as an architectural decision
+       % to be taken deliberately before a tag, not as a side effect of wiring an engine in.
             obj.assertOperable();
             if nargin < 2, engine = 'cplq'; end
             switch lower(engine)
-                case 'cplq',  g = conjCPLQ(obj);
+                case {'cplq','symbolic'},  g = conjCPLQ(obj);
+                case 'exact',              g = conjQ(obj);
                 case {'pqp','graph'}
                     error('PLQ:conj:engine', ...
                         'Conjugate engine ''%s'' is not implemented yet; use ''cplq''.', engine);
@@ -743,16 +759,24 @@ classdef QuaPol < RatPol & QuaPar
        end
        function h = biconj(obj, engine)
        % objective: biconjugate f** = conj(conj(f)); equals the closed convex envelope of f
-       % [output] h: a RatPar -- QuaPol (Case A), RatPol (Case B) or QuaParCPLQ (Case C); call
-       %             kind() to learn which. See biconjCPLQ.m and RETURN_TYPE.md.
+       % [input]  engine: 'cplq' (default) | 'symbolic' (alias of 'cplq') | 'exact'
+       % [output] h: 'cplq' returns a RatPar -- QuaPol (Case A), RatPol (Case B) or QuaParCPLQ
+       %             (Case C); call kind() to learn which. 'exact' returns a QuaCon. See
+       %             biconjCPLQ.m, biconjQ.m and RETURN_TYPE.md.
        %
-       % The 'cplq' engine goes through biconjCPLQ rather than literally conjugating twice: for a
+       % NEITHER ENGINE CONJUGATES TWICE, and for the same reason in both. For 'cplq': for a
        % single bounded triangle f* lives on an unbounded multi-face domain that conjCPLQ cannot
        % conjugate, so the second conjugation has nowhere to go, while f** = conv(q + I_T) is
-       % Step 1's own closed-form output. biconjCPLQ.m has the derivation and the validation
-       % numbers. Other engines are unchanged (and still error inside conj).
+       % Step 1's own closed-form output. For 'exact': ALGORITHM.md's direct route, the lower hull
+       % of the lifted set, which is both faster and defined on inputs the double conjugation is
+       % not. Other engines still error inside conj.
+       %
+       % The default is 'cplq' for the reason given in `conj` above -- the return type, not the
+       % mathematics.
             if nargin < 2, engine = 'cplq'; end
-            if strcmpi(engine, 'cplq')
+            if strcmpi(engine, 'exact')
+                h = biconjQ(obj);
+            elseif strcmpi(engine, 'cplq') || strcmpi(engine, 'symbolic')
                 h = biconjCPLQ(obj);
             else
                 h = conj(conj(obj, engine), engine);

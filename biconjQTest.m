@@ -747,6 +747,34 @@ classdef biconjQTest < matlab.unittest.TestCase
             f.fIsConvex = true;
             testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notConvex');
         end
+
+        function theExactEngineIsReachableFromTheClassAPI(testCase)
+        % biconjQ was callable only as a free function: `QuaPol.biconj` dispatched to biconjCPLQ
+        % for 'cplq' and to conj(conj(.)) otherwise, with no name for the exact route.
+        % `biconj(f,'exact')` is that route. Same three guarantees as conj's: it reaches biconjQ,
+        % it leaves the other engine names alone, and the refusals stay named.
+            f = biconjQTest.square([0 0 0 0, 0, 1, 0, 0, 0, 0]);   % q = x*y on the unit square
+
+            hExact = f.biconj('exact');
+            testCase.verifyEqual(hExact.kind(), 'QuaCon', '''exact'' must reach biconjQ');
+            hDirect = biconjQ(f);
+            testCase.verifyEqual(hExact.nf, hDirect.nf);
+            X = [0 0; 1 1; 0.5 0.5; 0.25 0.75; 1 0];
+            testCase.verifyEqual(hExact.eval(X), hDirect.eval(X), 'AbsTol', 0);
+            testCase.verifyEqual(f.biconj('EXACT').kind(), 'QuaCon');
+
+            % 'symbolic' is the legacy engine; 'cplq' is unchanged and still the default
+            testCase.verifyEqual(class(f.biconj('symbolic')), class(f.biconj('cplq')));
+            testCase.verifyEqual(class(f.biconj()),           class(f.biconj('cplq')));
+        end
+
+        function theExactEnginesREFUSALSSurviveTheClassAPI(testCase)
+        % A refusal routed through `biconj` must arrive with its own identifier -- the whole point
+        % of an engine that never falls back. `x^2 - y^2` on the square is the edge-CONVEX piece,
+        % which is the one genuine gap left in biconjQ.
+            f = biconjQTest.square([0 0 0 0, 2, 0, -2, 0, 0, 0]);
+            testCase.verifyError(@() f.biconj('exact'), 'PLQ:biconjQ:notImplemented');
+        end
     end
 
     methods (Static)

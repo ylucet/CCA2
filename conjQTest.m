@@ -890,6 +890,45 @@ classdef conjQTest < matlab.unittest.TestCase
             P = QuaPol.examples2();
             testCase.verifyError(@() conjQ(P{5}), 'PLQ:conjQ:ambiguousChain');
         end
+
+        function theExactEngineIsReachableFromTheClassAPI(testCase)
+        % conjQ was callable only as a free function: `QuaPol.conj` dispatched to conjCPLQ and had
+        % no engine name for the exact route at all, so `f.conj()` ran the slow symbolic pipeline
+        % whatever the input. `conj(f,'exact')` is that route, and this pins the three things a
+        % caller can rely on: it reaches conjQ, it does NOT change what the other engine names do,
+        % and an unknown name is still refused.
+            V = [0 0; 2 0; 0 2];  E = [1 2 1; 2 3 1; 3 1 1];  F = repmat([1 0], 3, 1);
+            f = QuaPol(V, E, [0 0 0 0, 2, 0, 2, 0, 0, 0], F);   % q = x^2 + y^2 on a triangle
+
+            gExact = f.conj('exact');
+            testCase.verifyEqual(gExact.kind(), 'QuaCon', '''exact'' must reach conjQ');
+            gDirect = conjQ(f);
+            testCase.verifyEqual(gExact.nf, gDirect.nf);
+            S = [0 0; 1 1; -3 2; 5 -4; 0.5 0.25];
+            testCase.verifyEqual(gExact.eval(S), gDirect.eval(S), 'AbsTol', 0, ...
+                'the engine name must not change the answer by so much as an ULP');
+
+            % the case name is not case-sensitive, like every other engine name here
+            testCase.verifyEqual(f.conj('EXACT').kind(), 'QuaCon');
+
+            % 'symbolic' is the legacy engine under the name conjQ.m's own header uses for it
+            testCase.verifyTrue(isa(f.conj('symbolic'), 'RatPar'));
+            testCase.verifyEqual(class(f.conj('symbolic')), class(f.conj('cplq')));
+
+            % unknown and not-implemented names are unchanged
+            testCase.verifyError(@() f.conj('nosuchengine'), 'PLQ:conj:engine');
+            testCase.verifyError(@() f.conj('pqp'),          'PLQ:conj:engine');
+        end
+
+        function theExactEngineRefusesAnInexactInputBYNAMEThroughTheClassAPI(testCase)
+        % The refusal that matters most on this route: conjQ will not compute exactly on
+        % coefficients that are already wrong, and asking for it through `conj` must not soften
+        % that into a silent fallback to the symbolic engine.
+            V = [0 0; 2 0; 0 2];  E = [1 2 1; 2 3 1; 3 1 1];  F = repmat([1 0], 3, 1);
+            f = QuaPol(V, E, [0 0 0 0, 2, 0, 2, 0, 0, 0], F);
+            f.fN = [];  f.fD = [];                              % what the float pipeline produces
+            testCase.verifyError(@() f.conj('exact'), 'PLQ:QuaPol:notExact');
+        end
     end
 
     methods (Static)

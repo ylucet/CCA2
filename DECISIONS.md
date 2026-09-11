@@ -6945,3 +6945,58 @@ regexp over its own source, and two obvious patterns are both wrong: stopping th
 first `)` matches nothing, because the call's function handle carries parentheses; stopping it at
 the first `;` misses exactly the calls whose input holds a column vector `[0;0]`. Reassemble the
 statement from its continuation lines and take the LAST identifier in it.
+
+## 2026-09-11 — REFUTED: the "duplicate vertex" defect was the RAY argument all along
+
+`TODO.md` carried, from 2026-09-07: *`conjConvexPolygon` with a DUPLICATE VERTEX raises
+`MATLAB:catenate:dimensionMismatch`, not its own `degenerateEdge`*. Both halves are wrong, and the
+way they are wrong is the useful part.
+
+**A duplicate vertex was already refused by name.** Measured before touching anything: four base
+polygons x every duplication position x single and double duplication x bounded plus four ray
+pairs = 152 calls, giving 120 `conjConvexPolygon:degenerateEdge`, 22 `conjConvexPolygon:orientation`,
+10 clean answers and **zero unnamed errors**. The realistic entry points agree — `conjQ` of a
+QuaPol with a repeated vertex reports `PLQ:conjQ:degenerateEdge`, `conj(...,'cplq')` reports
+`conjConvexPolygon:degenerateEdge`.
+
+**The real trigger is `dFirst`/`dLast`, and the polygon is irrelevant to it.** `edgeList` builds
+`dir = [-dFirst(:).'; fin; dLast(:).']`, so a ray that is not a 2-vector — a scalar, a 3-vector, a
+matrix — dies in that concatenation. A **perfectly good triangle fails identically**, which is the
+observation that settles it: `conjConvexPolygon([0 0;1 0;1 1], 0, 0, eye(2), [0;0], 0)` raises
+`MATLAB:catenate:dimensionMismatch` with no duplicate vertex anywhere. The 2026-09-07 session was
+varying the vertices while passing `0` for the rays — exactly what the neighbouring `nargin` and
+`shape` exercises pass — and attributed the error to the variable it was changing.
+
+**The method note.** The diagnosis was reached by rung 1 of CLAUDE.md section 5: observe without
+editing, and shrink the failing case. Sweeping the *stated* cause first (152 calls, all named) is
+what forced the question "then what IS raising it", and the answer was one line away — the CONTROL
+case, a good polygon with the same ill-shaped rays, which nobody had run. **A defect report names
+the variable the reporter was changing, not necessarily the one that matters; run the control.**
+
+Fixed as `conjConvexPolygon:rayShape`, validated alongside the other arguments (zero direction
+included, since untouched it reaches `outwardNormal` and is reported as a degenerate EDGE — the
+wrong argument named). Red first, then green; `degenerateEdge` gained the exercise the TODO item
+was really asking for and left `guardExerciseTest`'s `todo` remainder.
+
+## 2026-09-11 — the exact engines are wired into the class API; the DEFAULT is deliberately not changed
+
+`conjQ`/`biconjQ` answered every 2-D domain and were callable only as free functions:
+`QuaPol.conj` dispatched to `conjCPLQ` with no engine name for the exact route at all, so
+`f.conj()` ran the slow symbolic pipeline whatever the input, and every caller outside the tests
+had no way to ask for the exact one. Now `conj(f,'exact')` and `biconj(f,'exact')` reach them, and
+`'symbolic'` is an alias for `'cplq'` — the name `conjQ.m`'s own header was already using for the
+legacy route in its refusal message.
+
+**Why `'cplq'` stays the default, which is the decision here.** `'exact'` returns a `QuaCon`;
+`'cplq'` returns a `RatPar`. They are siblings under `RatCon`, not one under the other, so making
+`'exact'` the default changes the static return type of every unqualified `f.conj()` in the
+project. That is the breaking change `RETURN_TYPE.md` owns and it belongs to a deliberate
+pre-tag decision, not to the act of wiring an engine in. Wiring and switching are two commits, and
+this is only the first.
+
+**Both engines are kept, and not merely for compatibility.** They answer strictly different sets:
+the exact route refuses an INEXACT QuaPol by name (`PLQ:QuaPol:notExact`, since computing exactly
+on coefficients that are already one ULP wrong returns exactly the wrong number with no warning),
+and the legacy float pipeline builds such objects at nine production call sites. A fallback from
+one to the other is exactly what `conjQ.m`'s header refuses, so the engine name is the only way to
+choose, and a test pins that the refusal survives the dispatch rather than softening into one.

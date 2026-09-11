@@ -92,9 +92,14 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   path wrote (verified by probe), so every constructor has a no-argument path that writes nothing.
   Degree is deliberately **not** a type (no code dispatches on it) — see `RETURN_TYPE.md`.
   See `RatPar.m`, `RatParTest.m`, `RETURN_TYPE.md`. The moves changed no existing test.
-- Conjugate engine **`'cplq'` only** (`conjCPLQ.m`, `conjPieceCPLQ.m`, `convEnvCPLQ.m`) —
-  incremental; each file's own header STATUS block lists exactly which piece-classification
-  cases are covered so far.
+- Conjugate engines **`'cplq'` (default) and `'exact'`** — `'cplq'` is the legacy symbolic route
+  (`conjCPLQ.m`, `conjPieceCPLQ.m`, `convEnvCPLQ.m`), incremental, with each file's own header
+  STATUS block listing which piece-classification cases are covered; `'symbolic'` is an alias for
+  it. **`'exact'` is `conjQ.m` / `biconjQ.m`**, the sym-free rational route — wired into
+  `QuaPol.conj` / `QuaPol.biconj` 2026-09-11, before which it was reachable only as a free
+  function. It returns a `QuaCon` where `'cplq'` returns a `RatPar`, which is why it is not the
+  default: the switch is the breaking change `RETURN_TYPE.md` owns, to be taken deliberately
+  before a tag.
 - `maxQuaPar.m` — pointwise max of two full-domain `QuaPar` objects (needed when Step 1 splits a
   nonconvex piece into more than one sub-piece). Now wired into `conjCPLQ`'s own Step 3
   (`conjMaxOfSubTriangles`, in `conjCPLQ.m`): a single bounded triangle whose indefinite quadratic

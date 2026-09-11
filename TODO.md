@@ -72,13 +72,25 @@ it is bookkeeping rather than new mathematics.
   - **A finding, not a gap: two guards are DEAD CODE.** `quaPolToPlq:cubic` and `ratPolToPlq:cubic`
     cannot fire — both routines call `assertOperable` first, so a cubic is always refused with
     `PLQ:op:unsupportedType`. Measured, pinned by a test, and recorded in `SUPPORT_MATRIX.md`.
-- [ ] **`conjConvexPolygon` with a DUPLICATE VERTEX raises an unnamed error** —
-  `MATLAB:catenate:dimensionMismatch`, not `conjConvexPolygon:degenerateEdge`, which is the defect
-  class the harness above exists for (a refusal that cannot report itself). Found while trying to
-  fire that guard, 2026-09-07. Small: either the duplicate is rejected by name up front, or
-  `outwardNormal`'s zero check has to run before the concatenation.
+- [x] **~~`conjConvexPolygon` with a DUPLICATE VERTEX raises an unnamed error~~ MISFILED; the real
+  defect found and fixed 2026-09-11.** A duplicate vertex was ALREADY refused by name — measured,
+  152 calls over four base polygons x every duplication position x bounded and four ray pairs:
+  120 `degenerateEdge`, 22 `orientation`, 10 clean answers, **0 unnamed**. The
+  `MATLAB:catenate:dimensionMismatch` came from the RAY argument, which the 2026-09-07 session was
+  passing as the scalar `0` (as the neighbouring `nargin`/`shape` exercises do) while varying the
+  vertices: `edgeList` builds `[-dFirst(:).'; fin; dLast(:).']`, so any `dFirst`/`dLast` that is
+  not a 2-vector dies there — a **perfectly good polygon fails identically**. Fixed as
+  `conjConvexPolygon:rayShape`, validated with the other arguments, zero direction included.
+  `conjConvexPolygon:degenerateEdge` is now exercised and leaves the `todo` remainder (6 -> 5).
+- [x] **The exact engines are reachable from the class API** — DONE 2026-09-11. `conjQ`/`biconjQ`
+  were free functions only: `QuaPol.conj` dispatched to `conjCPLQ` and had no engine name for the
+  exact route, so `f.conj()` ran the slow symbolic pipeline whatever the input. Now
+  `conj(f,'exact')` / `biconj(f,'exact')`, with `'symbolic'` as an alias for `'cplq'` (the name
+  `conjQ.m`'s own header already used). **The default is unchanged on purpose**: `'exact'` returns
+  a `QuaCon` where `'cplq'` returns a `RatPar`, and switching that is the breaking change
+  `RETURN_TYPE.md` owns, to be taken before a tag rather than as a side effect.
 - [ ] **The rest of the guard exercises**, in the order the harness's own reason classes give:
-  the 6 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a
+  the 5 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a
   SLOW-bucket file (they need a symbolic `region`/`plq_1p`, so they do not belong in the fast one).
   The `internal` and `loop-safety` classes are a deliberate stop, not a backlog: firing them needs
   an input their own site argues cannot exist, so the firing would prove self-reporting only.
