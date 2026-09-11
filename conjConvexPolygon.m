@@ -62,6 +62,30 @@ function g = conjConvexPolygon(W, dFirst, dLast, A, L, c)
              'piece has a different cell structure -- the sup can be infinite in a recession ' ...
              'direction -- and is handled elsewhere.'], ev(1), ev(2));
     end
+    % A RAY DIRECTION MUST BE A 2-VECTOR OR EMPTY, and it is checked HERE rather than where it is
+    % used. edgeList builds `dir = [-dFirst(:).'; fin; dLast(:).']`, so anything else -- a scalar,
+    % a 3-vector, a matrix -- dies in that concatenation as MATLAB:catenate:dimensionMismatch,
+    % which is a refusal that cannot report itself. Measured 2026-09-11: a PERFECTLY GOOD polygon
+    % fails that way once a ray is ill-shaped, so the trigger is the ray argument alone (the
+    % 2026-09-07 note in TODO.md filed it as a duplicate-VERTEX defect; duplicates are and were
+    % already refused by name, see conjConvexPolygonTest).
+    % A ZERO direction is caught here too: it is not a recession direction at all, and left alone
+    % it reaches outwardNormal and is reported as a degenerate EDGE of the polygon, which names
+    % the wrong argument.
+    for rr = {dFirst, 'dFirst'; dLast, 'dLast'}.'
+        d = rr{1};
+        if isempty(d), continue, end
+        if ~isnumeric(d) || ~isvector(d) || numel(d) ~= 2 || ~all(isfinite(d))
+            error('conjConvexPolygon:rayShape', ...
+                ['%s must be a finite 2-vector (row or column) or [] ; got %dx%d. A recession ' ...
+                 'direction is a point of the plane like any other.'], rr{2}, size(d,1), size(d,2));
+        end
+        if norm(double(d)) <= 0
+            error('conjConvexPolygon:rayShape', ...
+                '%s is the ZERO vector, which is not a recession direction.', rr{2});
+        end
+    end
+
     unbounded = ~isempty(dFirst) || ~isempty(dLast);
     if unbounded && (isempty(dFirst) || isempty(dLast))
         error('conjConvexPolygon:oneRay', ...

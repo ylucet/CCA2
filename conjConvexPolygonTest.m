@@ -209,6 +209,46 @@ classdef conjConvexPolygonTest < matlab.unittest.TestCase
                 end
             end
         end
+
+        function anIllShapedRayIsRefusedByNameNotByAConcatenation(testCase)
+        % A RAY DIRECTION THAT IS NOT A 2-VECTOR used to reach edgeList's concatenation
+        % [-dFirst(:).'; fin; dLast(:).'] and die as MATLAB:catenate:dimensionMismatch -- a
+        % refusal that cannot report itself, which is the defect class guardExerciseTest exists
+        % for. Found 2026-09-07 while trying to fire `degenerateEdge`, and MISFILED as a
+        % duplicate-vertex defect: measured 2026-09-11, every duplicate-vertex input is already
+        % refused by name (152 calls, 0 unnamed), and a PERFECTLY GOOD polygon fails the same way
+        % once a ray is ill-shaped. So the trigger is the ray argument alone.
+            W = [0 0; 1 0; 1 1];
+            A = eye(2); L = [0;0]; c = 0;
+            testCase.verifyError(@() conjConvexPolygon(W, 0, 0, A, L, c), ...
+                'conjConvexPolygon:rayShape', 'scalar rays');
+            testCase.verifyError(@() conjConvexPolygon(W, [1 0 0], [0 1 0], A, L, c), ...
+                'conjConvexPolygon:rayShape', '3-vectors');
+            testCase.verifyError(@() conjConvexPolygon(W, [1 0], zeros(2,2), A, L, c), ...
+                'conjConvexPolygon:rayShape', 'a matrix');
+            % a ZERO direction is a ray that goes nowhere -- also named, and not the same thing
+            testCase.verifyError(@() conjConvexPolygon(W, [0 0], [1 1], A, L, c), ...
+                'conjConvexPolygon:rayShape', 'a zero direction');
+            % and the legitimate shapes still work, in both orientations of the vector
+            g1 = conjConvexPolygon([0 0; 1 0], [0 1], [0 1], A, L, c);
+            g2 = conjConvexPolygon([0 0; 1 0], [0;1], [0;1], A, L, c);
+            testCase.verifyEqual(g1.nf, g2.nf, 'a column ray must behave as a row ray');
+        end
+
+        function aDuplicateVertexIsRefusedByItsOwnName(testCase)
+        % The guard `conjConvexPolygon:degenerateEdge` fires and reports itself, for a duplicate
+        % ANYWHERE in the walk and for bounded and unbounded polygons alike. This is the exercise
+        % `guardExerciseTest` listed as `todo`; it is written here, with the routine it belongs to.
+            A = eye(2); L = [0;0]; c = 0;
+            W0 = [0 0; 1 0; 1 1; 0 1];
+            for dupAt = 1:size(W0,1)
+                W = [W0(1:dupAt,:); W0(dupAt,:); W0(dupAt+1:end,:)];
+                testCase.verifyError(@() conjConvexPolygon(W, [], [], A, L, c), ...
+                    'conjConvexPolygon:degenerateEdge', sprintf('bounded, duplicate at %d', dupAt));
+            end
+            testCase.verifyError(@() conjConvexPolygon([0 0; 1 0; 1 0], [-1 1], [1 1], A, L, c), ...
+                'conjConvexPolygon:degenerateEdge', 'unbounded, duplicate in the finite walk');
+        end
     end
 
     methods (Static)
