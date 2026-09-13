@@ -1,10 +1,14 @@
-classdef (Abstract) Rat
+classdef (Abstract) Rat < Alg
    % Rat: the FUNCTION-type axis of a piecewise function -- rational (a polynomial numerator over a
    % linear denominator). One of the two axes every type in this family is built from; the other is
    % the SUBDIVISION-type axis, Par/Pol. See RatPar.m for the full picture.
    %
-   % Rat is the general case: `den` may be any linear form. Its specialization Qua pins the
-   % denominator to 1 (see Qua.m).
+   % Rat is the middle level of a three-level chain, Qua < Rat < Alg: its specialization Qua pins
+   % the denominator to 1 (see Qua.m), and its generalization Alg drops the requirement that a face
+   % have a FORMULA at all -- a face may be cut out implicitly, as `biconj`'s bridge faces are.
+   % See Alg.m for why that level exists and why it is still rational in its stored data.
+   % `isa(f,'Rat')` is the test that separates "has a formula" from "is a named root"; it is what
+   % AlgCon's `set.FP` validator uses to pin the algebraic payload to empty on every type here.
    %
    % A property-less ABSTRACT MARKER, deliberately. It carries no data and, for now, no methods:
    % all state lives once on RatPar, so that the concrete classes can inherit along BOTH axes
