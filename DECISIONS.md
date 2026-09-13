@@ -7064,3 +7064,45 @@ up to it. That is the same shape of change adding `Conic` above `Par` was in Aug
 cleanly, but it is a change to the root of a lattice 598 passing tests sit on, and it will not be
 made against an unverifiable build. `.claude/probeAlg/` holds the probe that settles it, written
 in the same style as the August probe table in `RETURN_TYPE.md`.
+
+## 2026-09-13 (landed) — `AlgCon` is the lattice ROOT, and it is CONCRETE
+
+The design entry above is now built. Two things were settled by probe rather than by argument,
+both in `.claude/probeAlg/` and both run before anything was committed — the same discipline
+`RETURN_TYPE.md`'s August table records for `Conic`.
+
+**Probe 1: `Alg` inserts ABOVE `Rat` cleanly.** The diamond still expresses, `isa` is right on both
+axes independently, a `set.` validator reading `isa(obj,'Rat')` pins the new payload from the root,
+and the leaf-only constructor protocol survives the deeper chain.
+
+**Probe 2: the root may be CONCRETE.** This is the question the naming forced. The concrete cells
+are `<Function><Subdivision>` — QuaPol, RatPol, QuaPar, QuaCon — and at `(Alg, Conic)` the root of
+the lattice and the concrete cell ARE THE SAME CELL, because `biconj` actually produces one. Either
+`AlgCon` is concrete or there are two names for one thing. Measured: an abstract class MAY inherit
+a concrete one, and the root's own constructor does NOT clobber the leaf (a `CQuaCon` built through
+the deeper chain kept its own value). So `AlgCon` is concrete and `RatCon` stays abstract under it.
+
+**What moved, and what did not.** `RatCon`'s properties, its `set.den`/`set.Ec` validators, the
+edge-flag statics and `kind`/`isMeshed`/`setPinnedDefaults` moved to `AlgCon` VERBATIM, error
+identifiers included — `RatPar:denMustBeTrivial` and `RatPar:EcMustBeZero` still read `RatPar:`
+because an error identifier is a public catchable name and the conditions they report are
+unchanged (`RatParTest` pins both). `RatCon` keeps its header and nothing else. No existing type's
+behaviour changed: everything that was a `RatCon` still is one and is additionally an `Alg`, which
+is the honest reading — a rational function IS algebraic.
+
+**The new pin, from one site.** `FP`/`FB` are general on an `Alg` and PINNED TO EMPTY on a `Rat`,
+enforced by validators reading the object's own trait, exactly as `den` is pinned on a `Qua` and
+`Ec` on a `Pol`. Checked on all four rational types at once, so a type added later is covered
+without either class naming the other. All-zero `FB` is legal everywhere: that is what a face WITH
+a formula carries, and refusing it would force a producer to special-case its own bookkeeping.
+
+**One test defect found and fixed in the writing, worth recording because the syntax is a trap.**
+`?Rat.SuperclassList` parses as `?(Rat.SuperclassList)`, not as the superclass list of `Rat`. The
+working form is `meta.class.fromName('Rat').SuperclassList`, and the test asks for DIRECT
+superclasses deliberately: `isa` cannot tell a chain with a level silently inserted or skipped from
+one without, and the point of the test is the ORDER of the axis.
+
+**Still not built, deliberately.** Nothing PRODUCES an `AlgCon` yet, and its exact conic storage
+(`Vname`, `EcQ`, `FC`) still lives on `QuaCon`. Lifting those to the root is mechanical and is left
+until the assembly needs them, so their shape is driven by a real caller instead of guessed —
+which is the same reason the payload here is two fields and not the four the 2026-08-23 plan listed.

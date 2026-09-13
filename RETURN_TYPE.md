@@ -117,6 +117,27 @@ four named classes are the cells of that grid and inheritance is the grid's part
       QuaPol                        < RatPol & QuaPar
 ```
 
+**Both axes have since grown a third level, ABOVE the previous top in each case, so no existing
+type's behaviour changed either time.** The subdivision axis gained `Conic` in August, because a
+conjugate's edges are only parabolic when the two pieces compared are ADJACENT
+(`CONJ_FIELD_PROOF.md` Theorem 3; `doc/QuaConExampleProof.md` proves the general statement and
+gives the two integer determinants that decide it) — `RatCon` and `QuaCon` are its cells. The
+function axis gained **`Alg`** on 2026-09-13, because the convex envelope's bridge face is affine
+PLUS A NORM and neither `Qua` nor `Rat` can hold it; a face on an `Alg` carries an integer
+polynomial `p(x,y,z)` and a BRANCH INDEX naming which real root in `z` is its value, instead of a
+formula. See `Alg.m`, `AlgCon.m` and `DECISIONS.md` 2026-09-13.
+
+So the lattice is now a 3 x 3 product, `Qua < Rat < Alg` against `Pol < Par < Conic`, with
+**`AlgCon` as its root and the one place the mesh data is declared** — `RatCon < AlgCon & Rat`,
+and everything below is unchanged.
+
+**`AlgCon` is CONCRETE where `RatCon` is abstract**, the one place this lattice departs from the
+pattern above: the concrete cells are named `<Function><Subdivision>`, and at `(Alg, Conic)` the
+root of the lattice and the concrete cell are the SAME cell, because `biconj` actually produces
+one. Two probes settled that before it was committed (`.claude/probeAlg/`), in the style of the
+table below — an abstract class may inherit a concrete one, and the root's own constructor does
+NOT clobber the leaf, so the constructor protocol is unaffected.
+
 Four MATLAB-specific facts settled the mechanics, each verified by probe before committing:
 
 | Probe | Result | Consequence |

@@ -81,11 +81,24 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   `QuaPol < RatPol & QuaPar` (a genuine diamond — that is what a product lattice is);
   `QuaParCPLQ < RatPar & Qua` carries the same maths as a `QuaPar` but no mesh, so it deliberately
   does NOT inherit from `QuaPar` (`isMeshed()` is the intended test).
-  **All data lives on `RatPar` alone** — including `den` and `Ec` — because MATLAB makes a property
-  defined in two superclasses fatal AND unresolvable (`conflictingSuperClassProperty`;
+  **Both axes have since grown a THIRD level, above the previous top, so no existing type's
+  behaviour changed either time**: the subdivision axis gained `Conic` (an edge may be any conic —
+  a conjugate's edges are only parabolic when the pieces compared are ADJACENT, see
+  `doc/QuaConExampleProof.md`), and the function axis gained **`Alg`** on 2026-09-13 (a face may
+  have no FORMULA, being cut out implicitly by an integer polynomial `p(x,y,z)` plus a BRANCH INDEX
+  naming which real root in `z` is its value — the convex envelope's bridge face is affine plus a
+  norm, which neither `Qua` nor `Rat` can hold). So the lattice is a 3 x 3 product,
+  `Qua < Rat < Alg` against `Pol < Par < Conic`, and its root is **`AlgCon < Alg & Conic`**, with
+  `RatCon < AlgCon & Rat`. `AlgCon` is CONCRETE where the other interior levels are abstract,
+  because at `(Alg, Conic)` the root and the concrete cell are the same cell — `biconj` produces
+  one. See `Alg.m`, `AlgCon.m`, `algBranch.m`.
+  **All data lives on `AlgCon` alone** — `den`, `Ec`, and the algebraic payload `FP`/`FB` — because
+  MATLAB makes a property defined in two superclasses fatal AND unresolvable (`conflictingSuperClassProperty`;
   `RedefinedProperty` in the child), which would otherwise make `QuaPol` unconstructible. Each
-  type's pinned value is therefore enforced by `set.den`/`set.Ec` validators that read the object's
-  own traits: one definition site, whole lattice, and no type can lie about itself. `kind()`
+  type's pinned value is therefore enforced by `set.den`/`set.Ec`/`set.FP` validators that read the
+  object's own traits — `den` pinned to 1 on a `Qua`, `Ec` to 0 on a `Pol`, `FP`/`FB` to EMPTY on a
+  `Rat`: one definition site, whole lattice, and no type can lie about itself, including types that
+  do not exist yet. `kind()`
   returns the concrete type name derived from `class(obj)` rather than stored, so it cannot drift.
   A **leaf-only constructor protocol** is required and documented in `RatPar.m`: MATLAB re-runs a
   shared base constructor once per inheritance path, and the second run *clobbers* what the first

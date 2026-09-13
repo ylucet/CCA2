@@ -89,18 +89,23 @@ it is bookkeeping rather than new mathematics.
   `conjQ.m`'s own header already used). **The default is unchanged on purpose**: `'exact'` returns
   a `QuaCon` where `'cplq'` returns a `RatPar`, and switching that is the breaking change
   `RETURN_TYPE.md` owns, to be taken before a tag rather than as a side effect.
-- [ ] **THE `Alg` LEVEL — the type `biconj` needs.** Design settled and the evaluator's
-  mathematics verified 2026-09-13 (DECISIONS.md); **blocked on the MATLAB licence** (UBC VPN down),
-  so nothing is committed. In the working tree, unverified: `Alg.m` (the trait), `Rat.m` gaining
-  `< Alg`, `algBranch.m` (evaluate the b-th ascending real root of an implicit face) and
-  `algBranchTest.m`. **One command verifies them**:
-  `bash .claude/suite.sh --fast && bash .claude/suite.sh algBranchTest`, plus
-  `matlab -batch "addpath('.claude/probeAlg'); probeRun"` for the lattice probe.
-  Then, in order: (a) run the probe and settle where the lattice data lives — `Alg` above `Rat`
-  makes `AlgCon` the root, so `RatCon`'s properties and `QuaCon`'s exact ones (`Vname`, `EcQ`,
-  `fN`, `fD`, `FC`) move up to it; (b) write `AlgCon` itself, carrying `FP` (the per-face integer
-  polynomial) and `FB` (the branch index) pinned to empty on every `Rat`; (c) add `algBranchTest`
-  to `suite.sh`'s fast bucket.
+- [x] **THE `Alg` LEVEL — DONE 2026-09-13.** The function axis gained its top level and the lattice
+  is now a 3 x 3 product, `Qua < Rat < Alg` against `Pol < Par < Conic`, with **`AlgCon` as its
+  root** and `RatCon` thin above nothing. A face on an `Alg` carries an integer polynomial
+  `p(x,y,z)` and a BRANCH INDEX instead of a formula; `algBranch.m` evaluates that pair.
+  - **One face kind, not four.** The implicit form SUBSUMES the planned `AFFINE` cell, because a
+    degree-4 dual vertex satisfies its own minimal polynomial over Q. `src` demoted from the
+    definition of a value to PROVENANCE. DECISIONS.md 2026-09-13.
+  - **Two probes settled the mechanics first** (`.claude/probeAlg/`): `Alg` inserts above `Rat`
+    cleanly, and the root may be CONCRETE — which is what lets `AlgCon` be one class rather than
+    two names for the cell at `(Alg, Conic)`.
+  - **Verified twice.** A Python differential oracle ran while MATLAB was unavailable and caught a
+    wrong ASSERTION in the test (a double root is TWO roots). The measured bridge face is
+    reproduced from its implicit quadric with a ROOT GAP of 1.5e-15, and 200 swept paths confirm
+    the branch index names a CONTINUOUS branch (2.0e-13).
+  - **What is NOT built, and is task 2's job:** the PRODUCER. Nothing fills `FP`/`FB` yet, and
+    `AlgCon`'s exact conic storage (`Vname`, `EcQ`, `FC`) still lives on `QuaCon` — it lifts when
+    the assembly needs it, so its shape is driven by a real caller rather than guessed.
 - [ ] **The rest of the guard exercises**, in the order the harness's own reason classes give:
   the 5 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a
   SLOW-bucket file (they need a symbolic `region`/`plq_1p`, so they do not belong in the fast one).
