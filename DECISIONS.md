@@ -7000,3 +7000,67 @@ on coefficients that are already one ULP wrong returns exactly the wrong number 
 and the legacy float pipeline builds such objects at nine production call sites. A fallback from
 one to the other is exactly what `conjQ.m`'s header refuses, so the engine name is the only way to
 choose, and a test pins that the refusal survives the dispatch rather than softening into one.
+
+## 2026-09-13 — the `Alg` level: IMPLICIT subsumes AFFINE, so `src` is provenance and not the definition
+
+**Deciding the shape of the type before building it**, and one simplification found on the way that
+removes three of the four planned face kinds.
+
+**The 2026-08-23 plan** gave `biconj`'s return `fkind` in {QUAD, RAT, RULED, AFFINE}, the AFFINE
+case being `<p,x> - f*(p)` with `p` a dual vertex of degree up to 4. Its coefficients are
+irrational unless the cell NAMES that vertex, and naming it means holding the `QuaCon` it lives in
+— which is what "stored as a DECORATION of the QuaCon" was for.
+
+**It is not needed.** `p` satisfies its own minimal polynomial over Q, so eliminating `p` from
+`z = <p,x> - f*(p)` leaves a relation in `(x,y,z)` with RATIONAL coefficients, of degree at most 4
+in `z`. An AFFINE face is therefore an implicit face like any other, and the S4 vertex of
+`doc/QuaConExample.md` — three pieces tying at one dual point of degree 4 — is stored exactly as
+the two-piece bridge that sweeps a curve. **One face kind, not four**: an integer polynomial plus a
+branch index. `src` survives on `AlgCon` as PROVENANCE (which dual vertex a face came from, wanted
+for the classification table and for debugging), never as the definition of a value.
+
+**So the type is `AlgCon`, not `AlgAlg`.** Only the FUNCTION axis grows. The subdivision stays
+conic because the bridge REGION was measured to be the intersection of exactly two sign conditions
+on two conics (`.claude/bridgeRegionSides.m`, `.claude/bridgeRegionCross.m`) and the non-bridge
+regions are polyhedral — no edge needs a shape `Conic` cannot already hold.
+
+**The branch index is a NAME, on the argument `QuaCon.Vname` already uses one dimension down.** A
+vertex there is `[edgeA edgeB rootIdx]` rather than a pair of coordinates, because the coordinates
+are irrational and the name is not. Here the b-th ASCENDING real root of `p(x,y,.)` names the
+value for the same reason. It is well defined on a face: two real roots can only swap by
+colliding, and a collision means `p` and `dp/dz` share a root, i.e. the discriminant in `z`
+vanishes — an algebraic curve in `(x,y)`, so it meets the interior of a well-formed face nowhere.
+Across faces it may name a different branch, which is why `b` is stored PER FACE.
+
+**COUNTED WITH MULTIPLICITY, and that is a decision.** A double root is two entries, so branches
+`b` and `b+1` agree at a merge. Collapsing them would need a tolerance — `roots` separates a true
+double root by about `sqrt(eps)`, never exactly — and that tolerance would be deciding a
+STRUCTURAL question (do two branches merge here), which is the one kind of question this project
+never lets a tolerance answer. Caught by the oracle below, as a wrong assertion in the test rather
+than a wrong line in the code.
+
+**Verified by a DIFFERENTIAL ORACLE IN PYTHON, because MATLAB could not be run** (UBC licence
+server unreachable; `CLAUDE.md` says to say so rather than reason about what a run would show).
+The same algorithm written independently against the same fixtures checks the MATHEMATICS —
+substitution, ascending order, branch selection, degeneracy — though not the MATLAB syntax:
+
+* the cone `z^2 = x^2 + y^2` gives exactly `-|x|` and `+|x|` on branches 1 and 2;
+* a branch that does not exist is `NaN` and never a plausible number;
+* a quartic with four distinct real roots is selected by INDEX, so an implementation sorting by
+  `|z|` instead of `z` would get two of them wrong — it does not;
+* **the measured bridge face is reproduced from its implicit form**: for `q1 = |v|^2/2`,
+  `q2 = |v-a|^2 + c`, the quadric `(z - <2a,x-2a> - 2c)^2 - R^2|x-2a|^2 = 0` with `R^2 = 4(|a|^2-c)`
+  rational, upper branch, matches the closed form `<2a,x-2a> + R|x-2a| + 2c` of 2026-09-05, and the
+  **ROOT GAP is 1.5e-15** — the envelope's value IS a root of the stored polynomial, which is the
+  statement the representation rests on;
+* **200 swept paths** across a face, degrees 2 to 4, roots drifting affinely: the selected value
+  tracks the b-th ascending root to 2.0e-13, so the index really does name a CONTINUOUS branch
+  rather than a value that jumps between them. That is the property no fixture can show.
+
+**Not yet decided, and deliberately not guessed: where the lattice data lives.** Putting `Alg`
+above `Rat` makes `AlgCon` the root of the lattice, so `RatCon`'s properties — and `QuaCon`'s exact
+ones (`Vname`, `EcQ`, `fN`, `fD`, `FC`), which an `AlgCon` needs for the same reasons — would move
+up to it. That is the same shape of change adding `Conic` above `Par` was in August and it landed
+cleanly, but it is a change to the root of a lattice 598 passing tests sit on, and it will not be
+made against an unverifiable build. `.claude/probeAlg/` holds the probe that settles it, written
+in the same style as the August probe table in `RETURN_TYPE.md`.

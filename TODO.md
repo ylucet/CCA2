@@ -89,6 +89,18 @@ it is bookkeeping rather than new mathematics.
   `conjQ.m`'s own header already used). **The default is unchanged on purpose**: `'exact'` returns
   a `QuaCon` where `'cplq'` returns a `RatPar`, and switching that is the breaking change
   `RETURN_TYPE.md` owns, to be taken before a tag rather than as a side effect.
+- [ ] **THE `Alg` LEVEL — the type `biconj` needs.** Design settled and the evaluator's
+  mathematics verified 2026-09-13 (DECISIONS.md); **blocked on the MATLAB licence** (UBC VPN down),
+  so nothing is committed. In the working tree, unverified: `Alg.m` (the trait), `Rat.m` gaining
+  `< Alg`, `algBranch.m` (evaluate the b-th ascending real root of an implicit face) and
+  `algBranchTest.m`. **One command verifies them**:
+  `bash .claude/suite.sh --fast && bash .claude/suite.sh algBranchTest`, plus
+  `matlab -batch "addpath('.claude/probeAlg'); probeRun"` for the lattice probe.
+  Then, in order: (a) run the probe and settle where the lattice data lives — `Alg` above `Rat`
+  makes `AlgCon` the root, so `RatCon`'s properties and `QuaCon`'s exact ones (`Vname`, `EcQ`,
+  `fN`, `fD`, `FC`) move up to it; (b) write `AlgCon` itself, carrying `FP` (the per-face integer
+  polynomial) and `FB` (the branch index) pinned to empty on every `Rat`; (c) add `algBranchTest`
+  to `suite.sh`'s fast bucket.
 - [ ] **The rest of the guard exercises**, in the order the harness's own reason classes give:
   the 5 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a
   SLOW-bucket file (they need a symbolic `region`/`plq_1p`, so they do not belong in the fast one).
