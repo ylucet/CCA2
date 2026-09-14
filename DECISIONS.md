@@ -7159,3 +7159,28 @@ disagreement 0). And the three VERTEX cells of a conjugate carry AFFINE faces (`
 have neither a stationary point nor a facet-interior maximiser and contribute exactly ONE face
 each: a routine exercised only on the interior cell would look complete while two of its three
 branches had never run.
+
+## 2026-09-13 — TANGENTIAL ties are the MAJORITY of bridges, so a sign-only prune is refuted harder than recorded
+
+`DECISIONS.md` 2026-09-06 recorded that using `s ~= 0` from `ratQ.quadSignOnPoly` as Filter 2's
+prune test dropped a real bridge, and `quadSignOnPoly`'s own header says why: `+1` means `q >= 0`,
+which ALLOWS `q = 0` somewhere -- a TANGENTIAL tie, which carries a bridge face exactly as a
+transversal one does. Only `strict` licenses a prune.
+
+**Measured for the first time while promoting the walk into `envelopeCellPairs`, and it is not a
+corner case:**
+
+| fixture | transversal | TANGENTIAL |
+|---|---|---|
+| unit square, c = 0 (CONVEX) | 0 | **10** |
+| unit square, c = -1 | 3 | 8 |
+| unit square, c = -2 | 2 | 6 |
+
+So tangential is the majority throughout and on the CONVEX fixture it is EVERY SINGLE BRIDGE: a
+sign-only prune would drop all ten there, which is the whole envelope, not one face. Pinned per
+fixture in `envelopeCellPairsTest` so the split stays visible rather than asserted away.
+
+**It also refuted this file's own first test**, which asserted that every bridge takes both signs.
+Sampling can CONFIRM a sign change and can never prove one absent, so the assertions are now split
+by what each direction supports: a sampled sign change FORCES the bridge classification, a poly
+pair may never show both signs. Do not re-assert the converse.
