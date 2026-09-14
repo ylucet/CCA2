@@ -7106,3 +7106,56 @@ one without, and the point of the test is the ORDER of the axis.
 (`Vname`, `EcQ`, `FC`) still lives on `QuaCon`. Lifting those to the root is mechanical and is left
 until the assembly needs them, so their shape is driven by a real caller instead of guessed —
 which is the same reason the payload here is two fields and not the four the 2026-08-23 plan listed.
+
+## 2026-09-13 — the envelope's PRIMAL regions are CONSTRUCTED, not traced; and a transpose that dropped a term
+
+`.claude/cellFaceRegionProbe.m` established on 2026-09-07 that the non-bridge candidate regions are
+POLYHEDRAL, by tracing boundaries along rays and fitting lines (25 arcs, worst residual 1.3e-3
+against a trace step of 4.5e-3). That is evidence about the SHAPE; it does not give the regions.
+`envelopeCellRegions.m` now constructs them, exactly, and the probe's conclusion is what says the
+construction is looking for the right thing.
+
+**The whole routine is ONE KKT condition written three times.** Over a cell `P` the envelope's
+contribution is `h(x) = sup { <s,x> - g(s) : s in P }`, concave in `s`, so `s0` is the maximiser
+exactly when `Y - N s0` lies in the NORMAL CONE of `P` at `s0`, with `Y = dd*x - m` integer-affine
+in `x`. A maximiser lies in the relative interior of exactly one face of `P` and that face's normal
+cone is fixed, so there are three cases -- stationary, facet, vertex -- and in each one BOTH SIDES
+of the condition are affine in `x`. Clearing by `det(N) > 0`, by `w'Nw > 0` and by `det(Acol)` (with
+its SIGN carried) turns each into integer rows. Nothing is fitted and nothing is sampled.
+
+**THE BUG, and the check that found it.** The vertex case uses two 2x2 matrices that are
+TRANSPOSES of each other: `v` solves the ROW system `[a_i'; a_j'] v = [-c_i; -c_j]`, while the
+normal cone combines the COLUMNS `[a_i a_j]`. Using one for the other still type-checks and still
+produces a plausible vertex -- it put a cone's apex at `(2,0)` instead of `(2,2)`, so that face came
+out as `2*x1 - 1` where it must be `2*x1 + 2*x2 - 2`, silently dropping the whole `x2` term.
+
+It was caught by the ONE ORACLE-FREE CHECK available here: `h` is a SUP, so for any `s` FEASIBLE in
+the cell, `h(x) >= <s,x> - g(s)`. A face value beaten by a feasible point understates the sup and is
+a defect whatever the region says -- no reference implementation, no enumeration, no tolerance
+beyond the arithmetic. Worst overshoot went from 5.45 to exactly 0, and the worst disagreement with
+an independent enumeration from 2.2 to 9.4e-16. **A no-overshoot check is worth more than an
+oracle, because it cannot share a mistake with the thing it is checking**, and it is available for
+every sup this project computes.
+
+**The regions are EXACTLY the set where the sup is finite** -- 0 holes and 0 false faces over 5040
+points across six pieces. Coverage below 100% is the ANSWER, not a gap: a cell of a conjugate is
+generally an unbounded cone, so for many `x` the sup diverges and there is correctly no region.
+
+**Deciding that complement took three attempts, and the first two are the recorded defect class
+repeating.** A rejection sampler starves in a narrow cone at large radius and reported false
+"not divergent" with NEGATIVE growth -- the tell that the measurement had run out of samples rather
+than that the sup had settled. Replacing it with a grid of DIRECTIONS only moved the problem into
+the grid's own resolution: 501 directions manufacture 61 false holes where 2001 and 10001 give
+none. That is exactly `DECISIONS.md` 2026-09-07's "threshold below the measurement's own
+resolution". The sampling is now gone: along a recession direction `r` the objective behaves as
+`t<r,Y> - t^2 (r'Nr)/2`, so the sup diverges iff some `r` in `rec(P)` has `r'Nr = 0` and `r'Y > 0`,
+and since `N` is PSD that is a question about the NULL SPACE of `N` -- decided by its rank, in
+integers, with the rank-0 case settled by Farkas.
+
+**Two further measurements worth keeping.** The regions are DISJOINT: 1050 random draws found no
+point in two of them, so the ties live on a measure-zero set and continuity across a boundary can
+only be checked on CONSTRUCTED points (bisection between two points in different regions -- worst
+disagreement 0). And the three VERTEX cells of a conjugate carry AFFINE faces (`N = 0`), so they
+have neither a stationary point nor a facet-interior maximiser and contribute exactly ONE face
+each: a routine exercised only on the interior cell would look complete while two of its three
+branches had never run.
