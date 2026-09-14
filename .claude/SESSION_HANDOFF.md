@@ -9,8 +9,8 @@ _2026-09-14_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main` @ `294c617` — "docs: record the TANGENTIAL-bridge measurement"
-- Pushed: pending — 10 commits ahead of `origin/main`
+- Branch `main` @ `e110130` — "chore: update session handoff"
+- Pushed: yes — `origin/main` @ `e110130`
 - Tests: fast 630/0 (09-13) · normal 13/0 (09-11) · slow 98/0 · verylong 37/0
   (09-06/07, not re-run since)
 - Known reds: none
