@@ -20,6 +20,15 @@ function faces = envelopeCellRegions(N, m, q, dd, P)
 %                    .R    r x 3 integer rows [a b c] meaning a*x1 + b*x2 + c >= 0 -- the region
 %                    .fN   1x10 integer numerator in the 10-wide weighted basis
 %                    .fD   positive integer denominator, so the face is ratQ.evalFace(fN, fD, x)
+%                    .S    the MAXIMISER that produced the value, as the integer affine map
+%                          s*(x) = (S.Mn*x + S.tn)/S.d with S.d > 0
+%
+% WHY THE MAXIMISER IS RETURNED AND NOT JUST THE VALUE. On a BRIDGE pair the sup is taken over one
+% SIDE of the tie conic, not over the whole cell, and a candidate is admissible exactly where its
+% own maximiser is on that side -- i.e. where q(s*(x)) has the right sign. Since s*(x) is affine,
+% that pulls back to a CONIC condition in x (ratQ.substAffine), which an H-form cell can carry and
+% which is decided in integers. Without the map the caller would have to re-derive it per candidate
+% kind, and the KKT case analysis that produced it lives here.
 %
 % ------------------------------------------------------------------------------------------------
 % THE MATHEMATICS, because the whole routine is one KKT condition written three times.
@@ -89,7 +98,7 @@ function faces = envelopeCellRegions(N, m, q, dd, P)
         error('envelopeCellRegions:denominator', 'dd must be positive; got %g.', dd);
     end
     m = m(:);
-    faces = struct('who', {}, 'R', {}, 'fN', {}, 'fD', {});
+    faces = struct('who', {}, 'R', {}, 'fN', {}, 'fD', {}, 'S', {});
     k = size(P,1);
     if k == 0, return, end
 
@@ -111,7 +120,9 @@ function faces = envelopeCellRegions(N, m, q, dd, P)
             fN(8)  = -2 * dd * Km(1);
             fN(9)  = -2 * dd * Km(2);
             fN(10) = m.'*Km - 2*q*detN;
-            faces(end+1) = mkFace('stationary', 0, 0, R, fN, 2*detN*dd); %#ok<AGROW>
+            % s*(x) = K*Y/detN with Y = dd*x - m
+            S = mkMap(dd*K, -Km, detN);
+            faces(end+1) = mkFace('stationary', 0, 0, R, fN, 2*detN*dd, S); %#ok<AGROW>
         end
     end
 
@@ -166,7 +177,9 @@ function faces = envelopeCellRegions(N, m, q, dd, P)
         fN(8)  = 2*na*DND*dd*P0(1) + 2*beta*alpha(1);
         fN(9)  = 2*na*DND*dd*P0(2) + 2*beta*alpha(2);
         fN(10) = -2*na*DND*(P0.'*m) - DND*(P0.'*N*P0) - 2*na^2*DND*q + beta^2;
-        faces(end+1) = mkFace('facet', i, 0, R, fN, 2*na^2*DND*dd); %#ok<AGROW>
+        % s*(x) = (P0 + tau* w)/na with tau* = U/DND and U = alpha'x + beta
+        S = mkMap(w*alpha.', P0*DND + beta*w, na*DND);
+        faces(end+1) = mkFace('facet', i, 0, R, fN, 2*na^2*DND*dd, S); %#ok<AGROW>
     end
 
     % ---- 3. ONE CANDIDATE PER VERTEX ----------------------------------------------------------
@@ -206,15 +219,27 @@ function faces = envelopeCellRegions(N, m, q, dd, P)
             fN(8)  = 2 * vd * dd * V0(1);
             fN(9)  = 2 * vd * dd * V0(2);
             fN(10) = -2*vd*(V0.'*m) - V0.'*N*V0 - 2*q*vd^2;
-            faces(end+1) = mkFace('vertex', i, j, R, fN, 2*vd^2*dd); %#ok<AGROW>
+            % s*(x) = v, a CONSTANT: the vertex does not move with x
+            S = mkMap(zeros(2), V0, vd);
+            faces(end+1) = mkFace('vertex', i, j, R, fN, 2*vd^2*dd, S); %#ok<AGROW>
         end
     end
 end
 
 % ------------------------------------------------------------------------------------------------
-function f = mkFace(kind, i, j, R, fN, fD)
+function f = mkFace(kind, i, j, R, fN, fD, S)
     if fD < 0, fN = -fN;  fD = -fD; end
     [fN, fD] = ratQ.canon(fN, fD);
     f = struct('who', struct('kind', kind, 'facet', i, 'facet2', j), ...
-               'R', R, 'fN', fN, 'fD', fD);
+               'R', R, 'fN', fN, 'fD', fD, 'S', S);
+end
+
+% ------------------------------------------------------------------------------------------------
+function S = mkMap(Mn, tn, d)
+% The maximiser as s*(x) = (Mn*x + tn)/d, with the denominator kept POSITIVE so a caller can read
+% a sign off the numerator without carrying one.
+    if d < 0, Mn = -Mn;  tn = -tn;  d = -d; end
+    S = struct('Mn', ratQ.chk(Mn, 'maximiser map'), ...
+               'tn', ratQ.chk(tn(:), 'maximiser translation'), ...
+               'd',  ratQ.chk(d, 'maximiser denominator'));
 end

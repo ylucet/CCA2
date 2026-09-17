@@ -7256,3 +7256,69 @@ substitutes the witness into `FP` and clears its denominator to the total degree
 squares that. One fixture in four reaches 2^53 there and is refused as `bridgeFaceAlg:branchOverflow`
 -- a named refusal, not a raw `ratQ:overflow`. The general answer is the modular route this file
 already records for `ratQ`, not a different witness.
+
+## 2026-09-17 — the bridge face needs the CUT, not a max-fold: the Conic level is ENOUGH for the envelope
+
+The assembly is `f** = MAX over cell pairs of (sup over the pair)`, and the pairs' PRIMAL regions
+overlap, so something has to resolve the max. For the quadratic faces that is settled -- `maxQ`
+folds two QuaCons exactly. For a BRIDGE face it would not be: the boundary
+`{ bridge value = a quadratic }` is `FP` with z replaced by that quadratic, a curve of degree well
+past a conic, **which the Conic subdivision level cannot hold at all**. If bridge faces had to be
+max-folded, `AlgCon` would be the wrong type for the answer.
+
+**They do not.** Measured on the unit square at c = -1, on the one bridge pair whose cells are both
+nondegenerate, 86 points of the bridge region against a numeric `sup_s [<s,x> - max(gA,gB)(s)]`:
+
+| | maximiser s* INSIDE the pair P | s* outside P |
+|---|---|---|
+| bridge value = the envelope | **14** | 0 |
+| bridge value BEATEN by the envelope | **0** | **72** |
+
+Perfectly separated. Every point where the bridge loses is a point swept from a part of the tie
+conic that is NOT IN THIS PAIR -- the face claiming ground it does not own -- and every point it
+owns, it wins. So the missing step is the CUT (restrict the sweep to the tie ARC inside P), which
+is geometry, and NOT a max-fold against other pairs. Every boundary stays a conic and `AlgCon` is
+the right return type.
+
+**What the cut is, for whoever builds it.** The arc's endpoints are the tie conic meeting a facet
+LINE, so each is a quadratic irrational and the segment the sweep contributes there has coefficients
+in `Q(s_e)` -- not an integer line. The two CONJUGATE segments together are an integer conic (the
+product of two conjugate linear forms is rational), i.e. a degenerate line-pair conic, which an
+`Ec` row can hold. The open question is disambiguating the sign: a line pair's sign condition names
+two opposite wedges, so the cut needs either the other rows to exclude one, or the degree-2 sign
+kernel to pick the branch. That is the whole of `TODO.md` 2026-09-06 item 1, now with its boundary
+measured rather than guessed.
+
+**Do not build a max-fold for algebraic faces on the strength of an uncut region.** The uncut
+region is bigger than the face, and everything it appears to lose, it loses there.
+
+## 2026-09-17 — `bridgeFaceAlg` answers the GENERIC pair; the pairs real fixtures produce are DEGENERATE
+
+The producer was written and verified against pairs of nondegenerate quadratics, which is what
+every bridge probe in `.claude/` had ever used. Run on the pipeline's own fixtures it mostly
+refuses, and the count is the finding:
+
+| fixture | bridge pairs | built | refused |
+|---|---|---|---|
+| unit square, c = 0 | 10 | 0 | 10 |
+| unit square, c = -1 | 11 | **1** | 10 |
+| unit square, c = -2 | 8 | 0 | 8 |
+
+28 of 29 refused, by three names: `vertexCell` (the cell's face is AFFINE, so grad g is constant),
+`edgeCell` (a rank-1 Hessian, so grad g collapses the plane onto a line) and `degreeInMu` (BOTH
+faces affine, so `M_mu` vanishes identically and there is no family to be stationary in).
+
+**This is the shape of a conjugate, not bad luck.** `f*` of a quadratic on a polygon has ONE
+full-rank cell and then one rank-1 cell per edge and one affine cell per vertex, so degenerate
+cells are the majority of any overlay and the generic pair is the rare one.
+
+**The value side extends without new mathematics; the REGION side does not.** The discriminant needs
+only that `det(M_mu)` is not identically zero, which holds whenever at least one face is
+nondegenerate -- so `FP` is already computable for a vertex or edge cell. What fails is the region:
+`grad g` must be invertible for the boundary to be the IMAGE conic, and for a vertex cell that end
+of the sweep is a POINT, making the region a FAN rather than a band. The fan's other boundary is
+the pair of TANGENT LINES from that point to the image conic, which is rational -- the polar
+construction, `(polar)^2 - C(P) C = 0` -- so it is constructible, just not constructed.
+
+Order for whoever takes it: vertex x quadratic (fan, polar conic), edge x quadratic, then affine x
+affine, which is a max of affine functions and needs no curve at all.

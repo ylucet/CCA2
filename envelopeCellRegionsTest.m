@@ -46,6 +46,39 @@ classdef envelopeCellRegionsTest < matlab.unittest.TestCase
                 sprintf('a feasible s beat its own face by %.3e', worst));
         end
 
+        function theRETURNEDMAPISTheMaximiserItClaimsToBe(testCase)
+        % `.S` says WHERE the sup is attained, as an affine map in x, and the assembly uses it to
+        % decide whether a candidate is admissible on a bridge pair -- so a wrong map would place a
+        % face on the wrong side of a tie and nothing else would notice. The check is the
+        % definition: s*(x) must be FEASIBLE for the cell, and it must ACHIEVE the face's own value.
+        % Both directions are needed -- a feasible point that does not achieve, or an achieving
+        % point outside the cell, are opposite defects and the value alone sees neither.
+            rng(20260917);
+            g = conjQ(envelopeCellRegionsTest.tri([0 0; 1 0; 1 1], 0));
+            nTested = 0;  worstGap = 0;  infeasible = 0;
+            for k = 1:g.nf
+                [N, m, q, dd, P] = envelopeCellRegionsTest.cellData(g, k);
+                if isempty(P), continue, end
+                faces = envelopeCellRegions(N, m, q, dd, P);
+                X = (rand(60,2) - 0.5) * 8;
+                for t = 1:size(X,1)
+                    x = X(t,:).';
+                    f = envelopeCellRegionsTest.locate(faces, x.');
+                    if isempty(f), continue, end
+                    s = (f.S.Mn * x + f.S.tn) / f.S.d;
+                    if any(P(:,1:2)*s + P(:,3) < -1e-9), infeasible = infeasible + 1; continue, end
+                    achieved = s.'*x - ((s.'*N*s)/2 + m(:).'*s + q)/dd;
+                    got = ratQ.evalFace(f.fN, f.fD, x.');
+                    worstGap = max(worstGap, abs(achieved - got)/max(1, abs(got)));
+                    nTested = nTested + 1;
+                end
+            end
+            testCase.verifyGreaterThan(nTested, 100, 'the check was actually exercised');
+            testCase.verifyEqual(infeasible, 0, 'every maximiser must lie IN its own cell');
+            testCase.verifyLessThan(worstGap, 1e-9, ...
+                'the maximiser must achieve the value its own face reports');
+        end
+
         function theREGIONSAreEXACTLYWhereTheSupIsFinite(testCase)
         % Coverage is NOT 100% and that is the answer, not a gap: a cell of a conjugate is generally
         % an unbounded cone, so for many x the sup diverges, there is no maximiser and correctly no
