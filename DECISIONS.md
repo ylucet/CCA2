@@ -7360,3 +7360,43 @@ region on the far side.
    only proposal available was on the boundary and the face was refused for "no witness". The arc's
    own extent is now computed first and the sampling happens inside it. Same pass fixed a blind
    spot: a VERTICAL line tie returned no points at all, because the sampler solved for s2 given s1.
+
+## 2026-09-17 — REFUTED: the wedge-and-separator cut for a CONIC tie. The swept region spans several wedges
+
+The construction, in full, because it is plausible enough to be re-derived by anyone who meets the
+problem: for a conic tie the two cut segments at a facet are conjugate quadratic irrationals, but
+their PRODUCT is a rational line-pair conic `PC`; a line cuts an ellipse into exactly two arcs, so
+the swept set `A` of one arc is CONNECTED; `A`'s boundary contains the two segments, so — the step
+that fails — `A` crosses neither LINE and therefore lies in ONE of the four wedges; the wedges'
+apex is the singular point of `PC` and so is RATIONAL; and a rational separator through it can be
+chosen by an integer sign test on `PC`'s quadratic part, since that sign says whether a direction
+points between the lines or outside them. Two rows per facet, all integer, no square root ever
+formed.
+
+**It was built, and it is wrong at the third step.** `A` does not cross the SEGMENTS, but nothing
+stops it crossing a line's EXTENSION beyond its segment — and then `A` spans several wedges and
+`PC`'s sign is not a classifier for it.
+
+**Measured**, isotropic pair, box `{-1 <= s1 <= 3, -2 <= s2 <= 3}`: of 296 points whose base lies
+strictly inside the pair, **145 were EXCLUDED** by the wedge cell. The witness sits at `PC < 0` and
+the excluded points at `PC > 0` — one region, two wedges. The value check saw none of it: a cut that
+is too SMALL agrees with the definition at every point it keeps.
+
+**The test that caught it is now in the suite** (`theCUTHasNOHOLESAndKeepsNothingItShouldNot`), and
+it asks membership of the BASE POINT rather than of the value: x belongs to the face exactly when x
+is in the uncut sweep and its base s(x) lies in P. Both directions, both counted.
+
+**What the failure says about the TYPE.** The boundary of `A` really is the two SEGMENTS, and a
+segment is not the zero set of a polynomial. So no single H-form cell over CONICS holds `A`. The two
+candidate fixes, neither settled: subdivide further, so that within each sign of `PC` the pieces of
+`A` and of its complement are separated by some other rational curve; or give the SUBDIVISION axis a
+level that can carry a bounded arc — which is the `AlgAlg` that DECISIONS.md 2026-09-13 set aside on
+the grounds that only the function axis needed to grow. That reasoning rested on the UNCUT region
+being an intersection of conic sign conditions, which it is; the CUT one is what this entry is
+about.
+
+**Why the LINE tie is not affected, and it is not luck.** There every sweeping segment is a
+TRANSLATE of every other -- the gradient difference is constant when the two Hessians agree -- so the
+cut boundary is parallel to all of them and the swept region lies strictly on one side of it. That
+is exactly the hypothesis the conic case lacks. Verified in both directions on three pairs, 3802
+points: 0 holes, 0 points kept whose base is outside the pair.

@@ -201,6 +201,36 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
                 'bridgeArcCut:degenerateTie');
         end
 
+
+        function theCUTHasNOHOLESAndKeepsNothingItShouldNot(testCase)
+        % THE DIRECTION THE VALUE CHECKS CANNOT SEE. A cut that is too SMALL agrees with the
+        % definition at every point it keeps -- it simply answers on less ground -- so agreement is
+        % only half the statement. The other half is membership, and it is asked of the BASE POINT:
+        %
+        %     x belongs to this face  <=>  x is in the uncut sweep AND its base s(x) lies in P.
+        %
+        % The base of a point of the uncut sweep is the maximiser over the WHOLE tie (measured over
+        % 4758 points when the branch index was settled), so both directions are checkable without
+        % touching the cut's own arithmetic. This is the test that caught the conic-tie construction
+        % being wrong; the line tie passes it in both directions.
+            fx = fixtureByName('sameHessian');
+            cases = { [1 0 1; -1 0 1; 0 1 1; 0 -1 1], 'square'
+                      [1 0 0; 0 1 0],                 'quadrant'
+                      [0 1 1; 0 -1 2],                'strip' };
+            for c = 1:size(cases,1)
+                P = cases{c,1};
+                face = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, P);
+                full = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                [inside, holes, overKept] = baseMembership(fx, face, full, P);
+                testCase.verifyGreaterThan(inside, 100, ...
+                    sprintf('%s: too few points with a base inside the pair', cases{c,2}));
+                testCase.verifyEqual(holes, 0, ...
+                    sprintf('%s: the cut dropped a point whose base IS in the pair', cases{c,2}));
+                testCase.verifyEqual(overKept, 0, ...
+                    sprintf('%s: the cut kept a point whose base is OUTSIDE the pair', cases{c,2}));
+            end
+        end
+
         % ---- what it refuses, by name ------------------------------------------------------
 
         function aVERTEXCellIsRefusedByName(testCase)
@@ -495,6 +525,32 @@ function v = restrictedMax(fx, P, x)
     tau = min(max(beta/alpha, lo), hi);
     if ~isfinite(tau), v = inf; return, end
     v = -alpha/2*tau^2 + beta*tau + gamma;
+end
+
+function [inside, holes, overKept] = baseMembership(fx, face, full, P)
+% Walk points of the UNCUT sweep, find each one's base on the tie, and compare "the base is in P"
+% with "the H-form keeps it". Both disagreements are counted, and they are opposite defects.
+    [Dl, dl, kp] = tieData(fx);
+    w  = [dl(2); -dl(1)];
+    s0 = -kp * dl / (dl.'*dl);
+    T  = s0 + w*linspace(-200, 200, 40001);
+    vq = 0.5*sum(T.*(fx.A1*T), 1) + fx.b1.'*T + fx.k1;
+    ctr = face.wit(1:2).'/face.wit(3);
+    rng(43);
+    inside = 0;  holes = 0;  overKept = 0;
+    for i = 1:3000
+        x = ctr + (rand(2,1)*2-1)*4;
+        if ~inHForm(full, x), continue, end
+        [~, j] = max(sum(T.*x, 1) - vq);
+        sB = T(:,j);
+        slack = P(:,1:2)*sB + P(:,3);
+        if all(slack > 1e-6)
+            inside = inside + 1;
+            if ~inHForm(face, x), holes = holes + 1; end
+        elseif all(slack < -1e-6) && inHForm(face, x)
+            overKept = overKept + 1;
+        end
+    end
 end
 
 function tf = inHForm(face, x)

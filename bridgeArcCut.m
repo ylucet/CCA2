@@ -24,9 +24,28 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
 %
 % When the tie is a genuine CONIC those endpoints are quadratic irrationals, the segment through one
 % of them has coefficients in Q(s_e) rather than Q, and only the PAIR of conjugate segments is
-% rational (a degenerate line-pair conic). A line pair's sign condition names TWO OPPOSITE WEDGES,
-% so it does not by itself say which side the face is on, and that disambiguation is the open part
-% of the item. Refused here by name rather than guessed.
+% rational -- a degenerate line-pair conic PC, the product over the two conjugate roots, which is a
+% symmetric function of them and so has integer coefficients. A line pair's sign condition names
+% TWO OPPOSITE WEDGES, and picking the right one is the difficulty. It is REFUSED here, and the
+% route that looks like it works is recorded so that it is not built a second time:
+%
+%   THE WEDGE ARGUMENT, AND WHY IT IS FALSE. A line cuts an ellipse into exactly two arcs, so the
+%   set A swept from one of them is CONNECTED and its boundary contains the two segments. It is
+%   tempting to conclude that A crosses neither LINE and therefore lies in ONE of the four wedges,
+%   which would make PC's sign a valid classifier -- with the wedges' apex rational (the singular
+%   point of PC) and a rational separator through it available by an integer sign test on PC's
+%   quadratic part. All of that was built, and it is wrong at the first step: A does not cross the
+%   SEGMENTS, but it may perfectly well cross a line's EXTENSION beyond its segment, and then A
+%   spans several wedges. MEASURED on the isotropic pair over the box {-1<=s1<=3, -2<=s2<=3}: 145
+%   of 296 points whose base lies strictly inside the pair were EXCLUDED by the wedge cell, with
+%   the witness at PC < 0 and the excluded points at PC > 0 -- the same region, two wedges.
+%   DECISIONS.md 2026-09-17.
+%
+%   WHAT THE FAILURE POINTS AT. The boundary of A really is the two SEGMENTS, not the two lines, and
+%   a segment is not the zero set of a polynomial. So no single H-form cell over CONICS holds A:
+%   either the cell list gains a subdivision that separates A's pieces from B's within each sign of
+%   PC, or the subdivision axis needs a level that can carry a bounded arc. Which of the two is
+%   right is not settled, and a guess here puts a face on the wrong side of its own boundary.
 %
 % When the tie is a LINE -- tie(1:3) all zero -- every one of those objects is RATIONAL: the arc is
 % an interval of the line with rational endpoints, each endpoint is a rational point, and the
@@ -45,12 +64,12 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
     tie = ratQ.chk(tie(:).', 'tie conic');
     if any(tie(1:3) ~= 0)
         error('bridgeArcCut:conicTie', ...
-            ['the tie is a genuine CONIC, so the arc''s endpoints are quadratic irrationals and ' ...
-             'each cut segment lives in Q(s_e), not Q. Only the PAIR of conjugate segments is ' ...
-             'rational, and a line pair''s sign condition names two OPPOSITE wedges -- which one ' ...
-             'the face occupies is the open part of this item (TODO.md 2026-09-17). Refused ' ...
-             'rather than guessed, because a guess here puts a face on the wrong side of its own ' ...
-             'boundary.']);
+            ['the tie is a genuine CONIC, so each cut segment lives in Q(s_e) and only the ' ...
+             'conjugate PAIR is rational -- a line pair, whose sign condition names two OPPOSITE ' ...
+             'wedges. The wedge-and-separator construction that would resolve that was built and ' ...
+             'MEASURED WRONG (145 of 296 interior points excluded): the swept region crosses a ' ...
+             'cut line''s EXTENSION beyond its own segment, so it spans several wedges. See this ' ...
+             'file''s header and DECISIONS.md 2026-09-17 before attempting it again.']);
     end
     D = tie(4);  E = tie(5);  F = tie(6);
     if D == 0 && E == 0
