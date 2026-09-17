@@ -7400,3 +7400,56 @@ TRANSLATE of every other -- the gradient difference is constant when the two Hes
 cut boundary is parallel to all of them and the swept region lies strictly on one side of it. That
 is exactly the hypothesis the conic case lacks. Verified in both directions on three pairs, 3802
 points: 0 holes, 0 points kept whose base is outside the pair.
+
+
+## 2026-09-17 — the CENSUS of real bridge pairs, and what it says the envelope's mesh needs
+
+Everything built for the bridge so far was verified on pairs of nondegenerate quadratics with a LINE
+or an ELLIPSE tie. The pipeline's own fixtures are not like that, and the census is the reason the
+next step is not "more of the same":
+
+| cells \ tie | LINE | parabola | ellipse | hyperbola |
+|---|---|---|---|---|
+| full x full | 1 | | | |
+| full x rank1 | | 5 | | |
+| rank1 x rank1 | | | | 8 |
+| affine x rank1 | | 8 | | |
+| affine x full | | | 2 | |
+
+29 bridge pairs over the unit square at c = 0, -1, -2. So the PARABOLA is the commonest tie by a
+distance, the hyperbola is next, and the two cases the machinery answers -- LINE and ellipse -- are
+1 and 2 of 29. The parabola's dominance is Theorem 3 arriving on schedule: the tie's quadratic part
+is (H1-H2)/2 and adjacent pieces make its discriminant vanish, which is exactly a parabola.
+
+**And the cell kinds match: `rank1` and `affine` are most of them**, because a conjugate of a
+quadratic on a polygon has ONE full-rank cell, one rank-1 cell per edge and one affine cell per
+vertex.
+
+### What the bridge face's NEIGHBOUR is, which is the design finding
+
+Follow the maximiser out of a bridge face: it slides along the tie until it reaches the arc's
+endpoint `s_e`, and then it STOPS there while x keeps moving — s_e is a corner of the feasible set,
+so it is the maximiser for a whole 2-D cone of x. The neighbouring face is therefore the VERTEX
+candidate at `s_e`, whose value is `<s_e,x> - g1(s_e)`: AFFINE in x, with coefficients in `Q(s_e)`,
+a quadratic extension. The shared boundary is the cut segment, one ray of that cone.
+
+Two consequences, and they pull in opposite directions:
+
+- **The VALUE is expressible in `AlgCon` as it stands.** An affine function with quadratic-irrational
+  coefficients satisfies a RATIONAL relation: multiply by its conjugate,
+  `(z - ax - by - c)(z - a'x - b'y - c') = 0`, a quadratic in (x,y,z) over Q, and `FB` picks which
+  conjugate. The function axis needs nothing new.
+- **The REGION is not.** Its boundary is ONE of the two conjugate lines, and only the PAIR is
+  rational. That is the same obstruction the refuted wedge construction hit, now seen to be
+  structural rather than incidental to the cut.
+
+So the honest next design question is one thing, not many: **an edge needs to be able to name a
+BRANCH, exactly as a face already does.** `Ec` carries a conic; a degenerate one factors into two
+conjugate lines, and "which line" is a root index in the same sense `FB` is — well defined over Q,
+orderable by the sign of the discriminant's square root. That is a smaller change than the `AlgAlg`
+subdivision level 2026-09-13 set aside, and it is the one the measurements actually ask for.
+
+**Do not restart the assembly before this is settled.** Every route tried so far -- the wedge
+separator, and the earlier hope that the neighbouring faces' rational rows would bound the bridge --
+founders on the same fact: the cut boundary is one conjugate of a pair, and nothing in the current
+subdivision can say which.

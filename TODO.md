@@ -1,5 +1,43 @@
 # TODO
 
+## 2026-09-17 (second pass) — the CUT is built for a LINE tie; the rest needs ONE type decision
+
+Worked items 1-3 of the previous list. What landed, what is refuted, and what the whole remainder
+now turns on.
+
+**LANDED.** `bridgeArcCut` cuts a bridge face to the tie arc inside its own cell pair, exactly, for
+a LINE tie -- verified in BOTH directions (the value against a closed-form restricted oracle, and
+membership of the BASE POINT, which is the direction a too-small cut passes silently): 0 holes and
+0 points kept whose base is outside, over 3802 points on three pairs.
+
+**REFUTED, with the test that catches it now in the suite.** The wedge-and-separator construction
+for a CONIC tie. The swept region crosses a cut line's EXTENSION beyond its own segment, so it
+spans several wedges and the line pair's sign is not a classifier: 145 of 296 interior points were
+excluded. DECISIONS.md 2026-09-17. The argument is written out there in full BECAUSE it is
+plausible enough to be re-derived.
+
+**THE CENSUS THAT REDIRECTS THE WORK.** Over the unit square at c = 0, -1, -2 there are 29 bridge
+pairs: 8 hyperbola ties, 15 parabola, 2 ellipse, 1 LINE, and the cells are mostly `rank1` and
+`affine`. So the two cases the machinery answers are 3 of 29, and the PARABOLA dominates -- which is
+Theorem 3 arriving on schedule, since adjacent pieces make the tie's discriminant vanish.
+
+### The one item everything else waits on
+
+**AN EDGE MUST BE ABLE TO NAME A BRANCH, exactly as a face already does.** Following the maximiser
+out of a bridge face shows its neighbour is the VERTEX candidate at the arc's endpoint `s_e`: an
+AFFINE face whose coefficients live in `Q(s_e)`. Its VALUE is already storable -- multiply by the
+conjugate and `FP`/`FB` hold it -- but its REGION is bounded by ONE of two conjugate lines, and only
+the PAIR is rational. `Ec` carries a conic; a degenerate one factors into two conjugate lines, and
+"which line" is a root index in exactly the sense `FB` already is. That is a smaller change than
+the `AlgAlg` subdivision level set aside on 2026-09-13, and it is what the measurements ask for.
+
+Order after it: (1) the cut for a parabola and a hyperbola, which is then the same construction with
+a named branch; (2) the producer for `rank1` and `affine` cells -- the VALUE side already works,
+since the discriminant needs only that `det(M_mu)` is not identically zero, and the region side is a
+FAN bounded by the polar conic; (3) the fold into one `AlgCon` and `biconjQ`'s `convexPieceCoupling`
+route, which is bookkeeping once the two above land.
+
+
 ## 2026-09-17 - the BRIDGE PRODUCER landed; the assembly's boundary is now MEASURED, not guessed
 
 `bridgeFaceAlg` fills `AlgCon.FP`/`.FB` -- the producer the type has waited for since 2026-09-13.
