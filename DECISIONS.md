@@ -7322,3 +7322,41 @@ construction, `(polar)^2 - C(P) C = 0` -- so it is constructible, just not const
 
 Order for whoever takes it: vertex x quadratic (fan, polar conic), edge x quadratic, then affine x
 affine, which is a max of affine functions and needs no curve at all.
+
+## 2026-09-17 — the arc CUT: a LINE tie is rational and is the common case; a conic tie is the open half
+
+`bridgeArcCut` restricts a bridge face to the tie arc inside its own cell pair. Two regimes, and
+the split is not arbitrary:
+
+**A LINE tie is entirely rational.** The arc is an interval of the line with RATIONAL endpoints, so
+each cut boundary is the segment through a rational point -- an ordinary half-plane with one
+unambiguous side. Verified against the restricted definition (the objective is concave along the
+line, so its maximiser is the stationary point CLIPPED to the interval, closed form): worst relative
+error 6e-16 over three configurations -- uncut, one endpoint cut, both cut.
+
+**And that is the case the pipeline produces most**, so this is not a toy branch: the tie's
+quadratic part is (H1-H2)/2, which [COAP]/[JOGO] Theorem 6 makes VANISH for adjacent pieces of f,
+and two cells of one piece's conjugate share their Hessian outright.
+
+**A genuine CONIC tie is refused by name.** Its arc endpoints are quadratic irrationals, so each cut
+segment lives in Q(s_e); only the conjugate PAIR is rational, as a degenerate line-pair conic, and
+a line pair's sign condition names TWO OPPOSITE WEDGES. Picking the right one is the open question.
+The route that looked promising and is NOT yet established: the two lines meet at a RATIONAL point
+(a symmetric function of the conjugate pair), so if that point lies outside the sweep the condition
+is unambiguous there -- but in the isotropic annulus it does NOT, since both lines re-enter the
+region on the far side.
+
+**Two defects found while verifying, both of the kind that pass quietly:**
+
+1. **The witness was verified against the UNCUT sweep.** Rounding a proposal to the nearest integer
+   moved it out of a narrow strip, and both cut rows then came back as the SAME side -- an
+   unbounded region where the face is a parallelogram, and every value on the excess wrong. The
+   membership test now asks the cut question: Phi must have a root mu in [-1,0] AT WHICH the base
+   point s(mu) lies in P, and since s(mu) is algebraic that is a SIGN AT A ROOT, decided by
+   `ratQ.signAt` -- the same predicate the vertex names rest on, one dimension up. Strictly, so a
+   witness on a facet (whose sweep lands exactly ON a cut boundary) is passed over.
+2. **The tie sampler filtered where it should have TARGETED.** A fixed 41-point grid over a long
+   tie left exactly ONE sample inside a short arc, and that sample was a corner of the pair, so the
+   only proposal available was on the boundary and the face was refused for "no witness". The arc's
+   own extent is now computed first and the sampling happens inside it. Same pass fixed a blind
+   spot: a VERTICAL line tie returned no points at all, because the sampler solved for s2 given s1.

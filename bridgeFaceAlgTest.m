@@ -122,6 +122,85 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
                 'the value must come back from FP/FB alone');
         end
 
+
+        % ---- the CUT: the face restricted to the arc inside its own cell pair ------------------
+
+        function theCUTRestrictsTheFaceToTheArcInsideThePair(testCase)
+        % THE ORACLE CHANGES WITH THE PAIR, which is the whole point. Without P the face is the max
+        % over the WHOLE tie; with P it is the max over the tie points IN P, and for a line tie both
+        % are closed form -- the objective is a concave quadratic along the line, so the restricted
+        % maximiser is the stationary one CLIPPED to the interval. Nothing is sampled.
+            fx = fixtureByName('sameHessian');
+            cases = { 'quadrant', [1 0 0; 0 1 0], 1
+                      'square',   [1 0 1; -1 0 1; 0 1 1; 0 -1 1], 2 };
+            for c = 1:size(cases,1)
+                P = cases{c,2};
+                [face, info] = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, P);
+                testCase.verifyEqual(info.cut, 'line', sprintf('%s: a line tie', cases{c,1}));
+                testCase.verifyEqual(info.nCut, cases{c,3}, ...
+                    sprintf('%s: one half-plane per FINITE arc endpoint', cases{c,1}));
+                [worst, n] = restrictedAgreement(fx, face, P);
+                testCase.verifyGreaterThan(n, 50, sprintf('%s: too few region points', cases{c,1}));
+                testCase.verifyLessThan(worst, 1e-9, ...
+                    sprintf('%s: the cut face must equal the RESTRICTED definition', cases{c,1}));
+            end
+        end
+
+        function theUNCUTFaceCLAIMSGroundTheCutOneDoesNot(testCase)
+        % The cut has to be seen to REMOVE something, or the test above would pass on a cut that
+        % does nothing. It also says why the cut is not optional: on the ground it gives up, the
+        % uncut face is claiming a value the restricted problem cannot attain.
+            fx = fixtureByName('sameHessian');
+            P  = [1 0 1; -1 0 1; 0 1 1; 0 -1 1];
+            full = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+            cut  = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, P);
+            ctr = full.wit(1:2)/full.wit(3);
+            rng(23);
+            dropped = 0;  overclaim = 0;
+            for i = 1:2000
+                x = ctr(:) + (rand(2,1)*2-1)*5;
+                if ~inHForm(full, x) || inHForm(cut, x), continue, end
+                dropped = dropped + 1;
+                want = restrictedMax(fx, P, x);
+                got  = algBranch(full.FP, x(:).', full.FB);
+                if isfinite(want) && got > want + 1e-9*max(1,abs(want)), overclaim = overclaim + 1; end
+            end
+            testCase.verifyGreaterThan(dropped, 20, 'the cut must actually remove region');
+            testCase.verifyEqual(overclaim, dropped, ...
+                'and on every point it removes, the UNCUT face overstates the restricted sup');
+        end
+
+        function aCONICTieIsRefusedByNameWhenACutIsAskedFor(testCase)
+        % The open half of the item, said out loud. A genuine conic tie meets a facet at a quadratic
+        % irrational, so the cut segment lives in Q(s_e) and only the conjugate PAIR is rational --
+        % a line pair, whose sign condition names two opposite wedges. Refused rather than guessed.
+            fx = fixtureByName('anisotropic');
+            testCase.verifyError(@() bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [1 0 0; 0 1 0]), ...
+                'bridgeArcCut:conicTie');
+        end
+
+        function aPAIRThatExcludesTheWholeTieIsRefusedByName(testCase)
+        % A facet with the entire tie on its far side means the pair holds no tie point at all, so
+        % it carries no bridge and should never have been classified as one. That is the caller's
+        % defect and it is named as such.
+            fx = fixtureByName('sameHessian');
+        % The row is PARALLEL to the tie and on its far side -- which is what "excludes the whole
+        % tie" has to mean here, since any row that crosses the line merely moves the arc, however
+        % far away it puts it.
+            testCase.verifyError(@() bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [-3 1 -5]), ...
+                'bridgeFaceAlg:noWitness');
+            testCase.verifyError(@() bridgeArcCut(ratQ.conic([0 0 0 3 -1 -2]), [-3 1 -5], ...
+                                                  eye(2), [0;0], eye(2), [1;1], 1, [0 0 1]), ...
+                'bridgeArcCut:emptyArc');
+        end
+
+        function bridgeArcCutCHECKSItsOwnArguments(testCase)
+            testCase.verifyError(@() bridgeArcCut([0 0 0 1 1 0], [1 0 0]), 'bridgeArcCut:nargin');
+            testCase.verifyError(@() bridgeArcCut(ratQ.conic([0 0 0 0 0 1]), [1 0 0], ...
+                                                  eye(2), [0;0], eye(2), [1;1], 1, [0 0 1]), ...
+                'bridgeArcCut:degenerateTie');
+        end
+
         % ---- what it refuses, by name ------------------------------------------------------
 
         function aVERTEXCellIsRefusedByName(testCase)
@@ -183,6 +262,9 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
             testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 1 0 1 0 0 0], 0, ...
                                                    [0 0 0 0 2 0 2 1 1 1], 1), ...
                 'bridgeFaceAlg:denominator');
+            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 1 0 1 0 0 0], 1, ...
+                                                   [0 0 0 0 2 0 2 1 1 1], 1, [1 0]), ...
+                'bridgeFaceAlg:pairShape');
         end
     end
 end
@@ -368,6 +450,51 @@ function idx = ascendingIndexOfValue(fx, face)
         if gap > 1e-8*max(1, abs(want)), continue, end
         idx(end+1) = j; %#ok<AGROW>
     end
+end
+
+function [worst, n] = restrictedAgreement(fx, face, P)
+    ctr = face.wit(1:2)/face.wit(3);
+    rng(29);
+    worst = 0;  n = 0;
+    for i = 1:1200
+        x = ctr(:) + (rand(2,1)*2-1)*4;
+        if ~inHForm(face, x), continue, end
+        want = restrictedMax(fx, P, x);
+        if ~isfinite(want), continue, end
+        got = algBranch(face.FP, x(:).', face.FB);
+        n = n + 1;
+        worst = max(worst, abs(got - want)/max(1, abs(want)));
+    end
+end
+
+function v = restrictedMax(fx, P, x)
+% max over { s on the tie AND s in P } of <s,x> - g1(s), in CLOSED FORM for a line tie: the
+% objective is a concave quadratic along the line, so the answer is its stationary point clipped to
+% the interval P leaves. No sampling, and no arithmetic shared with the subject.
+    [Dl, dl, kp] = tieData(fx);
+    if any(Dl(:) ~= 0)
+        error('bridgeFaceAlgTest:notALineTie', 'this oracle is for a line tie');
+    end
+    w  = [dl(2); -dl(1)];
+    s0 = -kp * dl / (dl.'*dl);
+    lo = -inf;  hi = inf;
+    for i = 1:size(P,1)
+        a = P(i,1:2).';  c = P(i,3);
+        A = a.'*w;  B = a.'*s0 + c;
+        if A == 0
+            if B < 0, v = -inf; return, end
+            continue
+        end
+        if A > 0, lo = max(lo, -B/A); else, hi = min(hi, -B/A); end
+    end
+    if lo > hi, v = -inf; return, end
+    alpha = w.'*fx.A1*w;
+    if alpha <= 0, v = inf; return, end
+    beta  = w.'*x - (w.'*fx.A1*s0 + fx.b1.'*w);
+    gamma = s0.'*x - ((s0.'*fx.A1*s0)/2 + fx.b1.'*s0 + fx.k1);
+    tau = min(max(beta/alpha, lo), hi);
+    if ~isfinite(tau), v = inf; return, end
+    v = -alpha/2*tau^2 + beta*tau + gamma;
 end
 
 function tf = inHForm(face, x)
