@@ -147,11 +147,17 @@ classdef AlgCon < Alg & Conic
             % hold it and nothing here applies. Measured degrees run from (2,2,2) for an isotropic
             % bridge to (6,6,4) for an anisotropic one, with integer coefficients under 1e9
             % (DECISIONS.md 2026-09-06), so dense storage is at most a few hundred numbers a face.
-        FB (:,1){mustBeInteger,mustBeNonnegative} = []   % nf x 1 BRANCH INDEX: which real root of
-            % FP{k}(x,y,.) in z is the function's value, 1-based in ASCENDING order and counted
-            % WITH multiplicity. 0 exactly where FP{k} is empty. See algBranch.m for why an index
-            % is a legitimate NAME for an irrational value, and why it is well defined on a face:
-            % it is the argument QuaCon.Vname already rests on one dimension down.
+        FB (:,1){mustBeInteger} = []   % nf x 1 BRANCH INDEX: which real root of FP{k}(x,y,.) in z
+            % is the function's value, counted WITH multiplicity and 1-based from an END: POSITIVE
+            % counts up from the smallest real root, NEGATIVE down from the largest (-1 is the
+            % largest). 0 exactly where FP{k} is empty. See algBranch.m for why an index is a
+            % legitimate NAME for an irrational value -- the argument QuaCon.Vname already rests on
+            % one dimension down -- and for why the END matters: a colliding pair of roots can
+            % LEAVE the real line inside a face, which shifts every index above it and none below.
+            % A bridge face is a SUPREMUM, so its value is the largest real root and it is stored
+            % as -1; measured over 4758 region points, its ascending index takes two different
+            % values on ONE face, so the ascending spelling could not name it. DECISIONS.md
+            % 2026-09-17. Positive indices keep their original meaning unchanged.
         src = []             % PROVENANCE ONLY, never the definition of a value: the QuaCon f* this
             % envelope was assembled from, so a face can say which dual cell it came from -- the
             % paper's classification table wants exactly that, and so does every debugging session.

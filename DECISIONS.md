@@ -7184,3 +7184,75 @@ fixture in `envelopeCellPairsTest` so the split stays visible rather than assert
 Sampling can CONFIRM a sign change and can never prove one absent, so the assertions are now split
 by what each direction supports: a sampled sign change FORCES the bridge classification, a poly
 pair may never show both signs. Do not re-assert the converse.
+
+## 2026-09-17 — the bridge face's BRANCH INDEX counts from the TOP, and the ascending spelling could not name it
+
+`AlgCon.FB` was defined on 2026-09-13 as "which real root of `FP(x,y,.)` in z is the value, 1-based
+in ASCENDING order, with multiplicity". The first PRODUCER (`bridgeFaceAlg`) refutes that spelling
+for the faces the level exists for.
+
+**The measurement.** Three pairs of quadratics, 4758 points of the bridge region, the value taken
+from an independent maximisation over the tie curve:
+
+| | isotropic | anisotropic | both-shifted |
+|---|---|---|---|
+| real-root counts seen on ONE face | 2 | **2 and 4** | **2 and 4** |
+| ascending index of the value | 2 | **2 and 4** | **2 and 4** |
+| value is the LARGEST real root | 510/510 | 3134/3134 | 1114/1114 |
+
+So the value is the top root everywhere (worst 7.4e-14) while its ASCENDING index takes two
+different values **inside a single face**.
+
+**Why, and it is not a defect to fix.** `algBranch`'s original argument was that two roots can only
+swap by colliding, and that the collision locus is the discriminant curve. True, but incomplete:
+two roots can collide and LEAVE THE REAL LINE, dropping the count by two without either surviving
+branch moving. Every index ABOVE the departed pair then shifts down and every index below is
+untouched. An index is therefore stable only when counted from the end the value sits at.
+
+**And the value's end is not a fixture accident.** The face is `max { <s,x> - g1(s) : g1(s) = g2(s) }`
+and the real roots of `FP` are exactly that problem's critical values, so the value is the largest
+of them, always. Every face `biconj` produces is a supremum, so the top is the right end for all of
+them.
+
+**What changed, additively.** `FB < 0` counts from the top (`-1` = largest); `FB > 0` keeps the
+ascending meaning bit for bit, so nothing stored under the old reading changes and no existing test
+moved. `mustBeNonnegative` came off `AlgCon.FB`; `algBranch` refuses 0, which still means "this
+face carries a formula".
+
+**Do not re-spell a bridge face's `FB` as a positive index.**
+`bridgeFaceAlgTest/theASCENDINGIndexCannotNameThisFace` and
+`algBranchTest/aNEGATIVEIndexCountsFromTheTOPAndIsSTABLEWhereAscendingIsNot` both go red if it is,
+the second on a closed-form fixture -- `(z^2-1)(z^2-x)` -- whose middle pair leaves the real line at
+x = 0 while the top branch does not move.
+
+## 2026-09-17 — the bridge face's implicit polynomial is a DISCRIMINANT, and the resultant route is not needed
+
+`.claude/bridgeImplicitProbe.m` eliminated `s` from three equations with a 4x4 Sylvester
+determinant, and its own header records why that was affordable: ITS instance made one of the three
+LINEAR in `s2`. For a general pair the stationarity relation is quadratic in both components, the
+honest elimination is 12x12, and the probe's method does not generalise at all.
+
+**It does not have to.** Relaxing the tie with a multiplier turns the family into conjugates of
+quadratics, which are closed form:
+
+    psi(mu) = sup_s [<s,x> - g1 - mu(g1-g2)] = G_mu*(x),   G_mu = (1+mu) g1 - mu g2 ,
+
+and by the ENVELOPE THEOREM `psi'(mu)` is minus the constraint residual, so "the tie holds" and
+"psi is stationary" are ONE equation rather than two. Clearing `det(M_mu)` leaves
+`Psi(x,z,mu) = 2(dz + k_mu)det(M_mu) - (dx - c_mu)'adj(M_mu)(dx - c_mu)`, a CUBIC in mu, and the
+face is its DISCRIMINANT -- four terms, no Sylvester matrix, no resultant machinery.
+
+**Measured degrees and cost:** (2,2,2) and 28 as the largest coefficient for an isotropic pair,
+(6,6,4) and 4.5e6 for an anisotropic one -- 5e-8 of the 2^53 ceiling, where the probe's resultant
+route reached 2.7e12 on a smaller instance. Build time is under 0.1 s.
+
+**The mu^3 coefficient is HALF THE DETERMINANT OF THE TIE CONIC'S 3x3 MATRIX**, so it vanishes
+exactly when the tie is DEGENERATE (a line pair, a point, a double line) and `Psi` drops to a
+quadratic. That is the common case, not an exotic one: two translates of one quadratic tie along a
+LINE. Both degrees are built and both are tested.
+
+**What still overflows, and it is the ceiling rather than the method.** The branch certification
+substitutes the witness into `FP` and clears its denominator to the total degree; a Sturm chain then
+squares that. One fixture in four reaches 2^53 there and is refused as `bridgeFaceAlg:branchOverflow`
+-- a named refusal, not a raw `ratQ:overflow`. The general answer is the modular route this file
+already records for `ratQ`, not a different witness.

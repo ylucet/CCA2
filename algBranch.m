@@ -9,7 +9,9 @@ function [z, info] = algBranch(P, X, b, opts)
 % [input]  P    : the polynomial, as ratQ's dense polyN array in THREE variables: P(i+1,j+1,k+1)
 %                 is the integer coefficient of x^i y^j z^k. Sizes state the degrees (ratQ.trimN).
 %          X    : n x 2 evaluation points [x y].
-%          b    : the branch index, 1-based, in the CANONICAL order defined below.
+%          b    : the branch index in the CANONICAL order defined below -- 1-based from the
+%                 BOTTOM when positive, and from the TOP when negative (-1 is the largest real
+%                 root). Never 0: that value means "this face carries a formula, not a branch".
 %          opts : (optional) struct, fields `imagTol` and `degTol` -- see TOLERANCES.
 % [output] z    : n x 1 values, NaN where the branch does not exist at that point.
 %          info : struct with `nreal` (n x 1 real-root count) and `allReal` (n x 1 cell of the
@@ -34,10 +36,26 @@ function [z, info] = algBranch(P, X, b, opts)
 % WHY THE INDEX IS WELL-DEFINED ON A FACE, which is the property that makes it a name rather than
 % a guess. Two distinct real roots can only swap places by colliding, and at a collision p and
 % dp/dz share a root, i.e. the discriminant of p with respect to z vanishes. That is an algebraic
-% curve in (x,y), so it meets the interior of a face either nowhere or in a set the face's own
-% boundary already follows. Within one open face the real roots therefore vary continuously
-% without crossing, the count is constant, and "the b-th ascending real root" names one continuous
-% branch. ACROSS faces it may name a different branch, which is why b is stored PER FACE.
+% curve in (x,y), so within one open face the real roots vary continuously without crossing and
+% "the b-th real root" names one continuous branch. ACROSS faces it may name a different branch,
+% which is why b is stored PER FACE.
+%
+% COUNTING FROM WHICH END IS NOT COSMETIC, and the answer was measured rather than chosen. Two
+% roots can also collide and LEAVE the real line entirely -- the count drops by two without the
+% surviving branches moving at all -- and then every index ABOVE the departed pair shifts down
+% while every index BELOW it is untouched. So an end matters, and the stable end is the one the
+% face's own value sits at.
+%
+% For the convex envelope's bridge face the value is the LARGEST real root, and that is not a
+% coincidence to be rechecked per fixture: the face is a SUPREMUM over the tie curve, the real
+% roots of p are exactly that problem's critical values, and a supremum is the largest of them.
+% Measured on three pairs over 4758 region points: the value is the largest real root at every one
+% (worst 7.4e-14), while its ASCENDING index takes both 2 and 4 inside a single face. Ascending
+% indexing therefore cannot name a bridge face, and a negative b -- counting from the top, -1 for
+% the largest -- can. DECISIONS.md 2026-09-17.
+%
+% Positive b keeps its original meaning bit for bit, so nothing stored under the ascending reading
+% changes; the negative spelling is an addition, for the producer that needed it.
 %
 % WHAT THIS ROUTINE IS NOT. It is a DOUBLE-PRECISION evaluator -- the cache, in the sense
 % QuaCon.Vx is a cache of the vertex it names. The exact object is (P, b); this returns the double
@@ -72,8 +90,10 @@ function [z, info] = algBranch(P, X, b, opts)
     if ~isnumeric(X) || size(X,2) ~= 2
         error('algBranch:shape', 'X must be n x 2 [x y]; got %dx%d.', size(X,1), size(X,2));
     end
-    if ~isscalar(b) || b ~= fix(b) || b < 1
-        error('algBranch:branch', 'the branch index must be a positive integer; got %s.', mat2str(b));
+    if ~isscalar(b) || ~isnumeric(b) || b ~= fix(b) || b == 0
+        error('algBranch:branch', ...
+            ['the branch index must be a nonzero integer -- positive counts up from the ' ...
+             'smallest real root, negative down from the largest; got %s.'], mat2str(b));
     end
 
     sz = size(P);  sz(end+1:3) = 1;                 % pad: a face of degree 0 in z is still 3-D here
@@ -122,8 +142,10 @@ function [z, info] = algBranch(P, X, b, opts)
         rr = sort(real(r(isReal)));
         allReal{t} = rr;
         nreal(t) = numel(rr);
-        if b <= numel(rr)
-            z(t) = rr(b);
+        idx = b;
+        if idx < 0, idx = numel(rr) + 1 + b; end        % -1 is the largest, -2 the next below
+        if idx >= 1 && idx <= numel(rr)
+            z(t) = rr(idx);
         end
     end
 

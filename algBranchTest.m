@@ -131,6 +131,34 @@ classdef algBranchTest < matlab.unittest.TestCase
             testCase.verifyGreaterThan(max(want - wantLo), 1, 'the two branches are far apart');
         end
 
+        function aNEGATIVEIndexCountsFromTheTOPAndIsSTABLEWhereAscendingIsNot(testCase)
+        % THE CONVENTION THE BRIDGE FACE NEEDED, and the property that justifies it -- both in one
+        % fixture, because the second is the whole reason the first exists.
+        %
+        % p = (z^2 - 1)(z^2 - x) has four real roots for x > 0 and only two for x < 0: the pair
+        % +-sqrt(x) LEAVES the real line as x crosses zero. The TOP branch is continuous across
+        % that -- it is +1 for x < 1 and sqrt(x) beyond -- while its ASCENDING index jumps from 2
+        % to 3, which is exactly the shift that made an ascending FB unable to name a bridge face.
+            P = zeros(2,1,5);
+            P(1,1,5) = 1;  P(1,1,3) = -1;  P(2,1,3) = -1;  P(1,1,1) = 0;  P(2,1,1) = 1;
+            % p = z^4 - z^2 - x z^2 + x  =  (z^2 - 1)(z^2 - x)
+            [zHi, hi] = algBranch(P, [0.25 0; 4 0], -1);
+            testCase.verifyEqual(zHi, [1; 2], 'AbsTol', 1e-12, 'the top branch is continuous');
+            testCase.verifyEqual(hi.nreal, [4; 4], 'four real roots at both points');
+            % below zero the middle pair is gone, and the top branch is unchanged
+            [zNeg, neg] = algBranch(P, [-4 0], -1);
+            testCase.verifyEqual(zNeg, 1, 'AbsTol', 1e-12, 'still the top branch');
+            testCase.verifyEqual(neg.nreal, 2, 'and now only two real roots');
+            % ...which is what the ASCENDING index cannot survive: 3 here, 2 there, same branch
+            testCase.verifyEqual(algBranch(P, [4 0], 3), 1, 'AbsTol', 1e-12);
+            testCase.verifyEqual(algBranch(P, [-4 0], 2), 1, 'AbsTol', 1e-12);
+            testCase.verifyTrue(isnan(algBranch(P, [-4 0], 3)), ...
+                'the ascending index that named it before now names nothing');
+            % -2 is the next branch down, and out of range gives NaN rather than an error
+            testCase.verifyEqual(algBranch(P, [4 0], -2), 1, 'AbsTol', 1e-12);
+            testCase.verifyTrue(isnan(algBranch(P, [-4 0], -5)), 'past the bottom is NaN');
+        end
+
         function anILLFORMEDFACEIsRefusedByNameRatherThanEvaluated(testCase)
         % Every refusal here names the PRODUCER's defect, because none of these can arise from a
         % well-formed AlgCon -- which is exactly why they must not be allowed to return a number.
