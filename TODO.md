@@ -1,5 +1,47 @@
 # TODO
 
+## 2026-09-17 - the BRIDGE PRODUCER landed; the assembly's boundary is now MEASURED, not guessed
+
+`bridgeFaceAlg` fills `AlgCon.FP`/`.FB` -- the producer the type has waited for since 2026-09-13.
+It is exact, tested (13 fast-bucket tests against an oracle that maximises the definition), and it
+generalises the probe rather than transcribing it: the elimination is the DISCRIMINANT of a cubic
+in the Lagrange multiplier, not a Sylvester resultant, so it works for any pair instead of the one
+hand-written instance. DECISIONS.md 2026-09-17, three entries.
+
+**The next two items, in the order the measurements put them.**
+
+1. **THE CUT -- restrict the bridge's sweep to the tie ARC inside its own pair.** This is the one
+   thing standing between the producer and an assembled `biconj`. Measured, and the separation is
+   perfect: on the bridge region the face equals the envelope at every point whose maximiser lies
+   IN the pair (14/14) and is beaten at every point whose maximiser lies OUTSIDE it (72/72). So
+   the uncut region simply claims ground it does not own, and **no max-fold against other pairs is
+   needed** -- which is what keeps every boundary a CONIC and makes `AlgCon` the right return type.
+   The arc's endpoints are a conic meeting a facet line, so each segment the cut adds is
+   irrational; the two CONJUGATE segments together are an integer line-pair conic, which an `Ec`
+   row can hold. The open part is one question and no more: how to disambiguate a line pair's sign
+   condition, which names two opposite wedges. Either another row excludes one, or the degree-2
+   sign kernel picks the branch.
+
+2. **THE DEGENERATE CELL PAIRS, which are the MAJORITY and not the exception.** The producer
+   answers a pair of nondegenerate quadratics, which is all any probe had ever used. On the
+   pipeline's own fixtures it refuses 28 of 29 bridge pairs -- `vertexCell`, `edgeCell`,
+   `degreeInMu`. That is the shape of a conjugate (one full-rank cell, one rank-1 cell per edge,
+   one affine cell per vertex), so the generic pair is the rare one. **The VALUE side already
+   works**: the discriminant needs only that `det(M_mu)` is not identically zero. What is missing
+   is the REGION, because `grad g` must be invertible for the boundary to be an image conic. For a
+   VERTEX cell that end of the sweep is a POINT and the region is a FAN, bounded by the pair of
+   tangent lines from it -- rational, by the polar construction `(polar)^2 - C(P) C = 0`. Order:
+   vertex x quadratic, edge x quadratic, then affine x affine (a max of affine functions, needing
+   no curve at all).
+
+Only after those two does "fold the per-piece faces into one `AlgCon` and route `biconjQ`'s
+`convexPieceCoupling` through it" become bookkeeping. The pieces it needs are all in place:
+`envelopeCellPairs` classifies, `envelopeCellRegions` gives each candidate's region AND now its
+MAXIMISER (so a candidate's admissibility on one side of a tie is a conic condition in x, exact),
+`maxQ` folds the quadratic faces, and `assembleQuaConCells` is the H-form assembler an `AlgCon`
+version should follow.
+
+
 ## 2026-09-03 — Target venue decided: Mathematical Programming Computation
 
 Author decision, 2026-09-03. CCA2's paper targets **Mathematical
