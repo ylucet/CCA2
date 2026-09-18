@@ -7669,3 +7669,42 @@ declare divergence, which is documented at the site and is why the values above 
 2. the DOMINATION PRUNE, so the faces compact into a mesh instead of exploding;
 3. a container for a face whose membership is a predicate -- or, once 1 and 2 land, the observation
    that a compacted mesh may not need one.
+
+
+## 2026-09-18 — the CORNER candidates, and why an incomplete pair destroys the DOMAIN rather than a value
+
+`envelopeAssemble`'s first run left the two curved pairs of the c = -2 fixture covering 320 and 280
+of 600 interior points. The missing candidate was identified by CLASSIFYING the maximiser at the
+uncovered points rather than by guessing: of 91 and 109 uncovered points, **every single one** had
+its maximiser at a CORNER -- where the tie meets a facet of the pair.
+
+**Why it matters more than a missing value.** The assembly says "+infinity" exactly where no
+candidate covers x, which is how `dom f**` is expressed. So an incomplete candidate set does not
+merely miss a face: it declares the envelope infinite on ground it owns. Before the corners existed,
+letting the curved pairs vote on divergence made the envelope +infinity EVERYWHERE.
+
+**The face, and it is simpler than the bridge.** The corner `s_e` is a FIXED point, so the value
+`z(x) = <s_e,x> - g(s_e)` is AFFINE in x. What makes it more than an ordinary face is that `s_e` is
+a quadratic irrational -- the tie restricted to a facet line -- so the coefficients live in
+`Q(sigma)`. Stored implicitly, the way every irrational value here is: with `K z = E0(x) + E1(x)
+sigma` and `alpha sigma^2 + beta sigma + gamma = 0`,
+
+        [ 2 alpha K z - 2 alpha E0 + beta E1 ]^2  =  E1^2 (beta^2 - 4 alpha gamma) ,
+
+integer coefficients, degree 2 in z, and the two roots are the two CONJUGATE corners with `FB`
+naming which. The `sigma^2` that would otherwise appear is removed by the tie's own quadratic, which
+is what keeps the form linear in sigma.
+
+**Its region is a WEDGE with an irrational apex**, and membership is a predicate for the same reason
+a bridge face's is: `s_e` is the maximiser exactly when the two KKT multipliers -- of the facet and
+of the tie -- are nonnegative, which is `M \ (grad g(s_e) - x) >= 0` for a FIXED matrix. Two linear
+tests.
+
+**Measured after:** every pair covers 600 of 600 interior points; every pair may therefore vote on
+divergence again; and the envelope's domain comes out right -- 341 of 3000 points over `[-1,2]^2`
+finite, against a square that is a ninth of that window, answered by a mix of 243 quadratic and 98
+bridge faces. The values are unchanged: 0.0e0 on the convex fixture, 8.6e-13 and 3.2e-12 on the
+others.
+
+`envelopeAssembleTest` pins the coverage property itself, because it is the one whose failure is
+silent in the values and loud in the domain.

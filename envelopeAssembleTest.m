@@ -54,8 +54,10 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
                 [env, info] = envelopeAssemble(gA, gB);
                 testCase.verifyGreaterThan(info.nCurved, 0, ...
                     sprintf('c = %g must need a bridge face', c));
-                testCase.verifyEqual(numel(env.bridge), info.nCurved, ...
+                testCase.verifyEqual(info.nBridgeFaces, info.nCurved, ...
                     'every curved pair contributes exactly one bridge face');
+                testCase.verifyGreaterThan(info.nCornerFaces, 0, ...
+                    'and its CORNERS, where the tie meets a facet -- without which the pair''s own coverage is incomplete');
                 rng(17);
                 worst = 0;  n = 0;
                 for i = 1:8
@@ -97,6 +99,35 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
                 'and a quadratic face must answer where there is no bridge at all');
         end
 
+        function EVERYPairsCandidateSetCOVERSTheDomainItOwns(testCase)
+        % THE PROPERTY THE CORNER FACES EXIST FOR, and the one whose failure made the envelope
+        % +infinity everywhere. A pair's candidates must cover every point where that pair's sup is
+        % finite, because "no candidate covers x" is exactly how the assembly says "+infinity" --
+        % so an incomplete pair does not merely miss a value, it destroys the DOMAIN.
+        %
+        % Before `cornerFaceAlg`, the two curved pairs of this fixture covered 320 and 280 of 600
+        % interior points, and every uncovered point had its maximiser at a corner where the tie
+        % meets a facet -- 91 of 91 and 109 of 109, classified directly.
+            [fA, fB] = fixture(-2);
+            env = envelopeAssemble(conjQ(fA), conjQ(fB));
+            rng(31);
+            X = rand(200,2);                       % inside the square, where f** is finite
+            pairs = unique([[env.quad.pair], cellfun(@(f) f.pairIndex, env.bridge)]);
+            for p = pairs
+                cover = false(size(X,1),1);
+                for k = find([env.quad.pair] == p)
+                    cover = cover | inRegionT(env.quad(k).con, X);
+                end
+                for k = 1:numel(env.bridge)
+                    if env.bridge{k}.pairIndex ~= p, continue, end
+                    cover = cover | ownsT(env.bridge{k}, X);
+                end
+                testCase.verifyEqual(nnz(cover), size(X,1), ...
+                    sprintf('pair %d covers only %d of %d interior points', ...
+                            p, nnz(cover), size(X,1)));
+            end
+        end
+
         function theARGUMENTSAreChecked(testCase)
             [fA, fB] = fixture(0);
             testCase.verifyError(@() envelopeAssemble(conjQ(fA)), 'envelopeAssemble:nargin');
@@ -128,6 +159,33 @@ function f = tri(V, c)
     q(8) = q(8) - c;
     q(9) = q(9) + c;
     f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], q, [1 0; 1 0; 1 0]);
+end
+
+function in = ownsT(face, X)
+% Membership of one curved-tie face: a BRIDGE is swept, a CORNER is a wedge at a fixed irrational
+% apex. The same dispatch envelopeEval uses.
+    if strcmp(face.kind, 'corner')
+        in = false(size(X,1),1);
+        for i = 1:size(X,1)
+            mu = face.M \ (face.p - X(i,:).');
+            in(i) = all(mu >= -1e-9*max(1, max(abs(mu))));
+        end
+    else
+        in = bridgeMember(face.pair, X);
+    end
+end
+
+function in = inRegionT(con, X)
+    in = true(size(X,1),1);
+    for r = 1:size(con,1)
+        c = con(r,1:6);
+        if size(con,2) >= 8 && con(r,8) ~= 0
+            q = ratQ.pairLineEval(c, con(r,8), X);  sc = max(1, max(abs(X(:))));
+        else
+            q = QuaPar.evalConic(c, X);  sc = max(1, max(abs(c))*max(1, max(abs(X(:)))^2));
+        end
+        in = in & (con(r,7)*q >= -sqrt(eps)*sc);
+    end
 end
 
 % --------------------------------------------------------------------------------------------------

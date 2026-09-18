@@ -49,6 +49,18 @@ classdef guardExerciseTest < matlab.unittest.TestCase
             t.verifyError(@() conjPieceCPLQ(5), 'conjPieceCPLQ:type');
         end
 
+        function cornerFaceAlgArguments(t)                                   % reachable
+            % The corner candidates complete a curved pair's coverage, so a caller passing the
+            % wrong shape would silently lose the DOMAIN rather than a value.
+            n = [0 0 0 0 2 0 2 0 0 0];
+            t.verifyError(@() cornerFaceAlg(n, 1, [1 0 0], [1 0 1 0 0 -1]), ...
+                          'cornerFaceAlg:nargin');
+            t.verifyError(@() cornerFaceAlg([1 2 3], 1, [1 0 0], [1 0 1 0 0 -1], 1), ...
+                          'cornerFaceAlg:shape');
+            t.verifyError(@() cornerFaceAlg(n, 1, [1 0 0], [1 0 1 0 0 -1], 0), ...
+                          'cornerFaceAlg:side');
+        end
+
         function bridgeMemberArguments(t)                                    % reachable
             % The membership predicate is called from `eval` and from every test that asks "is x in
             % this face", so its arguments are checked where they arrive.

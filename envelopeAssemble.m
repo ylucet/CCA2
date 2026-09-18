@@ -10,7 +10,8 @@ function [env, info] = envelopeAssemble(gA, gB)
 % [output] env  : the envelope as its FACES -- struct with
 %                   .quad   struct array of quadratic candidates: .num, .den (the face function),
 %                           .con (its region, as conic rows), .pair (which cell pair it came from)
-%                   .bridge cell array of the CURVED-tie faces, as `bridgeFaceAlg` returns them
+%                   .bridge cell array of the faces a CURVED tie needs: the bridge face itself and
+%                           the CORNER faces where the tie meets a facet
 %                 `envelopeEval` evaluates it; the value at x is the MAX over the faces whose
 %                 region contains x.
 %          info : counts per pair class
@@ -132,9 +133,20 @@ function [env, info] = envelopeAssemble(gA, gB)
         env.bridge{end+1} = face; %#ok<AGROW>
         env = collect(env, sideCells(nA, dA, pr.P, pr.q, +1), k);
         env = collect(env, sideCells(nB, dB, pr.P, pr.q, -1), k);
+        % AND THE CORNERS, where the tie meets a facet. Measured before they existed: EVERY point a
+        % curved pair failed to cover had its maximiser at exactly such a corner (91 of 200 and 109
+        % of 200 on the two curved pairs of the c = -2 fixture).
+        for cf = [cornerFaceAlg(nA, dA, pr.P, pr.q, +1), cornerFaceAlg(nB, dB, pr.P, pr.q, -1)]
+            cf.pairIndex = k;
+            env.bridge{end+1} = cf; %#ok<AGROW>
+        end
     end
     info.nQuadFaces = numel(env.quad);
-    info.nBridgeFaces = numel(env.bridge);
+    % `cellfun` over an EMPTY cell array returns a double, not a string array, so the count is
+    % taken with a form that survives the convex case -- where there are no such faces at all.
+    kinds = cellfun(@(f) f.kind, env.bridge, 'UniformOutput', false);
+    info.nCornerFaces = sum(strcmp(kinds, 'corner'));
+    info.nBridgeFaces = numel(env.bridge) - info.nCornerFaces;
 end
 
 % --------------------------------------------------------------------------------------------------

@@ -52,17 +52,17 @@ function [val, who] = envelopeEval(env, X)
     % A pair diverges at x exactly where NONE of its candidates owns x: a candidate exists precisely
     % where the sup is attained (envelopeCellRegions' own header states that, and its test asserts
     % the complement).
-    % ONLY A PAIR WHOSE CANDIDATE SET IS COMPLETE MAY DECLARE DIVERGENCE. For a poly, tangential or
-    % straight-tie pair the candidates are exactly `envelopeCellRegions`', whose union IS the set
-    % where that pair's sup is finite -- so "nothing covers x" means "+infinity" there. A CURVED-tie
-    % pair is not yet complete: the restricted problem can also be maximised at a CORNER, where the
-    % tie meets a facet of the pair, and that candidate is an affine face with quadratic-irrational
-    % coefficients which nothing here builds yet. Measured: the two curved pairs of the c = -2
-    % fixture cover 320 and 280 of 600 interior points, so letting them vote made the envelope
-    % +infinity everywhere. They still contribute VALUES -- every one of which is a lower bound --
-    % they simply do not get to say where the sup diverges.
+    % EVERY PAIR MAY DECLARE DIVERGENCE, because every pair's candidate set is now complete: the
+    % straight candidates from `envelopeCellRegions`, the curved facet's interior from
+    % `bridgeFaceAlg`, and the CORNERS where the two meet from `cornerFaceAlg`. Their union is the
+    % set where that pair's sup is finite, so "nothing covers x" means "+infinity" -- which is how
+    % dom f** is expressed.
+    %
+    % It was not always so, and the history is the reason the check exists: before the corners were
+    % built, the two curved pairs of the c = -2 fixture covered 320 and 280 of 600 interior points,
+    % and letting them vote made the envelope +infinity everywhere. Measured again after: 600 of
+    % 600, for every pair.
     pairs = unique([[env.quad.pair], cellfun(@(f) f.pairIndex, env.bridge)]);
-    curved = unique(cellfun(@(f) f.pairIndex, env.bridge));
     best = -inf(n,1);
     bestKind = repmat({'none'}, n, 1);
     bestIdx = zeros(n,1);
@@ -86,7 +86,7 @@ function [val, who] = envelopeEval(env, X)
         for k = 1:numel(env.bridge)
             face = env.bridge{k};
             if face.pairIndex ~= p, continue, end
-            in = bridgeMember(face.pair, X);
+            in = faceOwns(face, X);
             idx = find(in);
             for j = idx(:).'
                 v = bridgeValue(face, X(j,:));
@@ -95,9 +95,7 @@ function [val, who] = envelopeEval(env, X)
                 if v > pv(j), pv(j) = v;  pk{j} = 'bridge';  pi(j) = k; end
             end
         end
-        if ~ismember(p, curved)
-            diverges = diverges | ~cover;
-        end
+        diverges = diverges | ~cover;
         upd = cover & (pv > best);
         best(upd) = pv(upd);
         bestKind(upd) = pk(upd);
@@ -113,11 +111,29 @@ function [val, who] = envelopeEval(env, X)
 end
 
 % ==================================================================================================
+function in = faceOwns(face, X)
+% Which of the curved-tie faces owns each point. A BRIDGE face is swept, so its membership is the
+% existence of a sweeping segment (`bridgeMember`); a CORNER face is a WEDGE whose apex is a fixed
+% irrational point, so its membership is the KKT multipliers of the two constraints active there
+% being nonnegative -- two linear tests against a fixed matrix.
+    switch face.kind
+        case 'corner'
+            in = false(size(X,1),1);
+            for i = 1:size(X,1)
+                mu = face.M \ (face.p - X(i,:).');
+                in(i) = all(mu >= -1e-9 * max(1, max(abs(mu))));
+            end
+        otherwise
+            in = bridgeMember(face.pair, X);
+    end
+end
+
+% --------------------------------------------------------------------------------------------------
 function v = bridgeValue(face, x)
 % A bridge face carries its value either implicitly (a polynomial and a branch) or as a rational
 % function -- `face.kind` says which, and both are read here so a caller never has to ask.
     switch face.kind
-        case 'algebraic'
+        case {'algebraic', 'corner'}
             v = algBranch(face.FP, x, face.FB);
         case 'rational'
             q = face.fN;
@@ -127,7 +143,8 @@ function v = bridgeValue(face, x)
             v = num/den / face.fD;
         otherwise
             error('envelopeEval:faceKind', ...
-                'a bridge face must be ''algebraic'' or ''rational''; got ''%s''.', face.kind);
+                ['a curved-tie face must be ''algebraic'', ''rational'' or ''corner''; got ' ...
+                 '''%s''.'], face.kind);
     end
 end
 

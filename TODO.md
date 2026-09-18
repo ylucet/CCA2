@@ -1,5 +1,33 @@
 # TODO
 
+## 2026-09-18 (second pass) — the CORNER candidates land; every pair's coverage is complete
+
+`cornerFaceAlg`: the candidate a curved-tie pair needs where the tie MEETS A FACET. Found by
+classifying the maximiser at the uncovered points -- 91 of 91 and 109 of 109 were at exactly such a
+corner. The face's value is AFFINE with quadratic-irrational coefficients, stored implicitly
+(degree 2 in z, the two roots being the two conjugate corners); its region is a WEDGE with an
+irrational apex, so membership is the two KKT multipliers being nonnegative.
+
+**Measured after: every pair covers 600 of 600 interior points**, so every pair may declare
+divergence again and the envelope's DOMAIN is right -- 341 of 3000 points over `[-1,2]^2` finite,
+against a square that is a ninth of it. Values unchanged: 0.0e0 convex, 8.6e-13 and 3.2e-12.
+
+### What is left for `biconj` to return an object
+
+1. **The DOMINATION PRUNE.** Folding the faces pairwise with `maxQ` is exact and EXPLODES -- 5, 6,
+   38, 35, 40, 125, 610 faces over seven of eighteen pairs, against an envelope with a handful. The
+   prune is an exact quadratic sign test on a polygon (`ratQ.quadSignOnPoly`): does some candidate
+   beat this one on the whole of its region. Without it there is no compact mesh.
+2. **A container** for a face whose membership is a predicate -- the bridge and corner faces -- or
+   the observation, once the prune lands, that a compacted mesh no longer needs one.
+3. Then `biconjQ`'s `convexPieceCoupling` route.
+
+### After that
+
+- **The BOUNDARY** (a real planar arrangement) for figures and the paper's topology tables.
+- The 2^53 ceiling: `polynomialOverflow` is a named refusal; the general answer is the modular route.
+
+
 ## 2026-09-18 — the ENVELOPE IS ASSEMBLED, and verified end to end
 
 `envelopeAssemble` + `envelopeEval`: the convex envelope of a two-piece `QuaPol`, computed from the
