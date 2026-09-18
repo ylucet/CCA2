@@ -19,7 +19,16 @@ a RETURN VALUE. **Both are needed.**
 
 ### Next, in order
 
-1. **The CORNER faces into the arrangement -- ATTEMPTED, and the rows were measured wrong.** The
+1. **The CORNER rows EXIST and are verified** -- `cornerWedgeRows`, 6400 of 6400 points agreeing
+   with the KKT predicate, wired into `cornerFaceAlg.con`. What is left is the ARRANGEMENT's side of
+   it: a branch row names one line of a pair, so a curve's identity becomes (conic, branch) and the
+   emptiness tests (`ratQ.feasible2`, `cellHasInterior`) need to take a branch row as that line
+   rather than as the conic's sign. That is now the only thing between the corners and the mesh.
+
+   The first attempt at these rows, and the ONE SIGN in the field arithmetic that made it fail, are
+   in DECISIONS.md 2026-09-18 -- worth reading before touching `cornerWedgeRows`.
+
+   ~~**ATTEMPTED, and the rows were measured wrong.**~~ The
    NAMING was not the obstacle and is done: `ratQ.parallelPairData` now handles the parallel pair a
    corner's facet edge always is, and it is tested. What failed is the reduction of the KKT
    multipliers modulo the facet's parameter quadratic: against the corner's own predicate on 3200

@@ -7852,7 +7852,7 @@ which name one line of a rational pair. So a corner could enter an arrangement a
 The BRIDGE face's region is the one that stays out, because its cut is the construction refuted
 twice on 2026-09-17.
 
-## 2026-09-18 — a CORNER's wedge as conjugate-pair ROWS: attempted, MEASURED WRONG, not kept
+## ~~2026-09-18 — a CORNER's wedge as conjugate-pair ROWS: attempted, MEASURED WRONG, not kept~~
 
 The arrangement takes a face whose region is a list of `[conic, side]` rows. A corner face's region is
 a wedge `M \ (p - x) >= 0` whose two edges have quadratic-irrational coefficients, so the rows do not
@@ -7881,3 +7881,42 @@ not the naming — which is why the naming is kept and the elimination is the th
 
 A corner's region therefore stays a PREDICATE alongside a bridge's, and `envelopeMesh:bridgeFaces`
 still names both. `envelopeEval` continues to answer for them.
+
+
+## 2026-09-18 — the corner ROWS work; the defect was ONE sign in the field arithmetic
+
+The entry above is overturned the same day, and by the rung-1 move rather than a better idea. The
+construction was not wrong: every quantity a corner's wedge needs lives in Q(sigma), so `cornerWedgeRows`
+writes that arithmetic down ONCE -- elements `(u1 + u2 sigma)/D`, with `al sigma^2 = -be sigma - ga`
+used in exactly one multiply -- and builds the corner, the tie gradient, `M`, its adjugate and `p` by
+composition. Each edge is then `L_i = A_i + sigma B_i` and its conjugate pair is
+
+        al * L^(sigma) L^(sigma')  =  al A^2 - be A B + ga B^2 ,
+
+one line, nothing to reduce. `B == 0` means the edge is already rational and is emitted as itself
+with branch 0; when it is not, the facet edge's pair is a pair of PARALLEL lines, which is what
+`ratQ.parallelPairData` was added for.
+
+**The defect the first attempt could not find was one line of normalisation.** Reducing an element to
+positive denominator did `u = -u; u(3) = -u(3);` -- and `u = -u` had already negated the denominator,
+so the second statement put it back. Every element with a negative denominator came out NEGATED, and
+every product carries `al` in its denominator, so this was precisely the corners with `al < 0`: half
+of them, which is the 450-of-3200 shape of the first measurement.
+
+**What found it was not a third edit but a change of activity.** The per-edge diagnostic printed, for
+every corner, how many points disagreed AND the residual of the row's line at the corner's own
+gradient. The residual was O(1) exactly where the disagreement was: the line did not pass through the
+corner at all, so the branch and the sides were never the suspects. One more print -- the rebuilt `p`
+against the face's own -- named the sign, and `p` differed exactly where `al < 0`.
+
+Measured after the fix: **16 corners, 6400 of 6400 points agreeing with the KKT predicate**, and every
+edge's line through its corner to 0.0e0. `cornerFaceAlg` fills `.con` with them, and
+`cornerWedgeRowsTest` asserts both properties on a fixture whose corners are at sigma = +-1/sqrt(2),
+including one fixture with `al < 0` so the sign that was wrong cannot go wrong silently again.
+
+### What this does NOT yet do
+
+The rows exist; `envelopeMesh` still refuses them. A branch row names ONE line of a pair, so the
+arrangement's curve identity becomes (conic, branch) and its emptiness tests -- `ratQ.feasible2` and
+`cellHasInterior` -- cannot take a branch row as the conic's sign without relaxing it. That is the
+next piece of work, and it is now the ONLY thing between the corners and the mesh.

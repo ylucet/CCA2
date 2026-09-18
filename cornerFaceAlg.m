@@ -48,7 +48,12 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
 % predicate for the same reason a bridge face's region is (DECISIONS.md 2026-09-17) -- only the
 % conjugate PAIR of such wedges is rational, and a pair does not say which one.
 %
-% CARRYING IT AS ROWS WAS TRIED AND IS RECORDED, NOT KEPT. `ratQ.pairLineData` and the BRANCH column
+% CARRYING IT AS ROWS NOW WORKS, and `.con` holds them: `cornerWedgeRows` spells each edge as one
+% BRANCH of its rational conjugate pair, measured against the predicate above at 6400 of 6400 points
+% of the c = -2 fixture. The paragraph below is the FIRST attempt at it, kept because the measurement
+% is the reason the second one is written the way it is.
+%
+% CARRYING IT AS ROWS WAS TRIED ONCE AND FAILED. `ratQ.pairLineData` and the BRANCH column
 % on `QuaCon.FC` name one line of a rational pair exactly, including the PARALLEL pair this wedge's
 % facet edge always is, so the naming was not the obstacle. The rows built from it disagreed with the
 % predicate above at 450 of 3200 points of the c = -2 fixture and could not name a branch at all for
@@ -68,7 +73,10 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
     tie = ratQ.chk(tie(:).', 'tie conic');
 
     N = [n(5) n(6); n(6) n(7)];  m = [n(8); n(9)];  qq = n(10);
-    faces = struct('kind', {}, 'FP', {}, 'FB', {}, 's', {}, 'sigma', {}, 'M', {}, 'p', {});
+    % `src` is what the face was BUILT from, kept so a consumer can redo the construction exactly
+    % rather than re-deriving it from doubles -- `cornerWedgeRows` needs precisely this.
+    faces = struct('kind', {}, 'FP', {}, 'FB', {}, 's', {}, 'sigma', {}, 'M', {}, 'p', {}, ...
+                   'src', {}, 'con', {});
 
     for i = 1:size(P,1)
         a = P(i,1:2).';  c = P(i,3);
@@ -99,10 +107,16 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
             p  = (N*s + m) / d;                     % grad g at the corner
             [FB, ok] = branchOf(FP, s, p, d, N, m, qq);
             if ~ok, continue, end
-            faces(end+1) = struct('kind', 'corner', 'FP', FP, 'FB', FB, 's', s, ...
-                                  'sigma', struct('quad', [al be ga], 'root', root, ...
-                                                  'facet', i, 's0n', s0n, 'w', w, 'na', na), ...
-                                  'M', M, 'p', p); %#ok<AGROW>
+            face = struct('kind', 'corner', 'FP', FP, 'FB', FB, 's', s, ...
+                          'sigma', struct('quad', [al be ga], 'root', root, ...
+                                          'facet', i, 's0n', s0n, 'w', w, 'na', na), ...
+                          'M', M, 'p', p, ...
+                          'src', struct('n', n, 'd', d, 'tie', tie, 'side', side), 'con', []);
+            % AND THE SAME WEDGE AS ROWS, when it can be spelled: that is what lets a corner enter an
+            % arrangement instead of being carried as a predicate. A refusal leaves `.con` empty and
+            % costs nothing -- the predicate above is unchanged and remains the definition.
+            face.con = cornerWedgeRows(face, n, d, tie, side);
+            faces(end+1) = face; %#ok<AGROW>
         end
     end
 end
