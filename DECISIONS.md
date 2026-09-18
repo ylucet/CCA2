@@ -7788,3 +7788,28 @@ assembler's incomplete emptiness test would be the wrong diagnosis.
 
 `envelopePrune` stands on its own either way: 120 -> 52, 142 -> 94, 110 -> 38 faces with nothing
 changed, and any of the three routes starts from a smaller list because of it.
+
+
+## 2026-09-18 — the TREE fold is refuted too. The arrangement is the only route left
+
+Route 2 of the previous entry, run: fold the pair meshes in a balanced binary tree instead of left
+to right, so that every intermediate is a max over FEWER pairs.
+
+    pair meshes      5 1 7 1 1 3 5 1 7 7 10 7 10 3 10 10 16 16
+    level 1 (9)      8 8 2 8 32 51 23 62 96
+    level 2 (5)      24 24 219 96 96
+    level 3 (3)      162 570 96
+    level 4          the run died
+
+Better than left-to-right, which was at 3726 by its twelfth pair, and still doubling per level
+against an envelope with a handful of faces. Same intrinsic cause: a max over any PROPER SUBSET of
+the pairs is a partial max, and a partial max of piecewise quadratics genuinely has pieces that only
+the full max deletes. Reordering cannot remove that; it only decides when the cost is paid.
+
+**So the arrangement is the only route left**, and the shape of it is fixed by everything above:
+overlay all the (pruned) faces' regions ONCE and decide the winner per cell, so that no intermediate
+function is ever formed. That is also the boundary the paper's figures and topology tables need, and
+the third route -- returning the face list with a type whose eval is the max -- remains available as
+a cheaper answer to the TYPE question if the arrangement proves long.
+
+Do not try a third fold order. The two extremes have been measured and the cause is not the order.

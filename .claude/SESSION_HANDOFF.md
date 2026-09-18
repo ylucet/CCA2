@@ -20,17 +20,18 @@ COMPUTED, VERIFIED and PRUNED. Values exact against f on the convex fixture and
 120 -> 52, 142 -> 94, 110 -> 38 faces after the prune with nothing changed.
 What it is not is a single mesh object.
 
-## Next — three routes, in order
+## Next — TWO routes; both fold orders are now ruled out by measurement
 1. **BUILD THE ARRANGEMENT ONCE**: overlay the pruned regions, winner per cell. No
    intermediate function is formed, so nothing blows up on the way — and it is the
    same construction the paper's figures and topology tables need.
-2. Fold in a TREE rather than left to right: same worst case, often far better in
-   practice, and a cheap experiment to run first.
-3. Return the FACE LIST with a type whose eval is the max over faces — a type
-   decision, since it needs a new concrete class rather than a QuaCon.
+2. **Return the FACE LIST** with a type whose eval is the max over faces — a TYPE
+   DECISION (a new concrete class, not a QuaCon), and the cheap answer if the
+   arrangement proves long. `envelopeEval` already does this correctly.
 
-Folding left to right is ruled out by measurement: semantically right per PAIR
-(not per face), and it doubles per fold — 5 to 3726 over twelve pairs.
+Folding is ruled out either way: left-to-right reaches 3726 faces by its twelfth
+pair, the balanced TREE reaches 570 by level 3 and dies at level 4. The cause is
+not the order — a max over any proper subset of the pairs is a partial max, which
+carries pieces only the full max deletes. Do not try a third order.
 
 ## Files
 - `envelopeAssemble.m`, `envelopePrune.m`, `envelopeEval.m` — assemble, prune, evaluate

@@ -16,18 +16,23 @@ roughly doubling per fold, against an envelope with a handful of faces; c = -2 b
 piecewise quadratics genuinely has many pieces -- only the full max collapses. A left-to-right fold
 cannot know which pieces the remaining pairs will delete, so no better emptiness filter fixes this.
 
-### The three routes, in the order to try them
+### Route 2 has now been RUN, and refuted
+
+The TREE fold reaches 96 faces at level 1, 219 at level 2, 570 at level 3, and the run dies at level
+4 -- better than left-to-right (3726 by its twelfth pair) and still doubling per level. The cause is
+not the ORDER: a max over any proper subset of the pairs is a partial max, which genuinely carries
+pieces only the full max deletes. **Do not try a third fold order.**
+
+### So two routes remain
 
 1. **BUILD THE ARRANGEMENT ONCE.** Overlay all the pruned regions, decide the winner per cell. No
    intermediate function is formed, so nothing can blow up on the way. This is also the boundary the
    paper's figures and topology tables need, so it is one item serving two purposes. Pieces that
    exist: `conicMeet`, `QuaCon.Vname`, the degree-4 sign kernel (`cellHasInterior`),
    `ratQ.feasible2`, and `envelopePrune` to keep the input small.
-2. **Fold in a TREE** rather than left to right -- same worst case, often much better in practice,
-   and a cheap experiment to run before committing to (1).
-3. **Return the FACE LIST**, with a type whose evaluation is the max over faces. `envelopeEval`
-   already does this correctly; it would need a new concrete class rather than a `QuaCon`, so it is
-   a type decision.
+2. **Return the FACE LIST**, with a type whose evaluation is the max over faces. `envelopeEval`
+   already does this correctly; it needs a new concrete class rather than a `QuaCon`, so it is a
+   TYPE DECISION -- and it is the cheap answer if the arrangement proves long.
 
 ### After that
 
