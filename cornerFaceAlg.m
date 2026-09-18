@@ -47,6 +47,13 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
 % conditions with irrational coefficients: a WEDGE whose apex is irrational. It is carried as a
 % predicate for the same reason a bridge face's region is (DECISIONS.md 2026-09-17) -- only the
 % conjugate PAIR of such wedges is rational, and a pair does not say which one.
+%
+% CARRYING IT AS ROWS WAS TRIED AND IS RECORDED, NOT KEPT. `ratQ.pairLineData` and the BRANCH column
+% on `QuaCon.FC` name one line of a rational pair exactly, including the PARALLEL pair this wedge's
+% facet edge always is, so the naming was not the obstacle. The rows built from it disagreed with the
+% predicate above at 450 of 3200 points of the c = -2 fixture and could not name a branch at all for
+% 8 of 16 corners. The step to redo is the reduction of the KKT multipliers modulo the facet's
+% parameter quadratic, not the naming. DECISIONS.md 2026-09-18.
 
     if nargin ~= 5
         error('cornerFaceAlg:nargin', 'expects (n, d, P, tie, side).');

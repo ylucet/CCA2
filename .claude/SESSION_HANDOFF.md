@@ -21,9 +21,12 @@ EXACTLY on the convex fixture. `biconjQ` attempts the route for any two-piece
 `convexPieceCoupling` input.
 
 ## Next
-1. **The CORNER faces into the arrangement.** Their region is a wedge with an
-   irrational apex, and `ratQ.pairLineData` + `QuaCon.FC`'s branch column already
-   name one line of a conjugate pair exactly — most of what a corner needs.
+1. **The CORNER faces into the arrangement — tried, and the rows are wrong.**
+   Naming is done and tested (`ratQ.parallelPairData` covers the parallel pair a
+   corner's facet edge always is). The KKT-multiplier elimination is what failed:
+   450 of 3200 points disagreed with the corner's own predicate and 8 of 16
+   corners named no branch, so nothing of it was kept — DECISIONS 2026-09-18.
+   Redo the elimination as a resultant, not a per-corner branch search.
 2. **The BRIDGE face's region** stays out (its cut is refuted twice, DECISIONS
    2026-09-17). Either solve that, or carry a bridge as a predicate face in a type
    that allows one — the type decision that was route B. Both halves are needed:

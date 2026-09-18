@@ -7851,3 +7851,33 @@ for exactly that landed earlier today: `ratQ.pairLineData` and the BRANCH column
 which name one line of a rational pair. So a corner could enter an arrangement as two branch rows.
 The BRIDGE face's region is the one that stays out, because its cut is the construction refuted
 twice on 2026-09-17.
+
+## 2026-09-18 — a CORNER's wedge as conjugate-pair ROWS: attempted, MEASURED WRONG, not kept
+
+The arrangement takes a face whose region is a list of `[conic, side]` rows. A corner face's region is
+a wedge `M \ (p - x) >= 0` whose two edges have quadratic-irrational coefficients, so the rows do not
+exist over Q one at a time — but the CONJUGATE PAIR of each edge does, and the branch column added
+earlier that day (`ratQ.pairLineData`, `QuaCon.FC`'s third column) names one line of such a pair
+exactly. That is why this looked like the short half of what `biconj` still needs.
+
+**The naming machinery is right and is kept.** One edge of the wedge is the facet itself, whose
+normal is RATIONAL and whose offset is irrational, so its conjugate pair is a pair of PARALLEL lines —
+a case `pairLineData` refused. `ratQ.parallelPairData` handles it now: the quadratic part is a perfect
+square, so the conic is a quadratic in one linear form `t`, and the two branches are that quadratic's
+roots ascending — the same convention one dimension lower. Tested.
+
+**What is wrong is the algebra of the multipliers, and it was measured, not guessed.** `wedgeRows`
+built each edge's integer conic by multiplying out over the two conjugate roots of the facet
+parameter, then chose the branch by comparing against the edge in doubles. Against the corner's own
+KKT predicate on 3200 points of the c = -2 fixture:
+
+    16 corner faces (8 with NO rows), 12 rows | agree 2750, DISAGREE 450
+
+Half the corners could not name a branch at all, and one point in seven disagreed. A face that is
+wrong one time in seven cannot enter an arrangement, and §10 forbids committing it, so the rows are
+out of the tree and this entry is what remains of them. The suspect step is the reduction of the
+multiplier numerator modulo the tie's parameter quadratic (the `sigma^2` elimination in `pairRow`),
+not the naming — which is why the naming is kept and the elimination is the thing to redo.
+
+A corner's region therefore stays a PREDICATE alongside a bridge's, and `envelopeMesh:bridgeFaces`
+still names both. `envelopeEval` continues to answer for them.

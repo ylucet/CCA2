@@ -2005,10 +2005,22 @@ classdef ratQ
             c = ratQ.conic(ratQ.chk(c, 'line pair'));
             a = c(1); b = c(2); cc = c(3); d = c(4); e = c(5); f = c(6);
             disc = ratQ.chk(b^2 - 4*a*cc, 'line pair discriminant');
-            if disc <= 0
+            if disc < 0
                 error('ratQ:notALinePair', ...
-                    ['this conic''s quadratic part is definite or a perfect square, so it is not ' ...
-                     'two distinct crossing lines and there is no branch to name.']);
+                    ['this conic''s quadratic part is DEFINITE, so its zero set is a point or ' ...
+                     'empty -- not two lines, and there is no branch to name.']);
+            end
+            if disc == 0
+                % PARALLEL LINES. The quadratic part is a perfect square, so the whole conic is a
+                % quadratic in ONE linear form t: k t^2 + m t + n, whose two roots are the two
+                % lines. They have no apex and no slopes to order by, so the branches are those
+                % ROOTS ascending -- the same convention, one dimension lower.
+                %
+                % The corner face of a convex envelope needs exactly this: one edge of its wedge has
+                % a RATIONAL direction and an irrational offset, so its conjugate pair is a pair of
+                % parallel lines (DECISIONS.md 2026-09-18).
+                info = ratQ.parallelPairData(c);
+                return
             end
             M3 = [2*a, b, d; b, 2*cc, e; d, e, 2*f];
             if ratQ.chk(round(det(M3)), 'line pair 3x3') ~= 0
@@ -2018,7 +2030,6 @@ classdef ratQ
             end
             M2 = [2*a, b; b, 2*cc];
             if ratQ.detExact(M2) == 0
-                % PARALLEL: both lines are level sets of one primitive linear form.
                 error('ratQ:parallelPair', ...
                     ['the two lines are PARALLEL, which the quadratic part being indefinite ' ...
                      'excludes -- so this cannot be reached and reaching it is a defect here.']);
@@ -2065,6 +2076,13 @@ classdef ratQ
             if ~isscalar(b) || ~ismember(b, [1 2])
                 error('ratQ:branch', 'the branch must be 1 or 2; got %s.', mat2str(b));
             end
+            if strcmp(info.kind, 'parallel')
+                % The line is { t = t_b } for the b-th root of info.quad, so the value at xn/xd is
+                % t(x) - t_b -- a LINEAR polynomial in t_b, and signAt decides its sign at that root.
+                tv = ratQ.chk(info.form(1)*xn(1) + info.form(2)*xn(2), 'parallel pair value');
+                s = ratQ.signAt(ratQ.polyTrim([-xd, tv]), info.quad, info.iv(b,:));
+                return
+            end
             p = info.apex;
             % x - p over the common denominator xd*p(3)
             ux = ratQ.chk(xn(1)*p(3) - p(1)*xd, 'point minus apex');
@@ -2086,6 +2104,49 @@ classdef ratQ
             s = ratQ.signAt(q, info.quad, info.iv(b,:));
         end
 
+        function info = parallelPairData(c)
+        % objective: the two PARALLEL lines of a degenerate conic, as a linear form and the two
+        %            levels it takes on them -- the counterpart of pairLineData's crossing case.
+        %
+        % With the quadratic part a perfect square the whole conic is a quadratic in ONE linear form
+        % t = u x + v y, and its two lines are the level sets t = t_1, t_2. The branches are those
+        % roots ASCENDING, which is the same convention as everywhere else and needs no apex.
+            a = c(1); b = c(2); cc = c(3); d = c(4); e = c(5); f = c(6);
+            % THE REPEATED FACTOR, over the integers. With b^2 = 4ac and a nonzero,
+            %       a x^2 + b xy + c y^2 = (2a x + b y)^2 / (4a) ,
+            % so t = 2a x + b y is the form, and multiplying the whole conic by 4a leaves
+            %       Q(t) = t^2 + 2d t + 4 a f ,
+            % whose two roots are the two lines. With a zero, b is zero too and the form is just y.
+            if a ~= 0
+                u = 2*a;  v = b;
+                if ratQ.chk(2*a*e - d*b, 'parallel pair linear part') ~= 0
+                    error('ratQ:notALinePair', ...
+                        ['the linear part is not a multiple of the repeated factor, so this ' ...
+                         'conic is a PARABOLA rather than two parallel lines.']);
+                end
+                quad = ratQ.chk([1, 2*d, 4*a*f], 'parallel pair quadratic');
+            elseif cc ~= 0
+                u = 0;  v = 1;
+                if d ~= 0
+                    error('ratQ:notALinePair', ...
+                        ['the linear part is not a multiple of the repeated factor, so this ' ...
+                         'conic is a PARABOLA rather than two parallel lines.']);
+                end
+                quad = ratQ.chk([cc, e, f], 'parallel pair quadratic');
+            else
+                error('ratQ:notALinePair', ...
+                    'the quadratic part vanishes, so this conic is a single line, not a pair.');
+            end
+            quad = ratQ.polyTrim(quad);
+            I = ratQ.isolateRoots(quad);
+            if size(I,1) ~= 2
+                error('ratQ:notALinePair', ...
+                    'the level quadratic has %d real roots, not two distinct lines.', size(I,1));
+            end
+            info = struct('kind', 'parallel', 'apex', [0;0;1], 'quad', quad, 'iv', I, ...
+                          'vertical', false, 'form', [u v]);
+        end
+
         function v = pairLineEval(c, b, X)
         % objective: the VALUE of one line of a degenerate conic at points X -- in doubles, as the
         %            cache that names the same line the exact branch index does.
@@ -2096,6 +2157,11 @@ classdef ratQ
         % is `ratQ.pairLineSign`, this is what `eval` uses at a point where a tolerance is already
         % the convention (QuaCon.eval's own header says where that line is drawn).
             info = ratQ.pairLineData(c);
+            if strcmp(info.kind, 'parallel')
+                r = sort(roots(info.quad));
+                v = info.form(1)*X(:,1) + info.form(2)*X(:,2) - r(b);
+                return
+            end
             p = info.apex(1:2) / info.apex(3);
             ux = X(:,1) - p(1);   uy = X(:,2) - p(2);
             if info.vertical && b == 2

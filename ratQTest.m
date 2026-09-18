@@ -1213,6 +1213,56 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyEqual(ratQ.pairLineSign(Cv, 1, [0; 5], 1), 1, 'y = x, above it');
         end
 
+        function aPARALLELPairNamesItsTwoLinesByTHEIRLEVELSAscending(testCase)
+        % [fast] A corner face's wedge has one edge whose NORMAL is rational and whose OFFSET is not,
+        % so its conjugate pair is a pair of PARALLEL lines -- no apex, no slopes to order by. The
+        % branches are then the two LEVELS of the common linear form, ascending, which is the same
+        % convention one dimension lower. Asserted against the definition, not a stored value:
+        % branch b is the line { t = t_b }, so the exact sign must be the sign of t(x) - t_b.
+            C = ratQ.conic([1 2 1 0 0 -2]);                 % (x + y)^2 = 2: x + y = -sqrt2, +sqrt2
+            info = ratQ.pairLineData(C);
+            testCase.verifyEqual(info.kind, 'parallel');
+            lv = sort(roots(info.quad(:).'));               % the levels of the form, ascending
+            testCase.verifyEqual(numel(lv), 2);
+
+            bad = 0;  onLine = 0;
+            for a = -3:3
+                for b = -3:3
+                    for br = [1 2]
+                        t = info.form(1)*a + info.form(2)*b;
+                        s = ratQ.pairLineSign(C, br, [a; b], 1);
+                        testCase.verifyEqual(s, ratQ.pairLineSign(C, br, [2*a; 2*b], 2), ...
+                                             'the sign must not depend on how the point is spelled');
+                        if abs(t - lv(br)) < 1e-9
+                            onLine = onLine + 1;
+                            if s ~= 0, bad = bad + 1; end
+                        elseif s ~= sign(t - lv(br))
+                            bad = bad + 1;
+                        end
+                        v = ratQ.pairLineEval(C, br, [a b]);
+                        if sign(v) ~= s && abs(v) > 1e-9, bad = bad + 1; end
+                    end
+                end
+            end
+            testCase.verifyEqual(bad, 0, 'the exact sign must be the sign of t(x) - t_b');
+            testCase.verifyGreaterThan(onLine, 0, 'and the levels here are irrational, so none');
+
+            % The form may be y alone, when the quadratic part has no x at all: y^2 - 3.
+            Cy = ratQ.conic([0 0 1 0 0 -3]);
+            iy = ratQ.pairLineData(Cy);
+            testCase.verifyEqual(iy.kind, 'parallel');
+            testCase.verifyEqual(ratQ.pairLineSign(Cy, 2, [0; 5], 1), 1, 'above y = +sqrt3');
+            testCase.verifyEqual(ratQ.pairLineSign(Cy, 2, [0; 1], 1), -1, 'below it');
+            testCase.verifyEqual(ratQ.pairLineSign(Cy, 1, [0; 1], 1), 1, 'but above y = -sqrt3');
+
+            % A PARABOLA has the same square as its quadratic part and is NOT a pair of lines, so it
+            % is refused rather than answered with a branch of something that is not there.
+            testCase.verifyError(@() ratQ.pairLineData(ratQ.conic([1 0 0 0 -1 0])), ...
+                'ratQ:notALinePair');                       % x^2 - y
+            testCase.verifyError(@() ratQ.pairLineData(ratQ.conic([1 2 1 0 0 0])), ...
+                'ratQ:notALinePair');                       % (x + y)^2: ONE line, twice
+        end
+
         function aCONICThatIsNOTTwoCrossingLinesNamesNoBranch(testCase)
         % The refusals, because a branch on the wrong kind of conic would be read as the whole curve
         % by any consumer that forgot to look -- so it is refused where it is asked for.

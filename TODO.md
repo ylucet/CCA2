@@ -19,9 +19,14 @@ a RETURN VALUE. **Both are needed.**
 
 ### Next, in order
 
-1. **The CORNER faces into the arrangement.** A corner's region is a wedge whose two half-planes have
-   conjugate quadratic-irrational coefficients -- and `ratQ.pairLineData` plus `QuaCon.FC`'s BRANCH
-   column already name one line of a rational pair exactly. That is most of what a corner needs.
+1. **The CORNER faces into the arrangement -- ATTEMPTED, and the rows were measured wrong.** The
+   NAMING was not the obstacle and is done: `ratQ.parallelPairData` now handles the parallel pair a
+   corner's facet edge always is, and it is tested. What failed is the reduction of the KKT
+   multipliers modulo the facet's parameter quadratic: against the corner's own predicate on 3200
+   points, the rows disagreed at 450 and could not name a branch for 8 of 16 corners, so they are not
+   in the tree (DECISIONS.md 2026-09-18). Redo that elimination -- the edge is a LINE, so its
+   conjugate pair should come out of the resultant of the multiplier numerator with the facet
+   quadratic directly, without a per-corner branch search at all.
 2. **The BRIDGE face's region** stays out: its cut is the construction refuted twice (DECISIONS.md
    2026-09-17). Either that is solved, or a bridge face is carried as a predicate face in a type
    that allows one -- which is the type decision that was route B.
