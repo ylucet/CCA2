@@ -9,8 +9,8 @@ _2026-09-18_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main`, seventeen commits ahead of `origin/main`, tree clean
-- Tests: fast bucket over 44 suites · `envelopeAssembleTest` 8/0 (~394 s, normal) ·
+- Branch `main`, nineteen commits ahead of `origin/main`, tree clean
+- Tests: fast 666/0 over 45 suites (09-18) · `envelopeAssembleTest` 8/0 (~394 s, normal) ·
   slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
 - Known reds: none
 
@@ -21,12 +21,15 @@ EXACTLY on the convex fixture. `biconjQ` attempts the route for any two-piece
 `convexPieceCoupling` input.
 
 ## Next
-1. **The CORNER faces into the arrangement — tried, and the rows are wrong.**
-   Naming is done and tested (`ratQ.parallelPairData` covers the parallel pair a
-   corner's facet edge always is). The KKT-multiplier elimination is what failed:
-   450 of 3200 points disagreed with the corner's own predicate and 8 of 16
-   corners named no branch, so nothing of it was kept — DECISIONS 2026-09-18.
-   Redo the elimination as a resultant, not a per-corner branch search.
+1. **The CORNER ROWS are done and verified** — `cornerWedgeRows`, 6400/6400 points
+   agreeing with the KKT predicate, wired into `cornerFaceAlg.con`. What is left is
+   the ARRANGEMENT's side: a branch row names ONE line of a pair, so a curve's
+   identity becomes (conic, branch) and the emptiness tests (`ratQ.feasible2`,
+   `cellHasInterior`) cannot read a branch row as the conic's sign.
+   **That is a fork worth one decision** — exact feasibility over Q(sigma) (Fourier-
+   Motzkin with `signAt` for the sign tests; clean, but a cell can mix rows from
+   several different quadratic fields), or a RELAXED emptiness test that keeps some
+   empty cells and lets the winner refinement delete them.
 2. **The BRIDGE face's region** stays out (its cut is refuted twice, DECISIONS
    2026-09-17). Either solve that, or carry a bridge as a predicate face in a type
    that allows one — the type decision that was route B. Both halves are needed:
