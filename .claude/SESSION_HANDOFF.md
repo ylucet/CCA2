@@ -9,28 +9,26 @@ _2026-09-18_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main`, thirteen commits ahead of `origin/main`, tree clean
-- Tests: fast bucket green over 44 suites · `envelopeAssembleTest` 5/0 (~155 s,
+- Branch `main`, fourteen commits ahead of `origin/main`, tree clean
+- Tests: fast bucket green over 44 suites · `envelopeAssembleTest` 6/0 (~207 s,
   normal) · slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
 - Known reds: none
 
-## What just landed
-The convex envelope is assembled, and now COMPLETE: the corner candidates (where
-the tie meets a facet) close every pair's coverage, so the domain is right as well
-as the values — 0.0e0 against f on the convex fixture, 8.6e-13 and 3.2e-12 against
-a numeric sup on the kinked ones.
+## Where the envelope stands
+It is COMPUTED and VERIFIED -- 0.0e0 against f on the convex fixture, 8.6e-13 and
+3.2e-12 against a numeric sup on the kinked ones, domain included -- and now
+PRUNED: 120 -> 52, 142 -> 94, 110 -> 38 faces with nothing changed.
 
-## Next
-1. The DOMINATION PRUNE — the pairwise `maxQ` fold explodes (5 → 610 faces over
-   seven pairs) against an envelope with a handful of faces. An exact quadratic
-   sign test on a polygon decides whether a candidate is beaten on its whole
-   region. This is what stands between the face list and a compact mesh.
-2. A container for a predicate-decided face — or the observation, once the prune
-   lands, that a compacted mesh no longer needs one.
-3. Then `biconjQ`'s `convexPieceCoupling` route.
+## Next — ONE item, where there were two
+**THE ARRANGEMENT.** Overlay the pruned faces' regions and take the max per cell.
+That is both the mesh `biconj` would return and the boundary the paper's figures
+want. `maxQ` cannot do it: a QuaCon is +infinity off its faces while a candidate
+that does not apply is -infinity, so folding collapses the list to an empty mesh
+(measured). `envelopeEval` already answers correctly from the face list, so
+nothing is blocked except the return TYPE.
 
 ## Files
-- `envelopeAssemble.m`, `envelopeEval.m` — the assembly and its evaluator
+- `envelopeAssemble.m`, `envelopePrune.m`, `envelopeEval.m` — assemble, prune, evaluate
 - `cornerFaceAlg.m` — the corner candidates that complete a curved pair
 - `bridgeFaceAlg.m` / `bridgeFaceRat.m` — the bridge face, algebraic or rational
 - `bridgeMember.m`, `bridgeWitness.m`, `bridgePhi.m` — membership, exact and cached

@@ -1,5 +1,37 @@
 # TODO
 
+## 2026-09-18 (third pass) — the PRUNE lands; the mesh needs an ARRANGEMENT, not a fold
+
+`envelopePrune`: drop a face when another is at least as large everywhere it applies and applies
+everywhere it does. Exact (`ratQ.feasible2` for the inclusion, `ratQ.quadSignOnPoly` for the
+comparison), sound by construction, and measured at 120 -> 52, 142 -> 94, 110 -> 38 faces with every
+value and every finiteness verdict unchanged. A dominating face INHERITS the dropped one's pair --
+without that the domain collapses, 60 of 300 points flipping to +infinity.
+
+**`maxQ` IS REFUTED as the way to build the mesh.** A `QuaCon` is +infinity off its faces; a
+candidate that does not apply is -infinity. The envelope is a sup of PARTIAL functions, so folding
+the pruned list with `maxQ` collapses it to an EMPTY mesh after about ten faces -- measured on both
+fixtures. The earlier explosion was the same mismatch, not a size problem.
+
+### What is left is now ONE item, not two
+
+**THE ARRANGEMENT.** Overlay the (pruned) faces' regions and take the max per cell. That gives the
+mesh `biconj` would return AND the boundary the paper's figures and topology tables need, so the two
+remaining items are the same item. `envelopeEval` already answers correctly from the face list, so
+nothing is blocked except the return type.
+
+Pieces that exist for it: `conicMeet` (exact conic-conic intersection), `QuaCon.Vname` (a vertex as
+a NAME rather than a coordinate), the degree-4 sign kernel (`cellHasInterior`), `ratQ.feasible2`,
+and the prune to keep the input small. What does not exist is the overlay itself -- one edge per
+ARC rather than per curve, all the vertices on a curve rather than the first two, and the ordered
+adjacency `P`.
+
+### After that
+
+- `biconjQ`'s `convexPieceCoupling` route, which is then a return statement.
+- The 2^53 ceiling: `polynomialOverflow` is a named refusal; the general answer is the modular route.
+
+
 ## 2026-09-18 (second pass) — the CORNER candidates land; every pair's coverage is complete
 
 `cornerFaceAlg`: the candidate a curved-tie pair needs where the tie MEETS A FACET. Found by

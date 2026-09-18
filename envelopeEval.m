@@ -62,7 +62,11 @@ function [val, who] = envelopeEval(env, X)
     % built, the two curved pairs of the c = -2 fixture covered 320 and 280 of 600 interior points,
     % and letting them vote made the envelope +infinity everywhere. Measured again after: 600 of
     % 600, for every pair.
-    pairs = unique([[env.quad.pair], cellfun(@(f) f.pairIndex, env.bridge)]);
+    % A face may belong to SEVERAL pairs once the prune has run: a dominating face inherits the
+    % pairs of everything it replaced, so that the coverage those faces provided is not lost.
+    allPairs = [];
+    for k = 1:numel(env.quad), allPairs = [allPairs, env.quad(k).pair(:).']; end %#ok<AGROW>
+    pairs = unique([allPairs, cellfun(@(f) f.pairIndex, env.bridge)]);
     best = -inf(n,1);
     bestKind = repmat({'none'}, n, 1);
     bestIdx = zeros(n,1);
@@ -71,7 +75,7 @@ function [val, who] = envelopeEval(env, X)
     for p = pairs
         cover = false(n,1);
         pv = -inf(n,1);  pk = repmat({'none'}, n, 1);  pi = zeros(n,1);
-        for k = find([env.quad.pair] == p)
+        for k = find(arrayfun(@(f) any(f.pair == p), env.quad))
             f = env.quad(k);
             in = inRegion(f.con, X);
             if ~any(in), continue, end

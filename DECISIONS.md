@@ -7708,3 +7708,39 @@ others.
 
 `envelopeAssembleTest` pins the coverage property itself, because it is the one whose failure is
 silent in the values and loud in the domain.
+
+
+## 2026-09-18 — the PRUNE lands, and `maxQ` is REFUTED as the way to turn the face list into a mesh
+
+`envelopePrune` drops a face when another is at least as large everywhere it applies AND applies
+everywhere it does -- `R_i subset R_j` by `ratQ.feasible2`, `v_j >= v_i` by `ratQ.quadSignOnPoly`,
+both exact, both asked of the LINEAR RELAXATION of `R_i` so the test is SOUND (it never drops a face
+that could win) without being complete.
+
+**Measured, on the three standard fixtures:** 120 -> 52, 142 -> 94, 110 -> 38 faces, with every
+value and every finiteness verdict unchanged.
+
+**A dominating face INHERITS the dropped one's PAIR**, and that line is not bookkeeping. A pair's
+coverage is what says where its sup is finite, so dropping a face shrinks the coverage and the
+envelope then claims +infinity on ground it owns: measured, 60 of 300 sampled points flipped from
+finite to infinite while every finite value stayed exactly right. The inheritance is sound precisely
+because the domination test established `R_i subset R_j`.
+
+### And the hope the prune was meant to serve is REFUTED
+
+The plan was: prune, then fold the survivors with `maxQ` into one `QuaCon`. It cannot work, and the
+reason is a semantic mismatch rather than a size one:
+
+* a `QuaCon` is **+infinity** off its faces, so `maxQ` of two single-face objects is +infinity
+  except where BOTH apply;
+* a CANDIDATE that does not apply contributes **nothing** -- it is -infinity, not +infinity.
+
+The envelope is a sup of PARTIAL functions, and `maxQ` computes a max of functions extended the
+other way. Measured: folding the pruned list one face at a time collapses to an EMPTY mesh after
+about ten faces, on both fixtures. The earlier "explosion" (5, 6, 38, ..., 610 faces) was the same
+mismatch in its other guise, not a complexity problem to be pruned away.
+
+**So turning the face list into a mesh means building the ARRANGEMENT**: overlay the faces' regions
+and take the max per cell. That is the same construction the paper's figures and topology tables
+need, so the two open items are now ONE item rather than two. `envelopeEval` already answers
+correctly from the face list, so nothing downstream is blocked on it except the return TYPE.

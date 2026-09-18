@@ -112,10 +112,12 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             env = envelopeAssemble(conjQ(fA), conjQ(fB));
             rng(31);
             X = rand(200,2);                       % inside the square, where f** is finite
-            pairs = unique([[env.quad.pair], cellfun(@(f) f.pairIndex, env.bridge)]);
+            allP = [];
+            for k = 1:numel(env.quad), allP = [allP, env.quad(k).pair(:).']; end %#ok<AGROW>
+            pairs = unique([allP, cellfun(@(f) f.pairIndex, env.bridge)]);
             for p = pairs
                 cover = false(size(X,1),1);
-                for k = find([env.quad.pair] == p)
+                for k = find(arrayfun(@(f) any(f.pair == p), env.quad))
                     cover = cover | inRegionT(env.quad(k).con, X);
                 end
                 for k = 1:numel(env.bridge)
@@ -128,6 +130,32 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             end
         end
 
+        function thePRUNERemovesFacesAndCHANGESNothing(testCase)
+        % A prune that changes a value is not a prune. Both halves are asserted: it must remove a
+        % substantial number of faces, and the envelope must come out IDENTICAL -- in value and in
+        % finiteness, because the second is how the domain is expressed and the first cannot see it.
+        %
+        % The finiteness half is not hypothetical: before the dominating face inherited the dropped
+        % one's PAIR, 60 of 300 sampled points flipped from finite to infinite while every finite
+        % value stayed exactly right.
+            for c = [0 -1 -2]
+                [fA, fB] = fixture(c);
+                env = envelopeAssemble(conjQ(fA), conjQ(fB));
+                rng(37);
+                X = [rand(150,1)*2 - 0.5, rand(150,1)*2 - 0.5];   % the square AND a margin
+                v0 = envelopeEval(env, X);
+                [env2, info] = envelopePrune(env);
+                v1 = envelopeEval(env2, X);
+                testCase.verifyLessThan(info.after, info.before, ...
+                    sprintf('c = %g: the prune must remove something', c));
+                testCase.verifyEqual(isfinite(v1), isfinite(v0), ...
+                    sprintf('c = %g: the DOMAIN must survive the prune', c));
+                fin = isfinite(v0);
+                testCase.verifyEqual(v1(fin), v0(fin), 'AbsTol', 0, ...
+                    sprintf('c = %g: every value must survive the prune exactly', c));
+            end
+        end
+
         function theARGUMENTSAreChecked(testCase)
             [fA, fB] = fixture(0);
             testCase.verifyError(@() envelopeAssemble(conjQ(fA)), 'envelopeAssemble:nargin');
@@ -136,6 +164,8 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             testCase.verifyError(@() envelopeEval(env), 'envelopeEval:nargin');
             testCase.verifyError(@() envelopeEval(struct('a',1), [0 0]), 'envelopeEval:shape');
             testCase.verifyError(@() envelopeEval(env, [0 0 0]), 'envelopeEval:points');
+            testCase.verifyError(@() envelopePrune(), 'envelopePrune:nargin');
+            testCase.verifyError(@() envelopePrune(struct('a',1)), 'envelopePrune:shape');
         end
     end
 end
