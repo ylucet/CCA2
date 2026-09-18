@@ -9,23 +9,28 @@ _2026-09-18_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main`, fourteen commits ahead of `origin/main`, tree clean
-- Tests: fast bucket green over 44 suites · `envelopeAssembleTest` 6/0 (~207 s,
-  normal) · slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
+- Branch `main`, fifteen commits ahead of `origin/main`, tree clean
+- Tests: fast bucket 662/0 over 44 suites · `envelopeAssembleTest` 6/0 (normal) ·
+  slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
 - Known reds: none
 
 ## Where the envelope stands
-It is COMPUTED and VERIFIED -- 0.0e0 against f on the convex fixture, 8.6e-13 and
-3.2e-12 against a numeric sup on the kinked ones, domain included -- and now
-PRUNED: 120 -> 52, 142 -> 94, 110 -> 38 faces with nothing changed.
+COMPUTED, VERIFIED and PRUNED. Values exact against f on the convex fixture and
+8.6e-13 / 3.2e-12 against a numeric sup on the kinked ones, domain included;
+120 -> 52, 142 -> 94, 110 -> 38 faces after the prune with nothing changed.
+What it is not is a single mesh object.
 
-## Next — ONE item, where there were two
-**THE ARRANGEMENT.** Overlay the pruned faces' regions and take the max per cell.
-That is both the mesh `biconj` would return and the boundary the paper's figures
-want. `maxQ` cannot do it: a QuaCon is +infinity off its faces while a candidate
-that does not apply is -infinity, so folding collapses the list to an empty mesh
-(measured). `envelopeEval` already answers correctly from the face list, so
-nothing is blocked except the return TYPE.
+## Next — three routes, in order
+1. **BUILD THE ARRANGEMENT ONCE**: overlay the pruned regions, winner per cell. No
+   intermediate function is formed, so nothing blows up on the way — and it is the
+   same construction the paper's figures and topology tables need.
+2. Fold in a TREE rather than left to right: same worst case, often far better in
+   practice, and a cheap experiment to run first.
+3. Return the FACE LIST with a type whose eval is the max over faces — a type
+   decision, since it needs a new concrete class rather than a QuaCon.
+
+Folding left to right is ruled out by measurement: semantically right per PAIR
+(not per face), and it doubles per fold — 5 to 3726 over twelve pairs.
 
 ## Files
 - `envelopeAssemble.m`, `envelopePrune.m`, `envelopeEval.m` — assemble, prune, evaluate

@@ -1,5 +1,40 @@
 # TODO
 
+## 2026-09-18 (fourth pass) — CORRECTION: the pair-level fold is right, and it explodes
+
+The previous entry said `maxQ` was refuted as the way to build the mesh. Half right: folding
+individual FACES is wrong (a QuaCon is +infinity off its faces, a candidate that does not apply is
+-infinity), but folding a whole PAIR is SEMANTICALLY CORRECT -- a pair's contribution really is
++infinity outside its candidate regions. What kills it is cost, not meaning:
+
+    pairs folded   1  2  3  4  5  6   7   8   9   10   11   12
+    mesh faces     5  8 15 24 48 63 252 270 675 1323 1917 3726        (c = 0)
+
+roughly doubling per fold, against an envelope with a handful of faces; c = -2 behaves the same.
+
+**The growth is INTRINSIC.** The max over the first k pairs is a PARTIAL max, and a partial max of
+piecewise quadratics genuinely has many pieces -- only the full max collapses. A left-to-right fold
+cannot know which pieces the remaining pairs will delete, so no better emptiness filter fixes this.
+
+### The three routes, in the order to try them
+
+1. **BUILD THE ARRANGEMENT ONCE.** Overlay all the pruned regions, decide the winner per cell. No
+   intermediate function is formed, so nothing can blow up on the way. This is also the boundary the
+   paper's figures and topology tables need, so it is one item serving two purposes. Pieces that
+   exist: `conicMeet`, `QuaCon.Vname`, the degree-4 sign kernel (`cellHasInterior`),
+   `ratQ.feasible2`, and `envelopePrune` to keep the input small.
+2. **Fold in a TREE** rather than left to right -- same worst case, often much better in practice,
+   and a cheap experiment to run before committing to (1).
+3. **Return the FACE LIST**, with a type whose evaluation is the max over faces. `envelopeEval`
+   already does this correctly; it would need a new concrete class rather than a `QuaCon`, so it is
+   a type decision.
+
+### After that
+
+- `biconjQ`'s `convexPieceCoupling` route, which is then a return statement.
+- The 2^53 ceiling: `polynomialOverflow` is a named refusal; the general answer is the modular route.
+
+
 ## 2026-09-18 (third pass) — the PRUNE lands; the mesh needs an ARRANGEMENT, not a fold
 
 `envelopePrune`: drop a face when another is at least as large everywhere it applies and applies

@@ -7744,3 +7744,47 @@ mismatch in its other guise, not a complexity problem to be pruned away.
 and take the max per cell. That is the same construction the paper's figures and topology tables
 need, so the two open items are now ONE item rather than two. `envelopeEval` already answers
 correctly from the face list, so nothing downstream is blocked on it except the return TYPE.
+
+
+## 2026-09-18 (correction) — the PAIR-level fold is semantically RIGHT; only the FACE-level one is wrong
+
+The entry above says "`maxQ` is REFUTED as the way to build the mesh". That is **half right, and the
+half it gets wrong changes what to try next**, so it is corrected here rather than amended in place.
+
+**What is true:** folding individual FACES with `maxQ` is wrong. A `QuaCon` is +infinity off its
+faces, and a single candidate that does not apply contributes nothing, so the fold collapses to an
+empty mesh -- measured, after about ten faces.
+
+**What is NOT true:** that the same applies to a PAIR. A cell pair's contribution really IS
++infinity outside its candidate regions -- that is exactly where its own sup diverges
+(`envelopeCellRegions`' contract) -- so a pair's faces DO form a legitimate `QuaCon`, and
+`f** = max over pairs` is exactly what `maxQ` computes. The very first assembly did it that way and
+it was right; what it was not was affordable.
+
+**Measured, run to completion instead of stopped early:**
+
+| pairs folded | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mesh faces (c = 0) | 5 | 8 | 15 | 24 | 48 | 63 | 252 | 270 | 675 | 1323 | 1917 | 3726 |
+
+roughly a doubling per fold, against an envelope with a handful of faces. The c = -2 fixture behaves
+the same way (1, 5, 8, 42, 88, 224, 1088, 1024, 2304, 3200).
+
+**And the growth is INTRINSIC to the fold, not a filter that is too weak.** The max over the FIRST k
+pairs is not the envelope: it is a partial max, and a partial max of piecewise quadratics genuinely
+has many pieces. Only the FULL max collapses, so the intermediate meshes carry pieces that the
+remaining pairs would delete -- and nothing in a left-to-right fold can know that. Blaming the
+assembler's incomplete emptiness test would be the wrong diagnosis.
+
+**So the options for turning the faces into a mesh are, in the order they should be tried:**
+
+1. **Build the arrangement ONCE** instead of folding: overlay all the (pruned) regions, decide the
+   winner per cell. No intermediate function is ever formed, so no partial max can blow up. This is
+   also the boundary the paper's figures and topology tables need.
+2. **Fold in a tree** rather than left to right, which keeps intermediate meshes smaller in practice
+   but has the same worst case, and is a cheap experiment before (1).
+3. **Return the face list**, with a type whose evaluation is the max over faces -- which is what
+   `envelopeEval` already does correctly, and would need a new concrete class rather than a `QuaCon`.
+
+`envelopePrune` stands on its own either way: 120 -> 52, 142 -> 94, 110 -> 38 faces with nothing
+changed, and any of the three routes starts from a smaller list because of it.
