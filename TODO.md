@@ -1,5 +1,33 @@
 # TODO
 
+## 2026-09-18 — the ENVELOPE IS ASSEMBLED, and verified end to end
+
+`envelopeAssemble` + `envelopeEval`: the convex envelope of a two-piece `QuaPol`, computed from the
+pieces' conjugates. **Exact (0.0e0) on the convex fixture against f itself, and 8.6e-13 / 3.2e-12 on
+the two non-convex ones against a numeric sup** -- with the bridge faces answering, at c = -2 over
+the whole square. `envelopeAssembleTest` (normal bucket) pins all three.
+
+### The three items between this and `biconj` returning an object
+
+1. **The CORNER candidates.** A curved-tie pair's candidate set is incomplete: the restricted sup can
+   be attained where the tie MEETS A FACET of the pair, and nothing builds that candidate. Measured:
+   the two curved pairs of the c = -2 fixture cover 320 and 280 of 600 interior points. The face is
+   AFFINE with quadratic-irrational coefficients, and its value is storable as it stands -- multiply
+   by the conjugate and `FP`/`FB` hold it. Until it exists, only pairs with complete coverage may
+   declare divergence (documented at the site).
+2. **The DOMINATION PRUNE.** Folding the pairs pairwise with `maxQ` is exact and EXPLODES -- 5, 6,
+   38, 35, 40, 125, 610 faces over seven of eighteen pairs. The prune is an exact quadratic sign
+   test on a polygon (`ratQ.quadSignOnPoly`): does some candidate beat this one on the whole of its
+   region. Without it there is no compact mesh; with it the faces should collapse to a handful.
+3. **The container**, for a face whose membership is a predicate -- or the observation, once 1 and 2
+   land, that a compacted mesh no longer needs one.
+
+### After that
+
+- **The BOUNDARY** (a real planar arrangement) for figures and the paper's topology tables.
+- The 2^53 ceiling: `polynomialOverflow` is a named refusal; the general answer is the modular route.
+
+
 ## 2026-09-17 (sixth pass) — the census CLOSES: a bridge face exists only where the tie is CURVED
 
 Item 2 is finished, and finishing it produced the statement that specifies item 3.

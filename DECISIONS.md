@@ -7623,3 +7623,49 @@ point of any face where the objective fails to be concave.
 `(A + Bt + Ct^2)/scale`, so the condition is `C/scale < 0`. `scale` carries `2a(delta'w)`, whose
 sign is whatever the pair's geometry makes it. Three of six configurations were wrong by factors of
 1e3 before the sign was carried.
+
+
+## 2026-09-18 — THE ENVELOPE IS ASSEMBLED AND VERIFIED END TO END, and it is exact on a convex input
+
+`envelopeAssemble` walks the cell pairs and produces the envelope's FACES; `envelopeEval` takes the
+max. Against two independent oracles:
+
+| fixture | oracle | worst relative error |
+|---|---|---|
+| unit square, c = 0 (CONVEX) | f ITSELF, since f** = f | **0.0e0**, exactly |
+| unit square, c = -1 | numeric `sup_s [<s,x> - max(gA,gB)(s)]` | 8.6e-13 |
+| unit square, c = -2 | same | 3.2e-12 |
+
+with no undershoot anywhere, and with the bridge faces genuinely answering: at c = -2 the kink is
+deep enough that they answer the WHOLE square. That is the first time a `biconj` of a two-piece
+`QuaPol` has been computed here at all.
+
+### Three things this turned up, all of them findings rather than bugs
+
+**1. THE FOLD EXPLODES, so the faces are returned instead of one mesh.** Folding the pairs pairwise
+with `maxQ` is exact and the running mesh went 5, 6, 38, 35, 40, 125, 610 faces over seven of
+eighteen pairs -- while the envelope has a handful. The growth is real: the intermediate maxima
+carry pieces later pairs dominate away, and nothing in the fold knows that yet. Compacting needs a
+DOMINATION PRUNE -- does some candidate beat this one on the whole of its region, an exact quadratic
+sign test on a polygon (`ratQ.quadSignOnPoly`) -- and that is the item between this and a `QuaCon`.
+
+**2. THE MAX IS OVER PAIRS, AND A PAIR THAT DIVERGES CONTRIBUTES +INFINITY.** Taking the max of the
+finite faces alone reported finite values OUTSIDE the unit square, where the envelope is +infinity:
+a pair whose own sup diverges at x makes the whole max diverge, and that is how `dom f**` is
+expressed. Fixed, and the domain then came out right -- 341 of 3000 points over `[-1,2]^2` finite,
+against a square that is a ninth of that window.
+
+**3. A CURVED-TIE PAIR'S CANDIDATE SET IS NOT YET COMPLETE**, and the same measurement found it: the
+two curved pairs of the c = -2 fixture cover 320 and 280 of 600 interior points. The missing class
+is the CORNER, where the tie meets a facet of the pair -- the restricted sup can be attained there,
+and that candidate is an AFFINE face whose coefficients are quadratic irrationals. Its value is
+storable as it stands (multiply by the conjugate and `FP`/`FB` hold it -- DECISIONS.md 2026-09-17);
+nothing builds it yet. Until it does, only pairs with provably complete coverage are allowed to
+declare divergence, which is documented at the site and is why the values above are right.
+
+### What stands between this and `biconj` returning an object
+
+1. the CORNER candidates above, so every pair's coverage is complete;
+2. the DOMINATION PRUNE, so the faces compact into a mesh instead of exploding;
+3. a container for a face whose membership is a predicate -- or, once 1 and 2 land, the observation
+   that a compacted mesh may not need one.

@@ -1,6 +1,6 @@
 # Session Handoff
 
-_2026-09-17_
+_2026-09-18_
 
 ## Blocked
 - `cPLQ/` is gitignored AND shadows tracked `functionNDomain.m` — delete / track /
@@ -9,25 +9,27 @@ _2026-09-17_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main`, eleven commits ahead of `origin/main`, tree clean
-- Tests: fast bucket 661/0 over 44 suites · normal 13/0 (09-11) · slow 98/0 ·
-  verylong 37/0 (09-06/07, not re-run since)
+- Branch `main`, twelve commits ahead of `origin/main`, tree clean
+- Tests: fast bucket green over 44 suites · normal gains `envelopeAssembleTest`
+  4/0 in ~130 s · slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
 - Known reds: none
 
-## Next — item 3, and it is now fully specified
-1. Fold the per-pair faces into one object and route `biconjQ`'s
-   `convexPieceCoupling` through it. The rule per pair: SKIP a tangential one;
-   a STRAIGHT tie is a FACET of each side (no bridge face); a CURVED tie takes
-   `bridgeFaceAlg`'s face, whose membership is `bridgeMember`. Fold the quadratic
-   faces with `maxQ`; a bridge face needs no fold. TODO.md 2026-09-17.
-2. The BOUNDARY (a planar arrangement) for figures and the paper's tables — off
-   the critical path, because a predicate decides membership.
+## What just landed
+The convex envelope is ASSEMBLED and verified end to end: exact (0.0e0) against f
+on the convex fixture, 8.6e-13 and 3.2e-12 against a numeric sup on the two
+non-convex ones, with the bridge faces answering. `envelopeAssemble` returns the
+FACES and `envelopeEval` takes the max.
+
+## Next
+1. The CORNER candidates — a curved-tie pair's candidates are incomplete where the
+   tie meets a facet (measured: 320 and 280 of 600 interior points covered). The
+   face is affine with quadratic-irrational coefficients and `FP`/`FB` can hold it.
+2. The DOMINATION PRUNE — the pairwise `maxQ` fold explodes (5 → 610 faces over
+   seven pairs); the prune is an exact sign test on a polygon.
+3. Then a container, and `biconjQ`'s `convexPieceCoupling` route.
 
 ## Files
-- `bridgeFaceAlg.m` — the producer; delegates to `bridgeFaceRat.m` when the pencil
-  is singular, so one entry point returns either face kind (`face.kind`)
-- `bridgeMember.m` — membership from the geometry; `bridgeWitness.m` exact,
-  `bridgePhi.m` the one polynomial both rest on
-- `bridgeArcCut.m` — exact cut ROWS for a line tie; both refuted constructions for
-  a conic tie are written out in its header
-- `ratQ.pairLine*`, `QuaCon.FC`'s third column — an edge may name one line of a pair
+- `envelopeAssemble.m`, `envelopeEval.m` — the assembly and its evaluator
+- `bridgeFaceAlg.m` / `bridgeFaceRat.m` — the bridge face, algebraic or rational
+- `bridgeMember.m`, `bridgeWitness.m`, `bridgePhi.m` — membership, exact and cached
+- `bridgeArcCut.m` — exact cut rows for a line tie; both refuted constructions kept
