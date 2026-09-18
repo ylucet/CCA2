@@ -1972,6 +1972,144 @@ classdef ratQ
             s = 0;  strict = false;
         end
 
+        function info = pairLineData(c)
+        % objective: decompose a DEGENERATE conic into its two LINES, as exact NAMES rather than as
+        %            coefficients -- neither line is rational, but the pair is, and "which one" is
+        %            a root index in exactly the sense QuaCon.Vname and AlgCon.FB already use.
+        % [input]  c : 1 x 6 integer conic [a b c d e f] whose 3x3 form is singular and whose
+        %              quadratic part is INDEFINITE (b^2 - 4ac > 0), i.e. two distinct real lines
+        % [output] info : struct with
+        %                   .kind   'crossing' (the lines meet) or 'parallel'
+        %                   .apex   [xn; yn; den] for 'crossing' -- rational, though the lines are not
+        %                   .quad   the integer quadratic whose ROOTS name the two lines, highest
+        %                           degree first, for ratQ.signAt
+        %                   .iv     2 x 2, one isolating interval per line, in CANONICAL ORDER
+        %                   .vertical  true when one line is vertical, and then it is branch 2
+        %                   .form   for 'parallel', the primitive linear form q the two lines are
+        %                           level sets of
+        %
+        % THE CANONICAL ORDER, which is what makes a branch index a NAME. For crossing lines the
+        % slope t = dy/dx of each line satisfies c t^2 + b t + a = 0, and the branches are its two
+        % real roots ASCENDING -- the same convention algBranch uses one dimension up. A VERTICAL
+        % line has no finite slope, and it is branch 2 by fiat, stated here so that both ends of the
+        % convention live in one place. For parallel lines there is no slope to order by: the two
+        % lines are level sets q = r of one linear form, and the branches are the two roots r
+        % ascending.
+        %
+        % WHY THIS EXISTS. The convex envelope's bridge face is cut by a segment whose endpoints are
+        % quadratic irrationals; only the PAIR of conjugate segments is rational (DECISIONS.md
+        % 2026-09-17). Storing the pair and naming the branch is what lets an H-form cell have one
+        % of them as a boundary, and it is a smaller change than giving the subdivision axis an
+        % algebraic level -- the same argument that made a face's value an index rather than a
+        % formula.
+            c = ratQ.conic(ratQ.chk(c, 'line pair'));
+            a = c(1); b = c(2); cc = c(3); d = c(4); e = c(5); f = c(6);
+            disc = ratQ.chk(b^2 - 4*a*cc, 'line pair discriminant');
+            if disc <= 0
+                error('ratQ:notALinePair', ...
+                    ['this conic''s quadratic part is definite or a perfect square, so it is not ' ...
+                     'two distinct crossing lines and there is no branch to name.']);
+            end
+            M3 = [2*a, b, d; b, 2*cc, e; d, e, 2*f];
+            if ratQ.chk(round(det(M3)), 'line pair 3x3') ~= 0
+                error('ratQ:notDegenerate', ...
+                    ['this conic is NOT degenerate, so it is one curve and not two lines. A ' ...
+                     'branch index names nothing on it.']);
+            end
+            M2 = [2*a, b; b, 2*cc];
+            if ratQ.detExact(M2) == 0
+                % PARALLEL: both lines are level sets of one primitive linear form.
+                error('ratQ:parallelPair', ...
+                    ['the two lines are PARALLEL, which the quadratic part being indefinite ' ...
+                     'excludes -- so this cannot be reached and reaching it is a defect here.']);
+            end
+            [xn, xd] = ratQ.solve2(M2, [-d; -e]);
+            if xd < 0, xn = -xn;  xd = -xd; end
+            % slopes: c t^2 + b t + a = 0. A ZERO leading coefficient means one line is VERTICAL.
+            quad = ratQ.polyTrim([cc, b, a]);
+            vertical = (cc == 0);
+            if vertical
+                if b == 0
+                    error('ratQ:notALinePair', ...
+                        'both lines are vertical, so they are parallel and cannot cross.');
+                end
+                iv = [-a/b - 1, -a/b + 1; 0 0];       % the finite slope is rational: a tight box
+            else
+                I = ratQ.isolateRoots(quad);
+                if size(I,1) ~= 2
+                    error('ratQ:notALinePair', ...
+                        ['the slope quadratic has %d real roots, not two, although the ' ...
+                         'discriminant is positive.'], size(I,1));
+                end
+                iv = I;
+            end
+            info = struct('kind', 'crossing', 'apex', [xn(1); xn(2); xd], 'quad', quad, ...
+                          'iv', iv, 'vertical', vertical);
+        end
+
+        function s = pairLineSign(c, b, xn, xd)
+        % objective: the EXACT sign of ONE line of a degenerate conic at a rational point.
+        % [input]  c : the line pair; b : the branch, 1 or 2; xn, xd : the point, xn/xd
+        % [output] s : -1, 0 or +1
+        %
+        % The line through the apex p with slope t is { (x2 - p2) - t (x1 - p1) = 0 }, so at a
+        % rational point the value is a LINEAR polynomial in t -- and t is a root of an integer
+        % quadratic. So this is the sign of a rational polynomial at an algebraic number, which
+        % `ratQ.signAt` decides exactly. No square root is ever formed, and nothing is evaluated in
+        % floating point.
+        %
+        % THE SIGN IS RELATIVE TO A FIXED ORIENTATION, namely the one written above; a caller reads
+        % the sign it wants AT A WITNESS and stores that, exactly as every other side in this
+        % toolbox is stored.
+            info = ratQ.pairLineData(c);
+            if ~isscalar(b) || ~ismember(b, [1 2])
+                error('ratQ:branch', 'the branch must be 1 or 2; got %s.', mat2str(b));
+            end
+            p = info.apex;
+            % x - p over the common denominator xd*p(3)
+            ux = ratQ.chk(xn(1)*p(3) - p(1)*xd, 'point minus apex');
+            uy = ratQ.chk(xn(2)*p(3) - p(2)*xd, 'point minus apex');
+            if info.vertical && b == 2
+                s = sign(ux);                      % the vertical line is x1 = p1
+                return
+            end
+            if info.vertical
+                % branch 1 is the FINITE slope, which is rational here: t = tn/td exactly, with no
+                % root-finding and no `rat` -- the quadratic has already degenerated to a linear.
+                td = info.quad(1);  tn = -info.quad(2);
+                s = sign(ratQ.chk(uy*td - tn*ux, 'line value')) * sign(td);
+                return
+            end
+            % value = uy - t*ux, a linear polynomial in t, at the b-th root of `quad`
+            q = ratQ.polyTrim([-ux, uy]);
+            if isempty(q), s = 0; return, end
+            s = ratQ.signAt(q, info.quad, info.iv(b,:));
+        end
+
+        function v = pairLineEval(c, b, X)
+        % objective: the VALUE of one line of a degenerate conic at points X -- in doubles, as the
+        %            cache that names the same line the exact branch index does.
+        % [input]  c : the line pair; b : 1 or 2; X : n x 2
+        % [output] v : n x 1
+        %
+        % A CACHE, in exactly the sense QuaCon.Vx is a cache of the vertex Vname names: the decision
+        % is `ratQ.pairLineSign`, this is what `eval` uses at a point where a tolerance is already
+        % the convention (QuaCon.eval's own header says where that line is drawn).
+            info = ratQ.pairLineData(c);
+            p = info.apex(1:2) / info.apex(3);
+            ux = X(:,1) - p(1);   uy = X(:,2) - p(2);
+            if info.vertical && b == 2
+                v = ux;  return
+            end
+            if info.vertical
+                t = -info.quad(2) / info.quad(1);
+            else
+                r = sort(roots(info.quad));
+                t = r(b);
+            end
+            v = uy - t*ux;
+        end
+
         function tf = conicDefinite(c)
         % objective: is the conic's 3x3 form DEFINITE, i.e. does the quadratic never vanish?
         % [input]  c : 1 x 6 integer conic

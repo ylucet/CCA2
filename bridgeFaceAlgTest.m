@@ -171,12 +171,16 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
         end
 
         function aCONICTieIsRefusedByNameWhenACutIsAskedFor(testCase)
-        % The open half of the item, said out loud. A genuine conic tie meets a facet at a quadratic
-        % irrational, so the cut segment lives in Q(s_e) and only the conjugate PAIR is rational --
-        % a line pair, whose sign condition names two opposite wedges. Refused rather than guessed.
-            fx = fixtureByName('anisotropic');
-            testCase.verifyError(@() bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [1 0 0; 0 1 0]), ...
-                'bridgeArcCut:conicTie');
+        % The open half of the item, and it has now cost TWO constructions. A conic tie's cut
+        % boundary is a SEGMENT of an irrational line; only the conjugate pair is rational. The
+        % wedge classifier and the sign-pattern classifier were both built and both measured wrong
+        % (bridgeArcCut's header has the numbers). Refused rather than guessed -- a guess here puts
+        % a face on the wrong side of its own boundary and every value on the excess is wrong.
+            for nm = {'isotropic', 'anisotropic'}
+                fx = fixtureByName(nm{1});
+                testCase.verifyError(@() bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [1 0 0; 0 1 0]), ...
+                    'bridgeArcCut:conicTie');
+            end
         end
 
         function aPAIRThatExcludesTheWholeTieIsRefusedByName(testCase)
@@ -190,14 +194,16 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
             testCase.verifyError(@() bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [-3 1 -5]), ...
                 'bridgeFaceAlg:noWitness');
             testCase.verifyError(@() bridgeArcCut(ratQ.conic([0 0 0 3 -1 -2]), [-3 1 -5], ...
-                                                  eye(2), [0;0], eye(2), [1;1], 1, [0 0 1]), ...
+                                                  eye(2), [0;0], eye(2), [1;1], 1, [0 0 1], ...
+                                                  [0 0 0 1 0 0], [0 0 0 1 0 -1], 0), ...
                 'bridgeArcCut:emptyArc');
         end
 
         function bridgeArcCutCHECKSItsOwnArguments(testCase)
             testCase.verifyError(@() bridgeArcCut([0 0 0 1 1 0], [1 0 0]), 'bridgeArcCut:nargin');
             testCase.verifyError(@() bridgeArcCut(ratQ.conic([0 0 0 0 0 1]), [1 0 0], ...
-                                                  eye(2), [0;0], eye(2), [1;1], 1, [0 0 1]), ...
+                                                  eye(2), [0;0], eye(2), [1;1], 1, [0 0 1], ...
+                                                  [0 0 0 1 0 0], [0 0 0 1 0 -1], 0), ...
                 'bridgeArcCut:degenerateTie');
         end
 
@@ -315,6 +321,8 @@ function fx = fixtureByName(name)
             fx = mk(name, [0 0 0 0 1 0 1 0 0 0], 1, [0 0 0 0 3 1 2 -4 2 3], 1);
         case 'bothShifted'                      % neither piece centred, both denominators > 1
             fx = mk(name, [0 0 0 0 4 1 3 2 5 -2], 3, [0 0 0 0 2 0 2 -1 1 1], 1);
+        case 'hyperbolic'                       % Delta indefinite: the tie is a hyperbola
+            fx = mk(name, [0 0 0 0 3 0 1 0 0 0], 1, [0 0 0 0 1 0 3 -4 2 3], 1);
         case 'sameHessian'                      % the tie is a LINE: the degenerate-conic path
             fx = mk(name, [0 0 0 0 2 0 2 0 0 0], 1, [0 0 0 0 2 0 2 -3 1 2], 1);
         otherwise
@@ -554,12 +562,25 @@ function [inside, holes, overKept] = baseMembership(fx, face, full, P)
 end
 
 function tf = inHForm(face, x)
-    tf = true;
-    for r = 1:size(face.con, 1)
-        c = face.con(r,1:6);
-        v = c(1)*x(1)^2 + c(2)*x(1)*x(2) + c(3)*x(2)^2 + c(4)*x(1) + c(5)*x(2) + c(6);
-        if face.con(r,7)*v < 0, tf = false; return, end
+% The region is the UNION over the blocks, and a block is an intersection of sign conditions -- so a
+% point is in the face when SOME block holds it. A `branch` of 1 or 2 means the condition is on ONE
+% LINE of a degenerate conic, evaluated through ratQ.pairLineEval, which is the double-precision
+% cache of the name the branch index carries.
+    for b = 1:numel(face.cells)
+        rows = face.cells{b};
+        ok = true;
+        for r = 1:size(rows, 1)
+            c = rows(r,1:6);
+            if size(rows,2) >= 8 && rows(r,8) ~= 0
+                v = ratQ.pairLineEval(c, rows(r,8), x(:).');
+            else
+                v = c(1)*x(1)^2 + c(2)*x(1)*x(2) + c(3)*x(2)^2 + c(4)*x(1) + c(5)*x(2) + c(6);
+            end
+            if rows(r,7)*v < 0, ok = false; break, end
+        end
+        if ok, tf = true; return, end
     end
+    tf = false;
 end
 
 function tf = maximiserIsOnTheTie(fx, x)

@@ -1,4 +1,4 @@
-function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
+function [cells, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit, C1, C2, kp)
 % bridgeArcCut  Cut a bridge face's sweep to the tie ARC that lies inside its own cell pair.
 %
 % objective: the one step between `bridgeFaceAlg` and an assembled envelope. The producer sweeps
@@ -12,8 +12,14 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
 %          N1,m1,N2,m2  : the two faces' Hessians and linear parts, ALREADY over the common d
 %          d            : that common positive integer denominator
 %          wit          : [xn1 xn2 xd], a rational point of the face's region, for reading signs
-% [output] rows : r x 7 integer rows [a b c d e f sign] to ADD to the face's region
-%          info : .kind ('line'), .tauLo/.tauHi (the arc's extent), .nCut (rows added)
+%          C1, C2       : the region's two boundary conics -- needed to verify a witness of the
+%                         COMPLEMENTARY arc, which is how a conic cut learns which side it is NOT on
+%          kp           : the tie's CONSTANT q1 - q2 over the same d. The tie conic has lost it to
+%                         its own scale, and the witness search needs the tie as a FUNCTION
+% [output] cells : cell array of r x 8 integer row blocks [a b c d e f sign branch] to ADD to the
+%                  face's region. ONE block for a line tie; a conic cut splits the face, so the
+%                  face is the UNION over the blocks -- see below.
+%          info  : .kind ('line' | 'conic'), .nCut (rows in the first block), .nCells
 %
 % ==================================================================================================
 % WHAT THE CUT IS, AND WHY A LINE TIE IS THE EASY CASE AND THE COMMON ONE
@@ -24,28 +30,29 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
 %
 % When the tie is a genuine CONIC those endpoints are quadratic irrationals, the segment through one
 % of them has coefficients in Q(s_e) rather than Q, and only the PAIR of conjugate segments is
-% rational -- a degenerate line-pair conic PC, the product over the two conjugate roots, which is a
-% symmetric function of them and so has integer coefficients. A line pair's sign condition names
-% TWO OPPOSITE WEDGES, and picking the right one is the difficulty. It is REFUSED here, and the
-% route that looks like it works is recorded so that it is not built a second time:
+% rational -- a degenerate line-pair conic PC. That case is REFUSED, and TWO constructions for it
+% have now been built and measured wrong. Both are written out because both are plausible enough to
+% be re-derived by anyone who meets the problem.
 %
-%   THE WEDGE ARGUMENT, AND WHY IT IS FALSE. A line cuts an ellipse into exactly two arcs, so the
-%   set A swept from one of them is CONNECTED and its boundary contains the two segments. It is
-%   tempting to conclude that A crosses neither LINE and therefore lies in ONE of the four wedges,
-%   which would make PC's sign a valid classifier -- with the wedges' apex rational (the singular
-%   point of PC) and a rational separator through it available by an integer sign test on PC's
-%   quadratic part. All of that was built, and it is wrong at the first step: A does not cross the
-%   SEGMENTS, but it may perfectly well cross a line's EXTENSION beyond its segment, and then A
-%   spans several wedges. MEASURED on the isotropic pair over the box {-1<=s1<=3, -2<=s2<=3}: 145
-%   of 296 points whose base lies strictly inside the pair were EXCLUDED by the wedge cell, with
-%   the witness at PC < 0 and the excluded points at PC > 0 -- the same region, two wedges.
-%   DECISIONS.md 2026-09-17.
+%   ATTEMPT 1, THE WEDGE. A line cuts a connected tie into two arcs, so the swept set A of one arc
+%   is CONNECTED and its boundary contains the two segments -- so, it seemed, A crosses neither LINE
+%   and lies in one of the four WEDGES, making PC's sign a classifier. FALSE: A does not cross the
+%   SEGMENTS, but it may cross a line's EXTENSION beyond its segment. Measured: 145 of 296 interior
+%   points excluded.
 %
-%   WHAT THE FAILURE POINTS AT. The boundary of A really is the two SEGMENTS, not the two lines, and
-%   a segment is not the zero set of a polynomial. So no single H-form cell over CONICS holds A:
-%   either the cell list gains a subdivision that separates A's pieces from B's within each sign of
-%   PC, or the subdivision axis needs a level that can carry a bounded arc. Which of the two is
-%   right is not settled, and a guess here puts a face on the wrong side of its own boundary.
+%   ATTEMPT 2, NAMING THE LINE. `ratQ.pairLineData` decomposes the pair and a branch index names one
+%   of the two conjugate lines exactly, so the four SIGN PATTERNS of (L1, L2) are available as
+%   ordinary H-form conditions. On the first fixtures measured, every pattern was purely A or purely
+%   B, which would make A the complement of one pattern -- a union of two cells. FALSE in general:
+%   on an anisotropic pair one pattern holds BOTH, 1399 points of A and 2218 of B. The pattern cell
+%   is DISCONNECTED there, with one component reachable from A and the other from B, and no further
+%   condition on C1, C2, L1, L2 separates them.
+%
+% WHAT THE TWO FAILURES HAVE IN COMMON, which is the thing to take to the next attempt: the face's
+% boundary is a SEGMENT -- a bounded piece of a line -- and every representation tried describes it
+% with the unbounded curve the segment sits on. `ratQ.pairLineData` and the `branch` column stay,
+% because naming one line of a conjugate pair is needed by any construction at all and is now exact;
+% what is missing is a way to bound it. DECISIONS.md 2026-09-17.
 %
 % When the tie is a LINE -- tie(1:3) all zero -- every one of those objects is RATIONAL: the arc is
 % an interval of the line with rational endpoints, each endpoint is a rational point, and the
@@ -58,18 +65,19 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
 % pieces of f, and two cells of the SAME piece's conjugate share their Hessian outright. So the
 % degenerate tie is the rule among neighbours and the genuine conic is what non-adjacent pairs give.
 
-    if nargin ~= 8
-        error('bridgeArcCut:nargin', 'expects (tie, P, N1, m1, N2, m2, d, wit).');
+    if nargin < 11
+        error('bridgeArcCut:nargin', ...
+            'expects (tie, P, N1, m1, N2, m2, d, wit, C1, C2, kp).');
     end
     tie = ratQ.chk(tie(:).', 'tie conic');
     if any(tie(1:3) ~= 0)
         error('bridgeArcCut:conicTie', ...
-            ['the tie is a genuine CONIC, so each cut segment lives in Q(s_e) and only the ' ...
-             'conjugate PAIR is rational -- a line pair, whose sign condition names two OPPOSITE ' ...
-             'wedges. The wedge-and-separator construction that would resolve that was built and ' ...
-             'MEASURED WRONG (145 of 296 interior points excluded): the swept region crosses a ' ...
-             'cut line''s EXTENSION beyond its own segment, so it spans several wedges. See this ' ...
-             'file''s header and DECISIONS.md 2026-09-17 before attempting it again.']);
+            ['the tie is a genuine CONIC, so each cut boundary is a SEGMENT of an irrational ' ...
+             'line and only the conjugate PAIR is rational. Two constructions for that have been ' ...
+             'built and MEASURED WRONG -- the wedge (145 of 296 interior points excluded) and the ' ...
+             'sign pattern of the two named lines (one pattern holding 1399 points of the face ' ...
+             'and 2218 of its complement). Read this file''s header and DECISIONS.md 2026-09-17 ' ...
+             'before attempting a third.']);
     end
     D = tie(4);  E = tie(5);  F = tie(6);
     if D == 0 && E == 0
@@ -111,7 +119,7 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
     end
 
     % ---- one half-plane per FINITE endpoint -----------------------------------------------------
-    rows = zeros(0,7);
+    rows = zeros(0,8);
     for e = {lo, hi}
         tau = e{1};
         if isempty(tau), continue, end                   % the arc runs to infinity on that side
@@ -119,7 +127,8 @@ function [rows, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit)
         if isempty(row), continue, end                   % the segment degenerates to a point
         rows(end+1,:) = row; %#ok<AGROW>
     end
-    info = struct('kind', 'line', 'tauLo', {lo}, 'tauHi', {hi}, 'nCut', size(rows,1));
+    cells = {rows};
+    info = struct('kind', 'line', 'nCut', size(rows,1), 'nCells', 1);
 end
 
 % ==================================================================================================
@@ -151,7 +160,7 @@ function row = endpointRow(tau, w, s0n, nd, N1, m1, N2, m2, d, wit)
              'INTERIOR of the arc''s sweep decides it; this one was chosen before the cut was ' ...
              'known.']);
     end
-    row = [c, s];
+    row = [c, s, 0];      % branch 0: a straight cut line IS the whole conic
 end
 
 % ==================================================================================================

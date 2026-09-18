@@ -1,5 +1,41 @@
 # TODO
 
+## 2026-09-17 (third pass) — the branch column is IN; the cut's conic half has refuted TWO constructions
+
+**LANDED.**
+- `bridgeArcCut` -- the bridge face cut to the tie arc inside its own cell pair, exact for a LINE
+  tie, verified in both directions (values against a closed-form restricted oracle; membership of
+  the BASE POINT, which is the direction a too-small cut passes silently): 0 holes, 0 over-keeps,
+  3802 points.
+- **The EDGE BRANCH, Yves's call**: `ratQ.pairLineData` / `pairLineSign` / `pairLineEval`, and a
+  third column on `QuaCon.FC` -- `[edgeIndex, side, branch]`. Branch 0 is the whole conic and a
+  two-column list is still accepted, so nothing that predates it changes. Exact sign against a
+  double cache on 162 cases, 0 disagreements.
+- `bridgeWitness` and `bridgePhi` extracted, so the producer and the cut share one definition of
+  what the face IS rather than two spellings of it.
+
+**REFUTED, both with the measurement in DECISIONS.md and the test that catches them in the suite.**
+1. The WEDGE classifier for a conic tie: the sweep crosses a cut line's EXTENSION, so it spans
+   several wedges. 145 of 296 interior points excluded.
+2. The SIGN-PATTERN classifier, which the branch column made possible: on an anisotropic pair one
+   pattern holds 1399 points of the face AND 2218 of its complement, because the pattern cell is
+   disconnected there.
+
+### The next item, and it is a question about `eval`, not about geometry
+
+Both failures are the same failure: **the cut boundary is a SEGMENT -- a BOUNDED piece of a line --
+and `FC` can only say "this side of this whole curve".** `AlgCon`'s classic mesh already carries
+bounded edges (`E` names two endpoints); the H-form the evaluator uses does not. So the next step is
+to ask whether a face's membership can be decided from the bounded-edge mesh instead of from `FC`,
+BEFORE any third construction over sign conditions is attempted.
+
+Then, in order: the cut for parabola and hyperbola ties (23 of the 29 bridge pairs the fixtures
+produce); the producer for `rank1` and `affine` cells (the VALUE side already works -- the
+discriminant needs only that `det(M_mu)` is not identically zero -- and the region is a FAN bounded
+by the polar conic); and only then the fold into one `AlgCon` and `biconjQ`'s `convexPieceCoupling`
+route.
+
+
 ## 2026-09-17 (second pass) — the CUT is built for a LINE tie; the rest needs ONE type decision
 
 Worked items 1-3 of the previous list. What landed, what is refuted, and what the whole remainder

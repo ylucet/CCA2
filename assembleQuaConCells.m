@@ -8,7 +8,19 @@ function g = assembleQuaConCells(cells)
 % [input]  cells : struct array with fields
 %                    num, den : the face function, as an integer 1x10 numerator over a denominator
 %                    con      : k x 7 rows [a b c d e f  sign], meaning the cell lies where
-%                               sign * (a x^2 + b xy + c y^2 + d x + e y + f) >= 0
+%                               sign * (a x^2 + b xy + c y^2 + d x + e y + f) >= 0, or k x 8 rows
+%                               [a b c d e f  sign  branch] where a branch of 1 or 2 selects ONE
+%                               LINE of a DEGENERATE conic and the condition is on that line alone.
+%                               A 7-column list means branch 0 throughout, which is every caller
+%                               that predates 2026-09-17. See QuaCon's header and
+%                               ratQ.pairLineData: neither line of a pair is rational, the PAIR is,
+%                               and the branch NAMES one of them.
+%
+% WHAT A BRANCH ROW COSTS HERE, said plainly. The emptiness filters below are SOUND but not
+% COMPLETE, and a branch row makes them less complete rather than less sound: the constant-sign
+% test and the arrangement test both read the WHOLE conic, which is not the constraint, so a cell
+% carrying one skips them and survives. It may therefore be an empty face that is kept, never a
+% nonempty face that is dropped -- the same direction as note 1 below, for the same reason.
 % [output] g     : QuaCon
 %
 % DEDUPLICATION IS BITWISE, and that is the whole reason the conic rows are canonical. Two cells
@@ -74,16 +86,29 @@ function g = assembleQuaConCells(cells)
     %      the remaining tests get sharper, or satisfiable only ON the curve, in which case the
     %      cell has empty interior. This is the only handle on CURVED emptiness that does not need
     %      the degree-4 kernel, and it is what a nested fold generates most of.
+    for k = 1:numel(cells)
+        r = cells(k).con;
+        if isempty(r), r = zeros(0,8); end
+        if size(r,2) == 7, r = [r, zeros(size(r,1),1)]; end   %#ok<AGROW> the pre-branch spelling
+        if size(r,2) ~= 8
+            error('assembleQuaConCells:conShape', ...
+                ['cell %d has %d columns in `con`; it must be k x 7 [conic sign] or k x 8 ' ...
+                 '[conic sign branch].'], k, size(r,2));
+        end
+        cells(k).con = r;
+    end
+
     live = true(1, numel(cells));
     for k = 1:numel(cells)
         rows = cells(k).con;
+        hasBranch = any(rows(:,8) ~= 0);
 
         % A THIN cell -- one carrying an EQUALITY side -- has no interior BY CONSTRUCTION, so the
         % nonempty-interior tests below would delete exactly the faces that case exists to build.
         % Only the contradictory-sides test still applies to it, and that one is about +1 against
         % -1 on one curve, which a 0 does not participate in.
         if any(rows(:,7) == 0)
-            [~, ~, ict] = unique(rows(:,1:6), 'rows');
+            [~, ~, ict] = unique(rows(:,[1:6 8]), 'rows');
             for u = 1:max(ict)
                 sd = rows(ict == u, 7);
                 if any(sd > 0) && any(sd < 0), live(k) = false; break, end
@@ -96,6 +121,8 @@ function g = assembleQuaConCells(cells)
         %     it constrains nothing) or unsatisfiable off the curve itself (drop the cell).
         keep = true(size(rows,1), 1);
         for r = 1:size(rows,1)
+            if rows(r,8) ~= 0, continue, end        % a BRANCH row: the whole conic is not the
+                                                    % constraint, so its sign says nothing here
             cs = ratQ.conicSign(rows(r,1:6));
             if cs == 0, continue, end
             if cs == rows(r,7)
@@ -109,7 +136,7 @@ function g = assembleQuaConCells(cells)
         cells(k).con = rows;
         if isempty(rows), continue, end                        % no conditions: the whole plane
 
-        [~, ~, ic] = unique(rows(:,1:6), 'rows');
+        [~, ~, ic] = unique(rows(:,[1:6 8]), 'rows');
         for u = 1:max(ic)
             sides = rows(ic == u, 7);
             if any(sides > 0) && any(sides < 0)
@@ -123,8 +150,14 @@ function g = assembleQuaConCells(cells)
         %     exact degree-<=4 sign kernel. That last one is the filtered predicate of
         %     CONJ_FIELD_PROOF.md 8.7 in the small: the cheap tests above run first and the exact
         %     kernel only on what survives, so it is the cold path.
-        isLine = all(rows(:,1:3) == 0, 2);
+        isLine = all(rows(:,1:3) == 0, 2) & rows(:,8) == 0;
         live(k) = ratQ.feasible2(rows(isLine,7) .* rows(isLine,4:6), true);
+        if live(k) && hasBranch
+            % The arrangement test reads whole conics, and a branch row is a condition on ONE line
+            % of one -- so running it here could DROP a nonempty cell, which is the one direction
+            % these filters must never take. Kept instead; see the header.
+            continue
+        end
         if live(k) && ~all(isLine)
             % Build the (EcQ, rows) form cellHasInterior wants: the rows already carry their own
             % conic inline here, so each is its own "curve list" entry.
@@ -156,7 +189,9 @@ function g = assembleQuaConCells(cells)
             if ~isempty(best)
                 r1 = [ratQ.chk(den,'e1'), 0, ratQ.chk(-pt(1),'e0')];
                 r2 = [0, ratQ.chk(den,'e1'), ratQ.chk(-pt(2),'e0')];
-                con = [ratQ.conic([0 0 0, r1]), 0; ratQ.conic([0 0 0, r2]), 0];
+                % 8 columns, like every other `con` here: the trailing 0 is the branch, i.e.
+                % "the whole conic", which is what a straight line always is.
+                con = [ratQ.conic([0 0 0, r1]), 0, 0; ratQ.conic([0 0 0, r2]), 0, 0];
                 cells = struct('num', best, 'den', bestD, 'con', con);
                 live = true;
             end
@@ -194,7 +229,7 @@ function g = assembleQuaConCells(cells)
             end
             idx(r) = hit;
         end
-        FC{k} = [idx, rows(:,7)];
+        FC{k} = [idx, rows(:,7), rows(:,8)];
     end
 
     fN = zeros(numel(cells), 10);  fD = ones(numel(cells), 1);
@@ -206,8 +241,15 @@ function g = assembleQuaConCells(cells)
     % The order matters and was measured: without the redundancy pass the merge finds NOTHING,
     % because the fold leaves cells differing by one side AND one implied row, which does not match
     % the merge's "same list, opposite side" pattern until the implied row is gone.
-    FC = dropRedundantRows(EcQ, FC);
-    [fN, fD, FC] = mergeAdjacentCells(fN, fD, FC);
+    % BOTH PASSES READ A ROW AS "this whole conic, this side", so neither is correct on a branch
+    % row: dropping one as redundant or merging across one would change the face. They are
+    % optimisations -- the face set is already right without them -- so cells carrying a branch are
+    % handed through untouched rather than given a branch-aware version that nothing yet needs.
+    plain = cellfun(@(C) isempty(C) || all(C(:,3) == 0), FC);
+    if all(plain)
+        FC = dropRedundantRows(EcQ, FC);
+        [fN, fD, FC] = mergeAdjacentCells(fN, fD, FC);
+    end
 
     % Some curves may now be referenced by nothing; drop them so `ne` counts the curves that
     % actually bound something, and renumber what is left.

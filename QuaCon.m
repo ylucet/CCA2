@@ -39,8 +39,18 @@ classdef QuaCon < RatCon & Qua
 %             those two edges meet, rootIdx selecting among the (at most four) real intersections in
 %             `conicMeet`'s canonical order. No coordinate is stored, ever -- see `vertexCoords`.
 %
-%   FC        the faces, in H-FORM. FC{k} is an m x 2 list of [edgeIndex, side], meaning
+%   FC        the faces, in H-FORM. FC{k} is an m x 3 list of [edgeIndex, side, branch], meaning
 %                     face k = { x : side_i * Q_{e_i}(x) >= 0 for every row i },
+%             where `branch` is 0 for the whole conic -- which every row was until 2026-09-17, and
+%             a two-column FC is still accepted and read as all-zero. A branch of 1 or 2 selects
+%             ONE LINE of a DEGENERATE conic, and then the condition is on that line alone:
+%                     face k = { x : side_i * L_{branch}(Q_{e_i})(x) >= 0 ... }.
+%             Neither line of a degenerate conic is rational; the PAIR is, and the branch NAMES one
+%             of them in exactly the sense `Vname` names a vertex and `AlgCon.FB` names a value --
+%             see ratQ.pairLineData for the canonical order. It exists because the convex envelope's
+%             bridge face is cut by a SEGMENT whose endpoints are quadratic irrationals: only the
+%             conjugate pair is rational, so without a branch the cut condition names two opposite
+%             wedges and the face cannot be written at all (DECISIONS.md 2026-09-17).
 %             and a side of 0 means ON the curve, i.e. Q = 0 -- an EQUALITY rather than an
 %             inequality. That third value is what lets a face be THIN: dom f* is a line when the
 %             primal is a positive semidefinite singular quadratic on the whole plane, and a single
@@ -80,7 +90,9 @@ classdef QuaCon < RatCon & Qua
         fD (:,1) {mustBeNumeric}   % nf x 1  positive integer denominators
         EcQ (:,6){mustBeNumeric}   % ne x 6  primitive integer conics, ratQ.conic form
         Vname (:,3){mustBeInteger,mustBeNonnegative} % nv x 3 [edgeA edgeB rootIdx]
-        FC                         % cell(nf,1); FC{k} is m x 2 of [edgeIndex, sign in {-1,+1}]
+        FC                         % cell(nf,1); FC{k} is m x 3 of [edgeIndex, sign in {-1,0,+1},
+                                   % branch in {0,1,2}] -- see the header. A two-column list is
+                                   % accepted on construction and stored with branch 0.
    end
 
    methods
@@ -168,10 +180,12 @@ classdef QuaCon < RatCon & Qua
             % ---- the H-form face constraints ------------------------------------------------
             for k = 1:nf
                 Ck = FC{k};
-                if isempty(Ck), Ck = zeros(0,2); end
-                if size(Ck,2) ~= 2
+                if isempty(Ck), Ck = zeros(0,3); end
+                if size(Ck,2) == 2, Ck = [Ck, zeros(size(Ck,1),1)]; end   % the pre-branch spelling
+                if size(Ck,2) ~= 3
                     error('QuaCon:badConstraint', ...
-                        'FC{%d} must be m x 2 of [edgeIndex, sign]; got %d columns.', k, size(Ck,2));
+                        ['FC{%d} must be m x 3 of [edgeIndex, sign, branch] (or m x 2, read as ' ...
+                         'branch 0); got %d columns.'], k, size(Ck,2));
                 end
                 if ~isempty(Ck)
                     if any(Ck(:,1) < 1) || any(Ck(:,1) > ne)
@@ -183,6 +197,24 @@ classdef QuaCon < RatCon & Qua
                             ['FC{%d} carries a side that is not -1, 0 or +1. The side says WHICH ' ...
                              'side of the conic the face lies on and cannot be omitted; 0 means ' ...
                              'ON the curve.'], k);
+                    end
+                    if ~all(ismember(Ck(:,3), [0 1 2]))
+                        error('QuaCon:badConstraint', ...
+                            ['FC{%d} carries a branch that is not 0, 1 or 2. A branch NAMES one ' ...
+                             'line of a degenerate conic; 0 means the whole conic.'], k);
+                    end
+                    for r = find(Ck(:,3).' ~= 0)
+                        % A branch on a NON-degenerate conic names nothing, and would be read as
+                        % the whole curve by any consumer that forgot to look -- so it is refused
+                        % where the object is built rather than where it is used.
+                        try
+                            ratQ.pairLineData(EcQ(Ck(r,1),:));
+                        catch ME
+                            error('QuaCon:badConstraint', ...
+                                ['FC{%d} row %d names branch %d of edge %d, but that conic is ' ...
+                                 'not two distinct crossing lines (%s).'], ...
+                                k, r, Ck(r,3), Ck(r,1), ME.identifier);
+                        end
                     end
                 end
                 FC{k} = Ck;
@@ -264,8 +296,17 @@ classdef QuaCon < RatCon & Qua
                 Ck = obj.FC{k};
                 inFace = true(n,1);
                 for r = 1:size(Ck,1)
-                    q = QuaPar.evalConic(obj.EcQ(Ck(r,1),:), X);
-                    scale = max(1, max(abs(obj.EcQ(Ck(r,1),:))) * max(1, max(abs(X(:)))^2));
+                    if Ck(r,3) == 0
+                        q = QuaPar.evalConic(obj.EcQ(Ck(r,1),:), X);
+                        scale = max(1, max(abs(obj.EcQ(Ck(r,1),:))) * max(1, max(abs(X(:)))^2));
+                    else
+                        % ONE LINE of a degenerate conic. The line is irrational, so this is the
+                        % double-precision CACHE of the name in Ck(r,3) -- ratQ.pairLineSign is the
+                        % decision, exactly as ratQ.signAt is for a vertex. Its scale is linear in
+                        % X, not quadratic, because a line is.
+                        q = ratQ.pairLineEval(obj.EcQ(Ck(r,1),:), Ck(r,3), X);
+                        scale = max(1, max(abs(X(:))));
+                    end
                     if Ck(r,2) == 0
                         % ON the curve. A THIN face, and the honest caveat is that a point picked
                         % at random in floating point is never exactly on a line, so such a face

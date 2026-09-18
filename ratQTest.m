@@ -1164,5 +1164,64 @@ classdef ratQTest < matlab.unittest.TestCase
         end
 
 
+
+        function aDEGENERATEConicNamesItsTwoLinesAndTheSIGNIsExact(testCase)
+        % THE BRANCH ON AN EDGE, which is the edge's counterpart of AlgCon.FB on a face. Neither
+        % line of a degenerate conic is rational; the PAIR is, and the branch NAMES one of them by
+        % the canonical order of the slope quadratic's roots. The sign at a rational point is then
+        % the sign of a linear polynomial AT A ROOT, which signAt decides -- no square root is ever
+        % formed and nothing is compared in floating point.
+        %
+        % It exists because the convex envelope's bridge face is cut by a segment whose endpoints
+        % are quadratic irrationals (DECISIONS.md 2026-09-17).
+            % (x - y)(x + y - 2) = x^2 - y^2 - 2x + 2y: lines y = x and y = -x + 2, apex (1,1)
+            C = ratQ.conic([1 0 -1 -2 2 0]);
+            info = ratQ.pairLineData(C);
+            testCase.verifyEqual(info.apex, [1; 1; 1], 'the apex is RATIONAL, though the lines are');
+            testCase.verifyFalse(info.vertical);
+            % branch 1 is the SMALLER slope: -1, i.e. y = -x + 2
+            testCase.verifyEqual(ratQ.pairLineEval(C, 1, [3 0; 0 3]), [1; 1], 'AbsTol', 1e-12);
+            testCase.verifyEqual(ratQ.pairLineEval(C, 2, [3 0; 0 3]), [-3; 3], 'AbsTol', 1e-12);
+
+            % THE EXACT SIGN AGREES WITH THE CACHE, everywhere off the lines. Two routes that share
+            % no arithmetic: signAt on the slope quadratic, and a double evaluation.
+            bad = 0;  onLine = 0;
+            for a = -4:4
+                for b = -4:4
+                    for br = 1:2
+                        s = ratQ.pairLineSign(C, br, [a; b], 1);
+                        v = ratQ.pairLineEval(C, br, [a b]);
+                        if s == 0
+                            onLine = onLine + 1;
+                            if abs(v) > 1e-12, bad = bad + 1; end
+                        elseif s ~= sign(v)
+                            bad = bad + 1;
+                        end
+                    end
+                end
+            end
+            testCase.verifyEqual(bad, 0, 'the exact sign and the cache must agree');
+            testCase.verifyGreaterThan(onLine, 0, 'and points ON a line must be seen, as sign 0');
+
+            % A VERTICAL line has no finite slope and is branch 2 by convention:
+            % x(x - y) = x^2 - xy, lines x = 0 and y = x
+            Cv = ratQ.conic([1 -1 0 0 0 0]);
+            iv = ratQ.pairLineData(Cv);
+            testCase.verifyTrue(iv.vertical);
+            testCase.verifyEqual(ratQ.pairLineSign(Cv, 2, [3; 7], 1), 1, 'x = 0, to its right');
+            testCase.verifyEqual(ratQ.pairLineSign(Cv, 2, [-3; 7], 1), -1);
+            testCase.verifyEqual(ratQ.pairLineSign(Cv, 1, [0; 5], 1), 1, 'y = x, above it');
+        end
+
+        function aCONICThatIsNOTTwoCrossingLinesNamesNoBranch(testCase)
+        % The refusals, because a branch on the wrong kind of conic would be read as the whole curve
+        % by any consumer that forgot to look -- so it is refused where it is asked for.
+            testCase.verifyError(@() ratQ.pairLineData(ratQ.conic([1 0 1 0 0 -1])), ...
+                'ratQ:notALinePair');                       % a circle: definite quadratic part
+            testCase.verifyError(@() ratQ.pairLineData(ratQ.conic([1 0 -1 0 0 -1])), ...
+                'ratQ:notDegenerate');                      % a hyperbola: indefinite but NOT a pair
+            testCase.verifyError(@() ratQ.pairLineSign(ratQ.conic([1 0 -1 -2 2 0]), 3, [0;0], 1), ...
+                'ratQ:branch');
+        end
     end
 end

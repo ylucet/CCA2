@@ -7453,3 +7453,39 @@ subdivision level 2026-09-13 set aside, and it is the one the measurements actua
 separator, and the earlier hope that the neighbouring faces' rational rows would bound the bridge --
 founders on the same fact: the cut boundary is one conjugate of a pair, and nothing in the current
 subdivision can say which.
+
+
+## 2026-09-17 — an EDGE may now name a BRANCH (author decision), and the second cut construction it enabled is REFUTED
+
+**The decision, taken by Yves:** an edge should be able to name one line of a degenerate conic, the
+way a face already names one root of its polynomial. Implemented as `ratQ.pairLineData` /
+`pairLineSign` / `pairLineEval` plus a third column on `QuaCon.FC` -- `[edgeIndex, side, branch]`,
+branch 0 meaning the whole conic, which is every row that existed before. A two-column list is still
+accepted and read as all-zero, so nothing that predates this changes.
+
+**Why it is the right shape.** Neither line of a degenerate conic is rational; the PAIR is. Naming
+the branch is exact -- the slopes are the roots of an integer quadratic, so the sign of one line at
+a rational point is the sign of a LINEAR polynomial at a root, which `ratQ.signAt` decides -- and it
+is the same argument `Vname` and `FB` already rest on. Verified against a double-precision cache on
+a 9 x 9 grid x both branches, zero disagreements, with the ON-the-line points reported as sign 0.
+
+**And it does NOT settle the bridge face's cut, which is what it was built for.** With the two lines
+nameable, the four SIGN PATTERNS of (L1, L2) become ordinary H-form conditions, and on the first
+fixtures measured every pattern was purely inside the face's sweep A or purely inside its complement
+B -- 0 of 4 mixed, twice -- which would make A the complement of one pattern, a union of two cells.
+That was built. **It is false in general:** on an anisotropic pair one pattern holds BOTH, 1399
+points of A and 2218 of B. The pattern cell is DISCONNECTED there, one component reachable from A
+and the other from B, and no further condition on C1, C2, L1, L2 separates them.
+
+**What the two failed attempts have in common**, which is the thing to take to a third: the cut
+boundary is a SEGMENT -- a BOUNDED piece of a line -- and every representation tried so far
+describes it with the unbounded curve the segment lies on. The wedge attempt assumed the sweep
+stays off the extensions; the pattern attempt assumed the extensions cut it consistently. Neither
+holds. The branch machinery STAYS, because naming one line of a pair is a prerequisite for any
+construction at all and is now exact; what is missing is a way to BOUND it.
+
+**Where that points.** `AlgCon`'s classic mesh already has bounded edges -- `E` names two endpoints
+per edge -- while `QuaCon.FC`, the H-form the evaluator actually uses, has only unbounded sign
+conditions. So the next attempt is not another clever curve: it is whether a face's membership can
+be decided from the bounded-edge mesh rather than from `FC`. That is a change to how `eval` works,
+not to what the geometry is, and it is the first thing to consider before any third construction.
