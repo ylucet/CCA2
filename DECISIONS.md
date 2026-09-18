@@ -7530,3 +7530,51 @@ and a test pins exactly that. The cut ROWS are still produced for a line tie, wh
 **What a predicate does not give: a BOUNDARY.** Figures, edge lists and the paper's topology tables
 still want the arcs explicitly, and the arrangement above is still the way to get them. That work is
 now OFF the critical path to a correct `biconj`, which is the point.
+
+
+## 2026-09-17 — the DEGENERATE cells answer now; the census splits three ways, and the last class is RATIONAL
+
+With membership decided from the geometry, a SINGULAR gradient map stopped being a refusal. A VERTEX
+cell (the dual face is affine, so grad g is a constant POINT) and an EDGE cell (rank-1 Hessian, so
+grad g collapses the plane onto a LINE) each fail to give an image CONIC -- but the conics are only
+the outer BOUND, and `bridgeMember` never reads them. So the row is omitted and the face answers.
+Both are verified in the suite by the same two questions as every other tie kind: values against the
+restricted definition, and membership against the base point.
+
+**One defect surfaced with them, in both the exact and the double path.** `Phi` is formed by
+multiplying through by `det(M_mu)^2`, so EVERY zero of that determinant is a root of `Phi` whatever x
+is. On a vertex cell `det(M_mu) = (1+mu)^2 det(N1)` vanishes at `mu = -1` -- an endpoint of the very
+interval the search runs over -- and the base point read there came back as 1e7 while the face's own
+values are order 1, so the face claimed points it does not own. The exact path already refused such a
+root (the sign of the determinant is 0); the double path had an eps-scale guard where it needed a
+RELATIVE one. Both now refuse it and a fixture pins the vertex cell.
+
+### The census, re-run, and it now splits three ways
+
+29 bridge pairs over the unit square at c = 0, -1, -2:
+
+| | count | what it is |
+|---|---|---|
+| BUILT | 5 | answered end to end |
+| TANGENTIAL | 10 | the tie TOUCHES the pair at one point -- **no two-dimensional face exists**, which is an answer, not a gap |
+| singular pencil | 14 | `det(M_mu)` vanishes IDENTICALLY, so no member of the Lagrange family is invertible |
+
+The tangential class is the pair walk being right: it counts a tangential tie as a bridge
+(DECISIONS.md 2026-09-13 measured those to be the majority), and such a pair's faces come from its
+two sides alone. `bridgeFaceAlg:tangentialArc` now says exactly that instead of reporting a failed
+search.
+
+### The last class is EASIER than what has been built, not harder
+
+Measured: 12 of the 14 are AFFINE x RANK-1, and there `det((1+mu)N1 - mu N2)` is identically zero
+because one Hessian is 0 and the other is singular. The whole conjugate-family parameterisation has
+no invertible member, so the discriminant construction cannot start.
+
+**It does not need to.** With g1 AFFINE the objective `<s,x> - g1(s)` is LINEAR in s, and the tie
+`{g1 = g2}` with g2 of rank 1 is a PARABOLA. Parameterise it as `s(t) = p0 + t p1 + t^2 p2` with
+rational coefficients; the objective becomes `a0(x) + a1(x) t + a2(x) t^2` with every `a_i` AFFINE in
+x, and its maximum is `a0 - a1^2/(4 a2)` at `t = -a1/(2 a2)`.
+
+So that face is a RATIONAL function of x with a LINEAR denominator -- exactly what the `Rat` level of
+the lattice holds, needing no `FP`/`FB` at all. That is the next thing to build, and it is a closed
+form rather than an elimination.

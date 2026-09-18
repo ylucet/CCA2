@@ -139,7 +139,21 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     tie = ratQ.diffConic(n1, d1, n2, d2);             % the tie conic, canonically spelled
 
     % ---- 1. the implicit polynomial -----------------------------------------------------------
-    [FP, ipInfo] = implicitPoly(d, N1, m1, q1, N2, m2, q2);
+    try
+        [FP, ipInfo] = implicitPoly(d, N1, m1, q1, N2, m2, q2);
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        % THE FACE'S OWN POLYNOMIAL DOES NOT FIT IN A DOUBLE, which is the answer being large
+        % rather than an intermediate being clumsy: the discriminant of a cubic multiplies four of
+        % its coefficients together, and those already carry the two faces' denominators to the
+        % third power. A named refusal, because "this input is past the exact arithmetic's ceiling"
+        % and "this routine is wrong" must not look the same from outside.
+        error('bridgeFaceAlg:polynomialOverflow', ...
+            ['the implicit polynomial exceeds 2^53 for this pair (%s). That is the ANSWER being ' ...
+             'large: the discriminant multiplies four coefficients that already carry both ' ...
+             'denominators cubed. The general fix is the modular route DECISIONS.md records for ' ...
+             'ratQ, not a rearrangement of this elimination.'], ME.message);
+    end
 
     % ---- 2. the two boundary conics -----------------------------------------------------------
     C1 = imageConic(tie, N1, m1, d, 'first');
@@ -157,8 +171,8 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     for w = 1:size(W,1)
         xn = W(w,1:2).';  xd = W(w,3);
         try
-            s1 = signAtRational(C1, xn, xd);
-            s2 = signAtRational(C2, xn, xd);
+            s1 = sideOf(C1, xn, xd);
+            s2 = sideOf(C2, xn, xd);
             [FB, bInfo] = branchIndex(FP, d, N1, m1, q1, N2, m2, q2, Dl, dl, kp, xn, xd);
             break
         catch ME
@@ -177,7 +191,10 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
              'records for ratQ.'], size(W,1), lastErr.message);
     end
 
-    base = [C1, s1, 0; C2, s2, 0];
+    % ONE ROW PER CONIC THAT EXISTS. A missing one is a weaker bound, never a wrong face.
+    base = zeros(0,8);
+    if ~isempty(C1), base = [base; C1, s1, 0]; end
+    if ~isempty(C2), base = [base; C2, s2, 0]; end
     cutInfo = struct('kind', 'none', 'nCut', 0, 'nCells', 1);
     cells = {base};
     if ~isempty(P)
@@ -302,26 +319,26 @@ function [p, info] = implicitPoly(d, N1, m1, q1, N2, m2, q2)
 end
 
 % ==================================================================================================
-function C = imageConic(tie, Nk, mk, d, which)
-% The conic through grad g_k(tie), by exact substitution.
+function C = imageConic(tie, Nk, mk, d, which) %#ok<INUSD>
+% The conic through grad g_k(tie), by exact substitution -- or EMPTY when there is not one.
 %
-% grad g_k(s) = (Nk s + mk)/d is an invertible affine map when Nk is nonsingular, and the image of
-% a conic under one is a conic whose coefficients are a substitution away: inverting
+% grad g_k(s) = (Nk s + mk)/d is an invertible affine map when Nk is nonsingular, and the image of a
+% conic under one is a conic whose coefficients are a substitution away: inverting
 % x = (Nk s + mk)/d gives s = adj(Nk)(d x - mk)/det(Nk), which is exactly ratQ.substAffine's
 % (Mn, tn, md). A conic goes through a routine that takes a FACE because the 10-wide weighted basis
 % spells the same function -- c5 = 2a, c6 = b, c7 = 2c -- and a function's zero set is its zero set.
+%
+% A SINGULAR Nk USED TO BE A REFUSAL AND IS NOW AN OMISSION, which is what deciding membership from
+% the geometry bought. The dual cell is then a VERTEX cell (Nk = 0: grad g is constant, so that end
+% of the sweep is a POINT) or an EDGE cell (rank 1: grad g collapses the plane onto a LINE). Neither
+% end is a conic, so that end contributes no row -- and the rows are only an OUTER BOUND, never the
+% face. `bridgeMember` decides membership from the pair's own data and does not read them at all.
+%
+% Those two cell kinds are not exotic: a conjugate of a quadratic on a polygon has ONE full-rank
+% cell, one rank-1 cell per EDGE and one affine cell per VERTEX, so they are most of any overlay
+% (DECISIONS.md 2026-09-17, the census).
     if ratQ.detExact(Nk) == 0
-        if all(Nk(:) == 0)
-            error('bridgeFaceAlg:vertexCell', ...
-                ['the %s face is AFFINE, so its dual cell is a VERTEX cell: grad g is constant, ' ...
-                 'its end of the sweep collapses to a POINT, and the region is a fan rather ' ...
-                 'than a band between two conics. A legitimate cell, and not this routine''s ' ...
-                 'shape.'], which);
-        end
-        error('bridgeFaceAlg:edgeCell', ...
-            ['the %s face has a SINGULAR Hessian, so its dual cell is an EDGE cell: grad g ' ...
-             'collapses the plane onto a LINE and that end of the sweep is not a conic. A ' ...
-             'legitimate cell, and not this routine''s shape.'], which);
+        C = [];  return
     end
     adjN = [Nk(2,2), -Nk(1,2); -Nk(2,1), Nk(1,1)];
     Mn = ratQ.chk(d * adjN,  'image map');
@@ -353,11 +370,24 @@ function [b, info] = branchIndex(FP, d, N1, m1, q1, N2, m2, q2, Dl, dl, kp, xn, 
 % pairs the value is the largest real root every time, while its ascending index takes both 2 and 4
 % WITHIN ONE FACE, because a pair of lower roots leaves the real line in the face's interior.
 % algBranch.m and DECISIONS.md 2026-09-17.
-    Phi = ratQ.polyTrim(fliplr(bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd)));
+    [PhiA, Dt] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
+    Phi = ratQ.polyTrim(fliplr(PhiA));
     x = xn(:) / xd;
     mus = roots(Phi);
     mus = real(mus(abs(imag(mus)) <= 1e-10*max(1, abs(mus))));
     mus = mus(mus >= -1 - 1e-12 & mus <= 1e-12);
+    % A ROOT WHERE det(M_mu) VANISHES IS AN ARTEFACT OF CLEARING IT, not a stationary multiplier.
+    % Phi was formed by multiplying through by det(M_mu)^2, so every zero of that determinant is a
+    % root of Phi whatever x is. It bites on a VERTEX cell, where the dual face is affine and
+    % det(M_mu) = (1+mu)^2 det(N1) vanishes at mu = -1 -- exactly an endpoint of the range -- and
+    % the value read there diverges (measured: 2.1e7 where the face's value is order 1). The exact
+    % membership test already refuses such a root, by the sign of det being 0; this is the same
+    % refusal in the double path.
+    if ~isempty(mus)
+        dScale = max(abs(Dt));
+        keep = arrayfun(@(mu) abs(polyval(fliplr(Dt), mu)) > 1e-9 * max(1, dScale), mus);
+        mus = mus(keep);
+    end
     if isempty(mus)
         error('bridgeFaceAlg:noStationary', ...
             ['the witness was VERIFIED to be in the region, so Phi has a root in [-1,0], yet ' ...
@@ -535,6 +565,12 @@ function q = conicOfFace(n)
 % TWICE the face, so the result is integral: the weighted basis carries halves on the squared
 % terms, and a conic has NO SCALE, so doubling is free where halving is not.
     q = [n(5), 2*n(6), n(7), 2*n(8), 2*n(9), 2*n(10)];
+end
+
+function s = sideOf(C, xn, xd)
+% The side, or 0 when there is no conic to have a side of.
+    if isempty(C), s = 0; return, end
+    s = signAtRational(C, xn, xd);
 end
 
 function s = signAtRational(C, xn, xd)

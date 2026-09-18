@@ -43,8 +43,12 @@ function [W, info] = bridgeWitness(d, N1, m1, N2, m2, Dl, dl, kp, C1, C2, P)
             % decides instantly. An overflow therefore moves to the next candidate and is COUNTED,
             % so that "no witness" can say which of the two reasons it means.
             try
-                if signAtRational(C1, xnTry, xdTry) == 0 || signAtRational(C2, xnTry, xdTry) == 0
-                    continue                          % ON a boundary: names no side
+                % ON a boundary names no side -- for the conics that EXIST. A singular gradient
+                % map contributes none (see bridgeFaceAlg's imageConic), and a missing boundary is
+                % one fewer proposal to reject, not a reason to reject every proposal.
+                if (~isempty(C1) && signAtRational(C1, xnTry, xdTry) == 0) || ...
+                   (~isempty(C2) && signAtRational(C2, xnTry, xdTry) == 0)
+                    continue
                 end
                 if isempty(P)
                     [inR, nR] = memberExact(N1, m1, N2, m2, Dl, dl, kp, d, xnTry, xdTry);
@@ -79,6 +83,20 @@ function [W, info] = bridgeWitness(d, N1, m1, N2, m2, Dl, dl, kp, C1, C2, P)
              'outside. The face is not refused because it is ill-formed but because its ' ...
              'membership test does not fit in a double -- the general answer is the modular ' ...
              'route DECISIONS.md records for ratQ, not a different witness.'], overflows, tries);
+    end
+    % NONEMPTY BUT TINY is the tangential case; EMPTY is a different statement -- the pair excludes
+    % the tie altogether -- and it keeps its own refusal below.
+    if ~isempty(P) && ~isempty(S) && size(S,1) <= 2
+        % THE TIE TOUCHES THE PAIR RATHER THAN CROSSING IT, and that is an ANSWER, not a gap: the
+        % arc is a single point, so the sweep is a single SEGMENT, which has no area and is no
+        % face. Measured on the standard fixtures: 10 of 29 pairs classified as bridges are of this
+        % kind, because the pair walk counts a TANGENTIAL tie as a bridge (DECISIONS.md
+        % 2026-09-13, where tangential ties turned out to be the majority). An assembly should skip
+        % such a pair and take its faces from the two sides alone.
+        error('bridgeFaceAlg:tangentialArc', ...
+            ['the tie meets this pair in at most a POINT (%d sampled tie points lie in it), so ' ...
+             'the pair carries no two-dimensional bridge face. That is the answer for a ' ...
+             'TANGENTIAL tie, not a refusal to compute one.'], size(S,1));
     end
     error('bridgeFaceAlg:noWitness', ...
         ['no interior point of the bridge region could be VERIFIED, after %d attempts over %d ' ...
@@ -124,11 +142,30 @@ function S = tieSample(Dl, dl, kp, P)
     else
         L = 20;  ctr = 0;
     end
-    for refine = 0:2
-        S = conicPoints(Dl, dl, kp, ctr, L, 41 * 10^refine);
+    % THE WINDOW HAS TO FIND THE ARC BEFORE THE SAMPLING CAN REFINE IT. A scale taken from the
+    % conic's own centre is meaningless for a PARABOLA, which has none, and the pair can place the
+    % arc far from wherever the window was centred -- measured, 10 of 29 bridge pairs on the
+    % standard fixtures were refused for "no witness" while having a perfectly good arc. So the
+    % window WIDENS until the pair admits some of the curve, and only then does the resolution go up
+    % INSIDE the feasible span.
+    S = zeros(0,2);
+    for L2 = [L, 4*L, 20*L, 100*L, 500*L]
+        S = conicPoints(Dl, dl, kp, ctr, L2, 2001);
         if isempty(P) || isempty(S), break, end
-        S = S(all(S*P(:,1:2).' + P(:,3).' >= 0, 2), :);
-        if size(S,1) >= 5, break, end
+        keep = all(S*P(:,1:2).' + P(:,3).' >= 0, 2);
+        if ~any(keep), continue, end
+        S = S(keep, :);
+        if size(S,1) >= 5
+            % refine inside the span the pair actually admits
+            lo = min(S(:,1));  hi = max(S(:,1));
+            pad = max(1e-9, (hi - lo)/20);
+            S2 = conicPoints(Dl, dl, kp, (lo+hi)/2, (hi-lo)/2 + pad, 2001);
+            if ~isempty(S2)
+                k2 = all(S2*P(:,1:2).' + P(:,3).' >= 0, 2);
+                if any(k2), S = S2(k2,:); end
+            end
+        end
+        break
     end
     if ~isempty(S)                                   % middle first: the least extreme proposals
         [~, ord] = sort(vecnorm(S - mean(S,1), 2, 2));

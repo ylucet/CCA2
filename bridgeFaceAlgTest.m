@@ -180,7 +180,14 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
         % This is what two constructions over sign conditions could not do. The difference is that
         % the bounded conditions live in the DUAL plane -- mu in [-1,0] and s in a polygon -- where
         % everything is straight, instead of being forced into curves in x.
-            for nm = {'sameHessian', 'isotropic', 'anisotropic', 'hyperbolic'}
+        %
+        % THE LAST TWO FIXTURES ARE THE DEGENERATE CELLS, which are the MAJORITY on real input: a
+        % conjugate has one full-rank cell, one rank-1 cell per edge and one affine cell per vertex.
+        % Both used to be refused outright, because their gradient map is singular and its end of
+        % the sweep is a LINE or a POINT rather than a conic. With membership decided from the
+        % geometry that only costs a row of the outer bound, so they now answer.
+            for nm = {'sameHessian', 'isotropic', 'anisotropic', 'hyperbolic', ...
+                      'vertexCell', 'edgeCell'}
                 fx = fixtureByName(nm{1});
                 for Pc = {[1 0 0; 0 1 0], [1 0 1; -1 0 3; 0 1 2; 0 -1 3]}
                     P = Pc{1};
@@ -296,19 +303,39 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
 
         % ---- what it refuses, by name ------------------------------------------------------
 
-        function aVERTEXCellIsRefusedByName(testCase)
-        % An AFFINE face means grad g is constant: its end of the sweep is a POINT, the region is a
-        % fan rather than a band, and this routine's two-conic shape does not hold it.
-            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 1 0 1 0 0 0], 1, ...
-                                                   [0 0 0 0 0 0 0 1 2 3], 1), ...
-                'bridgeFaceAlg:vertexCell');
+        function aSINGULARGradientMapOMITSABoundInsteadOfRefusing(testCase)
+        % WHAT USED TO BE TWO REFUSALS. A VERTEX cell's dual face is AFFINE, so grad g is constant
+        % and its end of the sweep is a POINT; an EDGE cell's Hessian has rank 1, so grad g collapses
+        % the plane onto a LINE. Neither end is a conic, so neither contributes a row to the outer
+        % bound -- and since membership is decided from the pair's own data, that costs a row of the
+        % BOUND and nothing of the FACE. These two cell kinds are the majority on real input.
+            for nm = {'vertexCell', 'edgeCell'}
+                fx = fixtureByName(nm{1});
+                face = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                testCase.verifyEqual(size(face.cells{1},1), 1, ...
+                    sprintf('%s: one end of the sweep is not a conic, so one row is missing', nm{1}));
+                testCase.verifyEqual(face.FB, -1, sprintf('%s: still the top branch', nm{1}));
+                testCase.verifyTrue(bridgeMember(face.pair, face.wit(1:2)/face.wit(3)), ...
+                    sprintf('%s: and the face is still a face', nm{1}));
+            end
         end
 
-        function anEDGECellIsRefusedByName(testCase)
-        % A rank-1 Hessian collapses the plane onto a line, so that boundary is not a conic either.
-            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 1 0 1 0 0 0], 1, ...
-                                                   [0 0 0 0 1 0 0 1 2 3], 1), ...
-                'bridgeFaceAlg:edgeCell');
+        function aTANGENTIALPairCarriesNOTwoDimensionalFaceAndSaysSo(testCase)
+        % NOT A GAP, AN ANSWER. The pair walk counts a TANGENTIAL tie as a bridge -- and tangential
+        % ties are the MAJORITY (DECISIONS.md 2026-09-13) -- but where the tie only TOUCHES the
+        % pair the arc is a single point, so the sweep is a single segment with no area. Measured
+        % on the standard fixtures: 10 of 29 bridge pairs are of this kind. An assembly must skip
+        % them and take those pairs' faces from the two sides alone, which is why the refusal says
+        % what it means instead of reporting a failed search.
+        %
+        % Here: g1 = |s|^2 against the constant 1, so the tie is the unit circle, and the pair asks
+        % for s1 >= 1 -- which the circle reaches at exactly one point.
+            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 2 0 2 0 0 0], 1, ...
+                                                   [0 0 0 0 0 0 0 0 0 1], 1, [1 0 -1]), ...
+                'bridgeFaceAlg:tangentialArc');
+            % ...while the same pair with room to cross carries a perfectly good face
+            face = bridgeFaceAlg([0 0 0 0 2 0 2 0 0 0], 1, [0 0 0 0 0 0 0 0 0 1], 1, [1 0 0]);
+            testCase.verifyTrue(bridgeMember(face.pair, face.wit(1:2)/face.wit(3)));
         end
 
         function TWOFacesThatCannotTIEAreRefusedByName(testCase)
@@ -329,14 +356,14 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
         end
 
         function AN2POWER53CeilingIsANamedREFUSALAndNotARawOverflow(testCase)
-        % The one input class this producer cannot answer, and it must say so in its own words: the
-        % branch certification substitutes the witness into FP and clears the denominator to the
-        % total degree, so the Sturm chain can pass 2^53 while everything else succeeded. The
-        % refusal names the ceiling; it does not let ratQ:overflow escape as if the face were
-        % malformed.
-            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 2 0 3 1 -1 0], 2, ...
-                                                   [0 0 0 0 5 -1 4 -3 2 1], 3), ...
-                'bridgeFaceAlg:branchOverflow');
+        % The one input class this producer cannot answer, and it must say so in its own words. The
+        % discriminant multiplies four coefficients that already carry both faces' denominators
+        % cubed, so a pair with large data puts the FACE'S OWN POLYNOMIAL past 2^53 -- the answer
+        % being large, not an intermediate being clumsy. A raw `ratQ:overflow` escaping here would
+        % look exactly like the routine being wrong.
+            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 8 -2 4 -4 2 2], 2, ...
+                                                   [0 0 0 0 6 -2 3 -5 -3 -7], 7), ...
+                'bridgeFaceAlg:polynomialOverflow');
         end
 
         function aCUBICFaceIsRefusedByName(testCase)
@@ -378,6 +405,10 @@ function fx = fixtureByName(name)
             fx = mk(name, [0 0 0 0 1 0 1 0 0 0], 1, [0 0 0 0 3 1 2 -4 2 3], 1);
         case 'bothShifted'                      % neither piece centred, both denominators > 1
             fx = mk(name, [0 0 0 0 4 1 3 2 5 -2], 3, [0 0 0 0 2 0 2 -1 1 1], 1);
+        case 'vertexCell'                       % g2 AFFINE: its dual cell is a VERTEX cell
+            fx = mk(name, [0 0 0 0 2 0 2 0 0 0], 1, [0 0 0 0 0 0 0 -3 1 2], 1);
+        case 'edgeCell'                         % g2's Hessian has RANK 1: an EDGE cell
+            fx = mk(name, [0 0 0 0 2 0 2 0 0 0], 1, [0 0 0 0 1 0 0 -3 1 2], 1);
         case 'hyperbolic'                       % Delta indefinite: the tie is a hyperbola
             fx = mk(name, [0 0 0 0 3 0 1 0 0 0], 1, [0 0 0 0 1 0 3 -4 2 3], 1);
         case 'sameHessian'                      % the tie is a LINE: the degenerate-conic path

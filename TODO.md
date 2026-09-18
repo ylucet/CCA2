@@ -1,5 +1,38 @@
 # TODO
 
+## 2026-09-17 (fifth pass) — the degenerate cells answer; the remaining class is RATIONAL and closed form
+
+`bridgeFaceAlg` now answers VERTEX cells (affine dual face) and EDGE cells (rank-1 Hessian): their
+gradient map is singular, so it contributes no row to the outer BOUND, and since membership is
+decided from the pair's own data that costs nothing of the face. Both are in the suite's sweep,
+verified the same two ways as every other tie kind.
+
+**The census re-run, splitting three ways over 29 bridge pairs:** 5 BUILT, 10 TANGENTIAL (the tie
+touches the pair at a point, so **no two-dimensional face exists** -- an answer, now named
+`tangentialArc`), 14 with a SINGULAR PENCIL (`det(M_mu)` identically zero).
+
+### Next: the singular pencil, which is the EASY case
+
+12 of the 14 are AFFINE x RANK-1. With g1 affine the objective is LINEAR in s and the tie is a
+PARABOLA, so parameterising `s(t) = p0 + t p1 + t^2 p2` makes the objective `a0 + a1 t + a2 t^2` with
+every coefficient AFFINE in x, and the maximum `a0 - a1^2/(4 a2)`. **That face is a RATIONAL function
+of x with a LINEAR denominator -- exactly the `Rat` level, no `FP`/`FB` needed.** A closed form, not
+an elimination. DECISIONS.md 2026-09-17.
+
+The other 2 have a non-singular pencil and still hit `degreeInMu`; diagnose after the 12.
+
+### Then
+
+1. **The fold into one `AlgCon`**, and `biconjQ`'s `convexPieceCoupling` route. Every piece exists:
+   `envelopeCellPairs` classifies (and the assembly must SKIP tangential pairs),
+   `envelopeCellRegions` gives each candidate's region and maximiser map, `maxQ` folds the quadratic
+   faces, `assembleQuaConCells` assembles H-form cells, `bridgeMember` decides a bridge face.
+2. **The BOUNDARY** -- a real planar arrangement -- for figures and the paper's topology tables.
+   Deliberately off the path to a correct `biconj`.
+3. The 2^53 ceiling: `polynomialOverflow` is now a named refusal (the face's own polynomial does not
+   fit), and the general answer remains the modular route.
+
+
 ## 2026-09-17 (fourth pass) — THE CUT IS DONE, for every tie kind, via a predicate
 
 `bridgeMember`: a point is in a bridge face exactly when a sweeping segment reaches it from a tie

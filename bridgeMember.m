@@ -66,10 +66,18 @@ function [tf, info] = bridgeMember(pr, X)
         r = roots(p);
         r = real(r(abs(imag(r)) <= 1e-9*max(1, abs(r))));
         r = r(r >= -1 - 1e-12 & r <= 1e-12);
+        dScale = max(abs(Dt));
         for j = 1:numel(r)
             mu = min(max(r(j), -1), 0);
             D  = polyval(fliplr(Dt), mu);
-            if abs(D) <= eps*max(1, abs(mu)), continue, end
+            % A ROOT WHERE det(M_mu) VANISHES IS AN ARTEFACT OF CLEARING IT. Phi was formed by
+            % multiplying through by det(M_mu)^2, so every zero of that determinant is a root
+            % whatever x is, and the base point read there is meaningless -- measured on a VERTEX
+            % cell, where det(M_mu) = (1+mu)^2 det(N1) vanishes at mu = -1 exactly: the base came
+            % back as 1e7 and the face claimed points it does not own. The threshold is RELATIVE to
+            % the determinant's own coefficients, because an absolute one means a different thing
+            % at every scale. The exact path refuses the same root by the sign of det being 0.
+            if abs(D) <= 1e-9 * max(1, dScale), continue, end
             s = [polyval(fliplr(U1), mu); polyval(fliplr(U2), mu)] / D;
             if ~isempty(pr.P)
                 % THE TOLERANCE IS ON THE PAIR, NOT ON THE FACE, and that is the cheap direction:
