@@ -1,5 +1,35 @@
 # TODO
 
+## 2026-09-18 (fifth pass) — the ARRANGEMENT is built and verified; what it does not finish is named
+
+`envelopeMesh`: collect the distinct region curves, build the arrangement incrementally, read each
+cell's applicable faces off its signs, refine by the winner. On the convex fixture, 52 pruned faces
+-> 13 curves -> 58 cells -> a QuaCon of 321 faces that reproduces **f exactly** (0.0e0 at 200
+points). No partial max is ever formed, which is what ruled out both fold orders.
+
+Wired into `biconjQ`: every two-piece `convexPieceCoupling` input now attempts the assembly route
+before the per-piece checks, and falls through to the old refusal if it cannot finish.
+
+### What it does not finish, and why the earlier A-or-B framing was wrong
+
+A BRIDGE or CORNER face's region is a PREDICATE, so it has no signs for an arrangement -- and a
+two-piece input that is piecewise convex but not convex is exactly the case with CURVED ties. So the
+arrangement gives the MESH and the BOUNDARY; a container for a predicate-region face gives `biconj`
+a RETURN VALUE. **Both are needed.**
+
+### Next, in order
+
+1. **The CORNER faces into the arrangement.** A corner's region is a wedge whose two half-planes have
+   conjugate quadratic-irrational coefficients -- and `ratQ.pairLineData` plus `QuaCon.FC`'s BRANCH
+   column already name one line of a rational pair exactly. That is most of what a corner needs.
+2. **The BRIDGE face's region** stays out: its cut is the construction refuted twice (DECISIONS.md
+   2026-09-17). Either that is solved, or a bridge face is carried as a predicate face in a type
+   that allows one -- which is the type decision that was route B.
+3. Compaction: 321 faces for an envelope with a handful. The refinement produces many cells carrying
+   the SAME function; `mergeAdjacentCells` only joins two separated by a single curve, so a stronger
+   merge is the obvious next economy.
+
+
 ## 2026-09-18 (fourth pass) — CORRECTION: the pair-level fold is right, and it explodes
 
 The previous entry said `maxQ` was refuted as the way to build the mesh. Half right: folding

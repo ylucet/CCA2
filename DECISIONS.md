@@ -7813,3 +7813,41 @@ the third route -- returning the face list with a type whose eval is the max -- 
 a cheaper answer to the TYPE question if the arrangement proves long.
 
 Do not try a third fold order. The two extremes have been measured and the cause is not the order.
+
+
+## 2026-09-18 — the ARRANGEMENT works, and it shows that A and B were never alternatives
+
+`envelopeMesh` builds the mesh the way the fold could not: collect the distinct curves the faces'
+regions are built from, add them one at a time to an incremental arrangement, read each cell's
+APPLICABLE faces straight off its signs, and refine by the winner. Measured on the convex fixture:
+
+    52 pruned faces -> 13 region curves (95 with the difference curves) -> 58 arrangement cells
+                    -> 1213 refined cells -> a QuaCon with 321 faces, 69 edges, in 164 s
+
+and it reproduces **f itself exactly** -- 0.0e0 at 200 points, none of them +infinity. No partial max
+is ever formed, which is precisely what the two fold orders could not avoid.
+
+**Why the cell count stays small where the fold's did not.** The same curve bounds many faces (13
+curves for 52 faces), so an arrangement is sized by the CURVES while a fold is sized by the FACES.
+The refinement then adds only the difference curves of the faces that actually meet on a cell -- two
+to four of them, not fifty.
+
+### And the route does NOT finish `biconj` on its own
+
+A BRIDGE or CORNER face's region is a PREDICATE, so it has no signs to place in an arrangement. Any
+input with a CURVED tie therefore meshes only its quadratic part -- and a two-piece input whose
+pieces are all convex but whose f is not is exactly the case that HAS curved ties. Wired into
+`biconjQ`, the route is attempted for every two-piece `convexPieceCoupling` input and falls through
+to the old refusal on the standard fixtures.
+
+**So A and B were never alternatives, and the earlier framing of that choice was wrong.** The
+arrangement is what gives a MESH and a BOUNDARY; a container for a predicate-region face is what
+gives `biconj` a RETURN VALUE on a curved tie. Both are needed, and the arrangement is the half that
+also serves the paper's figures.
+
+**The corner faces may be closer than they look.** A corner's region is a WEDGE with an irrational
+apex -- two half-planes whose coefficients are conjugate quadratic irrationals -- and the machinery
+for exactly that landed earlier today: `ratQ.pairLineData` and the BRANCH column on `QuaCon.FC`,
+which name one line of a rational pair. So a corner could enter an arrangement as two branch rows.
+The BRIDGE face's region is the one that stays out, because its cut is the construction refuted
+twice on 2026-09-17.

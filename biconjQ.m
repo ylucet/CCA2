@@ -170,6 +170,32 @@ function h = biconjQ(obj)
              'semidefinite, which is a free necessary condition for convexity.']);
     end
 
+    % ---- THE ASSEMBLY ROUTE, for a TWO-PIECE input the edge-concavity path cannot take ---------
+    % Where every piece is convex but f is not, the envelope must BRIDGE the gradient jump, and the
+    % lower-hull machinery below cannot: a bridge is not determined by the vertex values. That case
+    % used to be refused outright (`convexPieceCoupling`). It is now COMPUTED, by assembling the
+    % envelope from the two pieces' conjugates and meshing the result -- `envelopeAssemble`,
+    % `envelopePrune`, `envelopeMesh`, each verified in its own suite.
+    %
+    % It is attempted only for TWO pieces, because that is what the assembly takes, and it is
+    % attempted BEFORE the per-piece checks so that their refusal is not raised for a case that now
+    % has an answer. A failure falls through to those checks, so nothing that used to work changes
+    % and nothing that used to refuse refuses for a WORSE reason.
+    if allPSD && nf == 2
+        try
+            h = assembledEnvelope(obj);
+            return
+        catch ME
+            if ~startsWith(ME.identifier, 'envelope') && ...
+               ~startsWith(ME.identifier, 'bridgeFace') && ...
+               ~startsWith(ME.identifier, 'bridgeArcCut') && ...
+               ~startsWith(ME.identifier, 'cornerFace')
+                rethrow(ME)
+            end
+            % fall through: the checks below name the case in the vocabulary a caller expects
+        end
+    end
+
     % ---- EDGE-CONCAVITY, per face, which is weaker than concavity and is the real condition ----
     % The envelope is the lower hull of the lifted vertices whenever q is concave along every EDGE
     % DIRECTION of its face -- H itself need not be negative semidefinite. Why the weaker condition
@@ -317,6 +343,47 @@ function h = biconjQ(obj)
 end
 
 % ==================================================================================================
+
+% ------------------------------------------------------------------------------------------------
+function h = assembledEnvelope(obj)
+% co f for a TWO-PIECE input, assembled from the pieces' conjugates.
+%
+% f** = sup_s [<s,x> - f*(s)] and f* = max over the pieces of each piece's conjugate, so the envelope
+% splits over the overlay of the two conjugates' cells. `envelopeAssemble` walks those cell pairs,
+% `envelopePrune` drops the faces that can never be the maximum, and `envelopeMesh` builds the
+% arrangement -- which is the only route that does not form a partial max, and partial maxima are
+% what made every fold order explode (DECISIONS.md 2026-09-18).
+%
+% A face whose region is a PREDICATE -- a bridge or a corner, which is what a CURVED tie needs --
+% cannot enter an arrangement, so an input that produces one is refused here and the caller's own
+% checks name it. `envelopeEval` answers for those; what it does not give is an object.
+    pieces = splitPieces(obj);
+    gA = conjQ(pieces{1});
+    gB = conjQ(pieces{2});
+    env = envelopePrune(envelopeAssemble(gA, gB));
+    h = envelopeMesh(env);
+end
+
+% ------------------------------------------------------------------------------------------------
+function P = splitPieces(obj)
+% The two pieces as single-face QuaPols, each carrying its own face and that face's own polygon.
+    P = cell(1,2);
+    for k = 1:2
+        own = find(any(obj.F == k, 2));
+        vs = unique(reshape(obj.E(own,1:2), [], 1));
+        vs = vs(vs > 0);
+        V = obj.V(vs,:);
+        idx = zeros(max(vs),1);
+        idx(vs) = 1:numel(vs);
+        E = obj.E(own,:);
+        E(:,1:2) = idx(E(:,1:2));
+        F = zeros(size(E,1), 2);
+        for j = 1:size(E,1)
+            F(j,:) = (obj.F(own(j),:) == k);      % 1 where this piece is, 0 for the outside
+        end
+        P{k} = QuaPol(V, E, obj.f(k,:), F);
+    end
+end
 
 % ------------------------------------------------------------------------------------------------
 function assertFlagNotRefuted(obj)

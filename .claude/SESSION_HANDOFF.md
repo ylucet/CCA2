@@ -9,32 +9,31 @@ _2026-09-18_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main`, fifteen commits ahead of `origin/main`, tree clean
-- Tests: fast bucket 662/0 over 44 suites · `envelopeAssembleTest` 6/0 (normal) ·
+- Branch `main`, seventeen commits ahead of `origin/main`, tree clean
+- Tests: fast bucket over 44 suites · `envelopeAssembleTest` 8/0 (~394 s, normal) ·
   slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
 - Known reds: none
 
 ## Where the envelope stands
-COMPUTED, VERIFIED and PRUNED. Values exact against f on the convex fixture and
-8.6e-13 / 3.2e-12 against a numeric sup on the kinked ones, domain included;
-120 -> 52, 142 -> 94, 110 -> 38 faces after the prune with nothing changed.
-What it is not is a single mesh object.
+Assembled, verified, pruned, and now MESHED. `envelopeMesh` builds the arrangement
+once — 52 faces -> 13 curves -> 58 cells -> a QuaCon of 321 faces reproducing f
+EXACTLY on the convex fixture. `biconjQ` attempts the route for any two-piece
+`convexPieceCoupling` input.
 
-## Next — TWO routes; both fold orders are now ruled out by measurement
-1. **BUILD THE ARRANGEMENT ONCE**: overlay the pruned regions, winner per cell. No
-   intermediate function is formed, so nothing blows up on the way — and it is the
-   same construction the paper's figures and topology tables need.
-2. **Return the FACE LIST** with a type whose eval is the max over faces — a TYPE
-   DECISION (a new concrete class, not a QuaCon), and the cheap answer if the
-   arrangement proves long. `envelopeEval` already does this correctly.
-
-Folding is ruled out either way: left-to-right reaches 3726 faces by its twelfth
-pair, the balanced TREE reaches 570 by level 3 and dies at level 4. The cause is
-not the order — a max over any proper subset of the pairs is a partial max, which
-carries pieces only the full max deletes. Do not try a third order.
+## Next
+1. **The CORNER faces into the arrangement.** Their region is a wedge with an
+   irrational apex, and `ratQ.pairLineData` + `QuaCon.FC`'s branch column already
+   name one line of a conjugate pair exactly — most of what a corner needs.
+2. **The BRIDGE face's region** stays out (its cut is refuted twice, DECISIONS
+   2026-09-17). Either solve that, or carry a bridge as a predicate face in a type
+   that allows one — the type decision that was route B. Both halves are needed:
+   the arrangement gives the mesh and the boundary, a container gives `biconj` a
+   return value on a curved tie.
+3. Compaction: 321 faces where a handful is right. The refinement makes many cells
+   carrying the same function and `mergeAdjacentCells` only joins single-curve
+   neighbours.
 
 ## Files
-- `envelopeAssemble.m`, `envelopePrune.m`, `envelopeEval.m` — assemble, prune, evaluate
-- `cornerFaceAlg.m` — the corner candidates that complete a curved pair
-- `bridgeFaceAlg.m` / `bridgeFaceRat.m` — the bridge face, algebraic or rational
+- `envelopeAssemble.m` / `envelopePrune.m` / `envelopeMesh.m` / `envelopeEval.m`
+- `cornerFaceAlg.m`, `bridgeFaceAlg.m`, `bridgeFaceRat.m` — the curved-tie faces
 - `bridgeMember.m`, `bridgeWitness.m`, `bridgePhi.m` — membership, exact and cached

@@ -156,6 +156,41 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             end
         end
 
+        function theARRANGEMENTBuildsAMeshThatReproducesFExactly(testCase)
+        % THE ROUTE THAT WORKS. Both fold orders are ruled out by measurement; building the
+        % ARRANGEMENT once never forms a partial max, so nothing can blow up on the way. On the
+        % convex fixture the mesh must reproduce f itself, at zero tolerance.
+            [fA, fB] = fixture(0);
+            env = envelopePrune(envelopeAssemble(conjQ(fA), conjQ(fB)));
+            [g, info] = envelopeMesh(env);
+            testCase.verifyGreaterThan(g.nf, 0, 'the mesh must have faces');
+            testCase.verifyLessThan(info.cells, 500, ...
+                'the arrangement must stay small -- that is the whole point of not folding');
+            rng(43);
+            worst = 0;  n = 0;
+            for i = 1:150
+                x = [rand, rand];
+                want = min(fA.eval(x), fB.eval(x));
+                if ~isfinite(want), continue, end
+                got = g.eval(x);
+                testCase.verifyTrue(isfinite(got), 'the mesh is finite on the domain');
+                n = n + 1;
+                worst = max(worst, abs(got - want));
+            end
+            testCase.verifyGreaterThan(n, 80, 'the check was actually exercised');
+            testCase.verifyEqual(worst, 0, 'AbsTol', 0, ...
+                'a convex input is its own envelope, and the MESH must say so exactly');
+        end
+
+        function aPREDICATERegionFaceIsREFUSEDByTheArrangementByName(testCase)
+        % The boundary of the route, said out loud. A bridge or corner face's region is a PREDICATE,
+        % so it has no signs to place in an arrangement -- an input with a CURVED tie therefore
+        % meshes only its quadratic part, and `envelopeEval` remains the complete answer for it.
+            [fA, fB] = fixture(-2);
+            env = envelopeAssemble(conjQ(fA), conjQ(fB));
+            testCase.verifyError(@() envelopeMesh(env), 'envelopeMesh:bridgeFaces');
+        end
+
         function theARGUMENTSAreChecked(testCase)
             [fA, fB] = fixture(0);
             testCase.verifyError(@() envelopeAssemble(conjQ(fA)), 'envelopeAssemble:nargin');
@@ -166,6 +201,8 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             testCase.verifyError(@() envelopeEval(env, [0 0 0]), 'envelopeEval:points');
             testCase.verifyError(@() envelopePrune(), 'envelopePrune:nargin');
             testCase.verifyError(@() envelopePrune(struct('a',1)), 'envelopePrune:shape');
+            testCase.verifyError(@() envelopeMesh(), 'envelopeMesh:nargin');
+            testCase.verifyError(@() envelopeMesh(struct('a',1)), 'envelopeMesh:shape');
         end
     end
 end
