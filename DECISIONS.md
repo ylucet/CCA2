@@ -7489,3 +7489,44 @@ per edge -- while `QuaCon.FC`, the H-form the evaluator actually uses, has only 
 conditions. So the next attempt is not another clever curve: it is whether a face's membership can
 be decided from the bounded-edge mesh rather than from `FC`. That is a change to how `eval` works,
 not to what the geometry is, and it is the first thing to consider before any third construction.
+
+
+## 2026-09-17 — the bridge face's MEMBERSHIP is a PREDICATE, and that finishes the cut for every tie kind
+
+Yves chose "decide membership from the bounded-edge mesh rather than from sign conditions". Scoping
+that showed the mesh is not there to decide from: `assembleQuaConCells` builds ONE edge per CURVE
+(not per arc), keeps only the first two vertices found on it, and never fills the ordered adjacency
+`P`. Deciding from it means building a planar arrangement of conics first.
+
+**But the same choice has a much cheaper form, and the cut work had already built it.** The face is
+swept, so its own definition is a bounded condition:
+
+        x is in the face  <=>  there is mu in [-1, 0] with Phi(x, mu) = 0, whose base point
+                               s(mu) lies in the cell pair P.
+
+Both halves are bounded IN THE DUAL PLANE -- an interval for mu, an intersection of half-planes for
+s -- which is exactly what could not be expressed as curves in x. `bridgeMember` asks it in doubles
+for `eval`; `bridgeWitness` already asked it over the integers, where Phi's roots are isolated by
+Sturm and each row of P is the sign of a polynomial at a root (`ratQ.signAt`).
+
+**Measured, on every tie kind the pipeline produces and two shapes of cell pair** -- 8
+configurations, values against the RESTRICTED definition and membership against the BASE POINT:
+
+| tie | values (worst rel) | holes | kept with base outside |
+|---|---|---|---|
+| line | 6.7e-16 / 1.7e-15 | 0 | 0 |
+| ellipse | 7.6e-16 / 7.6e-16 | 0 | 0 |
+| ellipse (anisotropic) | 3.8e-15 / 7.2e-15 | 0 | 0 |
+| hyperbola | 3.1e-15 / 5.4e-15 | 0 | 0 |
+
+So the item that defeated two constructions over sign conditions -- 145 of 296 points wrongly
+dropped by the wedge, one pattern holding 1399 points of the face and 2218 of its complement -- is
+finished, including the HYPERBOLIC tie both of those had to refuse outright.
+
+**`cells` stays, as an OUTER BOUND.** The sign conditions still contain the face, so they remain a
+cheap pre-filter and the honest thing to put in a mesh; for a conic tie they are strictly larger,
+and a test pins exactly that. The cut ROWS are still produced for a line tie, where they are exact.
+
+**What a predicate does not give: a BOUNDARY.** Figures, edge lists and the paper's topology tables
+still want the arcs explicitly, and the arrangement above is still the way to get them. That work is
+now OFF the critical path to a correct `biconj`, which is the point.

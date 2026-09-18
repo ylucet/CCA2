@@ -9,26 +9,24 @@ _2026-09-17_
   pipeline (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `main`, six commits ahead of `origin/main`, tree clean
-- Tests: fast bucket green (bridgeFaceAlgTest 19, ratQTest 80, guardExerciseTest 18,
-  QuaConTest/conjQTest/biconjQTest/maxQTest/regionTest 143 together) ·
-  normal 13/0 (09-11) · slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
+- Branch `main`, eight commits ahead of `origin/main`, tree clean
+- Tests: fast bucket green; bridgeFaceAlgTest 20/0 (48 s — the heaviest suite in the
+  bucket, and it is the one that pins the envelope) · normal 13/0 (09-11) ·
+  slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
 - Known reds: none
 
 ## Next
-1. **A question about `eval`, before any more geometry.** The bridge face's cut
-   boundary is a SEGMENT — a bounded piece of a line — and `QuaCon.FC` can only say
-   "this side of this whole curve". Two constructions over sign conditions have now
-   been built and measured wrong for exactly that reason. `AlgCon`'s classic mesh
-   already has bounded edges. So: can a face's membership be decided from the
-   bounded-edge mesh rather than from `FC`? TODO.md 2026-09-17.
-2. Then the cut for parabola and hyperbola ties — 23 of the 29 bridge pairs the
-   standard fixtures produce.
-3. Then the `rank1` / `affine` cell producer, and only then the fold into one
-   `AlgCon`.
+1. The producer for `rank1` and `affine` cells — 28 of 29 bridge pairs on the
+   standard fixtures still refuse. The VALUE side already works; the region needs
+   only an outer bound and a witness now that membership is a predicate.
+2. The fold into one `AlgCon`, and `biconjQ`'s `convexPieceCoupling` route.
+3. The BOUNDARY (a real planar arrangement) — wanted for figures and the paper's
+   topology tables, and deliberately OFF the path to a correct `biconj`.
 
 ## Files
-- `bridgeFaceAlg.m` — the producer: FP, FB (top branch), region, optional cut
-- `bridgeArcCut.m` — the cut; LINE tie exact, conic tie refused with BOTH refutations
-- `bridgeWitness.m`, `bridgePhi.m` — shared by the producer and the cut
+- `bridgeFaceAlg.m` — the producer: FP, FB, the region's outer bound, the pair data
+- `bridgeMember.m` — membership, decided from the geometry; `bridgeWitness.m` is its
+  exact counterpart and `bridgePhi.m` the one polynomial both rest on
+- `bridgeArcCut.m` — the exact cut ROWS for a line tie; a conic tie is left to the
+  predicate, with both refuted constructions written out
 - `ratQ.pairLine*`, `QuaCon.FC`'s third column — an edge may name one line of a pair

@@ -170,17 +170,74 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
                 'and on every point it removes, the UNCUT face overstates the restricted sup');
         end
 
-        function aCONICTieIsRefusedByNameWhenACutIsAskedFor(testCase)
-        % The open half of the item, and it has now cost TWO constructions. A conic tie's cut
-        % boundary is a SEGMENT of an irrational line; only the conjugate pair is rational. The
-        % wedge classifier and the sign-pattern classifier were both built and both measured wrong
-        % (bridgeArcCut's header has the numbers). Refused rather than guessed -- a guess here puts
-        % a face on the wrong side of its own boundary and every value on the excess is wrong.
-            for nm = {'isotropic', 'anisotropic'}
+        function EVERYTieKindIsCUTCorrectlyByThePredicate(testCase)
+        % THE ITEM, FINISHED. For every kind of tie the pipeline produces -- line, ellipse,
+        % hyperbola -- and for two shapes of cell pair, the face must agree with the RESTRICTED
+        % definition (the max over the tie points INSIDE the pair) and must have no HOLES and keep
+        % nothing whose base lies outside. Values and membership are different questions and both
+        % are asked; a cut that is too small passes the first alone.
+        %
+        % This is what two constructions over sign conditions could not do. The difference is that
+        % the bounded conditions live in the DUAL plane -- mu in [-1,0] and s in a polygon -- where
+        % everything is straight, instead of being forced into curves in x.
+            for nm = {'sameHessian', 'isotropic', 'anisotropic', 'hyperbolic'}
                 fx = fixtureByName(nm{1});
-                testCase.verifyError(@() bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [1 0 0; 0 1 0]), ...
-                    'bridgeArcCut:conicTie');
+                for Pc = {[1 0 0; 0 1 0], [1 0 1; -1 0 3; 0 1 2; 0 -1 3]}
+                    P = Pc{1};
+                    face  = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, P);
+                    full  = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                    [worst, nv] = restrictedAgreementAny(fx, face, P);
+                    testCase.verifyGreaterThan(nv, 15, sprintf('%s: too few region points', nm{1}));
+                    testCase.verifyLessThan(worst, 1e-9, ...
+                        sprintf('%s: the cut face must equal the RESTRICTED definition', nm{1}));
+                    [inside, holes, over] = baseMembershipAny(fx, face, full, P);
+                    testCase.verifyGreaterThan(inside, 15, sprintf('%s: too few base-inside', nm{1}));
+                    testCase.verifyEqual(holes, 0, sprintf('%s: a point whose base IS in the pair was dropped', nm{1}));
+                    testCase.verifyEqual(over, 0, sprintf('%s: a point whose base is OUTSIDE was kept', nm{1}));
+                end
             end
+        end
+
+        function theROWBasedCutStillREFUSESAConicTieAndTheProducerCatchesIt(testCase)
+        % The division of labour, pinned. `bridgeArcCut` produces EXACT cut rows and can only do so
+        % for a LINE tie -- a conic tie's cut boundary is a segment, which no sign condition on a
+        % whole curve expresses, and the two constructions that tried are refuted in its header. It
+        % keeps refusing; the producer catches that and leaves the sign conditions as an OUTER
+        % BOUND, because membership does not read them.
+            fx = fixtureByName('isotropic');
+            d  = 2;  N1 = [2 0; 0 2];  m1 = [0;0];  N2 = [4 0; 0 4];  m2 = [-4; 2];
+            tie = ratQ.diffConic(fx.n1, fx.d1, fx.n2, fx.d2);
+            testCase.verifyError(@() bridgeArcCut(tie, [1 0 0], N1, m1, N2, m2, d, [1 1 1], ...
+                                                  [0 0 0 1 0 0], [0 0 0 1 0 -1], 0), ...
+                'bridgeArcCut:conicTie');
+            % ...and the producer still answers, because the face is not its bound
+            face = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, [1 0 0; 0 1 0]);
+            testCase.verifyTrue(bridgeMember(face.pair, face.wit(1:2)/face.wit(3)), ...
+                'the witness must be IN the face the predicate describes');
+        end
+
+        function theSIGNConditionsAreAnOUTERBoundAndNotTheFace(testCase)
+        % `cells` is kept, and what it is worth stating: it CONTAINS the face, so it is a legitimate
+        % cheap pre-filter, and for a conic tie it is strictly larger -- which is exactly why
+        % membership does not read it.
+            fx = fixtureByName('isotropic');
+            P  = [1 0 0; 0 1 0];
+            face = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, P);
+            rng(71);
+            ctr = face.wit(1:2).'/face.wit(3);
+            inBoth = 0;  outside = 0;  strictlyLarger = 0;
+            for i = 1:1500
+                x = ctr + (rand(2,1)*2-1)*5;
+                inF = inHForm(face, x);
+                inC = inCells(face, x);
+                if inF && inC, inBoth = inBoth + 1; end
+                if inF && ~inC, outside = outside + 1; end
+                if inC && ~inF, strictlyLarger = strictlyLarger + 1; end
+            end
+            testCase.verifyGreaterThan(inBoth, 20, 'the test must actually reach the face');
+            testCase.verifyEqual(outside, 0, 'no point of the face may fall outside the bound');
+            testCase.verifyGreaterThan(strictlyLarger, 0, ...
+                'and for a conic tie the bound is STRICTLY larger -- the reason it is not the face');
         end
 
         function aPAIRThatExcludesTheWholeTieIsRefusedByName(testCase)
@@ -561,11 +618,106 @@ function [inside, holes, overKept] = baseMembership(fx, face, full, P)
     end
 end
 
+function [worst, n] = restrictedAgreementAny(fx, face, P)
+% Against the RESTRICTED definition, for ANY tie kind: sweep the tie, keep the points inside P, and
+% refine the bracket in the curve's OWN parameter -- bracketing on a coordinate instead is what made
+% an earlier version of this oracle report the subject's error as 1e-3.
+    ctr = face.wit(1:2).'/face.wit(3);
+    rng(73);
+    worst = 0;  n = 0;
+    for i = 1:500
+        x = ctr + (rand(2,1)*2-1)*4;
+        if ~inHForm(face, x), continue, end
+        want = tieMax(fx, P, x);
+        if ~isfinite(want), continue, end
+        got = algBranch(face.FP, x(:).', face.FB);
+        if ~isfinite(got), continue, end
+        n = n + 1;
+        worst = max(worst, abs(got - want)/max(1, abs(want)));
+    end
+end
+
+function [inside, holes, overKept] = baseMembershipAny(fx, face, full, P)
+    ctr = face.wit(1:2).'/face.wit(3);
+    rng(79);
+    inside = 0;  holes = 0;  overKept = 0;
+    for i = 1:500
+        x = ctr + (rand(2,1)*2-1)*4;
+        if ~inHForm(full, x), continue, end
+        [~, sB] = tieMax(fx, zeros(0,3), x);
+        if isempty(sB), continue, end
+        slack = P(:,1:2)*sB + P(:,3);
+        if all(slack > 1e-6)
+            inside = inside + 1;
+            if ~inHForm(face, x), holes = holes + 1; end
+        elseif all(slack < -1e-6) && inHForm(face, x)
+            overKept = overKept + 1;
+        end
+    end
+end
+
+function [v, sBest] = tieMax(fx, P, x)
+% max over { the tie, inside P } of <s,x> - g1(s), and where it is attained. Coarse sweep then four
+% rounds of refinement, bracketed in the PARAMETER the curve is generated by.
+    [Dl, dl, kp] = tieData(fx);
+    isLine = all(Dl(:) == 0);
+    if isLine, lo = -60; hi = 60; else, lo = -25; hi = 25; end
+    v = -inf;  sBest = [];  best = NaN;
+    % THE FIRST SWEEP MUST BE FINE ENOUGH TO FIND THE RIGHT BASIN; the refinements after it need
+    % almost nothing. Making every round coarse was measured wrong: the search then converges to a
+    % LOCAL maximum of a curve that has several, and reports the subject as being in error.
+    % Rounds after the first cost ~200 evaluations each and contract the bracket 100-fold, so six
+    % of them are free. They are NEEDED because the restricted maximiser often sits AT the arc's
+    % endpoint, where the value's error is LINEAR in the bracket width rather than quadratic.
+    res = [4001 201 201 201 201 201 201];
+    for round = 1:numel(res)
+        ss = linspace(lo, hi, res(round));
+        [S, tt] = tiePoints(Dl, dl, kp, ss);
+        if isempty(S), return, end
+        val = sum(S.*x, 1) - (0.5*sum(S.*(fx.A1*S), 1) + fx.b1.'*S + fx.k1);
+        if ~isempty(P), val(~all(P(:,1:2)*S + P(:,3) >= 0, 1)) = -inf; end
+        [w, j] = max(val);
+        if ~isfinite(w), return, end
+        if w > v, v = w;  sBest = S(:,j);  best = tt(j); end
+        h = (hi - lo)/(res(round) - 1);
+        lo = best - 2*h;  hi = best + 2*h;
+    end
+end
+
+function [S, tt] = tiePoints(Dl, dl, kp, ss)
+    if all(Dl(:) == 0)
+        w = [dl(2); -dl(1)];  s0 = -kp*dl/(dl.'*dl);
+        S = s0 + w*ss;  tt = ss;  return
+    end
+    S = zeros(2,0);  tt = [];
+    for s1 = ss
+        a = Dl(2,2);  b = 2*Dl(1,2)*s1 + 2*dl(2);  c = Dl(1,1)*s1^2 + 2*dl(1)*s1 + 2*kp;
+        if abs(a) < 1e-14
+            if abs(b) > 1e-14, S(:,end+1) = [s1; -c/b];  tt(end+1) = s1; end %#ok<AGROW>
+            continue
+        end
+        disc = b^2 - 4*a*c;
+        if disc < 0, continue, end
+        r = sqrt(disc);
+        S(:,end+1) = [s1; (-b + r)/(2*a)];  tt(end+1) = s1; %#ok<AGROW>
+        if r > 0, S(:,end+1) = [s1; (-b - r)/(2*a)];  tt(end+1) = s1; end %#ok<AGROW>
+    end
+    keep = all(abs(S) < 1e4, 1);
+    S = S(:, keep);  tt = tt(keep);
+end
+
 function tf = inHForm(face, x)
-% The region is the UNION over the blocks, and a block is an intersection of sign conditions -- so a
-% point is in the face when SOME block holds it. A `branch` of 1 or 2 means the condition is on ONE
-% LINE of a degenerate conic, evaluated through ratQ.pairLineEval, which is the double-precision
-% cache of the name the branch index carries.
+% MEMBERSHIP IS DECIDED FROM THE GEOMETRY, not from the sign conditions. The face's boundary
+% includes a SEGMENT -- a bounded piece of a line -- which no condition on a whole curve expresses,
+% and two constructions that tried were measured wrong. `bridgeMember` asks the defining question
+% instead: is there a sweeping segment through x whose base tie point lies in the pair. The name is
+% kept because every test above reads the same thing: "is x in this face".
+    tf = bridgeMember(face.pair, x(:).');
+end
+
+function tf = inCells(face, x)
+% The OUTER BOUND, which is what `cells` is: an intersection of sign conditions that CONTAINS the
+% face. Used only by the test that pins that relationship.
     for b = 1:numel(face.cells)
         rows = face.cells{b};
         ok = true;

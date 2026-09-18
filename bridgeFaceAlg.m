@@ -22,6 +22,10 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
 %                   .FP  the integer polynomial p(x,y,z), as ratQ's dense polyN array in three
 %                        variables: FP(i+1,j+1,k+1) multiplies x^i y^j z^k
 %                   .FB  the branch index: which ascending real root of FP(x,y,.) is the value
+%                   .pair the cell pair's own data (d, N1, m1, N2, m2, Dl, dl, kp, P), which is
+%                        what MEMBERSHIP is decided from -- see bridgeMember. The face's boundary
+%                        includes a SEGMENT, which no sign condition on a whole curve can express,
+%                        so `cells` below is an OUTER BOUND and this is the face
 %                   .cells cell array of k x 8 row blocks [a b c d e f sign branch]: the region is
 %                        the UNION over the blocks, and each block is an intersection of sign
 %                        conditions. One block unless a CONIC tie was cut, which splits the face --
@@ -177,10 +181,27 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     cutInfo = struct('kind', 'none', 'nCut', 0, 'nCells', 1);
     cells = {base};
     if ~isempty(P)
-        [blocks, cutInfo] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, [xn(:).', xd], C1, C2, kp);
-        cells = cellfun(@(b) [base; b], blocks, 'UniformOutput', false);
+        % THE CUT ROWS ARE AN OPTIMISATION, NOT THE DEFINITION. Where the tie is a LINE they are
+        % exact and they tighten the outer bound to the face itself; where it is a genuine conic the
+        % cut boundary is a SEGMENT and no sign condition on a whole curve expresses it -- two
+        % constructions for that were built and measured wrong. So a conic tie keeps the UNCUT rows
+        % as its bound and membership is decided by `bridgeMember` from the pair's own data, which
+        % is where the bounded conditions live. The refusal is caught rather than propagated,
+        % because it refuses a spelling of the region and not the region.
+        try
+            [blocks, cutInfo] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, [xn(:).', xd], C1, C2, kp);
+            cells = cellfun(@(b) [base; b], blocks, 'UniformOutput', false);
+        catch ME
+            if ~strcmp(ME.identifier, 'bridgeArcCut:conicTie'), rethrow(ME), end
+            cutInfo = struct('kind', 'predicate', 'nCut', 0, 'nCells', 1);
+        end
     end
-    face = struct('FP', {FP}, 'FB', FB, 'cells', {cells}, 'wit', [xn(:).', xd]);
+    % THE PAIR'S OWN DATA TRAVELS WITH THE FACE, because membership is decided from it -- see
+    % bridgeMember. `cells` stays as the UNCUT region, which is a correct OUTER BOUND and a cheap
+    % pre-filter; it is not the face, and where a cut was asked for it is deliberately larger.
+    pair = struct('d', d, 'N1', N1, 'm1', m1, 'N2', N2, 'm2', m2, ...
+                  'Dl', Dl, 'dl', dl, 'kp', kp, 'P', P);
+    face = struct('FP', {FP}, 'FB', FB, 'cells', {cells}, 'pair', pair, 'wit', [xn(:).', xd]);
     info = struct('tie', tie, 'degrees', ipInfo.degrees, 'maxCoeff', ipInfo.maxCoeff, ...
                   'ceiling', ipInfo.maxCoeff / 2^53, 'muDegree', ipInfo.muDegree, ...
                   'zContentRemoved', ipInfo.zContentRemoved, ...

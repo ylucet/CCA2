@@ -1,5 +1,38 @@
 # TODO
 
+## 2026-09-17 (fourth pass) — THE CUT IS DONE, for every tie kind, via a predicate
+
+`bridgeMember`: a point is in a bridge face exactly when a sweeping segment reaches it from a tie
+point the cell pair owns. Both halves of that are bounded conditions in the DUAL plane -- mu in
+[-1,0], s in a polygon -- which is why it succeeds where two constructions over sign conditions in
+x failed. Exact over the integers (`bridgeWitness`, Sturm + `ratQ.signAt`), cached in doubles for
+`eval`.
+
+**Measured on 8 configurations** -- line, ellipse, anisotropic ellipse and HYPERBOLIC ties, two
+shapes of cell pair -- values against the restricted definition worst 7.2e-15, **0 holes and 0
+points kept whose base lies outside**. Both earlier constructions had to refuse the hyperbola
+outright; this does not.
+
+`cells` remains as an OUTER BOUND (a cheap pre-filter, and strictly larger for a conic tie -- a test
+pins that), and the exact cut ROWS are still produced for a line tie.
+
+### What is left, in order
+
+1. **The producer for `rank1` and `affine` cells.** 28 of 29 bridge pairs on the standard fixtures
+   are refused as `vertexCell` / `edgeCell` / `degreeInMu`, because a conjugate has one full-rank
+   cell, one rank-1 cell per edge and one affine cell per vertex. The VALUE side already works --
+   the discriminant needs only that `det(M_mu)` is not identically zero -- so what is missing is the
+   region, and with membership now a predicate the region's job is smaller than it was: an outer
+   bound and a witness. Start with vertex x quadratic.
+2. **The fold into one `AlgCon`**, and `biconjQ`'s `convexPieceCoupling` route. The pieces exist:
+   `envelopeCellPairs` classifies, `envelopeCellRegions` gives each candidate's region AND its
+   maximiser map, `maxQ` folds the quadratic faces, `assembleQuaConCells` assembles H-form cells.
+3. **The BOUNDARY, for figures and the paper's topology tables.** A predicate answers "is x inside"
+   and nothing else. Building it means the planar arrangement the assembler does not build today:
+   one edge per ARC rather than per curve, all vertices on a curve rather than the first two, and
+   the ordered adjacency `P`. OFF the critical path to a correct `biconj` -- which is why it waits.
+
+
 ## 2026-09-17 (third pass) — the branch column is IN; the cut's conic half has refuted TWO constructions
 
 **LANDED.**

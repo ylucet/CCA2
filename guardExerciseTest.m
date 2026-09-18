@@ -49,6 +49,16 @@ classdef guardExerciseTest < matlab.unittest.TestCase
             t.verifyError(@() conjPieceCPLQ(5), 'conjPieceCPLQ:type');
         end
 
+        function bridgeMemberArguments(t)                                    % reachable
+            % The membership predicate is called from `eval` and from every test that asks "is x in
+            % this face", so its arguments are checked where they arrive.
+            pr = struct('d',1,'N1',eye(2),'m1',[0;0],'N2',2*eye(2),'m2',[0;0], ...
+                        'Dl',-eye(2),'dl',[0;0],'kp',0,'P',zeros(0,3));
+            t.verifyError(@() bridgeMember(pr), 'bridgeMember:nargin');
+            t.verifyError(@() bridgeMember(struct('d',1), [0 0]), 'bridgeMember:pair');
+            t.verifyError(@() bridgeMember(pr, [0 0 0]), 'bridgeMember:shape');
+        end
+
         function assembleQuaConCellsConShape(t)                              % reachable
             % `con` is 7 columns (conic + side) or 8 (plus the BRANCH that names one line of a
             % degenerate conic). Anything else is a caller that has not been told about the column.

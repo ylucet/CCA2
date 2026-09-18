@@ -14,6 +14,11 @@
 %                   WHERE the base point is, since a's + c has the sign of (a'U + c xd det M) times
 %                   the sign of det M, both polynomials in mu
 %
+% [input]  exact : (optional, default true) false lets xn be a DOUBLE and skips the integrality
+%                  check, so the same formula serves `bridgeMember`'s cache. One definition of the
+%                  polynomial, two precisions -- a second spelling of it would be a second
+%                  definition of what the face IS.
+%
 % At the multiplier mu the base point is s = adj(M_mu)(d x - c_mu)/det(M_mu), and the tie equation
 % s'Dl s + 2 dl's + 2 kp = 0 clears to
 %
@@ -21,7 +26,7 @@
 %
 % with no division performed anywhere.
 
-function [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd)
+function [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, exact)
 % Phi as above, with det(M_mu) and the two components of U = xd det(M_mu) s(mu) alongside it -- all
 % ASCENDING integer vectors in mu. U is what lets a CALLER ask where the base point is: the row
 % a's + c has the sign of (a'U + c xd det M) times the sign of det M, both polynomials in mu, so
@@ -39,7 +44,9 @@ function [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd)
     Phi = vadd(vadd(Dl(1,1)*conv(U1,U1), 2*Dl(1,2)*conv(U1,U2)), Dl(2,2)*conv(U2,U2));
     Phi = vadd(Phi, 2*xd*conv(Dt, vadd(dl(1)*U1, dl(2)*U2)));
     Phi = vadd(Phi, 2*kp*xd^2*conv(Dt, Dt));
-    Phi = ratQ.chk(Phi, 'Phi');
+    if nargin < 11 || exact
+        Phi = ratQ.chk(Phi, 'Phi');
+    end
 end
 
 % --------------------------------------------------------------------------------------------------
