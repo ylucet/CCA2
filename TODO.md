@@ -1,5 +1,42 @@
 # TODO
 
+## 2026-09-17 (sixth pass) — the census CLOSES: a bridge face exists only where the tie is CURVED
+
+Item 2 is finished, and finishing it produced the statement that specifies item 3.
+
+**A STRAIGHT tie is an ordinary FACET.** Line, double line or parallel lines: each side of the tie is
+a POLYGON, and the sup over it is the facet or vertex candidate `envelopeCellRegions` already
+produces once the tie is handed to it as one more facet. A bridge face is needed only where the tie
+is CURVED, because then that facet is curved.
+
+**All 29 bridge pairs on the standard fixtures are now accounted for:** 5 built (curved tie),
+10 TANGENTIAL (the tie touches at a point -- no 2-D face, skip the pair), 14 straight ties (add the
+tie as a facet). Every refusal says which case it is and what to do about it.
+
+**`bridgeFaceRat`** builds the affine x rank-1 face where the tie is a parabola: RATIONAL, a
+quadratic numerator over a LINEAR denominator -- the `Rat` level, no FP/FB. `bridgeFaceAlg`
+delegates to it, so one entry point returns whichever kind the pair has (`face.kind`).
+
+### Item 3, now fully specified
+
+Fold the per-pair faces into one object and route `biconjQ`'s `convexPieceCoupling` through it:
+
+1. walk the pairs (`envelopeCellPairs`);
+2. SKIP a pair whose tie only touches it (`tangentialArc`);
+3. for a STRAIGHT tie, add the tie to each side's polygon and take `envelopeCellRegions`' candidates
+   -- no bridge face;
+4. for a CURVED tie, take `bridgeFaceAlg`'s face (algebraic, or rational when one side is affine),
+   whose membership is `bridgeMember` and whose `cells` are an outer bound;
+5. fold the quadratic faces across pairs with `maxQ`; a bridge face needs no fold, because it wins on
+   its own region (measured 2026-09-17).
+
+### After that
+
+- **The BOUNDARY** -- a real planar arrangement -- for figures and the paper's topology tables. A
+  predicate answers "is x inside" and nothing else. Off the critical path.
+- The 2^53 ceiling: `polynomialOverflow` is a named refusal; the general answer is the modular route.
+
+
 ## 2026-09-17 (fifth pass) — the degenerate cells answer; the remaining class is RATIONAL and closed form
 
 `bridgeFaceAlg` now answers VERTEX cells (affine dual face) and EDGE cells (rank-1 Hessian): their

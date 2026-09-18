@@ -135,6 +135,23 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     N2 = faceHess(n2) * (d/d2);  m2 = faceLin(n2) * (d/d2);  q2 = n2(10) * (d/d2);
     ratQ.chk([N1(:); N2(:); m1(:); m2(:); q1; q2].', 'rescaled faces');
 
+    % ---- the SINGULAR PENCIL is a different face, and a simpler one ----------------------------
+    % When one Hessian is 0 and the other is singular, det((1+mu)N1 - mu N2) vanishes IDENTICALLY:
+    % no member of the Lagrange family is invertible and the elimination below cannot start. It does
+    % not need to -- with one face AFFINE the objective is LINEAR in s and the tie is a PARABOLA, so
+    % the face is a RATIONAL function with a linear denominator, in closed form. Measured, 12 of 29
+    % bridge pairs on the standard fixtures are of exactly this shape (DECISIONS.md 2026-09-17).
+    %
+    % WHICH FACE IS "g1" DOES NOT MATTER: on the tie the two agree, so the value is the same either
+    % way, and the affine one is passed first because that is the form the closed form is written in.
+    r1 = ratQ.detExact(N1) == 0 && any(N1(:) ~= 0);
+    r2 = ratQ.detExact(N2) == 0 && any(N2(:) ~= 0);
+    if all(N1(:) == 0) && r2
+        [face, info] = bridgeFaceRat(n1, d1, n2, d2, P);  return
+    elseif all(N2(:) == 0) && r1
+        [face, info] = bridgeFaceRat(n2, d2, n1, d1, P);  return
+    end
+
     Dl = N1 - N2;  dl = m1 - m2;  kp = q1 - q2;       % the tie's own data: Delta, delta, kappa
     tie = ratQ.diffConic(n1, d1, n2, d2);             % the tie conic, canonically spelled
 
@@ -218,7 +235,8 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     % pre-filter; it is not the face, and where a cut was asked for it is deliberately larger.
     pair = struct('d', d, 'N1', N1, 'm1', m1, 'N2', N2, 'm2', m2, ...
                   'Dl', Dl, 'dl', dl, 'kp', kp, 'P', P);
-    face = struct('FP', {FP}, 'FB', FB, 'cells', {cells}, 'pair', pair, 'wit', [xn(:).', xd]);
+    face = struct('kind', 'algebraic', 'FP', {FP}, 'FB', FB, 'cells', {cells}, ...
+                  'pair', pair, 'wit', [xn(:).', xd]);
     info = struct('tie', tie, 'degrees', ipInfo.degrees, 'maxCoeff', ipInfo.maxCoeff, ...
                   'ceiling', ipInfo.maxCoeff / 2^53, 'muDegree', ipInfo.muDegree, ...
                   'zContentRemoved', ipInfo.zContentRemoved, ...
@@ -268,11 +286,14 @@ function [p, info] = implicitPoly(d, N1, m1, q1, N2, m2, q2)
             B = Psi{3};  C = Psi{2};  E = Psi{1};
             p = pAdd(pMul(C, C), pMul(-4, pMul(B, E)));
         otherwise
-            error('bridgeFaceAlg:degreeInMu', ...
-                ['Psi has degree %d in the multiplier, and a stationary value needs at least ' ...
-                 'two. Both faces then share a Hessian AND a linear part, so g1 - g2 is a ' ...
-                 'constant: { g1 = g2 } is empty or the whole plane, there is no tie curve, and ' ...
-                 'so there is no bridge face.'], numel(Psi) - 1);
+            error('bridgeFaceAlg:straightTie', ...
+                ['Psi has degree %d in the multiplier, which happens when the tie is STRAIGHT -- ' ...
+                 'a double line, a line pair, or no curve at all. And then there is no separate ' ...
+                 'bridge face to build: a straight tie is an ordinary FACET of each side polygon, ' ...
+                 'so the sup over that side is the facet or vertex candidate that ' ...
+                 'envelopeCellRegions already produces once the tie is handed to it as a facet. ' ...
+                 'The assembly does that; the producer is only needed where the tie is CURVED.'], ...
+                numel(Psi) - 1);
     end
     muDegree = numel(Psi) - 1;
 

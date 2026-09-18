@@ -7578,3 +7578,48 @@ x, and its maximum is `a0 - a1^2/(4 a2)` at `t = -a1/(2 a2)`.
 So that face is a RATIONAL function of x with a LINEAR denominator -- exactly what the `Rat` level of
 the lattice holds, needing no `FP`/`FB` at all. That is the next thing to build, and it is a closed
 form rather than an elimination.
+
+
+## 2026-09-17 — A BRIDGE FACE EXISTS ONLY WHERE THE TIE IS CURVED. The census closes, 29 of 29
+
+Chasing the last refusals turned into a structural statement, and it is the one that tells the
+assembly what to do.
+
+**A STRAIGHT tie is an ordinary FACET.** If `{g1 = g2}` is a line, a double line or a pair of
+parallel lines, then each side of it is a POLYGON and the sup over that side is the facet or vertex
+candidate `envelopeCellRegions` already produces -- once the tie is handed to it as one more facet.
+There is nothing extra to build. Where the tie is CURVED that facet is curved, and `envelopeCellRegions`
+cannot take it: that, and only that, is what a bridge face is for.
+
+**The census, now fully accounted for** -- 29 bridge pairs over the unit square at c = 0, -1, -2:
+
+| | count | what the assembly does |
+|---|---|---|
+| curved tie, built | 5 | take `bridgeFaceAlg`'s face; `bridgeMember` decides membership |
+| TANGENTIAL | 10 | skip: the tie touches at a point, so there is no 2-D face |
+| straight tie | 14 | add the tie as a FACET of each side and take that side's own candidates |
+
+The 14 split as 12 parallel-line ties (affine x rank-1) and 2 DOUBLE-LINE ties (`-2(s1-s2)^2 = 0`,
+the two quadratics touching along a line). Both refusals now say which case they are and what to do
+about it -- `bridgeFaceRat:noSeparateFace` and `bridgeFaceAlg:straightTie` -- instead of reporting a
+degree that dropped.
+
+### And the AFFINE x RANK-1 face, where the tie IS a parabola, is RATIONAL
+
+`bridgeFaceRat` builds it in closed form: with g1 affine the objective is LINEAR in s and the tie is
+a PARABOLA, so parameterising gives `A + B t + C t^2` with every coefficient AFFINE in x, and the
+value is `(4AC - B^2)/(4C)` -- a quadratic numerator over a LINEAR denominator, exactly the `Rat`
+level, no `FP`/`FB` and no branch index. `bridgeFaceAlg` DELEGATES to it, so one entry point returns
+whichever face kind the pair has (`face.kind`).
+
+**Verified ANALYTICALLY rather than by search**, and the reason is a defect in the first oracle: on
+an UNBOUNDED tie the maximiser can sit thousands of units out, so a windowed sweep under-reports the
+maximum and the subject looks like it is overclaiming. The claim is closed form -- the value is the
+objective AT the stationary point, and the objective is concave there -- so it is checked pointwise
+with no maximisation at all: tie residual 9e-16, value against the objective 1e-13, and not one
+point of any face where the objective fails to be concave.
+
+**One real defect found this way**: the concavity test read `C < 0` where the value is
+`(A + Bt + Ct^2)/scale`, so the condition is `C/scale < 0`. `scale` carries `2a(delta'w)`, whose
+sign is whatever the pair's geometry makes it. Three of six configurations were wrong by factors of
+1e3 before the sign was carried.

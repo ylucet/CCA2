@@ -343,7 +343,7 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
         % whole plane. There is no tie curve and so no bridge face, and Psi degenerates in mu.
             testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 1 0 1 2 3 0], 1, ...
                                                    [0 0 0 0 1 0 1 2 3 5], 1), ...
-                'bridgeFaceAlg:degreeInMu');
+                'bridgeFaceAlg:straightTie');
         end
 
         function aTIEWithNoREALPointsIsRefusedByName(testCase)
