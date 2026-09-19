@@ -1,5 +1,19 @@
 # TODO
 
+## 2026-09-18 (sixth pass) — the emptiness test is the arrangement's whole cost
+
+Measured (DECISIONS.md 2026-09-18, `.claude/branchRowPruning.m`): relaxed 31104 live cells, certified
+8072, and what an exact test decides, 486 — with the 8 corner BRANCH curves adding no cells at all.
+The relaxed test is also the slowest of the three. So:
+
+1. **Build the emptiness test as a filtered predicate**: doubles decide the clear cases, exact
+   arithmetic runs on the ties only (2128 of 10118 calls in the measurement). That is what
+   `cellHasInterior` already documents for its own kernel.
+2. **A constant row is not a curve.** A face's `con` can carry `1 >= 0`; it must be dropped before
+   the arrangement. `envelopeMesh` has this hole and has not met it yet.
+3. **`conicMeet` throws `ratQ:notFinite` on a constant** — `conicMeet([1 0 0 0 0 -1], [0 0 0 0 0 1])`,
+   because `lineMeetsConic` computes `-f/d` with `d = e = 0`. It should refuse by name.
+
 ## 2026-09-18 (fifth pass) — the ARRANGEMENT is built and verified; what it does not finish is named
 
 `envelopeMesh`: collect the distinct region curves, build the arrangement incrementally, read each

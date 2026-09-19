@@ -7920,3 +7920,43 @@ The rows exist; `envelopeMesh` still refuses them. A branch row names ONE line o
 arrangement's curve identity becomes (conic, branch) and its emptiness tests -- `ratQ.feasible2` and
 `cellHasInterior` -- cannot take a branch row as the conic's sign without relaxing it. That is the
 next piece of work, and it is now the ONLY thing between the corners and the mesh.
+
+## 2026-09-18 — MEASURED: the emptiness test decides the arrangement, and the branch rows cost nothing
+
+`.claude/branchRowPruning.m`, on the c = -2 fixture after `envelopePrune`: 23 curves, 15 from the
+quadratic faces' rational rows and 8 BRANCH rows from the corner wedges. Three emptiness tests, same
+arrangement, same exact test on the rational rows; the branch rows are the only difference.
+
+| test | live cells | emptiness calls | undecided | min of 3 runs |
+|---|---|---|---|---|
+| relaxed (branch rows ignored) | 31104 | 110234 | 0 | 330 s |
+| certified (margin LP, ties KEPT) | 8072 | 53334 | 29194 | 270 s |
+| aggressive (ties DROPPED = what exact decides) | **486** | 10118 | 2128 | 63 s |
+
+**The cheap test is not cheaper.** Relaxed keeps 64x the cells of the exact verdict and is the
+SLOWEST of the three in wall-clock as well, because every kept cell is split again by every later
+curve and pays an exact rational test each time. Per-call cost is a constant; kept cells compound.
+
+**The branch rows are free, if the test decides.** Under `aggressive` the live count is 486 from
+curve 15 onwards and NEVER GROWS -- all 8 corner curves together add no cells. The explosion is
+entirely the undecided cells, not the corners.
+
+**What must be exact is the ZERO-MARGIN case.** A cell whose largest inscribed margin is 0 has no
+interior, so an exact test drops it; in doubles that same case cannot be told from a genuinely thin
+cell, which is why `certified` keeps 29194 of them and pays for it. `aggressive` is the BOUND on what
+exactness buys, not a candidate -- in doubles it would eventually drop a real sliver.
+
+So the route is the filtered predicate `cellHasInterior` already documents: doubles decide the clear
+cases, and exact arithmetic runs only on the ties -- 2128 of 10118 calls here, a fifth of them.
+
+### Two defects this measurement found on the way, both real
+
+1. A face's `con` can carry a row with no x or y in it -- a constant, `1 >= 0`. It is not a curve and
+   must not enter an arrangement. `envelopeMesh` has the same hole and has never met it, the convex
+   fixture having no such row.
+2. `conicMeet([1 0 0 0 0 -1], [0 0 0 0 0 1])` throws `ratQ:notFinite` rather than refusing by name:
+   `lineMeetsConic` takes `p0 = -f/d` with `d = e = 0`. A constant is not a line, and the guard
+   should say so.
+
+Both are recorded in TODO.md. Timings are the minimum of three repetitions on a shared machine
+(AI/CLAUDE.md section 3) and are the least trustworthy column; the cell counts are the result.
