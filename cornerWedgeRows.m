@@ -184,10 +184,11 @@ function v = qval(u, sg)
 end
 
 % ==================================================================================================
-% Q(sigma) arithmetic: [u1 u2 D] means (u1 + u2 sigma)/D, D > 0, and `al sigma^2 = -be sigma - ga`
-% is used in exactly one place.
+% Q(sigma) arithmetic: [u1 u2 D] means (u1 + u2 sigma)/D. It lives in `ratQ` now -- `qsRed`, `qsAdd`,
+% `qsMul` -- because `cellInterior` needs the same field and one sign convention wrong in two places
+% is the defect this file was rewritten for (DECISIONS.md 2026-09-18).
 function u = qadd(u, v)
-    u = qred([u(1)*v(3) + v(1)*u(3), u(2)*v(3) + v(2)*u(3), u(3)*v(3)]);
+    u = ratQ.qsAdd(u, v);
 end
 
 function u = qneg(u)
@@ -195,20 +196,11 @@ function u = qneg(u)
 end
 
 function w = qmul(u, v, Q)
-    al = Q(1);  be = Q(2);  ga = Q(3);
-    w = qred([al*u(1)*v(1) - ga*u(2)*v(2), ...
-              al*(u(1)*v(2) + u(2)*v(1)) - be*u(2)*v(2), ...
-              al*u(3)*v(3)]);
+    w = ratQ.qsMul(u, v, Q);
 end
 
 function u = qred(u)
-    % `u = -u` already negates the denominator with the numerator, which is the whole of the
-    % normalisation; flipping u(3) again after it was the defect that put every element with a
-    % negative denominator -- i.e. EVERY product when al < 0 -- back on the wrong sign.
-    if u(3) < 0, u = -u; end
-    g = gcdv(u);
-    if g > 0, u = u / g; end
-    u = ratQ.chk(u, 'Q(sigma) element');
+    u = ratQ.qsRed(u);
 end
 
 % --------------------------------------------------------------------------------------------------

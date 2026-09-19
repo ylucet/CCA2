@@ -98,42 +98,44 @@ function [C, req] = curveTable(faces)
 % The distinct curves, and each face's demand on them: req{i} is an m x 2 list [curveIndex, side].
 % Bitwise deduplication, because the rows are canonical integers -- the same argument
 % assembleQuaConCells' own curve table rests on.
-    C = zeros(0,6);
+    C = zeros(0,7);                                 % [conic(1:6), branch] -- branch 0 for a curve
     req = cell(1, numel(faces));
     for i = 1:numel(faces)
         con = faces(i).con;
         r = zeros(size(con,1), 2);
+        keep = true(size(con,1), 1);
         for t = 1:size(con,1)
             c = con(t,1:6);
-            hit = find(all(C == c, 2), 1);
-            if isempty(hit), C(end+1,:) = c;  hit = size(C,1); end %#ok<AGROW>
+            if all(c(1:5) == 0)
+                % A CONSTANT row is not a curve. It is vacuous when it holds and empties the face
+                % when it does not, and admitting one makes the exact kernel meet the "curve" 1 = 0.
+                % Measured as reachable on the c = -2 fixture (DECISIONS.md 2026-09-18).
+                if c(6) < 0, req{i} = [];  keep = false(size(con,1),1);  break, end
+                keep(t) = false;  continue
+            end
+            key = [c, branchOf(con, t)];
+            hit = find(all(C == key, 2), 1);
+            if isempty(hit), C(end+1,:) = key;  hit = size(C,1); end %#ok<AGROW>
             r(t,:) = [hit, con(t,7)];
         end
-        req{i} = r;
+        req{i} = r(keep,:);
     end
 end
 
 % --------------------------------------------------------------------------------------------------
 function tf = cellIsLive(C, rows)
-% Does this cell have a two-dimensional interior? Exactly, and by the same two tests
-% assembleQuaConCells uses: Fourier-Motzkin on the straight rows, and the degree-4 sign kernel when
-% a conic is present.
-    if isempty(rows), tf = true; return, end
-    lin = zeros(0,3);  curved = zeros(0,6);  sides = [];
-    for t = 1:size(rows,1)
-        c = C(rows(t,1), :);
-        if all(c(1:3) == 0)
-            lin(end+1,:) = rows(t,2) * c(4:6); %#ok<AGROW>
-        else
-            curved(end+1,:) = c; %#ok<AGROW>
-            sides(end+1) = rows(t,2); %#ok<AGROW>
-        end
-    end
-    if ~isempty(lin) && ~ratQ.feasible2(lin, true), tf = false; return, end
-    if isempty(curved), tf = true; return, end
-    tf = cellHasInterior([curved; zeros(size(lin,1),3), lin], ...
-                         [(1:size(curved,1)).', sides(:); ...
-                          (size(curved,1)+(1:size(lin,1))).', ones(size(lin,1),1)]);
+% Does this cell have a two-dimensional interior? `cellInterior` decides it, including the case a
+% plain Fourier-Motzkin cannot reach -- a BRANCH row, one named line of a conjugate pair. Measured:
+% ignoring such a row costs 31104 live cells against 486 (DECISIONS.md 2026-09-18), because every
+% cell kept is split again by every later curve.
+    tf = cellInterior(C, rows);
+end
+
+% --------------------------------------------------------------------------------------------------
+function b = branchOf(con, t)
+% The row's branch, where one is carried. Seven-column rows predate the branch column and name an
+% ordinary curve.
+    if size(con,2) >= 8, b = con(t,8); else, b = 0; end
 end
 
 % --------------------------------------------------------------------------------------------------
@@ -203,9 +205,11 @@ end
 
 % --------------------------------------------------------------------------------------------------
 function [C, idx] = addCurve(C, c)
-% Find or add a curve in the table, so every cell row stays a plain [curveIndex, side].
-    idx = find(all(C == c, 2), 1);
-    if isempty(idx), C(end+1,:) = c;  idx = size(C,1); end
+% Find or add a curve in the table, so every cell row stays a plain [curveIndex, side]. A difference
+% conic is an ordinary curve, so its branch column is 0.
+    key = [c, 0];
+    idx = find(all(C == key, 2), 1);
+    if isempty(idx), C(end+1,:) = key;  idx = size(C,1); end
 end
 
 % --------------------------------------------------------------------------------------------------
@@ -213,8 +217,8 @@ function con = rowsToCon(C, rows)
 % The cell's rows as assembleQuaConCells' 8-column form.
     con = zeros(size(rows,1), 8);
     for t = 1:size(rows,1)
-        con(t,1:6) = C(rows(t,1), :);
+        con(t,1:6) = C(rows(t,1), 1:6);
         con(t,7)   = rows(t,2);
-        con(t,8)   = 0;
+        con(t,8)   = C(rows(t,1), 7);
     end
 end

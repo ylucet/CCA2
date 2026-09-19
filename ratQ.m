@@ -2104,6 +2104,61 @@ classdef ratQ
             s = ratQ.signAt(q, info.quad, info.iv(b,:));
         end
 
+        function u = qsRed(u)
+        % objective: an element of Q(t) in lowest terms with a POSITIVE denominator.
+        % [input]  u : [n1 n2 D], meaning (n1 + n2 t)/D
+        %
+        % `u = -u` negates the denominator along with the numerator, which is the whole of the
+        % normalisation. Flipping the denominator again afterwards negates the element, and that one
+        % line was the defect behind the first corner-row attempt (DECISIONS.md 2026-09-18) -- which
+        % is the reason this arithmetic lives in ONE place now.
+            if numel(u) ~= 3
+                error('ratQ:qsShape', 'a Q(t) element is [n1 n2 D]; got %s.', mat2str(size(u)));
+            end
+            if u(3) == 0
+                error('ratQ:qsZeroDen', 'a Q(t) element cannot have a zero denominator.');
+            end
+            if u(3) < 0, u = -u; end
+            g = gcd(gcd(abs(u(1)), abs(u(2))), abs(u(3)));
+            if g > 0, u = u / g; end
+            u = ratQ.chk(u, 'Q(t) element');
+        end
+
+        function w = qsAdd(u, v)
+        % (u1 + u2 t)/Du + (v1 + v2 t)/Dv, over the common denominator.
+            w = ratQ.qsRed([u(1)*v(3) + v(1)*u(3), u(2)*v(3) + v(2)*u(3), u(3)*v(3)]);
+        end
+
+        function w = qsMul(u, v, Q)
+        % The product, with `t^2` removed by the quadratic Q = [al be ga], al t^2 + be t + ga = 0:
+        % THE ONLY PLACE that relation is used. Q may be LINEAR ([1 0]) when no branch row is
+        % present, and then t never appears and the rule is not needed.
+            if numel(Q) == 2
+                if u(2) ~= 0 || v(2) ~= 0
+                    error('ratQ:qsField', ...
+                          'a linear Q means t does not occur, but an operand has a t term.');
+                end
+                w = ratQ.qsRed([u(1)*v(1), 0, u(3)*v(3)]);
+                return
+            end
+            al = Q(1);  be = Q(2);  ga = Q(3);
+            w = ratQ.qsRed([al*u(1)*v(1) - ga*u(2)*v(2), ...
+                            al*(u(1)*v(2) + u(2)*v(1)) - be*u(2)*v(2), ...
+                            al*u(3)*v(3)]);
+        end
+
+        function s = qsSign(u, Q, iv)
+        % The EXACT sign of (u1 + u2 t)/D at the root of Q isolated in iv. The denominator is
+        % positive by construction, so this is the sign of a linear polynomial at an algebraic
+        % number -- `ratQ.signAt` decides it, and no square root is formed.
+            u = ratQ.qsRed(u);
+            if u(2) == 0, s = sign(u(1)); return, end
+            if numel(Q) == 2
+                error('ratQ:qsField', 'a linear Q means t does not occur, but u has a t term.');
+            end
+            s = ratQ.signAt(ratQ.polyTrim([u(2), u(1)]), Q, iv);
+        end
+
         function info = parallelPairData(c)
         % objective: the two PARALLEL lines of a degenerate conic, as a linear form and the two
         %            levels it takes on them -- the counterpart of pairLineData's crossing case.

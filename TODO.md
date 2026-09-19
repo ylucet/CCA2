@@ -1,5 +1,27 @@
 # TODO
 
+## 2026-09-19 (seventh pass) — the emptiness test is built and reaches the measured bound
+
+`cellInterior`: rational rows by the exact tests that existed, then a margin LP in doubles, then the
+ties by an exact Farkas certificate in the branch rows' own quadratic field. On the c = -2 fixture
+486 live cells against the relaxed test's 31104, with ZERO cells left undecided (DECISIONS.md
+2026-09-19). Wired into `envelopeMesh`; `conicMeet` refuses a constant by name; the Q(t) arithmetic
+lives once in `ratQ`.
+
+### Next, in order
+
+1. **The corner faces' VALUES.** Their regions can enter an arrangement now, their values cannot: a
+   corner's value is affine with quadratic-irrational coefficients (`FP`/`FB`), and the mesh emits a
+   QuaCon of quadratic faces. `envelopeMesh` refuses an envelope with corner faces for that reason
+   alone now -- it is an OUTPUT TYPE question, not a geometry one.
+2. **The BRIDGE face's region**, still a predicate: its cut is refuted twice (DECISIONS 2026-09-17).
+   Either solve it, or carry a bridge as a predicate face in a type that allows one.
+3. Compaction: 321 faces on the convex fixture where a handful is right; `mergeAdjacentCells` only
+   joins neighbours separated by a single curve.
+4. A subsystem whose branch rows name two DIFFERENT conjugate pairs is skipped by `cellInterior`'s
+   certificate and the cell kept. It never occurred on this fixture; if one ever does, the compositum
+   of two quadratic fields is what it needs.
+
 ## 2026-09-18 (sixth pass) — the emptiness test is the arrangement's whole cost
 
 Measured (DECISIONS.md 2026-09-18, `.claude/branchRowPruning.m`): relaxed 31104 live cells, certified

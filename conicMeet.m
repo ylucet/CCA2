@@ -58,6 +58,17 @@ function [P, info] = conicMeet(A, B, opts)
     % Not an optimisation: the resultant of a degree-1 and a degree-2 polynomial is a different
     % size of determinant, and going through the general path would mean padding a formal degree
     % the polynomial does not have -- which is exactly the failure the shear exists to prevent.
+    if all(A(1:5) == 0) || all(B(1:5) == 0)
+        % A CONSTANT is not a curve: `f = 0` with f nonzero is empty, and `0 = 0` is the plane. Either
+        % way there is no curve to meet, and the line path would form `-f/d` with d = e = 0 and throw
+        % `ratQ:notFinite` from deep inside. Measured as reachable: a face's region can carry the row
+        % `1 >= 0` (DECISIONS.md 2026-09-18), and an arrangement then hands it here as a curve.
+        error('conicMeet:constant', ...
+              ['one argument has no x or y in it, so it is a CONSTANT and not a curve: %s. ' ...
+               'Drop such a row before building the arrangement -- it is vacuous when it holds ' ...
+               'and empties the cell when it does not.'], ...
+              mat2str(tern(all(A(1:5) == 0), A, B)));
+    end
     if all(A(1:3) == 0) || all(B(1:3) == 0)
         if all(A(1:3) == 0), L = A; C = B; else, L = B; C = A; end
         [P, q] = lineMeetsConic(L, C, opts);
@@ -417,4 +428,9 @@ function d = pdist2rows(P)
             t = t + 1; d(t) = norm(P(i,:) - P(j,:));
         end
     end
+end
+
+% --------------------------------------------------------------------------------------------------
+function v = tern(c, a, b)
+    if c, v = a; else, v = b; end
 end

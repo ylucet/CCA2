@@ -61,6 +61,43 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                           'cornerFaceAlg:side');
         end
 
+        function cellInteriorArguments(t)                                    % reachable
+            % The arrangement's emptiness test. A wrong shape here would not throw on its own -- a
+            % six-column table simply reads the branch column as missing -- so the shape is pinned,
+            % and a CONSTANT row is refused because admitting one made the exact kernel meet the
+            % "curve" 1 = 0 and silently stop the pruning (DECISIONS.md 2026-09-18).
+            t.verifyError(@() cellInterior([0 0 0 1 0 0, 0]), 'cellInterior:nargin');
+            t.verifyError(@() cellInterior([0 0 0 1 0 0], [1 1]), 'cellInterior:shape');
+            t.verifyError(@() cellInterior([0 0 0 0 0 1, 0], [1 1]), 'cellInterior:constant');
+        end
+
+        function cornerWedgeRowsArguments(t)                                 % reachable
+            % The rows a corner's wedge is spelled with; a caller passing something that is not a
+            % corner face would otherwise index fields that are not there.
+            n = [0 0 0 0 2 0 2 0 0 0];
+            f = cornerFaceAlg(n, 1, [1 0 1; -1 0 1; 0 1 1; 0 -1 1], [2 0 2 0 0 -3], 1);
+            t.verifyNotEmpty(f, 'the fixture must produce a corner, or this proves nothing');
+            t.verifyError(@() cornerWedgeRows(f(1), 1, 1), 'cornerWedgeRows:nargin');
+            t.verifyError(@() cornerWedgeRows(struct('a', 1), n, 1, [2 0 2 0 0 -3], 1), ...
+                          'cornerWedgeRows:shape');
+        end
+
+        function conicMeetConstant(t)                                        % reachable
+            % A CONSTANT is not a curve, and a face's region can carry one. Before the guard the
+            % line path formed -f/d with d = e = 0 and threw `ratQ:notFinite` from three calls down.
+            t.verifyError(@() conicMeet([1 0 0 0 0 -1], [0 0 0 0 0 1]), 'conicMeet:constant');
+        end
+
+        function qsFieldArguments(t)                                         % reachable
+            % The Q(t) arithmetic both `cornerWedgeRows` and `cellInterior` rest on. A zero
+            % denominator or a t term against a field that has no t are the two ways a caller can
+            % ask for something that is not an element.
+            t.verifyError(@() ratQ.qsRed([1 2]), 'ratQ:qsShape');
+            t.verifyError(@() ratQ.qsRed([1 2 0]), 'ratQ:qsZeroDen');
+            t.verifyError(@() ratQ.qsMul([1 1 1], [1 0 1], [1 0]), 'ratQ:qsField');
+            t.verifyError(@() ratQ.qsSign([1 1 1], [1 0], [-1 1]), 'ratQ:qsField');
+        end
+
         function bridgeMemberArguments(t)                                    % reachable
             % The membership predicate is called from `eval` and from every test that asks "is x in
             % this face", so its arguments are checked where they arrive.

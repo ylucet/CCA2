@@ -24,11 +24,11 @@ function branchRowPruning()
     fprintf('curves: %d total (%d from quadratic faces, %d branch rows from corners)\n', ...
             size(C,1), nQ, nB);
 
-    % "aggressive" is NOT a candidate implementation: a zero margin means no INTERIOR, so
-    % treating it as empty is what an EXACT test would conclude -- but in doubles it would also drop
-    % a genuinely thin cell. It is run to BOUND what exactness could buy over `certified`, which
-    % keeps every undecided cell.
-    for mode = ["relaxed", "certified", "aggressive"]
+    % "aggressive" is NOT a candidate implementation: a zero margin means no INTERIOR, so treating
+    % it as empty is what an EXACT test concludes -- but in doubles it would also drop a genuinely
+    % thin cell. It bounded what exactness could buy, and `cellInterior` is the implementation that
+    % reaches that bound soundly, deciding each tie by an exact Farkas certificate instead.
+    for mode = ["relaxed", "certified", "aggressive", "exact"]
         best = inf;  rec = [];  stats = [];
         for rep = 1:3
             t0 = tic;
@@ -53,7 +53,12 @@ function [cells, st] = arrange(C, mode)
             for sd = [1 -1]
                 cand = [cells{k}; j, sd];
                 st.calls = st.calls + 1;
-                [live, und] = isLive(C, cand, mode);
+                if strcmp(mode, "exact")
+                    [live, info] = cellInterior(C, cand);
+                    und = double(strcmp(info.path, 'unsureTie'));
+                else
+                    [live, und] = isLive(C, cand, mode);
+                end
                 st.undecided = st.undecided + und;
                 if live, next{end+1} = cand; end %#ok<AGROW>
             end

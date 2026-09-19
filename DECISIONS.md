@@ -7960,3 +7960,52 @@ cases, and exact arithmetic runs only on the ties -- 2128 of 10118 calls here, a
 
 Both are recorded in TODO.md. Timings are the minimum of three repetitions on a shared machine
 (AI/CLAUDE.md section 3) and are the least trustworthy column; the cell counts are the result.
+
+
+## 2026-09-19 — `cellInterior`: the filtered emptiness test REACHES the bound, with nothing left unsure
+
+The measurement of 2026-09-18 said the arrangement's whole cost is its emptiness test, and bounded
+what an exact one would buy. `cellInterior` is that test, and it reaches the bound:
+
+| test | live cells | emptiness calls | undecided | min of 3 runs |
+|---|---|---|---|---|
+| relaxed (branch rows ignored) | 31104 | 110234 | 0 | 334 s |
+| certified in doubles (ties kept) | 8072 | 53334 | 29194 | 273 s |
+| aggressive (ties dropped -- the BOUND, not sound) | 486 | 10118 | 2128 | 64 s |
+| **`cellInterior`** | **486** | **10118** | **0** | **105 s** |
+
+Three stages, cheapest first: the rational rows by the exact tests that already existed; then the
+margin of the straight rows in doubles, which decides all but 2128 of 10118 calls; then those ties by
+an exact Farkas certificate. Not one cell is left undecided on this fixture, and it is a third of the
+relaxed run's time.
+
+**The certificate, and the two defects of my own that the tests caught.**
+
+1. *The tight set is not enough.* Reading only the constraints the margin LP makes tight concludes
+   "live" from a tight PAIR -- two rows always have interior between them -- while a third row
+   contradicts them. Every PAIR and TRIPLE is tried instead, which is complete in the plane because
+   an infeasible system of half-planes has an infeasible subsystem of at most three.
+2. *Both lines of a pair are not the same root.* Two branch rows of one conic name the TWO roots of
+   its quadratic, and writing both as `t` makes them the same line, so no certificate can be found.
+   The second root is rational in the first -- `t' = (-be - al t)/al` -- so one field carries both,
+   and no compositum is needed as long as a subsystem stays inside one pair. One that does not is
+   skipped and the cell KEPT; that never happened on this fixture.
+
+The test that caught both is the six-sector count: three concurrent lines cut the plane into six
+sectors, so of the eight sign patterns exactly six are live. A test that dropped every tie and one
+that kept every tie both get that count wrong, and so did each defect above.
+
+**Also landed, from the same measurement.** `conicMeet` now refuses a CONSTANT by name
+(`conicMeet:constant`) instead of forming `-f/d` with `d = e = 0` and throwing `ratQ:notFinite` from
+three calls down -- an arrangement catches such a throw as "unsure" and silently stops pruning, which
+is what hid this for a whole run. `envelopeMesh` drops constant rows before building its curve table.
+And the Q(t) arithmetic now lives once, in `ratQ.qsRed/qsAdd/qsMul/qsSign`, because the same field is
+needed by `cornerWedgeRows` and `cellInterior` and one sign convention wrong in two places is exactly
+the 2026-09-18 defect.
+
+### What is left before `biconj` returns on a curved tie
+
+The corner faces' REGIONS can now enter an arrangement. Their VALUES still cannot: a corner's value
+is affine with quadratic-irrational coefficients, stored implicitly as `FP`/`FB`, and the mesh emits
+a `QuaCon` of quadratic faces. So `envelopeMesh` still refuses an envelope with corner or bridge
+faces -- the refusal is now about the OUTPUT TYPE, not about the geometry.

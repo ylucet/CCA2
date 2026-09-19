@@ -11,6 +11,20 @@ classdef conicMeetTest < matlab.unittest.TestCase
 % mathematics, and would go red the day the exact degree-<=4 kernel replaces `roots`.
 
     methods (Test)
+        function aCONSTANTIsRefusedByNameAndNotAsAnArithmeticFault(t)
+        % [fast] A row with no x and no y is a CONSTANT, not a curve, and a face's region can carry
+        % one -- `1 >= 0` was measured on the c = -2 fixture. Before this guard the line path formed
+        % `-f/d` with d = e = 0 and threw `ratQ:notFinite` from three calls down, which an
+        % arrangement catches as "unsure" and silently stops pruning on. The refusal must therefore
+        % be by NAME, in either argument position.
+            t.verifyError(@() conicMeet([1 0 0 0 0 -1], [0 0 0 0 0 1]), 'conicMeet:constant');
+            t.verifyError(@() conicMeet([0 0 0 0 0 1], [1 0 0 0 0 -1]), 'conicMeet:constant');
+            t.verifyError(@() conicMeet([0 0 0 0 0 -3], [0 0 1 0 0 -1]), 'conicMeet:constant');
+            % and a genuine LINE, which also has no quadratic part, still goes through
+            P = conicMeet([0 0 0 1 0 0], [1 0 1 0 0 -1]);      % x = 0 meets the unit circle
+            t.verifyEqual(sortrows(P), [0 -1; 0 1], 'AbsTol', 1e-12);
+        end
+
 
         % ---- the cases the arrangement actually meets -------------------------------------------
 
