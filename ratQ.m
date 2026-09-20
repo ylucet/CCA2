@@ -2159,6 +2159,140 @@ classdef ratQ
             s = ratQ.signAt(ratQ.polyTrim([u(2), u(1)]), Q, iv);
         end
 
+        function u = qs2Red(u)
+        % objective: an element of Q(t1, t2) in lowest terms with a POSITIVE denominator.
+        % [input]  u : [n1 n2 n3 n4 D], meaning (n1 + n2 t1 + n3 t2 + n4 t1 t2)/D
+        %
+        % The COMPOSITUM of two quadratic fields, needed where one cell's rows name lines of two
+        % DIFFERENT conjugate pairs. Measured reachable: four concurrent lines drawn from two pairs
+        % give 8 of 16 sign patterns whose emptiness cannot be certified in either field alone.
+            if numel(u) ~= 5
+                error('ratQ:qs2Shape', 'a Q(t1,t2) element is [n1 n2 n3 n4 D]; got %s.', ...
+                      mat2str(size(u)));
+            end
+            if u(5) == 0
+                error('ratQ:qs2ZeroDen', 'a Q(t1,t2) element cannot have a zero denominator.');
+            end
+            if u(5) < 0, u = -u; end
+            g = gcd(gcd(gcd(abs(u(1)), abs(u(2))), gcd(abs(u(3)), abs(u(4)))), abs(u(5)));
+            if g > 0, u = u / g; end
+            u = ratQ.chk(u, 'Q(t1,t2) element');
+        end
+
+        function w = qs2Add(u, v)
+            w = ratQ.qs2Red([u(1)*v(5) + v(1)*u(5), u(2)*v(5) + v(2)*u(5), ...
+                             u(3)*v(5) + v(3)*u(5), u(4)*v(5) + v(4)*u(5), u(5)*v(5)]);
+        end
+
+        function w = qs2Mul(u, v, Q1, Q2)
+        % The product, with t1^2 and t2^2 removed by their own quadratics -- THE ONLY PLACE either
+        % relation is used. Clearing by al1*al2 keeps every coefficient an integer.
+            al1 = Q1(1); be1 = Q1(2); ga1 = Q1(3);
+            al2 = Q2(1); be2 = Q2(2); ga2 = Q2(3);
+            a = u(1:4);  b = v(1:4);
+            c00 = a(1)*b(1);
+            c10 = a(1)*b(2) + a(2)*b(1);
+            c01 = a(1)*b(3) + a(3)*b(1);
+            c11 = a(1)*b(4) + a(4)*b(1) + a(2)*b(3) + a(3)*b(2);
+            c20 = a(2)*b(2);
+            c02 = a(3)*b(3);
+            c21 = a(2)*b(4) + a(4)*b(2);
+            c12 = a(3)*b(4) + a(4)*b(3);
+            c22 = a(4)*b(4);
+            n1 = al1*al2*c00 - al2*ga1*c20 - al1*ga2*c02 + ga1*ga2*c22;
+            n2 = al1*al2*c10 - al2*be1*c20 - al1*ga2*c12 + be1*ga2*c22;
+            n3 = al1*al2*c01 - al1*be2*c02 - al2*ga1*c21 + ga1*be2*c22;
+            n4 = al1*al2*c11 - al2*be1*c21 - al1*be2*c12 + be1*be2*c22;
+            w = ratQ.qs2Red([n1, n2, n3, n4, al1*al2*u(5)*v(5)]);
+        end
+
+        function [s, ok] = qs2Sign(u, Q1, iv1, Q2, iv2)
+        % objective: the EXACT sign of an element of Q(t1, t2), or a refusal.
+        % [output] s : -1, 0 or +1;  ok : false when the sign could not be decided
+        %
+        % TWO STEPS, and the first is what makes the second terminate.
+        %
+        %   1. IS IT ZERO? When the two quadratics generate DIFFERENT quadratic fields, 1, t1, t2
+        %      and t1 t2 are independent over Q, so the element is zero exactly when all four
+        %      coordinates are. The fields coincide exactly when the product of the discriminants
+        %      is a perfect square, and then this test is invalid -- so that case is REFUSED rather
+        %      than answered, and the caller keeps its cell.
+        %
+        %   2. IF NOT ZERO, it is bounded away from zero, so bisecting both root intervals until
+        %      the interval value excludes zero terminates. Each bisection keeps the half whose
+        %      endpoint signs straddle, decided by evaluating the integer quadratic at a rational
+        %      midpoint -- exactly, never in floating point. The depth is capped by ratQ's 2^53
+        %      ceiling, and hitting the cap is a refusal, not a guess.
+            u = ratQ.qs2Red(u);
+            d1 = ratQ.chk(Q1(2)^2 - 4*Q1(1)*Q1(3), 'discriminant');
+            d2 = ratQ.chk(Q2(2)^2 - 4*Q2(1)*Q2(3), 'discriminant');
+            r = round(sqrt(double(d1)*double(d2)));
+            if d1 > 0 && d2 > 0 && r*r == d1*d2
+                s = 0;  ok = false;  return          % one field in disguise: the zero test fails
+            end
+            if all(u(2:4) == 0), s = sign(u(1));  ok = true;  return, end
+            if all(u(1:4) == 0), s = 0;  ok = true;  return, end
+            [lo1, hi1] = deal(iv1(1), iv1(2));
+            [lo2, hi2] = deal(iv2(1), iv2(2));
+            for it = 1:60
+                [s, decided] = ratQ.qs2Interval(u, [lo1 hi1], [lo2 hi2]);
+                if decided, ok = true;  return, end
+                try
+                    [lo1, hi1] = ratQ.qs2Bisect(Q1, lo1, hi1);
+                    [lo2, hi2] = ratQ.qs2Bisect(Q2, lo2, hi2);
+                catch
+                    s = 0;  ok = false;  return      % the ceiling, reported rather than guessed
+                end
+            end
+            s = 0;  ok = false;
+        end
+
+        function [s, decided] = qs2Interval(u, i1, i2)
+        % The sign of (n1 + n2 t1 + n3 t2 + n4 t1 t2)/D over a box, by interval arithmetic: decided
+        % only when the whole box is on one side of zero.
+            c = double(u(1:4));
+            xs = [i1(1) i1(2)];  ys = [i2(1) i2(2)];
+            v = [];
+            for a = xs
+                for b = ys
+                    v(end+1) = c(1) + c(2)*a + c(3)*b + c(4)*a*b; %#ok<AGROW>
+                end
+            end
+            % The form is BILINEAR, so over a box its extremes are at the corners -- no subdivision
+            % is needed and the enclosure is exact up to rounding, which the guard below absorbs.
+            tol = 8 * eps * max(1, max(abs(c))) * max(1, max(abs([xs ys])))^2;
+            if min(v) > tol,  s = 1;   decided = true;  return, end
+            if max(v) < -tol, s = -1;  decided = true;  return, end
+            s = 0;  decided = false;
+        end
+
+        function [lo, hi] = qs2Bisect(Q, lo, hi)
+        % One exact bisection of a root interval of the integer quadratic Q. The midpoint is a
+        % rational, and the sign of Q there is the sign of an integer -- no floating point decides
+        % which half to keep.
+            [pl, ql] = ratQ.toRational(lo);
+            [ph, qh] = ratQ.toRational(hi);
+            pm = ratQ.chk(pl*qh + ph*ql, 'bisection midpoint');
+            qm = ratQ.chk(2*ql*qh, 'bisection midpoint');
+            sm = sign(ratQ.chk(Q(1)*pm^2 + Q(2)*pm*qm + Q(3)*qm^2, 'quadratic at midpoint'));
+            sl = sign(ratQ.chk(Q(1)*pl^2 + Q(2)*pl*ql + Q(3)*ql^2, 'quadratic at endpoint'));
+            if sm == 0, lo = pm/qm;  hi = pm/qm;  return, end
+            if sm == sl, lo = pm/qm; else, hi = pm/qm; end
+        end
+
+        function [p, q] = toRational(x)
+        % A double as an exact fraction p/q. Every double IS one, so this is exact, not `rat`.
+            if x == 0, p = 0;  q = 1;  return, end
+            [f, e] = log2(abs(x));
+            k = 0;
+            y = x;
+            while y ~= round(y) && k < 60
+                y = y * 2;  k = k + 1;
+            end
+            p = ratQ.chk(round(y), 'rational numerator');
+            q = ratQ.chk(2^k, 'rational denominator');
+        end
+
         function info = parallelPairData(c)
         % objective: the two PARALLEL lines of a degenerate conic, as a linear form and the two
         %            levels it takes on them -- the counterpart of pairLineData's crossing case.

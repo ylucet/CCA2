@@ -141,7 +141,15 @@ function [empty, skipped] = tryOne(C, rows, idx)
     end
     quad = [];  iv = [-1 1];  ref = 0;
     if ~isempty(conics)
-        if size(unique(conics, 'rows'), 1) > 1, skipped = true;  return, end
+        if size(unique(conics, 'rows'), 1) == 2
+            % TWO conjugate pairs in one subsystem: the certificate lives in the COMPOSITUM of two
+            % quadratic fields, which `ratQ.qs2*` provides. Measured reachable -- four concurrent
+            % lines drawn from two pairs leave 8 of 16 sign patterns undecidable in either field
+            % alone, and every one of them is an EMPTY cell that would otherwise be kept.
+            [empty, skipped] = tryTwoFields(C, rows, idx);
+            return
+        end
+        if size(unique(conics, 'rows'), 1) > 2, skipped = true;  return, end
         pd = ratQ.pairLineData(conics(1,:));
         quad = pd.quad;
         % ONE generator for the whole subsystem. Two branch rows of the same pair name the TWO
@@ -223,6 +231,107 @@ function [a, c, ok] = exactHalfPlane(C, rows, t, ref)
         c = ratQ.qsAdd([-sd*p(2) 0 1], ratQ.qsMul([sd*p(1) 0 1], T, pd.quad));
     end
     ok = true;
+end
+
+% --------------------------------------------------------------------------------------------------
+function [empty, skipped] = tryTwoFields(C, rows, idx)
+% The same Farkas certificate, with the rows' coefficients embedded in Q(t1, t2).
+%
+% Each row is built in ITS OWN field first -- that is what `exactHalfPlane` already does -- and then
+% embedded in the compositum's basis {1, t1, t2, t1 t2}: a rational row uses the first slot only, a
+% row of the first pair the second, a row of the second pair the third. Products then go through
+% `ratQ.qs2Mul`, which is the only place either quadratic is used.
+    empty = false;  skipped = false;
+    cs = [];
+    for t = idx(:).'
+        if C(rows(t,1), 7) ~= 0, cs(end+1,:) = C(rows(t,1), 1:6); end %#ok<AGROW>
+    end
+    u = unique(cs, 'rows');
+    pd1 = ratQ.pairLineData(u(1,:));  pd2 = ratQ.pairLineData(u(2,:));
+    Q1 = pd1.quad;  Q2 = pd2.quad;
+    if numel(Q1) ~= 3 || numel(Q2) ~= 3, skipped = true;  return, end
+    ref1 = 0;  ref2 = 0;
+    for t = idx(:).'
+        b = C(rows(t,1), 7);
+        if b == 0, continue, end
+        if isequal(C(rows(t,1), 1:6), u(1,:)) && ref1 == 0, ref1 = b; end
+        if isequal(C(rows(t,1), 1:6), u(2,:)) && ref2 == 0, ref2 = b; end
+    end
+    iv1 = pd1.iv(ref1,:);  iv2 = pd2.iv(ref2,:);
+
+    A1 = {};  A2 = {};  Cc = {};
+    for t = idx(:).'
+        b = C(rows(t,1), 7);
+        if b == 0
+            [a, c, ok] = exactHalfPlane(C, rows, t, 0);
+            slot = 0;
+        elseif isequal(C(rows(t,1), 1:6), u(1,:))
+            [a, c, ok] = exactHalfPlane(C, rows, t, ref1);
+            slot = 1;
+        else
+            [a, c, ok] = exactHalfPlane(C, rows, t, ref2);
+            slot = 2;
+        end
+        if ~ok, skipped = true;  return, end
+        A1{end+1} = embed(a{1}, slot);  A2{end+1} = embed(a{2}, slot); %#ok<AGROW>
+        Cc{end+1} = embed(c, slot); %#ok<AGROW>
+    end
+
+    n = numel(A1);
+    if n == 2
+        cr = cross2two(A1{1}, A2{1}, A1{2}, A2{2}, Q1, Q2);
+        [sg, ok] = ratQ.qs2Sign(cr, Q1, iv1, Q2, iv2);
+        if ~ok, skipped = true;  return, end
+        if sg ~= 0, return, end
+        dt = ratQ.qs2Add(ratQ.qs2Mul(A1{1}, A1{2}, Q1, Q2), ratQ.qs2Mul(A2{1}, A2{2}, Q1, Q2));
+        [sg, ok] = ratQ.qs2Sign(dt, Q1, iv1, Q2, iv2);
+        if ~ok, skipped = true;  return, end
+        if sg >= 0, return, end
+        n2 = ratQ.qs2Add(ratQ.qs2Mul(A1{2}, A1{2}, Q1, Q2), ratQ.qs2Mul(A2{2}, A2{2}, Q1, Q2));
+        lam = {n2, qneg2(dt)};
+    else
+        lam = {cross2two(A1{2}, A2{2}, A1{3}, A2{3}, Q1, Q2), ...
+               cross2two(A1{3}, A2{3}, A1{1}, A2{1}, Q1, Q2), ...
+               cross2two(A1{1}, A2{1}, A1{2}, A2{2}, Q1, Q2)};
+        sg = zeros(1,3);
+        for k = 1:3
+            [sg(k), ok] = ratQ.qs2Sign(lam{k}, Q1, iv1, Q2, iv2);
+            if ~ok, skipped = true;  return, end
+        end
+        if all(sg <= 0)
+            for k = 1:3, lam{k} = qneg2(lam{k}); end
+            sg = -sg;
+        end
+        if ~all(sg >= 0), return, end
+        if all(sg == 0), return, end
+    end
+    tot = [0 0 0 0 1];
+    for k = 1:numel(Cc), tot = ratQ.qs2Add(tot, ratQ.qs2Mul(lam{k}, Cc{k}, Q1, Q2)); end
+    [sg, ok] = ratQ.qs2Sign(tot, Q1, iv1, Q2, iv2);
+    if ~ok, skipped = true;  return, end
+    empty = sg <= 0;
+end
+
+function w = embed(u, slot)
+% A Q(t) element into the compositum's basis {1, t1, t2, t1 t2}.
+    switch slot
+        case 1, w = [u(1), u(2), 0, 0, u(3)];
+        case 2, w = [u(1), 0, u(2), 0, u(3)];
+        otherwise
+            if u(2) ~= 0
+                error('cellInterior:embed', 'a rational row cannot carry a t term.');
+            end
+            w = [u(1), 0, 0, 0, u(3)];
+    end
+    w = ratQ.qs2Red(w);
+end
+
+function w = cross2two(u1, u2, v1, v2, Q1, Q2)
+    w = ratQ.qs2Add(ratQ.qs2Mul(u1, v2, Q1, Q2), qneg2(ratQ.qs2Mul(u2, v1, Q1, Q2)));
+end
+
+function u = qneg2(u)
+    u = [-u(1), -u(2), -u(3), -u(4), u(5)];
 end
 
 % --------------------------------------------------------------------------------------------------

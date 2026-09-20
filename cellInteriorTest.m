@@ -70,10 +70,56 @@ classdef cellInteriorTest < matlab.unittest.TestCase
             t.verifyGreaterThan(info.margin, 0);
         end
 
+        function TWOConjugatePairsInOneCellAreDecidedInTheirCOMPOSITUM(t)
+        % A cell whose rows name lines of TWO different pairs needs a certificate in Q(t1, t2), and
+        % the case is not hypothetical: four concurrent lines drawn from two pairs leave 8 of the 16
+        % sign patterns undecidable in either field alone, and every one of them is EMPTY -- so
+        % keeping them, as the single-field code had to, keeps eight empty cells.
+        %
+        % Four lines through one point cut the plane into eight sectors, so exactly 8 of the 16
+        % patterns are live. That count is the assertion, and `unsureTie` must not appear at all.
+            P1 = ratQ.conic([1 0 -2 0 0 0]);          % slopes +-1/sqrt(2)
+            P2 = ratQ.conic([1 0 -3 0 0 0]);          % slopes +-1/sqrt(3), a DIFFERENT field
+            C = [P1, 1; P1, 2; P2, 1; P2, 2];
+            live = 0;  unsure = 0;
+            for s1 = [1 -1]
+                for s2 = [1 -1]
+                    for s3 = [1 -1]
+                        for s4 = [1 -1]
+                            [tf, info] = cellInterior(C, [1 s1; 2 s2; 3 s3; 4 s4]);
+                            live = live + tf;
+                            unsure = unsure + strcmp(info.path, 'unsureTie');
+                        end
+                    end
+                end
+            end
+            t.verifyEqual(live, 8, 'four concurrent lines give eight sectors');
+            t.verifyEqual(unsure, 0, 'and none of the ties may be left undecided');
+        end
+
+        function theCOMPOSITUMRefusesTwoPairsOfTheSAMEField(t)
+        % The zero test behind the sign -- all four coordinates vanish -- is only valid when the two
+        % quadratics generate DIFFERENT quadratic fields. They coincide exactly when the product of
+        % the discriminants is a perfect square, and then the sign is REFUSED rather than guessed.
+            [s, ok] = ratQ.qs2Sign([1 1 -1 0 1], [1 0 -2], [1 2], [1 0 -8], [2 3]);
+            t.verifyFalse(ok, 'sqrt(2) and sqrt(8) generate one field, so this must refuse');
+            t.verifyEqual(s, 0);
+            % and a genuine compositum is decided: 1 + sqrt(2) - sqrt(3) > 0
+            [s, ok] = ratQ.qs2Sign([1 1 -1 0 1], [1 0 -2], [1 2], [1 0 -3], [1 2]);
+            t.verifyTrue(ok);
+            t.verifyEqual(s, 1);
+            % ... and its negation is negative, which pins the orientation rather than the value
+            [s, ok] = ratQ.qs2Sign([-1 -1 1 0 1], [1 0 -2], [1 2], [1 0 -3], [1 2]);
+            t.verifyTrue(ok);
+            t.verifyEqual(s, -1);
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() cellInterior([0 0 0 1 0 0, 0]), 'cellInterior:nargin');
             t.verifyError(@() cellInterior([0 0 0 1 0 0], [1 1]), 'cellInterior:shape');
             t.verifyError(@() cellInterior([0 0 0 0 0 1, 0], [1 1]), 'cellInterior:constant');
+            t.verifyError(@() ratQ.qs2Red([1 2 3 4]), 'ratQ:qs2Shape');
+            t.verifyError(@() ratQ.qs2Red([1 2 3 4 0]), 'ratQ:qs2ZeroDen');
         end
     end
 end

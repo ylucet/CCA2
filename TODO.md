@@ -17,11 +17,16 @@ DOES carry the value and cannot be reduced the same way.
       bridge as a predicate face in a type that allows one. Its VALUE already has a home
       (`AlgCon`'s `FP`/`FB`).
 - [ ] **Compaction**: 321 faces on the convex fixture where a handful is right.
-- [ ] **`cellInterior`'s skipped case**: a subsystem whose branch rows name two DIFFERENT pairs is
-      kept rather than decided; it has not occurred, and would need the compositum of two quadratic
-      fields.
 
 ### Done recently
+
+- [x] **`cellInterior`'s skipped case** (2026-09-19, overnight). It was NOT hypothetical: four
+      concurrent lines from two pairs leave 8 of 16 sign patterns undecidable in either field alone,
+      and all 8 are EMPTY cells that were being kept. `ratQ.qs2Red/qs2Add/qs2Mul/qs2Sign` give the
+      compositum Q(t1,t2); the sign rests on an exact zero test (four independent coordinates) and
+      terminates by interval bisection with exact rational midpoints. Two pairs of the SAME field
+      are refused rather than answered, because the zero test is invalid there. Now 8 of 16 live,
+      none unsure.
 
 ## 2026-09-19 (seventh pass) — the emptiness test is built and reaches the measured bound
 
