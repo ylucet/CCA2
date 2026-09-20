@@ -3,6 +3,10 @@
 Branch: overnight/2026-09-19
 
 ## What changed
+- **Compaction: 321 faces -> 160, 41 edges instead of 69** (item 2), on the convex fixture, still
+  reproducing f exactly (0.0e0 at 300 points). `compactCells` drops rows a cell's other rows imply,
+  using `cellInterior` so curved and branch rows count too, and alternates with the merge to a
+  fixpoint. A thin face keeps every row -- that guard is five fast-bucket reds' worth of lesson.
 - **The bridge face's region, measured rather than constructed** (item 1). Its membership is
   CONSTANT on the cells of the arrangement -- 50000 points, 40 cells, 0 mixed, each bridge entirely
   inside exactly one cell -- so the region half of the problem that defeated two constructions is
@@ -14,6 +18,7 @@ Branch: overnight/2026-09-19
   on exact rational midpoints. 8 of 16 live, none unsure. cellInteriorTest 7/0.
 
 ## What is broken
+- Nothing. The daily SLOW gate ran once at the start of the run: 98 passed, 0 failed over 5 suites.
 
 ## Needs a decision
 

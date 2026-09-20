@@ -83,7 +83,7 @@ cd "$CCA2DIR" || exit 1
 # ORDER at the end -- a run's output does not depend on how the scheduler happened to interleave
 # it. Per-job elapsed times are printed, which is what tells you where to shard next.
 FAST_SUITES=(guardExerciseTest PLQVCTest QuaPolExactTest QuaParCPLQUnitTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
-             algBranchTest AlgConTest bridgeFaceAlgTest bridgeFaceRatTest cellInteriorTest cornerWedgeRowsTest envelopeMeshCornersTest envelopeCellPairsTest envelopeCellRegionsTest
+             algBranchTest AlgConTest bridgeFaceAlgTest bridgeFaceRatTest cellInteriorTest compactCellsTest cornerWedgeRowsTest envelopeMeshCornersTest envelopeCellPairsTest envelopeCellRegionsTest
              clipArcByHalfPlaneTest conicMeetTest conjConvexPolygonTest conjEdgeLowerBoundTest
              biconjCPLQUnitTest biconjQTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest
              convEnvCPLQTest

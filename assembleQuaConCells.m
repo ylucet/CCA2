@@ -50,8 +50,10 @@ function g = assembleQuaConCells(cells)
 % 3. THE MERGE IS PARTIAL TOO. mergeAdjacentCells joins two cells that carry one function and are
 %    separated by a single curve, which is an exact set identity and is the pattern a pairwise fold
 %    generates. Two cells carrying one function that differ in more than one constraint are left
-%    apart; joining those needs redundancy elimination against a curved constraint set, i.e. (1)'s
-%    kernel again.
+%    apart -- unless dropping an IMPLIED row makes them differ in one, which `compactCells` now
+%    decides with `cellInterior`, curved and branch rows included. What is still left apart is a
+%    pair whose union is genuinely not an H-form cell, an L-shape say, and that is a fact about the
+%    union rather than a gap in the merge.
 %
 % Neither gap can produce a wrong VALUE: `eval` reads the face functions and the sign conditions,
 % and both are exact.
@@ -245,11 +247,10 @@ function g = assembleQuaConCells(cells)
     % row: dropping one as redundant or merging across one would change the face. They are
     % optimisations -- the face set is already right without them -- so cells carrying a branch are
     % handed through untouched rather than given a branch-aware version that nothing yet needs.
-    plain = cellfun(@(C) isempty(C) || all(C(:,3) == 0), FC);
-    if all(plain)
-        FC = dropRedundantRows(EcQ, FC);
-        [fN, fD, FC] = mergeAdjacentCells(fN, fD, FC);
-    end
+    % `compactCells` alternates the two to a fixpoint and decides redundancy with `cellInterior`,
+    % so a CURVED row and a BRANCH row are candidates for removal like any other -- which is what
+    % the paragraph above says the older, linear-only `dropRedundantRows` could not do.
+    [fN, fD, FC] = compactCells(fN, fD, FC, EcQ);
 
     % Some curves may now be referenced by nothing; drop them so `ne` counts the curves that
     % actually bound something, and renumber what is left.

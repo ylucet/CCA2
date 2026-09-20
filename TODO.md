@@ -19,10 +19,18 @@ DOES carry the value and cannot be reduced the same way.
       hold: where a bridge competes with a quadratic face of ANOTHER pair, the boundary is
       `FP(x, y, q(x,y)) = 0`, of degree well above two. Needs the subdivision axis to grow
       (`AlgAlg`), which is a type decision -- see MORNING.md.
-- [ ] **Compaction**: 321 faces on the convex fixture where a handful is right.
+
 
 ### Done recently
 
+- [x] **Compaction** (2026-09-19, overnight): 321 faces -> **160**, 69 edges -> 41, on the convex
+      fixture, still reproducing f EXACTLY (0.0e0 at 300 points). `compactCells` drops a row the
+      cell's other rows already imply -- decided by `cellInterior`, so CURVED and BRANCH rows are
+      candidates too, which the linear-only `dropRedundantRows` could not manage -- and alternates
+      with `mergeAdjacentCells` to a fixpoint. A THIN face (a line or a point domain) keeps every
+      row: it has no interior, so every violation is vacuously empty, and stripping it was five
+      fast-bucket reds before the guard. `dropRedundantRows` is now unreferenced except in a
+      comment; delete it after review.
 - [x] **`cellInterior`'s skipped case** (2026-09-19, overnight). It was NOT hypothetical: four
       concurrent lines from two pairs leave 8 of 16 sign patterns undecidable in either field alone,
       and all 8 are EMPTY cells that were being kept. `ratQ.qs2Red/qs2Add/qs2Mul/qs2Sign` give the
