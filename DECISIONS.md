@@ -8089,3 +8089,22 @@ than on boundaries between faces.
 
 **The item is scope-reduced, not blocked**: the region half is measured and ready to use, and the
 value half needs a decision about the type (MORNING.md 2026-09-19).
+
+## 2026-09-19 (overnight) — REFUTED: "a row whose violation is impossible may always be dropped"
+
+`compactCells` removes a row when `{other rows} and {r violated}` has no interior, which is what
+turns 321 faces into 160. Stated that way the rule is WRONG, and the fast bucket said so within one
+run: five reds, among them `conjQ`'s single-point dual domain and `biconjQ`'s collinear chain.
+
+**A THIN face has no interior at all.** `dom f*` is a LINE when the primal is a positive semidefinite
+singular quadratic and a single POINT when it is affine -- both are correct conjugates, both are
+stored (`QuaCon.FC`'s side 0 exists for exactly this), and for such a face EVERY row's violation is
+vacuously interior-free. The rule therefore strips a point to a half-plane, silently and with no
+value ever coming out wrong until the face is asked for its shape.
+
+**The rule as it now stands:** only a cell that HAS interior may lose a row. That is a precondition,
+not a tolerance, and `compactCellsTest` pins it on the origin and on a ray -- the two thin shapes --
+alongside the cases where dropping is correct.
+
+The general lesson is the one the emptiness work kept meeting from the other side: "has no interior"
+and "is empty" are different predicates, and a mesh that stores thin faces has to keep them apart.
