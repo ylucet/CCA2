@@ -58,8 +58,7 @@ function tf = inRows(con, x)
 end
 
 function v = quadVal(f, x)
-    n = f.num;
-    v = (n(5)*x(1)^2 + n(6)*x(1)*x(2) + n(7)*x(2)^2 + n(8)*x(1) + n(9)*x(2) + n(10)) / f.den;
+    v = ratQ.evalFace(f.num, f.den, x);        % the WEIGHTED basis, not a hand-rolled one
 end
 
 function v = cornerVal(f, x)

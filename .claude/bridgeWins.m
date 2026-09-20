@@ -18,9 +18,7 @@ function bridgeWins()
             bq = -inf;
             for j = 1:numel(env.quad)
                 if ~inRows(env.quad(j).con, X(i,:)), continue, end
-                n = env.quad(j).num;  x = X(i,:);
-                bq = max(bq, (n(5)*x(1)^2 + n(6)*x(1)*x(2) + n(7)*x(2)^2 + ...
-                              n(8)*x(1) + n(9)*x(2) + n(10)) / env.quad(j).den);
+                bq = max(bq, ratQ.evalFace(env.quad(j).num, env.quad(j).den, X(i,:)));
             end
             if isinf(bq), nOnly = nOnly + 1; continue, end
             worst = max(worst, v - bq);

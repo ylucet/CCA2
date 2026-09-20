@@ -8108,3 +8108,32 @@ alongside the cases where dropping is correct.
 
 The general lesson is the one the emptiness work kept meeting from the other side: "has no interior"
 and "is empty" are different predicates, and a mesh that stores thin faces has to keep them apart.
+
+## 2026-09-20 — CORRECTION: the face basis is WEIGHTED, and three of yesterday's numbers were measured without the weights
+
+`ratQ.evalFace` evaluates a face through `QuaPar.evalPoly`, whose basis carries weights -- entry 5
+(x^2) and entry 7 (y^2) are halved, so
+
+        q(x,y) = (n5/2 x^2 + n6 xy + n7/2 y^2 + n8 x + n9 y + n10) / d .
+
+Three probes of 2026-09-19 evaluated `env.quad` faces with an unweighted form of my own. The product
+code was never affected -- everything shipped goes through `ratQ.evalFace`, and `isConvexQ` uses the
+HESSIAN form `n5 x^2 + 2 n6 xy + n7 y^2` deliberately -- but the measurements those entries quote
+were wrong, so they are re-measured here.
+
+| measurement | as recorded 09-19 | corrected |
+|---|---|---|
+| a corner's value above the best quadratic owning the same point | 0 of 4000 points, largest excess 0.0e0 | **unchanged** |
+| a bridge STRICTLY above the best quadratic | 22 of 60 | **60 of 60**, largest excess 1.6e-1 |
+| cells with a bridge among the winners | 2 of 40 | 1 of 40 (a bridge wins somewhere in 2) |
+
+**Every conclusion stands, and the second is stronger.** A corner still never carries the value, so
+carrying it for coverage alone is right. A bridge does not merely sometimes carry the value -- it
+carries it EVERY time it owns a point, which is what one expects of a candidate that exists because
+the sup is attained on the tie. And a cell where a bridge competes with a quadratic face of ANOTHER
+pair still exists, so the boundary `FP(x, y, q(x,y)) = 0` is still required and the subdivision axis
+still has to grow.
+
+The lesson is the one this project keeps relearning about hand-rolled evaluation: there is exactly
+one definition of a face's value, `ratQ.evalFace`, and a probe that writes its own is measuring
+something else. The probes now call it.

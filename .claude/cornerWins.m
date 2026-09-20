@@ -96,8 +96,7 @@ function [C, req, isCorner, val] = faceTable(env)
 end
 
 function h = quadValue(num, den)
-    h = @(X) (num(5)*X(:,1).^2 + num(6)*X(:,1).*X(:,2) + num(7)*X(:,2).^2 + ...
-              num(8)*X(:,1) + num(9)*X(:,2) + num(10)) / den;
+    h = @(X) ratQ.evalFace(num, den, X);       % the WEIGHTED basis, not a hand-rolled one
 end
 
 function h = cornerValue(f)

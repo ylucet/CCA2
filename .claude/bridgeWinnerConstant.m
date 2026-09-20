@@ -72,9 +72,7 @@ function bridgeWinnerConstant()
 end
 
 function v = faceVal(f, X)
-    n = f.num;
-    v = (n(5)*X(:,1).^2 + n(6)*X(:,1).*X(:,2) + n(7)*X(:,2).^2 + ...
-         n(8)*X(:,1) + n(9)*X(:,2) + n(10)) / f.den;
+    v = ratQ.evalFace(f.num, f.den, X);        % the WEIGHTED basis, not a hand-rolled one
 end
 
 function v = faceValAlg(f, x)
