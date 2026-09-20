@@ -1,45 +1,37 @@
 # Session Handoff
 
-_2026-09-19_
+_2026-09-19 (after the overnight run)_
 
 ## Blocked
-- `cPLQ/` is gitignored AND shadows tracked `functionNDomain.m` — delete / track /
-  note? Your call. MORNING.md.
-- `maxQuaPar:notDegenerate` reachability — an in-contract pair needs the symbolic
-  pipeline (hours). DECISIONS 2026-09-06.
+- **Does the subdivision axis grow?** The only item left, and a type decision — see
+  MORNING.md. A bridge face carries the envelope's value, so where it competes
+  with a quadratic face the mesh must draw a curve of degree well above two.
+- `cPLQ/` is gitignored AND shadows tracked `functionNDomain.m` — your call.
+- `maxQuaPar:notDegenerate` reachability — needs the symbolic pipeline (hours).
 
 ## State
-- Branch `main`, well ahead of `origin/main`, tree clean
-- Tests: fast bucket over 46 suites · `envelopeAssembleTest` 8/0 (normal) ·
-  slow 98/0 · verylong 37/0 (09-06/07, not re-run since)
+- Branch `overnight/2026-09-19`, 7 commits ahead of `main`, nothing pushed
+- Tests: fast 688/0 over 48 suites · slow 98/0 · verylong 37/0 with 8 documented
+  `assumeFail` quarantines (both gates re-run 09-19)
 - Known reds: none
 
 ## Where the envelope stands
-The CORNER faces are in the mesh — carried for their REGION, not their value:
-measured, a corner's value never exceeds the best quadratic face owning the same
-point (largest excess exactly 0.0e0), so what a corner decides is COVERAGE, and a
-pair with no covering face is +infinity. A BRIDGE face is the opposite and is now
-the only blocker.
-
-The corner faces' REGIONS are exact rows now (`cornerWedgeRows`, 6400/6400 against
-the KKT predicate), and the arrangement can take them: `cellInterior` decides a
-cell with branch rows in three stages — exact rational tests, a margin LP in
-doubles, then an exact Farkas certificate for the ties. Measured on the c = -2
-fixture: 486 live cells where ignoring the branch rows gives 31104, and NOTHING
-left undecided.
+The mesh now carries BOTH curved-tie face kinds for what they decide: a corner for
+its wedge (coverage), a bridge for its predicate (coverage), with membership asked
+once per cell because the predicate is constant on cells. Compaction halved the
+face count, 321 -> 160. What remains is the bridge/quadratic BOUNDARY, refused by
+name as `envelopeMesh:bridgeCompetes`.
 
 ## Next
-1. **The BRIDGE face's region** — now the ONLY thing between a curved tie and a
-   meshed `biconj`. Its cut is refuted twice (DECISIONS 2026-09-17); either solve
-   it or carry a bridge as a predicate face in a type that allows one. Its VALUE
-   already has a home in `AlgCon`'s `FP`/`FB`, and it does need one: measured, a
-   bridge is strictly above the best quadratic face at 22 of 60 points.
-2. Compaction: 321 faces where a handful is right.
-3. `cellInterior` skips a certificate whose branch rows name two different pairs
-   and keeps the cell; it has not occurred.
+1. The decision above. With option 1 the work is the `AlgAlg` subdivision level;
+   with option 2 `biconj` returns the face list for a curved tie and the mesh
+   stays for straight and tangential ones.
+2. `dropRedundantRows` is dead code now — delete after review.
+3. Pin `envelopeMesh:bridgeCompetes` with a normal-bucket test (it is on the guard
+   inventory as `todo`).
 
 ## Files
-- `cellInterior.m` — the emptiness test, and `cellInteriorTest.m`'s six-sector count
-- `cornerWedgeRows.m` — a corner's wedge as conjugate-pair rows
-- `ratQ.qsRed/qsAdd/qsMul/qsSign` — the Q(t) arithmetic, in one place
-- `.claude/branchRowPruning.m` — the measurement behind all of this
+- `compactCells.m` — drop implied rows, merge to a fixpoint; thin faces keep every row
+- `cellInterior.m` + `ratQ.qs2*` — emptiness, now including the compositum of two fields
+- `envelopeMesh.m` — corners and bridges as coverage; `bridgeCompetes` is the boundary
+- `.claude/bridgeCellConstant.m`, `.claude/bridgeWinnerConstant.m` — the night's measurements
