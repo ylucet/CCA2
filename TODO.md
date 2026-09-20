@@ -12,10 +12,13 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **The BRIDGE face's region.** It is the only thing between a curved tie and a meshed
-      `biconj`: its cut is refuted twice (DECISIONS 2026-09-17), so either solve it or carry a
-      bridge as a predicate face in a type that allows one. Its VALUE already has a home
-      (`AlgCon`'s `FP`/`FB`).
+- [ ] **The bridge/quadratic BOUNDARY** (what is left of "the bridge face's region", after the
+      2026-09-19 measurement split it in two). The REGION half is settled: a bridge's membership is
+      constant on the cells of the arrangement, so it can be carried as a predicate face tested once
+      per cell -- 50000 points, 0 mixed cells. The VALUE half needs a curve the conic level cannot
+      hold: where a bridge competes with a quadratic face of ANOTHER pair, the boundary is
+      `FP(x, y, q(x,y)) = 0`, of degree well above two. Needs the subdivision axis to grow
+      (`AlgAlg`), which is a type decision -- see MORNING.md.
 - [ ] **Compaction**: 321 faces on the convex fixture where a handful is right.
 
 ### Done recently

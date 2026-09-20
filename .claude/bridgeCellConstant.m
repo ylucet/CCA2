@@ -39,19 +39,25 @@ function bridgeCellConstant()
         f = env.bridge{k};
         if strcmp(f.kind, 'corner'), continue, end
         in = bridgeMember(f.pair, X);
-        mixed = 0;  nCell = 0;  worst = 0;
+        mixed = 0;  nCell = 0;  worst = 0;  nIn = 0;  nOut = 0;
         for c = 1:max(cellOf)
             idx = find(cellOf == c);
             if numel(idx) < 2, continue, end
             nCell = nCell + 1;
             v = in(idx);
-            if any(v) && ~all(v)
+            if all(v)
+                nIn = nIn + 1;
+            elseif ~any(v)
+                nOut = nOut + 1;
+            else
                 mixed = mixed + 1;
                 worst = max(worst, min(sum(v), sum(~v)));
             end
         end
-        fprintf('bridge %d (%s): %d cells with 2+ points | MIXED %d | smallest minority %d\n', ...
-                k, f.kind, nCell, mixed, worst);
+        % A count of constant cells alone can be VACUOUS -- a predicate that is false everywhere
+        % is constant on every cell and proves nothing -- so both sides are reported.
+        fprintf(['bridge %d (%s): %d cells | all IN %d | all OUT %d | MIXED %d | ' ...
+                 'smallest minority %d\n'], k, f.kind, nCell, nIn, nOut, mixed, worst);
     end
 end
 

@@ -8047,3 +8047,45 @@ an arrangement can read -- and its region is the predicate whose cut is refuted 
 assembly never produces a corner without a bridge, so the path is exercised by a hand-built envelope
 (`envelopeMeshCornersTest`) until the bridge is solved -- and the bridge is now the ONLY thing
 between a curved tie and a meshed `biconj`.
+
+
+## 2026-09-19 (overnight) — the bridge REGION is a union of cells; what the CONIC level cannot hold is the bridge/quadratic BOUNDARY
+
+Two constructions that tried to write a bridge face's region as sign conditions are refuted
+(2026-09-17), both because the cut boundary is a SEGMENT described by the unbounded curve it lies
+on. An ARRANGEMENT does not have that problem, so the question was re-asked there, and the answer
+splits in two.
+
+**The region is a union of arrangement cells, and that is new.** Give each point its sign vector
+against the 23 curves of the c = -2 arrangement -- the quadratic faces' rows, the corner wedges, and
+the bridges' own outer bounds -- and ask `bridgeMember` at 50000 of them:
+
+    bridge 1  : 40 cells with 2+ points | all IN 1 | all OUT 39 | MIXED 0
+    bridge 10 : 40 cells with 2+ points | all IN 1 | all OUT 39 | MIXED 0
+
+Not one cell straddles the boundary, and each bridge face is entirely inside exactly ONE cell. The
+outer-bound rows add NO new curves. So the thing neither construction could express as a sign
+condition -- membership -- IS decided by the arrangement the mesh already builds, and a bridge face
+could be carried as a predicate face tested once per cell.
+
+**What is NOT settled is the VALUE, and that is a type question.** A bridge carries the envelope's
+value (strictly above the best quadratic at 22 of 60 points, up to 1.2e-1), so where it competes the
+mesh must draw the boundary {bridge value = quadratic value}. Measured, with the winner taken inside
+each cell:
+
+    40 cells with a finite value | more than ONE winner inside 12 | a bridge among them 2
+    cell 30: winners from pairs [3 11 12], the bridge being pair 12
+    cell 31: winners from pairs [3 10 11 13 12 14], the bridge being pair 12
+
+The competitors are faces of DIFFERENT cell pairs, so this is a genuine max between pairs, not a
+partition within one. Its boundary is `FP(x, y, q(x,y)) = 0` -- the bridge's implicit polynomial with
+a quadratic substituted for z -- a rational curve of degree well above two.
+
+**So `the Conic level is ENOUGH for the envelope` (2026-09-17) is true for EVALUATION and false for
+the MESH.** `envelopeEval` needs no such curve, because it never draws a boundary; a mesh does. What
+is missing is the SUBDIVISION axis, exactly the `AlgAlg` level set aside on 2026-09-13 on the grounds
+that only the function axis needed to grow -- and that reasoning, again, rested on regions rather
+than on boundaries between faces.
+
+**The item is scope-reduced, not blocked**: the region half is measured and ready to use, and the
+value half needs a decision about the type (MORNING.md 2026-09-19).
