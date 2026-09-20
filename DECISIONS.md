@@ -8222,3 +8222,29 @@ It settles the GEOMETRY: a curved-tie envelope has a mesh, the faces are few, an
 verified evaluator exactly. It does NOT settle the TYPE -- `mesh` is a plain struct array and
 `meshAlgEval` its evaluator, because `AlgCon`'s edge table holds conics. Growing that is the rest of
 the work, and it is now a question about storage rather than about geometry.
+
+## 2026-09-20 — the type: `Crv` and `AlgCrv`, and the property move that was REFUTED on the way
+
+The subdivision axis has a fourth level. `Crv` is the trait -- an edge may be a curve of ANY degree,
+named as (rational polynomial, BRANCH) because the rational object names a PAIR -- and `AlgCrv` is
+the concrete cell at (Alg, Crv), the type `biconj` returns for an input whose pieces meet along a
+curved tie. The algebraic edge table `EcA` is declared on AlgCon and PINNED EMPTY unless the object
+is a Crv, which is the rule `den`, `Ec`, `FP` and `FB` already follow, enforced by reading the TRAIT
+rather than the class name so it covers types that do not exist yet.
+
+Measured on the c = -2 fixture, assembled from the verified mesh:
+
+    AlgCrv: 4 faces, 34 conic edges, 22 algebraic edges
+    against envelopeEval: 0 domain mismatches, max |value difference| 0.0e0 over 417 points
+
+**REFUTED on the way: moving the exact mesh up to AlgCon.** `fN`, `fD`, `EcQ`, `Vname` and `FC` are
+declared on QuaCon, and AlgCrv cannot extend QuaCon -- a QuaCon is a `Rat`, and a Rat may not carry
+an implicit face. AlgCon's own header says the mesh is declared ONCE, so moving those five up looked
+like both the fix and a correction. It is not, at least not as a five-line edit: the fast bucket went
+from 692 passing to **363 passing, 331 failed and 326 INCOMPLETE** -- classes that no longer load.
+Reverted immediately, and the declarations are duplicated on AlgCrv with the measurement in a comment
+above them, so the wart carries its own price tag. Doing the move properly is its own item with its
+own measurement, and TODO.md has it.
+
+The lesson is the one about big refactors that look like tidying: `AlgCon.m` says the data lives in
+one place, the code says otherwise, and the gap between them is not closed by believing the comment.

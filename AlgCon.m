@@ -141,6 +141,15 @@ classdef AlgCon < Alg & Conic
             % one with no curvature.
 
         % ---- the ALGEBRAIC payload: general on an Alg, PINNED TO EMPTY on a Rat --------------
+        EcA (:,1) struct = emptyEcA()   % ne_alg x 1 ALGEBRAIC edges, the fourth subdivision
+            % level (see Crv.m). Entry j has fields FP, FB, num, den, and stands for the curve
+            %       { x : q(x) = value_FB(x) },   q = num . basis / den,
+            % where value_FB is the FB-th real root of FP(x,y,.) -- the boundary between a BRIDGE
+            % face and a quadratic one. The polynomial FP(x,y,q(x,y)) that vanishes there is
+            % rational but names the PAIR of branches, so the branch index is part of the edge and
+            % not decoration; `algCurveSide` decides a side exactly, by counting roots.
+            % PINNED to empty unless the object is a Crv -- a conic subdivision has no such edge.
+            % An FC row selects this table with a fourth column of 1; see FC's own note.
         FP (:,1) cell = {}   % nf x 1. FP{k} is face k's defining polynomial p_k(x,y,z), as ratQ's
             % dense polyN array in three variables: FP{k}(i+1,j+1,m+1) is the INTEGER coefficient
             % of x^i y^j z^m. EMPTY where face k has a formula, in which case fN/fD (or f/den)
@@ -291,6 +300,19 @@ classdef AlgCon < Alg & Conic
             obj.Ec = val;
        end
 
+       function obj = set.EcA(obj, val)
+       % Enforce the Crv axis from the single place `EcA` is defined: only a Crv may carry an edge
+       % that is not a conic. Reading the TRAIT rather than the class name is the same argument
+       % set.den, set.Ec and set.FP rest on, and it covers types that do not exist yet.
+            if ~isempty(val) && ~isa(obj,'Crv')
+                error('AlgCon:EcAMustBeEmpty', ...
+                    ['a %s has a CONIC subdivision (it is not a Crv), so every edge is a conic ' ...
+                     'and none is an arbitrary algebraic curve: EcA must be empty. An edge that ' ...
+                     'needs a polynomial belongs on a Crv -- see Crv.m.'], class(obj));
+            end
+            obj.EcA = val;
+       end
+
        function obj = set.FP(obj, val)
        % Enforce the Alg axis from the single place `FP` is defined: every face of a Rat has a
        % FORMULA, so a rational type must never carry an implicit one. Reading the TRAIT rather
@@ -356,4 +378,12 @@ classdef AlgCon < Alg & Conic
             if isempty(obj.Ec),  obj.Ec  = zeros(size(obj.E,1), 6); end
        end
    end
+end
+
+% ==================================================================================================
+function e = emptyEcA()
+% The empty ALGEBRAIC edge table, with its fields declared so that every EcA -- empty or not -- has
+% the same shape. A default of `struct([])` would have no fields, and a caller appending to it would
+% silently create whatever it wrote first.
+    e = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {});
 end

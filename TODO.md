@@ -12,6 +12,11 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
+- [ ] **Move the exact mesh (`fN`, `fD`, `EcQ`, `Vname`, `FC`) from QuaCon up to AlgCon**, where
+      AlgCon's own header says it belongs. Tried as a five-line edit on 2026-09-20 and REFUTED: the
+      fast bucket went 692 -> 363 passing with 326 incomplete, i.e. classes that stopped loading.
+      Until then `AlgCrv` declares those five itself, with the measurement in a comment above them.
+
 - [ ] **The bridge/quadratic BOUNDARY** (what is left of "the bridge face's region", after the
       2026-09-19 measurement split it in two). The REGION half is settled: a bridge's membership is
       constant on the cells of the arrangement, so it can be carried as a predicate face tested once
