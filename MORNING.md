@@ -3,6 +3,12 @@
 Branch: overnight/2026-09-19
 
 ## What changed
+- **Bridge faces now enter the arrangement for COVERAGE** (item 1, second pass -- the half that does
+  not need your decision). Their outer bounds join the curve table as curves, and membership is
+  asked ONCE per cell at an interior point, which is sound because the predicate is constant on a
+  cell. The blanket refusal is gone: a curved-tie envelope is now refused by
+  `envelopeMesh:bridgeCompetes` only where a bridge's VALUE competes with a quadratic face, which is
+  exactly the measured obstruction and the thing your decision is about.
 - **Compaction: 321 faces -> 160, 41 edges instead of 69** (item 2), on the convex fixture, still
   reproducing f exactly (0.0e0 at 300 points). `compactCells` drops rows a cell's other rows imply,
   using `cellInterior` so curved and branch rows count too, and alternates with the merge to a

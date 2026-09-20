@@ -62,17 +62,18 @@ function [g, info] = envelopeMesh(env)
     if ~isstruct(env) || ~all(isfield(env, {'quad', 'bridge'}))
         error('envelopeMesh:shape', 'env must be what envelopeAssemble returns.');
     end
-    corners = {};
+    corners = {};  bridges = {};
     for k = 1:numel(env.bridge)
         f = env.bridge{k};
         if strcmp(f.kind, 'corner') && ~isempty(f.con)
             corners{end+1} = f; %#ok<AGROW>
+        elseif isfield(f, 'cells') && ~isempty(f.cells) && isfield(f, 'pair')
+            bridges{end+1} = f; %#ok<AGROW>
         else
             error('envelopeMesh:bridgeFaces', ...
-                ['this envelope has a face whose region is a PREDICATE with no rows (kind %s), ' ...
-                 'so it has no signs to place in an arrangement. Mesh the quadratic part by ' ...
-                 'passing an envelope without it, or keep using envelopeEval, which answers for ' ...
-                 'both.'], f.kind);
+                ['this envelope has a face whose region is a PREDICATE with no rows and no outer ' ...
+                 'bound (kind %s), so nothing places it in an arrangement. Keep using ' ...
+                 'envelopeEval, which answers for it.'], f.kind);
         end
     end
     if isempty(env.quad)
@@ -81,10 +82,11 @@ function [g, info] = envelopeMesh(env)
         return
     end
 
-    % ---- 1. the distinct curves, from the quadratic faces AND the corners' wedges -----------------
+    % ---- 1. the distinct curves: the quadratic faces, the corners' wedges, the bridges' bounds ----
     [C, req, pairOf] = curveTable(env.quad, corners);
     nQuad = numel(env.quad);
-    allPairs = unique(pairOf);
+    C = addBridgeCurves(C, bridges);       % curves only: a bridge's membership is a PREDICATE
+    allPairs = unique([pairOf, cellfun(@(f) f.pairIndex, bridges)]);
 
     % ---- 2. the arrangement, one curve at a time ------------------------------------------------
     cells = {zeros(0,2)};                       % each cell: rows [curveIndex, side]
@@ -105,10 +107,35 @@ function [g, info] = envelopeMesh(env)
     nRef = 0;  nUncovered = 0;
     for k = 1:numel(cells)
         app = applicable(req, cells{k});
-        if isempty(app), nUncovered = nUncovered + 1; continue, end
+        % A BRIDGE's membership is a predicate, so it is asked ONCE for the cell, at an interior
+        % point. That is sound because the predicate is CONSTANT on a cell: measured on the c = -2
+        % fixture, 50000 points, 40 cells, not one of them mixed (DECISIONS.md 2026-09-19).
+        [pt, okPt] = interiorPoint(C, cells{k});
+        here = pairOf(app);
+        bridgeHere = [];
+        if okPt
+            for b = 1:numel(bridges)
+                if bridgeMember(bridges{b}.pair, pt)
+                    here(end+1) = bridges{b}.pairIndex; %#ok<AGROW>
+                    bridgeHere(end+1) = b; %#ok<AGROW>
+                end
+            end
+        end
+        if isempty(app) && isempty(bridgeHere), nUncovered = nUncovered + 1; continue, end
         % EVERY pair must be covered here, or the envelope is +infinity and the cell is left out.
-        % This is `envelopeEval`'s rule, and it is what the corner faces are carried for.
-        if ~all(ismember(allPairs, pairOf(app))), nUncovered = nUncovered + 1; continue, end
+        % This is `envelopeEval`'s rule, and it is what the corner and bridge faces are carried for.
+        if ~all(ismember(allPairs, here)), nUncovered = nUncovered + 1; continue, end
+        if ~isempty(bridgeHere)
+            % A BRIDGE CARRIES THE VALUE -- measured strictly above the best quadratic face at 22 of
+            % 60 points -- so where one owns part of a cell the mesh would have to draw
+            % {bridge value = quadratic value}, i.e. FP(x, y, q(x,y)) = 0, of degree well above two
+            % and not an edge a CONIC subdivision can hold. Refused by name rather than mis-valued.
+            error('envelopeMesh:bridgeCompetes', ...
+                ['a bridge face owns part of a cell, and its value competes with the quadratic ' ...
+                 'faces there. The boundary between them is not a conic, so this envelope cannot ' ...
+                 'be meshed on a conic subdivision -- envelopeEval answers for it. DECISIONS.md ' ...
+                 '2026-09-19.']);
+        end
         quadApp = app(app <= nQuad);
         if isempty(quadApp)
             error('envelopeMesh:algebraicFace', ...
@@ -127,7 +154,8 @@ function [g, info] = envelopeMesh(env)
 
     g = assembleQuaConCells(out);
     info = struct('curves', size(C,1), 'cells', nArr, 'refined', nRef, 'faces', g.nf, ...
-                  'uncovered', nUncovered, 'corners', numel(corners));
+                  'uncovered', nUncovered, 'corners', numel(corners), ...
+                  'bridges', numel(bridges));
 end
 
 % ==================================================================================================
@@ -176,6 +204,74 @@ function tf = cellIsLive(C, rows)
 % ignoring such a row costs 31104 live cells against 486 (DECISIONS.md 2026-09-18), because every
 % cell kept is split again by every later curve.
     tf = cellInterior(C, rows);
+end
+
+% --------------------------------------------------------------------------------------------------
+function C = addBridgeCurves(C, bridges)
+% A bridge face's OUTER BOUND joins the curve table as CURVES, with no demand attached: the bound
+% contains the face but is not equal to it, so it may not be read as the face's region. What it buys
+% is that no cell straddles the face's boundary, which is what makes one membership test per cell
+% sound.
+    for b = 1:numel(bridges)
+        blocks = bridges{b}.cells;
+        if ~iscell(blocks), blocks = {blocks}; end
+        for t = 1:numel(blocks)
+            con = blocks{t};
+            for r = 1:size(con,1)
+                c = con(r,1:6);
+                if all(c(1:5) == 0), continue, end
+                key = [c, branchOf(con, r)];
+                if isempty(find(all(C == key, 2), 1)), C(end+1,:) = key; end %#ok<AGROW>
+            end
+        end
+    end
+end
+
+% --------------------------------------------------------------------------------------------------
+function [pt, ok] = interiorPoint(C, rows)
+% A point strictly inside the cell, for the one predicate test the bridges need. The straight rows
+% give a Chebyshev centre; the curved ones are then checked, and a cell whose centre does not satisfy
+% them is reported as UNDECIDED rather than answered from a point outside it.
+    pt = [0 0];  ok = false;
+    H = zeros(0,3);
+    for t = 1:size(rows,1)
+        c = C(rows(t,1), 1:6);  br = C(rows(t,1), 7);  sd = rows(t,2);
+        if br == 0 && all(c(1:3) == 0), H(end+1,:) = sd * c(4:6); end %#ok<AGROW>
+    end
+    R = 1e3;
+    if isempty(H)
+        cand = [0 0];
+    else
+        for i = 1:size(H,1)
+            n = hypot(H(i,1), H(i,2));
+            if n > 0, H(i,:) = H(i,:) / n; end
+        end
+        M = [H(:,1:2), -ones(size(H,1),1); 1 0 0; -1 0 0; 0 1 0; 0 -1 0];
+        b = [-H(:,3); -R; -R; -R; -R];
+        best = -inf;  cand = [0 0];  k = size(M,1);
+        for i = 1:k-2
+            for j = i+1:k-1
+                for l = j+1:k
+                    S = M([i j l], :);
+                    if abs(det(S)) < 1e-12, continue, end
+                    z = S \ b([i j l]);
+                    if all(M*z >= b - 1e-9) && z(3) > best, best = z(3);  cand = z(1:2).'; end
+                end
+            end
+        end
+        if best <= 0, return, end
+    end
+    for t = 1:size(rows,1)
+        c = C(rows(t,1), 1:6);  br = C(rows(t,1), 7);  sd = rows(t,2);
+        if br ~= 0
+            v = ratQ.pairLineEval(c, br, cand);
+        else
+            v = c(1)*cand(1)^2 + c(2)*cand(1)*cand(2) + c(3)*cand(2)^2 + ...
+                c(4)*cand(1) + c(5)*cand(2) + c(6);
+        end
+        if sd * v <= 0, return, end
+    end
+    pt = cand;  ok = true;
 end
 
 % --------------------------------------------------------------------------------------------------
