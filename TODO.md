@@ -1,5 +1,24 @@
 # TODO
 
+## 2026-09-19 (eighth pass) — corners are COVERAGE; the bridge is the only thing left
+
+Measured before building (DECISIONS.md 2026-09-19): a corner face's value never exceeds the best
+quadratic face owning the same point -- largest excess exactly 0.0e0 -- so it needs no algebraic face
+at all. It is carried for its REGION: every pair must be covered on a cell or the envelope is
++infinity there. `envelopeMesh` does that now and refuses only faces whose region has no rows.
+
+A BRIDGE face is strictly above the best quadratic at 22 of 60 sampled points, by up to 1.2e-1, so it
+DOES carry the value and cannot be reduced the same way.
+
+### Next, in order
+
+1. **The BRIDGE face's region.** It is now the only thing between a curved tie and a meshed
+   `biconj`: its cut is refuted twice (DECISIONS 2026-09-17), so either solve it or carry a bridge as
+   a predicate face in a type that allows one. Its VALUE already has a home (`AlgCon`'s `FP`/`FB`).
+2. Compaction: 321 faces on the convex fixture where a handful is right.
+3. A subsystem whose branch rows name two DIFFERENT pairs is skipped by `cellInterior`'s certificate
+   and the cell kept; it has not occurred, and would need the compositum of two quadratic fields.
+
 ## 2026-09-19 (seventh pass) — the emptiness test is built and reaches the measured bound
 
 `cellInterior`: rational rows by the exact tests that existed, then a margin LP in doubles, then the

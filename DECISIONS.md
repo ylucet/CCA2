@@ -8009,3 +8009,41 @@ The corner faces' REGIONS can now enter an arrangement. Their VALUES still canno
 is affine with quadratic-irrational coefficients, stored implicitly as `FP`/`FB`, and the mesh emits
 a `QuaCon` of quadratic faces. So `envelopeMesh` still refuses an envelope with corner or bridge
 faces -- the refusal is now about the OUTPUT TYPE, not about the geometry.
+
+
+## 2026-09-19 — a CORNER face is COVERAGE, a BRIDGE face is VALUE, and only the second needs a new type
+
+The next step was "give the corner faces' VALUES a home in the output type", because a corner's value
+is affine with quadratic-irrational coefficients and the mesh emits a QuaCon of quadratic faces. It
+was measured first, and the measurement moved the work rather than sizing it.
+
+**Every cell of the c = -2 arrangement is mixed.** Of the 486 live cells, 486 carry a corner face
+ALONGSIDE quadratic faces -- none carries a corner alone -- so there is no subset of the mesh where a
+corner could be emitted without comparing it against a quadratic face. That comparison is a conic
+with irrational coefficients, i.e. one member of a conjugate PAIR OF CONICS, which no conic
+subdivision can hold as an edge. On that reading the work was a type extension.
+
+**But a corner never carries the value.** At 4000 points, wherever a corner face owns a point its
+value NEVER EXCEEDS the best quadratic face owning the same point, and the largest excess is exactly
+**0.0e0** -- equality, not domination. The reason is structural: the corner sits ON the tie, so it
+belongs to the neighbouring cell pair as well, and that pair's own candidate through the same dual
+point takes the same value. So the comparison never has to be drawn, and no algebraic face is needed.
+
+What a corner IS needed for is `envelopeEval`'s other rule: the envelope is the max over faces, and a
+PAIR with no face owning x is +infinity there. A pair whose only candidate at x is a corner therefore
+has its DOMAIN ended by that wedge. `envelopeMesh` now carries corner faces for exactly that: their
+rows join the arrangement, every pair must be covered on a cell or the cell is left out, and the
+value still comes from a quadratic face. A cell covered ONLY by corners would need an algebraic face
+after all and is refused by name (`envelopeMesh:algebraicFace`); it has not occurred.
+
+**A BRIDGE face is the opposite, and the same probe says so.** Of 60 (point, bridge face) pairs, the
+bridge is STRICTLY above the best quadratic face at 22 of them, by up to 1.2e-1. A bridge carries the
+envelope's value, so it cannot be reduced to coverage: it needs both an algebraic face AND a region
+an arrangement can read -- and its region is the predicate whose cut is refuted twice (2026-09-17).
+
+### What this means for the order of work
+
+`envelopeMesh` accepts corner faces now, and refuses only faces whose region has NO ROWS. A real
+assembly never produces a corner without a bridge, so the path is exercised by a hand-built envelope
+(`envelopeMeshCornersTest`) until the bridge is solved -- and the bridge is now the ONLY thing
+between a curved tie and a meshed `biconj`.

@@ -15,6 +15,12 @@ _2026-09-19_
 - Known reds: none
 
 ## Where the envelope stands
+The CORNER faces are in the mesh — carried for their REGION, not their value:
+measured, a corner's value never exceeds the best quadratic face owning the same
+point (largest excess exactly 0.0e0), so what a corner decides is COVERAGE, and a
+pair with no covering face is +infinity. A BRIDGE face is the opposite and is now
+the only blocker.
+
 The corner faces' REGIONS are exact rows now (`cornerWedgeRows`, 6400/6400 against
 the KKT predicate), and the arrangement can take them: `cellInterior` decides a
 cell with branch rows in three stages — exact rational tests, a margin LP in
@@ -23,13 +29,14 @@ fixture: 486 live cells where ignoring the branch rows gives 31104, and NOTHING
 left undecided.
 
 ## Next
-1. **The corner faces' VALUES.** A corner's value is affine with quadratic-
-   irrational coefficients and the mesh emits a QuaCon of quadratic faces, so
-   `envelopeMesh` still refuses an envelope containing them — now purely an
-   OUTPUT TYPE question, the geometry being done.
-2. **The BRIDGE face's region** stays a predicate (its cut is refuted twice,
-   DECISIONS 2026-09-17).
-3. Compaction: 321 faces where a handful is right.
+1. **The BRIDGE face's region** — now the ONLY thing between a curved tie and a
+   meshed `biconj`. Its cut is refuted twice (DECISIONS 2026-09-17); either solve
+   it or carry a bridge as a predicate face in a type that allows one. Its VALUE
+   already has a home in `AlgCon`'s `FP`/`FB`, and it does need one: measured, a
+   bridge is strictly above the best quadratic face at 22 of 60 points.
+2. Compaction: 321 faces where a handful is right.
+3. `cellInterior` skips a certificate whose branch rows name two different pairs
+   and keeps the cell; it has not occurred.
 
 ## Files
 - `cellInterior.m` — the emptiness test, and `cellInteriorTest.m`'s six-sector count

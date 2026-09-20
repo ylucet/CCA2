@@ -61,6 +61,24 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                           'cornerFaceAlg:side');
         end
 
+        function envelopeMeshAlgebraicFace(t)                                % reachable
+            % A cell covered ONLY by corner faces would need a face whose value is affine with
+            % quadratic-irrational coefficients, which a conic subdivision cannot store. Measured
+            % never to happen -- a corner's value always ties a quadratic face (DECISIONS.md
+            % 2026-09-19) -- so it is built here on purpose: one pair, one corner, nothing else.
+            n = [0 0 0 0, 2, 0, 2, 0, 0, 0];
+            f = cornerFaceAlg(n, 1, [1 0 1; -1 0 1; 0 1 1; 0 -1 1], [2 0 2 0 0 -3], 1);
+            t.verifyNotEmpty(f, 'the fixture must produce a corner, or this proves nothing');
+            c = f(1);  c.pairIndex = 1;
+            % The corner must share its PAIR with a quadratic face whose region does not reach as
+            % far as the wedge: a corner in a pair of its own is dropped by the coverage rule before
+            % the guard, and an envelope with no quadratic face at all returns empty before it.
+            q = struct('num', [0 0 0 0, 1, 0, 1, 0, 0, 0], 'den', 1, ...
+                       'con', [0 0 0 1 0 -1, 1, 0], 'pair', 1);          % only where x >= 1
+            env = struct('quad', q, 'bridge', {{c}});
+            t.verifyError(@() envelopeMesh(env), 'envelopeMesh:algebraicFace');
+        end
+
         function cellInteriorArguments(t)                                    % reachable
             % The arrangement's emptiness test. A wrong shape here would not throw on its own -- a
             % six-column table simply reads the branch column as missing -- so the shape is pinned,

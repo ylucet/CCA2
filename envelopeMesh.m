@@ -34,11 +34,27 @@ function [g, info] = envelopeMesh(env)
 %    positive denominators. Splitting by it is one more row, and the faces are taken one at a time so
 %    the refinement is bounded by how many actually apply (two to four here, not fifty).
 %
-% WHAT IT DOES NOT COVER. A BRIDGE or CORNER face's region is a predicate, not a row list, so it has
-% no signs to read and cannot enter the arrangement. A fixture whose ties are all straight or
-% tangential -- the CONVEX one, among others -- has none of them and comes out whole; otherwise this
-% is the envelope's quadratic part and `envelopeEval` remains the complete answer. That boundary is
-% named in `envelopeMesh:bridgeFaces` rather than left for a caller to discover.
+% CORNER FACES ARE COVERAGE, NOT VALUE -- which is why they can be here at all.
+%
+% A corner face's value is affine with quadratic-irrational coefficients, so it is not a face any
+% conic subdivision can store, and the boundary between it and a quadratic face would be a conic
+% with irrational coefficients -- not an edge either. It turns out neither is needed. MEASURED on
+% the c = -2 fixture, 4000 points: wherever a corner face owns a point, its value NEVER EXCEEDS the
+% best quadratic face owning the same point, and the largest excess is exactly 0.0e0 -- equality,
+% not domination, because the corner lies ON the tie and therefore belongs to the neighbouring pair
+% too, whose own candidate through that same dual point takes the same value.
+%
+% So a corner face is carried for its REGION alone. Its rows join the arrangement, and what they
+% decide is COVERAGE: by `envelopeEval`'s rule the envelope is the max over faces, and a PAIR with
+% no face owning x makes it +infinity there. A cell where every pair is covered emits the largest
+% QUADRATIC face; a cell where some pair is not is left out, and a hole in the mesh is exactly
+% +infinity. A cell covered ONLY by a corner face would need an algebraic face after all, and is
+% refused by name (`envelopeMesh:algebraicFace`) rather than silently mis-valued -- it did not occur
+% on any fixture here.
+%
+% WHAT IT STILL DOES NOT COVER: a BRIDGE face, whose region is a predicate with no rows at all
+% (DECISIONS.md 2026-09-17). `envelopeMesh:bridgeFaces` names that, and `envelopeEval` answers for
+% such an envelope.
 
     if nargin ~= 1
         error('envelopeMesh:nargin', 'expects (env).');
@@ -46,12 +62,18 @@ function [g, info] = envelopeMesh(env)
     if ~isstruct(env) || ~all(isfield(env, {'quad', 'bridge'}))
         error('envelopeMesh:shape', 'env must be what envelopeAssemble returns.');
     end
-    if ~isempty(env.bridge)
-        error('envelopeMesh:bridgeFaces', ...
-            ['this envelope has %d face(s) whose region is a PREDICATE (bridge or corner), which ' ...
-             'has no signs to place in an arrangement. Mesh the quadratic part by passing an ' ...
-             'envelope without them, or keep using envelopeEval, which answers for both.'], ...
-            numel(env.bridge));
+    corners = {};
+    for k = 1:numel(env.bridge)
+        f = env.bridge{k};
+        if strcmp(f.kind, 'corner') && ~isempty(f.con)
+            corners{end+1} = f; %#ok<AGROW>
+        else
+            error('envelopeMesh:bridgeFaces', ...
+                ['this envelope has a face whose region is a PREDICATE with no rows (kind %s), ' ...
+                 'so it has no signs to place in an arrangement. Mesh the quadratic part by ' ...
+                 'passing an envelope without it, or keep using envelopeEval, which answers for ' ...
+                 'both.'], f.kind);
+        end
     end
     if isempty(env.quad)
         g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
@@ -59,8 +81,10 @@ function [g, info] = envelopeMesh(env)
         return
     end
 
-    % ---- 1. the distinct curves ---------------------------------------------------------------
-    [C, req] = curveTable(env.quad);
+    % ---- 1. the distinct curves, from the quadratic faces AND the corners' wedges -----------------
+    [C, req, pairOf] = curveTable(env.quad, corners);
+    nQuad = numel(env.quad);
+    allPairs = unique(pairOf);
 
     % ---- 2. the arrangement, one curve at a time ------------------------------------------------
     cells = {zeros(0,2)};                       % each cell: rows [curveIndex, side]
@@ -76,13 +100,25 @@ function [g, info] = envelopeMesh(env)
     end
     nArr = numel(cells);
 
-    % ---- 3 and 4. the applicable faces, and the winner ------------------------------------------
+    % ---- 3 and 4. the applicable faces, the COVERAGE test, and the winner ------------------------
     out = struct('num', {}, 'den', {}, 'con', {});
-    nRef = 0;
+    nRef = 0;  nUncovered = 0;
     for k = 1:numel(cells)
         app = applicable(req, cells{k});
-        if isempty(app), continue, end          % no face here: the envelope is +infinity
-        [sub, C] = winnerCells(C, cells{k}, env.quad, app);
+        if isempty(app), nUncovered = nUncovered + 1; continue, end
+        % EVERY pair must be covered here, or the envelope is +infinity and the cell is left out.
+        % This is `envelopeEval`'s rule, and it is what the corner faces are carried for.
+        if ~all(ismember(allPairs, pairOf(app))), nUncovered = nUncovered + 1; continue, end
+        quadApp = app(app <= nQuad);
+        if isempty(quadApp)
+            error('envelopeMesh:algebraicFace', ...
+                ['a cell is covered only by CORNER faces, whose value is affine with ' ...
+                 'quadratic-irrational coefficients and cannot be stored on a conic subdivision. ' ...
+                 'Measured never to occur on the fixtures here -- the corner''s value always ties ' ...
+                 'a quadratic face -- so reaching it means the output type needs an algebraic ' ...
+                 'face after all.']);
+        end
+        [sub, C] = winnerCells(C, cells{k}, env.quad, quadApp);
         nRef = nRef + numel(sub);
         for t = 1:numel(sub)
             out(end+1) = sub(t); %#ok<AGROW>
@@ -90,18 +126,29 @@ function [g, info] = envelopeMesh(env)
     end
 
     g = assembleQuaConCells(out);
-    info = struct('curves', size(C,1), 'cells', nArr, 'refined', nRef, 'faces', g.nf);
+    info = struct('curves', size(C,1), 'cells', nArr, 'refined', nRef, 'faces', g.nf, ...
+                  'uncovered', nUncovered, 'corners', numel(corners));
 end
 
 % ==================================================================================================
-function [C, req] = curveTable(faces)
-% The distinct curves, and each face's demand on them: req{i} is an m x 2 list [curveIndex, side].
+function [C, req, pairOf] = curveTable(faces, corners)
+% The distinct curves, each face's demand on them (req{i}, an m x 2 list [curveIndex, side]), and
+% which PAIR each face belongs to -- the quadratic faces first, then the corners, so that a face
+% index at most numel(faces) is one whose VALUE can be emitted.
 % Bitwise deduplication, because the rows are canonical integers -- the same argument
 % assembleQuaConCells' own curve table rests on.
     C = zeros(0,7);                                 % [conic(1:6), branch] -- branch 0 for a curve
-    req = cell(1, numel(faces));
-    for i = 1:numel(faces)
-        con = faces(i).con;
+    n = numel(faces) + numel(corners);
+    req = cell(1, n);
+    pairOf = zeros(1, n);
+    for i = 1:n
+        if i <= numel(faces)
+            con = faces(i).con;
+            pairOf(i) = faces(i).pair(1);
+        else
+            con = corners{i - numel(faces)}.con;
+            pairOf(i) = corners{i - numel(faces)}.pairIndex;
+        end
         r = zeros(size(con,1), 2);
         keep = true(size(con,1), 1);
         for t = 1:size(con,1)
