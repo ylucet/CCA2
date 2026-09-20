@@ -79,6 +79,27 @@ classdef guardExerciseTest < matlab.unittest.TestCase
             t.verifyError(@() envelopeMesh(env), 'envelopeMesh:algebraicFace');
         end
 
+        function algCurveArguments(t)                                        % reachable
+            % The edge a conic subdivision cannot hold, and its two routines. `pointTooFine` is the
+            % one worth pinning beyond the argument checks: an arbitrary double IS a rational, but
+            % with a denominator near 2^52, and clearing that through a degree-4 FP would leave
+            % ratQ's ceiling -- so it is refused by NAME rather than overflowing three calls down.
+            FP = zeros(3,3,3);  FP(1,1,3) = 1;  FP(3,1,1) = -1;  FP(1,3,1) = -1;
+            num = [0 0 0 0, 0, 0, 0, 0, 0, 1];
+            t.verifyError(@() algCurveSide(FP, 2, num, 1), 'algCurveSide:nargin');
+            t.verifyError(@() algCurveSide(zeros(2,2,2), 2, num, 1, [0 0]), ...
+                          'algCurveSide:zDegree');
+            t.verifyError(@() algCurveSide(FP, 0, num, 1, [0 0]), 'algCurveSide:branch');
+            t.verifyError(@() algCurveSide(FP, 2, num, 1, [0 0 0]), 'algCurveSide:points');
+            t.verifyError(@() algCurveSide(FP, 2, num, 1, [0.6 0.8]), ...
+                          'algCurveSide:pointTooFine');
+            t.verifyError(@() bridgeQuadCut(FP, num), 'bridgeQuadCut:nargin');
+            t.verifyError(@() bridgeQuadCut(FP, num, 0), 'bridgeQuadCut:denominator');
+            t.verifyError(@() bridgeQuadCut(FP, [1 0 0 0 0 0 0 0 0 1], 1), 'bridgeQuadCut:cubic');
+            t.verifyError(@() bridgeQuadCut(zeros(2,2,2), num, 1), 'bridgeQuadCut:zDegree');
+            t.verifyError(@() bridgeQuadCut({1}, num, 1), 'bridgeQuadCut:shape');
+        end
+
         function compactCellsArguments(t)                                    % reachable
             % The compaction pass. Its own rule is an exact set identity, so the only guard it
             % needs is the argument count -- a caller that forgets the curve table would otherwise

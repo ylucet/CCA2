@@ -8137,3 +8137,55 @@ still has to grow.
 The lesson is the one this project keeps relearning about hand-rolled evaluation: there is exactly
 one definition of a face's value, `ratQ.evalFace`, and a probe that writes its own is measuring
 something else. The probes now call it.
+
+## 2026-09-20 — the AlgAlg edge is (RATIONAL CURVE, BRANCH), and the side of it is a ROOT COUNT
+
+Yves chose to grow the subdivision axis. The first two pieces are built and verified, and between
+them they say what the new edge IS.
+
+**`bridgeQuadCut` builds the curve.** The bridge's value is not a formula, but the equation is
+rational: substituting the quadratic face's `q(x,y)` into `FP` and clearing denominators gives the
+integer polynomial `R = F2 q^2 + F1 q den + F0 den^2`, of degree 4 in x and y on the real fixtures.
+That is the first edge the CONIC level cannot hold, and making it costs three multiplications
+because `FP` has degree 2 in z -- no resultant is needed.
+
+**But R names the PAIR of branches, not one.** `FP = F2 (z - z1)(z - z2)`, so `R` vanishes wherever q
+meets EITHER root, and its sign is the product. Measured against the value difference on the c = -2
+fixture: one branch agrees 63% to 97% of the time, while the product agrees 100% wherever the fibre
+is real. This is the same shape as a degenerate conic naming two lines -- the rational object is the
+pair, and the branch index names the member.
+
+**`algCurveSide` names one, by counting.** The bridge's value at x is the FB-th real root of an
+integer polynomial and `q(x)` is RATIONAL, so
+
+        q > value_FB   <=>   at least FB of the fibre's real roots lie at or below q,
+
+which Sturm decides exactly. No root is computed and no irrational value is formed -- the same move
+as `ratQ.pairLineSign` one degree up. Measured against the definition on the c = -2 fixture: **828 of
+828 points agree, 0 refusals.**
+
+### Three things that had to be got right, each found by a red
+
+1. **MULTIPLICITY.** `algBranch` sorts the fibre's roots WITH multiplicity; Sturm counts DISTINCT
+   roots. They disagree exactly where the two branches merge -- the cone's apex in the small, the
+   discriminant curve in general. The fibre is quadratic, so its discriminant settles the case
+   outright: negative means no branch, zero means both branches ARE the double root and the side is
+   `sign(2 a qn + b) sign(a)`, positive means the count applies.
+2. **THE COMPARISON POINT MUST BE AN INTEGER.** `countRootsIn` wants exact endpoints, and `q` is a
+   fraction -- so the fibre is taken in the scaled variable `u = qd z`, which makes the endpoint the
+   integer `qn`.
+3. **REDUCE BEFORE SCALING.** That scaling squares `qd`, and an unreduced `qn/qd` put the fibre at
+   1e17 -- every point refused. Reducing the fraction and taking the polynomial's content out first
+   brings the same fixture to zero refusals.
+
+**The ceiling is real and now measured.** Clearing a point of denominator `2^e` through `FP` costs
+about `|coef| (|x| 2^e)^4 2^(4e)`; with FP's coefficients at 4 to 16 this is inside 2^53 for e = 4
+and over it at e = 6. A point too fine is refused as `algCurveSide:pointTooFine` rather than
+overflowing three calls down, and a caller wanting an exact side must pass a simple rational -- which
+a cell has many of.
+
+### What is left
+
+The curve and the side exist; the mesh does not use them yet. `envelopeMesh` still raises
+`envelopeMesh:bridgeCompetes`, and lifting that means the curve TABLE, the emptiness tests and the
+vertex naming all taking a degree-4 curve -- which is the rest of the `AlgAlg` work.
