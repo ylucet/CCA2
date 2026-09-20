@@ -19,6 +19,11 @@ DOES carry the value and cannot be reduced the same way.
       hold: where a bridge competes with a quadratic face of ANOTHER pair, the boundary is
       `FP(x, y, q(x,y)) = 0`, of degree well above two. Needs the subdivision axis to grow
       (`AlgAlg`), which is a type decision -- see MORNING.md.
+      The REGION half is now IN: `envelopeMesh` carries bridge faces for coverage -- their outer
+      bounds join the curve table and membership is asked once per cell -- and refuses by
+      `envelopeMesh:bridgeCompetes` only where the VALUE competes. That refusal is on the guard
+      inventory as `todo`: reachable from the c = -2 fixture, and pinning it needs a
+      normal-bucket test, since building a bridge face costs the whole assembly.
 
 
 ### Done recently
