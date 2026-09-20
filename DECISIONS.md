@@ -8189,3 +8189,36 @@ a cell has many of.
 The curve and the side exist; the mesh does not use them yet. `envelopeMesh` still raises
 `envelopeMesh:bridgeCompetes`, and lifting that means the curve TABLE, the emptiness tests and the
 vertex naming all taking a degree-4 curve -- which is the rest of the `AlgAlg` work.
+
+## 2026-09-20 — a CURVED-TIE envelope MESHES, with algebraic edges: 486 cells to 4 faces
+
+`envelopeMeshAlg` builds the arrangement with the new edge allowed, and the c = -2 fixture -- the one
+no mesh has ever been built for -- comes out:
+
+    486 arrangement cells -> 4 faces, 30 algebraic rows, 484 cells left out (they are +infinity)
+
+and against `envelopeEval`, on 400 points of the domain and 200 around it:
+
+    domain mismatches 0 of 600 | max |mesh - evaluator| = 0.0e0 over 417 common points
+
+**The 484 left-out cells are the answer, not a gap.** This envelope is finite on the unit square and
++infinity outside it, so most of a wide arrangement is outside the domain -- a hole in the mesh IS
++infinity, which is the same convention `envelopeMesh` already uses.
+
+**What the mesh is made of.** The arrangement is still over CONIC curves only; the algebraic curve
+never enters it. It appears only in the REFINEMENT, as a row `(FP, FB, num, den, side)` meaning
+`side (q - value_FB) >= 0` -- one row per quadratic face the bridge has to beat. That keeps the
+emptiness tests, the curve table and the cell enumeration exactly as they were: the only new thing
+is a predicate a face carries, decided exactly by `algCurveSide` when building and in doubles when
+evaluating, which is the split the whole project already draws.
+
+**Still refused, and named:** two BRIDGE faces owning one cell (`envelopeMeshAlg:twoBridges`). Their
+difference is irrational on both sides, so it is not of the bridge-quadratic shape; it has not
+occurred on any fixture here.
+
+### What this does and does not settle
+
+It settles the GEOMETRY: a curved-tie envelope has a mesh, the faces are few, and it reproduces the
+verified evaluator exactly. It does NOT settle the TYPE -- `mesh` is a plain struct array and
+`meshAlgEval` its evaluator, because `AlgCon`'s edge table holds conics. Growing that is the rest of
+the work, and it is now a question about storage rather than about geometry.
