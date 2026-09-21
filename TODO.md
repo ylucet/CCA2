@@ -12,6 +12,14 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
+- [ ] **Wire `biconjQ`'s curved-tie route** to assemble and return an `AlgCrv`, so a two-piece
+      `convexPieceCoupling` input with a curved tie stops refusing. The pieces exist and are
+      verified: `envelopeMeshAlg` -> `assembleAlgCrv` -> `AlgCrv.eval`.
+
+- [ ] **The VERTEX table for an AlgCrv.** `assembleAlgCrv` leaves `Vname` empty, so the object
+      evaluates but has no topology -- no edge list, no figures, no classification table. A vertex
+      where two degree-4 curves meet needs a bigger kernel than `conicMeet`'s quartic.
+
 - [ ] **Move the exact mesh (`fN`, `fD`, `EcQ`, `Vname`, `FC`) from QuaCon up to AlgCon**, where
       AlgCon's own header says it belongs. Tried as a five-line edit on 2026-09-20 and REFUTED: the
       fast bucket went 692 -> 363 passing with 326 incomplete, i.e. classes that stopped loading.
