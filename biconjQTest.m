@@ -666,10 +666,33 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(h.eval(X), convex.eval(X), 'AbsTol', 1e-12, ...
                 'and there co f = f, so it is answered rather than refused');
 
+            % THE KINKED SIDE IS NOW ANSWERED, and this assertion used to pin the refusal. The
+            % contract changed deliberately on 2026-09-21: the envelope is assembled from the
+            % pieces' conjugates and meshed, and where a BRIDGE face's value competes with a
+            % quadratic one the boundary has degree 4, so the mesh comes back as an `AlgCrv` --
+            % algebraic faces on an algebraic subdivision -- rather than a QuaCon. What is asserted
+            % now is the ANSWER rather than the refusal, against the assembled envelope's own
+            % evaluator, which was verified against the definition.
             kinked = biconjQTest.diagonalKink(-2);
             testCase.verifyFalse(isConvexQ(kinked), 'c < 0 is the non-convex side');
-            testCase.verifyError(@() biconjQ(kinked), 'PLQ:biconjQ:convexPieceCoupling', ...
-                'convex pieces with a non-convex coupling get their own identifier');
+            hk = biconjQ(kinked);
+            testCase.verifyClass(hk, 'AlgCrv', ...
+                'a curved tie needs an edge no conic subdivision holds');
+            testCase.verifyGreaterThan(hk.nf, 0);
+
+            env = envelopePrune(envelopeAssemble( ...
+                    conjQ(biconjQTest.cornerTri([0 0; 1 0; 1 1], 0)), ...
+                    conjQ(biconjQTest.cornerTri([0 0; 1 1; 0 1], -2))));
+            rng(41);
+            P = [rand(200,1), rand(200,1)];
+            want = envelopeEval(env, P);
+            got = hk.eval(P);
+            ok = isfinite(want) & isfinite(got);
+            testCase.verifyGreaterThan(sum(ok), 100, 'the value check must be exercised');
+            testCase.verifyEqual(max(abs(got(ok) - want(ok))), 0, 'AbsTol', 1e-9, ...
+                'and biconj must agree with the assembled envelope it is built from');
+            testCase.verifyEqual(isfinite(got), isfinite(want), ...
+                'including on the DOMAIN, point by point');
         end
 
         function aMULTIPIECEEnvelopeIsOneHullOverAllTheLiftedVertices(testCase)
@@ -785,6 +808,13 @@ classdef biconjQTest < matlab.unittest.TestCase
         % convention is the whole content of the case.
             f = QuaPol([0 0; 2 0; 0 2], [1 2 1; 1 3 1], ...
                        [0 0 0 0, -2, 0, 0, 0, 0, 0; 0 0 0 0, 0, 0, 0, 0, 0, 0], [0 0; 0 0]);
+        end
+
+        function f = cornerTri(V, c)
+        % One triangle of the diagonal-kink fixture, as its own QuaPol -- what `envelopeAssemble`
+        % takes, so that the oracle above is built from the same two pieces `biconj` splits into.
+            q = [0 0 0 0, 2, 0, 2, 0, 0, 0];  q(8) = q(8) - c;  q(9) = q(9) + c;
+            f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], q, [1 0; 1 0; 1 0]);
         end
 
         function f = diagonalKink(c)

@@ -354,14 +354,25 @@ function h = assembledEnvelope(obj)
 % arrangement -- which is the only route that does not form a partial max, and partial maxima are
 % what made every fold order explode (DECISIONS.md 2026-09-18).
 %
-% A face whose region is a PREDICATE -- a bridge or a corner, which is what a CURVED tie needs --
-% cannot enter an arrangement, so an input that produces one is refused here and the caller's own
-% checks name it. `envelopeEval` answers for those; what it does not give is an object.
+% TWO MESHES, and the cheaper one is tried first. `envelopeMesh` returns a QuaCon, which is what a
+% caller wants whenever the answer fits: every face quadratic, every edge a conic. It refuses --
+% `envelopeMesh:bridgeCompetes` -- exactly when a BRIDGE face's value competes with a quadratic
+% one, because that boundary has degree four and no conic subdivision holds it as an edge.
+%
+% For that case `envelopeMeshAlg` builds the same arrangement with such an edge allowed, and
+% `assembleAlgCrv` puts it in an `AlgCrv` -- algebraic faces on an algebraic subdivision, the type
+% the subdivision axis grew for (Crv.m). So the RETURN TYPE says which case the input was, and both
+% are verified against `envelopeEval` in their own suites.
     pieces = splitPieces(obj);
     gA = conjQ(pieces{1});
     gB = conjQ(pieces{2});
     env = envelopePrune(envelopeAssemble(gA, gB));
-    h = envelopeMesh(env);
+    try
+        h = envelopeMesh(env);
+    catch ME
+        if ~strcmp(ME.identifier, 'envelopeMesh:bridgeCompetes'), rethrow(ME), end
+        h = assembleAlgCrv(envelopeMeshAlg(env));
+    end
 end
 
 % ------------------------------------------------------------------------------------------------

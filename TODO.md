@@ -12,10 +12,6 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **Wire `biconjQ`'s curved-tie route** to assemble and return an `AlgCrv`, so a two-piece
-      `convexPieceCoupling` input with a curved tie stops refusing. The pieces exist and are
-      verified: `envelopeMeshAlg` -> `assembleAlgCrv` -> `AlgCrv.eval`.
-
 - [ ] **The VERTEX table for an AlgCrv.** `assembleAlgCrv` leaves `Vname` empty, so the object
       evaluates but has no topology -- no edge list, no figures, no classification table. A vertex
       where two degree-4 curves meet needs a bigger kernel than `conicMeet`'s quartic.
@@ -40,6 +36,14 @@ DOES carry the value and cannot be reduced the same way.
 
 
 ### Done recently
+
+- [x] **`biconjQ`'s curved-tie route** (2026-09-21): `assembledEnvelope` tries `envelopeMesh` first
+      and falls back to `assembleAlgCrv(envelopeMeshAlg(env))` on `envelopeMesh:bridgeCompetes`, so
+      the RETURN TYPE says which case the input was -- QuaCon when every edge is a conic, AlgCrv
+      when a bridge face's value competes. Measured on the diagonal-kink fixture: c = 0 gives a
+      QuaCon of 2 faces, c = -2 an AlgCrv of 4, both agreeing with the assembled envelope's
+      evaluator to 0.0e0 over 310 points with no domain mismatch. biconjQTest 41/0, and the
+      assertion that pinned the old refusal now pins the answer.
 
 - [x] **Compaction** (2026-09-19, overnight): 321 faces -> **160**, 69 edges -> 41, on the convex
       fixture, still reproducing f EXACTLY (0.0e0 at 300 points). `compactCells` drops a row the
