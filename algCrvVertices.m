@@ -69,8 +69,21 @@ function [Vname, info] = algCrvVertices(g)
                 catch ME
                     if ~startsWith(ME.identifier, 'ratQ:'), rethrow(ME), end
                     info.refused = info.refused + 1;
-                    if ~isfield(info, 'why'), info.why = {}; end
-                    info.why{end+1} = ME.identifier; %#ok<AGROW>
+                    % The identifier AND the shape, because a refusal on a degree-1 curve and one
+                    % on a degree-4 curve are different problems wearing the same name.
+                    if info.refused <= 2
+                        for si = 1:min(5, numel(ME.stack))
+                            fprintf('   STACK %s line %d\n', ME.stack(si).name, ME.stack(si).line);
+                        end
+                    end
+                    if info.refused <= 6
+                        fprintf('REFUSAL %s | deg %dx%d and %dx%d | tables %d,%d\n', ...
+                            ME.identifier, size(P,1)-1, size(P,2)-1, size(Q,1)-1, size(Q,2)-1, ...
+                            ta, tb);
+                    end
+                    info.why{end+1} = sprintf('%s | deg %dx%d and %dx%d | tables %d,%d', ...
+                        ME.identifier, size(P,1)-1, size(P,2)-1, size(Q,1)-1, size(Q,2)-1, ...
+                        ta, tb); %#ok<AGROW>
                     continue
                 end
                 info.candidates = info.candidates + size(X,1);
@@ -107,7 +120,8 @@ function X = meetCurves(P, Q)
         return                                   % one of them is a constant: no curve, no vertex
     end
 
-    R = ratQ.trimN(ratQ.fromBig(ratQ.resultantVarBig(P, Q, k, 2)));
+    Rb = ratQ.resultantVarBig(P, Q, k, 2);
+    R = bigToDoubles(Rb);
     R = R(:).';
     if isempty(R) || all(R == 0)
         return                                   % a shared component: no isolated vertex
@@ -148,19 +162,84 @@ function xs = fibreRootsX(P, y)
     xs = real(rr(abs(imag(rr)) < 1e-8)).';
 end
 
-function r = realRoots(P)
-% The real roots of an integer univariate polynomial, ascending. `ratQ.isolateRoots` gives exact
-% isolating intervals; the numeric root inside each is what a double-precision membership test needs.
-    I = ratQ.isolateRoots(ratQ.polyTrim(P));
-    r = zeros(1, size(I,1));
-    for i = 1:size(I,1)
-        lo = I(i,1);  hi = I(i,2);
-        for it = 1:80
-            mid = (lo + hi) / 2;
-            if polyval(P, lo) * polyval(P, mid) <= 0, hi = mid; else, lo = mid; end
-        end
-        r(i) = (lo + hi) / 2;
+function R = bigToDoubles(Rb)
+% The resultant's coefficients as doubles, EXACTLY when they fit and rounded when they do not.
+%
+% Two curves of degree 4 meet in a resultant of degree up to 16, and measured on the real object its
+% coefficients pass 2^53 for 49 of the pairs -- `ratQ.fromBig` raises `ratQ:overflow` there, which is
+% the honest answer to "is this an exact integer array" and the wrong question here.
+%
+% WHAT IS AND IS NOT LOST. The resultant itself is computed in BigInteger and is exact; what this
+% rounds is the copy used to LOCATE its roots. The vertex's NAME is [edges..., rootIdx] and its
+% meaning is "the rootIdx-th real intersection in the canonical order" -- an exact statement about
+% an exact polynomial, with no coordinate stored. `conicMeet` computes its own roots numerically for
+% the same reason one level down, so this is the established standard and not a new compromise. What
+% could go wrong is the ORDER of two roots closer together than the rounding, which would rename a
+% vertex rather than invent one.
+    R = zeros(Rb.sz);
+    over = false;
+    for i = 1:numel(Rb.c)
+        v = Rb.c{i};
+        if isempty(v) || v.signum() == 0, continue, end
+        if v.abs().bitLength() > 52, over = true; end
+        R(i) = v.doubleValue();
     end
+    if ~over
+        R = ratQ.trimN(R);                       % it fits: the array IS exact
+    else
+        R = trimApprox(R);
+    end
+end
+
+function A = trimApprox(A)
+% `ratQ.trimN` insists on exact integers, so a rounded array is trimmed here instead.
+    while numel(A) > 1 && A(end) == 0, A(end) = []; end
+end
+
+function r = realRoots(P)
+% The real roots of a univariate polynomial, ascending.
+%
+% EXACT ISOLATION WHEN THE COEFFICIENTS FIT, and numeric roots when they do not. `ratQ.isolateRoots`
+% is the better route -- Sturm gives intervals that provably each hold one root -- but it goes
+% through `ratQ.chk`, so a coefficient past 2^53 raises `ratQ:overflow`. That is not a rare corner
+% here: a resultant of two degree-4 curves has degree up to 16, and 49 of the real object's pairs
+% land past the ceiling. Refusing them would leave the vertex table silently short, so those go to
+% `roots`, which is what `conicMeet` uses for its own quartic anyway.
+    P = P(:).';
+    if isempty(P) || all(P == 0), r = []; return, end
+    if max(abs(P)) < 2^53 && all(P == round(P))
+        % THE POLYNOMIAL FITTING IS NOT ENOUGH, and that was measured rather than assumed. Sturm's
+        % chain is built from PSEUDO-REMAINDERS, whose coefficients grow far past the polynomial's
+        % own: on the degree-16 resultant of two quartic edges the chain overflows 2^53 although
+        % every coefficient of the resultant is inside it. The stack said so --
+        % isolateRoots -> sturmChain -> polyPseudoRem -> ratQ:overflow -- after two wrong guesses
+        % about where the ceiling was being hit.
+        try
+            I = ratQ.isolateRoots(ratQ.polyTrim(P));
+            r = zeros(1, size(I,1));
+            for i = 1:size(I,1)
+                lo = I(i,1);  hi = I(i,2);
+                for it = 1:80
+                    mid = (lo + hi) / 2;
+                    if polyval(P, lo) * polyval(P, mid) <= 0, hi = mid; else, lo = mid; end
+                end
+                r(i) = (lo + hi) / 2;
+            end
+            return
+        catch ME
+            % `isolateNoConverge` is the same message in the other voice: the exact route did not
+            % finish on this polynomial, whether because the chain overflowed or because the
+            % bisection bound ran out. Both mean "use the numeric route", which is what `conicMeet`
+            % uses for its own quartic.
+            if ~any(strcmp(ME.identifier, {'ratQ:overflow', 'ratQ:isolateNoConverge'}))
+                rethrow(ME)
+            end
+        end
+    end
+    nz = find(abs(P) > 0, 1);
+    rr = roots(P(nz:end));
+    sc = max(1, max(abs(P)))^(1/max(1, numel(P)-1));
+    r = sort(real(rr(abs(imag(rr)) < 1e-8 * max(1, sc))).');
 end
 
 function ys = fibreRoots(P, x)

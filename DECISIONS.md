@@ -8289,3 +8289,30 @@ is a comparison against a root rather than a sign.
 **Left open, with its count:** 49 pairs still refuse, and `algCrvVertices` runs in about 4 minutes on
 the c = -2 object, which is why it is a separate call rather than part of `assembleAlgCrv` -- values
 cost seconds, topology costs minutes, and most callers want the first.
+
+## 2026-09-22 — the vertex refusals were STURM'S CHAIN, not the resultant, and two guesses said otherwise
+
+`algCrvVertices` refused 49 of its edge pairs with `ratQ:overflow`, all of them curve-by-curve at
+degree 4. Three diagnoses, and only the third was right:
+
+1. *"`fromBig` cannot represent the degree-16 resultant."* Plausible -- the conversion raises at 2^53
+   by design. Bypassed it with a rounding converter; the count stayed at 49.
+2. *"`isolateRoots` rejects the rounded coefficients."* Also plausible, and also wrong: a guard that
+   sent large polynomials to `roots` changed nothing, because the resultants in question FIT.
+3. **The stack, printed rather than reasoned about:** `isolateRoots -> sturmChain -> polyPseudoRem
+   -> ratQ:overflow`. Sturm's chain is built from PSEUDO-REMAINDERS, whose coefficients grow far
+   past the polynomial's own, so a degree-16 resultant whose every coefficient is inside 2^53 still
+   overflows while its chain is built.
+
+Calling `resultantVarBig` on all 231 curve-by-curve pairs directly found NO overflow, which is what
+finally located the raise downstream of it -- the differential test that should have come first.
+
+**The fix is a fallback, not a wider integer.** Where the exact isolation cannot finish -- overflow,
+or `isolateNoConverge` -- the roots are taken numerically, which is what `conicMeet` does for its own
+quartic. Nothing about the vertex NAME weakens: it is [edgeA tableA edgeB tableB rootIdx], an exact
+statement about an exact polynomial, and the numeric step only locates the roots it indexes.
+
+Measured after: **0 refusals**, 112 vertices over 100 edge pairs, 227 s, against 49 refusals and 111
+vertices before. The 47 pairs recovered contributed 1 vertex and 2 candidates, so the gap was mostly
+pairs that do not meet inside their faces -- which is worth knowing: the refusals were loud but
+nearly harmless.
