@@ -12,10 +12,11 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **The EDGE and INCIDENCE tables (`E`, `F`) for an AlgCrv.** `Vname` is filled now, but `E`
-      (which vertices bound each edge) and `F` (which faces each edge separates) are still empty,
-      and a figure or an edge list needs them. The vertices are named per face, so the adjacency is
-      recoverable from what `algCrvVertices` already computes.
+- [ ] **An edge with MORE THAN TWO vertices.** `E` holds two endpoints, and 31 of the c = -2
+      object's 56 edges carry more -- so for those the edge is really several arcs and the table
+      describes only part of it. Splitting them means ordering vertices ALONG a curve, which is a
+      comparison of algebraic numbers. `assembleQuaConCells` has the same limitation one degree
+      down. `algCrvIncidence` reports the count as `oversubdivided` rather than hiding it.
 
 - [ ] **A vertex named twice.** `algCrvVertices` deduplicates by EDGE PAIR, not by point, so a point
       where three edges meet is named three times. `assembleQuaConCells` has the same question one
@@ -31,6 +32,11 @@ DOES carry the value and cannot be reduced the same way.
       observed. Also `envelopeMesh:bridgeCompetes` wants a normal-bucket test to pin it.
 
 ### Done recently
+
+- [x] **The EDGE and FACE incidence for an AlgCrv** (2026-09-22): `algCrvIncidence`, read off the
+      tables rather than computed -- an edge's endpoints are the vertices whose NAME mentions it,
+      and the faces it separates are those whose rows reference it. On the c = -2 object: 56 edges,
+      36 segments, 20 rays, 22 shared by two faces, and three consistency checks at 0.
 
 - [x] **The 49 refusing edge pairs** (2026-09-22): all `ratQ:overflow`, and the cause was STURM'S
       CHAIN rather than the resultant -- pseudo-remainder coefficients grow past the polynomial's
