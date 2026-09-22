@@ -8,9 +8,9 @@ _2026-09-22_
   (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `overnight/2026-09-20` @ `d32bd18` — "feat: algCrvIncidence -- an AlgCrv
-  gets its edge and face adjacency"
-- Pushed: no upstream; also UNMERGED to `main` (10 commits ahead)
+- Branch `main` @ `f1f491e` — "chore: update session handoff"
+  (`overnight/2026-09-20` merged in, fast-forward)
+- Pushed: yes — `origin/main`
 - Tests: fast 707/0 (09-22) · normal 8/0 (09-20) · slow 98/0 and verylong 37/0
   with 8 documented `assumeFail` quarantines (09-19, not re-run since)
 - Known reds: none
@@ -21,8 +21,8 @@ _2026-09-22_
    `info.oversubdivided`). Needs comparison of algebraic numbers.
 2. Move `fN, fD, EcQ, Vname, FC` from QuaCon up to AlgCon. The five-line version
    is REFUTED — 692 -> 363 passing, 326 incomplete. DECISIONS 2026-09-20.
-3. Merge the branch into `main`, then run `bash .claude/suite.sh --slow`
-   (~20 min; stop the podman machine first, it commits 4 GB).
+3. Run `bash .claude/suite.sh --slow` — not run since 09-19 (~20 min; stop the
+   podman machine first, it commits 4 GB on a box already at 84% of its limit).
 
 ## Files
 - `Crv.m`, `AlgCrv.m` — the fourth subdivision level and the (Alg, Crv) type
