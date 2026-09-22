@@ -12,30 +12,38 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **The VERTEX table for an AlgCrv.** `assembleAlgCrv` leaves `Vname` empty, so the object
-      evaluates but has no topology -- no edge list, no figures, no classification table. A vertex
-      where two degree-4 curves meet needs a bigger kernel than `conicMeet`'s quartic.
+- [ ] **The 49 edge pairs `algCrvVertices` still refuses.** Down from 466 once the elimination
+      variable was chosen, so what is left is a different cause and has not been named yet. One
+      diagnostic run prints the identifiers; until then the vertex table is complete only up to
+      those pairs.
+
+- [ ] **The EDGE and INCIDENCE tables (`E`, `F`) for an AlgCrv.** `Vname` is filled now, but `E`
+      (which vertices bound each edge) and `F` (which faces each edge separates) are still empty,
+      and a figure or an edge list needs them. The vertices are named per face, so the adjacency is
+      recoverable from what `algCrvVertices` already computes.
+
+- [ ] **A vertex named twice.** `algCrvVertices` deduplicates by EDGE PAIR, not by point, so a point
+      where three edges meet is named three times. `assembleQuaConCells` has the same question one
+      degree down and answers it with `seen(lo,hi)`; decide whether that is a defect here or the
+      intended "one name per pair".
 
 - [ ] **Move the exact mesh (`fN`, `fD`, `EcQ`, `Vname`, `FC`) from QuaCon up to AlgCon**, where
       AlgCon's own header says it belongs. Tried as a five-line edit on 2026-09-20 and REFUTED: the
       fast bucket went 692 -> 363 passing with 326 incomplete, i.e. classes that stopped loading.
       Until then `AlgCrv` declares those five itself, with the measurement in a comment above them.
 
-- [ ] **The bridge/quadratic BOUNDARY** (what is left of "the bridge face's region", after the
-      2026-09-19 measurement split it in two). The REGION half is settled: a bridge's membership is
-      constant on the cells of the arrangement, so it can be carried as a predicate face tested once
-      per cell -- 50000 points, 0 mixed cells. The VALUE half needs a curve the conic level cannot
-      hold: where a bridge competes with a quadratic face of ANOTHER pair, the boundary is
-      `FP(x, y, q(x,y)) = 0`, of degree well above two. Needs the subdivision axis to grow
-      (`AlgAlg`), which is a type decision -- see MORNING.md.
-      The REGION half is now IN: `envelopeMesh` carries bridge faces for coverage -- their outer
-      bounds join the curve table and membership is asked once per cell -- and refuses by
-      `envelopeMesh:bridgeCompetes` only where the VALUE competes. That refusal is on the guard
-      inventory as `todo`: reachable from the c = -2 fixture, and pinning it needs a
-      normal-bucket test, since building a bridge face costs the whole assembly.
-
+- [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
+      observed. Also `envelopeMesh:bridgeCompetes` wants a normal-bucket test to pin it.
 
 ### Done recently
+
+- [x] **The VERTEX table for an AlgCrv** (2026-09-21): `algCrvVertices`, named
+      [edgeA tableA edgeB tableB rootIdx]. The degree-16 resultant of two quartic edges is
+      affordable -- 1.5 to 2.6 s, coefficients about 1.7e5, inside 2^53 via `resultantVarBig`.
+      111 vertices on the c = -2 object. DECISIONS.md 2026-09-21.
+
+- [x] **The bridge/quadratic BOUNDARY** (2026-09-20/21): settled by `Crv` + `AlgCrv` and the
+      `biconjQ` route. A curved-tie input now returns an AlgCrv instead of refusing.
 
 - [x] **`biconjQ`'s curved-tie route** (2026-09-21): `assembledEnvelope` tries `envelopeMesh` first
       and falls back to `assembleAlgCrv(envelopeMeshAlg(env))` on `envelopeMesh:bridgeCompetes`, so
