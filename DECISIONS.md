@@ -8248,3 +8248,44 @@ own measurement, and TODO.md has it.
 
 The lesson is the one about big refactors that look like tidying: `AlgCon.m` says the data lives in
 one place, the code says otherwise, and the gap between them is not closed by believing the comment.
+
+## 2026-09-21 — the AlgCrv's VERTICES: the degree-16 resultant is affordable, and the choice of variable is not free
+
+`assembleAlgCrv` left `Vname` empty, so the object evaluated but had no topology. The open question
+was whether naming a vertex is affordable at all: an edge here may be a curve of degree 4, so two of
+them meet in a resultant of degree up to 16, and ratQ's arithmetic stops at 2^53.
+
+**Measured first, on the real object's own edges (34 conics, 22 curves of degree 4):**
+
+| pair | resultant degree | largest coefficient | time |
+|---|---|---|---|
+| conic x conic | (`conicMeet`, the existing kernel) | | |
+| conic x curve | 4 | 1 to 4 | instant |
+| curve x curve | 12 to 16 | about 1.7e5 | 1.5 to 2.6 s |
+
+All of it inside 2^53 -- `ratQ.resultantVarBig` eliminates in BigInteger and the answer comes back as
+ordinary integers. So the exact route was affordable and the question was closed before any table
+was built.
+
+**THE ELIMINATION VARIABLE IS NOT FREE, and that was measured rather than reasoned.** A resultant
+needs BOTH arguments to have positive degree in the variable it removes, and a VERTICAL line has no
+y at all. Eliminating y therefore refused 66 of 176 conic-by-curve pairs with `ratQ:resultantDegree`
+-- and on the whole object, 466 pairs refused against 273 candidates found, which is the shape of a
+systematic gap rather than of a hard case. Choosing the variable (y when both have it, else x, with
+the fibre read the other way round) took that to 49 refusals and 468 candidates, and the named
+vertices from 61 to 111.
+
+**The name carries the table.** `QuaCon.Vname` is [edgeA edgeB rootIdx]; here it is
+[edgeA tableA edgeB tableB rootIdx], because an edge may come from `EcQ` (a conic) or `EcA` (a
+curve) and the name has to say which. No coordinate is stored, exactly as one degree down.
+
+**Membership is decided in DOUBLES**, which `assembleQuaConCells` already does for a curved corner
+and for the same reason: a vertex wrongly kept or wrongly dropped changes the mesh's TOPOLOGY and
+never a face's VALUE, since `eval` reads the face functions and their sign conditions and neither
+mentions a vertex. The exact test would be the sign of a rational polynomial at a degree-16
+algebraic number -- available for a conic row through `ratQ.signAt`, but not for a BRANCH row, which
+is a comparison against a root rather than a sign.
+
+**Left open, with its count:** 49 pairs still refuse, and `algCrvVertices` runs in about 4 minutes on
+the c = -2 object, which is why it is a separate call rather than part of `assembleAlgCrv` -- values
+cost seconds, topology costs minutes, and most callers want the first.

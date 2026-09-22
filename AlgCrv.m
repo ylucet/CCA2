@@ -50,7 +50,10 @@ classdef AlgCrv < AlgCon & Crv
         fN (:,10){mustBeNumeric}   % nf x 10 integer numerators, ratQ.canon form against fD
         fD (:,1) {mustBeNumeric}   % nf x 1  positive integer denominators
         EcQ (:,6){mustBeNumeric}   % ne x 6  primitive integer conics, ratQ.conic form
-        Vname (:,3){mustBeInteger,mustBeNonnegative} % nv x 3 [edgeA edgeB rootIdx]
+        Vname {mustBeInteger,mustBeNonnegative} % nv x 5 [edgeA tableA edgeB tableB rootIdx] --
+                                   % five columns rather than QuaCon's three, because an edge here
+                                   % may come from either table and the name has to say which. See
+                                   % `algCrvVertices`, which fills it.
         FC                         % cell(nf,1); FC{k} is m x 4 of [edgeIndex, sign, branch, table]
                                    % -- table 0 selects the conic EcQ, table 1 the algebraic EcA.
                                    % Fewer columns are accepted and read with the rest zero.

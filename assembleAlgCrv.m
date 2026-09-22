@@ -10,12 +10,11 @@ function g = assembleAlgCrv(mesh)
 % are deduplicated on the same principle, by the integer data that defines them: the face's
 % polynomial, its branch, and the quadratic's numerator and denominator.
 %
-% WHAT IS NOT DONE HERE, and it is stated rather than papered over: the VERTEX table is left empty.
-% A vertex of this mesh is an intersection of two curves of degree up to four, so naming one means
-% the resultant of two quartics -- a degree-16 kernel, where `conicMeet`'s is degree 4. Everything
-% that reads the mesh's VALUES works without it (`eval` reads FC and the tables); everything that
-% wants its TOPOLOGY -- figures, edge lists, the paper's tables -- does not, and that is the next
-% piece of work rather than a defect in this one.
+% THE VERTEX TABLE IS FILLED BY `algCrvVertices`, and NOT here, because it costs minutes where the
+% rest of this costs seconds -- the degree-16 resultant of two quartics, measured at 1.5 to 2.6 s a
+% pair. A caller that wants the TOPOLOGY (an edge list, a figure, the paper's tables) asks for it;
+% a caller that wants VALUES does not, since `eval` reads FC and the two edge tables and neither
+% mentions a vertex. `withVertices` below is the one-line way to ask.
     if nargin ~= 1
         error('assembleAlgCrv:nargin', 'expects (mesh).');
     end
@@ -63,6 +62,13 @@ function g = assembleAlgCrv(mesh)
     end
 
     g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, fN, fD, zeros(0,2), FC, FP, FB, EcA);
+end
+
+function g = withVertices(g)  %#ok<DEFNU>
+% The same object with its vertices named -- separate because it costs minutes, and most callers
+% want the function rather than its topology.
+    g.Vname = algCrvVertices(g);
+    g.nv = size(g.Vname, 1);
 end
 
 function hit = findAlg(EcA, a)
