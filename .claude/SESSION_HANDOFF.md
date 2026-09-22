@@ -3,7 +3,6 @@
 _2026-09-22_
 
 ## Blocked
-- `cPLQ/` is gitignored AND shadows tracked `functionNDomain.m` — your call.
 - `maxQuaPar:notDegenerate` reachability — needs an in-contract symbolic input
   (hours). DECISIONS 2026-09-06.
 
