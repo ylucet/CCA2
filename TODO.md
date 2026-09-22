@@ -12,11 +12,6 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **The 49 edge pairs `algCrvVertices` still refuses.** Down from 466 once the elimination
-      variable was chosen, so what is left is a different cause and has not been named yet. One
-      diagnostic run prints the identifiers; until then the vertex table is complete only up to
-      those pairs.
-
 - [ ] **The EDGE and INCIDENCE tables (`E`, `F`) for an AlgCrv.** `Vname` is filled now, but `E`
       (which vertices bound each edge) and `F` (which faces each edge separates) are still empty,
       and a figure or an edge list needs them. The vertices are named per face, so the adjacency is
@@ -36,6 +31,11 @@ DOES carry the value and cannot be reduced the same way.
       observed. Also `envelopeMesh:bridgeCompetes` wants a normal-bucket test to pin it.
 
 ### Done recently
+
+- [x] **The 49 refusing edge pairs** (2026-09-22): all `ratQ:overflow`, and the cause was STURM'S
+      CHAIN rather than the resultant -- pseudo-remainder coefficients grow past the polynomial's
+      own. The exact isolation now falls back to numeric roots where it cannot finish, which is what
+      `conicMeet` does for its own quartic. 0 refusals, 112 vertices. DECISIONS.md 2026-09-22.
 
 - [x] **The VERTEX table for an AlgCrv** (2026-09-21): `algCrvVertices`, named
       [edgeA tableA edgeB tableB rootIdx]. The degree-16 resultant of two quartic edges is
