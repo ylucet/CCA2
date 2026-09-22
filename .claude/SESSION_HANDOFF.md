@@ -1,37 +1,31 @@
 # Session Handoff
 
-_2026-09-19 (after the overnight run)_
+_2026-09-22_
 
 ## Blocked
-- **Does the subdivision axis grow?** The only item left, and a type decision — see
-  MORNING.md. A bridge face carries the envelope's value, so where it competes
-  with a quadratic face the mesh must draw a curve of degree well above two.
 - `cPLQ/` is gitignored AND shadows tracked `functionNDomain.m` — your call.
-- `maxQuaPar:notDegenerate` reachability — needs the symbolic pipeline (hours).
+- `maxQuaPar:notDegenerate` reachability — needs an in-contract symbolic input
+  (hours). DECISIONS 2026-09-06.
 
 ## State
-- Branch `overnight/2026-09-19`, 7 commits ahead of `main`, nothing pushed
-- Tests: fast 688/0 over 48 suites · slow 98/0 · verylong 37/0 with 8 documented
-  `assumeFail` quarantines (both gates re-run 09-19)
+- Branch `overnight/2026-09-20` @ `d32bd18` — "feat: algCrvIncidence -- an AlgCrv
+  gets its edge and face adjacency"
+- Pushed: no upstream; also UNMERGED to `main` (10 commits ahead)
+- Tests: fast 707/0 (09-22) · normal 8/0 (09-20) · slow 98/0 and verylong 37/0
+  with 8 documented `assumeFail` quarantines (09-19, not re-run since)
 - Known reds: none
 
-## Where the envelope stands
-The mesh now carries BOTH curved-tie face kinds for what they decide: a corner for
-its wedge (coverage), a bridge for its predicate (coverage), with membership asked
-once per cell because the predicate is constant on cells. Compaction halved the
-face count, 321 -> 160. What remains is the bridge/quadratic BOUNDARY, refused by
-name as `envelopeMesh:bridgeCompetes`.
-
 ## Next
-1. The decision above. With option 1 the work is the `AlgAlg` subdivision level;
-   with option 2 `biconj` returns the face list for a curved tie and the mesh
-   stays for straight and tangential ones.
-2. `dropRedundantRows` is dead code now — delete after review.
-3. Pin `envelopeMesh:bridgeCompetes` with a normal-bucket test (it is on the guard
-   inventory as `todo`).
+1. Order vertices ALONG a curve. 31 of the c = -2 object's 56 edges carry more
+   than two, so `E` describes only part of them (`algCrvIncidence`,
+   `info.oversubdivided`). Needs comparison of algebraic numbers.
+2. Move `fN, fD, EcQ, Vname, FC` from QuaCon up to AlgCon. The five-line version
+   is REFUTED — 692 -> 363 passing, 326 incomplete. DECISIONS 2026-09-20.
+3. Merge the branch into `main`, then run `bash .claude/suite.sh --slow`
+   (~20 min; stop the podman machine first, it commits 4 GB).
 
 ## Files
-- `compactCells.m` — drop implied rows, merge to a fixpoint; thin faces keep every row
-- `cellInterior.m` + `ratQ.qs2*` — emptiness, now including the compositum of two fields
-- `envelopeMesh.m` — corners and bridges as coverage; `bridgeCompetes` is the boundary
-- `.claude/bridgeCellConstant.m`, `.claude/bridgeWinnerConstant.m` — the night's measurements
+- `Crv.m`, `AlgCrv.m` — the fourth subdivision level and the (Alg, Crv) type
+- `envelopeMeshAlg.m`, `assembleAlgCrv.m` — the curved-tie mesh `biconjQ` returns
+- `algCurveSide.m` — the new edge's side, by Sturm root count
+- `algCrvVertices.m`, `algCrvIncidence.m` — vertices, then adjacency
