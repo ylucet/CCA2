@@ -182,13 +182,16 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
                 'a convex input is its own envelope, and the MESH must say so exactly');
         end
 
-        function aPREDICATERegionFaceIsREFUSEDByTheArrangementByName(testCase)
-        % The boundary of the route, said out loud. A bridge or corner face's region is a PREDICATE,
-        % so it has no signs to place in an arrangement -- an input with a CURVED tie therefore
-        % meshes only its quadratic part, and `envelopeEval` remains the complete answer for it.
+        function aCOMPETINGBridgeIsREFUSEDByTheConicMeshByName(testCase)
+        % The boundary of the conic route, said out loud. Since the bridge faces entered the
+        % arrangement for COVERAGE (1bc6a10), a curved tie's bridge is placed in the mesh, and what
+        % is refused is only the case the conic subdivision cannot hold: a bridge whose value
+        % COMPETES with a quadratic face inside a cell, because the boundary between them has degree
+        % 4. That refusal is the one `biconjQ` falls back on to return an AlgCrv. (Before 1bc6a10
+        % this fixture was refused earlier, as `envelopeMesh:bridgeFaces`, a region with no rows.)
             [fA, fB] = fixture(-2);
             env = envelopeAssemble(conjQ(fA), conjQ(fB));
-            testCase.verifyError(@() envelopeMesh(env), 'envelopeMesh:bridgeFaces');
+            testCase.verifyError(@() envelopeMesh(env), 'envelopeMesh:bridgeCompetes');
         end
 
         function theARGUMENTSAreChecked(testCase)

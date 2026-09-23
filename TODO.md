@@ -29,7 +29,7 @@ DOES carry the value and cannot be reduced the same way.
       Until then `AlgCrv` declares those five itself, with the measurement in a comment above them.
 
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
-      observed. Also `envelopeMesh:bridgeCompetes` wants a normal-bucket test to pin it.
+      observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
 ### Done recently
 
