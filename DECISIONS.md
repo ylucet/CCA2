@@ -8370,3 +8370,15 @@ arcs end — and the object failed it in five distinct ways, each observed befor
 After: faces 1 and 3 — the triangles above and below the diagonal, which is what sampling the
 evaluator says they are — have closed boundaries with degree 2 everywhere. Faces 2 and 4 own only the
 segments y = 1 and x = 0: zero area, which is a question about the envelope, not about the incidence.
+
+## 2026-09-22 — the exact mesh moves up to AlgCon; the 09-20 refutation was ONE leftover declaration
+
+`fN fD EcQ Vname FC` are now declared once, on AlgCon, as its header always said. The 2026-09-20
+attempt (692 -> 363 passing, 326 incomplete) was not refuted by the design: it moved the five from
+QuaCon and left **QuaPol's own `fN`/`fD`** in place, and QuaPol inherits AlgCon through RatPol, so
+the redeclaration stopped QuaPol -- and PLQVC, QuaPoly and every test building one -- from loading.
+Found by reading the declarations (`grep` over every classdef), not by re-running the failure.
+
+Two things the move had to carry: `Vname` is 3 wide on a QuaCon and 5 on an AlgCrv, so the width
+check moved into QuaCon's constructor (`QuaCon:size`); and `RatParTest` pinned QuaPol's OWN
+properties as {fN fD VN VD}, which is now {VN VD} because fN/fD are AlgCon's. fast 714/0, normal 24/0.

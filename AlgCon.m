@@ -140,6 +140,23 @@ classdef AlgCon < Alg & Conic
             % all-zero when the object is a Pol -- a polyhedral subdivision is exactly a parabolic
             % one with no curvature.
 
+        % ---- the EXACT mesh: integers, empty wherever nothing exact was supplied ---------------
+        % Declared here and not on the leaves, as the rule above says. Until 2026-09-22 QuaPol
+        % declared fN/fD, QuaCon all five and AlgCrv all five again, because AlgCrv cannot extend
+        % QuaCon (a QuaCon is a Rat, and a Rat may not carry an implicit face). The first attempt at
+        % this move (2026-09-20) left QuaPol's own fN/fD in place, and a property redeclared below
+        % the class that declares it stops that class loading -- QuaPol and everything built on it,
+        % which was the 326 incomplete tests. Empty is the honest default: nothing claims exactness.
+        fN (:,10){mustBeNumeric}   % nf x 10 integer numerators, ratQ.canon form against fD
+        fD (:,1) {mustBeNumeric}   % nf x 1  positive integer denominators
+        EcQ (:,6){mustBeNumeric}   % ne x 6  primitive integer conics, ratQ.conic form
+        Vname {mustBeInteger,mustBeNonnegative} % a vertex NAMED, not placed: nv x 3
+                                   % [edgeA edgeB rootIdx] on a conic mesh (QuaCon), nv x 5
+                                   % [edgeA tableA edgeB tableB rootIdx] on a Crv (AlgCrv), whose edges
+                                   % come from two tables. The width is each constructor's to check.
+        FC                         % cell(nf,1) of each face's rows [edgeIndex, sign, branch, table];
+                                   % table (AlgCrv only) 0 = EcQ, 1 = EcA. See QuaCon and AlgCrv.
+
         % ---- the ALGEBRAIC payload: general on an Alg, PINNED TO EMPTY on a Rat --------------
         EcA (:,1) struct = emptyEcA()   % ne_alg x 1 ALGEBRAIC edges, the fourth subdivision
             % level (see Crv.m). Entry j has fields FP, FB, num, den, and stands for the curve

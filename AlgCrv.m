@@ -18,9 +18,8 @@ classdef AlgCrv < AlgCon & Crv
    % THE ALGEBRAIC EDGE TABLE IS `AlgCon.EcA`, declared in the one place the mesh lives and pinned
    % empty unless the object is a Crv -- exactly the rule `den`, `Ec`, `FP` and `FB` already follow.
    % This class is the concrete cell where that pin is released, plus the evaluator that reads such
-   % an edge. The EXACT mesh it also needs is declared below rather than inherited, for a reason
-   % that is measured and recorded there and in TODO.md; that is a wart, and it is a wart with a
-   % price tag rather than an oversight.
+   % an edge. The EXACT mesh it also needs (`fN`, `fD`, `EcQ`, `Vname`, `FC`) is inherited from
+   % AlgCon, where it is declared once; until 2026-09-22 it was duplicated here (DECISIONS).
    %
    % AN FC ROW MAY NOW NAME EITHER TABLE. A row is [edgeIndex, side, branch, table], where table 0
    % (or absent, which is every row that predates this class) means `Ec`/`EcQ`'s CONIC and table 1
@@ -35,29 +34,6 @@ classdef AlgCrv < AlgCon & Crv
    % the same reason QuaCon.eval does: the operations that must leave Q are the PREDICATES that
    % decide a mesh, and reading a finished function at a point is not one of them.
 
-   properties
-        % THE EXACT MESH, DECLARED HERE AND NOT INHERITED -- which is worth saying plainly, because
-        % AlgCon's header says the mesh is declared once and this looks like a breach of it.
-        %
-        % It is not where it should be, and the cost of moving it was MEASURED rather than assumed.
-        % `fN`, `fD`, `EcQ`, `Vname` and `FC` live on QuaCon, not on AlgCon, and this class cannot
-        % extend QuaCon because a QuaCon is a `Rat` and a Rat may not carry an implicit face
-        % (`AlgCon:FPMustBeEmpty`). Moving the five declarations up to AlgCon -- where the header
-        % says they belong -- was tried on 2026-09-20 and took the fast bucket from 692 passing to
-        % 363 passing, 331 failed and 326 INCOMPLETE, i.e. classes that no longer load. So they are
-        % declared here, duplicated, until that move is done properly as its own piece of work with
-        % its own measurement. TODO.md carries it.
-        fN (:,10){mustBeNumeric}   % nf x 10 integer numerators, ratQ.canon form against fD
-        fD (:,1) {mustBeNumeric}   % nf x 1  positive integer denominators
-        EcQ (:,6){mustBeNumeric}   % ne x 6  primitive integer conics, ratQ.conic form
-        Vname {mustBeInteger,mustBeNonnegative} % nv x 5 [edgeA tableA edgeB tableB rootIdx] --
-                                   % five columns rather than QuaCon's three, because an edge here
-                                   % may come from either table and the name has to say which. See
-                                   % `algCrvVertices`, which fills it.
-        FC                         % cell(nf,1); FC{k} is m x 4 of [edgeIndex, sign, branch, table]
-                                   % -- table 0 selects the conic EcQ, table 1 the algebraic EcA.
-                                   % Fewer columns are accepted and read with the rest zero.
-   end
 
    methods
       function obj = AlgCrv(Vname, E, EcQ, fN, fD, F, FC, FP, FB, EcA)

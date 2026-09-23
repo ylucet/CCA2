@@ -61,8 +61,7 @@ classdef QuaPol < RatPol & QuaPar
         % second copy that can silently disagree with the object -- needs two copies that both
         % claim authority, and there are never two here. Both fields go when the float pipeline
         % does, leaving nothing to unpick.
-        fN (:,10){mustBeNumeric} = []   % nf x 10 integer numerators, ratQ.canon form against fD
-        fD (:,1) {mustBeNumeric} = []   % nf x 1  positive integer denominators
+        % fN / fD are declared on AlgCon (the exact mesh, once); QuaPol fills them.
         VN (:,2){mustBeNumeric} = []    % nv x 2 integer vertex numerators over VD
         VD (:,1) {mustBeNumeric} = []   % nv x 1 positive integer denominators
    end

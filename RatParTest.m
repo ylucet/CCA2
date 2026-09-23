@@ -155,8 +155,8 @@ classdef RatParTest < matlab.unittest.TestCase
             end
 
             % The leaves declare exactly what they are documented to declare.
-            testCase.verifyEqual(sort(own('QuaPol')), sort({'fN';'fD';'VN';'VD'}), ...
-                'QuaPol carries the exact input and nothing else');
+            testCase.verifyEqual(sort(own('QuaPol')), sort({'VN';'VD'}), ...
+                'QuaPol carries the exact VERTICES and nothing else -- fN/fD are AlgCon''s');
             testCase.verifyEqual(own('QuaParCPLQ'), {'fnd'}, ...
                 'QuaParCPLQ adds the symbolic payload it wraps');
 

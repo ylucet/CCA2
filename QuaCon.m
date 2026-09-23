@@ -84,16 +84,6 @@ classdef QuaCon < RatCon & Qua
 % screens with a tolerance; the exact kernel behind that screen is Phase 2c and is NOT yet built,
 % which is why `eval` documents its own limit rather than pretending otherwise.
 
-   properties
-        % See the header for why each is shaped as it is. All four are EXACT; none is a cache.
-        fN (:,10){mustBeNumeric}   % nf x 10 integer numerators, ratQ.canon form against fD
-        fD (:,1) {mustBeNumeric}   % nf x 1  positive integer denominators
-        EcQ (:,6){mustBeNumeric}   % ne x 6  primitive integer conics, ratQ.conic form
-        Vname (:,3){mustBeInteger,mustBeNonnegative} % nv x 3 [edgeA edgeB rootIdx]
-        FC                         % cell(nf,1); FC{k} is m x 3 of [edgeIndex, sign in {-1,0,+1},
-                                   % branch in {0,1,2}] -- see the header. A two-column list is
-                                   % accepted on construction and stored with branch 0.
-   end
 
    methods
        function obj = QuaCon(Vname, E, EcQ, fN, fD, F, FC)
@@ -119,6 +109,13 @@ classdef QuaCon < RatCon & Qua
                     'QuaCon needs 7 arguments (Vname, E, EcQ, fN, fD, F, FC); got %d.', nargin);
             end
 
+            % Vname's WIDTH is checked here: the property is declared once on AlgCon, where an
+            % AlgCrv's names are five wide, so the declaration can no longer pin three.
+            if isempty(Vname), Vname = zeros(0,3); end
+            if size(Vname,2) ~= 3
+                error('QuaCon:size', 'Vname must be nv x 3 [edgeA edgeB rootIdx]; got %dx%d.', ...
+                      size(Vname,1), size(Vname,2));
+            end
             nv = size(Vname,1);  ne = size(E,1);  nf = size(fN,1);
             if size(E,2) ~= 3 || size(EcQ,1) ~= ne || size(F,1) ~= ne || size(F,2) ~= 2
                 error('QuaCon:size', ...

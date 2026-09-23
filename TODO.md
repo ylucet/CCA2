@@ -23,15 +23,14 @@ DOES carry the value and cannot be reduced the same way.
       (a curve meeting no vertex) in `algCrvIncidence`'s E. Decide: drop them in `assembleAlgCrv`,
       or mark them thin with a sign-0 row.
 
-- [ ] **Move the exact mesh (`fN`, `fD`, `EcQ`, `Vname`, `FC`) from QuaCon up to AlgCon**, where
-      AlgCon's own header says it belongs. Tried as a five-line edit on 2026-09-20 and REFUTED: the
-      fast bucket went 692 -> 363 passing with 326 incomplete, i.e. classes that stopped loading.
-      Until then `AlgCrv` declares those five itself, with the measurement in a comment above them.
-
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
       observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
 ### Done recently
+
+- [x] **The exact mesh moved up to AlgCon** (2026-09-22): `fN fD EcQ Vname FC` declared once; the
+      copies on QuaCon, AlgCrv and QuaPol are gone. The 09-20 refutation was QuaPol's own fN/fD
+      left in place. fast 714/0, normal 24/0. DECISIONS.md 2026-09-22.
 
 - [x] **An edge with more than two vertices -> ARCS** (2026-09-22): `algCrvIncidence` traces each
       curve between the mesh vertices on it and keeps the arcs that bound a face by the side test.
