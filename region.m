@@ -3124,7 +3124,11 @@ classdef region
                 % mirror wedge: f*(-3,-2.4) came back 5.130 for a truth of 4.500.
                 gI = [obj.ineqs(i).dfdx(vars(1)).subsF(vars,[px(j),py(j)]).f, ...
                       obj.ineqs(i).dfdx(vars(2)).subsF(vars,[px(j),py(j)]).f];
-                if isAlways(gI(1) == 0) && isAlways(gI(2) == 0)
+                % SIMPLIFIED FIRST: at an irrational vertex a vanishing gradient component can be
+                % a zero in disguise, which isAlways reports it cannot prove -- and then the
+                % tangent below is the zero line (symbolicFunction:normalizeZero).
+                gI = simplify(gI);
+                if isAlways(gI(1) == 0, 'Unknown', 'false') && isAlways(gI(2) == 0, 'Unknown', 'false')
                     continue
                 end
                 tangent = obj.ineqs(i).tangent(px(j),py(j),vars);

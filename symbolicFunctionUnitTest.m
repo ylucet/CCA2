@@ -30,6 +30,31 @@ classdef symbolicFunctionUnitTest < matlab.unittest.TestCase
     methods (Test)
 
         % =========================================================================================
+        % normalize1 -- scale by the last coefficient, which must not be a DISGUISED zero
+        % =========================================================================================
+        function normalize1SkipsACoefficientThatIsZeroInDisguise(testCase)
+            % (sqrt2 - 1)^2 + 2 sqrt2 - 3 is 0, but not written as 0, so coeffs keeps it as a term
+            % and normalize1 divided by it: symbolic:kernel:DivisionByZero. It arises for real in
+            % region.removeTangent, from the tangent at an irrational vertex (biconjCPLQ of the
+            % poly2 kink at c = +2 and +0.5, 2026-09-22). The result must be the same line with
+            % the phantom term gone, scaled so its last genuine coefficient has modulus one.
+            x = symbolicFunctionUnitTest.X;  y = symbolicFunctionUnitTest.Y;
+            z = (sqrt(sym(2)) - 1)^2 + 2*sqrt(sym(2)) - 3;
+            testCase.assertTrue(isAlways(z == 0), 'the fixture must really be a zero');
+            g = symbolicFunction(z*x + 2*y + 2).normalize1;
+            testCase.verifyTrue(isAlways(g.f == y + 1), char(g.f));
+        end
+
+        function normalize1OfTheZeroPolynomialIsRefusedByName(testCase)
+            % Every coefficient zero in disguise: there is nothing to scale by, and a line that is
+            % 0 = 0 is not a line. Refused by name rather than dividing by zero.
+            x = symbolicFunctionUnitTest.X;  y = symbolicFunctionUnitTest.Y;
+            z = (sqrt(sym(2)) - 1)^2 + 2*sqrt(sym(2)) - 3;
+            testCase.verifyError(@() symbolicFunction(z*x + z*y + z).normalize1, ...
+                                 'symbolicFunction:normalizeZero');
+        end
+
+        % =========================================================================================
         % isLinear / isQuad -- the branch predicates, asserted as a partition of a family
         % =========================================================================================
         function degreePredicatesClassifyTheWholeFamily(testCase)

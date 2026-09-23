@@ -599,7 +599,22 @@ classdef symbolicFunction
             %obj.vars
             
           c = coeffs(obj.f,obj.vars);
-          obj = symbolicFunction(simplify((1/abs(c(end)))*obj.f));
+          f0 = obj.f;
+          % A DISGUISED ZERO as the last coefficient -- (sqrt2-1)^2 + 2 sqrt2 - 3, from a tangent
+          % at an irrational vertex in region.removeTangent -- is kept by coeffs as a term, and
+          % dividing by it is symbolic:kernel:DivisionByZero. Simplifying first removes the term;
+          % when the last coefficient is already a plain nonzero, nothing changes.
+          if isempty(c) || isequal(simplify(c(end)), sym(0))
+              f0 = simplify(obj.f);
+              c = coeffs(f0, obj.vars);
+              c = c(arrayfun(@(t) ~isequal(simplify(t), sym(0)), c));
+              if isempty(c)
+                  error('symbolicFunction:normalizeZero', ...
+                        'normalize1: %s is identically zero, so there is no line to normalize.', ...
+                        char(obj.f));
+              end
+          end
+          obj = symbolicFunction(simplify((1/abs(c(end)))*f0));
           
         end
 
