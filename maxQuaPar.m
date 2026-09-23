@@ -2868,12 +2868,23 @@ function newPieces = splitCell(cell, f1row, f2row, polyK, polyL, kSrc, lSrc)
     % inputs; e.g. on the 3-edge.tex example, det(M)~-1.7e-17 against a true zero, but the old
     % threshold (1e-6*sc)^3~3e-18 was smaller still).
     if ~isParabolicType && abs(det(M)) > 1e-6*sc^3
+        % Callers catch maxQuaPar: identifiers and fall back, so a firing is invisible from the
+        % top. CCA2_GUARD_LOG=<file> (off by default) records each one; .claude/notDegenerateRun.sh.
+        logf = getenv('CCA2_GUARD_LOG');
+        if ~isempty(logf)
+            fid = fopen(logf, 'a');
+            if fid > 0
+                fprintf(fid, 'maxQuaPar:notDegenerate delta=%.6g detM=%.6g M=%s\n', ...
+                        delta, det(M), mat2str(M, 8));
+                fclose(fid);
+            end
+        end
         error('maxQuaPar:notDegenerate', ...
             ['maxQuaPar:splitCell: the difference of the two candidate quadratics is a genuine ' ...
              'irreducible ellipse/hyperbola (delta=%g ~= 0 and the full 3x3 discriminant is nonzero), ' ...
-             'which QuaPar cannot represent. This should never happen for two conjugates of adjacent ' ...
-             'sub-pieces of the same originally-nonconvex domain (see maxQuaPar.m header); the input ' ...
-             'pair violates that.'], delta);
+             'which QuaPar cannot represent. It DOES arise from legal input -- conjCPLQ of the ' ...
+             'two-piece poly2 kink reaches it (SUPPORT_MATRIX.md, DECISIONS 2026-09-22) -- and ' ...
+             'conjCPLQ catches it and falls back to the symbolic Case C.'], delta);
     end
 
     edges = cellEdgeList(cell);

@@ -8316,3 +8316,57 @@ Measured after: **0 refusals**, 112 vertices over 100 edge pairs, 227 s, against
 vertices before. The 47 pairs recovered contributed 1 vertex and 2 candidates, so the gap was mostly
 pairs that do not meet inside their faces -- which is worth knowing: the refusals were loud but
 nearly harmless.
+
+## 2026-09-22 — `maxQuaPar:notDegenerate` IS REACHABLE: it fires on the two-piece `poly2` kink
+
+Closes the 2026-09-06 open question. The guard's message said the condition "should never happen for
+two conjugates of adjacent sub-pieces"; that is **refuted** by a legal `QuaPol`. The wired symbolic
+pipeline was run on the eight KINK fixtures (`.claude/notDegenerateRun.sh`, one MATLAB per job), and
+because `conjCPLQ` CATCHES `maxQuaPar:` identifiers and falls back to Case C, a firing is invisible
+from the top — so the guard now appends to `$CCA2_GUARD_LOG` when that is set (off by default), one
+log per job.
+
+| fixture | `conjCPLQ` | `biconjCPLQ` |
+|---|---|---|
+| `poly2` c = −2 | **fires**, answers (QuaParCPLQ) | **fires**, then `MATLAB:badsubscript` |
+| `poly2` c = −0.5 | **fires**, answers | **fires**, then `MATLAB:badsubscript` |
+| `poly2` c = +0.5 | **fires**, answers | `symbolic:kernel:DivisionByZero` (5414 s) |
+| `poly2` c = +2 | closed form, no fire | `MATLAB:invalidConversion` (sym to logical) |
+| `square2`, all four c | closed form, no fire | answers, no fire |
+
+The firing differences are ellipses/hyperbolas with det M ≠ 0 (e.g. M = [.25 0 −.5; 0 .25 −1; −.5 −1 4]),
+so this is the condition itself, not a tolerance artefact. The three `poly2` biconjugate crashes are
+UNNAMED — separate defects, in TODO, not traced here.
+
+## 2026-09-22 — splitting an AlgCrv edge into ARCS: traced in doubles, and two vertex defects it exposed
+
+An edge carrying more than two vertices is now split into the arcs between consecutive vertices along
+it (`algCrvIncidence`), by **tracing the curve numerically** from vertex to vertex — not by comparing
+algebraic numbers, which is what the handoff expected. Same trade as the vertex membership test
+(2026-09-21): an arc wrongly split changes topology, never a value. An arc is kept only for the faces
+whose rows its midpoint satisfies, with the edge's own row as an equality.
+
+The constructed fixture (two quarter-disks) found two defects in `algCrvVertices`, both red first:
+1. **Dedup by edge pair lost corners**: a pair met on face 1 was skipped on face 2, so (−1,0), a corner
+   of face 2 only, was never named. Now the meet is cached per pair and membership tested per face.
+2. **Two axis-parallel lines never met**: y = 0 has no x, x = 0 no y, so no resultant variable exists.
+   A one-variable curve is now solved on its own and the other read along its lines.
+
+And the real c = −2 object found a third: **tangent corners** come back from `roots` with half the
+digits (the corner (1,0) as five points up to 2e−4 apart). A vertex is now snapped to a nearby
+small-denominator rational point only when both integer curves vanish there in exact arithmetic.
+
+**The oracle was the definition of a boundary** — at each vertex point of a face exactly two of its
+arcs end — and the object failed it in five distinct ways, each observed before it was fixed:
+
+| degrees seen | cause | fix |
+|---|---|---|
+| up to 17 | the near-duplicate tangent corners above | exact rational snap |
+| up to 8 | the table spells y = 1 as y−1, 1−y, y²−1, (y−1)², so one arc is traced four times | merge arcs with the same end POINTS and the same midpoint |
+| 3 at (0,1), (1,0) | the diagonal passes through (½,½), a vertex named only for another spelling of it | breakpoints = every mesh vertex ON the curve |
+| 3 | `x² ≥ 0` holds on both sides of x = 0, so reading the row as an equality claimed an arc that bounds nothing | side test: just off the arc, in on one side and out on the other |
+| — | `x² = 0` never changes sign, so it could not be traced at all | a rank-1 conic is traced as its line |
+
+After: faces 1 and 3 — the triangles above and below the diagonal, which is what sampling the
+evaluator says they are — have closed boundaries with degree 2 everywhere. Faces 2 and 4 own only the
+segments y = 1 and x = 0: zero area, which is a question about the envelope, not about the incidence.

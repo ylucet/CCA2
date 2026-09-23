@@ -96,7 +96,7 @@ NORMAL_SUITES=(envelopeAssembleTest envelopeMeshAlgTest cplqAdapterTest function
 # Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
 # wall clock at the suite's whole runtime.
 SHARD_SUITES=(testcPLQ testMaxMultiRegion)
-SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest)
+SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest algCrvMeshTest)  # algCrvMeshTest: closed form but ~11 min of fixture, too long for normal
 # Individual tests here run for many minutes; see the VERYLONG note above.
 VERYLONG_SUITES=(testcPLQ testMaxMultiRegion)
 

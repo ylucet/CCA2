@@ -36,3 +36,4 @@ slprj/
 # scratch files the overnight run may leave
 .claude/*.tmp
 .claude/overnight-slow.log
+.claude/notDegenerate-*/

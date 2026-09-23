@@ -59,6 +59,52 @@ classdef algCrvIncidenceTest < matlab.unittest.TestCase
             t.verifyEqual(unique(E(:,5)).', 0, 'and the flag says so');
         end
 
+        function anEdgeWithTHREEVerticesIsSplitIntoItsARCS(t)
+        % The circle bounds TWO quarter-disks and carries three vertices, (1,0), (0,1), (-1,0): one
+        % edge, two arcs that bound a face each, and a lower half that bounds neither. Before the
+        % split it was one row holding two of the three and `oversubdivided` said so.
+            g = quarters();
+            V = algCrvVertices(g);
+            [E, F, info] = algCrvIncidence(g, V);
+            t.verifyEqual(info.oversubdivided, 2, 'the circle and the line y = 0 carry three each');
+            t.verifyEqual(info.split, 2, 'and both are split');
+            t.verifyEqual(info.untraced, 0);
+            t.verifyGreaterThanOrEqual(info.unowned, 1, 'the lower half bounds no face');
+
+            circ = find(E(:,1) == 1 & E(:,2) == 0);
+            t.verifyEqual(numel(circ), 2, 'the circle is two arcs of the mesh');
+            [~, iv] = algCrvVertices(g);  X = iv.X;
+            for r = circ.'
+                ends = sortrows(round(X(E(r,3:4),:), 9));
+                k = F(r,1);
+                t.verifyEqual(F(r,2), 0, 'each quarter arc bounds one face');
+                if k == 1, want = [0 1; 1 0]; else, want = [-1 0; 0 1]; end
+                t.verifyEqual(ends, want, 'AbsTol', 1e-9, ...
+                              'an arc runs between the two vertices ITS face has on the circle');
+            end
+        end
+
+        function everyVERTEXOfAFaceEndsExactlyTWOOfItsArcs(t)
+        % The definition of a face's boundary as a closed chain: at each of its vertex POINTS
+        % exactly two of the face's arcs end. One row per edge breaks this on the circle, which
+        % would give face 1 the whole circle's row with a third vertex hanging off it.
+            g = quarters();
+            [V, iv] = algCrvVertices(g);
+            [E, F] = algCrvIncidence(g, V, iv.X);
+            for k = 1:g.nf
+                mine = find(F(:,1) == k | F(:,2) == k);
+                P = zeros(0,2);
+                for r = mine.'
+                    for c = [3 4]
+                        if E(r,c) > 0, P(end+1,:) = round(iv.X(E(r,c),:), 9); end %#ok<AGROW>
+                    end
+                end
+                [~, ~, j] = unique(P, 'rows');
+                t.verifyEqual(unique(accumarray(j, 1)).', 2, ...
+                              sprintf('face %d: every vertex ends exactly two arcs', k));
+            end
+        end
+
         function theARGUMENTSAreChecked(t)
             g = fixture();
             t.verifyError(@() algCrvIncidence(g), 'algCrvIncidence:nargin');
@@ -77,4 +123,14 @@ function g = fixture(line)
     EcA = struct('FP', FP, 'FB', 2, 'num', num, 'den', 1);
     FC  = {[1 1 0 1; 1 1 0 0]};
     g = AlgCrv(zeros(0,3), zeros(0,3), ratQ.conic(line), num, 1, zeros(0,2), FC, {[]}, 0, EcA);
+end
+
+function g = quarters()
+% The unit disk's upper half, split by x = 0: face 1 is the quarter with x >= 0, face 2 the other.
+% Edges: 1 the circle (inside is <= 0), 2 the line y = 0, 3 the line x = 0. Constant 1 on both.
+    EcQ = [ratQ.conic([1 0 1 0 0 -1]); ratQ.conic([0 0 0 0 1 0]); ratQ.conic([0 0 0 1 0 0])];
+    num = [0 0 0 0, 0, 0, 0, 0, 0, 1];
+    FC  = {[1 -1 0 0; 2 1 0 0; 3  1 0 0]; ...
+           [1 -1 0 0; 2 1 0 0; 3 -1 0 0]};
+    g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, [num; num], [1; 1], zeros(0,2), FC, {[], []}, [0; 0]);
 end

@@ -61,6 +61,18 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                           'cornerFaceAlg:side');
         end
 
+        function algCrvIncidenceCoords(t)                                    % reachable
+            % X omitted with a Vname that is not the one algCrvVertices recomputes -- here the
+            % same names in another order -- so the coordinates cannot be matched to the names.
+            EcQ = [ratQ.conic([1 0 1 0 0 -1]); ratQ.conic([0 0 0 0 1 0]); ratQ.conic([0 0 0 1 0 0])];
+            num = [0 0 0 0, 0, 0, 0, 0, 0, 1];
+            FC  = {[1 -1 0 0; 2 1 0 0; 3 1 0 0]; [1 -1 0 0; 2 1 0 0; 3 -1 0 0]};
+            g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, [num; num], [1; 1], zeros(0,2), FC, ...
+                       {[], []}, [0; 0]);
+            V = algCrvVertices(g);
+            t.verifyError(@() algCrvIncidence(g, flipud(V)), 'algCrvIncidence:coords');
+        end
+
         function envelopeMeshAlgebraicFace(t)                                % reachable
             % A cell covered ONLY by corner faces would need a face whose value is affine with
             % quadratic-irrational coefficients, which a conic subdivision cannot store. Measured
@@ -309,7 +321,7 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'fanUnboundedFace:noVertex',                'symbolic-input'; ...
                 'fanUnboundedFace:nonAffineFacet',          'symbolic-input'; ...
                 'maxQuaPar:assemblyDisagreesWithPieces',    'internal'; ...
-                'maxQuaPar:notDegenerate',                  'contract'; ...
+                'maxQuaPar:notDegenerate',                  'contract'; ... % REACHED 2026-09-22 by the poly2 kink, symbolic -- DECISIONS
                 'maxQuaPar:pieceInvariant',                 'internal'; ...
                 'plqCheck:halfStripRegion',                 'symbolic-input'; ...
                 'plqCheck:triRegion',                       'symbolic-input'; ...

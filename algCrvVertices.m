@@ -7,7 +7,10 @@ function [Vname, info] = algCrvVertices(g)
 %
 % [input]  g     : AlgCrv
 % [output] Vname : nv x 5, each row [edgeA tableA edgeB tableB rootIdx] -- see below
-%          info  : .candidates, .named, .refused, .seconds
+%          info  : .candidates, .named, .refused, .seconds, and .X -- nv x 2, each vertex's
+%                  coordinates in DOUBLES, row for row with Vname. Not part of the name: it is the
+%                  numeric location `meetCurves` already computed, kept so `algCrvIncidence` can
+%                  order vertices along a curve without re-running the resultants (minutes).
 %
 % ==================================================================================================
 % A VERTEX IS A NAME, NOT A COORDINATE, and that is the same convention one degree up
@@ -45,10 +48,11 @@ function [Vname, info] = algCrvVertices(g)
     end
     t0 = tic;
     Vname = zeros(0,5);
-    info = struct('candidates', 0, 'named', 0, 'refused', 0, 'seconds', 0, 'why', {{}});
+    info = struct('candidates', 0, 'named', 0, 'refused', 0, 'seconds', 0, 'why', {{}}, ...
+                  'X', zeros(0,2));
 
     curves = curveTable(g);                      % one polyN per (table, index) actually used
-    seen = containers.Map('KeyType', 'char', 'ValueType', 'logical');
+    seen = containers.Map('KeyType', 'char', 'ValueType', 'any');
 
     for k = 1:g.nf
         rows = g.FC{k};
@@ -58,14 +62,31 @@ function [Vname, info] = algCrvVertices(g)
                 [ia, ta] = rowEdge(rows, a);
                 [ib, tb] = rowEdge(rows, b);
                 if ia == ib && ta == tb, continue, end
+                % THE MEET IS CACHED PER PAIR, THE MEMBERSHIP IS TESTED PER FACE. Two faces sharing
+                % both edges have different corners on them -- two quarter-disks share the circle
+                % and y = 0, and (-1,0) is a corner of the second only -- so skipping a pair already
+                % met on another face lost that face's corners. The pair is met once; each face
+                % then keeps the intersections on IT, and a name another face already gave is not
+                % given twice.
                 key = sprintf('%d,%d,%d,%d', ta, ia, tb, ib);
-                if seen.isKey(key), continue, end
-                seen(key) = true;
+                if seen.isKey(key)
+                    X = seen(key);
+                    for r = 1:size(X,1)
+                        nm = [ia, ta, ib, tb, r];
+                        if any(all(Vname == nm, 2)) || ~onFace(g, k, X(r,:)), continue, end
+                        Vname(end+1,:) = nm; %#ok<AGROW>
+                        info.X(end+1,:) = X(r,:);
+                        info.named = info.named + 1;
+                    end
+                    continue
+                end
+                seen(key) = zeros(0,2);
 
                 P = curves{ta+1}{ia};  Q = curves{tb+1}{ib};
                 if isempty(P) || isempty(Q), continue, end
                 try
-                    X = meetCurves(P, Q);
+                    X = snapRational(meetCurves(P, Q), P, Q);
+                    seen(key) = X;
                 catch ME
                     if ~startsWith(ME.identifier, 'ratQ:'), rethrow(ME), end
                     info.refused = info.refused + 1;
@@ -90,6 +111,7 @@ function [Vname, info] = algCrvVertices(g)
                 for r = 1:size(X,1)
                     if ~onFace(g, k, X(r,:)), continue, end
                     Vname(end+1,:) = [ia, ta, ib, tb, r]; %#ok<AGROW>
+                    info.X(end+1,:) = X(r,:);
                     info.named = info.named + 1;
                 end
             end
@@ -99,6 +121,41 @@ function [Vname, info] = algCrvVertices(g)
 end
 
 % ==================================================================================================
+function X = snapRational(X, P, Q)
+% A vertex where the two curves are TANGENT is a double root of the resultant, and a double root comes
+% back from `roots` with only about half the digits -- measured on the c = -2 object, the corner (1,0)
+% came back as five points up to 2e-4 apart, which then read as five vertices on every edge through
+% it. Such corners are typically RATIONAL, and a rational point can be CHECKED exactly: if a nearby
+% point with a small denominator makes both integer curves vanish in exact integer arithmetic, it is
+% the intersection, and it replaces the rounded one. Nothing is snapped on a tolerance alone.
+    for r = 1:size(X,1)
+        for q = 1:24
+            c = round(X(r,:) * q);
+            if norm(c / q - X(r,:)) > 1e-3, continue, end
+            if exactZero(P, c, q) && exactZero(Q, c, q)
+                X(r,:) = c / q;
+                break
+            end
+        end
+    end
+    if ~isempty(X), X = unique(round(sortrows(X), 10), 'rows', 'stable'); end
+end
+
+function tf = exactZero(P, c, q)
+% Is P(c(1)/q, c(2)/q) == 0 exactly? q^d * P at that point is an integer sum, exact in doubles while
+% every term stays below 2^53; past that the answer is "not provably zero".
+    d = (size(P,1) - 1) + (size(P,2) - 1);
+    v = 0;  big = 0;
+    for i = 1:size(P,1)
+        for j = 1:size(P,2)
+            if P(i,j) == 0, continue, end
+            t = P(i,j) * c(1)^(i-1) * c(2)^(j-1) * q^(d - (i-1) - (j-1));
+            v = v + t;  big = max(big, abs(t));
+        end
+    end
+    tf = big < 2^52 && v == 0;
+end
+
 function X = meetCurves(P, Q)
 % The real intersections of two integer curves, in `conicMeet`'s canonical order -- lexicographic by
 % (x, y).
@@ -112,6 +169,15 @@ function X = meetCurves(P, Q)
     X = zeros(0,2);
     dyP = size(P,2) - 1;  dyQ = size(Q,2) - 1;
     dxP = size(P,1) - 1;  dxQ = size(Q,1) - 1;
+
+    % A CURVE IN ONE VARIABLE is a set of parallel lines, and then there may be NO variable both
+    % curves have: y = 0 against x = 0 has no resultant either way round, and they meet at the
+    % origin. So such a curve is solved on its own and the other read along each of its lines.
+    if dyP == 0 && dxP >= 1, X = alongLines(P(:,1), Q, 1, P, Q); return, end
+    if dyQ == 0 && dxQ >= 1, X = alongLines(Q(:,1), P, 1, P, Q); return, end
+    if dxP == 0 && dyP >= 1, X = alongLines(P(1,:), Q, 2, P, Q); return, end
+    if dxQ == 0 && dyQ >= 1, X = alongLines(Q(1,:), P, 2, P, Q); return, end
+
     if dyP >= 1 && dyQ >= 1
         k = 2;
     elseif dxP >= 1 && dxQ >= 1
@@ -136,6 +202,21 @@ function X = meetCurves(P, Q)
             others = fibreRootsX(P, ts(i));      % eliminated x: ts are y, fibre gives x
             if isempty(others), others = fibreRootsX(Q, ts(i)); end
             for o = others, X = keepIfOn(X, [o, ts(i)], P, Q); end
+        end
+    end
+    if ~isempty(X), X = unique(round(sortrows(X), 10), 'rows', 'stable'); end
+end
+
+function X = alongLines(u, R, var, P, Q)
+% u holds a univariate polynomial's coefficients, ASCENDING, in x (var = 1) or y (var = 2); its roots
+% are parallel lines, and R is read along each. Same order and same filter as the resultant route.
+    X = zeros(0,2);
+    ts = realRoots(flip(u(:).'));
+    for i = 1:numel(ts)
+        if var == 1
+            for o = fibreRoots(R, ts(i)),  X = keepIfOn(X, [ts(i), o], P, Q); end
+        else
+            for o = fibreRootsX(R, ts(i)), X = keepIfOn(X, [o, ts(i)], P, Q); end
         end
     end
     if ~isempty(X), X = unique(round(sortrows(X), 10), 'rows', 'stable'); end

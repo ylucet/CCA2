@@ -41,6 +41,44 @@ classdef algCrvVerticesTest < matlab.unittest.TestCase
             t.verifyEmpty(V, 'no real crossing, no vertex');
         end
 
+        function aCORNEROnlyTheSECONDFaceHasIsNamed(t)
+        % Two quarter-disks share the circle and the line y = 0, and (-1,0) is a corner of the
+        % SECOND one only. Deduplicating by edge pair skipped the pair on its second face, so the
+        % corner went unnamed and the circle looked like it carried two vertices instead of three.
+            [V, info] = algCrvVertices(quarters());
+            P = sortrows(round(info.X, 9));
+            t.verifyTrue(ismember([-1 0], P, 'rows'), 'the second face''s own corner');
+            t.verifyEqual(size(unique(V, 'rows'), 1), size(V, 1), 'and no name appears twice');
+        end
+
+        function twoAXISParallelLINESMeet(t)
+        % y = 0 has no x and x = 0 has no y, so neither variable can be eliminated between them --
+        % the resultant needs both to have positive degree in it. They still meet, at the origin,
+        % which is a corner of both quarter-disks.
+            [~, info] = algCrvVertices(quarters());
+            t.verifyTrue(ismember([0 0], round(info.X, 9), 'rows'), 'x = 0 meets y = 0');
+        end
+
+        function everyCORNEROfTheQuarterDisksIsNamedAndNothingElse(t)
+        % The two faces' corners are exactly (1,0), (0,1), (-1,0) and (0,0); (0,-1), where x = 0
+        % meets the circle, is on neither face.
+            [~, info] = algCrvVertices(quarters());
+            P = unique(round(info.X, 9), 'rows');
+            t.verifyEqual(P, [-1 0; 0 0; 0 1; 1 0], 'AbsTol', 1e-9);
+        end
+
+        function aTANGENTCornerIsOnePointAndExact(t)
+        % x + y = 2 touches the circle x^2 + y^2 = 2 at (1,1): a DOUBLE root of the resultant, which
+        % a numeric root finder returns to about half the digits, as a pair of nearby roots. It is one
+        % point, and a rational one, so it must come back as exactly (1,1) once.
+            EcQ = [ratQ.conic([1 0 1 0 0 -2]); ratQ.conic([0 0 0 1 1 -2])];
+            num = [0 0 0 0, 0, 0, 0, 0, 0, 1];
+            g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, num, 1, zeros(0,2), ...
+                       {[1 -1 0 0; 2 -1 0 0]}, {[]}, 0);
+            [~, info] = algCrvVertices(g);
+            t.verifyEqual(unique(info.X, 'rows'), [1 1], 'AbsTol', 1e-12);
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() algCrvVertices(), 'algCrvVertices:nargin');
             t.verifyError(@() algCrvVertices(5), 'algCrvVertices:type');
@@ -58,4 +96,15 @@ function g = fixture(line)
     EcQ = ratQ.conic(line);
     FC  = {[1 1 0 1; 1 1 0 0]};                            % the curve, then the line
     g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, num, 1, zeros(0,2), FC, {[]}, 0, EcA);
+end
+
+function g = quarters()
+% The unit disk's upper half, split by x = 0: face 1 is the quarter with x >= 0, face 2 the other.
+% Edges: 1 the circle (inside is <= 0), 2 the line y = 0, 3 the line x = 0. algCrvIncidenceTest
+% uses the same object.
+    EcQ = [ratQ.conic([1 0 1 0 0 -1]); ratQ.conic([0 0 0 0 1 0]); ratQ.conic([0 0 0 1 0 0])];
+    num = [0 0 0 0, 0, 0, 0, 0, 0, 1];
+    FC  = {[1 -1 0 0; 2 1 0 0; 3  1 0 0]; ...
+           [1 -1 0 0; 2 1 0 0; 3 -1 0 0]};
+    g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, [num; num], [1; 1], zeros(0,2), FC, {[], []}, [0; 0]);
 end

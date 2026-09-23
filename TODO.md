@@ -12,16 +12,16 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **An edge with MORE THAN TWO vertices.** `E` holds two endpoints, and 31 of the c = -2
-      object's 56 edges carry more -- so for those the edge is really several arcs and the table
-      describes only part of it. Splitting them means ordering vertices ALONG a curve, which is a
-      comparison of algebraic numbers. `assembleQuaConCells` has the same limitation one degree
-      down. `algCrvIncidence` reports the count as `oversubdivided` rather than hiding it.
+- [ ] **`biconjCPLQ` crashes UNNAMED on all four `poly2` kinks** (2026-09-22, `.claude/notDegenerateRun.sh`):
+      c = -2 and -0.5 `MATLAB:badsubscript` ("index must not exceed 1"), c = +2
+      `MATLAB:invalidConversion` (sym to logical, after `isAlways` in `functionNDomain.mergeL`),
+      c = +0.5 `symbolic:kernel:DivisionByZero` after 5414 s. The `square2` kinks all answer. No
+      stacks yet -- the probe prints only the identifier; rerun one with `getReport(e)`.
 
-- [ ] **A vertex named twice.** `algCrvVertices` deduplicates by EDGE PAIR, not by point, so a point
-      where three edges meet is named three times. `assembleQuaConCells` has the same question one
-      degree down and answers it with `seen(lo,hi)`; decide whether that is a defect here or the
-      intended "one name per pair".
+- [ ] **Faces of ZERO AREA in the c = -2 AlgCrv.** Faces 2 and 4 own only the segments y = 1 and
+      x = 0 (sampled), yet the envelope carries them as faces, and each keeps one table row
+      (a curve meeting no vertex) in `algCrvIncidence`'s E. Decide: drop them in `assembleAlgCrv`,
+      or mark them thin with a sign-0 row.
 
 - [ ] **Move the exact mesh (`fN`, `fD`, `EcQ`, `Vname`, `FC`) from QuaCon up to AlgCon**, where
       AlgCon's own header says it belongs. Tried as a five-line edit on 2026-09-20 and REFUTED: the
@@ -32,6 +32,17 @@ DOES carry the value and cannot be reduced the same way.
       observed. Also `envelopeMesh:bridgeCompetes` wants a normal-bucket test to pin it.
 
 ### Done recently
+
+- [x] **An edge with more than two vertices -> ARCS** (2026-09-22): `algCrvIncidence` traces each
+      curve between the mesh vertices on it and keeps the arcs that bound a face by the side test.
+      On the c = -2 object both faces with area get closed boundaries, degree 2 at every vertex
+      (was up to 17); `algCrvMeshTest` (slow) pins it. Found and fixed on the way in
+      `algCrvVertices`: corners lost to per-pair dedup, axis-parallel lines never meeting, tangent
+      corners off by 2e-4 (now snapped only on an exact rational check). The "vertex named twice"
+      question is answered by clustering: one name per edge PAIR stays, one breakpoint per POINT.
+
+- [x] **`maxQuaPar:notDegenerate` reachability** (2026-09-22): REACHABLE, fires on the `poly2`
+      kinks through `conjCPLQ` and `biconjCPLQ`. DECISIONS.md 2026-09-22.
 
 - [x] **The EDGE and FACE incidence for an AlgCrv** (2026-09-22): `algCrvIncidence`, read off the
       tables rather than computed -- an edge's endpoints are the vertices whose NAME mentions it,
@@ -659,11 +670,6 @@ it is bookkeeping rather than new mathematics.
 - **The implicit-face TYPE** — a third value on `RETURN_TYPE.md`'s function axis, `p(x,y,z)=0` plus
   a branch selector. Yves's call. Independent of everything above: every non-bridge face is
   quadratic or piecewise affine in `x`, so none of them is implicit.
-- **`maxQuaPar:notDegenerate`'s reachability** cannot be settled by a direct call — the guard's own
-  message says the condition cannot arise for an in-contract pair, so any input built to trigger it
-  proves nothing. An in-contract pair needs the symbolic pipeline, hours per fixture. Its
-  `SUPPORT_MATRIX` row rests on the condition count, and says so.
-
 ### Done recently
 
 - [x] **rank 1, the EDGE cells** — derived and verified: along the Hessian's null direction the
