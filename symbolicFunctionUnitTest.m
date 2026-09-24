@@ -45,6 +45,19 @@ classdef symbolicFunctionUnitTest < matlab.unittest.TestCase
             testCase.verifyTrue(isAlways(g.f == y + 1), char(g.f));
         end
 
+        function normalize1SurvivesASimplifyThatDividesByZero(testCase)
+            % CAPTURED from biconjCPLQ of the poly2 kink at c = +2 (2026-09-23): a tangent line
+            % y - 2x/3 + c whose constant holds sqrt(r) with r a zero in disguise (a tangency).
+            % c is exactly -4/3, but simplify(c) itself throws symbolic:kernel:DivisionByZero;
+            % expand makes r a literal 0 first. Scaled by 1/|-2/3|, the line is 3y/2 - x - 2.
+            x = symbolicFunctionUnitTest.X;  y = symbolicFunctionUnitTest.Y;
+            r65 = sqrt(sym(65));
+            rad = (5*r65/4 + 45/4)^2 - (13*r65/8 + 117/8)*(25*r65/26 + 225/26);
+            c = 2*(5*r65/4 + sqrt(rad) + 45/4)/(3*(13*r65/16 + 117/16)) - 92/39;
+            g = symbolicFunction(y - 2*x/3 + c).normalize1;
+            testCase.verifyTrue(isAlways(g.f == 3*y/2 - x - 2), char(g.f));
+        end
+
         function normalize1OfTheZeroPolynomialIsRefusedByName(testCase)
             % Every coefficient zero in disguise: there is nothing to scale by, and a line that is
             % 0 = 0 is not a line. Refused by name rather than dividing by zero.

@@ -604,17 +604,17 @@ classdef symbolicFunction
           % at an irrational vertex in region.removeTangent -- is kept by coeffs as a term, and
           % dividing by it is symbolic:kernel:DivisionByZero. Simplifying first removes the term;
           % when the last coefficient is already a plain nonzero, nothing changes.
-          if isempty(c) || isequal(simplify(c(end)), sym(0))
-              f0 = simplify(obj.f);
+          if isempty(c) || isequal(symbolicFunction.safeSimplify(c(end)), sym(0))
+              f0 = symbolicFunction.safeSimplify(obj.f);
               c = coeffs(f0, obj.vars);
-              c = c(arrayfun(@(t) ~isequal(simplify(t), sym(0)), c));
+              c = c(arrayfun(@(t) ~isequal(symbolicFunction.safeSimplify(t), sym(0)), c));
               if isempty(c)
                   error('symbolicFunction:normalizeZero', ...
                         'normalize1: %s is identically zero, so there is no line to normalize.', ...
                         char(obj.f));
               end
           end
-          obj = symbolicFunction(simplify((1/abs(c(end)))*f0));
+          obj = symbolicFunction(symbolicFunction.safeSimplify((1/abs(c(end)))*f0));
           
         end
 
@@ -907,4 +907,19 @@ classdef symbolicFunction
     % 
     % end
 
+    methods (Static)
+        function e = safeSimplify(e)
+        % simplify, EXCEPT that MuPAD's simplify can itself raise symbolic:kernel:DivisionByZero on a
+        % FINITE expression: sqrt(r) with r a zero in disguise, e.g. the constant of a tangent at a
+        % tangency (captured from biconjCPLQ of the poly2 kink at c = +2, 2026-09-23). expand makes
+        % r a literal 0 first, and simplify(expand(e)) is the same number. Any other error, or the
+        % same error after expanding, propagates.
+            try
+                e = simplify(e);
+            catch ME
+                if ~strcmp(ME.identifier, 'symbolic:kernel:DivisionByZero'), rethrow(ME), end
+                e = simplify(expand(e));
+            end
+        end
+    end
 end
