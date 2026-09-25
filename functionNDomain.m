@@ -1302,7 +1302,12 @@ classdef functionNDomain
                            % quadratic; do not attack this line again for it.
                            m0 = (d0.vy(1)-d0.vy(2))/(d0.vx(1)-d0.vx(2));
                            c = d0.vy(1) - m0*d0.vx(1);
-                           nineq = symbolicFunction(vars(2)-m0*vars(1)-c);
+                           % THE REGION'S variables, not the function's: f.getVars is what f
+                           % depends on, and a conjugate piece can depend on s_1 alone -- the
+                           % poly2 kink at c = -2 has one, and vars(2) was then out of range.
+                           % The chord lives in the region's plane, which always has two.
+                           rv = d0.vars;
+                           nineq = symbolicFunction(rv(2)-m0*rv(1)-c);
                            % THE PROBE ON THE CONIC, by PROPERTY. This one already asked the
                            % right question -- is root one feasible, else take the other -- but
                            % it asked it in a way that breaks two ways: `my2(2)` is indexed
@@ -1315,7 +1320,10 @@ classdef functionNDomain
                            % 2026-08-18/19 on the four sibling sites in region.m.
                            mx = (d0.vx(1)+d0.vx(2))/2;
                            [~, my, okP] = d0.probeOnConstraint(j, mx);
-                           if okP && isAlways(nineq.subsF(vars,[mx,my])>0)
+                           % The comparison is made on the SYM, inside isAlways. Comparing the
+                           % symbolicFunction first ran its own `if` on an irrational value
+                           % (sqrt(65) - 11 on the poly2 kink at c = +2) that `if` cannot decide.
+                           if okP && isAlways(nineq.subsF(rv,[mx,my]).f > 0)
                                nineq = -nineq;
                            end
                            d0.ineqs(j) = nineq;

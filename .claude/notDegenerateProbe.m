@@ -15,6 +15,9 @@ function notDegenerateProbe(shape, c, op)
         fprintf('OUTCOME ok %s  (%.0f s)\n', class(g), toc(t0));
     catch e
         fprintf('OUTCOME %s  (%.0f s)\n  %s\n', e.identifier, toc(t0), e.message);
+        for k = 1:min(12, numel(e.stack))                 % an unnamed crash names nothing else
+            fprintf('  at %s:%d\n', e.stack(k).name, e.stack(k).line);
+        end
     end
 end
 

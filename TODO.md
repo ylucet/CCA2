@@ -12,16 +12,28 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **`biconjCPLQ` crashes UNNAMED on all four `poly2` kinks** (2026-09-22, `.claude/notDegenerateRun.sh`):
-      c = -2 and -0.5 `MATLAB:badsubscript` ("index must not exceed 1"), c = +2
-      `MATLAB:invalidConversion` (sym to logical, after `isAlways` in `functionNDomain.mergeL`),
-      c = +0.5 `symbolic:kernel:DivisionByZero` after 5414 s. The `square2` kinks all answer. No
-      stacks yet -- the probe prints only the identifier; rerun one with `getReport(e)`.
+- [ ] **`biconjCPLQ` on the `poly2` kinks: the CRASHES are fixed, what is left is SCALING.** Three
+      unnamed crashes, each found by printing the stack or capturing the input, each fixed red
+      first where a fast test could reach it: `conjugateOfPiecePoly` read the chord's variables off
+      the FUNCTION (one symbol when a piece depends on s_1 alone, c = -2) and ran an `if` on an
+      irrational comparison (c = +2); `normalize1`'s `simplify` itself divided by zero on sqrt of a
+      disguised zero (c = +2 and +0.5; `safeSimplify`). After them no run crashes, and none finishes:
+      c = -2 >5 h, c = +2 >4 h. Measured on c = -2 (second conjugation, 20 folds): cells 2, 4, 8,
+      15, 21, 23, 32 ... 51 by fold 16, 750-1500 s a fold -- the "STEP 3 ... DOES NOT SCALE" entry
+      below. Both tests in `biconjCPLQTest` are QUARANTINED by name (assumeFail) until then.
 
-- [ ] **Faces of ZERO AREA in the c = -2 AlgCrv.** Faces 2 and 4 own only the segments y = 1 and
-      x = 0 (sampled), yet the envelope carries them as faces, and each keeps one table row
-      (a curve meeting no vertex) in `algCrvIncidence`'s E. Decide: drop them in `assembleAlgCrv`,
-      or mark them thin with a sign-0 row.
+- [ ] **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
+      parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area
+      owns it too, and their value never exceeds it (max excess 1.1e-16 over 82 points), so dropping
+      them changes no value. What is open is DETECTING zero area at assembly -- the regions are
+      algebraic, so it is an emptiness-of-interior test (`cellInterior` has one for cells) -- and
+      until then `algCrvIncidence` gives each one table row for a curve meeting no vertex.
+      **Cause, found 2026-09-24:** each is a QUADRATIC face the bridge beats on the whole interior
+      and ties only on the domain edge -- inside the square the one row excluding points just off
+      the segment is the algebraic row (EcA9 for face 2, EcA14 for face 4), i.e. q - bridge <= 0 on
+      both sides. Refuted as causes: a doubled-line row forcing the face onto a line (none), and
+      the straight rows alone (inscribed radius 0.29 in all four faces). So the place to drop them
+      is where the envelope decides a quadratic face owns a cell, not in the incidence.
 
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
       observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
