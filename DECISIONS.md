@@ -8382,3 +8382,27 @@ Found by reading the declarations (`grep` over every classdef), not by re-runnin
 Two things the move had to carry: `Vname` is 3 wide on a QuaCon and 5 on an AlgCrv, so the width
 check moved into QuaCon's constructor (`QuaCon:size`); and `RatParTest` pinned QuaPol's OWN
 properties as {fN fD VN VD}, which is now {VN VD} because fN/fD are AlgCon's. fast 714/0, normal 24/0.
+
+## 2026-09-25 — `biconjQ` on the poly2 kink: three exact-arithmetic ceilings, one of them a SILENT wrong sign
+
+`biconjQ` (the closed-form route) on the eight KINK fixtures, each against the envelope's definition
+(<= f, = f at the corners, convex): square2 passes at all four c (c = -2 only after the `algBranch`
+double-root fix; c = -0.5 in 6231 s), poly2 refused at all four. Two of those refusals were
+`ratQ:overflow`, each reproducing in ~15 s, and chasing them found three ceilings in turn:
+
+1. **`ratQ.feasible2` checked each DIFFERENCE, not each PRODUCT** -- and this one decided wrongly
+   without raising. Two products of ~1e18 are each rounded, their difference comes out small, passes
+   `chk`, and has the wrong sign: `feasible2` called (B-1)/B <= s1 <= (C-1)/C, C > B ~ 1e9, empty.
+   Every product now goes through `ratQ.mulChk`, and an overflow reruns the same algorithm in
+   BigInteger. The same `chk(a*b - c*d)` shape is at ~80 other sites -- TODO.
+2. **`cornerFaceAlg`'s implicit polynomial** squared past 2^53 while the polynomial, content
+   removed, fits: squared in BigInteger now, content removed there.
+3. **`bridgeFaceAlg`'s discriminant**, same shape. Its own comment called this "the ANSWER being
+   large" and a test pinned the refusal on ([0 0 0 0 8 -2 4 -4 2 2], 2, [0 0 0 0 6 -2 3 -5 -3 -7], 7);
+   REFUTED for that input -- only intermediates were large, and it now stops later (`noWitness`).
+   The pin moved to an input whose REDUCED polynomial is past 2^53.
+
+After them the poly2 kinks refuse as `convexPieceCoupling` with the assembly's own reason now
+carried in the message: `envelopeMesh:bridgeFaces`, a CORNER face whose region has no rows, which
+the conic mesh cannot place and the assembly does not route to `envelopeMeshAlg`. That is the next
+limit, and a different kind of one.

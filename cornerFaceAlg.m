@@ -151,8 +151,21 @@ end
 function FP = implicitValue(E0, E1, K, al, be, D)
 % [2 al K z - 2 al E0 + be E1]^2 - E1^2 D = 0, as ratQ's dense polyN array in (x, y, z).
     L = affPlusZ(-2*al*E0 + be*E1, 2*al*K);              % the bracket: affine in x, linear in z
-    FP = ratQ.polyAddN(sq(L), -D * sq(affPlusZ(E1, 0)));
-    FP = ratQ.trimN(ratQ.contentFree(ratQ.chk(FP, 'corner polynomial')));
+    try
+        FP = ratQ.polyAddN(sq(L), -D * sq(affPlusZ(E1, 0)));
+        FP = ratQ.trimN(ratQ.contentFree(ratQ.chk(FP, 'corner polynomial')));
+    catch ME
+        % THE SQUARE CAN PASS 2^53 WHILE THE POLYNOMIAL, CONTENT REMOVED, DOES NOT -- biconjQ of
+        % the poly2 kink at c = -2 reached it (2026-09-25). Then the square is taken in BigInteger,
+        % the content removed THERE, and only the result converted back; fromBig still raises if
+        % the reduced polynomial itself does not fit, which is an honest overflow.
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        Lb = ratQ.toBig(ratQ.chk(L, 'corner bracket'));
+        Eb = ratQ.toBig(affPlusZ(ratQ.chk(E1, 'corner slope'), 0));
+        Db = ratQ.toBig(ratQ.chk(D, 'corner discriminant'));
+        FPb = ratQ.bigAdd(ratQ.bigMul(Lb, Lb), ratQ.bigNeg(ratQ.bigMul(Db, ratQ.bigMul(Eb, Eb))));
+        FP = ratQ.trimN(ratQ.fromBig(ratQ.bigContentFree(FPb)));
+    end
 end
 
 function A = affPlusZ(e, kz)

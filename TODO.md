@@ -22,6 +22,21 @@ DOES carry the value and cannot be reduced the same way.
       15, 21, 23, 32 ... 51 by fold 16, 750-1500 s a fold -- the "STEP 3 ... DOES NOT SCALE" entry
       below. Both tests in `biconjCPLQTest` are QUARANTINED by name (assumeFail) until then.
 
+- [ ] **`biconjQ` on the poly2 kink stops at `envelopeMesh:bridgeFaces`** (2026-09-25): a CORNER face
+      whose region has no rows and no outer bound, so the conic mesh cannot place it, and
+      `assembledEnvelope` does not fall back to `envelopeMeshAlg` for that identifier (it does for
+      `bridgeCompetes`). The three overflows before it are fixed (DECISIONS.md 2026-09-25). Reproduce
+      in ~90 s: `biconjQ` of the poly2 kink at c = -2; the refusal message names the reason.
+
+- [ ] **`ratQ.chk` on a SUM OF PRODUCTS can return a WRONG SIGN silently -- audit 80 sites.** Found
+      2026-09-25 in `ratQ.feasible2`: it checked each difference, not each product, so two products
+      of ~1e18 were rounded, cancelled to something small, passed the check and had the wrong sign
+      -- `feasible2` said "empty" for a nonempty interval. Fixed there (`ratQ.mulChk` per product,
+      BigInteger fallback). The same pattern -- `chk(a*b - c*d)` -- is at 80 other sites (`grep -E
+      "chk\(.*\*.*[-+].*\*"`), in ratQ, biconjQ, assembleQuaConCells, algCurveSide and more. Each is
+      exact only while every PRODUCT is below 2^53; none of them checks that. Fix: `mulChk` each
+      product (or `chk` a bound on the sum of |products|), with a test per routine at ~1e9 inputs.
+
 - [ ] **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
       parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area
       owns it too, and their value never exceeds it (max excess 1.1e-16 over 82 points), so dropping

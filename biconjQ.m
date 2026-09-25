@@ -181,6 +181,7 @@ function h = biconjQ(obj)
     % attempted BEFORE the per-piece checks so that their refusal is not raised for a case that now
     % has an answer. A failure falls through to those checks, so nothing that used to work changes
     % and nothing that used to refuse refuses for a WORSE reason.
+    assemblyWhy = '';
     if allPSD && nf == 2
         try
             h = assembledEnvelope(obj);
@@ -192,7 +193,11 @@ function h = biconjQ(obj)
                ~startsWith(ME.identifier, 'cornerFace')
                 rethrow(ME)
             end
-            % fall through: the checks below name the case in the vocabulary a caller expects
+            % fall through: the checks below name the case in the vocabulary a caller expects --
+            % but the refusal CARRIES this reason, because "the assembly declined" and "there is no
+            % route" are different news and only the first says what to fix.
+            assemblyWhy = sprintf(' The assembly route declined first: %s -- %s', ME.identifier, ...
+                                  ME.message(1:min(end, 200)));
         end
     end
 
@@ -315,7 +320,7 @@ function h = biconjQ(obj)
                          'jump across a shared edge (piece %d curves upward along one of its ' ...
                          'own edges, so its vertex values do not determine the bridge). The ' ...
                          'bridge face carries the square root of a quadratic, which no CCA2 ' ...
-                         'type can hold -- see DECISIONS.md 2026-09-05.'], k);
+                         'type can hold -- see DECISIONS.md 2026-09-05.%s'], k, assemblyWhy);
                 end
                 error('PLQ:biconjQ:notImplemented', ...
                     ['piece %d is not convex AND curves UPWARD along one of its edges, so its ' ...

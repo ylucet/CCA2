@@ -361,9 +361,56 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
         % cubed, so a pair with large data puts the FACE'S OWN POLYNOMIAL past 2^53 -- the answer
         % being large, not an intermediate being clumsy. A raw `ratQ:overflow` escaping here would
         % look exactly like the routine being wrong.
-            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 8 -2 4 -4 2 2], 2, ...
-                                                   [0 0 0 0 6 -2 3 -5 -3 -7], 7), ...
+        %
+        % THE INPUT CHANGED 2026-09-25, because the old one was not in this class. It was
+        % ([0 0 0 0 8 -2 4 -4 2 2], 2, [0 0 0 0 6 -2 3 -5 -3 -7], 7), refused because the double
+        % path's INTERMEDIATES passed 2^53; with the discriminant redone in BigInteger and its
+        % content removed there, its polynomial fits, and it now stops later with a different named
+        % refusal (noWitness). This input's REDUCED polynomial is past 2^53.
+            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 80 -20 41 -43 23 29], 17, ...
+                                                   [0 0 0 0 61 -19 33 -51 -37 -71], 19), ...
                 'bridgeFaceAlg:polynomialOverflow');
+        end
+
+        function theBRIDGEPairsOfThePOLY2KinkBuildAndVanishOnTheirFace(testCase)
+        % The four cell pairs biconjQ hands this producer on the poly2 kink at c = -2 (captured
+        % 2026-09-25). One of them used to raise polynomialOverflow -- its discriminant's
+        % intermediates passed 2^53 while the reduced polynomial does not -- which is what sent the
+        % whole biconjugate to a refusal. Each must now build, and its polynomial must vanish at
+        % constructed face points and nowhere 0.1 above them: the definition, not a stored answer.
+            % each with the CELL PAIR's half-planes, exactly as the assembly calls it
+            pairs = {{[0 0 0 0 1 0 0 0 0 0], 2, [0 0 0 0 9 6 4 -4 32 24], 26, ...
+                      [1 0 4; -1 0 4; 0 -1 0; 3 2 16; -3 -2 10; 2 -3 2]}, ...
+                     {[0 0 0 0 1 -2 4 16 8 -32], 10, [0 0 0 0 0 0 0 1 2 -1], 1, ...
+                      [-1 2 4; 1 -2 6; 2 1 -8; 1 0 -2; 3 2 -10]}, ...
+                     {[0 0 0 0 1 0 1 0 0 0], 2, [0 0 0 0 0 0 0 1 2 -1], 1, ...
+                      [0 1 0; -2 -1 8; 2 -3 8; 1 0 -2; 3 2 -10]}, ...
+                     {[0 0 0 0 1 0 1 0 0 0], 2, [0 0 0 0 9 6 4 -4 32 24], 26, ...
+                      [0 1 0; -2 -1 8; 2 -3 8; 3 2 16; -3 -2 10; 2 -3 2]}};
+            built = 0;
+            for k = 1:numel(pairs)
+                a = pairs{k};
+                fx = mk(sprintf('poly2 pair %d', k), a{1:4});
+                try
+                    face = bridgeFaceAlg(a{:});
+                catch ME
+                    % a pair with no SEPARATE curved bridge is handed on by name (the rational
+                    % route declines it, or the tie is straight and is a facet); an OVERFLOW, or
+                    % any other refusal, is a failure
+                    testCase.verifyTrue(any(strcmp(ME.identifier, ...
+                        {'bridgeFaceRat:noSeparateFace', 'bridgeFaceAlg:straightTie'})), ...
+                        sprintf('%s: %s -- %s', fx.name, ME.identifier, ME.message));
+                    continue
+                end
+                built = built + 1;
+                % faceResiduals parameterises only line and ellipse ties; these are not, so the
+                % face points are built from the same definition on ANY conic tie: s on {g1 = g2},
+                % x on the segment between the two gradients, value <s,x> - g1(s).
+                [onFace, nPts] = anyTieResidual(fx, face.FP);
+                testCase.verifyGreaterThan(nPts, 20, sprintf('%s: enough tie points sampled', fx.name));
+                testCase.verifyLessThan(onFace, 1e-10, sprintf('%s: p vanishes on the face', fx.name));
+            end
+            testCase.verifyEqual(built, 3, 'pairs 1, 3 and 4 are curved bridges and must build');
         end
 
         function aCUBICFaceIsRefusedByName(testCase)
@@ -800,4 +847,28 @@ function r = relEval(P, x, z)
     end
     if s == 0, s = 1; end
     r = abs(v)/s;
+end
+
+function [worst, n] = anyTieResidual(fx, FP)
+% Face points of the bridge on a tie of ANY conic type: s1 on a grid, s2 from the tie's quadratic
+% (or linear) equation in s2, x on the gradient segment at s, z = <s,x> - g1(s). Returns the worst
+% relative residual of FP there (relEval) and how many points were used.
+    g1 = @(s) (s.'*fx.A1*s)/2 + fx.b1.'*s + fx.k1;
+    [Dl, dl, kp] = tieData(fx);
+    worst = 0;  n = 0;
+    for s1 = linspace(-6, 6, 25)
+        % (1/2) s'Dl s + dl's + kp = 0 as a polynomial in s2
+        c = [Dl(2,2)/2, Dl(1,2)*s1 + dl(2), Dl(1,1)*s1^2/2 + dl(1)*s1 + kp];
+        if abs(c(1)) < 1e-14, c = c(2:3); end
+        if all(abs(c) < 1e-14) || numel(c) < 2, continue, end
+        r = roots(c);
+        for s2 = real(r(abs(imag(r)) < 1e-9)).'
+            sp = [s1; s2];
+            for lam = [0 0.5 1]
+                x = (1-lam)*(fx.A1*sp + fx.b1) + lam*(fx.A2*sp + fx.b2);
+                worst = max(worst, relEval(FP, x, sp.'*x - g1(sp)));
+                n = n + 1;
+            end
+        end
+    end
 end

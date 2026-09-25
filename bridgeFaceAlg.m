@@ -276,15 +276,25 @@ function [p, info] = implicitPoly(d, N1, m1, q1, N2, m2, q2)
     switch numel(Psi) - 1
         case 3
             A = Psi{4};  B = Psi{3};  C = Psi{2};  E = Psi{1};
-            p =       pAdd(pMul(18, pMul(A, pMul(B, pMul(C, E)))), ...
-                           pMul(-4, pMul(B, pMul(B, pMul(B, E)))));
-            p = pAdd(p, pMul(pMul(B, B), pMul(C, C)));
-            p = pAdd(p, pMul(-4, pMul(A, pMul(C, pMul(C, C)))));
-            p = pAdd(p, pMul(-27, pMul(pMul(A, A), pMul(E, E))));
+            try
+                p =       pAdd(pMul(18, pMul(A, pMul(B, pMul(C, E)))), ...
+                               pMul(-4, pMul(B, pMul(B, pMul(B, E)))));
+                p = pAdd(p, pMul(pMul(B, B), pMul(C, C)));
+                p = pAdd(p, pMul(-4, pMul(A, pMul(C, pMul(C, C)))));
+                p = pAdd(p, pMul(-27, pMul(pMul(A, A), pMul(E, E))));
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+                p = discBig({E, C, B, A});
+            end
         case 2
             % The tie conic is DEGENERATE -- see the header. Psi = B mu^2 + C mu + E.
             B = Psi{3};  C = Psi{2};  E = Psi{1};
-            p = pAdd(pMul(C, C), pMul(-4, pMul(B, E)));
+            try
+                p = pAdd(pMul(C, C), pMul(-4, pMul(B, E)));
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+                p = discBig({E, C, B});
+            end
         otherwise
             error('bridgeFaceAlg:straightTie', ...
                 ['Psi has degree %d in the multiplier, which happens when the tie is STRAIGHT -- ' ...
@@ -623,4 +633,30 @@ function d = checkDen(d, name)
               name, mat2str(d));
     end
     d = double(d);
+end
+
+function p = discBig(cf)
+% The discriminant of sum_k cf{k} mu^(k-1) (a quadratic or a cubic in mu, coefficients polyN in
+% x, y, z), in java.math.BigInteger, content removed THERE and only then converted back. The
+% double path's intermediates pass 2^53 on the poly2 kink (biconjQ, 2026-09-25) while the reduced
+% polynomial may not; ratQ.fromBig still raises ratQ:overflow if it does, which is the honest case.
+    b = cellfun(@(c) ratQ.toBig(c), cf, 'UniformOutput', false);
+    K = @(v) ratQ.toBig(v);
+    if numel(b) == 4
+        E = b{1};  C = b{2};  B = b{3};  A = b{4};
+        q = ratQ.bigMul(K(18), mulAll(A, B, C, E));
+        q = ratQ.bigAdd(q, ratQ.bigMul(K(-4), mulAll(B, B, B, E)));
+        q = ratQ.bigAdd(q, mulAll(B, B, C, C));
+        q = ratQ.bigAdd(q, ratQ.bigMul(K(-4), mulAll(A, C, C, C)));
+        q = ratQ.bigAdd(q, ratQ.bigMul(K(-27), mulAll(A, A, E, E)));
+    else
+        E = b{1};  C = b{2};  B = b{3};
+        q = ratQ.bigAdd(mulAll(C, C), ratQ.bigMul(K(-4), mulAll(B, E)));
+    end
+    p = ratQ.fromBig(ratQ.bigContentFree(q));
+end
+
+function r = mulAll(varargin)
+    r = varargin{1};
+    for k = 2:numel(varargin), r = ratQ.bigMul(r, varargin{k}); end
 end
