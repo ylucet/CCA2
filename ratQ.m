@@ -123,8 +123,22 @@ classdef ratQ
         %            the product is what makes coefficients grow for no reason down a fold chain.
             l = lcm(d1, d2);
             ratQ.chk(l, 'common denominator');
-            n = ratQ.chk(n1 * (l/d1) + n2 * (l/d2), 'sum numerator');
-            [n, d] = ratQ.canon(n, l);
+            if abs(n1) * (l/d1) + abs(n2) * (l/d2) < 2^53
+                n = ratQ.chk(n1 * (l/d1) + n2 * (l/d2), 'sum numerator');
+                [n, d] = ratQ.canon(n, l);
+                return
+            end
+            % THE PRODUCTS PASS 2^53, so they are rounded and a cancelling sum comes out small and
+            % WRONG (ratQTest.aCANCELLINGSumOfProductsIsExactOrRefusedNeverWrong). Redone in
+            % BigInteger, reduced there; fromBig raises if the reduced value does not fit.
+            I = @(v) java.math.BigInteger.valueOf(int64(v));
+            nb = I(n1).multiply(I(l/d1)).add(I(n2).multiply(I(l/d2)));
+            lb = I(l);
+            g = nb.gcd(lb);
+            if g.signum() ~= 0, nb = nb.divide(g);  lb = lb.divide(g); end
+            n = ratQ.fromBig(struct('sz', [1 1], 'c', {{nb}}));
+            d = ratQ.fromBig(struct('sz', [1 1], 'c', {{lb}}));
+            if n == 0, d = 1; end
         end
 
         function [n, d] = sub(n1, d1, n2, d2)
@@ -303,8 +317,17 @@ classdef ratQ
                 case 1
                     D = A(1,1);
                 case 2
+                    if abs(A(1,1))*abs(A(2,2)) + abs(A(1,2))*abs(A(2,1)) >= 2^53
+                        D = ratQ.detBig(A);  return          % products past 2^53: see detBig
+                    end
                     D = ratQ.chk(A(1,1)*A(2,2) - A(1,2)*A(2,1), 'determinant');
                 case 3
+                    aA = abs(A);
+                    if aA(1,1)*(aA(2,2)*aA(3,3) + aA(2,3)*aA(3,2)) + ...
+                       aA(1,2)*(aA(2,1)*aA(3,3) + aA(2,3)*aA(3,1)) + ...
+                       aA(1,3)*(aA(2,1)*aA(3,2) + aA(2,2)*aA(3,1)) >= 2^53
+                        D = ratQ.detBig(A);  return
+                    end
                     D = ratQ.chk( ...
                         A(1,1)*(A(2,2)*A(3,3) - A(2,3)*A(3,2)) ...
                       - A(1,2)*(A(2,1)*A(3,3) - A(2,3)*A(3,1)) ...
@@ -312,6 +335,40 @@ classdef ratQ
                 otherwise
                     error('ratQ:badSystem', 'detExact handles n <= 3; got %d.', size(A,1));
             end
+        end
+
+        function D = detBig(A)
+        % detExact's 2x2 / 3x3 cofactor expansion in BigInteger, for when a PRODUCT passes 2^53:
+        % in doubles each product is then rounded and a cancelling determinant comes out small and
+        % wrong, raising nothing ([B B+1; B-1 B] with B = 1e9 has det 1). The VALUE is returned
+        % exactly when it fits, and fromBig raises ratQ:overflow when it does not.
+            I = @(v) java.math.BigInteger.valueOf(int64(v));
+            b = cell(size(A));
+            for k = 1:numel(A), b{k} = I(A(k)); end
+            m2 = @(p, q, r, t) b{p}.multiply(b{q}).subtract(b{r}.multiply(b{t}));
+            n = size(A,1);
+            if n == 2
+                v = m2(sub2ind([2 2],1,1), sub2ind([2 2],2,2), sub2ind([2 2],1,2), sub2ind([2 2],2,1));
+            else
+                s3 = @(i,j) sub2ind([3 3], i, j);
+                v = b{s3(1,1)}.multiply(m2(s3(2,2), s3(3,3), s3(2,3), s3(3,2))) ...
+                    .subtract(b{s3(1,2)}.multiply(m2(s3(2,1), s3(3,3), s3(2,3), s3(3,1)))) ...
+                    .add(b{s3(1,3)}.multiply(m2(s3(2,1), s3(3,2), s3(2,2), s3(3,1))));
+            end
+            D = ratQ.fromBig(struct('sz', [1 1], 'c', {{v}}));
+        end
+
+        function v = chkB(v, bound, what)
+        % ratQ.chk for a SUM OF PRODUCTS: `bound` is the same expression with every factor in
+        % absolute value and every sign +. Below 2^53 every product and every partial sum is an
+        % exact double; at or above it one may have been rounded, and a cancelling result can be
+        % small and wrong while passing a check on itself -- so this raises instead.
+            if bound >= 2^53
+                error('ratQ:overflow', ['%s: its terms reach %.17g, at or beyond 2^53, so a ' ...
+                      'product may have been rounded. Widen the integer type; do NOT introduce ' ...
+                      'a tolerance.'], what, bound);
+            end
+            v = ratQ.chk(v, what);
         end
 
         function [H, d] = hessQ(n, dn)
@@ -2148,14 +2205,15 @@ classdef ratQ
             if strcmp(info.kind, 'parallel')
                 % The line is { t = t_b } for the b-th root of info.quad, so the value at xn/xd is
                 % t(x) - t_b -- a LINEAR polynomial in t_b, and signAt decides its sign at that root.
-                tv = ratQ.chk(info.form(1)*xn(1) + info.form(2)*xn(2), 'parallel pair value');
+                tv = ratQ.chkB(info.form(1)*xn(1) + info.form(2)*xn(2), ...
+                     abs(info.form(1)*xn(1)) + abs(info.form(2)*xn(2)), 'parallel pair value');
                 s = ratQ.signAt(ratQ.polyTrim([-xd, tv]), info.quad, info.iv(b,:));
                 return
             end
             p = info.apex;
             % x - p over the common denominator xd*p(3)
-            ux = ratQ.chk(xn(1)*p(3) - p(1)*xd, 'point minus apex');
-            uy = ratQ.chk(xn(2)*p(3) - p(2)*xd, 'point minus apex');
+            ux = ratQ.chkB(xn(1)*p(3) - p(1)*xd, abs(xn(1)*p(3)) + abs(p(1)*xd), 'point minus apex');
+            uy = ratQ.chkB(xn(2)*p(3) - p(2)*xd, abs(xn(2)*p(3)) + abs(p(2)*xd), 'point minus apex');
             if info.vertical && b == 2
                 s = sign(ux);                      % the vertical line is x1 = p1
                 return
@@ -2164,7 +2222,7 @@ classdef ratQ
                 % branch 1 is the FINITE slope, which is rational here: t = tn/td exactly, with no
                 % root-finding and no `rat` -- the quadratic has already degenerated to a linear.
                 td = info.quad(1);  tn = -info.quad(2);
-                s = sign(ratQ.chk(uy*td - tn*ux, 'line value')) * sign(td);
+                s = sign(ratQ.chkB(uy*td - tn*ux, abs(uy*td) + abs(tn*ux), 'line value')) * sign(td);
                 return
             end
             % value = uy - t*ux, a linear polynomial in t, at the b-th root of `quad`
@@ -2341,10 +2399,12 @@ classdef ratQ
         % which half to keep.
             [pl, ql] = ratQ.toRational(lo);
             [ph, qh] = ratQ.toRational(hi);
-            pm = ratQ.chk(pl*qh + ph*ql, 'bisection midpoint');
+            pm = ratQ.chkB(pl*qh + ph*ql, abs(pl*qh) + abs(ph*ql), 'bisection midpoint');
             qm = ratQ.chk(2*ql*qh, 'bisection midpoint');
-            sm = sign(ratQ.chk(Q(1)*pm^2 + Q(2)*pm*qm + Q(3)*qm^2, 'quadratic at midpoint'));
-            sl = sign(ratQ.chk(Q(1)*pl^2 + Q(2)*pl*ql + Q(3)*ql^2, 'quadratic at endpoint'));
+            sm = sign(ratQ.chkB(Q(1)*pm^2 + Q(2)*pm*qm + Q(3)*qm^2, ...
+                 abs(Q(1))*pm^2 + abs(Q(2)*pm*qm) + abs(Q(3))*qm^2, 'quadratic at midpoint'));
+            sl = sign(ratQ.chkB(Q(1)*pl^2 + Q(2)*pl*ql + Q(3)*ql^2, ...
+                 abs(Q(1))*pl^2 + abs(Q(2)*pl*ql) + abs(Q(3))*ql^2, 'quadratic at endpoint'));
             if sm == 0, lo = pm/qm;  hi = pm/qm;  return, end
             if sm == sl, lo = pm/qm; else, hi = pm/qm; end
         end
@@ -2377,7 +2437,7 @@ classdef ratQ
             % whose two roots are the two lines. With a zero, b is zero too and the form is just y.
             if a ~= 0
                 u = 2*a;  v = b;
-                if ratQ.chk(2*a*e - d*b, 'parallel pair linear part') ~= 0
+                if ratQ.chkB(2*a*e - d*b, abs(2*a*e) + abs(d*b), 'parallel pair linear part') ~= 0
                     error('ratQ:notALinePair', ...
                         ['the linear part is not a multiple of the repeated factor, so this ' ...
                          'conic is a PARABOLA rather than two parallel lines.']);

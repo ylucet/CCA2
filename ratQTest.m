@@ -391,6 +391,27 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyTrue (ratQ.feasible2([B 1 -(B-1); -C 1 (C-1); 0 -1 0]), 'through FM: nonempty');
         end
 
+        function aCANCELLINGSumOfProductsIsExactOrRefusedNeverWrong(testCase)
+        % The defect feasible2 had, asked of every ratQ routine that sums products: inputs whose
+        % ANSWER is small but whose PRODUCTS pass 2^53, so each product is rounded and the rounded
+        % difference is small enough to pass a check on the result. The contract is exact-or-refuse:
+        % the true value, or ratQ:overflow -- never a plausible wrong number.
+            B = 1e9;
+            cases = { ...
+                {'det 2x2', @() ratQ.detExact([B B+1; B-1 B]), 1}, ...
+                {'det 3x3', @() ratQ.detExact([B B+1 0; B-1 B 0; 0 0 1]), 1}, ...
+                {'det 3x3 off-diagonal', @() ratQ.detExact([0 0 1; B B+1 0; B-1 B 0]), 1}};
+            for k = 1:numel(cases)
+                c = cases{k};
+                verifyExactOrRefused(testCase, c{2}, c{3}, c{1});
+            end
+            % add: 100000007/3 + n2/100000037, whose numerator over the lcm is exactly 1, while
+            % 100000007 * 100000037 ~ 1e16 is past 2^53
+            n2 = -3333334800000086;
+            verifyExactOrRefused(testCase, @() addAsRow(100000007, 3, n2, 100000037), ...
+                                 [1, 300000111], 'add');
+        end
+
         function feasible2AgreesWithLinprogOnRandomSystems(testCase)
         % Differential test against an entirely different algorithm -- a simplex/interior-point LP
         % in floating point, from the Optimization Toolbox. Legitimate in a TEST and nowhere near
@@ -1291,4 +1312,20 @@ classdef ratQTest < matlab.unittest.TestCase
                 'ratQ:branch');
         end
     end
+end
+
+function r = addAsRow(n1, d1, n2, d2)
+    [n, d] = ratQ.add(n1, d1, n2, d2);
+    r = [n, d];
+end
+
+function verifyExactOrRefused(testCase, f, want, name)
+    try
+        got = f();
+    catch ME
+        testCase.verifyEqual(ME.identifier, 'ratQ:overflow', ...
+            sprintf('%s: the only acceptable refusal is ratQ:overflow; got %s', name, ME.identifier));
+        return
+    end
+    testCase.verifyEqual(got, want, sprintf('%s: a value came back, so it must be the EXACT one', name));
 end
