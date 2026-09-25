@@ -62,6 +62,23 @@ classdef algBranchTest < matlab.unittest.TestCase
             testCase.verifyEqual(algBranch(P, X0, 1), algBranch(P, X0, 2), 'AbsTol', 1e-7);
         end
 
+        function aDOUBLERootThatRootsReturnsAsAComplexPairIsStillReal(testCase)
+        % Where the two branches MEET the fibre is a perfect square, and `roots` can return that
+        % double root as a complex pair with imaginary part ~ sqrt(eps) -- (z + 0.75)^2 comes back
+        % as -0.75 +- 9.3e-9 i, past imagTol = 1e-10, so the point had NO branch. Measured on the
+        % c = -2 AlgCrv (2026-09-25): the bridge's two branches meet on the domain edge x = 0, and
+        % f** evaluated to +Inf at (0, 0.5) and (0, 0.7), points of dom f. The contract is the one
+        % theBRANCHCOUNTIsReportedWITHMULTIPLICITY pins: at the merge, two equal real branches.
+            for r = [0.75 0.91 1/3]
+                P = zeros(1,1,3);
+                P(1,1,3) = 1;  P(1,1,2) = 2*r;  P(1,1,1) = r^2;      % (z + r)^2
+                testCase.verifyEqual(algBranch(P, [0 0.5], 1), -r, 'AbsTol', 1e-7, 'branch 1');
+                testCase.verifyEqual(algBranch(P, [0 0.5], 2), -r, 'AbsTol', 1e-7, 'branch 2');
+                [~, info] = algBranch(P, [0 0.5], 1);
+                testCase.verifyEqual(info.nreal, 2, 'a double root counts twice');
+            end
+        end
+
         function aQUARTICBranchIsSelectedByIndexAndNotByMagnitude(testCase)
         % Four distinct real roots at every point, so every index is exercised and an implementation
         % that sorted by |z| rather than by z would get two of them wrong.

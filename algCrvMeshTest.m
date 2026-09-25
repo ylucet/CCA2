@@ -35,6 +35,20 @@ classdef algCrvMeshTest < matlab.unittest.TestCase
             t.verifyEqual(t.info.refused, 0, 'no edge pair refused');
         end
 
+        function fStarStarIsFINITEOnAllOfDomF(t)
+            % dom f** = conv dom f = the unit square, so every point of it, BOUNDARY INCLUDED, must
+            % be owned by a face. On the domain edges x = 0 and y = 1 the bridge's two branches
+            % meet, the fibre is a double root, and algBranch used to drop it as complex: f** was
+            % +Inf at (0, 0.5), (0, 0.7) and (0.41, 1) (2026-09-25).
+            s = linspace(0, 1, 401).';
+            B = [s 0*s; 1+0*s s; s 1+0*s; 0*s s];
+            [u, w] = meshgrid(linspace(0.013, 0.987, 23));
+            X = [B; u(:) w(:)];
+            v = t.G.eval(X);
+            t.verifyEqual(sum(~isfinite(v)), 0, ...
+                sprintf('points of dom f where f** is not finite: %s', mat2str(X(~isfinite(v),:), 4)));
+        end
+
         function everyFaceWithAREAHasAClosedBoundary(t)
             [E, F, info] = algCrvIncidence(t.G, t.V, t.X);
             t.verifyEqual(info.untraced, 0, 'every edge with a vertex on it is traced');

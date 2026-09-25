@@ -74,6 +74,13 @@ function [z, info] = algBranch(P, X, b, opts)
 %   degTol  : leading coefficients below degTol * (the largest coefficient) are dropped before
 %             root-finding, because `roots` on a vector with a ~0 leading entry returns a spurious
 %             root near infinity. Again relative, for the same reason.
+%   the DOUBLE-ROOT test (quadratic fibres only, fixed at 1e-12): a discriminant within 1e-12 of
+%             zero, relative to the size of its TERMS before cancellation, is a double root -- two
+%             equal real entries, the multiplicity contract above. Without it `roots` can return
+%             the double root as a complex pair past imagTol, and the point has no branch at all:
+%             the c = -2 AlgCrv evaluated to +Inf on parts of its domain edges x = 0 and y = 1, where
+%             the bridge's two branches meet (2026-09-25). It decides nothing a mesh depends on;
+%             it only stops the cache from dropping a value that exists.
 
     if nargin < 4, opts = struct(); end
     if ~isfield(opts,'imagTol'), opts.imagTol = 1e-10; end
@@ -140,6 +147,25 @@ function [z, info] = algBranch(P, X, b, opts)
 
         isReal = abs(imag(r)) <= opts.imagTol * max(1, abs(r));
         rr = sort(real(r(isReal)));
+        % A DOUBLE ROOT OF A QUADRATIC FIBRE -- where the two branches meet -- can come back from
+        % `roots` as a complex pair with imaginary part ~ sqrt(eps), past imagTol, leaving the
+        % point with no branch at all: the c = -2 AlgCrv evaluated to +Inf on its domain edge x = 0
+        % that way (algBranchTest.aDOUBLERootThatRootsReturnsAsAComplexPairIsStillReal). The
+        % discriminant is the right scale to ask "is this a double root": where it vanishes to
+        % relative precision the answer is -b/(2a) twice, which is the multiplicity contract of
+        % theBRANCHCOUNTIsReportedWITHMULTIPLICITY. Every other fibre is decided by `roots` as before.
+        % The scale is the size of the TERMS before cancellation, not of the coefficients: along
+        % the edge y = 1 of the same object the discriminant is 0 everywhere, but near the corner
+        % x = sqrt2 - 1 the coefficients themselves are ~1e-7 (they cancel), and a tolerance
+        % relative to them rejected the rounding of an exact zero.
+        if numel(cz) == 3
+            ca = zeros(1, 3);
+            for k = 1:3, ca(k) = abs(xs) * abs(P(:,:,k)) * abs(ys); end
+            dq = cz(2)^2 - 4*cz(3)*cz(1);
+            if abs(dq) <= 1e-12 * (ca(2)^2 + 4*ca(3)*ca(1))
+                rr = [1; 1] * (-cz(2) / (2*cz(3)));
+            end
+        end
         allReal{t} = rr;
         nreal(t) = numel(rr);
         idx = b;
