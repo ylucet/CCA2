@@ -374,6 +374,23 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyTrue (ratQ.feasible2(zeros(0,3)), 'no constraints is the whole plane');
         end
 
+        function feasible2DecidesWhenItsOwnProductsPass2to53(testCase)
+        % Rows well inside 2^53 whose DECISION needs a product outside it: s1 >= (B-1)/B against
+        % s1 <= (C-1)/C with B, C ~ 1e9 compares (B-1)*C with (C-1)*B ~ 1e18. The answer is exact
+        % arithmetic -- (C-1)/C > (B-1)/B iff C > B -- and must not be an overflow. Reached for
+        % real by biconjQ of the poly2 kink at c = -2 and -0.5 (envelopeCellRegions, 2026-09-25),
+        % whose own inputs are all below 32.
+            B = 1e9 + 7;  C = 1e9 + 9;
+            testCase.verifyTrue (ratQ.feasible2([B 0 -(B-1); -C 0 (C-1)]),        'C > B: an interval');
+            testCase.verifyTrue (ratQ.feasible2([B 0 -(B-1); -C 0 (C-1)], true),  'with interior in s1 (s2 is free)');
+            testCase.verifyFalse(ratQ.feasible2([C 0 -(C-1); -B 0 (B-1)]),        'swapped: empty');
+            testCase.verifyTrue (ratQ.feasible2([B 0 -(B-1); -B 0 (B-1)]),        'equal: one line');
+            testCase.verifyFalse(ratQ.feasible2([B 0 -(B-1); -B 0 (B-1)], true),  'equal: no interior');
+            % the same comparison reached through the ELIMINATION of s2
+            testCase.verifyFalse(ratQ.feasible2([C 1 -(C-1); -B 1 (B-1); 0 -1 0]), 'through FM: empty');
+            testCase.verifyTrue (ratQ.feasible2([B 1 -(B-1); -C 1 (C-1); 0 -1 0]), 'through FM: nonempty');
+        end
+
         function feasible2AgreesWithLinprogOnRandomSystems(testCase)
         % Differential test against an entirely different algorithm -- a simplex/interior-point LP
         % in floating point, from the Optimization Toolbox. Legitimate in a TEST and nowhere near

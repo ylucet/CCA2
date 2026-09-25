@@ -1321,6 +1321,24 @@ classdef ratQ
             if nargin < 2, strict = false; end
             ratQ.chk(P, 'half-plane');
             if isempty(P), tf = true; return, end
+            % THE ROWS FITTING IS NOT ENOUGH: elimination and the bound comparisons multiply them,
+            % so rows near 1e9 need products near 1e18 -- biconjQ of the poly2 kink reached that
+            % from inputs below 32. The double path is tried first, as before; where one of ITS
+            % products overflows, the same algorithm is redone in BigInteger (ratQTest.
+            % feasible2DecidesWhenItsOwnProductsPass2to53). Exact both ways; no tolerance.
+            try
+                tf = ratQ.feasible2Double(P, strict);
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+                tf = ratQ.feasible2Big(P, strict);
+            end
+        end
+
+        function tf = feasible2Double(P, strict)
+        % feasible2's original body, in doubles. EVERY PRODUCT is checked, not only each final
+        % difference: two products of ~1e18 are each rounded, their difference comes out small,
+        % passes a check on the difference, and has the WRONG SIGN -- which is how this returned
+        % false for (B-1)/B <= s1 <= (C-1)/C, C > B ~ 1e9, without raising anything.
 
             % ---- eliminate s2 -------------------------------------------------------------
             % Rows with p2 = 0 already constrain s1 alone; the rest split into lower and upper
@@ -1335,8 +1353,8 @@ classdef ratQ
                     % P(i): p2i*s2 >= -(p1i*s1 + p0i)   with p2i > 0
                     % P(j): p2j*s2 >= -(p1j*s1 + p0j)   with p2j < 0, i.e. an upper bound
                     % Combining eliminates s2 with positive weights (-p2j) and (p2i):
-                    a = ratQ.chk(-P(j,2)*P(i,1) + P(i,2)*P(j,1), 'FM coefficient');
-                    b = ratQ.chk(-P(j,2)*P(i,3) + P(i,2)*P(j,3), 'FM constant');
+                    a = ratQ.chk(ratQ.mulChk(-P(j,2), P(i,1)) + ratQ.mulChk(P(i,2), P(j,1)), 'FM coefficient');
+                    b = ratQ.chk(ratQ.mulChk(-P(j,2), P(i,3)) + ratQ.mulChk(P(i,2), P(j,3)), 'FM constant');
                     Q(end+1,:) = [a, b]; %#ok<AGROW>
                 end
             end
@@ -1351,20 +1369,71 @@ classdef ratQ
                     if (strict && b <= 0) || (~strict && b < 0), tf = false; return, end
                 elseif a > 0
                     % s1 >= -b/a, and a > 0, so the bound is (-b)/a. Keep the LARGEST.
-                    if ~haveLo || ratQ.chk(-b*loD - loN*a, 'lower bound') > 0
+                    if ~haveLo || ratQ.chk(ratQ.mulChk(-b, loD) - ratQ.mulChk(loN, a), 'lower bound') > 0
                         loN = -b;  loD = a;  haveLo = true;
                     end
                 else
                     % s1 <= -b/a with a < 0; writing it with a positive denominator gives
                     % b/(-a). Keep the SMALLEST.
                     nN = b;  nD = -a;
-                    if ~haveHi || ratQ.chk(nN*hiD - hiN*nD, 'upper bound') < 0
+                    if ~haveHi || ratQ.chk(ratQ.mulChk(nN, hiD) - ratQ.mulChk(hiN, nD), 'upper bound') < 0
                         hiN = nN;  hiD = nD;  haveHi = true;
                     end
                 end
             end
             if haveLo && haveHi
-                c = ratQ.chk(loN*hiD - hiN*loD, 'bound comparison');
+                c = ratQ.chk(ratQ.mulChk(loN, hiD) - ratQ.mulChk(hiN, loD), 'bound comparison');
+                if (strict && c >= 0) || (~strict && c > 0), tf = false; return, end
+            end
+            tf = true;
+        end
+
+        function v = mulChk(x, y)
+        % x*y, raising ratQ:overflow when the exact product is not representable -- so a product
+        % that was rounded can never feed a later sign test. (Doubles are exact integers below 2^53.)
+            v = x * y;
+            if abs(v) >= 2^53
+                error('ratQ:overflow', 'product %.17g * %.17g reached 2^53; widen the integer type.', x, y);
+            end
+        end
+
+        function tf = feasible2Big(P, strict)
+        % feasible2Double line for line, in java.math.BigInteger: the same Fourier-Motzkin
+        % elimination of s2 and the same cross-multiplied bound comparisons, with no ceiling.
+            I = @(v) java.math.BigInteger.valueOf(int64(v));
+            k = size(P,1);
+            p1 = cell(k,1); p2 = cell(k,1); p0 = cell(k,1);
+            for r = 1:k, p1{r} = I(P(r,1)); p2{r} = I(P(r,2)); p0{r} = I(P(r,3)); end
+            Qa = {};  Qb = {};
+            for r = find(P(:,2) == 0).', Qa{end+1} = p1{r}; Qb{end+1} = p0{r}; end %#ok<AGROW>
+            for i = find(P(:,2) > 0).'
+                for j = find(P(:,2) < 0).'
+                    Qa{end+1} = p2{j}.negate().multiply(p1{i}).add(p2{i}.multiply(p1{j})); %#ok<AGROW>
+                    Qb{end+1} = p2{j}.negate().multiply(p0{i}).add(p2{i}.multiply(p0{j})); %#ok<AGROW>
+                end
+            end
+            haveLo = false;  haveHi = false;
+            loN = []; loD = []; hiN = []; hiD = [];
+            for r = 1:numel(Qa)
+                a = Qa{r};  b = Qb{r};
+                sa = a.signum();
+                if sa == 0
+                    sb = b.signum();
+                    if (strict && sb <= 0) || (~strict && sb < 0), tf = false; return, end
+                elseif sa > 0
+                    nN = b.negate();  nD = a;                         % s1 >= -b/a
+                    if ~haveLo || nN.multiply(loD).subtract(loN.multiply(nD)).signum() > 0
+                        loN = nN;  loD = nD;  haveLo = true;
+                    end
+                else
+                    nN = b;  nD = a.negate();                         % s1 <= b/(-a)
+                    if ~haveHi || nN.multiply(hiD).subtract(hiN.multiply(nD)).signum() < 0
+                        hiN = nN;  hiD = nD;  haveHi = true;
+                    end
+                end
+            end
+            if haveLo && haveHi
+                c = loN.multiply(hiD).subtract(hiN.multiply(loD)).signum();
                 if (strict && c >= 0) || (~strict && c > 0), tf = false; return, end
             end
             tf = true;
