@@ -7,7 +7,7 @@ Nothing.
 
 ## State
 - Branch `main` @ `6aa5ed9` — "fix: every explicit sum of products under ratQ.chk ..."
-- Pushed: pending (12 commits ahead of origin/main)
+- Pushed: yes — origin/main @ 594390d
 - Tests: fast 723/0 · normal 24/0 (09-25) · slow 100/0 (09-23)
 - Known reds: none; 2 kink tests in biconjCPLQTest quarantined (runtime)
 
