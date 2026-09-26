@@ -140,7 +140,7 @@ end
 function tf = atLeastAsLarge(fj, fi, Li)
 % Is v_j >= v_i on the region Li? The difference is a quadratic once both denominators are cleared,
 % and `ratQ.quadSignOnPoly` decides its sign on a polygon exactly.
-    num = ratQ.chk(fj.num * fi.den - fi.num * fj.den, 'value difference');
+    num = ratQ.chkB(fj.num * fi.den - fi.num * fj.den, abs(fj.num) * abs(fi.den) + abs(fi.num) * abs(fj.den), 'value difference');
     if any(num(1:4) ~= 0)
         tf = false;  return                       % a cubic difference: outside this test's reach
     end

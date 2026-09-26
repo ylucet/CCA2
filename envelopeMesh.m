@@ -338,7 +338,7 @@ function [c, sgn] = diffConicOf(fj, fi)
 % canonically. Both denominators are positive integers, so the difference's sign is the sign of
 % num_j*den_i - num_i*den_j; `ratQ.conic` may flip the whole conic to make its leading entry
 % positive, and `sgn` carries that flip.
-    num = ratQ.chk(fj.num * fi.den - fi.num * fj.den, 'face difference');
+    num = ratQ.chkB(fj.num * fi.den - fi.num * fj.den, abs(fj.num) * abs(fi.den) + abs(fi.num) * abs(fj.den), 'face difference');
     raw = [num(5), 2*num(6), num(7), 2*num(8), 2*num(9), 2*num(10)];
     if all(raw == 0) || any(num(1:4) ~= 0), c = [];  sgn = 0;  return, end
     nz = find(raw ~= 0, 1);

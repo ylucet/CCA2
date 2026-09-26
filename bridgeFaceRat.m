@@ -130,8 +130,8 @@ function [face, info] = buildFace(u, w, nu, rq, rl, rc, rd, b1, k1, d, P)
 
     % value*(nu*d*rd) = rd*(t*uy + ...) ... collect:  A + B t + C t^2 with
     C = ratQ.chk(rq * wy,                         'C');            % from r(t)'s t^2 term
-    B = ratQ.chk(rd * uy + rl * wy,               'B');
-    A = ratQ.chk(rc * wy - [0, 0, nu*rd*k1],      'A');
+    B = ratQ.chkB(rd * uy + rl * wy, abs(rd) * abs(uy) + abs(rl) * abs(wy), 'B');
+    A = ratQ.chkB(rc * wy - [0, 0, nu*rd*k1], abs(rc) * abs(wy) + [0, 0, abs(nu*rd*k1)], 'A');
     % the common scaling: value = (A + B t + C t^2) / (nu * d * rd)
     scale = ratQ.chk(nu * d * rd, 'value scaling');
 

@@ -262,7 +262,7 @@ function h = biconjQ(obj)
                     % (H*v + L)'d at every vertex v of the piece, cleared by the POSITIVE vd.
                     for i = 1:numel(vsk)
                         v = Vi(vsk(i), :).';
-                        rate = ratQ.chk((Hk*v + vd*Lk).' * d, 'recession slope at a vertex');
+                        rate = ratQ.chkB((Hk*v + vd*Lk).' * d, (abs(Hk)*abs(v) + abs(vd)*abs(Lk)).' * abs(d), 'recession slope at a vertex');
                         if rate < 0, diverges = true; break, end
                     end
                     if diverges, break, end
@@ -512,7 +512,7 @@ function h = concaveEnvelope(obj)
             rho = [];
             for i = 1:numel(vsk)
                 v = Vi(vsk(i), :).';
-                ri = ratQ.chk((Hn*v + vd*Ln).' * d, 'lifted ray height');
+                ri = ratQ.chkB((Hn*v + vd*Ln).' * d, (abs(Hn)*abs(v) + abs(vd)*abs(Ln)).' * abs(d), 'lifted ray height');
                 if isempty(rho) || ri < rho, rho = ri; end
             end
             R3(end+1,:) = [ratQ.chk(2*Lden*vd*d(1), 'lift ray x'), ...
@@ -521,7 +521,7 @@ function h = concaveEnvelope(obj)
         end
         for i = 1:numel(vsk)
             v  = Vi(vsk(i), :).';
-            qv = ratQ.chk(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), 'vertex value');
+            qv = ratQ.chkB(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), abs(scale) * (abs(v).'*abs(Hn)*abs(v) + 2*abs(vd)*(abs(Ln).'*abs(v)) + 2*vd^2*abs(kn)), 'vertex value');
             key = vsk(i);
             if ~isKey(lifted, key) || qv < lifted(key)
                 lifted(key) = qv;
@@ -694,7 +694,7 @@ function rows = hullHalfPlanes(Vi, vd, vs, dirs)
             c0 = ratQ.chk(-(n * p.'), 'offset');
             sgn = 0;  ok = true;
             for i = 1:m
-                t = ratQ.chk(n(1)*Vi(vs(i),1) + n(2)*Vi(vs(i),2) + c0, 'hull side');
+                t = ratQ.chkB(n(1)*Vi(vs(i),1) + n(2)*Vi(vs(i),2) + c0, abs(n(1)*Vi(vs(i),1)) + abs(n(2)*Vi(vs(i),2)) + abs(c0), 'hull side');
                 if t == 0, continue, end
                 if sgn == 0, sgn = sign(t);
                 elseif sign(t) ~= sgn, ok = false; break
@@ -753,7 +753,7 @@ function rows = polygonHalfPlanes(obj, Vi, vd, vs, k, rays)
         sgn = 0;
         for i = 1:numel(vs)
             v = Vi(vs(i), :);
-            t = ratQ.chk(n(1)*v(1) + n(2)*v(2) + c0, 'side');
+            t = ratQ.chkB(n(1)*v(1) + n(2)*v(2) + c0, abs(n(1)*v(1)) + abs(n(2)*v(2)) + abs(c0), 'side');
             if t ~= 0, sgn = sign(t); break, end
         end
         if sgn == 0 && nargin >= 6
@@ -819,7 +819,7 @@ function h = quaPolAsQuaCon(obj)
         for r = 1:size(rows,1)
             for i = 1:numel(vs)
                 v = Vi(vs(i), :);
-                if ratQ.chk(rows(r,1)*v(1) + rows(r,2)*v(2) + vd*rows(r,3), 'convexity') < 0
+                if ratQ.chkB(rows(r,1)*v(1) + rows(r,2)*v(2) + vd*rows(r,3), abs(rows(r,1)*v(1)) + abs(rows(r,2)*v(2)) + abs(vd*rows(r,3)), 'convexity') < 0
                     error('PLQ:biconjQ:nonConvexPiece', ...
                         ['piece %d is NOT CONVEX, and co f = f here, so the answer must carry ' ...
                          'that same non-convex region -- which an intersection of half-planes ' ...
@@ -828,7 +828,7 @@ function h = quaPolAsQuaCon(obj)
                 end
             end
             for q = 1:size(rays,1)
-                if ratQ.chk(rows(r,1)*rays(q,1) + rows(r,2)*rays(q,2), 'convexity') < 0
+                if ratQ.chkB(rows(r,1)*rays(q,1) + rows(r,2)*rays(q,2), abs(rows(r,1)*rays(q,1)) + abs(rows(r,2)*rays(q,2)), 'convexity') < 0
                     error('PLQ:biconjQ:nonConvexPiece', ...
                         'piece %d recedes along (%d,%d), leaving one of its own half-planes.', ...
                         k, rays(q,1), rays(q,2));
@@ -961,7 +961,7 @@ function h = collinearChainEnvelope(obj)
         for e = 1:2
             iv = obj.E(j,e);
             v  = Vi(iv,:).';
-            qv = ratQ.chk(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), 'vertex value');
+            qv = ratQ.chkB(scale * (v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn), abs(scale) * (abs(v).'*abs(Hn)*abs(v) + 2*abs(vd)*(abs(Ln).'*abs(v)) + 2*vd^2*abs(kn)), 'vertex value');
             if ~isKey(lifted, iv) || qv < lifted(iv), lifted(iv) = qv; end
         end
     end
@@ -982,7 +982,7 @@ function h = collinearChainEnvelope(obj)
     for i = 1:m
         while numel(st) >= 2
             o = st(end-1);  a1 = st(end);
-            cr = ratQ.chk((T(a1)-T(o))*(Z(i)-Z(o)) - (Z(a1)-Z(o))*(T(i)-T(o)), 'hull turn');
+            cr = ratQ.chkB((T(a1)-T(o))*(Z(i)-Z(o)) - (Z(a1)-Z(o))*(T(i)-T(o)), abs(T(a1)-T(o))*abs(Z(i)-Z(o)) + abs(Z(a1)-Z(o))*abs(T(i)-T(o)), 'hull turn');
             if cr <= 0, st(end) = []; else, break, end
         end
         st(end+1) = i; %#ok<AGROW>
@@ -1005,7 +1005,7 @@ function h = collinearChainEnvelope(obj)
         % Z(x)*DT = DZ*vd*<d,x> + (Z_p*DT - DZ*(A.d + T_p)),  over Dl*DT.
         num = [0 0 0 0, 0, 0, 0, ...
                ratQ.chk(DZ*vd*d(1), 'c8'), ratQ.chk(DZ*vd*d(2), 'c9'), ...
-               ratQ.chk(Z(p)*DT - DZ*(Ad + T(p)), 'c10')];
+               ratQ.chkB(Z(p)*DT - DZ*(Ad + T(p)), abs(Z(p)*DT) + abs(DZ)*(abs(Ad) + abs(T(p))), 'c10')];
         den = ratQ.chk(Dl * DT, 'cell denominator');
         % t(x) >= T_p and t(x) <= T_q, at ACTUAL coordinates (linear part scaled by vd).
         lo = [ratQ.chk(vd*d(1),'s1'),  ratQ.chk(vd*d(2),'s2'),  ratQ.chk(-(Ad + T(p)),'s0')];
@@ -1045,7 +1045,7 @@ function h = thinEnvelope(obj)
     if isempty(obj.E)
         % ---- a NEEDLE ------------------------------------------------------------------------
         p  = Vi(1,:).';
-        qp = ratQ.chk(p.'*Hn*p + 2*vd*(Ln.'*p) + 2*vd^2*kn, 'needle value');   % over 2*fD*vd^2
+        qp = ratQ.chkB(p.'*Hn*p + 2*vd*(Ln.'*p) + 2*vd^2*kn, abs(p).'*abs(Hn)*abs(p) + 2*abs(vd)*(abs(Ln).'*abs(p)) + 2*vd^2*abs(kn), 'needle value');   % over 2*fD*vd^2
         r1 = [ratQ.chk(vd,'e1'), 0, ratQ.chk(-p(1),'e0')];
         r2 = [0, ratQ.chk(vd,'e1'), ratQ.chk(-p(2),'e0')];
         con = [ratQ.conic([0 0 0, r1]), 0; ratQ.conic([0 0 0, r2]), 0];
@@ -1080,8 +1080,8 @@ function h = thinEnvelope(obj)
     n  = [d(2); -d(1)];
     c0 = ratQ.chk(-(n.' * a), 'line offset');
     rows = [ratQ.chk(vd*n(1),'l1'), ratQ.chk(vd*n(2),'l2'), c0];          % ON the line
-    lo   = [ratQ.chk(vd*d(1),'s1'), ratQ.chk(vd*d(2),'s2'), ratQ.chk(-(d.'*a),'s0')];
-    hi   = [ratQ.chk(-vd*d(1),'t1'), ratQ.chk(-vd*d(2),'t2'), ratQ.chk(d.'*b,'t0')];
+    lo   = [ratQ.chk(vd*d(1),'s1'), ratQ.chk(vd*d(2),'s2'), ratQ.chkB(-(d.'*a), abs(d).'*abs(a), 's0')];
+    hi   = [ratQ.chk(-vd*d(1),'t1'), ratQ.chk(-vd*d(2),'t2'), ratQ.chkB(d.'*b, abs(d).'*abs(b), 't0')];
     con  = [ratQ.conic([0 0 0, rows]), 0; ...
             ratQ.conic([0 0 0, lo]), sgnOfB(lo, +1); ...
             ratQ.conic([0 0 0, hi]), sgnOfB(hi, +1)];
@@ -1093,12 +1093,12 @@ function h = thinEnvelope(obj)
         % q curves DOWN along the segment: the envelope is the CHORD, the affine interpolant of the
         % two endpoint values. Written over 2*fD*vd^2*(d.d), and checked to reproduce q(a) and q(b)
         % exactly at the ends.
-        qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'endpoint value');
-        qb = ratQ.chk(b.'*Hn*b + 2*vd*(Ln.'*b) + 2*vd^2*kn, 'endpoint value');
+        qa = ratQ.chkB(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, abs(a).'*abs(Hn)*abs(a) + 2*abs(vd)*(abs(Ln).'*abs(a)) + 2*vd^2*abs(kn), 'endpoint value');
+        qb = ratQ.chkB(b.'*Hn*b + 2*vd*(Ln.'*b) + 2*vd^2*kn, abs(b).'*abs(Hn)*abs(b) + 2*abs(vd)*(abs(Ln).'*abs(b)) + 2*vd^2*abs(kn), 'endpoint value');
         dd = ratQ.chk(d.'*d, 'segment length squared');
         num = [0 0 0 0, 0, 0, 0, ...
                ratQ.chk((qb-qa)*vd*d(1), 'c8'), ratQ.chk((qb-qa)*vd*d(2), 'c9'), ...
-               ratQ.chk(qa*dd - (qb-qa)*(a.'*d), 'c10')];
+               ratQ.chkB(qa*dd - (qb-qa)*(a.'*d), abs(qa*dd) + abs(qb-qa)*(abs(a).'*abs(d)), 'c10')];
         den = ratQ.chk(2*fD*vd^2*dd, 'chord denominator');
     end
     h = assembleQuaConCells(struct('num', num, 'den', den, 'con', con));

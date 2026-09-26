@@ -127,7 +127,8 @@ function [tf, why] = isConvexQ(obj)
         [P2, D2] = vertexOf(obj, obj.E(j,2));
 
         % a and the edge, both cleared of denominators by the POSITIVE factor D1*D2.
-        a = ratQ.chk([-(P2(2)*D1 - P1(2)*D2), P2(1)*D1 - P1(1)*D2], 'edge normal');
+        a = ratQ.chkB([-(P2(2)*D1 - P1(2)*D2), P2(1)*D1 - P1(1)*D2], ...
+                      [abs(P2(2)*D1) + abs(P1(2)*D2), abs(P2(1)*D1) + abs(P1(1)*D2)], 'edge normal');
         if all(a == 0)
             error('PLQ:isConvexQ:degenerateEdge', ...
                 'edge %d has both endpoints at the same vertex, so it has no normal.', j);
@@ -136,7 +137,8 @@ function [tf, why] = isConvexQ(obj)
         % ---- (b) continuity: d vanishes on the edge LINE. d restricted to the line is a
         % univariate quadratic, so three distinct points decide it (Singh-Lucet Proposition 3.1;
         % Remark 3.2 counts the three parameters). The midpoint is the third.
-        Pm = ratQ.chk([P1(1)*D2 + P2(1)*D1, P1(2)*D2 + P2(2)*D1], 'midpoint numerator');
+        Pm = ratQ.chkB([P1(1)*D2 + P2(1)*D1, P1(2)*D2 + P2(2)*D1], ...
+                       [abs(P1(1)*D2) + abs(P2(1)*D1), abs(P1(2)*D2) + abs(P2(2)*D1)], 'midpoint numerator');
         Dm = ratQ.chk(2*D1*D2, 'midpoint denominator');
         if evalNum(dn, P1, D1) ~= 0 || evalNum(dn, P2, D2) ~= 0 || evalNum(dn, Pm, Dm) ~= 0
             tf = false;
@@ -190,8 +192,9 @@ function v = evalNum(n, P, D)
 % [1/6 1/2 1/2 1/6 1/2 1 1/2 1 1 1] (QuaPol.evalPoly), so for a quadratic the value is
 % (n5 x^2)/2 + n6 xy + (n7 y^2)/2 + n8 x + n9 y + n10. Multiplying by the POSITIVE 2*D^2 clears
 % both the halves and the point's denominator and leaves an integer.
-    v = ratQ.chk(n(5)*P(1)^2 + 2*n(6)*P(1)*P(2) + n(7)*P(2)^2 ...
-               + 2*n(8)*P(1)*D + 2*n(9)*P(2)*D + 2*n(10)*D^2, 'jump value');
+    v = ratQ.chkB(n(5)*P(1)^2 + 2*n(6)*P(1)*P(2) + n(7)*P(2)^2 ...
+               + 2*n(8)*P(1)*D + 2*n(9)*P(2)*D + 2*n(10)*D^2, ...
+                abs(n(5:10)) * abs([P(1)^2; 2*P(1)*P(2); P(2)^2; 2*P(1)*D; 2*P(2)*D; 2*D^2]), 'jump value');
 end
 
 % ------------------------------------------------------------------------------------------------
@@ -202,7 +205,7 @@ function s = deltaNum(G, a, P, D)
 % delta = <grad d, a> / |a|^2 with grad d (x) = G*[x;y;1]/dd. Multiplying by the positive
 % D*dd*|a|^2 leaves <G*[P; D], a>, an integer.
     g = ratQ.chk(G * [P(1); P(2); D], 'gradient jump');
-    s = ratQ.chk(g(1)*a(1) + g(2)*a(2), 'delta numerator');
+    s = ratQ.chkB(g(1)*a(1) + g(2)*a(2), abs(g(1)*a(1)) + abs(g(2)*a(2)), 'delta numerator');
 end
 
 % ------------------------------------------------------------------------------------------------
@@ -217,7 +220,7 @@ function [ok, jBad] = domainIsConvex(obj)
         if obj.E(k,3) == 0
             [Q1, C1] = vertexOf(obj, obj.E(k,1));
             [Q2, C2] = vertexOf(obj, obj.E(k,2));
-            rays(end+1,:) = ratQ.chk(Q2*C1 - Q1*C2, 'ray direction'); %#ok<AGROW>
+            rays(end+1,:) = ratQ.chkB(Q2*C1 - Q1*C2, abs(Q2)*abs(C1) + abs(Q1)*abs(C2), 'ray direction'); %#ok<AGROW>
         end
     end
 
@@ -231,20 +234,21 @@ function [ok, jBad] = domainIsConvex(obj)
         [P1, D1] = vertexOf(obj, obj.E(j,1));
         [P2, D2] = vertexOf(obj, obj.E(j,2));
         % l(x) = a'x + c, scaled by the positive D1*D2, is > 0 strictly to the LEFT of the edge.
-        a = ratQ.chk([-(P2(2)*D1 - P1(2)*D2), P2(1)*D1 - P1(1)*D2], 'boundary normal');
-        c = ratQ.chk(P1(1)*P2(2) - P2(1)*P1(2), 'boundary offset');
+        a = ratQ.chkB([-(P2(2)*D1 - P1(2)*D2), P2(1)*D1 - P1(1)*D2], ...
+                      [abs(P2(2)*D1) + abs(P1(2)*D2), abs(P2(1)*D1) + abs(P1(1)*D2)], 'boundary normal');
+        c = ratQ.chkB(P1(1)*P2(2) - P2(1)*P1(2), abs(P1(1)*P2(2)) + abs(P2(1)*P1(2)), 'boundary offset');
         sgn = 1;
         if iL == 0, sgn = -1; end                     % the finite side is the RIGHT one
         % The scales: l at the vertex Q/C is (a'Q + c*C)/(C*D1*D2), and D1*D2 is already inside a
         % and c, so a'Q + c*C carries the sign.
         for i = 1:size(obj.VN,1)
             [Q, C] = vertexOf(obj, i);
-            if sgn * ratQ.chk(a(1)*Q(1) + a(2)*Q(2) + c*C, 'domain half-plane') < 0
+            if sgn * ratQ.chkB(a(1)*Q(1) + a(2)*Q(2) + c*C, abs(a(1)*Q(1)) + abs(a(2)*Q(2)) + abs(c*C), 'domain half-plane') < 0
                 ok = false;  jBad = j;  return
             end
         end
         for r = 1:size(rays,1)
-            if sgn * ratQ.chk(a(1)*rays(r,1) + a(2)*rays(r,2), 'domain recession') < 0
+            if sgn * ratQ.chkB(a(1)*rays(r,1) + a(2)*rays(r,2), abs(a(1)*rays(r,1)) + abs(a(2)*rays(r,2)), 'domain recession') < 0
                 ok = false;  jBad = j;  return
             end
         end

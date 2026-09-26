@@ -140,7 +140,9 @@ function [row, kind] = rowFor(A, B, Q, xw, sg)
         return
     end
     al = Q(1);  be = Q(2);  ga = Q(3);
-    C = ratQ.chk(al*linMul(A,A) - be*linMul(A,B) + ga*linMul(B,B), 'wedge pair conic');
+    C = ratQ.chkB(al*linMul(A,A) - be*linMul(A,B) + ga*linMul(B,B), ...
+                  abs(al)*linMul(abs(A),abs(A)) + abs(be)*linMul(abs(A),abs(B)) + abs(ga)*linMul(abs(B),abs(B)), ...
+                  'wedge pair conic');
     if all(C == 0), kind = 'degenerate';  return, end
     C = ratQ.conic(C);
     try

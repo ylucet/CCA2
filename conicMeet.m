@@ -179,7 +179,9 @@ function C = shearConic(C, k)
 % objective: substitute x = x' + k*y' into the conic, exactly.
 %   a(x'+ky')^2 + b(x'+ky')y' + c y'^2 + d(x'+ky') + e y' + f
     a = C(1); b = C(2); c = C(3); d = C(4); e = C(5); f = C(6);
-    C = ratQ.chk([a, 2*a*k + b, a*k^2 + b*k + c, d, d*k + e, f], 'sheared conic');
+    C = ratQ.chkB([a, 2*a*k + b, a*k^2 + b*k + c, d, d*k + e, f], ...
+        [abs(a), abs(2*a*k) + abs(b), abs(a)*k^2 + abs(b*k) + abs(c), abs(d), abs(d*k) + abs(e), abs(f)], ...
+        'sheared conic');
 end
 
 function q = resultantY(A, B)
@@ -316,7 +318,8 @@ function r = pseudoRem(p, q)
     lq = q(1);
     while numel(r) >= numel(q) && any(r ~= 0)
         shift = numel(r) - numel(q);
-        r = ratQ.chk(lq * r - r(1) * [q, zeros(1, shift)], 'pseudo-remainder');
+        r = ratQ.chkB(lq * r - r(1) * [q, zeros(1, shift)], ...
+                      abs(lq) * abs(r) + abs(r(1)) * abs([q, zeros(1, shift)]), 'pseudo-remainder');
         r = trimPoly(r(2:end));                     % the leading term cancels by construction
         % REMOVE THE CONTENT EVERY STEP, not only at the end. Each reduction multiplies by lc(q),
         % so a chain of them squares the coefficients; measured, a quartic with six-digit entries

@@ -289,12 +289,12 @@ function g = caseAFullDomain(fN, fD)
         m = [Hn(1,1); Hn(1,2)];
         if all(m == 0), m = [Hn(1,2); Hn(2,2)]; end
         mHm = ratQ.chk(m.' * Hn * m, 'range scaling');
-        P = [ratQ.chk(fD*m(1),'p1'), ratQ.chk(fD*m(2),'p2'), ratQ.chk(-(Ln.'*m),'p3')];
+        P = [ratQ.chk(fD*m(1),'p1'), ratQ.chk(fD*m(2),'p2'), ratQ.chkB(-(Ln.'*m), abs(Ln).'*abs(m), 'p3')];
         den = ratQ.chk(2 * mHm * fD, 'line denominator');
         num = [0 0 0 0, ratQ.chk(2*P(1)^2,'c5'), ratQ.chk(2*P(1)*P(2),'c6'), ...
                ratQ.chk(2*P(2)^2,'c7'), ratQ.chk(2*P(1)*P(3),'c8'), ratQ.chk(2*P(2)*P(3),'c9'), ...
                ratQ.chk(P(3)^2 - 2*mHm*fN(10), 'c10')];
-        row = [ratQ.chk(fD*nl(1),'e1'), ratQ.chk(fD*nl(2),'e2'), ratQ.chk(-(Ln.'*nl),'e0')];
+        row = [ratQ.chk(fD*nl(1),'e1'), ratQ.chk(fD*nl(2),'e2'), ratQ.chkB(-(Ln.'*nl), abs(Ln).'*abs(nl), 'e0')];
         g = assembleQuaConCells(struct('num', num, 'den', den, ...
                                        'con', [ratQ.conic([0 0 0, row]), sgnOf(row, 0)]));
         return
@@ -309,7 +309,7 @@ function g = caseAFullDomain(fN, fD)
     c7  = ratQ.chk(2 * fD^2 * A(2,2), 'conjugate c7');
     c8  = ratQ.chk(-2 * fD * ALn(1),  'conjugate c8');
     c9  = ratQ.chk(-2 * fD * ALn(2),  'conjugate c9');
-    c10 = ratQ.chk(Ln' * ALn - 2 * D * fN(10), 'conjugate c10');
+    c10 = ratQ.chkB(Ln' * ALn - 2 * D * fN(10), abs(Ln)' * (abs(A) * abs(Ln)) + 2 * abs(D * fN(10)), 'conjugate c10');
 
     [gN, gD] = ratQ.canon([0 0 0 0, c5, c6, c7, c8, c9, c10], den);
 
@@ -349,8 +349,8 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
     for i = 1:numel(sh.vs)
         vi = sh.vs(i);
         v  = Vi(vi, :).';
-        gv = ratQ.chk(Hn * v + vd * Ln, 'vertex gradient');       % over fD*vd
-        qv = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
+        gv = ratQ.chkB(Hn * v + vd * Ln, abs(Hn) * abs(v) + abs(vd) * abs(Ln), 'vertex gradient');       % over fD*vd
+        qv = ratQ.chkB(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, abs(v).'*abs(Hn)*abs(v) + 2*abs(vd)*(abs(Ln).'*abs(v)) + 2*vd^2*abs(kn), 'vertex value');
         num = [0 0 0 0, 0, 0, 0, ...
                ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv];
 
@@ -360,7 +360,7 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
             ed = dirs{kk};
             % <s - grad q(v), e> <= 0, cleared by fD*vd, written as a >= 0 half-plane
             rows(end+1,:) = [ratQ.chk(-fD*vd*ed(1),'n1'), ratQ.chk(-fD*vd*ed(2),'n2'), ...
-                             ratQ.chk(gv.' * ed, 'n0')]; %#ok<AGROW>
+                             ratQ.chkB(gv.' * ed, abs(gv).' * abs(ed), 'n0')]; %#ok<AGROW>
         end
         [con, ok] = toCon(rows);
         if ok
@@ -379,16 +379,16 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
             error('PLQ:conjQ:degenerateEdge', ...
                 'edge %d has d''Qd = %d <= 0 under a strictly convex Q.', j, alpha);
         end
-        ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
-        qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'edge base value');
-        Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chk(-(ga.'*d),'t0')];
+        ga = ratQ.chkB(Hn * a + vd * Ln, abs(Hn) * abs(a) + abs(vd) * abs(Ln), 'edge base gradient');
+        qa = ratQ.chkB(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, abs(a).'*abs(Hn)*abs(a) + 2*abs(vd)*(abs(Ln).'*abs(a)) + 2*vd^2*abs(kn), 'edge base value');
+        Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chkB(-(ga.'*d), abs(ga).'*abs(d), 't0')];
 
         den = ratQ.chk(2 * alpha * fD * vd^2, 'edge denominator');
         lin = [ratQ.chk(2*alpha*fD*vd*a(1),'c8'), ratQ.chk(2*alpha*fD*vd*a(2),'c9')];
         num = [0 0 0 0, ...
                ratQ.chk(2*Td(1)^2,'c5'), ratQ.chk(2*Td(1)*Td(2),'c6'), ratQ.chk(2*Td(2)^2,'c7'), ...
-               ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
-               ratQ.chk(Td(3)^2 - alpha*qa,'c10')];
+               ratQ.chkB(lin(1) + 2*Td(1)*Td(3), abs(lin(1)) + 2*abs(Td(1)*Td(3)), 'c8'), ratQ.chkB(lin(2) + 2*Td(2)*Td(3), abs(lin(2)) + 2*abs(Td(2)*Td(3)), 'c9'), ...
+               ratQ.chkB(Td(3)^2 - alpha*qa, Td(3)^2 + abs(alpha*qa), 'c10')];
 
         rows = [dom; Td];                                  % 0 <= t*
         if ~e.isRay
@@ -397,9 +397,9 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
         % the multiplier condition, cleared by alpha > 0
         n = outwardNormalOf(sh, j, Vi);
         Hdn = ratQ.chk(d.' * Hn * n, 'edge multiplier coupling');
-        rows(end+1,:) = [ratQ.chk(alpha*fD*vd*n(1) - Td(1)*Hdn, 'm1'), ...
-                         ratQ.chk(alpha*fD*vd*n(2) - Td(2)*Hdn, 'm2'), ...
-                         ratQ.chk(-alpha*(ga.'*n) - Td(3)*Hdn, 'm0')]; %#ok<AGROW>
+        rows(end+1,:) = [ratQ.chkB(alpha*fD*vd*n(1) - Td(1)*Hdn, abs(alpha*fD*vd*n(1)) + abs(Td(1)*Hdn), 'm1'), ...
+                         ratQ.chkB(alpha*fD*vd*n(2) - Td(2)*Hdn, abs(alpha*fD*vd*n(2)) + abs(Td(2)*Hdn), 'm2'), ...
+                         ratQ.chkB(-alpha*(ga.'*n) - Td(3)*Hdn, abs(alpha)*(abs(ga).'*abs(n)) + abs(Td(3)*Hdn), 'm0')]; %#ok<AGROW>
         [con, ok] = toCon(rows);
         if ok
             cells(end+1) = struct('num', num, 'den', den, 'con', con); %#ok<AGROW>
@@ -413,14 +413,14 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
     ALn = A * Ln;
     numI = [0 0 0 0, ratQ.chk(2*fD^2*A(1,1),'c5'), ratQ.chk(2*fD^2*A(1,2),'c6'), ...
             ratQ.chk(2*fD^2*A(2,2),'c7'), ratQ.chk(-2*fD*ALn(1),'c8'), ...
-            ratQ.chk(-2*fD*ALn(2),'c9'), ratQ.chk(Ln.'*ALn - 2*D*kn, 'c10')];
+            ratQ.chk(-2*fD*ALn(2),'c9'), ratQ.chkB(Ln.'*ALn - 2*D*kn, abs(Ln).'*(abs(A)*abs(Ln)) + 2*abs(D*kn), 'c10')];
     rows = dom;
     for r = 1:size(sh.hp,1)
         % hp is [p q c] meaning p*x + q*y + c >= 0 at actual points; substitute x = fD*A*s/D - A*L/D
         p = sh.hp(r,1:2);
         Ap = A.' * p.';
         rows(end+1,:) = [ratQ.chk(fD*Ap(1), 'i1'), ratQ.chk(fD*Ap(2), 'i2'), ...
-                         ratQ.chk(-(Ap.'*Ln) + D*sh.hp(r,3), 'i0')]; %#ok<AGROW>
+                         ratQ.chkB(-(Ap.'*Ln) + D*sh.hp(r,3), (abs(A).'*abs(p.')).'*abs(Ln) + abs(D*sh.hp(r,3)), 'i0')]; %#ok<AGROW>
     end
     [con, ok] = toCon(rows);
     if ok
@@ -558,7 +558,7 @@ function sh = pieceShape(obj, k, Vi, vd)
         sgn = 0;
         for i = 1:numel(sh.vs)
             v = Vi(sh.vs(i), :);
-            t = ratQ.chk(n(1)*v(1) + n(2)*v(2) + c0, 'vertex side');
+            t = ratQ.chkB(n(1)*v(1) + n(2)*v(2) + c0, abs(n(1)*v(1)) + abs(n(2)*v(2)) + abs(c0), 'vertex side');
             if t ~= 0, sgn = sign(t); break, end
         end
         if sgn == 0
@@ -601,7 +601,7 @@ function sh = pieceShape(obj, k, Vi, vd)
         % smaller set the half-planes cut out (measured on an L: 54 of 303 dual points too low).
         for i = 1:numel(sh.vs)
             v = Vi(sh.vs(i), :);
-            if ratQ.chk(sgn * (n(1)*v(1) + n(2)*v(2) + c0), 'convexity') < 0
+            if ratQ.chkB(sgn * (n(1)*v(1) + n(2)*v(2) + c0), abs(n(1)*v(1)) + abs(n(2)*v(2)) + abs(c0), 'convexity') < 0
                 sh.convex = false;
             end
         end
@@ -696,9 +696,9 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
                 end
                 for c = 1:numel(cand)
                     d = cand{c};
-                    if ratQ.chk(p.' * d, 'cone membership') < 0, continue, end
+                    if ratQ.chkB(p.' * d, abs(p).' * abs(d), 'cone membership') < 0, continue, end
                     row = [ratQ.chk(-fD*vd*d(1), 'r1'), ratQ.chk(-fD*vd*d(2), 'r2'), ...
-                           ratQ.chk(vd*(Ln.'*d), 'r0')];
+                           ratQ.chkB(vd*(Ln.'*d), abs(vd)*(abs(Ln).'*abs(d)), 'r0')];
                     if all(row == 0), continue, end
                     dom(end+1,:) = row; %#ok<AGROW>
                 end
@@ -751,7 +751,7 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
 
         % <s,d> - (Ln.d)/fD <= mu/vd, cleared by fD*vd > 0 and written as a >= 0 half-plane
         row = [ratQ.chk(-fD*vd*d(1), 'r1'), ratQ.chk(-fD*vd*d(2), 'r2'), ...
-               ratQ.chk(fD*mu + vd*(Ln.'*d), 'r0')];
+               ratQ.chkB(fD*mu + vd*(Ln.'*d), abs(fD*mu) + abs(vd)*(abs(Ln).'*abs(d)), 'r0')];
         if all(row == 0), continue, end
         dom(end+1,:) = row; %#ok<AGROW>
     end
@@ -796,7 +796,7 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom)
     qv = zeros(m,1);  numV = zeros(m,10);
     for i = 1:m
         v = Vi(sh.vs(i), :).';
-        qv(i) = ratQ.chk(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, 'vertex value');
+        qv(i) = ratQ.chkB(v.'*Hn*v + 2*vd*(Ln.'*v) + 2*vd^2*kn, abs(v).'*abs(Hn)*abs(v) + 2*abs(vd)*(abs(Ln).'*abs(v)) + 2*vd^2*abs(kn), 'vertex value');
         numV(i,:) = [0 0 0 0, 0, 0, 0, ...
                      ratQ.chk(2*fD*vd*v(1),'c8'), ratQ.chk(2*fD*vd*v(2),'c9'), -qv(i)];
     end
@@ -808,17 +808,17 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom)
         alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
         if alpha <= 0, continue, end
         a  = Vi(e.a, :).';
-        ga = ratQ.chk(Hn * a + vd * Ln, 'edge base gradient');
-        qa = ratQ.chk(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, 'edge base value');
-        Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chk(-(ga.'*d),'t0')];
+        ga = ratQ.chkB(Hn * a + vd * Ln, abs(Hn) * abs(a) + abs(vd) * abs(Ln), 'edge base gradient');
+        qa = ratQ.chkB(a.'*Hn*a + 2*vd*(Ln.'*a) + 2*vd^2*kn, abs(a).'*abs(Hn)*abs(a) + 2*abs(vd)*(abs(Ln).'*abs(a)) + 2*vd^2*abs(kn), 'edge base value');
+        Td = [ratQ.chk(fD*vd*d(1),'t1'), ratQ.chk(fD*vd*d(2),'t2'), ratQ.chkB(-(ga.'*d), abs(ga).'*abs(d), 't0')];
         lin = [ratQ.chk(2*alpha*fD*vd*a(1),'c8'), ratQ.chk(2*alpha*fD*vd*a(2),'c9')];
         Ed(end+1) = struct('Td', Td, 'alpha', alpha, ...
             'num', [0 0 0 0, ...
                     ratQ.chk(2*Td(1)^2,'c5'), ratQ.chk(2*Td(1)*Td(2),'c6'), ...
                     ratQ.chk(2*Td(2)^2,'c7'), ...
-                    ratQ.chk(lin(1) + 2*Td(1)*Td(3),'c8'), ...
-                    ratQ.chk(lin(2) + 2*Td(2)*Td(3),'c9'), ...
-                    ratQ.chk(Td(3)^2 - alpha*qa,'c10')], ...
+                    ratQ.chkB(lin(1) + 2*Td(1)*Td(3), abs(lin(1)) + 2*abs(Td(1)*Td(3)), 'c8'), ...
+                    ratQ.chkB(lin(2) + 2*Td(2)*Td(3), abs(lin(2)) + 2*abs(Td(2)*Td(3)), 'c9'), ...
+                    ratQ.chkB(Td(3)^2 - alpha*qa, Td(3)^2 + abs(alpha*qa), 'c10')], ...
             'den', ratQ.chk(2*alpha*fD*vd^2, 'edge denominator'), 'isRay', e.isRay); %#ok<AGROW>
     end
 
@@ -935,7 +935,7 @@ function A2 = twiceArea(Vi, cyc)
     m = numel(cyc);
     for i = 1:m
         p = Vi(cyc(i), :);  q = Vi(cyc(mod(i, m) + 1), :);
-        A2 = A2 + ratQ.chk(p(1)*q(2) - p(2)*q(1), 'signed area');
+        A2 = A2 + ratQ.chkB(p(1)*q(2) - p(2)*q(1), abs(p(1)*q(2)) + abs(p(2)*q(1)), 'signed area');
     end
     A2 = ratQ.chk(A2, 'signed area');
 end
@@ -1059,7 +1059,7 @@ function sh = triangleShape(Vi, vd, tri)
         sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false); %#ok<AGROW>
         n = [d(2), -d(1)];
         c0 = ratQ.chk(-(n * Vi(a,:).'), 'offset');
-        t  = ratQ.chk(n(1)*Vi(o,1) + n(2)*Vi(o,2) + c0, 'third vertex side');
+        t  = ratQ.chkB(n(1)*Vi(o,1) + n(2)*Vi(o,2) + c0, abs(n(1)*Vi(o,1)) + abs(n(2)*Vi(o,2)) + abs(c0), 'third vertex side');
         if t == 0
             error('PLQ:conjQ:degenerate', 'a split triangle has zero area.');
         end

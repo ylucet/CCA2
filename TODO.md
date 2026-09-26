@@ -28,14 +28,16 @@ DOES carry the value and cannot be reduced the same way.
       `bridgeCompetes`). The three overflows before it are fixed (DECISIONS.md 2026-09-25). Reproduce
       in ~90 s: `biconjQ` of the poly2 kink at c = -2; the refusal message names the reason.
 
-- [ ] **`ratQ.chk` on a SUM OF PRODUCTS can return a WRONG SIGN silently -- audit 80 sites.** Found
-      2026-09-25 in `ratQ.feasible2`: it checked each difference, not each product, so two products
-      of ~1e18 were rounded, cancelled to something small, passed the check and had the wrong sign
-      -- `feasible2` said "empty" for a nonempty interval. Fixed there (`ratQ.mulChk` per product,
-      BigInteger fallback). The same pattern -- `chk(a*b - c*d)` -- is at 80 other sites (`grep -E
-      "chk\(.*\*.*[-+].*\*"`), in ratQ, biconjQ, assembleQuaConCells, algCurveSide and more. Each is
-      exact only while every PRODUCT is below 2^53; none of them checks that. Fix: `mulChk` each
-      product (or `chk` a bound on the sum of |products|), with a test per routine at ~1e9 inputs.
+- [ ] **Matrix and dot products inside `ratQ.chk` -- the rest of the exact-sum audit.** The EXPLICIT
+      sums are DONE (2026-09-25): all 81 sites in 13 files go through `ratQ.chkB(value,
+      |expression|, what)`, which refuses once the terms reach 2^53; `ratQ.detExact` and `ratQ.add`
+      were measured returning WRONG values and now take BigInteger past the bound, and
+      `exactSumLintTest` (fast) keeps the explicit form from coming back. LEFT: about 118 `chk`
+      calls wrap a matrix or dot product (`chk(N*s + m)`, `chk(a.'*w)`), which hides the same sum
+      behind one `*` -- the lint cannot tell those from a scalar product, which is safe. conjQ's
+      and bridgeArcCut's were converted where seen; the rest need reading one by one. Also
+      unchecked: products assigned WITHOUT any chk (`ALn = A*Ln`), whose rounding a later chkB
+      only bounds if its bound is written through the original factors.
 
 - [ ] **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
       parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area

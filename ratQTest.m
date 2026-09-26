@@ -391,6 +391,18 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyTrue (ratQ.feasible2([B 1 -(B-1); -C 1 (C-1); 0 -1 0]), 'through FM: nonempty');
         end
 
+        function chkBRefusesExactlyWhereAProductMayHaveBeenRounded(testCase)
+        % The guard every sum-of-products site now uses: the value is returned while the bound (the
+        % expression in absolute values) is below 2^53, where every product and partial sum is an
+        % exact double, and ratQ:overflow is raised from 2^53 on -- even when the VALUE is tiny,
+        % because that is exactly the case a check on the value alone lets through.
+            testCase.verifyEqual(ratQ.chkB(7, 2^53 - 2, 'below'), 7);
+            testCase.verifyEqual(ratQ.chkB([1 -2], [3 4], 'vector'), [1 -2]);
+            testCase.verifyError(@() ratQ.chkB(1, 2^53, 'at'), 'ratQ:overflow');
+            testCase.verifyError(@() ratQ.chkB([0 1], [5 1e18], 'one entry past'), 'ratQ:overflow');
+            testCase.verifyError(@() ratQ.chkB([0 1; 2 3], [5 1e18; 2^53 1], 'matrix'), 'ratQ:overflow');
+        end
+
         function aCANCELLINGSumOfProductsIsExactOrRefusedNeverWrong(testCase)
         % The defect feasible2 had, asked of every ratQ routine that sums products: inputs whose
         % ANSWER is small but whose PRODUCTS pass 2^53, so each product is rounded and the rounded

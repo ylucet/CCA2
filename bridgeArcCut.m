@@ -96,8 +96,8 @@ function [cells, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit, C1, C2, kp
     lo = [];  hi = [];                                   % rational bounds as [num den], den > 0
     for i = 1:size(P,1)
         a = P(i,1:2).';  c = P(i,3);
-        A = ratQ.chk(a.'*w, 'arc bound slope');
-        B = ratQ.chk(a.'*s0n + c*nd, 'arc bound constant');
+        A = ratQ.chkB(a.'*w, abs(a).'*abs(w), 'arc bound slope');
+        B = ratQ.chkB(a.'*s0n + c*nd, abs(a).'*abs(s0n) + abs(c*nd), 'arc bound constant');
         if A == 0
             % The row does not vary along the tie: it holds on all of it or on none of it.
             if B < 0
@@ -141,11 +141,11 @@ function row = endpointRow(tau, w, s0n, nd, N1, m1, N2, m2, d, wit)
 % with that normal is the boundary, and the side is read at the witness -- which is a point of the
 % face, so it names the side the face is on rather than a side someone chose.
     tn = tau(1);  td = tau(2);
-    seN = ratQ.chk(s0n*td + tn*w, 'arc endpoint');       % s_e = seN / seD
+    seN = ratQ.chkB(s0n*td + tn*w, abs(s0n)*abs(td) + abs(tn)*abs(w), 'arc endpoint');   % s_e = seN / seD
     seD = ratQ.chk(nd*td,         'arc endpoint denominator');
 
-    P1n = ratQ.chk(N1*seN + seD*m1, 'grad g1 at the endpoint');   % grad g1 = P1n/(d*seD)
-    P2n = ratQ.chk(N2*seN + seD*m2, 'grad g2 at the endpoint');
+    P1n = ratQ.chkB(N1*seN + seD*m1, abs(N1)*abs(seN) + abs(seD)*abs(m1), 'grad g1 at the endpoint');   % grad g1 = P1n/(d*seD)
+    P2n = ratQ.chkB(N2*seN + seD*m2, abs(N2)*abs(seN) + abs(seD)*abs(m2), 'grad g2 at the endpoint');
     dir = P2n - P1n;
     if all(dir == 0), row = []; return, end              % the two gradients agree: no segment
 

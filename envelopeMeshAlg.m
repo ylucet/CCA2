@@ -162,7 +162,7 @@ end
 % --------------------------------------------------------------------------------------------------
 function [c, sgn] = diffConic(fw, fj)
 % The curve {v_w = v_j}, with the sign that means "w is the larger", as `envelopeMesh` spells it.
-    num = ratQ.chk(fw.num * fj.den - fj.num * fw.den, 'face difference');
+    num = ratQ.chkB(fw.num * fj.den - fj.num * fw.den, abs(fw.num) * abs(fj.den) + abs(fj.num) * abs(fw.den), 'face difference');
     raw = [num(5), 2*num(6), num(7), 2*num(8), 2*num(9), 2*num(10)];
     if all(raw == 0) || any(num(1:4) ~= 0), c = [];  sgn = 0;  return, end
     nz = find(raw ~= 0, 1);

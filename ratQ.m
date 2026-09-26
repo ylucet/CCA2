@@ -124,7 +124,7 @@ classdef ratQ
             l = lcm(d1, d2);
             ratQ.chk(l, 'common denominator');
             if abs(n1) * (l/d1) + abs(n2) * (l/d2) < 2^53
-                n = ratQ.chk(n1 * (l/d1) + n2 * (l/d2), 'sum numerator');
+                n = ratQ.chkB(n1 * (l/d1) + n2 * (l/d2), abs(n1) * (l/d1) + abs(n2) * (l/d2), 'sum numerator');
                 [n, d] = ratQ.canon(n, l);
                 return
             end
@@ -320,7 +320,7 @@ classdef ratQ
                     if abs(A(1,1))*abs(A(2,2)) + abs(A(1,2))*abs(A(2,1)) >= 2^53
                         D = ratQ.detBig(A);  return          % products past 2^53: see detBig
                     end
-                    D = ratQ.chk(A(1,1)*A(2,2) - A(1,2)*A(2,1), 'determinant');
+                    D = ratQ.chkB(A(1,1)*A(2,2) - A(1,2)*A(2,1), abs(A(1,1)*A(2,2)) + abs(A(1,2)*A(2,1)), 'determinant');
                 case 3
                     aA = abs(A);
                     if aA(1,1)*(aA(2,2)*aA(3,3) + aA(2,3)*aA(3,2)) + ...
@@ -363,10 +363,13 @@ classdef ratQ
         % absolute value and every sign +. Below 2^53 every product and every partial sum is an
         % exact double; at or above it one may have been rounded, and a cancelling result can be
         % small and wrong while passing a check on itself -- so this raises instead.
-            if bound >= 2^53
+            if any(bound(:) >= 2^53)
+                % max(...) because `error`, unlike sprintf, does not expand an array across format
+                % specifiers -- a vector here made the guard raise MATLAB:error:nonScalarInput
+                % instead of itself, the QuaPar:size defect over again (DECISIONS 2026-09-06).
                 error('ratQ:overflow', ['%s: its terms reach %.17g, at or beyond 2^53, so a ' ...
                       'product may have been rounded. Widen the integer type; do NOT introduce ' ...
-                      'a tolerance.'], what, bound);
+                      'a tolerance.'], what, max(bound(:)));
             end
             v = ratQ.chk(v, what);
         end
