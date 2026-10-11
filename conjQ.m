@@ -205,6 +205,12 @@ function [g, dom] = conjPieceQ(obj, k)
         return
     end
 
+    [gT, isThin] = linealityConj(obj, k, sh, Hn, fN, fD, Vi, vd);
+    if isThin
+        g = gT;                                % dom f* is a LINE (or part of one): see there
+        return
+    end
+
     if Hn(1,1) > 0 && D > 0
         g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom);     % strictly convex: KKT active set
     else
@@ -1195,5 +1201,67 @@ function P = onePart(V, E, ip, q)
         if d(1)*(ip(2) - a(2)) - d(2)*(ip(1) - a(1)) > 0, F(e,:) = [1 0]; else, F(e,:) = [0 1]; end
     end
     P = QuaPol(V, E, q, F);
+end
+
+% ------------------------------------------------------------------------------------------------
+function [g, isThin] = linealityConj(obj, k, sh, Hn, fN, fD, Vi, vd)
+% objective: the conjugate of a convex piece that contains a whole LINE along which q has no
+%            curvature -- the case whose dom f* is THIN.
+%
+% If every boundary line of the piece is parallel to d (a half-plane or a slab) and H d = 0, then
+% the piece is P' + span(d), P' its cross-section on a line across d, and f(x + t d) = f(x) +
+% t <L,d>. So
+%       f*(s) = sup_{x' in P', t}  <s,x'> - f(x') + t (<s,d> - <L,d>)
+% is +infinity unless <s,d> = <L,d>, and on that line it is (f restricted to P')*(s): a domain of
+% dimension < 2, which conjPieceQ already answers on the whole plane. The answer is that function's
+% cells, each cut to the line by an EQUALITY row (side 0, as caseAFullDomain spells a line).
+%
+% Found 2026-10-11: conjQ returned +infinity EVERYWHERE for such pieces (f = 0 on a half-plane,
+% f = y^2 + x on one), because the domain rows it derived were an equality pair and the 2-D cases
+% downstream have no 2-D cell to put the answer in.
+    g = [];  isThin = false;
+    if size(sh.hp,1) < 1 || ~isempty(sh.rays) && size(sh.rays,1) ~= 2, return, end
+    N = sh.hp(:,1:2);
+    p = N(1,:) / max(1, gcd(abs(N(1,1)), abs(N(1,2))));
+    for i = 2:size(N,1)
+        if ratQ.chkB(N(i,1)*p(2) - N(i,2)*p(1), abs(N(i,1)*p(2)) + abs(N(i,2)*p(1)), 'parallel') ~= 0
+            return                                       % two directions: no line in the piece
+        end
+    end
+    d = [-p(2); p(1)];
+    if any(ratQ.chkB(Hn*d, abs(Hn)*abs(d), 'null image') ~= 0), return, end   % curvature along d
+    % the cross-section through a vertex v, along p: x = v + t p, each row a*x + c >= 0 a bound on t
+    v = Vi(sh.vs(1),:) / vd;
+    lo = -inf;  hi = inf;
+    for i = 1:size(sh.hp,1)
+        a = sh.hp(i,1:2);  c = sh.hp(i,3);
+        coef = a*p.';  rhs = -(a*v.' + c);               % coef * t >= rhs
+        if coef > 0, lo = max(lo, rhs/coef); else, hi = min(hi, rhs/coef); end
+    end
+    row = fN;
+    if isfinite(lo) && isfinite(hi)
+        if lo == hi, Pp = QuaPol(v + lo*p, zeros(0,3), row, zeros(0,2));
+        else, Pp = QuaPol([v + lo*p; v + hi*p], [1 2 1], row, [0 0]); end
+    elseif isfinite(lo)
+        Pp = QuaPol([v + lo*p; v + (lo+1)*p], [1 2 0], row, [0 0]);
+    elseif isfinite(hi)
+        Pp = QuaPol([v + hi*p; v + (hi-1)*p], [1 2 0], row, [0 0]);
+    else
+        return                                           % no bound across d: the plane, caseA's
+    end
+    gP = conjPieceQ(Pp, 1);
+    Ln = [fN(8); fN(9)];
+    eq = [ratQ.chk(fD*d(1), 'line e1'), ratQ.chk(fD*d(2), 'line e2'), ...
+          ratQ.chkB(-(Ln.'*d), abs(Ln).'*abs(d), 'line e0')];      % fD <s,d> - <Ln,d> = 0
+    eqRow = [ratQ.conic([0 0 0, eq]), sgnOf(eq, 0), 0];
+    cells = struct('num', {}, 'den', {}, 'con', {});
+    for f = 1:gP.nf
+        FC = gP.FC{f};
+        con = zeros(0,8);
+        if ~isempty(FC), con = [gP.EcQ(FC(:,1),:), FC(:,2), FC(:,3)]; end
+        cells(end+1) = struct('num', gP.fN(f,:), 'den', gP.fD(f), 'con', [con; eqRow]); %#ok<AGROW>
+    end
+    g = assembleQuaConCells(cells);
+    isThin = true;
 end
 

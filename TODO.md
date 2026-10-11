@@ -68,6 +68,13 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Done recently
 
+- [x] **conj: a piece containing a LINE without curvature had f* = +inf everywhere** -- FIXED
+      2026-10-11. Its dom f* is a line or a point (f = 0 on a half-plane; y^2 + x on one), which
+      random test points never hit. Now: the cross-section's conjugate, cut to the line by an
+      equality row. New normal-bucket conjDefinitionAuditTest checks every answered example
+      against the definition, with an integer grid of s so thin domains are hit; it was red on
+      the old code at exactly examplesDiscontinuous{1} and {3}.
+
 - [x] **conjQ on a NON-CONVEX UNBOUNDED piece** -- DONE 2026-10-11. Covered by convex parts (a
       half-strip per boundary segment plus a wedge at each ray base, swept along an integer
       direction r that points into the piece from every edge -- checked in integers; no such r

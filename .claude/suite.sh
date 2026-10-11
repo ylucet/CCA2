@@ -92,7 +92,7 @@ FAST_SUITES=(guardExerciseTest erratumExamplesTest biconjAtomsTest envelopeEvalT
              moreauTest proxAverageTest
              QuaConTest ratQTest regionTest regionUnitTest symbolicFunctionUnitTest
              testSymbolicFunction)
-NORMAL_SUITES=(erratumBiconjTest envelopeAssembleTest envelopeMeshAlgTest cplqAdapterTest functionNDomainTest regionMinusTest testfunctionNDomain)
+NORMAL_SUITES=(erratumBiconjTest conjDefinitionAuditTest envelopeAssembleTest envelopeMeshAlgTest cplqAdapterTest functionNDomainTest regionMinusTest testfunctionNDomain)
 # Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
 # wall clock at the suite's whole runtime.
 SHARD_SUITES=(testcPLQ testMaxMultiRegion)

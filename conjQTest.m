@@ -939,6 +939,27 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'AbsTol', 1e-10, 'RelTol', 1e-12);
         end
 
+        function aPIECEContainingALineWithoutCurvatureHasALineSupportedConjugate(testCase)
+        % Found 2026-10-11 by a definition audit at hand-picked points (random s never lands on a
+        % line): a piece that contains a whole LINE along d with H d = 0 has f(x + t d) =
+        % f(x) + t <L,d>, so f* is finite only on the line <s,d> = <L,d>, and there it is the
+        % conjugate of f on the piece's cross-section. conjQ returned +infinity EVERYWHERE.
+        % Closed forms, by hand:
+        %   f = 0 on y >= 0:          f* = 0 on {s1 = 0, s2 <= 0}, +inf elsewhere
+        %   f = y^2 + x on y <= 0:    f* = (min(s2,0))^2/4 on {s1 = 1}, +inf elsewhere
+            V = [0 0; 1 0; -1 0];  E = [1 2 0; 1 3 0];
+            up = conjQ(QuaPol(V, E, [0 0 0 0 0 0 0 0 0 0], [1 0; 0 1]));
+            testCase.verifyEqual(up.eval([0 0; 0 -2; 0 1; 1 -1; -0.5 0]), [0; 0; inf; inf; inf]);
+            dn = conjQ(QuaPol(V, E, [0 0 0 0 0 0 2 1 0 0], [0 1; 1 0]));
+            testCase.verifyEqual(dn.eval([1 -2; 1 0; 1 3; 0 0; 2 -1]), [1; 0; 0; inf; inf], 'AbsTol', 1e-14);
+            % the two discontinuous examples built from exactly these pieces
+            D = QuaPol.examplesDiscontinuous();
+            testCase.verifyEqual(conjQ(D{1}).eval([0 0; 0 -1; 0 1]), [0; inf; inf], ...
+                'f = 0 above, 1 below: f* is finite at the origin only');
+            testCase.verifyEqual(conjQ(D{3}).eval([1 0; 1 -2; 1 1; 0 0]), [0.25; 1; inf; inf], ...
+                'AbsTol', 1e-14, 'x^2 above, y^2 + x below: f* lives on the ray {s1 = 1, s2 <= 0}');
+        end
+
         function aCHAINWhoseRowCountIsNotItsEdgeCountIsStillRefused(testCase)
         % The convention needs one row per edge; any other count really is ambiguous.
             f = QuaPol([0 0; 1 0; 0 1], [1 2 1; 1 3 1], ...
