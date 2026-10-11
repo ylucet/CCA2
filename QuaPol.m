@@ -709,7 +709,7 @@ classdef QuaPol < RatPol & QuaPar
        function g = conj(obj, engine)
        % objective: Legendre-Fenchel conjugate f*(s) = sup_x <s,x> - f(x)
        % [input]  obj   : QuaPol (quadratic on polyhedral); must be operable (degree<=2)
-       %          engine: 'cplq' (default) | 'symbolic' (alias of 'cplq') | 'exact' | 'pqp' |
+       %          engine: 'exact' (default) | 'cplq' | 'symbolic' (alias of 'cplq') | 'pqp' |
        %                  'graph'
        % [output] g     : the conjugate. 'cplq' returns a RatPar (QuaPol / QuaPar / QuaParCPLQ --
        %                  see RETURN_TYPE.md); 'exact' returns a QuaCon. Both are RatCon, which is
@@ -722,12 +722,12 @@ classdef QuaPol < RatPol & QuaPar
        % answers. `conjCPLQ` is the legacy symbolic route and answers a strictly different set of
        % inputs (an INEXACT QuaPol, which the exact one refuses by design).
        %
-       % WHY 'cplq' IS STILL THE DEFAULT even though conjQ answers every 2-D domain and is orders
-       % faster: changing it changes the RETURN TYPE of an unqualified `f.conj()` from RatPar to
-       % QuaCon, and that is the breaking change RETURN_TYPE.md treats as an architectural decision
-       % to be taken deliberately before a tag, not as a side effect of wiring an engine in.
+       % THE DEFAULT IS 'exact' (decided 2026-10-11). An unqualified `f.conj()` therefore returns a
+       % QuaCon, not a RatPar -- the return-type change RETURN_TYPE.md flagged, taken deliberately.
+       % An INEXACT QuaPol (built by the legacy float pipeline) is refused by name on this route;
+       % pass 'cplq' for it.
             obj.assertOperable();
-            if nargin < 2, engine = 'cplq'; end
+            if nargin < 2, engine = 'exact'; end
             switch lower(engine)
                 case {'cplq','symbolic'},  g = conjCPLQ(obj);
                 case 'exact',              g = conjQ(obj);
@@ -770,8 +770,8 @@ classdef QuaPol < RatPol & QuaPar
        % of the lifted set, which is both faster and defined on inputs the double conjugation is
        % not. Other engines still error inside conj.
        %
-       % The default is 'cplq' for the reason given in `conj` above -- the return type, not the
-       % mathematics.
+       % The default is still 'cplq' here: `conj` switched to 'exact' on 2026-10-11, biconj has
+       % not been decided (biconjQ returns an EnvelopeMin on some inputs, not an AlgCon).
             if nargin < 2, engine = 'cplq'; end
             if strcmpi(engine, 'exact')
                 h = biconjQ(obj);

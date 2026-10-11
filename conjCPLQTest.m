@@ -11,12 +11,6 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(q.f, p.f, 'AbsTol', 1e-12);
         end
 
-        function defaultEngineIsCPLQ(testCase)
-            % conj() with no engine argument defaults to 'cplq'.
-            p = QuaPol.energy();
-            testCase.verifyEqual(p.conj().f, p.conj('cplq').f, 'AbsTol', 1e-12);
-        end
-
         function biconjOfConvexQuadraticIsItself(testCase)
             % f** = f for a closed convex function.
             p = QuaPol.energy();
@@ -41,14 +35,14 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % Case A -- full-domain strictly convex quadratic: conjugate is again a full-domain
             % quadratic, so the second conjugation is Case A too, and biconj closes the loop.
             caseA = QuaPol([1 0 1 0 0 0]);
-            testCase.verifyEqual(caseA.conj().kind(), 'QuaPol');
+            testCase.verifyEqual(caseA.conj('cplq').kind(), 'QuaPol');
             testCase.verifyEqual(caseA.biconj().kind(), 'QuaPol');
 
             % Case B -- single bounded triangle: conj gives a genuine mesh QuaPar; biconj is the
             % convex envelope, a RatPol on the same triangle. f = xy vanishes at all three
             % vertices and is >= 0 on this triangle, so f** is identically zero on it.
             caseB = QuaPol([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
-            testCase.verifyEqual(caseB.conj().kind(), 'QuaPar');
+            testCase.verifyEqual(caseB.conj('cplq').kind(), 'QuaPar');
             bB = caseB.biconj();
             testCase.verifyEqual(bB.kind(), 'RatPol');
             testCase.verifyEqual(bB.eval([0.2 0.2; 1/3 1/3]), [0; 0], 'AbsTol', 1e-12);
@@ -77,7 +71,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             F = [1 0; 1 0; 2 1; 2 0; 2 0];
             caseC = QuaPol(V, E, [1 0 1 0 0 0; 1 0 1 0 0 0], F);
             % ASSERTION CHANGED 2026-08-24, and the reason is what this line is FOR. It read
-            % `verifyEqual(caseC.conj().kind(), 'QuaPar')` -- the EXACT class. Its own comment
+            % `verifyEqual(caseC.conj('cplq').kind(), 'QuaPar')` -- the EXACT class. Its own comment
             % above says what it is about: "what changed is the route, and hence the type", i.e.
             % closed-form numerics rather than the symbolic fallback. A convex face is now
             % conjugated WHOLE by conjConvexPolygon instead of being fan-triangulated, and the
@@ -85,7 +79,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % guarantees no edge is curved. It satisfies the property this test exists to pin
             % strictly better, so pinning the exact class was pinning a representation detail the
             % test itself says it is not about.
-            gC = caseC.conj();
+            gC = caseC.conj('cplq');
             testCase.verifyInstanceOf(gC, 'QuaPar', 'must be a mesh, not the symbolic form');
             testCase.verifyFalse(isa(gC, 'QuaParCPLQ'), 'must not fall back to the symbolic path');
 
@@ -95,7 +89,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % numeric route and returns a MESHED QuaPar -- pinned here the other way round, with
             % the values checked, since the route is the thing this test is about.
             caseCind = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
-            gInd = caseCind.conj();
+            gInd = caseCind.conj('cplq');
             testCase.verifyEqual(gInd.kind(), 'QuaPar');
             for sPt = {[3 -1], [-2 3], [1 1], [4 4], [-3 -3], [0.5 0.5]}
                 sv = sPt{1};
@@ -108,7 +102,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % HISTORY. It first read `verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ')`, which
             % passes on an EMPTY piece list -- QuaParCPLQ(functionNDomain.empty()).kind() is still
             % 'QuaParCPLQ' -- so it hid the defect entirely. Measured on pristine HEAD
-            % (2026-07-31): caseC.conj() gave 9 pieces and caseC.biconj() gave ZERO, i.e.
+            % (2026-07-31): caseC.conj('cplq') gave 9 pieces and caseC.biconj() gave ZERO, i.e.
             % f** = +inf everywhere, for an f that is CONVEX and hence its own biconjugate. It was
             % then changed to verifyError, pinning the loud failure instead of the silent one,
             % with the failing chain traced into functionNDomain.getInterior.

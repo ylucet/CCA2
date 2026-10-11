@@ -204,12 +204,12 @@ classdef RatParTest < matlab.unittest.TestCase
             % End to end, the actual promise: whatever supported shape goes in, a RatPar comes
             % out, and kind() names it. The shapes are conjCPLQ's own Cases A/B.
             fullQuad = QuaPol([1 0 1 0 0 0]);                       % Case A: full-domain PD
-            gA = fullQuad.conj();
+            gA = fullQuad.conj('cplq');
             testCase.verifyTrue(isa(gA, 'RatPar'));
             testCase.verifyEqual(gA.kind(), 'QuaPol');
 
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            gB = QuaPol(V, E, [0 1 0 0 0 0], F).conj();             % Case B: bounded triangle
+            gB = QuaPol(V, E, [0 1 0 0 0 0], F).conj('cplq');             % Case B: bounded triangle
             testCase.verifyTrue(isa(gB, 'RatPar'));
             testCase.verifyEqual(gB.kind(), 'QuaPar');
         end

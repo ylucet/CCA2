@@ -48,7 +48,7 @@ classdef conjQTest < matlab.unittest.TestCase
             for k = 1:numel(cases)
                 f  = QuaPol(cases{k});
                 ge = conjQ(f);
-                gl = f.conj();
+                gl = f.conj('cplq');
                 S  = [0 0; 1 1; -3 2; 7 -5; 0.25 0.75];
                 testCase.verifyEqual(ge.eval(S), gl.eval(S), 'RelTol', 1e-12, ...
                     sprintf('case %d: exact and legacy conjugates differ', k));
@@ -918,6 +918,17 @@ classdef conjQTest < matlab.unittest.TestCase
             % unknown and not-implemented names are unchanged
             testCase.verifyError(@() f.conj('nosuchengine'), 'PLQ:conj:engine');
             testCase.verifyError(@() f.conj('pqp'),          'PLQ:conj:engine');
+        end
+
+        function theDEFAULTEngineIsTheExactOne(testCase)
+        % Decided 2026-10-11: an unqualified `f.conj()` runs conjQ and returns a QuaCon. The legacy
+        % symbolic route stays reachable as 'cplq' / 'symbolic'.
+            V = [0 0; 2 0; 0 2];  E = [1 2 1; 2 3 1; 3 1 1];  F = repmat([1 0], 3, 1);
+            f = QuaPol(V, E, [0 0 0 0, 2, 0, 2, 0, 0, 0], F);
+            g = f.conj();
+            testCase.verifyEqual(g.kind(), 'QuaCon', 'the default must be the exact engine');
+            S = [0 0; 1 1; -3 2; 5 -4; 0.5 0.25];
+            testCase.verifyEqual(g.eval(S), f.conj('exact').eval(S), 'AbsTol', 0);
         end
 
         function theExactEngineRefusesAnInexactInputBYNAMEThroughTheClassAPI(testCase)

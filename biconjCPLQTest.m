@@ -144,7 +144,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % unit triangle. conj works and gives a QuaPar; biconj used to raise
             % PLQ:conjCPLQ:notImplemented on the second conjugation.
             p = QuaPol([0 0; 1 0; 0 1], biconjCPLQTest.E3, [0 1 0 0 0 0], biconjCPLQTest.F3);
-            testCase.verifyEqual(p.conj().kind(), 'QuaPar');
+            testCase.verifyEqual(p.conj('cplq').kind(), 'QuaPar');
             b = p.biconj();
             testCase.verifyEqual(b.kind(), 'RatPol');
             % f = xy >= 0 on this triangle and vanishes at all three vertices, so the largest
@@ -205,7 +205,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % conj-of-conj -- so what is pinned here now is that conj SUCCEEDS and agrees with
             % the closed-form sup, which is a stronger statement than the old refusal.
             p = biconjCPLQTest.triangle([0 0; 1 1; 3 2], [0 1 0 0 0 0]);   % f = xy
-            gc = p.conj();
+            gc = p.conj('cplq');
             testCase.verifyTrue(isa(gc, 'RatPar'));
             for sPt = {[1 1], [-3 -3], [2 -1], [0 0], [5 5]}
                 sv = sPt{1};
@@ -288,7 +288,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % g** = g. That also exercises the shape the second pass found hardest: an
             % unbounded, multi-face, piecewise-affine conjugate.
             p = biconjCPLQTest.triangle([0 0; 1 0; 0 1], [0 1 0 0 0 0]);
-            g = p.conj();
+            g = p.conj('cplq');
             testCase.verifyEqual(g.kind(), 'QuaPar');
             h = g.biconj();
             % ACCESSOR CHANGED 2026-08-25 (overnight), not the assertion. This read `h.fnd`, which
