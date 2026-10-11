@@ -152,7 +152,7 @@ function row = endpointRow(tau, w, s0n, nd, N1, m1, N2, m2, d, wit)
     n = [-dir(2); dir(1)];
     % n'x - n'grad g1 = 0, cleared by d*seD
     c = ratQ.conic([0 0 0, ratQ.chk(d*seD*n(1), 'cut row'), ratQ.chk(d*seD*n(2), 'cut row'), ...
-                    ratQ.chk(-n.'*P1n, 'cut row')]);
+                    ratQ.chkB(-n.'*P1n, abs(n).'*abs(P1n), 'cut row')]);
     s = signAtRational(c, wit(1:2).', wit(3));
     if s == 0
         error('bridgeArcCut:witnessOnCut', ...

@@ -288,7 +288,7 @@ function g = caseAFullDomain(fN, fD)
         end
         m = [Hn(1,1); Hn(1,2)];
         if all(m == 0), m = [Hn(1,2); Hn(2,2)]; end
-        mHm = ratQ.chk(m.' * Hn * m, 'range scaling');
+        mHm = ratQ.chkB(m.' * Hn * m, abs(m).' * abs(Hn) * abs(m), 'range scaling');
         P = [ratQ.chk(fD*m(1),'p1'), ratQ.chk(fD*m(2),'p2'), ratQ.chkB(-(Ln.'*m), abs(Ln).'*abs(m), 'p3')];
         den = ratQ.chk(2 * mHm * fD, 'line denominator');
         num = [0 0 0 0, ratQ.chk(2*P(1)^2,'c5'), ratQ.chk(2*P(1)*P(2),'c6'), ...
@@ -301,7 +301,7 @@ function g = caseAFullDomain(fN, fD)
     end
 
     A   = [Hn(2,2), -Hn(1,2); -Hn(1,2), Hn(1,1)];    % adjugate of a 2x2, exactly
-    ALn = A * Ln;
+    ALn = ratQ.chkB(A * Ln, abs(A) * abs(Ln), 'adjugate image');   % feeds c8, c9: bounded
     den = ratQ.chk(2 * fD * D, 'conjugate denominator');
 
     c5  = ratQ.chk(2 * fD^2 * A(1,1), 'conjugate c5');
@@ -373,7 +373,7 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
         e = sh.ed(j);
         a = Vi(e.a, :).';
         d = e.d(:);
-        alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
+        alpha = ratQ.chkB(d.' * Hn * d, abs(d).' * abs(Hn) * abs(d), 'edge curvature');
         if alpha <= 0
             % Impossible for a strictly convex Q and a nonzero direction; kept as an assertion.
             error('PLQ:conjQ:degenerateEdge', ...
@@ -396,7 +396,7 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
         end
         % the multiplier condition, cleared by alpha > 0
         n = outwardNormalOf(sh, j, Vi);
-        Hdn = ratQ.chk(d.' * Hn * n, 'edge multiplier coupling');
+        Hdn = ratQ.chkB(d.' * Hn * n, abs(d).' * abs(Hn) * abs(n), 'edge multiplier coupling');
         rows(end+1,:) = [ratQ.chkB(alpha*fD*vd*n(1) - Td(1)*Hdn, abs(alpha*fD*vd*n(1)) + abs(Td(1)*Hdn), 'm1'), ...
                          ratQ.chkB(alpha*fD*vd*n(2) - Td(2)*Hdn, abs(alpha*fD*vd*n(2)) + abs(Td(2)*Hdn), 'm2'), ...
                          ratQ.chkB(-alpha*(ga.'*n) - Td(3)*Hdn, abs(alpha)*(abs(ga).'*abs(n)) + abs(Td(3)*Hdn), 'm0')]; %#ok<AGROW>
@@ -410,7 +410,7 @@ function g = caseBConvexOnPiece(fN, fD, Vi, vd, sh, dom)
     % x* = H^-1(s - L) = fD*A*(s - L/fD)/D with A = adj(Hn); it is in the piece exactly when every
     % half-plane holds there, and each of those is affine in s.
     A = [Hn(2,2), -Hn(1,2); -Hn(1,2), Hn(1,1)];
-    ALn = A * Ln;
+    ALn = ratQ.chkB(A * Ln, abs(A) * abs(Ln), 'adjugate image');   % feeds c8, c9: bounded
     numI = [0 0 0 0, ratQ.chk(2*fD^2*A(1,1),'c5'), ratQ.chk(2*fD^2*A(1,2),'c6'), ...
             ratQ.chk(2*fD^2*A(2,2),'c7'), ratQ.chk(-2*fD*ALn(1),'c8'), ...
             ratQ.chk(-2*fD*ALn(2),'c9'), ratQ.chkB(Ln.'*ALn - 2*D*kn, abs(Ln).'*(abs(A)*abs(Ln)) + 2*abs(D*kn), 'c10')];
@@ -554,7 +554,7 @@ function sh = pieceShape(obj, k, Vi, vd)
     for j = 1:numel(sh.ed)
         p = Vi(sh.ed(j).a, :);
         n = [sh.ed(j).d(2), -sh.ed(j).d(1)];          % a normal to this edge
-        c0 = ratQ.chk(-(n * p.'), 'offset');
+        c0 = ratQ.chkB(-(n * p.'), (abs(n) * abs(p).'), 'offset');
         sgn = 0;
         for i = 1:numel(sh.vs)
             v = Vi(sh.vs(i), :);
@@ -563,7 +563,7 @@ function sh = pieceShape(obj, k, Vi, vd)
         end
         if sgn == 0
             for r = 1:size(sh.rays,1)
-                t = ratQ.chk(n * sh.rays(r,:).', 'recession side');
+                t = ratQ.chkB(n * sh.rays(r,:).', abs(n) * abs(sh.rays(r,:)).', 'recession side');
                 if t ~= 0, sgn = sign(t); break, end
             end
         end
@@ -606,7 +606,7 @@ function sh = pieceShape(obj, k, Vi, vd)
             end
         end
         for r = 1:size(sh.rays,1)
-            if ratQ.chk(sgn * (n * sh.rays(r,:).'), 'convexity') < 0
+            if ratQ.chkB(sgn * (n * sh.rays(r,:).'), abs(sgn) * (abs(n) * abs(sh.rays(r,:)).'), 'convexity') < 0
                 sh.convex = false;
             end
         end
@@ -708,7 +708,7 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
     end
 
     for r = 1:size(R,1)
-        if ratQ.chk(R(r,:) * Hn * R(r,:).', 'ray curvature') < 0
+        if ratQ.chkB(R(r,:) * Hn * R(r,:).', abs(R(r,:)) * abs(Hn) * abs(R(r,:)).', 'ray curvature') < 0
             ok = false;
             why = sprintf('the piece recedes along (%d,%d), where the objective rises without bound for every s', ...
                           R(r,1), R(r,2));
@@ -732,8 +732,8 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
 
     for r = 1:size(R,1)
         d = R(r,:).';
-        if ratQ.chk(d.' * Hn * d, 'ray curvature') ~= 0, continue, end
-        Hd = ratQ.chk(Hn * d, 'null direction image');
+        if ratQ.chkB(d.' * Hn * d, abs(d).' * abs(Hn) * abs(d), 'ray curvature') ~= 0, continue, end
+        Hd = ratQ.chkB(Hn * d, abs(Hn) * abs(d), 'null direction image');
 
         % inf over the piece of <Hd, x>: -infinity if it decreases along some recession direction
         for q = 1:size(R,1)
@@ -746,7 +746,7 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
         end
         mu = inf;
         for i = 1:numel(sh.vs)
-            t = ratQ.chk(Vi(sh.vs(i), :) * Hd, 'slope at vertex');
+            t = ratQ.chkB(Vi(sh.vs(i), :) * Hd, abs(Vi(sh.vs(i), :)) * abs(Hd), 'slope at vertex');
             if t < mu, mu = t; end          % over vd, like Vi itself
         end
 
@@ -806,7 +806,7 @@ function g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom)
     for j = 1:numel(sh.ed)
         e = sh.ed(j);
         d = e.d(:);
-        alpha = ratQ.chk(d.' * Hn * d, 'edge curvature');
+        alpha = ratQ.chkB(d.' * Hn * d, abs(d).' * abs(Hn) * abs(d), 'edge curvature');
         if alpha <= 0, continue, end
         a  = Vi(e.a, :).';
         ga = ratQ.chkB(Hn * a + vd * Ln, abs(Hn) * abs(a) + abs(vd) * abs(Ln), 'edge base gradient');
@@ -1059,7 +1059,7 @@ function sh = triangleShape(Vi, vd, tri)
         d = ratQ.chk(Vi(b,:) - Vi(a,:), 'edge direction');
         sh.ed(end+1) = struct('a', a, 'b', b, 'd', d, 'isRay', false); %#ok<AGROW>
         n = [d(2), -d(1)];
-        c0 = ratQ.chk(-(n * Vi(a,:).'), 'offset');
+        c0 = ratQ.chkB(-(n * Vi(a,:).'), (abs(n) * abs(Vi(a,:)).'), 'offset');
         t  = ratQ.chkB(n(1)*Vi(o,1) + n(2)*Vi(o,2) + c0, abs(n(1)*Vi(o,1)) + abs(n(2)*Vi(o,2)) + abs(c0), 'third vertex side');
         if t == 0
             error('PLQ:conjQ:degenerate', 'a split triangle has zero area.');

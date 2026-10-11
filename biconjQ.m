@@ -256,7 +256,7 @@ function h = biconjQ(obj)
             diverges = false;
             for r = 1:size(rays,1)
                 d = rays(r,:).';
-                a = ratQ.chk(d.' * Hk * d, 'recession curvature');
+                a = ratQ.chkB(d.' * Hk * d, abs(d).' * abs(Hk) * abs(d), 'recession curvature');
                 if a < 0, diverges = true; break, end
                 if a == 0
                     % (H*v + L)'d at every vertex v of the piece, cleared by the POSITIVE vd.
@@ -301,7 +301,7 @@ function h = biconjQ(obj)
             a = obj.E(j,1);  b = obj.E(j,2);
             d = obj.VN(b,:)/obj.VD(b) - obj.VN(a,:)/obj.VD(a);
             [dn, ~] = ratQ.fromDouble(d);
-            if ratQ.chk(dn * Hk * dn.', 'edge curvature') > 0
+            if ratQ.chkB(dn * Hk * dn.', abs(dn) * abs(Hk) * abs(dn).', 'edge curvature') > 0
                 % TWO DIFFERENT SITUATIONS TRIP THIS ONE TEST, and until 2026-09-05 they shared a
                 % message that was right about only one of them. Which it is turns on whether THIS
                 % piece is convex, so that is what selects the identifier.
@@ -592,14 +592,14 @@ function h = concaveEnvelope(obj)
                 n = ratQ.chk(cross(dirs(1,:), dirs(2,:)), 'facet normal');
                 if n(3) == 0, continue, end     % vertical plane: not the graph of a function
                 if n(3) < 0, n = -n; end        % orient upward, so "above" is n.p >= d
-                d = ratQ.chk(n * G(base,:).', 'facet offset');
+                d = ratQ.chkB(n * G(base,:).', abs(n) * abs(G(base,:)).', 'facet offset');
                 below = false;
                 for p = 1:m
                     if ratQ.chkB(n * Q3(p,:).' - d, abs(n) * abs(Q3(p,:)).' + abs(d), 'facet side') < 0, below = true; break, end
                 end
                 if ~below
                     for p = 1:nr
-                        if ratQ.chk(n * R3(p,:).', 'facet side at infinity') < 0
+                        if ratQ.chkB(n * R3(p,:).', abs(n) * abs(R3(p,:)).', 'facet side at infinity') < 0
                             below = true;  break
                         end
                     end
@@ -701,7 +701,7 @@ function rows = hullHalfPlanes(Vi, vd, vs, dirs)
                 n = [e(2), -e(1)];
             end
             if all(n == 0), continue, end                 % coincident vertices, or a null direction
-            c0 = ratQ.chk(-(n * p.'), 'offset');
+            c0 = ratQ.chkB(-(n * p.'), (abs(n) * abs(p).'), 'offset');
             sgn = 0;  ok = true;
             for i = 1:m
                 t = ratQ.chkB(n(1)*Vi(vs(i),1) + n(2)*Vi(vs(i),2) + c0, abs(n(1)*Vi(vs(i),1)) + abs(n(2)*Vi(vs(i),2)) + abs(c0), 'hull side');
@@ -712,7 +712,7 @@ function rows = hullHalfPlanes(Vi, vd, vs, dirs)
             end
             if ok
                 for i = 1:r
-                    t = ratQ.chk(n * dirs(i,:).', 'hull side at infinity');
+                    t = ratQ.chkB(n * dirs(i,:).', abs(n) * abs(dirs(i,:)).', 'hull side at infinity');
                     if t == 0, continue, end
                     if sgn == 0, sgn = sign(t);
                     elseif sign(t) ~= sgn, ok = false; break
@@ -759,7 +759,7 @@ function rows = polygonHalfPlanes(obj, Vi, vd, vs, k, rays)
     for j = find(any(obj.F == k, 2)).'
         p = Vi(obj.E(j,1), :);  q = Vi(obj.E(j,2), :);
         n  = [q(2)-p(2), -(q(1)-p(1))];
-        c0 = ratQ.chk(-(n * p.'), 'offset');
+        c0 = ratQ.chkB(-(n * p.'), (abs(n) * abs(p).'), 'offset');
         sgn = 0;
         for i = 1:numel(vs)
             v = Vi(vs(i), :);
@@ -771,7 +771,7 @@ function rows = polygonHalfPlanes(obj, Vi, vd, vs, k, rays)
             % sides: the constraint must survive travelling to infinity along it, a condition on
             % the LINEAR part alone.
             for q = 1:size(rays,1)
-                t = ratQ.chk(n * rays(q,:).', 'recession side');
+                t = ratQ.chkB(n * rays(q,:).', abs(n) * abs(rays(q,:)).', 'recession side');
                 if t ~= 0, sgn = sign(t); break, end
             end
         end
@@ -892,7 +892,7 @@ function assertChainEdgeConcave(obj)
         [fN, ~] = obj.faceQ(j);
         Hn = [fN(5) fN(6); fN(6) fN(7)];
         d = ratQ.chk(Vi(obj.E(j,2),:) - Vi(obj.E(j,1),:), 'chain edge direction').';
-        if ratQ.chk(d.' * Hn * d, 'chain edge curvature') > 0
+        if ratQ.chkB(d.' * Hn * d, abs(d).' * abs(Hn) * abs(d), 'chain edge curvature') > 0
             error('PLQ:biconjQ:notImplemented', ...
                 ['chain edge %d curves UPWARD along itself, so its lifted arc dips below its ' ...
                  'own chord and the envelope is not determined by the vertex values.'], j);
@@ -980,7 +980,7 @@ function h = collinearChainEnvelope(obj)
     m  = numel(vs);
     T  = zeros(m,1);  Z = zeros(m,1);
     for i = 1:m
-        T(i) = ratQ.chk((Vi(vs(i),:).' - A).' * d, 'chain parameter');
+        T(i) = ratQ.chkB((Vi(vs(i),:).' - A).' * d, (abs(Vi(vs(i),:)).' + abs(A)).' * abs(d), 'chain parameter');
         Z(i) = lifted(vs(i));
     end
     [T, ord] = sort(T);  Z = Z(ord);
@@ -1003,9 +1003,9 @@ function h = collinearChainEnvelope(obj)
 
     % ---- one cell per hull piece ----------------------------------------------------------------
     n0 = [d(2); -d(1)];                                    % normal to the line
-    c0 = ratQ.chk(-(n0.' * A), 'line offset');
+    c0 = ratQ.chkB(-(n0.' * A), (abs(n0).' * abs(A)), 'line offset');
     onLine = [ratQ.chk(vd*n0(1),'l1'), ratQ.chk(vd*n0(2),'l2'), c0];
-    Ad = ratQ.chk(A.' * d, 'anchor parameter');
+    Ad = ratQ.chkB(A.' * d, abs(A).' * abs(d), 'anchor parameter');
 
     cells = struct('num', {}, 'den', {}, 'con', {});
     for k = 1:numel(st)-1
@@ -1085,10 +1085,10 @@ function h = thinEnvelope(obj)
     % ---- a SEGMENT --------------------------------------------------------------------------
     a = Vi(obj.E(1,1),:).';  b = Vi(obj.E(1,2),:).';
     d = ratQ.chk(b - a, 'segment direction');
-    alpha = ratQ.chk(d.' * Hn * d, 'segment curvature');
+    alpha = ratQ.chkB(d.' * Hn * d, abs(d).' * abs(Hn) * abs(d), 'segment curvature');
 
     n  = [d(2); -d(1)];
-    c0 = ratQ.chk(-(n.' * a), 'line offset');
+    c0 = ratQ.chkB(-(n.' * a), (abs(n).' * abs(a)), 'line offset');
     rows = [ratQ.chk(vd*n(1),'l1'), ratQ.chk(vd*n(2),'l2'), c0];          % ON the line
     lo   = [ratQ.chk(vd*d(1),'s1'), ratQ.chk(vd*d(2),'s2'), ratQ.chkB(-(d.'*a), abs(d).'*abs(a), 's0')];
     hi   = [ratQ.chk(-vd*d(1),'t1'), ratQ.chk(-vd*d(2),'t2'), ratQ.chkB(d.'*b, abs(d).'*abs(b), 't0')];

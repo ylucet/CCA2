@@ -204,7 +204,7 @@ function s = deltaNum(G, a, P, D)
 %
 % delta = <grad d, a> / |a|^2 with grad d (x) = G*[x;y;1]/dd. Multiplying by the positive
 % D*dd*|a|^2 leaves <G*[P; D], a>, an integer.
-    g = ratQ.chk(G * [P(1); P(2); D], 'gradient jump');
+    g = ratQ.chkB(G * [P(1); P(2); D], abs(G) * abs([P(1); P(2); D]), 'gradient jump');
     s = ratQ.chkB(g(1)*a(1) + g(2)*a(2), abs(g(1)*a(1)) + abs(g(2)*a(2)), 'delta numerator');
 end
 

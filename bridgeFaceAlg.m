@@ -373,7 +373,7 @@ function C = imageConic(tie, Nk, mk, d, which) %#ok<INUSD>
     end
     adjN = [Nk(2,2), -Nk(1,2); -Nk(2,1), Nk(1,1)];
     Mn = ratQ.chk(d * adjN,  'image map');
-    tn = ratQ.chk(-adjN*mk,  'image translation');
+    tn = ratQ.chkB(-adjN*mk, abs(adjN)*abs(mk),  'image translation');
     md = ratQ.detExact(Nk);
     [n2, ~] = ratQ.substAffine(faceOfConic(tie), 1, Mn, tn, md);
     C = ratQ.conic(conicOfFace(n2));

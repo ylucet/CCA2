@@ -82,7 +82,7 @@ function [face, info] = bridgeFaceRat(n1, d1, n2, d2, P)
     end
     w  = [-u(2); u(1)];                     % along the parabola's axis: u'w = 0
     nu = ratQ.chk(u.'*u, 'range normalisation');
-    dw = ratQ.chk(dl.'*w, 'tie linear part along the axis');
+    dw = ratQ.chkB(dl.'*w, abs(dl).'*abs(w), 'tie linear part along the axis');
     if dw == 0
         % THE TIE IS A LINE PAIR, AND THEN THERE IS NO SEPARATE BRIDGE FACE AT ALL. The tie's linear
         % part lies in the rank-1 Hessian's range, so the tie depends on t = <u,s> alone: t^2 = const,
@@ -104,7 +104,7 @@ function [face, info] = bridgeFaceRat(n1, d1, n2, d2, P)
     % s(t) = (t*u + r(t)*w)/nu  with  r(t) = (t^2 * nu/(2a) - t*(dl''u) - kp*nu) / dw
     % Cleared: r(t) = (rq*t^2 + rl*t + rc) / rd
     rq = ratQ.chk(nu,            'parabola quadratic term');
-    rl = ratQ.chk(-2*a*(dl.'*u), 'parabola linear term');
+    rl = ratQ.chkB(-2*a*(dl.'*u), 2*abs(a)*(abs(dl).'*abs(u)), 'parabola linear term');
     rc = ratQ.chk(-2*a*kp*nu,    'parabola constant term');
     rd = ratQ.chk(2*a*dw,        'parabola denominator');
 

@@ -28,17 +28,6 @@ DOES carry the value and cannot be reduced the same way.
       `bridgeCompetes`). The three overflows before it are fixed (DECISIONS.md 2026-09-25). Reproduce
       in ~90 s: `biconjQ` of the poly2 kink at c = -2; the refusal message names the reason.
 
-- [ ] **Matrix and dot products inside `ratQ.chk` -- the rest of the exact-sum audit.** The EXPLICIT
-      sums are DONE (2026-09-25): all 81 sites in 13 files go through `ratQ.chkB(value,
-      |expression|, what)`, which refuses once the terms reach 2^53; `ratQ.detExact` and `ratQ.add`
-      were measured returning WRONG values and now take BigInteger past the bound, and
-      `exactSumLintTest` (fast) keeps the explicit form from coming back. LEFT: about 118 `chk`
-      calls wrap a matrix or dot product (`chk(N*s + m)`, `chk(a.'*w)`), which hides the same sum
-      behind one `*` -- the lint cannot tell those from a scalar product, which is safe. conjQ's
-      and bridgeArcCut's were converted where seen; the rest need reading one by one. Also
-      unchecked: products assigned WITHOUT any chk (`ALn = A*Ln`), whose rounding a later chkB
-      only bounds if its bound is written through the original factors.
-
 - [ ] **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
       parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area
       owns it too, and their value never exceeds it (max excess 1.1e-16 over 82 points), so dropping
@@ -73,6 +62,15 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **Exact-sum audit, second pass** (2026-10-11). The lint now also flags a top-level +/- with
+      a product or power (it missed `b^2 - 4ac`, `2*a*q + b`, Horner steps): 17 sites converted to
+      chkB, red first. Matrix/dot/quadratic-form products inside chk (32 sites: d'Hd, n*p', A*Ln,
+      G*[P;D], ...) converted with the |.| bound; sums of squares (u'u) and single scalar products
+      left alone as exact. NOT covered by the lint: a hidden product inside chk -- a line scan
+      cannot tell `n * p.'` (a sum) from `a * b` (safe); the remaining `*`-under-chk sites were
+      read and are scalar. Products assigned with no check at all were fixed where found (cone
+      form, recession curvature, adjugate image), not hunted exhaustively.
 
 - [x] **`envelopeEval` scaled its membership tolerance by the BATCH's max |x|** (2026-10-10):
       fixed per point, red first (envelopeEvalTest: a point outside the only face took its value

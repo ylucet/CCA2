@@ -13,6 +13,8 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   parabolic tie once were all dropped (made the envelope +inf).
 - envelopeEval: a point's value depended on the other points in the call (tolerance scaled by
   the batch); fixed per point, red first.
+- Exact-sum audit: 49 more integer sums that could silently get the wrong sign past 2^53 now
+  refuse instead (17 found by a widened lint, 32 hidden in matrix/dot products).
 - Daily slow gate: 101 pass / 0 fail (2 known quarantined).
 
 ## What is broken
@@ -27,4 +29,4 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   (c) return it only under an explicit engine flag. I'd keep (a).
 
 ## Where I stopped
-Items 1-2 done and committed; working the exact-sum audit (item 3).
+Items 1-3 done; next is the poly2-kink biconj stop at envelopeMesh:bridgeFaces.
