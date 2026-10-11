@@ -52,12 +52,10 @@ DOES carry the value and cannot be reduced the same way.
       examplesNonconvex{1} (a notched polygon) at the vertices (0,0), (2,1) and the edge point
       (0.5,0.5); on the needle examples2{1}, eval at the needle itself. Any oracle built on eval
       under-reports on these domains.
-- [ ] **conjQ refuses multi-function CHAINS (`PLQ:conjQ:ambiguousChain`, examples2{4,5,6,7,10}).**
-      Its stated reason -- no convention for which edge takes which function -- is the premise
-      biconjQ's own comment calls wrong: row j IS edge j's function (QuaPol.eval). Then f* is the
-      max over edges of each edge's conjugate. The legacy engine refuses them too.
 - [ ] **conjQ refuses a NON-CONVEX UNBOUNDED piece (`PLQ:conjQ:nonConvexPiece`,
       examplesNonconvex{2}).** Cut along recession directions, then fold as for bounded pieces.
+      The ONE in-scope failure of the conj sweep (conjQExamplesSweepTest.knownFail): 28 pass,
+      6 refused as out of scope (5 cubic, 1 inexact input), 1 fail -- 2026-10-11.
 
 - [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
@@ -74,6 +72,10 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **conjQ on multi-function CHAINS** -- DONE 2026-10-11. Row j is edge j's function, so f* is
+      the max over edges of each edge's conjugate; examples2{4,5,6,7,10} match a closed-form
+      per-edge sup. A row count other than the edge count is still refused (ambiguousChain).
 
 - [x] **Atom route, unbounded: a CONVEX unbounded piece** -- DONE 2026-10-11 (overnight). Its
       region is held as half-planes (inPiece), not a polygon. biconjQTest's quadrant fixture is

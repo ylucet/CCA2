@@ -883,12 +883,38 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyError(@() conjQ(struct('a',1)), 'PLQ:conjQ:input');
         end
 
-        function conjQREFUSESAChainCarryingSeveralFunctions(testCase)
-        % A domain of dimension < 2 with one function row per edge. conjQ has no convention for
-        % which edge takes which -- unlike biconjQ, whose envelope reads them per edge -- so it
-        % refuses rather than picking one.
+        function aCHAINCarryingOneFunctionPerEdgeIsConjugatedEdgeByEdge(testCase)
+        % CHANGED 2026-10-11. This asserted PLQ:conjQ:ambiguousChain, on the grounds that several
+        % function rows with no F left it undecided which edge took which. That premise is wrong
+        % (biconjQ.m says so too): row j IS edge j's function -- QuaPol.eval reads obj.f(i,:) for
+        % edge i. So f* = max_j sup over edge j of <s,x> - q_j(x), and each sup is a 1-D quadratic
+        % in closed form, computed independently here: segments t in [0,1], rays t in [0,inf).
             P = QuaPol.examples2();
-            testCase.verifyError(@() conjQ(P{5}), 'PLQ:conjQ:ambiguousChain');
+            rng(2026);  S = [randn(200,2)*3; 0 0; 1 0; 0 1; -1 -1];
+            for k = [4 5 6 7 10]
+                f = P{k};
+                g = conjQ(f);
+                want = -inf(size(S,1),1);
+                for j = 1:f.ne
+                    u = f.V(f.E(j,1),:);
+                    if f.E(j,3) == 0, d = f.V(f.E(j,2),:); tmax = inf;
+                    else, d = f.V(f.E(j,2),:) - u; tmax = 1; end
+                    want = max(want, edgeSup(f.f(j,:), u, d, tmax, S));
+                end
+                got = g.eval(S);
+                testCase.verifyEqual(isinf(got), isinf(want), sprintf('examples2{%d}: the domain', k));
+                fin = isfinite(want);
+                testCase.verifyEqual(got(fin), want(fin), 'AbsTol', 1e-10, 'RelTol', 1e-12, ...
+                    sprintf('examples2{%d}: the value', k));
+            end
+        end
+
+        function aCHAINWhoseRowCountIsNotItsEdgeCountIsStillRefused(testCase)
+        % The convention needs one row per edge; any other count really is ambiguous.
+            f = QuaPol([0 0; 1 0; 0 1], [1 2 1; 1 3 1], ...
+                       [0 0 0 0, 2, 0, 0, 0, 0, 0; 0 0 0 0, 0, 0, 2, 0, 0, 0; 0 0 0 0, 0, 0, 0, 0, 0, 1], ...
+                       [0 0; 0 0]);
+            testCase.verifyError(@() conjQ(f), 'PLQ:conjQ:ambiguousChain');
         end
 
         function theExactEngineIsReachableFromTheClassAPI(testCase)
@@ -1079,5 +1105,27 @@ classdef conjQTest < matlab.unittest.TestCase
             end
             L = randi([-4 4], 2, 1);  k0 = randi([-4 4]);
         end
+    end
+end
+
+function v = edgeSup(n, u, d, tmax, S)
+% sup over t in [0, tmax] of <s, u + t d> - q(u + t d), q the weighted-basis row n: a quadratic
+% a t^2 + b t + c in t, maximised in closed form.
+    H = [n(5) n(6); n(6) n(7)];  L = [n(8); n(9)];
+    q = @(x) 0.5*x*H*x.' + x*L + n(10);
+    a = -0.5 * d*H*d.';
+    v = zeros(size(S,1),1);
+    for i = 1:size(S,1)
+        s = S(i,:);
+        b = s*d.' - (u*H + L.')*d.';
+        c = s*u.' - q(u);
+        h = @(t) a*t.^2 + b*t + c;
+        cand = [0, tmax];
+        if isinf(tmax)
+            if a > 0 || (a == 0 && b > 0), v(i) = inf; continue, end
+            cand = 0;
+        end
+        if a < 0, cand(end+1) = min(max(-b/(2*a), 0), tmax); end %#ok<AGROW>
+        v(i) = max(h(cand));
     end
 end

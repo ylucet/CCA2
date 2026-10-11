@@ -78,6 +78,29 @@ function [g, dom] = conjQ(obj)
     % f is q_k on P_k, so f*(s) = max_k sup_{x in P_k} <s,x> - q_k(x) = max_k (q_k + I_{P_k})*(s).
     % Conjugation turns a union into a MAX (ALGORITHM.md), which is why the per-piece closed forms
     % compose at all -- and why Step 3 is a fold rather than a special algorithm.
+    % ---- a CHAIN carrying one function per edge -------------------------------------------------
+    % A domain of dimension < 2 has no faces, so the fold above has no pieces to run over; its rows
+    % belong to EDGES instead -- row j is edge j's function, the convention QuaPol.eval reads (and
+    % biconjQ relies on). Each edge, a segment or a ray with its own row, is a one-function input of
+    % dimension < 2 that conjPieceQ already answers, and the union is again a MAX. Until 2026-10-11
+    % this refused as ambiguousChain on the premise that no such convention existed. Only a row
+    % count other than the edge count is genuinely ambiguous.
+    if obj.dom.dim < 2 && nf > 1
+        if nf ~= obj.ne
+            error('PLQ:conjQ:ambiguousChain', ...
+                ['a domain of dimension < 2 carrying %d function rows on %d edges: the convention ' ...
+                 'is one row per edge, so which edge takes which is undefined.'], nf, obj.ne);
+        end
+        g = [];  dom = zeros(0,3);
+        for j = 1:obj.ne
+            ej = QuaPol(obj.V(obj.E(j,1:2),:), [1 2 obj.E(j,3)], obj.f(j,:), [0 0]);
+            [gj, dj] = conjPieceQ(ej, 1);
+            if isempty(g), g = gj; else, g = maxQ(g, gj); end
+            dom = [dom; dj]; %#ok<AGROW>
+        end
+        return
+    end
+
     [g, dom] = conjPieceQ(obj, 1);
     for k = 2:nf
         [gk, dk] = conjPieceQ(obj, k);
