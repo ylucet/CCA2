@@ -190,7 +190,7 @@ classdef ratQ
         %            <0 elliptic. Exact integer arithmetic, so the classification is DECIDED,
         %            not estimated.
             ratQ.chk(c, 'conic');
-            disc = ratQ.chk(c(2)^2 - 4*c(1)*c(3), 'discriminant');
+            disc = ratQ.chkB(c(2)^2 - 4*c(1)*c(3), c(2)^2 + 4*abs(c(1))*abs(c(3)), 'discriminant');
         end
 
         function k = conicKind(c)
@@ -477,16 +477,19 @@ classdef ratQ
             Y = zeros(4,4);  Y(2,1) = Mn(2,1);  Y(1,2) = Mn(2,2);  Y(1,1) = tn(2);
 
             % ---- accumulate P(i,j) * X^i * Y^j, each lifted to the denominator md^3 -----------
-            R = zeros(4,4);
+            R = zeros(4,4);  Rb = zeros(4,4);   % Rb bounds R: the same sum on absolute values
             Xp = ratQ.polyPow(X, 3);      % Xp{k+1} is X^k
             Yp = ratQ.polyPow(Y, 3);
+            Xa = ratQ.polyPow(abs(X), 3);
+            Ya = ratQ.polyPow(abs(Y), 3);
             for i = 0:3
                 for j = 0:(3-i)
                     cij = P(i+1, j+1);
                     if cij == 0, continue, end
                     term = ratQ.polyMul(Xp{i+1}, Yp{j+1});
                     lift = md^(3 - i - j);
-                    R = ratQ.chk(R + cij * lift * term, 'substituted coefficient');
+                    Rb = Rb + abs(cij) * abs(lift) * ratQ.polyMul(Xa{i+1}, Ya{j+1});
+                    R = ratQ.chkB(R + cij * lift * term, Rb, 'substituted coefficient');
                 end
             end
 
@@ -1737,7 +1740,7 @@ classdef ratQ
                 end
                 lcb = b(1);  lcr = r(1);
                 r = ratQ.chk(r * lcb, 'reduced pseudo-remainder step');
-                r(1:numel(b)) = ratQ.chk(r(1:numel(b)) - lcr * b, 'elimination');
+                r(1:numel(b)) = ratQ.chkB(r(1:numel(b)) - lcr * b, abs(r(1:numel(b))) + abs(lcr) * abs(b), 'elimination');
                 r(1) = 0;                      % the leading term cancels exactly, by construction
                 r = ratQ.polyPrimitive(ratQ.polyTrim(r));
             end
@@ -2133,7 +2136,7 @@ classdef ratQ
         % formula.
             c = ratQ.conic(ratQ.chk(c, 'line pair'));
             a = c(1); b = c(2); cc = c(3); d = c(4); e = c(5); f = c(6);
-            disc = ratQ.chk(b^2 - 4*a*cc, 'line pair discriminant');
+            disc = ratQ.chkB(b^2 - 4*a*cc, b^2 + 4*abs(a)*abs(cc), 'line pair discriminant');
             if disc < 0
                 error('ratQ:notALinePair', ...
                     ['this conic''s quadratic part is DEFINITE, so its zero set is a point or ' ...
@@ -2354,8 +2357,8 @@ classdef ratQ
         %      midpoint -- exactly, never in floating point. The depth is capped by ratQ's 2^53
         %      ceiling, and hitting the cap is a refusal, not a guess.
             u = ratQ.qs2Red(u);
-            d1 = ratQ.chk(Q1(2)^2 - 4*Q1(1)*Q1(3), 'discriminant');
-            d2 = ratQ.chk(Q2(2)^2 - 4*Q2(1)*Q2(3), 'discriminant');
+            d1 = ratQ.chkB(Q1(2)^2 - 4*Q1(1)*Q1(3), Q1(2)^2 + 4*abs(Q1(1))*abs(Q1(3)), 'discriminant');
+            d2 = ratQ.chkB(Q2(2)^2 - 4*Q2(1)*Q2(3), Q2(2)^2 + 4*abs(Q2(1))*abs(Q2(3)), 'discriminant');
             r = round(sqrt(double(d1)*double(d2)));
             if d1 > 0 && d2 > 0 && r*r == d1*d2
                 s = 0;  ok = false;  return          % one field in disguise: the zero test fails
@@ -2530,7 +2533,8 @@ classdef ratQ
                 case 0
                     % P is bounded: the min is attained, and every direction is irrelevant.
                 case 1
-                    a = rec(1,:) * H * rec(1,:).';
+                    a = ratQ.chkB(rec(1,:) * H * rec(1,:).', abs(rec(1,:)) * abs(H) * abs(rec(1,:)).', ...
+                                  'recession curvature');   % a SIGN decision: bounded, not trusted
                     if a < 0, s = -1; return, end  % q -> -infinity along the one recession ray
                     if a == 0
                         r = ratQ.flatRaySign(H, g0, P, rec(1,:).');
@@ -2701,11 +2705,15 @@ classdef ratQ
         % parabola opens upwards and its vertex lies strictly inside, at that vertex, where
         % 4*a2*psi = 4*a2*a0 - a1^2. Only signs are needed, so the vertex value never has to be
         % formed as a rational: with a2 > 0 the sign of psi there is the sign of that integer.
-            A = u1.' * H * u1;   B = u1.' * H * u2;   C = u2.' * H * u2;
-            a2 = A - 2*B + C;    a1 = 2*(B - C);
+            aH = abs(H);  a1u = abs(u1);  a2u = abs(u2);
+            A = ratQ.chkB(u1.' * H * u1, a1u.' * aH * a1u, 'cone form');
+            B = ratQ.chkB(u1.' * H * u2, a1u.' * aH * a2u, 'cone form');
+            C = ratQ.chkB(u2.' * H * u2, a2u.' * aH * a2u, 'cone form');
+            a2 = ratQ.chkB(A - 2*B + C, abs(A) + 2*abs(B) + abs(C), 'cone form');
+            a1 = ratQ.chkB(2*(B - C), 2*(abs(B) + abs(C)), 'cone form');
             s = min(sign(A), sign(C));
             if a2 > 0 && a1 < 0 && -a1 < 2*a2                 % vertex -a1/(2*a2) lies in (0,1)
-                s = min(s, sign(ratQ.chk(4*a2*C - a1^2, 'cone form vertex')));
+                s = min(s, sign(ratQ.chkB(4*a2*C - a1^2, 4*abs(a2)*abs(C) + a1^2, 'cone form vertex')));
             end
         end
     end

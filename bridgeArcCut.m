@@ -90,7 +90,7 @@ function [cells, info] = bridgeArcCut(tie, P, N1, m1, N2, m2, d, wit, C1, C2, kp
     % D*s1 + E*s2 + F = 0 identically, so tau parameterises the tie and nothing else.
     w   = [E; -D];
     s0n = [-F*D; -F*E];
-    nd  = ratQ.chk(D^2 + E^2, 'line normalisation');
+    nd  = ratQ.chkB(D^2 + E^2, D^2 + E^2, 'line normalisation');
 
     % Row a's + c >= 0 becomes A*tau + B >= 0 with A, B integers.
     lo = [];  hi = [];                                   % rational bounds as [num den], den > 0

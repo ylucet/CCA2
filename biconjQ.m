@@ -269,10 +269,11 @@ function h = biconjQ(obj)
                 end
             end
             if ~diverges && size(rays,1) >= 2
-                a = ratQ.chk(rays(1,:)*Hk*rays(1,:).', 'cone a');
-                b = ratQ.chk(rays(1,:)*Hk*rays(2,:).', 'cone b');
-                c = ratQ.chk(rays(2,:)*Hk*rays(2,:).', 'cone c');
-                if b < 0 && ratQ.chk(b^2 - a*c, 'cone discriminant') > 0
+                aR = abs(rays);  aH = abs(Hk);
+                a = ratQ.chkB(rays(1,:)*Hk*rays(1,:).', aR(1,:)*aH*aR(1,:).', 'cone a');
+                b = ratQ.chkB(rays(1,:)*Hk*rays(2,:).', aR(1,:)*aH*aR(2,:).', 'cone b');
+                c = ratQ.chkB(rays(2,:)*Hk*rays(2,:).', aR(2,:)*aH*aR(2,:).', 'cone c');
+                if b < 0 && ratQ.chkB(b^2 - a*c, b^2 + abs(a)*abs(c), 'cone discriminant') > 0
                     diverges = true;
                 end
             end
@@ -594,7 +595,7 @@ function h = concaveEnvelope(obj)
                 d = ratQ.chk(n * G(base,:).', 'facet offset');
                 below = false;
                 for p = 1:m
-                    if ratQ.chk(n * Q3(p,:).' - d, 'facet side') < 0, below = true; break, end
+                    if ratQ.chkB(n * Q3(p,:).' - d, abs(n) * abs(Q3(p,:)).' + abs(d), 'facet side') < 0, below = true; break, end
                 end
                 if ~below
                     for p = 1:nr

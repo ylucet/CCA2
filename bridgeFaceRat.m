@@ -142,7 +142,8 @@ function [face, info] = buildFace(u, w, nu, rq, rl, rc, rd, b1, k1, d, P)
     info  = struct();
 
     % value at t*: (A - B^2/(4C)) / scale = (4AC - B^2) / (4C * scale)
-    num = ratQ.chk(polyMulAff(A, C)*4 - polyMulAff(B, B), 'face numerator');   % quadratic in x
+    num = ratQ.chkB(polyMulAff(A, C)*4 - polyMulAff(B, B), ...
+                    polyMulAff(abs(A), abs(C))*4 + polyMulAff(abs(B), abs(B)), 'face numerator');   % quadratic in x
     den = ratQ.chk(4 * scale * C, 'face denominator');                          % LINEAR in x
 
     face.fN = ratQ.chk(quadToWeighted(num), 'face numerator, weighted basis');

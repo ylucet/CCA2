@@ -7,6 +7,12 @@ classdef exactSumLintTest < matlab.unittest.TestCase
 % same shape was at 80 more sites. A sum of products goes through ratQ.chkB(value, |expression|)
 % instead, which refuses once the terms reach 2^53.
 %
+% WIDENED 2026-10-10. The first version flagged only `* ... +- ... *`, so a product plus a plain
+% term (`2*a*qn + bb`, a Horner step `v*t + p(k)`) and every discriminant written `b^2 - 4*a*c`
+% passed -- 18 sites, the same silent-sign risk. Now also: a binary +/- at the TOP level of the
+% argument together with a `*` or `^` there. A difference inside parentheses times a product
+% (`(qb-qa)*vd`) is exact for integers and is deliberately not flagged.
+%
 % WHAT THIS DOES NOT SEE: a matrix or dot product inside chk (`chk(N*s + m)`) hides the same sum
 % behind one `*`, and a line scan cannot tell it from a scalar product, which is safe. Those are a
 % TODO.md item, not a pass of this test.
@@ -24,7 +30,7 @@ classdef exactSumLintTest < matlab.unittest.TestCase
                     c = strfind(L, '%');  if ~isempty(c), L = L(1:c(1)-1); end   % code only
                     if contains(L, 'chkB') || contains(L, 'mulChk'), continue, end
                     for a = chkFirstArgs(L)
-                        if ~isempty(regexp(a{1}, '\*.*[-+].*\*', 'once'))
+                        if isSumOfProducts(a{1})
                             bad{end+1} = sprintf('%s:%d', files(k).name, i); %#ok<AGROW>
                             break
                         end
@@ -57,4 +63,19 @@ function args = chkFirstArgs(L)
         end
         args{end+1} = L(from:j-1); %#ok<AGROW>
     end
+end
+
+function tf = isSumOfProducts(a)
+% The original pattern, OR a top-level binary +/- with a top-level product or power.
+    tf = ~isempty(regexp(a, '\*.*[-+].*\*', 'once'));
+    if tf, return, end
+    top = a;                                     % blank out every parenthesised group
+    prev = '';
+    while ~strcmp(prev, top)
+        prev = top;
+        top = regexprep(top, '\([^()\[\]]*\)|\[[^()\[\]]*\]', 'X');
+    end
+    top = regexprep(top, '\d[eE][-+]\d', '0');           % 1e-9 is a literal, not a sum
+    top = regexprep(top, '(^|[=,;])\s*[-+]', '$1');       % a leading unary sign
+    tf = ~isempty(regexp(top, '[^-+*/^\s]\s*[-+]', 'once')) && ~isempty(regexp(top, '[*^]', 'once'));
 end

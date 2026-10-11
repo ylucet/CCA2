@@ -68,7 +68,7 @@ function [s, info] = algCurveSide(FP, FB, num, den, X)
         % merge: the cone's apex in the small, the discriminant curve in general. The fibre is
         % quadratic, so the discriminant settles it outright.
         [a, bb, cc] = coeffs3(p);
-        disc = ratQ.chk(bb^2 - 4*a*cc, 'fibre discriminant');
+        disc = ratQ.chkB(bb^2 - 4*a*cc, bb^2 + 4*abs(a)*abs(cc), 'fibre discriminant');
         if disc < 0, info.nreal(i) = 0;  continue, end % no real branch at this point
 
         if disc == 0
@@ -76,7 +76,7 @@ function [s, info] = algCurveSide(FP, FB, num, den, X)
             % for either. r = -bb/(2a), and sign(q - r) = sign(2 a qn + bb) sign(a) over integers.
             info.nreal(i) = 2;                         % with multiplicity, as algBranch counts
             info.below(i) = NaN;
-            t = ratQ.chk(2*a*qn + bb, 'double root comparison');
+            t = ratQ.chkB(2*a*qn + bb, 2*abs(a)*abs(qn) + abs(bb), 'double root comparison');
             if t == 0, s(i) = 0; else, s(i) = sign(t) * sign(a); end
             continue
         end
@@ -190,8 +190,9 @@ end
 % --------------------------------------------------------------------------------------------------
 function v = polyAtInt(p, t)
 % p(t) for an integer polynomial at an integer, exactly.
-    v = 0;
+    v = 0;  vb = 0;                    % vb bounds every partial sum: Horner on |p| at |t|
     for k = 1:numel(p)
-        v = ratQ.chk(v * t + p(k), 'fibre at the comparison point');
+        vb = vb * abs(t) + abs(p(k));
+        v = ratQ.chkB(v * t + p(k), vb, 'fibre at the comparison point');
     end
 end

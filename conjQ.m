@@ -293,7 +293,7 @@ function g = caseAFullDomain(fN, fD)
         den = ratQ.chk(2 * mHm * fD, 'line denominator');
         num = [0 0 0 0, ratQ.chk(2*P(1)^2,'c5'), ratQ.chk(2*P(1)*P(2),'c6'), ...
                ratQ.chk(2*P(2)^2,'c7'), ratQ.chk(2*P(1)*P(3),'c8'), ratQ.chk(2*P(2)*P(3),'c9'), ...
-               ratQ.chk(P(3)^2 - 2*mHm*fN(10), 'c10')];
+               ratQ.chkB(P(3)^2 - 2*mHm*fN(10), P(3)^2 + 2*abs(mHm)*abs(fN(10)), 'c10')];
         row = [ratQ.chk(fD*nl(1),'e1'), ratQ.chk(fD*nl(2),'e2'), ratQ.chkB(-(Ln.'*nl), abs(Ln).'*abs(nl), 'e0')];
         g = assembleQuaConCells(struct('num', num, 'den', den, ...
                                        'con', [ratQ.conic([0 0 0, row]), sgnOf(row, 0)]));
@@ -719,10 +719,11 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
     % it is nonnegative for every l >= 0 exactly when a >= 0, c >= 0 and (b >= 0 or b^2 <= a*c).
     % Testing the generators alone would miss a negative direction strictly inside the cone.
     if size(R,1) >= 2
-        a = ratQ.chk(R(1,:)*Hn*R(1,:).', 'cone a');
-        b = ratQ.chk(R(1,:)*Hn*R(2,:).', 'cone b');
-        c = ratQ.chk(R(2,:)*Hn*R(2,:).', 'cone c');
-        if b < 0 && ratQ.chk(b^2 - a*c, 'cone discriminant') > 0
+        aR = abs(R);  aH = abs(Hn);
+        a = ratQ.chkB(R(1,:)*Hn*R(1,:).', aR(1,:)*aH*aR(1,:).', 'cone a');
+        b = ratQ.chkB(R(1,:)*Hn*R(2,:).', aR(1,:)*aH*aR(2,:).', 'cone b');
+        c = ratQ.chkB(R(2,:)*Hn*R(2,:).', aR(2,:)*aH*aR(2,:).', 'cone c');
+        if b < 0 && ratQ.chkB(b^2 - a*c, b^2 + abs(a)*abs(c), 'cone discriminant') > 0
             ok = false;
             why = 'some direction strictly inside the recession cone has negative curvature';
             return

@@ -95,7 +95,7 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
             faces = [faces, f1]; %#ok<AGROW>
             continue
         end
-        D = ratQ.chk(be^2 - 4*al*ga, 'corner discriminant');
+        D = ratQ.chkB(be^2 - 4*al*ga, be^2 + 4*abs(al)*abs(ga), 'corner discriminant');
         if D <= 0, continue, end                   % the facet misses the tie, or touches it
 
         % ---- the value, implicitly ------------------------------------------------------------
