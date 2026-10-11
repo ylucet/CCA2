@@ -46,14 +46,6 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
-- [ ] **Atom route, unbounded: a CONVEX unbounded piece** (`biconjAtoms:unboundedConvexPiece`).
-      Rays are in (2026-10-11, see Done). A convex piece that is unbounded needs half-plane
-      membership for its atom (inPoly is polygon-only) and its 'piece' form. The argument for
-      the rest: f* = max_j g_j + I_D, so f** = (co min_j h_j) inf-conv sigma_D; a pair over D is
-      exactly co(min(h_a,h_b)) inf-conv sigma_D, and a triple plane holds on T + N_D(s0)
-      (EnvelopeMin's .G, unit-tested; s0 on the boundary of D is non-generic, so no end-to-end
-      fixture exercises it yet).
-
 - [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
       irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the mesh,
@@ -69,6 +61,13 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **Atom route, unbounded: a CONVEX unbounded piece** -- DONE 2026-10-11 (overnight). Its
+      region is held as half-planes (inPiece), not a polygon. biconjQTest's quadrant fixture is
+      exactly max(x,0)^2 + y^2. The argument for the unbounded route: f* = max_j g_j + I_D, so
+      f** = (co min_j h_j) inf-conv sigma_D; a pair over D is exactly co(min(h_a,h_b)) inf-conv
+      sigma_D, and a triple plane holds on T + N_D(s0) (EnvelopeMin .G, unit-tested; s0 on the
+      boundary of D is non-generic, so no end-to-end fixture exercises it).
 
 - [x] **Atom route for UNBOUNDED domains (erratum Case E, Example 3)** -- DONE 2026-10-11
       (overnight). A ray along which f is strictly convex is an atom (t in [0, inf)); a ray of

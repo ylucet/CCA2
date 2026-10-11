@@ -103,6 +103,23 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(h.eval([1 2; 1 -0.5]), [inf; inf], 'and +infinity off it');
         end
 
+        function aCONVEXUnboundedPieceBesideAnINDEFINITEOneIsComputed(testCase)
+        % Found 2026-10-11: the atom route refused a convex piece with rays
+        % (biconjAtoms:unboundedConvexPiece) -- its membership test was polygon-only.
+        % f = x^2 + y^2 on the first quadrant, y^2 - 2xy on the second. f >= y^2 throughout (on the
+        % second quadrant -2xy >= 0), with equality on the negative x-axis, and the limit
+        % lam*f(x/lam, 0) + (1-lam)*f(0, y/(1-lam)) -> y^2 as lam -> 0 gives co f <= y^2 for x <= 0.
+        % On the first quadrant f itself is convex and max(x,0)^2 + y^2 is a convex minorant equal
+        % to f there, so co f = max(x,0)^2 + y^2 on y >= 0, +infinity below.
+            f = QuaPol([0 0; 1 0; 0 1; -1 0], [1 2 0; 1 3 0; 1 4 0], ...
+                       [0 0 0 0, 2, 0, 2, 0, 0, 0; 0 0 0 0, 0, -2, 2, 0, 0, 0], [1 0; 2 1; 0 2]);
+            h = biconjQ(f);
+            rng(82);  X = [randn(60,1)*3, abs(randn(60,1))*3; 0 0; -2 0; 2 0; 0 3];
+            testCase.verifyEqual(h.eval(X), max(X(:,1),0).^2 + X(:,2).^2, 'AbsTol', 1e-10, ...
+                'co f is max(x,0)^2 + y^2 on the upper half-plane');
+            testCase.verifyEqual(h.eval([1 -1; -1 -0.5]), [inf; inf], 'and +infinity below');
+        end
+
         function anUNBOUNDEDPieceGetsTheLIFTEDHULLWithItsRECESSIONRaysInIt(testCase)
         % The unbounded envelope, on a fixture whose answer is known in closed form rather than
         % only checkable: q = -x^2 on the half-strip {0 <= x <= 1, y >= 0}.

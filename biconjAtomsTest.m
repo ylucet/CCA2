@@ -8,10 +8,11 @@ classdef biconjAtomsTest < matlab.unittest.TestCase
         function theINPUTContractIsRefusedByName(testCase)
             testCase.verifyError(@() biconjAtoms(42), 'biconjAtoms:input');
             % CHANGED 2026-10-11: rays are in scope now (erratum Case E), so `biconjAtoms:unbounded`
-            % is gone. What is refused is a CONVEX piece that is unbounded (its atom would need
-            % half-plane membership) and an empty dom f* (co f = -infinity).
+            % is gone, and so (later the same night) is `unboundedConvexPiece`: a lone convex
+            % unbounded piece is ONE atom with an empty D, sent back like a bounded one. What is
+            % refused is an empty dom f* (co f = -infinity).
             cvxCone = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, 2, 0, 2, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() biconjAtoms(cvxCone), 'biconjAtoms:unboundedConvexPiece');
+            testCase.verifyError(@() biconjAtoms(cvxCone), 'biconjAtoms:oneAtom');
             down = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, -2, 0, -2, 0, 0, 0], [1 0; 0 1]);
             testCase.verifyError(@() biconjAtoms(down), 'biconjAtoms:emptyDomain');
         end

@@ -30,7 +30,8 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   face's polynomial genuinely needs 59 bits, past what double storage holds.
 - **biconjQ now handles unbounded domains on the atom route** (erratum Case E). Erratum Example 3
   comes out exactly x1^2 (its quarantine is lifted), and a cone fixture refused since September
-  is exactly its closed form. Both are values no finite convex combination attains.
+  is exactly its closed form. Both are values no finite convex combination attains. Convex
+  unbounded pieces work too (a mixed fixture matches its hand-derived closed form).
 - Daily slow gate: 101 pass / 0 fail (2 known quarantined).
 
 ## What is broken
@@ -38,7 +39,6 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   quarantined on that. Needs wider storage for implicit polynomials (TODO).
 - poly2 kink biconj is still not MESHED (evaluable only): the single global arrangement has 85
   curves. Fix is a per-cell-pair arrangement (TODO).
-- Unbounded inputs with a CONVEX unbounded piece are still refused by name (TODO).
 
 ## Needs a decision
 - **TODO item "biconjCPLQ scaling on the poly2 kinks" (legacy symbolic route, runs > 4 h) was
@@ -51,4 +51,14 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   (c) return it only under an explicit engine flag. I'd keep (a).
 
 ## Where I stopped
-Row-less corners done; Example 2 integer width scope-reduced to the stored-polynomial width; unbounded atom route done.
+Stopped at the end of the overnight window (about 12 h) with the tree green: fast 744/0 and
+normal 30/0, with 3 quarantined (all erratum Example 2). Every item still in TODO Next up is
+either a decision (above) or a redesign rather than a fix:
+- carry the implicit polynomial in BigInteger through the bridge witness, branch and side
+  decisions (Example 2);
+- arrange per cell pair instead of globally (poly2 kink mesh);
+- mesh and prune EnvelopeMin;
+- an exact interior-emptiness test for algebraic regions (zero-area faces);
+- find a fixture for two bridge faces in one cell.
+The first of these is the next session's natural start: it completes all three erratum examples.
+Nothing pushed; branch overnight/2026-10-10.

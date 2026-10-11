@@ -3,7 +3,7 @@ function env = biconjAtoms(f)
 %   envelopes and their triple tangent planes -- the route for non-convex pieces that curve UP
 %   along an edge, which biconjQ's lower-hull path cannot take.
 %
-% [input]  f   : QuaPol, exact (fN/fD), operable; rays allowed when no unbounded piece is convex.
+% [input]  f   : QuaPol, exact (fN/fD), operable; bounded or not.
 % [output] env : EnvelopeMin -- `env.eval(X)` is co f at the points X.
 %
 % ==================================================================================================
@@ -36,8 +36,8 @@ function env = biconjAtoms(f)
 %            this is a face's DATA, not a mesh decision, and like every face here it is evaluated
 %            in doubles.
 %
-% RAYS (erratum Case E) are below, at the restriction to D. WHAT IS NOT HERE: a convex piece that
-% is unbounded (refused by name), and the face list is not meshed into one AlgCon -- `EnvelopeMin.eval` is the function. Verified against the erratum's
+% RAYS (erratum Case E) are below, at the restriction to D. WHAT IS NOT HERE: the face list is
+% not meshed into one AlgCon -- `EnvelopeMin.eval` is the function. Verified against the erratum's
 % closed forms in erratumExamplesTest.
 % ==================================================================================================
     if ~isa(f, 'QuaPol'), error('biconjAtoms:input', 'expects a QuaPol; got %s.', class(f)); end
@@ -88,7 +88,7 @@ function [atoms, forms] = collectAtoms(f)
     atoms = {};
     forms = struct('kind', {}, 'A', {}, 'b', {}, 'c', {}, 'u', {}, 'd', {}, 'al', {}, 'be', {}, ...
                    'H', {}, 'L', {}, 'poly', {}, 'tmax', {});
-    cvx = {};                                    % polygons of the convex-piece atoms
+    cvx = {};                                    % the convex-piece atoms' regions (see inPiece)
     edgeAt = zeros(0,4);                         % [u w] of each edge atom, for dedup
     rayAt = zeros(0,4);                          % [u d] of each RAY atom, d primitive
     vtx = zeros(0,2);  vval = zeros(0,1);        % every vertex that gets a form
@@ -100,17 +100,15 @@ function [atoms, forms] = collectAtoms(f)
         % the piece's edges as (u, dv, isRay): a segment u -> u + dv, or a ray u + t dv, t >= 0
         own = find(any(f.F == k, 2));
         if any(f.E(own,3) == 0)
-            if isCvx
-                error('biconjAtoms:unboundedConvexPiece', ['piece %d is convex AND unbounded; its ' ...
-                      'atom would need half-plane membership, which is not built yet.'], k);
-            end
-            poly = [];
             ed = zeros(0,5);
             for j = own(:).'
                 u = f.V(f.E(j,1),:);  w = f.V(f.E(j,2),:);
                 if f.E(j,3) == 0, ed(end+1,:) = [u, w, 1]; %#ok<AGROW>
                 else, ed(end+1,:) = [u, w - u, 0]; end %#ok<AGROW>
             end
+            % AN UNBOUNDED PIECE HAS NO POLYGON: membership is by its half-planes instead.
+            poly = struct('rows', pieceRows(ed));
+            eidx = own;
         else
             [poly, eidx] = piecePolygon(f, k);
             m = size(poly,1);
@@ -160,7 +158,7 @@ function [atoms, forms] = collectAtoms(f)
         forms(end+1) = mkForm('vertex', zeros(2), vtx(i,:).', -vval(i), vtx(i,:), [], [], [], ...
                               [], [], []); %#ok<AGROW>
         p = vtx(i,:);
-        covered = any(cellfun(@(P) inPoly(p, P), cvx));
+        covered = any(cellfun(@(P) inPiece(p, P), cvx));
         for j = 1:size(edgeAt,1)
             covered = covered || norm(p - edgeAt(j,1:2)) < 1e-12 || norm(p - edgeAt(j,3:4)) < 1e-12;
         end
@@ -176,7 +174,7 @@ function [atoms, forms] = collectAtoms(f)
     keep = true(1, numel(atoms));
     for i = 1:numel(atoms)
         if strcmp(atoms{i}.kind, 'edge')
-            keep(i) = ~any(cellfun(@(P) inPoly(atoms{i}.u, P) && inPoly(atoms{i}.w, P), cvx));
+            keep(i) = ~any(cellfun(@(P) inPiece(atoms{i}.u, P) && inPiece(atoms{i}.w, P), cvx));
         end
     end
     atoms = atoms(keep);
@@ -214,6 +212,30 @@ function q = singlePiece(f, k, eidx)
     E = f.E(eidx,:);  E(:,1:2) = idx(E(:,1:2));
     F = double(f.F(eidx,:) == k);
     q = QuaPol(f.V(vs,:), E, f.f(k,:), F);
+end
+
+function tf = inPiece(p, P)
+% p in a piece's region: a polygon (bounded) or a struct of half-planes (unbounded).
+    if isstruct(P)
+        R = P.rows;
+        tf = all(R(:,1:2)*p(:) + R(:,3) >= -1e-9 * max(1, max(abs(R(:)))) * max(1, norm(p)));
+    else
+        tf = inPoly(p, P);
+    end
+end
+
+function R = pieceRows(ed)
+% The half-planes [a b c] (a x + b y + c >= 0) of a CONVEX unbounded piece, from its edges
+% (u, dv, isRay), oriented by an interior point: the mean of the base points pushed along the sum
+% of the unit ray directions, which lies strictly inside a 2-D convex piece with a vertex.
+    rays = ed(ed(:,5) == 1, 3:4);
+    ip = mean(ed(:,1:2), 1) + sum(rays ./ vecnorm(rays, 2, 2), 1);
+    R = zeros(size(ed,1), 3);
+    for i = 1:size(ed,1)
+        nrm = [-ed(i,4), ed(i,3)];
+        R(i,:) = [nrm, -nrm*ed(i,1:2).'];
+        if R(i,1:2)*ip.' + R(i,3) < 0, R(i,:) = -R(i,:); end
+    end
 end
 
 function tf = inPoly(p, P)
@@ -279,7 +301,7 @@ function [m, ok] = contact(fm, s)
             t = (s.'*fm.d.' - fm.be) / (2*fm.al);
             m = fm.u + t*fm.d;  ok = t >= -1e-9 && t <= fm.tmax + 1e-9;   % tmax = inf on a ray
         case 'piece'
-            m = (fm.H \ (s - fm.L)).';  ok = inPoly(m, fm.poly);
+            m = (fm.H \ (s - fm.L)).';  ok = inPiece(m, fm.poly);
     end
 end
 
