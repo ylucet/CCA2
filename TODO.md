@@ -46,6 +46,12 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
+- [ ] **`QuaPol.eval` returns +inf at points IN the domain** (found 2026-10-11 checking conjQ
+      against a numeric sup; conjQ was right each time, by hand): on examples2{3}, a RAY from 0
+      along (1,0) with x^2/2, eval is +inf at (2,0) and (3,0) -- the ray read as a segment; on
+      examplesNonconvex{1} (a notched polygon) at the vertices (0,0), (2,1) and the edge point
+      (0.5,0.5); on the needle examples2{1}, eval at the needle itself. Any oracle built on eval
+      under-reports on these domains.
 - [ ] **conjQ refuses multi-function CHAINS (`PLQ:conjQ:ambiguousChain`, examples2{4,5,6,7,10}).**
       Its stated reason -- no convention for which edge takes which function -- is the premise
       biconjQ's own comment calls wrong: row j IS edge j's function (QuaPol.eval). Then f* is the
