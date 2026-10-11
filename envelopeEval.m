@@ -137,7 +137,16 @@ function v = bridgeValue(face, x)
 % A bridge face carries its value either implicitly (a polynomial and a branch) or as a rational
 % function -- `face.kind` says which, and both are read here so a caller never has to ask.
     switch face.kind
-        case {'algebraic', 'corner'}
+        case 'corner'
+            % A corner face is AFFINE, <s,x> - g(s), and is read as such. NOT through FP/FB: FP's two
+            % roots are the two conjugate corners' PLANES, which CROSS, so "the k-th root from the
+            % top" names this corner on one side of their crossing line and the other corner on the
+            % other side -- measured 2026-10-11 on the poly2 kink, -0.382 returned for -2.642,
+            % above f** (envelopeAssembleTest/anIRRATIONALStraightTieGetsItsCorners).
+            n = face.src.n;  s = face.s(:);
+            g = ((s.'*[n(5) n(6); n(6) n(7)]*s)/2 + [n(8) n(9)]*s + n(10)) / face.src.d;
+            v = x(:).'*s - g;
+        case 'algebraic'
             v = algBranch(face.FP, x, face.FB);
         case 'rational'
             q = face.fN;

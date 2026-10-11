@@ -123,6 +123,16 @@ function [env, info] = envelopeAssemble(gA, gB)
                     info.nStraight = info.nStraight + 1;
                     env = collect(env, sideCells(nA, dA, pr.P, pr.q, +1), k);
                     env = collect(env, sideCells(nB, dB, pr.P, pr.q, -1), k);
+                    % AND ITS CORNERS (2026-10-11). The tie is not a row here -- for a parallel
+                    % pair its lines are generally IRRATIONAL ((s1 - 2 s2) = -6 +- sqrt(80) on the
+                    % poly2 kink) -- so P's candidates contain nothing ON it. Where both faces are
+                    % linear along the tie the sup over it sits at its ends, the corners, and
+                    % without them the pair covered nothing: +inf on most of the domain.
+                    straightTieGuard(nA, nB, pr.q);
+                    for cf = [cornerFaceAlg(nA, dA, pr.P, pr.q, +1), cornerFaceAlg(nB, dB, pr.P, pr.q, -1)]
+                        cf.pairIndex = k;
+                        env.bridge{end+1} = cf; %#ok<AGROW>
+                    end
                     continue
                 otherwise
                     rethrow(ME)
@@ -150,6 +160,31 @@ function [env, info] = envelopeAssemble(gA, gB)
 end
 
 % --------------------------------------------------------------------------------------------------
+function straightTieGuard(nA, nB, q)
+% A straight tie that is a pair of IRRATIONAL parallel lines can only be covered by its corners when
+% both faces are LINEAR along it; a face curving along it would need a facet candidate on an
+% irrational line, which nothing builds. That is refused by name rather than left as a hole (a hole
+% is +inf, a wrong answer). A double line or rational lines are left alone: unchanged behaviour.
+    A = q(1);  B = q(2);  C = q(3);  D = q(4);  E = q(5);  F = q(6);
+    if A ~= 0
+        disc = ratQ.chkB(4*D^2 - 16*A*F, 4*D^2 + 16*abs(A)*abs(F), 'straight tie discriminant');
+        w = [-B; 2*A];
+    else
+        disc = ratQ.chkB(4*E^2 - 16*C*F, 4*E^2 + 16*abs(C)*abs(F), 'straight tie discriminant');
+        w = [1; 0];
+    end
+    if disc <= 0 || round(sqrt(disc))^2 == disc, return, end   % double line, or rational lines
+    for n = {nA, nB}
+        N = [n{1}(5) n{1}(6); n{1}(6) n{1}(7)];
+        if ratQ.chkB(w.'*N*w, abs(w).'*abs(N)*abs(w), 'curvature along the tie') ~= 0
+            error('envelopeAssemble:irrationalStraightFacet', ...
+                ['a cell pair ties on irrational parallel lines and a face CURVES along them, so ' ...
+                 'its sup may sit inside the tie segment -- a facet candidate on an irrational ' ...
+                 'line, which is not built.']);
+        end
+    end
+end
+
 function env = collect(env, cells, k)
 % Add one pair's candidates to the face list, each remembering which pair it came from.
     for i = 1:numel(cells)

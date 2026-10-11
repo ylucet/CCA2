@@ -15,6 +15,10 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   the batch); fixed per point, red first.
 - Exact-sum audit: 49 more integer sums that could silently get the wrong sign past 2^53 now
   refuse instead (17 found by a widened lint, 32 hidden in matrix/dot products).
+- Two pre-existing envelope defects found on the poly2 kink (both made values WRONG, not just
+  refused): a cell pair tying on irrational parallel lines got no corners (envelope +inf on 64%
+  of its domain); and every corner face was evaluated through a branch index that picks the
+  OTHER corner's value past a crossing line (0.23 too high). Both fixed, red first.
 - Daily slow gate: 101 pass / 0 fail (2 known quarantined).
 
 ## What is broken
@@ -23,6 +27,10 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
 - Erratum Example 3 biconj: unbounded, atom route is bounded-only — 1 test quarantined (TODO).
 
 ## Needs a decision
+- **TODO item "biconjCPLQ scaling on the poly2 kinks" (legacy symbolic route, runs > 4 h) was
+  skipped.** The exact route is its replacement, and tonight's fixes go there. Options: (a) drop
+  the item and retire the two quarantined legacy tests in favour of the exact route's tests
+  [my pick]; (b) keep it for a dedicated session; (c) keep the legacy tests quarantined forever.
 - **Return type of biconjQ on the new route.** It returns `EnvelopeMin` (a min of face lists,
   answers `eval`), not an AlgCon node. Options: (a) keep it as a separate type until meshing lands
   [what I did — reversible]; (b) mesh before returning (needs envelopeMesh on several pairs);

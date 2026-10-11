@@ -77,6 +77,31 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             end
         end
 
+        function anIRRATIONALStraightTieGetsItsCorners(testCase)
+        % Found 2026-10-11 on the poly2 kink at c = -2 (biconjQ's own fixture): one cell pair ties
+        % on a PARALLEL PAIR of IRRATIONAL lines, (s1 - 2 s2) = -6 +- sqrt(80). A straight tie is
+        % treated as an ordinary facet, but an irrational line cannot be a row, so nothing produced
+        % candidates ON it -- and both faces are linear along it, so the pair's sup sits at its
+        % ends, the corners. The pair covered no point at all and the envelope was +inf on 384 of
+        % 600 points of its own domain. Oracle: the numeric sup, as above.
+            V = [-2 0; 2 0; 1 2; -1 2];
+            q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];  q1 = q0;  q1(9) = -2;
+            gA = conjQ(QuaPol(V([1 2 3],:), [1 2 1; 2 3 1; 3 1 1], q0, [1 0;1 0;1 0]));
+            gB = conjQ(QuaPol(V([1 3 4],:), [1 2 1; 2 3 1; 3 1 1], q1, [1 0;1 0;1 0]));
+            env = envelopeAssemble(gA, gB);
+            rng(23);  W = rand(60,3);  W = W ./ sum(W,2);
+            X = [W*V([1 2 3],:); W*V([1 3 4],:)];
+            v = envelopeEval(env, X);
+            testCase.verifyTrue(all(isfinite(v)), sprintf( ...
+                'the envelope must be finite on its domain; +inf at %d of %d', nnz(~isfinite(v)), numel(v)));
+            for i = 1:8:size(X,1)
+                want = supOracle(gA, gB, X(i,:));
+                testCase.verifyGreaterThanOrEqual(v(i), want - 1e-9*max(1,abs(want)), 'no undershoot');
+                testCase.verifyLessThan(abs(v(i) - want)/max(1,abs(want)), 1e-7, ...
+                    sprintf('the envelope must equal the definition at (%g,%g)', X(i,1), X(i,2)));
+            end
+        end
+
         function aBRIDGEFaceIsUSEDAndNotJustBuilt(testCase)
         % The faces must actually ANSWER somewhere, or the fixture would be proving nothing about
         % them. `envelopeEval` reports which face supplied each value, so this asks it directly.
