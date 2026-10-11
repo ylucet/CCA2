@@ -322,10 +322,19 @@ function h = biconjQ(obj)
                          'bridge face carries the square root of a quadratic, which no CCA2 ' ...
                          'type can hold -- see DECISIONS.md 2026-09-05.%s'], k, assemblyWhy);
                 end
+                % THE ATOM ROUTE (2026-10-10). A non-convex piece's conjugate is that of its
+                % vertices and convex edges (erratum Theorem 1), each of which has a polyhedral
+                % conjugate, so the envelope is the minimum over the atoms' pairwise envelopes and
+                % triple tangent planes -- biconjAtoms' header. Bounded domains only; the result is
+                % an EnvelopeMin, which answers eval but is not meshed into one AlgCon.
+                if all(obj.E(:,3) ~= 0)
+                    h = biconjAtoms(obj);
+                    return
+                end
                 error('PLQ:biconjQ:notImplemented', ...
-                    ['piece %d is not convex AND curves UPWARD along one of its edges, so its ' ...
-                     'own envelope is not determined by the vertex values -- that single-piece ' ...
-                     'case is [COAP] A.2-A.5.'], k);
+                    ['piece %d is not convex AND curves UPWARD along one of its edges, and the ' ...
+                     'domain is UNBOUNDED -- the atom route covers bounded domains only (an ' ...
+                     'unbounded one needs the erratum''s Case E).'], k);
             end
         end
         % A 2-D face needs three affinely independent GENERATORS, and for an unbounded piece two of

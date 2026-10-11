@@ -641,13 +641,18 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(h.eval((A+B)/2), (h.eval(A) + h.eval(B))/2 + 1e-9);
         end
 
-        function aPieceThatCurvesUPWARDAlongAnEdgeIsRefusedByName(testCase)
-        % The condition is EDGE-concavity, so what is refused is an edge along which q curves
-        % upward -- there the vertex values no longer determine the envelope. This piece is
-        % INDEFINITE, so its own single-piece envelope is the unimplemented one, and that case is
-        % [COAP] A.2-A.5.
+        function aPieceThatCurvesUPWARDAlongAnEdgeIsComputedByTheAtomRoute(testCase)
+        % CHANGED 2026-10-10. This asserted PLQ:biconjQ:notImplemented: the piece is indefinite and
+        % curves UP along (1,0), the case the lower-hull path cannot take. biconjAtoms now computes
+        % it, so the test asserts the answer instead. q = (x^2 - y^2)/2 on the unit square has
+        % co f = x^2/2 - y/2 in closed form: convex, <= f (-y/2 <= -y^2/2 on [0,1]), equal to f on
+        % both horizontal edges, and no convex minorant can exceed it, since on each vertical
+        % segment it IS the chord of f.
             f = biconjQTest.square([0 0 0 0, 1, 0, -1, 0, 0, 0]);   % +1 along (1,0)
-            testCase.verifyError(@() biconjQ(f), 'PLQ:biconjQ:notImplemented');
+            h = biconjQ(f);
+            rng(31);  X = [rand(300,2); 0 0; 1 0; 1 1; 0 1; 0.5 0; 0.5 1];
+            testCase.verifyEqual(h.eval(X), X(:,1).^2/2 - X(:,2)/2, 'AbsTol', 1e-12);
+            testCase.verifyTrue(all(isinf(h.eval([1.5 0.5; -0.1 0.5]))), '+inf off the square');
         end
 
         function CONVEXPiecesWithANonConvexKinkGetTheirOWNRefusal(testCase)
@@ -793,9 +798,11 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         function theExactEnginesREFUSALSSurviveTheClassAPI(testCase)
         % A refusal routed through `biconj` must arrive with its own identifier -- the whole point
-        % of an engine that never falls back. `x^2 - y^2` on the square is the edge-CONVEX piece,
-        % which is the one genuine gap left in biconjQ.
-            f = biconjQTest.square([0 0 0 0, 2, 0, -2, 0, 0, 0]);
+        % of an engine that never falls back. CHANGED 2026-10-10: the fixture was `x^2 - y^2` on
+        % the square, which biconjAtoms now computes; the property is unchanged, so it uses an
+        % input that still refuses -- an indefinite piece on an UNBOUNDED cone, curving up along a
+        % ray (the same `fin` this file uses for the honest-gap case).
+            f = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
             testCase.verifyError(@() f.biconj('exact'), 'PLQ:biconjQ:notImplemented');
         end
     end

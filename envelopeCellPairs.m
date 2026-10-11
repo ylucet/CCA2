@@ -69,11 +69,11 @@ function [pairs, stats] = envelopeCellPairs(gA, gB)
     stats = struct('nPairs', 0, 'nMeet', 0, 'nSame', 0, 'nPoly', 0, 'nBridge', 0, 'nSkipCurved', 0);
 
     for i = 1:gA.nf
-        RA = cellHalfPlanes(gA, i);
-        if isempty(RA), continue, end
+        [RA, thinA] = cellHalfPlanes(gA, i);
+        if thinA, continue, end
         for j = 1:gB.nf
-            RB = cellHalfPlanes(gB, j);
-            if isempty(RB), continue, end
+            [RB, thinB] = cellHalfPlanes(gB, j);
+            if thinB, continue, end
             stats.nPairs = stats.nPairs + 1;
 
             P = [RA; RB];
@@ -107,8 +107,13 @@ function p = mk(kind, ij, P, q, win)
     p = struct('kind', kind, 'ij', ij, 'P', P, 'q', q, 'win', win);
 end
 
-function rows = cellHalfPlanes(g, k)
+function [rows, thin] = cellHalfPlanes(g, k)
 % Cell k's boundary as INTEGER half-planes [a b c] meaning a*s1 + b*s2 + c >= 0.
+%
+% NO ROWS IS THE WHOLE PLANE, NOT NOTHING. The conjugate of a single point is one affine face with
+% no boundary at all; until 2026-10-10 an empty list was read as "no region" and such a cell was
+% skipped, so a point paired with anything gave no pairs. Only a THIN cell (one with an on-curve
+% row) bounds no 2-D region, and that is what `thin` says.
 %
 % A QuaCon stores a face as a list of [edge, side] pairs against its exact conics `EcQ`, and for a
 % polyhedral cell each such conic is a line -- its quadratic part is zero and rows 4:6 are the line.
@@ -116,6 +121,7 @@ function rows = cellHalfPlanes(g, k)
 % half-plane and is skipped here rather than turned into a degenerate row.
     FC = g.FC{k};
     rows = zeros(0,3);
+    thin = false;
     for t = 1:size(FC,1)
         cc = g.EcQ(FC(t,1), :);
         if any(cc(1:3) ~= 0)
@@ -125,7 +131,7 @@ function rows = cellHalfPlanes(g, k)
                  'affine condition that a KKT multiplier changes sign -- so a curved cell means ' ...
                  'this is not one.'], k, class(g), FC(t,1), cc(1), cc(2), cc(3));
         end
-        if FC(t,2) == 0, continue, end          % a THIN face: on the curve, bounding nothing
+        if FC(t,2) == 0, thin = true; continue, end   % a THIN face: on the curve, bounding nothing
         rows(end+1,:) = FC(t,2) * cc(4:6); %#ok<AGROW>
     end
 end

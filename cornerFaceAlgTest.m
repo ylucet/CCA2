@@ -9,6 +9,39 @@ classdef cornerFaceAlgTest < matlab.unittest.TestCase
 % the polynomial, content removed, does not.
 
     methods (Test)
+        function aFACETParallelToTheParabolasAXISHasOneRATIONALCorner(t)
+        % Found 2026-10-10 (biconjAtoms on an indefinite triangle): a vertex's affine conjugate
+        % against an edge's rank-1 one ties on a PARABOLA whose axis is the null direction of the
+        % rank-1 Hessian -- PARALLEL to the strip's own facets. Restricted to such a facet the tie
+        % is LINEAR in the parameter (al = 0), so the facet meets the parabola exactly ONCE, at a
+        % rational point. The routine skipped every such facet as "along the asymptote", the pair
+        % lost its corners, and envelopeEval answered +inf on the whole envelope.
+        %
+        % g(s) = s1^2/2 on the strip -1 <= s1 <= 1, tie g - s2 = 0, i.e. 2 s2 = s1^2: the corners
+        % are (+-1, 1/2), and each face's value is <s,x> - g(s), affine.
+            n = [0 0 0 0 1 0 0 0 0 0];  P = [1 0 1; -1 0 1];  tie = [1 0 0 0 -2 0];
+            faces = cornerFaceAlg(n, 1, P, tie, 1);
+            t.verifyEqual(numel(faces), 2, 'one corner on each facet');
+            S = sortrows([faces.s].');
+            t.verifyEqual(S, [-1 0.5; 1 0.5], 'AbsTol', 1e-14);
+            rng(11);  X = randn(20,2)*3;
+            for k = 1:numel(faces)
+                s = faces(k).s;
+                want = X*s - s(1)^2/2;
+                got = arrayfun(@(i) algBranch(faces(k).FP, X(i,:), faces(k).FB), (1:20).');
+                t.verifyEqual(got, want, 'AbsTol', 1e-10, 'the value is the affine <s,x> - g(s)');
+                t.verifyEqual(size(faces(k).con, 1), 2, 'and the wedge is spelled as two rows');
+                % the rows must say what the KKT predicate says: M \ (p - x) >= 0
+                Y = randn(200,2)*3;
+                byRows = true(200,1);
+                for r = 1:2
+                    byRows = byRows & faces(k).con(r,7) * QuaPar.evalConic(faces(k).con(r,1:6), Y) >= 0;
+                end
+                byKkt = arrayfun(@(i) all(faces(k).M \ (faces(k).p - Y(i,:).') >= 0), (1:200).');
+                t.verifyEqual(byRows, byKkt, 'the wedge rows and the KKT test agree');
+            end
+        end
+
         function theCORNERSOfThePOLY2KinkBuildAndCarryTheirValue(t)
             calls = {{[0 0 0 0 1 0 0 0 0 0],     2, [1 0 4;-1 0 4;0 -1 0;3 2 16;-3 -2 10;2 -3 2], [8 -24 -8 16 -128 -96],  1}, ...
                      {[0 0 0 0 9 6 4 -4 32 24], 26, [1 0 4;-1 0 4;0 -1 0;3 2 16;-3 -2 10;2 -3 2], [8 -24 -8 16 -128 -96], -1}, ...

@@ -83,6 +83,30 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
             testCase.verifyError(@() bridgeFaceRat(aff, 1, aff, 1), 'bridgeFaceRat:notRankOne');
         end
 
+        function bridgeMemberDECIDESARationalFace(testCase)
+        % envelopeEval asks bridgeMember which points a curved-tie face owns, for EVERY face kind.
+        % Until 2026-10-10 it only understood the algebraic face's pair and refused a rational
+        % one by name, so any envelope with a vertex-against-edge tie could not be evaluated. The
+        % membership is the closed form this file's own `analytic` uses: the maximiser along the
+        % parabola exists (concave: C/scale < 0) and lies in the pair.
+            fx = fixtureByName('shifted');
+            P  = [1 0 0; 0 1 0];
+            face = bridgeFaceRat(fx.n1, fx.d1, fx.n2, fx.d2, P);
+            pr = face.pair;
+            rng(107);
+            X = face.wit(1:2)/face.wit(3) + (rand(400,2)*2 - 1)*4;
+            want = false(size(X,1),1);
+            for i = 1:size(X,1)
+                Bv = pr.B(1)*X(i,1) + pr.B(2)*X(i,2) + pr.B(3);
+                Cv = pr.C(1)*X(i,1) + pr.C(2)*X(i,2) + pr.C(3);
+                if Cv * pr.scale >= 0, continue, end
+                s = paraPoint(pr, -Bv/(2*Cv));
+                want(i) = all(P(:,1:2)*s + P(:,3) >= 0);
+            end
+            testCase.assumeTrue(any(want) && any(~want), 'fixture must straddle the face');
+            testCase.verifyEqual(bridgeMember(pr, X), want);
+        end
+
         function bridgeFaceAlgDELEGATESToItRatherThanRefusing(testCase)
         % One entry point, two face kinds: a caller asks bridgeFaceAlg and gets whichever face the
         % pair actually has. The singular pencil used to be a refusal.

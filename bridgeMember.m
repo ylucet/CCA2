@@ -44,6 +44,28 @@ function [tf, info] = bridgeMember(pr, X)
     if nargin ~= 2
         error('bridgeMember:nargin', 'expects (pr, X).');
     end
+    if isstruct(pr) && isfield(pr, 'kind') && strcmp(pr.kind, 'rational')
+        % A RATIONAL face (bridgeFaceRat: affine against rank-1, the tie a parabola) needs no
+        % fibre at all: the maximiser along the parabola is t* = -B/(2C), it exists exactly where
+        % the objective is concave (C/scale < 0, the scaling's sign included), and the point is
+        % owned when that maximiser lies in the pair. Same closed form bridgeFaceRat uses for
+        % its witness; until 2026-10-10 this routine refused such a face by name.
+        if ~isnumeric(X) || size(X,2) ~= 2
+            error('bridgeMember:shape', 'X must be n x 2; got %s.', mat2str(size(X)));
+        end
+        Bv = X*pr.B(1:2).' + pr.B(3);
+        Cv = X*pr.C(1:2).' + pr.C(3);
+        t = -Bv ./ (2*Cv);
+        r = (pr.rq*t.^2 + pr.rl*t + pr.rc) / pr.rd;
+        S = (t*pr.u(:).' + r*pr.w(:).') / pr.nu;
+        tf = Cv * pr.scale < 0;
+        if ~isempty(pr.P)
+            tol = sqrt(eps) * max(1, max(abs(S), [], 2));
+            tf = tf & all(S*pr.P(:,1:2).' + pr.P(:,3).' >= -tol, 2);
+        end
+        info = struct('mu', nan(size(X,1),1), 'base', nan(size(X,1),2));
+        return
+    end
     if ~isstruct(pr) || ~all(isfield(pr, {'d','N1','m1','N2','m2','Dl','dl','kp','P'}))
         error('bridgeMember:pair', ...
             ['pr must carry the cell pair''s own data (d, N1, m1, N2, m2, Dl, dl, kp, P) -- it is ' ...

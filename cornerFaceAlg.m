@@ -85,7 +85,16 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
         w   = [a(2); -a(1)];
         s0n = [-c*a(1); -c*a(2)];
         [al, be, ga] = restrictTie(tie, s0n, w, na);
-        if al == 0, continue, end                  % the facet runs along the tie's asymptote
+        if al == 0
+            % LINEAR along the facet: one crossing, at a RATIONAL point. This is the GENERIC case
+            % for a vertex against an edge -- the parabola's axis is parallel to the strip's
+            % facets -- and skipping it lost every such corner (2026-10-10). be = 0 too means the
+            % facet runs along the tie or misses it: no corner.
+            if be == 0, continue, end
+            f1 = rationalCorner(n, d, N, m, qq, P, a, s0n, w, na, be, ga, tie, side, i);
+            faces = [faces, f1]; %#ok<AGROW>
+            continue
+        end
         D = ratQ.chk(be^2 - 4*al*ga, 'corner discriminant');
         if D <= 0, continue, end                   % the facet misses the tie, or touches it
 
@@ -122,6 +131,61 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
 end
 
 % ==================================================================================================
+function faces = rationalCorner(n, d, N, m, qq, P, a, s0n, w, na, be, ga, tie, side, i)
+% The corner of a facet the tie crosses ONCE: sigma = -ga/be, so s = sn/sd is rational, the face is
+% the AFFINE function <s,x> - g(s) with rational coefficients, and its wedge is two straight rows.
+%
+%   s = (s0n*be - ga*w) / (na*be),   and   2 d sd^2 z - 2 d sd <sn,x> + sn'N sn + 2 sd m'sn
+%   + 2 sd^2 qq = 0   is the value, cleared to integers (the implicit form every face carries).
+    faces = struct('kind', {}, 'FP', {}, 'FB', {}, 's', {}, 'sigma', {}, 'M', {}, 'p', {}, ...
+                   'src', {}, 'con', {});
+    % Every sum of products goes through ratQ.chkB with its absolute-value bound: a cancelling
+    % sum past 2^53 can come out small and wrong while passing a check on itself.
+    A = @abs;
+    sn = ratQ.chkB(s0n*be - ga*w, A(s0n)*A(be) + A(ga)*A(w), 'rational corner');
+    sd = ratQ.chk(na*be, 'rational corner');
+    if sd < 0, sn = -sn;  sd = -sd; end
+    inCell = ratQ.chkB(P(:,1:2)*sn + P(:,3)*sd, A(P(:,1:2))*A(sn) + A(P(:,3))*sd, ...
+                       'rational corner in the cell');
+    if any(inCell < 0), return, end                            % exact: the corner is not in the cell
+    FP = zeros(2,2,2);
+    FP(1,1,2) = ratQ.chk(2*d*sd^2, 'rational corner value');
+    FP(2,1,1) = ratQ.chk(-2*d*sd*sn(1), 'rational corner value');
+    FP(1,2,1) = ratQ.chk(-2*d*sd*sn(2), 'rational corner value');
+    FP(1,1,1) = ratQ.chkB(sn.'*N*sn + 2*sd*(m.'*sn) + 2*sd^2*qq, ...
+                          A(sn).'*A(N)*A(sn) + 2*sd*(A(m).'*A(sn)) + 2*sd^2*A(qq), ...
+                          'rational corner value');
+    FP = ratQ.trimN(ratQ.contentFree(FP));
+    % the tie's gradient at s, times sd (a positive scaling of M's second column changes no sign)
+    T = [2*tie(1) tie(2) tie(4); tie(2) 2*tie(3) tie(5)];
+    gqn = ratQ.chkB(T*[sn; sd], A(T)*[A(sn); sd], 'rational corner gradient');
+    Mn = [a, side*gqn];
+    dM = ratQ.chkB(Mn(1,1)*Mn(2,2) - Mn(1,2)*Mn(2,1), A(Mn(1,1)*Mn(2,2)) + A(Mn(1,2)*Mn(2,1)), ...
+                   'rational corner det');
+    if dM == 0, return, end                                    % the two constraints are parallel
+    pn = ratQ.chkB(N*sn + m*sd, A(N)*A(sn) + A(m)*sd, 'rational corner gradient of g');
+    pd = ratQ.chk(d*sd, 'rational corner');                    % grad g(s) = pn/pd
+    % mu = Mn \ (p - x) >= 0  <=>  sign(dM) * adj(Mn) (pn - pd x) >= 0, two rows LINEAR in x
+    adjM = [Mn(2,2), -Mn(1,2); -Mn(2,1), Mn(1,1)];
+    con = zeros(2,8);
+    for r = 1:2
+        R = [ratQ.chk(-sign(dM)*pd*adjM(r,1:2), 'rational corner row'), ...
+             ratQ.chkB(sign(dM)*(adjM(r,:)*pn), A(adjM(r,:))*A(pn), 'rational corner row')];
+        con(r,1:6) = ratQ.conic([0 0 0, R]);
+        k = find([0 0 0, R] ~= 0, 1);
+        con(r,7) = sign(R(k-3));
+    end
+    s = sn / sd;  p = pn / pd;
+    M = [a, side*gqn/sd];
+    face = struct('kind', 'corner', 'FP', FP, 'FB', -1, 's', s, ...
+                  'sigma', struct('quad', [0 be ga], 'root', 0, 'facet', i, 's0n', s0n, 'w', w, ...
+                                  'na', na), ...
+                  'M', M, 'p', p, 'src', struct('n', n, 'd', d, 'tie', tie, 'side', side), ...
+                  'con', con);
+    faces(end+1) = face;
+end
+
+% --------------------------------------------------------------------------------------------------
 function [al, be, ga] = restrictTie(tie, s0n, w, na)
 % The tie along s = (s0n + sigma*w)/na, cleared by na^2: an integer quadratic in sigma.
     A = tie(1); B = tie(2); C = tie(3); Dc = tie(4); E = tie(5); F = tie(6);

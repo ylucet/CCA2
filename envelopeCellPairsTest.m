@@ -204,6 +204,23 @@ classdef envelopeCellPairsTest < matlab.unittest.TestCase
             testCase.verifyLessThan(st.nMeet, st.nPairs, 'the filter drops something');
         end
 
+        function aWHOLEPLANECellIsPairedNotSkipped(testCase)
+        % The conjugate of a single point v with value c is <s,v> - c on the WHOLE plane: one cell
+        % with no boundary rows. Until 2026-10-10 an empty row list was read as "no region" and the
+        % cell was skipped, so a point paired with anything produced NO pairs and the envelope was
+        % +inf everywhere. Paired with a triangle's conjugate, every cell of the triangle's must
+        % meet it.
+            gv = conjQ(QuaPol([1 -3], zeros(0,3), [0 0 0 0 0 0 0 0 0 -11], zeros(0,2)));
+            gT = conjQ(envelopeCellPairsTest.tri([-2 0; 2 0; 0 2], 0));
+            [pairs, stats] = envelopeCellPairs(gT, gv);
+            testCase.verifyEqual(stats.nMeet, gT.nf, ...
+                'every cell of the triangle meets the point''s whole-plane cell');
+            testCase.verifyEqual(numel(pairs), gT.nf);
+            [pairs2, ~] = envelopeCellPairs(gv, gv);
+            testCase.verifyEqual(numel(pairs2), 1, 'a whole-plane cell meets itself');
+            testCase.verifyEqual(pairs2(1).kind, 'poly');
+        end
+
         function aCURVEDCellIsRefusedByNameRatherThanDroppedInSilence(testCase)
         % The conjugate of a CONVEX piece is polyhedral -- every cell boundary is the affine
         % condition that a KKT multiplier changes sign (CONJ_FIELD_PROOF.md 7.3) -- so a genuinely

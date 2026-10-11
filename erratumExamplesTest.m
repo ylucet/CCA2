@@ -3,8 +3,9 @@ classdef erratumExamplesTest < matlab.unittest.TestCase
 % 3-34; source D:\AI\67191168115b2b8bc24afaab\erratum.tex, Lean companion in its lean/ folder),
 % run through the EXACT pipeline: conjQ for f*, biconjQ for f**.
 %
-% BUCKET: fast (conjQ and biconjQ are integer arithmetic; no symbolic call). A test that turns out
-% to refuse or run long is quarantined by name, not moved.
+% BUCKET: fast (conjQ is integer arithmetic; no symbolic call). The BICONJUGATE tests of the same
+% examples are in erratumBiconjTest (normal bucket: biconjQ takes ~45 s on Example 1); the
+% fixtures and oracles below are shared with it.
 %
 % WHY THESE THREE. Each is the smallest witness of one way the original papers' structure theorems
 % fail, so together they cover what the corrected theorems add:
@@ -67,21 +68,6 @@ classdef erratumExamplesTest < matlab.unittest.TestCase
                 onArc(:,1) - 3*onArc(:,2) + 11, 'AbsTol', 1e-9, 'fixture self-check: the arc ties');
         end
 
-        function ex1BiconjugateMatchesTheErratumCells(testCase)
-            [f, ~] = erratumExamplesTest.example1();
-            h = erratumExamplesTest.biconjOrQuarantine(testCase, f);
-            [X, want] = erratumExamplesTest.ex1BiconjCells();
-            testCase.verifyEqual(h.eval(X), want, 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
-                'biconjQ disagrees with the erratum''s four cells on Example 1');
-        end
-
-        function ex1BiconjugateSatisfiesTheDefinition(testCase)
-            [f, pieces] = erratumExamplesTest.example1();
-            h = erratumExamplesTest.biconjOrQuarantine(testCase, f);
-            erratumExamplesTest.checkEnvelopeDefinition(testCase, h, f, pieces, ...
-                erratumExamplesTest.ex1DualSample());
-        end
-
         % ============================== Example 2 ===============================================
 
         function ex2ConjugateMatchesTheDefinition(testCase)
@@ -131,35 +117,6 @@ classdef erratumExamplesTest < matlab.unittest.TestCase
                 'the same points with a far point in the same call');
         end
 
-        function ex2BiconjugateMatchesTheErratumCells(testCase)
-            [f, ~] = erratumExamplesTest.example2();
-            h = erratumExamplesTest.biconjOrQuarantine(testCase, f);
-            [X, want, names] = erratumExamplesTest.ex2BiconjCells();
-            got = h.eval(X);
-            for i = 1:size(X,1)
-                testCase.verifyEqual(got(i), want(i), 'RelTol', 1e-9, 'AbsTol', 1e-7, ...
-                    sprintf('Example 2, %s at (%g,%g)', names{i}, X(i,1), X(i,2)));
-            end
-        end
-
-        function ex2BiconjugateIsAffineOnTheMiddleCell(testCase)
-        % Cell 4 = conv{G1,G2,G3} carries s_bar'x - f*(s_bar), an AFFINE function. s_bar is a
-        % triple point of f* with no closed form, so assert the property instead: the value at a
-        % convex combination equals the combination of the values.
-            [f, ~] = erratumExamplesTest.example2();
-            h = erratumExamplesTest.biconjOrQuarantine(testCase, f);
-            P = [36.5 0.9; 37.5 1.4; 35.5 0.2];       % inside conv{G1,G2,G3}
-            w = [0.2 0.5 0.3];
-            testCase.verifyEqual(h.eval(w*P), w*h.eval(P), 'RelTol', 1e-9, 'AbsTol', 1e-7);
-        end
-
-        function ex2BiconjugateSatisfiesTheDefinition(testCase)
-            [f, pieces] = erratumExamplesTest.example2();
-            h = erratumExamplesTest.biconjOrQuarantine(testCase, f);
-            erratumExamplesTest.checkEnvelopeDefinition(testCase, h, f, pieces, ...
-                erratumExamplesTest.ex2DualSample());
-        end
-
         % ============================== Example 3 ===============================================
 
         function ex3ConjugateIsAHalfPlaneParabola(testCase)
@@ -174,38 +131,10 @@ classdef erratumExamplesTest < matlab.unittest.TestCase
                 'f* must be +inf wherever s2 > 0');
         end
 
-        function ex3BiconjugateIsX1Squared(testCase)
-            f = erratumExamplesTest.example3();
-            h = erratumExamplesTest.biconjOrQuarantine(testCase, f);
-            rng(20261011);
-            X = [randn(200,1)*5, abs(randn(200,1))*5; 1 0; -3 0; 0 4];
-            testCase.verifyEqual(h.eval(X), X(:,1).^2, 'RelTol', 1e-12, 'AbsTol', 1e-12);
-            Y = [randn(50,1)*5, -abs(randn(50,1))*5 - 1e-3];
-            testCase.verifyTrue(all(isinf(h.eval(Y)) & h.eval(Y) > 0), ...
-                'f** must be +inf off the closed upper half-plane');
-        end
     end
 
     % ============================== fixtures and oracles =========================================
     methods (Static)
-
-        function h = biconjOrQuarantine(testCase, f)
-        % QUARANTINE BY IDENTIFIER (umbrella CLAUDE.md section 8), measured 2026-10-10: biconjQ
-        % refuses all three examples with PLQ:biconjQ:notImplemented, because each has a
-        % non-convex piece that curves UP along one of its edges -- the case erratum Theorem 2
-        % covers (cases B-E and (b)) and the exact path does not implement yet. Only THAT refusal
-        % is quarantined: any other error, or a wrong answer once it computes, fails as usual,
-        % and the tests un-quarantine themselves when the case lands.
-            try
-                h = biconjQ(f);
-            catch ME
-                if strcmp(ME.identifier, 'PLQ:biconjQ:notImplemented')
-                    testCase.assumeFail(['QUARANTINED: biconjQ does not implement a non-convex ' ...
-                        'piece curving up along an edge (erratum Theorem 2). ' ME.message]);
-                end
-                rethrow(ME)
-            end
-        end
 
         function [f, pieces] = example1()
         % P1 = conv{A,B,C} with x^2+y^2, P2 = conv{A,B,v} with x^2+xy-y^2.

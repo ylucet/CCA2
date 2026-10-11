@@ -12,13 +12,6 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **biconjQ for a non-convex piece curving UP along an edge -- erratum Theorem 2.** All three
-      erratum examples are refused `PLQ:biconjQ:notImplemented` (2026-10-10); their six biconj
-      tests in `erratumExamplesTest` are quarantined on that identifier only and run by themselves
-      once it is gone. Under (H) the erratum gives polyhedral cells with closed forms (its Cases
-      B, C, D with delta = 0, E) and a quartic 1-D minimum for case (b), so this is a spec, not
-      research. Example 1 is mixed convex/indefinite, outside (H): norm-shaped cell.
-
 - [ ] **`envelopeEval` and `cornerWedgeRows` scale their membership tolerance by the BATCH's max
       |x|** -- the pattern fixed in `QuaCon.eval` 2026-10-10, where it returned a neighbour
       face's value (off by 0.4). No failing test there yet; write one first.
@@ -66,7 +59,34 @@ DOES carry the value and cannot be reduced the same way.
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
       observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
+- [ ] **Integer width of the face constructors: erratum Example 2 overflows.** biconjAtoms on it
+      raises `ratQ:overflow` in `bridgeFaceRat` (face numerator 2.9e23) and `cornerFaceAlg`
+      (corner bracket 1.8e17; still 1.5e16 at coordinates / 5). Three erratumBiconjTest tests are
+      quarantined on that identifier. Patching sites one at a time just moves the refusal (seen
+      twice) -- the fix is a wider number type for these constructors (BigInteger end to end, as
+      `implicitValue`'s fallback already does), not another chk.
+
+- [ ] **Atom route for UNBOUNDED domains (erratum Case E, Example 3).** biconjAtoms refuses rays;
+      biconjQ still raises notImplemented there (erratumBiconjTest/ex3 quarantined). Ray atoms
+      have polyhedral conjugates too, but co f need not be attained (erratum Example 3), so the
+      pair envelopes must carry the recession part.
+
+- [ ] **EnvelopeMin is not meshed, and builds ALL atom pairs.** biconjQ returns it where it used to
+      refuse: it answers eval but is not an AlgCon. Two follow-ups: prune pairs/triples to the
+      ones adjacent in conjQ(f)'s mesh (erratum Step 1 only needs active pairs), and mesh the
+      minimum (envelopePrune/envelopeMesh take one pair's faces today).
+
 ### Done recently
+
+- [x] **biconjQ for a non-convex piece curving UP along an edge (bounded) -- the ATOM route**
+      (2026-10-10, scope-reduced; residue is the three items above). `biconjAtoms`: atoms =
+      vertices + convex edges of each non-convex piece, convex pieces whole (erratum Theorem 1);
+      co f = min over atom pairs (envelopeAssemble) and triple tangent planes. Erratum Example 1
+      exact at 8 points in all 4 cells (circle-bounded and norm-shaped cells included); agrees
+      with the legacy triangle envelope to 1e-14 on four indefinite triangles (1-3 convex edges).
+      Three defects found and fixed on the way, each red first: envelopeCellPairs skipped a
+      whole-plane cell; bridgeMember refused a rational face; cornerFaceAlg dropped every corner
+      where a facet meets the tie ONCE (the generic vertex-vs-edge case).
 
 - [x] **The exact mesh moved up to AlgCon** (2026-09-22): `fN fD EcQ Vname FC` declared once; the
       copies on QuaCon, AlgCrv and QuaPol are gone. The 09-20 refutation was QuaPol's own fN/fD
