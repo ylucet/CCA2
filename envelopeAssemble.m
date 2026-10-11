@@ -1,4 +1,4 @@
-function [env, info] = envelopeAssemble(gA, gB)
+function [env, info] = envelopeAssemble(gA, gB, D)
 % envelopeAssemble  The convex envelope of a two-piece function, assembled from the pieces'
 %   conjugates: the third step, and the one that turns a pile of verified parts into a function.
 %
@@ -57,8 +57,8 @@ function [env, info] = envelopeAssemble(gA, gB)
 % complete and checkable envelope; what it is not is a single `QuaCon`, and the two things that
 % stand between it and one are the prune above and a container for a predicate-decided face.
 
-    if nargin ~= 2
-        error('envelopeAssemble:nargin', 'expects (gA, gB), two QuaCon conjugates.');
+    if nargin < 2 || nargin > 3
+        error('envelopeAssemble:nargin', 'expects (gA, gB[, D]), two QuaCon conjugates.');
     end
     for h = {gA, gB}
         if ~isa(h{1}, 'QuaCon')
@@ -66,7 +66,8 @@ function [env, info] = envelopeAssemble(gA, gB)
         end
     end
 
-    [pairs, stats] = envelopeCellPairs(gA, gB);
+    if nargin < 3, D = zeros(0,3); end       % dom f* to restrict to: see envelopeCellPairs
+    [pairs, stats] = envelopeCellPairs(gA, gB, D);
     info = struct('nPairs', numel(pairs), 'nPoly', 0, 'nTangential', 0, 'nStraight', 0, ...
                   'nCurved', 0, 'stats', stats);
     env = struct('quad', struct('num', {}, 'den', {}, 'con', {}, 'pair', {}), 'bridge', {{}});

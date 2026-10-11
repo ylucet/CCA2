@@ -1,4 +1,4 @@
-function [pairs, stats] = envelopeCellPairs(gA, gB)
+function [pairs, stats] = envelopeCellPairs(gA, gB, D)
 % envelopeCellPairs  Enumerate and CLASSIFY the cell pairs of two conjugates, exactly.
 %
 % objective: the first step of the convex envelope's assembly. `co f` over two pieces is
@@ -53,9 +53,13 @@ function [pairs, stats] = envelopeCellPairs(gA, gB)
 % means the caller passed something other than a convex piece's conjugate -- a caller defect, and
 % one that would otherwise show up much later as a wrong region.
 
-    if nargin ~= 2
-        error('envelopeCellPairs:nargin', 'expects (gA, gB), two QuaCon conjugates.');
+    if nargin < 2 || nargin > 3
+        error('envelopeCellPairs:nargin', 'expects (gA, gB[, D]), two QuaCon conjugates.');
     end
+    % D: optional integer half-planes [a b c] (a s1 + b s2 + c >= 0) the dual variable is restricted
+    % to -- dom f* of the whole function when the pair is two ATOMS of an unbounded input (erratum
+    % Case E; biconjAtoms). Every pair's region is intersected with it.
+    if nargin < 3, D = zeros(0,3); end
     for g = {gA, gB}
         if ~isa(g{1}, 'QuaCon')
             error('envelopeCellPairs:type', ...
@@ -76,7 +80,7 @@ function [pairs, stats] = envelopeCellPairs(gA, gB)
             if thinB, continue, end
             stats.nPairs = stats.nPairs + 1;
 
-            P = [RA; RB];
+            P = [RA; RB; D];
             if ~ratQ.feasible2(P, true), continue, end        % FILTER 1: meet in 2-D
             stats.nMeet = stats.nMeet + 1;
 

@@ -326,16 +326,11 @@ function h = biconjQ(obj)
                 % THE ATOM ROUTE (2026-10-10). A non-convex piece's conjugate is that of its
                 % vertices and convex edges (erratum Theorem 1), each of which has a polyhedral
                 % conjugate, so the envelope is the minimum over the atoms' pairwise envelopes and
-                % triple tangent planes -- biconjAtoms' header. Bounded domains only; the result is
-                % an EnvelopeMin, which answers eval but is not meshed into one AlgCon.
-                if all(obj.E(:,3) ~= 0)
-                    h = biconjAtoms(obj);
-                    return
-                end
-                error('PLQ:biconjQ:notImplemented', ...
-                    ['piece %d is not convex AND curves UPWARD along one of its edges, and the ' ...
-                     'domain is UNBOUNDED -- the atom route covers bounded domains only (an ' ...
-                     'unbounded one needs the erratum''s Case E).'], k);
+                % triple tangent planes -- biconjAtoms' header. An unbounded domain is assembled over
+                % dom f* (erratum Case E, 2026-10-11). The result is an EnvelopeMin, which answers
+                % eval but is not meshed into one AlgCon.
+                h = biconjAtoms(obj);
+                return
             end
         end
         % A 2-D face needs three affinely independent GENERATORS, and for an unbounded piece two of

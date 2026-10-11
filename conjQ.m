@@ -1,4 +1,4 @@
-function g = conjQ(obj)
+function [g, dom] = conjQ(obj)
 % conjQ  The Legendre-Fenchel conjugate computed EXACTLY over the rationals, returning a QuaCon.
 %
 % objective: f*(s) = sup_x <s,x> - f(x), with every coefficient an exact rational and every
@@ -11,6 +11,10 @@ function g = conjQ(obj)
 %                exactly on coefficients that are already one ULP wrong yields exactly the wrong
 %                number, which carries no warning (QuaPol.assertExact has the reference).
 % [output] g   : QuaCon -- exact faces, primitive integer edge conics, NAMED vertices.
+%          dom : k x 3 integer half-planes [a b c] (a s1 + b s2 + c >= 0) whose intersection is
+%                dom f* -- the recession conditions of the unbounded pieces, empty when f has
+%                none, and the impossible row [0 0 -1] when dom f* is empty. biconjAtoms
+%                restricts its atom pairs to it (erratum Case E).
 %
 % ------------------------------------------------------------------------------------------------
 % EXACT OR A NAMED REFUSAL. NEVER A FALLBACK.
@@ -74,15 +78,17 @@ function g = conjQ(obj)
     % f is q_k on P_k, so f*(s) = max_k sup_{x in P_k} <s,x> - q_k(x) = max_k (q_k + I_{P_k})*(s).
     % Conjugation turns a union into a MAX (ALGORITHM.md), which is why the per-piece closed forms
     % compose at all -- and why Step 3 is a fold rather than a special algorithm.
-    g = conjPieceQ(obj, 1);
+    [g, dom] = conjPieceQ(obj, 1);
     for k = 2:nf
-        g = maxQ(g, conjPieceQ(obj, k));
+        [gk, dk] = conjPieceQ(obj, k);
+        g = maxQ(g, gk);
+        dom = [dom; dk]; %#ok<AGROW>
     end
 end
 
 % ==================================================================================================
 
-function g = conjPieceQ(obj, k)
+function [g, dom] = conjPieceQ(obj, k)
 % objective: the exact conjugate of ONE piece -- q_k restricted to its own face P_k -- as a QuaCon.
 %
 % THE WHOLE CASE ANALYSIS, and it is two questions asked in order. FIRST, can the sup be finite at
@@ -96,6 +102,7 @@ function g = conjPieceQ(obj, k)
     [fN, fD] = obj.faceQ(k);
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     D  = ratQ.detExact(Hn);
+    dom = zeros(0,3);                              % the piece's half-planes of dom f*, see conjQ
 
     if obj.nv == 0
         g = caseAFullDomain(fN, fD);               % the whole plane: no domain constraints at all
@@ -124,7 +131,7 @@ function g = conjPieceQ(obj, k)
         end
         sh = degenerateShape(obj, Vi);
         [okFinite, dom, ~] = recessionConditions(sh, Hn, [fN(8); fN(9)], fD, Vi, vd);
-        if ~okFinite, g = emptyConjugate(); return, end
+        if ~okFinite, g = emptyConjugate(); dom = [0 0 -1]; return, end
         g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom);
         return
     end
@@ -171,6 +178,7 @@ function g = conjPieceQ(obj, k)
         % not hold such a function, which was wrong.
         assert(~isempty(why));                 %#ok<NASGU> -- the reason, kept for debugging
         g = emptyConjugate();
+        dom = [0 0 -1];                        % 0 >= 1: no s at all
         return
     end
 

@@ -46,10 +46,13 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
-- [ ] **Atom route for UNBOUNDED domains (erratum Case E, Example 3).** biconjAtoms refuses rays;
-      biconjQ still raises notImplemented there (erratumBiconjTest/ex3 quarantined). Ray atoms
-      have polyhedral conjugates too, but co f need not be attained (erratum Example 3), so the
-      pair envelopes must carry the recession part.
+- [ ] **Atom route, unbounded: a CONVEX unbounded piece** (`biconjAtoms:unboundedConvexPiece`).
+      Rays are in (2026-10-11, see Done). A convex piece that is unbounded needs half-plane
+      membership for its atom (inPoly is polygon-only) and its 'piece' form. The argument for
+      the rest: f* = max_j g_j + I_D, so f** = (co min_j h_j) inf-conv sigma_D; a pair over D is
+      exactly co(min(h_a,h_b)) inf-conv sigma_D, and a triple plane holds on T + N_D(s0)
+      (EnvelopeMin's .G, unit-tested; s0 on the boundary of D is non-generic, so no end-to-end
+      fixture exercises it yet).
 
 - [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
@@ -66,6 +69,13 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **Atom route for UNBOUNDED domains (erratum Case E, Example 3)** -- DONE 2026-10-11
+      (overnight). A ray along which f is strictly convex is an atom (t in [0, inf)); a ray of
+      linear growth only shrinks dom f*, so every atom pair is assembled over D = dom f*
+      (conjQ's recession conditions, now its second output; envelopeAssemble/envelopeCellPairs
+      take D). Example 3 is exactly x1^2 (+inf below), and biconjQTest's cone fixture, refused
+      since 2026-09-05, is exactly (x-y)^2/2 -- both values NOT attained by finitely many points.
 
 - [x] **Corner faces with NO wedge rows** -- DONE 2026-10-11 (overnight). The two poly2-kink corners had a wedge edge A + sigma B with A parallel to B: a rational line times an irrational scalar, whose conjugate product is a double line that `pairLineData` rejects. `cornerWedgeRows` now spells it as the rational line, side from a witness; cornerFaceAlgTest checks the rows against the KKT predicate. Residue: the arrangement size, in Next up.
 - [x] **`biconjQ` on the poly2 kink answers** (2026-10-11, scope-reduced; residue: the

@@ -88,9 +88,19 @@ classdef biconjQTest < matlab.unittest.TestCase
             % is not edge-concave, and its own envelope is the unimplemented single-piece case.
             % The distinction this test exists for -- a correct -infinity against an honest gap --
             % is unchanged through all three.
+            %
+            % CHANGED a third time, 2026-10-11: the gap is closed (biconjAtoms over dom f*, erratum
+            % Case E), so the finite side is now asserted as its VALUE rather than as a refusal.
+            % f = (x^2 - y^2)/2 on cone((1,0),(1,1)) is 0 on the diagonal ray and t^2/2 on the
+            % x-axis ray, so co f(x,y) = (x - y)^2/2 -- the limit of lam*f((x-y)/lam, 0) as lam -> 1,
+            % NOT attained by finitely many points -- and +infinity off the cone.
             fin = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], ...
                          [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() biconjQ(fin), 'PLQ:biconjQ:notImplemented');
+            h = biconjQ(fin);
+            rng(81);  Y = rand(40,2)*4;  Y(:,2) = Y(:,2) .* Y(:,1)/4;      % 0 <= y <= x
+            testCase.verifyEqual(h.eval(Y), (Y(:,1) - Y(:,2)).^2/2, 'AbsTol', 1e-12, ...
+                'co f is (x - y)^2/2 on the cone');
+            testCase.verifyEqual(h.eval([1 2; 1 -0.5]), [inf; inf], 'and +infinity off it');
         end
 
         function anUNBOUNDEDPieceGetsTheLIFTEDHULLWithItsRECESSIONRaysInIt(testCase)
@@ -800,10 +810,11 @@ classdef biconjQTest < matlab.unittest.TestCase
         % A refusal routed through `biconj` must arrive with its own identifier -- the whole point
         % of an engine that never falls back. CHANGED 2026-10-10: the fixture was `x^2 - y^2` on
         % the square, which biconjAtoms now computes; the property is unchanged, so it uses an
-        % input that still refuses -- an indefinite piece on an UNBOUNDED cone, curving up along a
-        % ray (the same `fin` this file uses for the honest-gap case).
-            f = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() f.biconj('exact'), 'PLQ:biconjQ:notImplemented');
+        % input that still refuses. CHANGED AGAIN 2026-10-11: that input (an indefinite piece on an
+        % unbounded cone) is computed now too, so the refusal is the representational one -- q
+        % strictly concave on a cone, co f = -infinity (`down` in this file).
+            f = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, -2, 0, -2, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyError(@() f.biconj('exact'), 'PLQ:biconjQ:minusInfinity');
         end
     end
 

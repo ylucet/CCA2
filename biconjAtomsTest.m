@@ -7,9 +7,31 @@ classdef biconjAtomsTest < matlab.unittest.TestCase
     methods (Test)
         function theINPUTContractIsRefusedByName(testCase)
             testCase.verifyError(@() biconjAtoms(42), 'biconjAtoms:input');
-            % an indefinite piece on an unbounded cone: rays are out of scope (erratum Case E)
-            fin = QuaPol([0 0; 1 0; 1 1], [1 2 0; 1 3 0], [0 0 0 0, 1, 0, -1, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() biconjAtoms(fin), 'biconjAtoms:unbounded');
+            % CHANGED 2026-10-11: rays are in scope now (erratum Case E), so `biconjAtoms:unbounded`
+            % is gone. What is refused is a CONVEX piece that is unbounded (its atom would need
+            % half-plane membership) and an empty dom f* (co f = -infinity).
+            cvxCone = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, 2, 0, 2, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyError(@() biconjAtoms(cvxCone), 'biconjAtoms:unboundedConvexPiece');
+            down = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, -2, 0, -2, 0, 0, 0], [1 0; 0 1]);
+            testCase.verifyError(@() biconjAtoms(down), 'biconjAtoms:emptyDomain');
+        end
+
+        function aTRIPLEFaceOnTheBoundaryOfDomFStarExtendsAlongItsNormalCone(testCase)
+        % erratum Case E: a tangent plane <s,x> - c with s on the boundary of D = dom f* holds on
+        % T + N_D(s), because moving x along an outward normal r of D at s costs exactly <s,r>.
+        % EnvelopeMin must evaluate it there and nowhere else.
+            T = [0 0; 1 0; 0 1];  s = [1; 2];  c = 0.5;
+            one = EnvelopeMin({}, struct('T', T, 's', s, 'c', c, 'G', [0; 1]), {});
+            X = [0.2 0.3; 0.2 5; 0 40; 2 5; 0.5 -1];
+            want = [X(1:3,:)*s - c; inf; inf];
+            testCase.verifyEqual(one.eval(X), want, 'AbsTol', 1e-12, 'T + cone((0,1))');
+            two = EnvelopeMin({}, struct('T', T, 's', s, 'c', c, 'G', [0 1; 1 0]), {});
+            X = [5 5; 0.3 0.2; -1 0.5; 0.5 -0.1];
+            want = [X(1:2,:)*s - c; inf; inf];
+            testCase.verifyEqual(two.eval(X), want, 'AbsTol', 1e-12, 'T + the first quadrant');
+            none = EnvelopeMin({}, struct('T', T, 's', s, 'c', c, 'G', zeros(2,0)), {});
+            testCase.verifyEqual(none.eval([0.2 5; 0.2 0.3]), [inf; 0.2 + 0.6 - c], 'AbsTol', 1e-12, ...
+                'no generators: the triangle alone');
         end
 
         function aSINGLEConvexPieceIsOneAtomAndIsSentBack(testCase)

@@ -3,7 +3,7 @@ function env = biconjAtoms(f)
 %   envelopes and their triple tangent planes -- the route for non-convex pieces that curve UP
 %   along an edge, which biconjQ's lower-hull path cannot take.
 %
-% [input]  f   : QuaPol, exact (fN/fD), bounded (no rays), operable.
+% [input]  f   : QuaPol, exact (fN/fD), operable; rays allowed when no unbounded piece is convex.
 % [output] env : EnvelopeMin -- `env.eval(X)` is co f at the points X.
 %
 % ==================================================================================================
@@ -36,16 +36,36 @@ function env = biconjAtoms(f)
 %            this is a face's DATA, not a mesh decision, and like every face here it is evaluated
 %            in doubles.
 %
-% WHAT IS NOT HERE: rays (the unbounded case needs the erratum's Case E), and the face list is not
-% meshed into one AlgCon -- `EnvelopeMin.eval` is the function. Verified against the erratum's
+% RAYS (erratum Case E) are below, at the restriction to D. WHAT IS NOT HERE: a convex piece that
+% is unbounded (refused by name), and the face list is not meshed into one AlgCon -- `EnvelopeMin.eval` is the function. Verified against the erratum's
 % closed forms in erratumExamplesTest.
 % ==================================================================================================
     if ~isa(f, 'QuaPol'), error('biconjAtoms:input', 'expects a QuaPol; got %s.', class(f)); end
+    % AN UNBOUNDED INPUT (erratum Case E). Its rays carry two things. A ray along which f is
+    % strictly convex is an ATOM like a convex edge, with t in [0, inf). A ray along which f grows
+    % at most linearly is not an atom at all: its sup sits at the base vertex, and what it does is
+    % shrink dom f* to a polyhedron D. So every pair is assembled over D -- sup over s in D of
+    % <s,x> - max(g_a, g_b) -- which is how a value like erratum Example 3's x1^2, NOT attained by
+    % finitely many points, comes out exact: it is the recession part, read off D. Each such
+    % candidate is still >= f** (max(g_a, g_b) + I_D <= f*), so the minimum stays an upper bound
+    % that cannot undershoot; that it is attained is verified on Example 3, not proved here.
+    D = zeros(0,3);
     if any(f.E(:,3) == 0)
-        error('biconjAtoms:unbounded', ['a piece is unbounded; the atom route covers bounded ' ...
-              'domains only (an unbounded one needs the erratum''s Case E).']);
+        [~, D] = conjQ(f);
+        D = unique(D, 'rows');
+        if any(all(D(:,1:2) == 0, 2) & D(:,3) < 0)
+            error('biconjAtoms:emptyDomain', ['dom f* is empty: f has no affine minorant, so ' ...
+                  'co f is -infinity everywhere.']);
+        end
     end
     [atoms, forms] = collectAtoms(f);
+    if numel(atoms) == 1 && ~isempty(D)
+        % ONE ATOM, BUT THE RECESSION STILL MATTERS: (g + I_D)* is not the atom itself. Paired with
+        % itself, the assembly sees identical faces and returns exactly that.
+        g1 = conjQ(atoms{1}.q);
+        env = EnvelopeMin({envelopeAssemble(g1, g1, D)}, tripleFaces(forms, D), atoms);
+        return
+    end
     if numel(atoms) < 2
         error('biconjAtoms:oneAtom', ['the input reduces to %d atom(s); a single atom is convex, ' ...
               'so biconjQ''s convex path is the one to take.'], numel(atoms));
@@ -55,10 +75,10 @@ function env = biconjAtoms(f)
     pairs = {};
     for a = 1:numel(atoms)
         for b = a+1:numel(atoms)
-            pairs{end+1} = envelopeAssemble(g{a}, g{b}); %#ok<AGROW>
+            pairs{end+1} = envelopeAssemble(g{a}, g{b}, D); %#ok<AGROW>
         end
     end
-    tris = tripleFaces(forms);
+    tris = tripleFaces(forms, D);
     env = EnvelopeMin(pairs, tris, atoms);
 end
 
@@ -67,18 +87,39 @@ function [atoms, forms] = collectAtoms(f)
 % Atoms (QuaPols) and FORMS (closed-form conjugate pieces for the triples), deduplicated.
     atoms = {};
     forms = struct('kind', {}, 'A', {}, 'b', {}, 'c', {}, 'u', {}, 'd', {}, 'al', {}, 'be', {}, ...
-                   'H', {}, 'L', {}, 'poly', {});
+                   'H', {}, 'L', {}, 'poly', {}, 'tmax', {});
     cvx = {};                                    % polygons of the convex-piece atoms
     edgeAt = zeros(0,4);                         % [u w] of each edge atom, for dedup
+    rayAt = zeros(0,4);                          % [u d] of each RAY atom, d primitive
     vtx = zeros(0,2);  vval = zeros(0,1);        % every vertex that gets a form
     for k = 1:f.nf
         [n, d] = f.faceQ(k);
         H = [n(5) n(6); n(6) n(7)] / d;  L = [n(8); n(9)] / d;  k0 = n(10) / d;
-        [poly, eidx] = piecePolygon(f, k);
         isCvx = n(5) >= 0 && n(7) >= 0 && n(5)*n(7) - n(6)^2 >= 0;   % Sylvester on integers
         q = @(X) 0.5*sum((X*H).*X, 2) + X*L + k0;
-        for i = 1:size(poly,1)
-            [vtx, vval] = addVertex(vtx, vval, poly(i,:), q(poly(i,:)));
+        % the piece's edges as (u, dv, isRay): a segment u -> u + dv, or a ray u + t dv, t >= 0
+        own = find(any(f.F == k, 2));
+        if any(f.E(own,3) == 0)
+            if isCvx
+                error('biconjAtoms:unboundedConvexPiece', ['piece %d is convex AND unbounded; its ' ...
+                      'atom would need half-plane membership, which is not built yet.'], k);
+            end
+            poly = [];
+            ed = zeros(0,5);
+            for j = own(:).'
+                u = f.V(f.E(j,1),:);  w = f.V(f.E(j,2),:);
+                if f.E(j,3) == 0, ed(end+1,:) = [u, w, 1]; %#ok<AGROW>
+                else, ed(end+1,:) = [u, w - u, 0]; end %#ok<AGROW>
+            end
+        else
+            [poly, eidx] = piecePolygon(f, k);
+            m = size(poly,1);
+            ed = [poly, poly([2:m 1],:) - poly, zeros(m,1)];
+        end
+        for i = 1:size(ed,1)
+            [vtx, vval] = addVertex(vtx, vval, ed(i,1:2), q(ed(i,1:2)));
+            if ~ed(i,5), [vtx, vval] = addVertex(vtx, vval, ed(i,1:2) + ed(i,3:4), ...
+                                                 q(ed(i,1:2) + ed(i,3:4))); end
         end
         if isCvx
             cvx{end+1} = poly; %#ok<AGROW>
@@ -89,14 +130,25 @@ function [atoms, forms] = collectAtoms(f)
                                       H, L, poly); %#ok<AGROW>
             end
         end
-        for i = 1:size(poly,1)
-            u = poly(i,:);  w = poly(mod(i, size(poly,1)) + 1, :);  dv = w - u;
+        for i = 1:size(ed,1)
+            u = ed(i,1:2);  dv = ed(i,3:4);  isRay = ed(i,5) == 1;
             al = 0.5 * dv*H*dv.';
-            if al <= 0, continue, end
+            if al <= 0, continue, end            % a ray of linear growth only shapes dom f* (D)
             be = (u*H + L.') * dv.';  ga = q(u);
-            forms(end+1) = mkForm('edge', dv.'*dv/(2*al), u.' - be*dv.'/(2*al), ...
-                                  -ga + be^2/(4*al), u, dv, al, be, [], [], []); %#ok<AGROW>
+            fm = mkForm('edge', dv.'*dv/(2*al), u.' - be*dv.'/(2*al), ...
+                        -ga + be^2/(4*al), u, dv, al, be, [], [], []);
+            if isRay, fm.tmax = inf; end
+            forms(end+1) = fm; %#ok<AGROW>
             if isCvx, continue, end              % the convex piece's atom already holds it
+            if isRay
+                key = [u, dv / norm(dv)];               % a ray is its base and its direction
+                if any(all(abs(rayAt - key) < 1e-12, 2)), continue, end
+                rayAt(end+1,:) = key; %#ok<AGROW>
+                atoms{end+1} = struct('kind', 'ray', 'u', u, 'w', [], ...
+                    'q', QuaPol([u; dv], [1 2 0], f.f(k,:), [0 0])); %#ok<AGROW>
+                continue
+            end
+            w = u + dv;
             key = sortrows([u; w]);  key = [key(1,:), key(2,:)];
             if any(all(abs(edgeAt - key) < 1e-12, 2)), continue, end
             edgeAt(end+1,:) = key; %#ok<AGROW>
@@ -111,6 +163,9 @@ function [atoms, forms] = collectAtoms(f)
         covered = any(cellfun(@(P) inPoly(p, P), cvx));
         for j = 1:size(edgeAt,1)
             covered = covered || norm(p - edgeAt(j,1:2)) < 1e-12 || norm(p - edgeAt(j,3:4)) < 1e-12;
+        end
+        for j = 1:size(rayAt,1)
+            covered = covered || norm(p - rayAt(j,1:2)) < 1e-12;   % a ray atom holds its base
         end
         if ~covered
             atoms{end+1} = struct('kind', 'vertex', 'u', p, 'q', ...
@@ -129,7 +184,7 @@ end
 
 function fm = mkForm(kind, A, b, c, u, d, al, be, H, L, poly)
     fm = struct('kind', kind, 'A', A, 'b', b, 'c', c, 'u', u, 'd', d, 'al', al, 'be', be, ...
-                'H', H, 'L', L, 'poly', poly);
+                'H', H, 'L', L, 'poly', poly, 'tmax', 1);
 end
 
 function [vtx, vval] = addVertex(vtx, vval, p, v)
@@ -171,9 +226,13 @@ function tf = inPoly(p, P)
 end
 
 % ==================================================================================================
-function tris = tripleFaces(forms)
+function tris = tripleFaces(forms, D)
 % For every triple of forms, every common tie s0 whose three contact points lie in their atoms.
-    tris = struct('T', {}, 's', {}, 'c', {});
+% With an unbounded input, a tie ON the boundary of D = dom f* also carries the normal cone there:
+% the face <s0,x> - g(s0) holds on T + N_D(s0) (erratum Case E), G its generators. Off the
+% boundary G is empty. A tie outside D keeps its triangle alone -- still a chord of f, so still
+% an upper bound.
+    tris = struct('T', {}, 's', {}, 'c', {}, 'G', {});
     n = numel(forms);
     for a = 1:n
         for b = a+1:n
@@ -188,11 +247,23 @@ function tris = tripleFaces(forms)
                     if ~ok, continue, end
                     ar = (M(2,1)-M(1,1))*(M(3,2)-M(1,2)) - (M(2,2)-M(1,2))*(M(3,1)-M(1,1));
                     if abs(ar) <= 1e-9 * max(1, max(abs(M(:))))^2, continue, end
-                    tris(end+1) = struct('T', M, 's', s0.', 'c', gval(F3(1), s0)); %#ok<AGROW>
+                    tris(end+1) = struct('T', M, 's', s0.', 'c', gval(F3(1), s0), ...
+                                         'G', normalCone(D, s0)); %#ok<AGROW>
                 end
             end
         end
     end
+end
+
+function G = normalCone(D, s0)
+% Outward normals of the rows of D active at s0, as columns; empty unless s0 is on D's boundary.
+    G = zeros(2,0);
+    if isempty(D), return, end
+    r = D(:,1:2)*s0 + D(:,3);
+    tol = 1e-9 * max(1, max(abs(D(:))));
+    if any(r < -tol), return, end                 % s0 is outside D: the triangle alone
+    act = abs(r) <= tol * max(1, norm(s0));
+    G = -D(act,1:2).';
 end
 
 function v = gval(fm, s)
@@ -206,7 +277,7 @@ function [m, ok] = contact(fm, s)
             m = fm.u;  ok = true;
         case 'edge'
             t = (s.'*fm.d.' - fm.be) / (2*fm.al);
-            m = fm.u + t*fm.d;  ok = t >= -1e-9 && t <= 1 + 1e-9;
+            m = fm.u + t*fm.d;  ok = t >= -1e-9 && t <= fm.tmax + 1e-9;   % tmax = inf on a ray
         case 'piece'
             m = (fm.H \ (s - fm.L)).';  ok = inPoly(m, fm.poly);
     end

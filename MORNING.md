@@ -28,6 +28,9 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   fixed (each red first, from the captured input) and a witness search that only looked in a
   small box around the origin replaced by a closed form. It now stops at an honest limit: one
   face's polynomial genuinely needs 59 bits, past what double storage holds.
+- **biconjQ now handles unbounded domains on the atom route** (erratum Case E). Erratum Example 3
+  comes out exactly x1^2 (its quarantine is lifted), and a cone fixture refused since September
+  is exactly its closed form. Both are values no finite convex combination attains.
 - Daily slow gate: 101 pass / 0 fail (2 known quarantined).
 
 ## What is broken
@@ -35,7 +38,7 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   quarantined on that. Needs wider storage for implicit polynomials (TODO).
 - poly2 kink biconj is still not MESHED (evaluable only): the single global arrangement has 85
   curves. Fix is a per-cell-pair arrangement (TODO).
-- Erratum Example 3 biconj: unbounded, atom route is bounded-only — 1 test quarantined (TODO).
+- Unbounded inputs with a CONVEX unbounded piece are still refused by name (TODO).
 
 ## Needs a decision
 - **TODO item "biconjCPLQ scaling on the poly2 kinks" (legacy symbolic route, runs > 4 h) was
@@ -48,4 +51,4 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   (c) return it only under an explicit engine flag. I'd keep (a).
 
 ## Where I stopped
-Row-less corners done; Example 2 integer width scope-reduced to the stored-polynomial width.
+Row-less corners done; Example 2 integer width scope-reduced to the stored-polynomial width; unbounded atom route done.

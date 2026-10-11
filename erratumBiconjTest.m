@@ -13,8 +13,8 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
 %              content removed, needs 59 bits: the ANSWER is past what a double stores exactly.
 %              (Until 2026-10-11 it stopped earlier at ratQ:overflow in three constructors whose
 %              intermediates, not results, were large; fixed.) TODO "integer width".
-%   Example 3  PLQ:biconjQ:notImplemented -- unbounded; the atom route is bounded-only (needs the
-%              erratum's Case E).
+%   (Example 3 was quarantined on PLQ:biconjQ:notImplemented until 2026-10-11, when the atom
+%   route learned rays -- erratum Case E. It runs now.)
 % Any other error, or a wrong value, fails as usual, and a test runs by itself once its refusal goes.
 
     methods (Test)
@@ -118,10 +118,6 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             if which == 2 && strcmp(ME.identifier, 'bridgeFaceAlg:polynomialOverflow')
                 testCase.assumeFail(['QUARANTINED: Example 2 overflows the exact integer range ' ...
                     '(TODO: integer width -- an implicit bridge polynomial needs 59 bits). ' ME.message]);
-            end
-            if which == 3 && strcmp(ME.identifier, 'PLQ:biconjQ:notImplemented')
-                testCase.assumeFail(['QUARANTINED: unbounded, the atom route is bounded-only ' ...
-                    '(erratum Case E). ' ME.message]);
             end
             rethrow(ME)
         end
