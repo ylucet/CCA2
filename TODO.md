@@ -38,12 +38,13 @@ DOES carry the value and cannot be reduced the same way.
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
       observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
-- [ ] **Integer width of the face constructors: erratum Example 2 overflows.** biconjAtoms on it
-      raises `ratQ:overflow` in `bridgeFaceRat` (face numerator 2.9e23) and `cornerFaceAlg`
-      (corner bracket 1.8e17; still 1.5e16 at coordinates / 5). Three erratumBiconjTest tests are
-      quarantined on that identifier. Patching sites one at a time just moves the refusal (seen
-      twice) -- the fix is a wider number type for these constructors (BigInteger end to end, as
-      `implicitValue`'s fallback already does), not another chk.
+- [ ] **Integer width of the STORED answer: erratum Example 2.** Three constructors overflowed on
+      INTERMEDIATES and are fixed (2026-10-11): the corner bracket (now built in BigInteger), the
+      rational bridge face (joint content 3.2e17 divided out in BigInteger), and the rational
+      corner (s put in lowest terms). The witness search was also wrong (fixed +-8 grid). What is
+      left is honest: an algebraic bridge face's implicit polynomial, content removed, needs 59
+      bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
+      enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
 - [ ] **Atom route for UNBOUNDED domains (erratum Case E, Example 3).** biconjAtoms refuses rays;
       biconjQ still raises notImplemented there (erratumBiconjTest/ex3 quarantined). Ray atoms

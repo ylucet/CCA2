@@ -107,6 +107,36 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
             testCase.verifyEqual(bridgeMember(pr, X), want);
         end
 
+        function theWITNESSIsFoundWhereverTheFaceIs(testCase)
+        % Captured 2026-10-11 from biconjQ on erratum Example 2 (coordinates up to 60): the face
+        % lies outside the +-8 grid the witness search walked, so it raised noWitness. The witness
+        % must be a rational point STRICTLY inside the face: concave there, and its maximiser
+        % strictly inside the pair.
+            P = [-2 0 125; 1 0 5; -5 -3 248];
+            face = bridgeFaceRat([0 0 0 0 0 0 0 70 -10 1285], 2, [0 0 0 0 1 0 0 50 30 470], 3, P);
+            pr = face.pair;
+            x = face.wit(1:2) / face.wit(3);
+            testCase.verifyEqual(face.wit, round(face.wit), 'the witness is rational: integers');
+            Bv = pr.B(1)*x(1) + pr.B(2)*x(2) + pr.B(3);
+            Cv = pr.C(1)*x(1) + pr.C(2)*x(2) + pr.C(3);
+            testCase.verifyLessThan(Cv * pr.scale, 0, 'concave along the parabola at the witness');
+            s = paraPoint(pr, -Bv/(2*Cv));
+            testCase.verifyGreaterThan(min(P(:,1:2)*s + P(:,3)), 0, 'its maximiser is strictly in the pair');
+        end
+
+        function aFACEWithALargeCOMMONFactorStillBuildsAndHasItsValue(testCase)
+        % Captured 2026-10-11 from biconjQ on erratum Example 2: 4AC - B^2 reaches 3.2e24, but
+        % numerator and denominator share a factor 3.2e17, and the reduced face fits. The face must
+        % build and be the stationary value, exactly as for the small fixtures.
+            fx = mk('example2', [0 0 0 0 0 0 0 60 10 -2660], 1, [0 0 0 0 25 10 4 3030 -2854 535327], 214);
+            face = bridgeFaceRat(fx.n1, fx.d1, fx.n2, fx.d2, [1 0 -130; 5 2 -357; -5 -2 892]);
+            [nT, tieRes, valRes, nonConcave] = analytic(fx, face);
+            testCase.verifyGreaterThan(nT, 50, 'too few face points');
+            testCase.verifyLessThan(tieRes, 1e-12, 'the maximiser must lie ON the tie');
+            testCase.verifyLessThan(valRes, 1e-9, 'the value must be the objective at that point');
+            testCase.verifyEqual(nonConcave, 0, 'the face must only exist where the objective is concave');
+        end
+
         function bridgeFaceAlgDELEGATESToItRatherThanRefusing(testCase)
         % One entry point, two face kinds: a caller asks bridgeFaceAlg and gets whichever face the
         % pair actually has. The singular pencil used to be a refusal.

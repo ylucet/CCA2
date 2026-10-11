@@ -75,6 +75,51 @@ classdef cornerFaceAlgTest < matlab.unittest.TestCase
             t.verifyGreaterThan(n, 0, 'the fixture has corners');
         end
 
+        function erratumEXAMPLE2sCornerBuildsPastTheDoubleRange(t)
+        % Captured 2026-10-11 from biconjQ on erratum Example 2 (coordinates up to 60): the BRACKET
+        % -2 al E0 + be E1 reached 1.8e17 before the BigInteger fallback started, which squared it
+        % only after building it in doubles. The corner must build, and its polynomial must vanish
+        % on the affine value <s,x> - g(s) around grad g(s).
+            n = [0 0 0 0 1 0 0 50 30 470];  d = 3;
+            P = [2 0 -125; -1 0 130; -10 -6 1321; 5 3 -248];
+            tie = [180 -180 -54 -21420 38628 -1330974];
+            faces = cornerFaceAlg(n, d, P, tie, 1);
+            t.verifyGreaterThan(numel(faces), 0, 'the fixture has a corner');
+            N = [n(5) n(6); n(6) n(7)];  m = [n(8); n(9)];  q = n(10);
+            g = @(s) ((s.'*N*s)/2 + m.'*s + q) / d;
+            for f = faces
+                s = f.s;
+                for off = [0 0; 0.1 0; 0 0.1; -0.07 0.05].'
+                    x = f.p + off;
+                    t.verifyLessThan(relResidual(f.FP, x, s.'*x - g(s)), 1e-10, ...
+                        'the polynomial vanishes on the corner''s value');
+                end
+                t.verifyEqual(algBranch(f.FP, f.p.', f.FB), s.'*f.p - g(s), 'RelTol', 1e-9, ...
+                    'the chosen branch IS the corner''s value at grad g(s)');
+            end
+        end
+
+        function erratumEXAMPLE2sRationalCornerIsReducedBeforeItsValue(t)
+        % Captured 2026-10-11 from biconjQ on erratum Example 2: the facet meets the tie once, at
+        % a RATIONAL s = sn/sd that was never put in lowest terms, so its value's d*sd^2 term
+        % reached 4.4e16. The corner must build and carry its affine value.
+            n = [0 0 0 0 0 0 0 60 10 -2660];
+            faces = cornerFaceAlg(n, 1, [1 0 -130; 5 2 -357; -5 -2 892], ...
+                                  [-25 -20 -4 19620 9988 -2209134], 1);
+            t.verifyGreaterThan(numel(faces), 0, 'the fixture has a corner');
+            g = @(s) [60 10]*s - 2660;
+            for f = faces
+                s = f.s;
+                for off = [0 0; 0.1 0; 0 0.1; -0.07 0.05].'
+                    x = f.p + off;
+                    t.verifyLessThan(relResidual(f.FP, x, s.'*x - g(s)), 1e-10, ...
+                        'the polynomial vanishes on the corner''s value');
+                end
+                t.verifyEqual(algBranch(f.FP, f.p.', f.FB), s.'*f.p - g(s), 'RelTol', 1e-9, ...
+                    'the chosen branch IS the corner''s value');
+            end
+        end
+
         function theCORNERSOfThePOLY2KinkBuildAndCarryTheirValue(t)
             calls = {{[0 0 0 0 1 0 0 0 0 0],     2, [1 0 4;-1 0 4;0 -1 0;3 2 16;-3 -2 10;2 -3 2], [8 -24 -8 16 -128 -96],  1}, ...
                      {[0 0 0 0 9 6 4 -4 32 24], 26, [1 0 4;-1 0 4;0 -1 0;3 2 16;-3 -2 10;2 -3 2], [8 -24 -8 16 -128 -96], -1}, ...

@@ -9,9 +9,10 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
 % triangle is ~100 s.
 %
 % QUARANTINES, by identifier only (umbrella CLAUDE.md section 8), measured 2026-10-10:
-%   Example 2  ratQ:overflow -- its coordinates (up to 60) push the corner and rational-bridge
-%              polynomials past 2^53 (also at coordinates / 5). TODO "integer width of the face
-%              constructors".
+%   Example 2  bridgeFaceAlg:polynomialOverflow -- an algebraic bridge face's implicit polynomial,
+%              content removed, needs 59 bits: the ANSWER is past what a double stores exactly.
+%              (Until 2026-10-11 it stopped earlier at ratQ:overflow in three constructors whose
+%              intermediates, not results, were large; fixed.) TODO "integer width".
 %   Example 3  PLQ:biconjQ:notImplemented -- unbounded; the atom route is bounded-only (needs the
 %              erratum's Case E).
 % Any other error, or a wrong value, fails as usual, and a test runs by itself once its refusal goes.
@@ -114,9 +115,9 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             end
             ME = cache{which}.err;
             if isempty(ME), h = cache{which}.h; return, end
-            if which == 2 && strcmp(ME.identifier, 'ratQ:overflow')
+            if which == 2 && strcmp(ME.identifier, 'bridgeFaceAlg:polynomialOverflow')
                 testCase.assumeFail(['QUARANTINED: Example 2 overflows the exact integer range ' ...
-                    '(TODO: integer width of the face constructors). ' ME.message]);
+                    '(TODO: integer width -- an implicit bridge polynomial needs 59 bits). ' ME.message]);
             end
             if which == 3 && strcmp(ME.identifier, 'PLQ:biconjQ:notImplemented')
                 testCase.assumeFail(['QUARANTINED: unbounded, the atom route is bounded-only ' ...

@@ -145,6 +145,8 @@ function faces = rationalCorner(n, d, N, m, qq, P, a, s0n, w, na, be, ga, tie, s
     sn = ratQ.chkB(s0n*be - ga*w, A(s0n)*A(be) + A(ga)*A(w), 'rational corner');
     sd = ratQ.chk(na*be, 'rational corner');
     if sd < 0, sn = -sn;  sd = -sd; end
+    gs = gcd(gcd(sn(1), sn(2)), sd);                           % LOWEST TERMS before anything is
+    sn = sn / gs;  sd = sd / gs;                               % squared: erratum Example 2, 2026-10-11
     inCell = ratQ.chkB(P(:,1:2)*sn + P(:,3)*sd, A(P(:,1:2))*A(sn) + A(P(:,3))*sd, ...
                        'rational corner in the cell');
     if any(inCell < 0), return, end                            % exact: the corner is not in the cell
@@ -224,7 +226,13 @@ function FP = implicitValue(E0, E1, K, al, be, D)
         % the content removed THERE, and only the result converted back; fromBig still raises if
         % the reduced polynomial itself does not fit, which is an honest overflow.
         if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
-        Lb = ratQ.toBig(ratQ.chk(L, 'corner bracket'));
+        % THE BRACKET ITSELF CAN PASS 2^53 TOO -- erratum Example 2 reached 1.8e17 (2026-10-11) --
+        % so it is built in BigInteger from its factors, every one of which already fits.
+        big = @(v) ratQ.toBig(v);
+        Lb = ratQ.bigAdd(ratQ.bigAdd( ...
+                ratQ.bigMul(big(-2*ratQ.chk(al, 'corner tie')), big(affPlusZ(E0, 0))), ...
+                ratQ.bigMul(big(be), big(affPlusZ(E1, 0)))), ...
+                ratQ.bigMul(big(2*al), big(affPlusZ([0 0 0], K))));
         Eb = ratQ.toBig(affPlusZ(ratQ.chk(E1, 'corner slope'), 0));
         Db = ratQ.toBig(ratQ.chk(D, 'corner discriminant'));
         FPb = ratQ.bigAdd(ratQ.bigMul(Lb, Lb), ratQ.bigNeg(ratQ.bigMul(Db, ratQ.bigMul(Eb, Eb))));

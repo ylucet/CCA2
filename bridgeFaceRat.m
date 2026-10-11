@@ -142,9 +142,19 @@ function [face, info] = buildFace(u, w, nu, rq, rl, rc, rd, b1, k1, d, P)
     info  = struct();
 
     % value at t*: (A - B^2/(4C)) / scale = (4AC - B^2) / (4C * scale)
-    num = ratQ.chkB(polyMulAff(A, C)*4 - polyMulAff(B, B), ...
-                    polyMulAff(abs(A), abs(C))*4 + polyMulAff(abs(B), abs(B)), 'face numerator');   % quadratic in x
-    den = ratQ.chk(4 * scale * C, 'face denominator');                          % LINEAR in x
+    try
+        num = ratQ.chkB(polyMulAff(A, C)*4 - polyMulAff(B, B), ...
+                        polyMulAff(abs(A), abs(C))*4 + polyMulAff(abs(B), abs(B)), 'face numerator');   % quadratic in x
+        den = ratQ.chk(4 * scale * C, 'face denominator');                      % LINEAR in x
+    catch ME
+        % THE PAIR CARRIES A LARGE COMMON FACTOR. Erratum Example 2 (2026-10-11): the numerator's
+        % terms reach 3.2e24, the joint content of numerator and denominator is 3.2e17, and the
+        % reduced face has coefficients below 6e6. So build both in BigInteger, divide out the
+        % content they share (a positive gcd, so no sign changes), and come back; fromBig still
+        % raises if the reduced face itself does not fit.
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        [num, den] = numDenBig(A, B, C, scale);
+    end
 
     face.fN = ratQ.chk(quadToWeighted(num), 'face numerator, weighted basis');
     face.fD = 1;
@@ -164,29 +174,67 @@ end
 
 % ==================================================================================================
 function wit = witnessRat(pr)
-% A rational point of the face: propose from the parabola itself -- the midpoint of no segment here,
-% because the sweep IS the parabola's own maximiser map -- and verify with the closed-form test.
-    for t = [0 1 -1 2 -2 0.5 -0.5 4 -4 10 -10]
+% A rational point STRICTLY inside the face, in closed form. The face is the union over admissible
+% parameters t of the LINE {x : t*(x) = t} = {B(x) + 2t C(x) = 0}, cut to the half-plane where
+% C(x)*scale < 0 (concave). So: take t strictly inside the pair's interval on the parabola, a point
+% of its line strictly on the concave side, round it to a dyadic rational and verify it.
+%
+% Until 2026-10-11 this walked a fixed +-8 grid, independent of t, and missed every face of
+% erratum Example 2 (coordinates up to 60).
+    for t = candidateParams(pr)
         s = paraPoint(pr, t);
         if any(~isfinite(s)), continue, end
-        if ~isempty(pr.P) && any(pr.P(:,1:2)*s + pr.P(:,3) < 0), continue, end
-        % x such that t*(x) = t: any x with B(x) + 2 C(x) t = 0. Walk a small grid and take the
-        % first rational point whose own maximiser is this t and which the pair admits.
-        for xd = [1 2 4 8]
-            for a1 = -8:8
-                for a2 = -8:8
-                    xn = [a1; a2];
-                    if ~bridgeMemberRatAt(pr, xn, xd), continue, end
-                    wit = [xn(:).', xd];
-                    return
-                end
-            end
+        if ~isempty(pr.P) && any(pr.P(:,1:2)*s + pr.P(:,3) <= 0), continue, end
+        L = pr.B + 2*t*pr.C;                        % the line t*(x) = t, as [gx gy c]
+        g = L(1:2);
+        if all(g == 0), continue, end
+        x0  = -L(3) * g(:) / (g*g.');
+        dir = [-g(2); g(1)];
+        c0  = pr.C(1:2)*x0 + pr.C(3);
+        cd  = pr.C(1:2)*dir;
+        want = -sign(pr.scale) * max(1, abs(c0));   % strictly on the concave side
+        if cd ~= 0
+            x = x0 + ((want - c0)/cd) * dir;
+        elseif c0 * pr.scale < 0
+            x = x0;
+        else
+            continue
+        end
+        for xd = 2.^(0:30)
+            xn = round(x * xd);
+            if any(abs(xn) >= 2^52), break, end
+            if ~bridgeMemberRatAt(pr, xn, xd), continue, end
+            wit = [xn(:).', xd];
+            return
         end
     end
     error('bridgeFaceRat:noWitness', ...
         ['no rational point of this face was found on the search grid. Either the pair admits no ' ...
          'part of the parabola, or the face is thinner than the grid -- which the caller should ' ...
          'be told rather than have guessed at.']);
+end
+
+function T = candidateParams(pr)
+% Parameters strictly inside the pair's set on the parabola: each row of P along s(t) is a
+% quadratic in t, so between consecutive real roots the sign is constant. Midpoints of those
+% intervals (and points beyond the outermost roots), then a few fixed values as a fallback.
+    roots_ = [];
+    for r = 1:size(pr.P, 1)
+        a = pr.P(r,1:2);
+        c2 = (a*pr.w) * pr.rq / (pr.rd * pr.nu);
+        c1 = (a*pr.u + (a*pr.w) * pr.rl / pr.rd) / pr.nu;
+        c0 = (a*pr.w) * pr.rc / (pr.rd * pr.nu) + pr.P(r,3);
+        rr = roots([c2 c1 c0]);
+        roots_ = [roots_; real(rr(abs(imag(rr)) < 1e-12 * max(1, abs(rr))))]; %#ok<AGROW>
+    end
+    roots_ = sort(roots_(:)).';
+    if isempty(roots_)
+        T = [0 1 -1];
+    else
+        span = max(1, roots_(end) - roots_(1));
+        T = [(roots_(1:end-1) + roots_(2:end))/2, roots_(1) - span, roots_(end) + span];
+    end
+    T = [T, 0 1 -1 2 -2 0.5 -0.5 4 -4 10 -10];
 end
 
 function tf = bridgeMemberRatAt(pr, xn, xd)
@@ -209,6 +257,24 @@ function v = affAt(f, xn, xd)
 end
 
 % ==================================================================================================
+function [num, den] = numDenBig(A, B, C, scale)
+% num = 4AC - B^2 and den = 4 scale C, exactly, with their JOINT content removed. Both are kept in
+% one three-variable big array -- num at z^0, den at z^1 -- so one bigContentFree divides them by
+% the same gcd.
+    big = @(v) ratQ.toBig(v);
+    aff = @(f) big(reshape([f(3) f(1) f(2) 0], 2, 2));          % (i,j) <-> x^(i-1) y^(j-1)
+    numB = ratQ.bigAdd(ratQ.bigMul(big(4), ratQ.bigMul(aff(A), aff(C))), ...
+                       ratQ.bigNeg(ratQ.bigMul(aff(B), aff(B))));
+    denB = ratQ.bigMul(big(4), ratQ.bigMul(big(scale), aff(C)));
+    z = big(reshape([0 1], 1, 1, 2));                            % the variable z
+    red = ratQ.fromBig(ratQ.bigContentFree(ratQ.bigAdd(numB, ratQ.bigMul(denB, z))));
+    both = zeros(3, 3, 2);                                       % pad to the full 3x3x2 shape
+    both(1:size(red,1), 1:size(red,2), 1:size(red,3)) = red;
+    Nm = both(:,:,1);  Dm = both(:,:,2);
+    num = [Nm(3,1), Nm(2,2), Nm(1,3), Nm(2,1), Nm(1,2), Nm(1,1)];  % [xx xy yy x y 1]
+    den = [Dm(2,1), Dm(1,2), Dm(1,1)];
+end
+
 function c = polyMulAff(f, g)
 % The product of two affine forms [gx gy c], as [xx xy yy x y 1].
     c = [f(1)*g(1), f(1)*g(2) + f(2)*g(1), f(2)*g(2), ...

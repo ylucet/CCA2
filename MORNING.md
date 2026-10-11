@@ -24,11 +24,15 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   Consequence: the kink now reaches the global mesh, which has 85 curves and did not finish in
   90 min; the mesh now refuses past 40 curves by name and biconjQ returns the evaluable face list
   (verified against the definition), exactly as before.
+- Erratum Example 2's biconjugate gets much further: three overflows on intermediate numbers
+  fixed (each red first, from the captured input) and a witness search that only looked in a
+  small box around the origin replaced by a closed form. It now stops at an honest limit: one
+  face's polynomial genuinely needs 59 bits, past what double storage holds.
 - Daily slow gate: 101 pass / 0 fail (2 known quarantined).
 
 ## What is broken
-- Erratum Example 2 biconj: `ratQ:overflow` (integers past 2^53) — 3 tests quarantined. Needs a
-  wider number type in the face constructors (TODO).
+- Erratum Example 2 biconj: one algebraic face's stored polynomial needs 59 bits — 3 tests
+  quarantined on that. Needs wider storage for implicit polynomials (TODO).
 - poly2 kink biconj is still not MESHED (evaluable only): the single global arrangement has 85
   curves. Fix is a per-cell-pair arrangement (TODO).
 - Erratum Example 3 biconj: unbounded, atom route is bounded-only — 1 test quarantined (TODO).
@@ -44,4 +48,4 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   (c) return it only under an explicit engine flag. I'd keep (a).
 
 ## Where I stopped
-Row-less corners done; residue (global arrangement too large on the kink) is back in Next up.
+Row-less corners done; Example 2 integer width scope-reduced to the stored-polynomial width.
