@@ -42,6 +42,39 @@ classdef cornerFaceAlgTest < matlab.unittest.TestCase
             end
         end
 
+        function aWEDGEEdgeThatIsARationalLineTimesAnIrrationalScalarGetsItsRow(t)
+        % Found 2026-10-11, the poly2 kink at c = -2 (pair 15: an affine face against a rank-1 one,
+        % tied on irrational parallel lines). A wedge edge A + sigma*B with A PARALLEL to B is the
+        % RATIONAL line B scaled by (lambda + sigma); its conjugate product is a DOUBLE line, which
+        % pairLineData rejects (ratQ:notALinePair), so the corner got no rows and the mesh could
+        % not place it. Every corner of the pair must come with two rows that agree with its KKT
+        % predicate.
+            P = [-1 2 4; 1 -2 6; 2 1 -8; 3 2 -10; 1 0 -2];
+            q = [1 -4 4 12 -24 -44];
+            calls = {{[0 0 0 0 1 -2 4 16 8 -32], 10, P, q,  1}, ...
+                     {[0 0 0 0 0 0 0 1 2 -1],      1, P, q, -1}};
+            rng(13);  Y = randn(300,2)*4;
+            n = 0;
+            for c = 1:numel(calls)
+                faces = cornerFaceAlg(calls{c}{:});
+                for k = 1:numel(faces)
+                    n = n + 1;
+                    t.verifyEqual(size(faces(k).con, 1), 2, sprintf('call %d corner %d has its two rows', c, k));
+                    if size(faces(k).con, 1) ~= 2, continue, end
+                    byRows = true(size(Y,1),1);
+                    for r = 1:2
+                        cr = faces(k).con(r,:);
+                        if cr(8) ~= 0, qv = ratQ.pairLineEval(cr(1:6), cr(8), Y);
+                        else, qv = QuaPar.evalConic(cr(1:6), Y); end
+                        byRows = byRows & cr(7) * qv(:) >= 0;
+                    end
+                    byKkt = arrayfun(@(i) all(faces(k).M \ (faces(k).p - Y(i,:).') >= 0), (1:size(Y,1)).');
+                    t.verifyEqual(byRows, byKkt, 'the wedge rows and the KKT test agree');
+                end
+            end
+            t.verifyGreaterThan(n, 0, 'the fixture has corners');
+        end
+
         function theCORNERSOfThePOLY2KinkBuildAndCarryTheirValue(t)
             calls = {{[0 0 0 0 1 0 0 0 0 0],     2, [1 0 4;-1 0 4;0 -1 0;3 2 16;-3 -2 10;2 -3 2], [8 -24 -8 16 -128 -96],  1}, ...
                      {[0 0 0 0 9 6 4 -4 32 24], 26, [1 0 4;-1 0 4;0 -1 0;3 2 16;-3 -2 10;2 -3 2], [8 -24 -8 16 -128 -96], -1}, ...

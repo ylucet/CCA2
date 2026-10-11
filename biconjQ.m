@@ -393,10 +393,11 @@ function h = assembledEnvelope(obj)
                     if ~strcmp(ME2.identifier, 'envelopeMeshAlg:faceKind'), rethrow(ME2), end
                     h = unmeshed(env);
                 end
-            case 'envelopeMesh:bridgeFaces'
-                % A corner face whose wedge has no rows cannot be placed in any arrangement
-                % (TODO). The face list is still the envelope -- envelopeEval answers for it,
-                % verified against the definition -- so return it unmeshed rather than refuse.
+            case {'envelopeMesh:bridgeFaces', 'envelopeMesh:arrangementSize'}
+                % A corner face whose wedge has no rows cannot be placed in any arrangement, and an
+                % arrangement past the curve budget does not finish (TODO). The face list is still
+                % the envelope -- envelopeEval answers for it, verified against the definition --
+                % so return it unmeshed rather than refuse.
                 h = unmeshed(env);
             otherwise
                 rethrow(ME)

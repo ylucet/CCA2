@@ -139,6 +139,23 @@ function [row, kind] = rowFor(A, B, Q, xw, sg)
         kind = 'rational';
         return
     end
+    if all(ratQ.chkB([A(1)*B(2) - A(2)*B(1), A(1)*B(3) - A(3)*B(1), A(2)*B(3) - A(3)*B(2)], ...
+                     [abs(A(1)*B(2)) + abs(A(2)*B(1)), abs(A(1)*B(3)) + abs(A(3)*B(1)), ...
+                      abs(A(2)*B(3)) + abs(A(3)*B(2))], 'wedge edge parallel test') == 0)
+        % A PARALLEL to B: L = (lambda + sigma) B, the RATIONAL line B scaled by an irrational
+        % number. Its conjugate product is a DOUBLE line, which no branch of a pair can name
+        % (ratQ:notALinePair, 2026-10-11) -- but it needs none: the edge IS the line B, and the
+        % witness, strictly inside the wedge, says which side.
+        g = gcdv(B);
+        L = B / g;
+        v = L(1)*xw(1) + L(2)*xw(2) + L(3);
+        if abs(v) <= 1e-9 * max(1, max(abs(L)))
+            kind = 'witnessOnEdge';  return
+        end
+        row = [0 0 0 L, sign(v), 0];
+        kind = 'rationalScaled';
+        return
+    end
     al = Q(1);  be = Q(2);  ga = Q(3);
     C = ratQ.chkB(al*linMul(A,A) - be*linMul(A,B) + ga*linMul(B,B), ...
                   abs(al)*linMul(abs(A),abs(A)) + abs(be)*linMul(abs(A),abs(B)) + abs(ga)*linMul(abs(B),abs(B)), ...

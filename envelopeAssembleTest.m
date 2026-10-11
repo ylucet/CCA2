@@ -104,7 +104,9 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
 
         function biconjQOnThePOLY2KinkANSWERSWhenTheMeshCannotPlaceACorner(testCase)
         % biconjQ of the poly2 kink at c = -2 stopped at envelopeMesh:bridgeFaces: two corner
-        % faces have no wedge rows, so no arrangement can place them (TODO). The face list itself
+        % faces had no wedge rows, so no arrangement could place them. With the rows built
+        % (2026-10-11) the arrangement has 85 curves and does not finish, so the mesh refuses it
+        % by size (envelopeMesh:arrangementSize) and this path is the same. The face list itself
         % is correct (the test above), so biconjQ returns it unmeshed, as an EnvelopeMin, rather
         % than refusing. Oracle: the numeric sup over the two pieces' conjugates.
             V = [-2 0; 2 0; 1 2; -1 2];

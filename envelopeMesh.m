@@ -87,6 +87,17 @@ function [g, info] = envelopeMesh(env)
     nQuad = numel(env.quad);
     C = addBridgeCurves(C, bridges);       % curves only: a bridge's membership is a PREDICATE
     allPairs = unique([pairOf, cellfun(@(f) f.pairIndex, bridges)]);
+    % THE ARRANGEMENT IS GLOBAL, and its cost is not polynomial in any useful sense: every curve
+    % re-tests every live cell, whose emptiness test grows with the cell's rows. Measured on the
+    % poly2 kink at c = -2 (2026-10-11): 23 curves mesh in minutes; 85 curves passed 370 cells at
+    % curve 30 and did not finish in 90 minutes. Refuse by name past the budget -- the face list
+    % is still the envelope, and envelopeEval answers for it.
+    maxCurves = 40;
+    if size(C,1) > maxCurves
+        error('envelopeMesh:arrangementSize', ...
+            ['the arrangement has %d curves (budget %d), and a global arrangement of that size ' ...
+             'does not finish. envelopeEval answers for the face list.'], size(C,1), maxCurves);
+    end
 
     % ---- 2. the arrangement, one curve at a time ------------------------------------------------
     cells = {zeros(0,2)};                       % each cell: rows [curveIndex, side]

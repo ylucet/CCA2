@@ -50,10 +50,14 @@ DOES carry the value and cannot be reduced the same way.
       have polyhedral conjugates too, but co f need not be attained (erratum Example 3), so the
       pair envelopes must carry the recession part.
 
-- [ ] **Corner faces with NO wedge rows cannot be meshed** (poly2 kink c = -2: 2 of 12 corners;
-      `cornerWedgeRows` declines them, so envelopeMesh raises bridgeFaces and envelopeMeshAlg
-      faceKind). biconjQ now returns the unmeshed EnvelopeMin there. Find why cornerWedgeRows
-      declines those two (branchOf undecidable?) and spell their rows.
+- [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
+      row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
+      irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the mesh,
+      whose single global arrangement passed 370 cells at curve 30 of 85 and did not finish in
+      90 min. `envelopeMesh` now refuses past 40 curves (`envelopeMesh:arrangementSize`) and
+      biconjQ returns the unmeshed EnvelopeMin, as before. Fix: arrange PER CONJUGATE CELL PAIR
+      (each pair's faces only see that pair's curves), or prune curves that bound no live face
+      before arranging.
 
 - [ ] **EnvelopeMin is not meshed, and builds ALL atom pairs.** biconjQ returns it where it used to
       refuse: it answers eval but is not an AlgCon. Two follow-ups: prune pairs/triples to the
@@ -62,6 +66,7 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Done recently
 
+- [x] **Corner faces with NO wedge rows** -- DONE 2026-10-11 (overnight). The two poly2-kink corners had a wedge edge A + sigma B with A parallel to B: a rational line times an irrational scalar, whose conjugate product is a double line that `pairLineData` rejects. `cornerWedgeRows` now spells it as the rational line, side from a witness; cornerFaceAlgTest checks the rows against the KKT predicate. Residue: the arrangement size, in Next up.
 - [x] **`biconjQ` on the poly2 kink answers** (2026-10-11, scope-reduced; residue: the
       row-less corners item above). Found on the way, both making VALUES wrong: no corners on an
       irrational parallel-line tie (+inf on 64% of the domain), and corner values read off the
