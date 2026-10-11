@@ -286,38 +286,50 @@ classdef QuaCon < RatCon & Qua
        % On the boundary itself both faces give the same value (f* is continuous), so the answer is
        % right there; the case this cannot yet decide is a point whose membership is genuinely
        % undecided at double precision, which is what Phase 2c's exact kernel is for.
+       %
+       % THE FACE A POINT GETS IS THE ONE IT IS MOST INSIDE, not the first one that accepts it, and
+       % the tolerance is scaled by THAT point's |x|, not the batch's. Both were wrong until
+       % 2026-10-10 (erratumExamplesTest, Example 2): with integer conic coefficients ~3e5 the
+       % accepted band is wide enough that a strict member of one face is also accepted by its
+       % neighbour, and first-match then returned the neighbour's smaller value (off by 0.4); and
+       % one far point in the call widened every other point's band. A strict member has
+       % violation <= 0, so it always beats a face that only accepts the point within tolerance.
             if isempty(X), val = zeros(0,1); idx = zeros(0,1); return, end
             n = size(X,1);
             val = inf(n,1);  idx = zeros(n,1);
+            best = inf(n,1);                       % smallest violation found so far, per point
+            xmax = max(1, max(abs(X), [], 2));     % per point, never per batch
+            tol = sqrt(eps);
             for k = 1:obj.nf
                 Ck = obj.FC{k};
-                inFace = true(n,1);
+                viol = -inf(n,1);
                 for r = 1:size(Ck,1)
                     if Ck(r,3) == 0
                         q = QuaPar.evalConic(obj.EcQ(Ck(r,1),:), X);
-                        scale = max(1, max(abs(obj.EcQ(Ck(r,1),:))) * max(1, max(abs(X(:)))^2));
+                        scale = max(1, max(abs(obj.EcQ(Ck(r,1),:))) * xmax.^2);
                     else
                         % ONE LINE of a degenerate conic. The line is irrational, so this is the
                         % double-precision CACHE of the name in Ck(r,3) -- ratQ.pairLineSign is the
                         % decision, exactly as ratQ.signAt is for a vertex. Its scale is linear in
                         % X, not quadratic, because a line is.
                         q = ratQ.pairLineEval(obj.EcQ(Ck(r,1),:), Ck(r,3), X);
-                        scale = max(1, max(abs(X(:))));
+                        scale = xmax;
                     end
                     if Ck(r,2) == 0
                         % ON the curve. A THIN face, and the honest caveat is that a point picked
                         % at random in floating point is never exactly on a line, so such a face
                         % answers +inf almost surely -- the mesh is still exactly right, and the
                         % exact predicates that build it are unaffected. See this class's header.
-                        inFace = inFace & (abs(q) <= sqrt(eps) * scale);
+                        viol = max(viol, abs(q(:)) ./ scale);
                     else
-                        inFace = inFace & (Ck(r,2) * q >= -sqrt(eps) * scale);
+                        viol = max(viol, -Ck(r,2) * q(:) ./ scale);
                     end
                 end
-                take = inFace & (idx == 0);
+                take = viol <= tol & viol < best;
                 if any(take)
                     val(take) = ratQ.evalFace(obj.fN(k,:), obj.fD(k), X(take,:));
                     idx(take) = k;
+                    best(take) = viol(take);
                 end
             end
        end

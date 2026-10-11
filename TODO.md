@@ -12,6 +12,17 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
+- [ ] **biconjQ for a non-convex piece curving UP along an edge -- erratum Theorem 2.** All three
+      erratum examples are refused `PLQ:biconjQ:notImplemented` (2026-10-10); their six biconj
+      tests in `erratumExamplesTest` are quarantined on that identifier only and run by themselves
+      once it is gone. Under (H) the erratum gives polyhedral cells with closed forms (its Cases
+      B, C, D with delta = 0, E) and a quartic 1-D minimum for case (b), so this is a spec, not
+      research. Example 1 is mixed convex/indefinite, outside (H): norm-shaped cell.
+
+- [ ] **`envelopeEval` and `cornerWedgeRows` scale their membership tolerance by the BATCH's max
+      |x|** -- the pattern fixed in `QuaCon.eval` 2026-10-10, where it returned a neighbour
+      face's value (off by 0.4). No failing test there yet; write one first.
+
 - [ ] **`biconjCPLQ` on the `poly2` kinks: the CRASHES are fixed, what is left is SCALING.** Three
       unnamed crashes, each found by printing the stack or capturing the input, each fixed red
       first where a fast test could reach it: `conjugateOfPiecePoly` read the chord's variables off
