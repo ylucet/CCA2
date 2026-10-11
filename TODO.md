@@ -12,10 +12,6 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **`envelopeEval` and `cornerWedgeRows` scale their membership tolerance by the BATCH's max
-      |x|** -- the pattern fixed in `QuaCon.eval` 2026-10-10, where it returned a neighbour
-      face's value (off by 0.4). No failing test there yet; write one first.
-
 - [ ] **`biconjCPLQ` on the `poly2` kinks: the CRASHES are fixed, what is left is SCALING.** Three
       unnamed crashes, each found by printing the stack or capturing the input, each fixed red
       first where a fast test could reach it: `conjugateOfPiecePoly` read the chord's variables off
@@ -77,6 +73,11 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **`envelopeEval` scaled its membership tolerance by the BATCH's max |x|** (2026-10-10):
+      fixed per point, red first (envelopeEvalTest: a point outside the only face took its value
+      once a far point shared the call). `cornerWedgeRows`' scale was NOT the same defect -- its X
+      is three points it builds itself, not a caller's batch.
 
 - [x] **biconjQ for a non-convex piece curving UP along an edge (bounded) -- the ATOM route**
       (2026-10-10, scope-reduced; residue is the three items above). `biconjAtoms`: atoms =

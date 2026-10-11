@@ -82,7 +82,7 @@ cd "$CCA2DIR" || exit 1
 # ORDERING. Parallel jobs finish out of order, so results are buffered per job and printed in JOB
 # ORDER at the end -- a run's output does not depend on how the scheduler happened to interleave
 # it. Per-job elapsed times are printed, which is what tells you where to shard next.
-FAST_SUITES=(guardExerciseTest erratumExamplesTest biconjAtomsTest PLQVCTest QuaPolExactTest QuaParCPLQUnitTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
+FAST_SUITES=(guardExerciseTest erratumExamplesTest biconjAtomsTest envelopeEvalTest PLQVCTest QuaPolExactTest QuaParCPLQUnitTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
              algBranchTest AlgConTest bridgeFaceAlgTest bridgeFaceRatTest algCurveSideTest AlgCrvTest algCrvVerticesTest algCrvIncidenceTest cellInteriorTest compactCellsTest cornerWedgeRowsTest cornerFaceAlgTest exactSumLintTest envelopeMeshCornersTest envelopeCellPairsTest envelopeCellRegionsTest
              clipArcByHalfPlaneTest conicMeetTest conjConvexPolygonTest conjEdgeLowerBoundTest
              biconjCPLQUnitTest biconjQTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest

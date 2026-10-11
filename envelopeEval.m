@@ -157,18 +157,23 @@ function in = inRegion(con, X)
 % Does each point satisfy every row of this face's region? The tolerance is the one QuaCon.eval
 % already documents: a point within it of a boundary is accepted, and on the boundary two faces
 % agree anyway, because the envelope is continuous there.
+%
+% The scale is PER POINT (2026-10-10, envelopeEvalTest): scaled by the whole call's largest |x|, a
+% far point in the same call widened every other point's band, and a point outside a face's
+% region took that face's value -- QuaCon.eval's defect, fixed there the same day.
     n = size(X,1);
     in = true(n,1);
+    xmax = max(1, max(abs(X), [], 2));
     for r = 1:size(con,1)
         c = con(r,1:6);
         if size(con,2) >= 8 && con(r,8) ~= 0
             q = ratQ.pairLineEval(c, con(r,8), X);
-            scale = max(1, max(abs(X(:))));
+            scale = xmax;
         else
             q = QuaPar.evalConic(c, X);
-            scale = max(1, max(abs(c)) * max(1, max(abs(X(:)))^2));
+            scale = max(1, max(abs(c)) * xmax.^2);
         end
-        in = in & (con(r,7) * q >= -sqrt(eps) * scale);
+        in = in & (con(r,7) * q(:) >= -sqrt(eps) * scale);
         if ~any(in), return, end
     end
 end

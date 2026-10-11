@@ -11,6 +11,8 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
 - Three bugs fixed on the way (each red first): whole-plane conjugate cells were skipped in pair
   enumeration; rational bridge faces had no membership test; corners where a cell facet meets a
   parabolic tie once were all dropped (made the envelope +inf).
+- envelopeEval: a point's value depended on the other points in the call (tolerance scaled by
+  the batch); fixed per point, red first.
 - Daily slow gate: 101 pass / 0 fail (2 known quarantined).
 
 ## What is broken
@@ -25,4 +27,4 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   (c) return it only under an explicit engine flag. I'd keep (a).
 
 ## Where I stopped
-Item 1 done (scope-reduced); regression buckets running before commit.
+Items 1-2 done and committed; working the exact-sum audit (item 3).
