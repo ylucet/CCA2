@@ -46,6 +46,13 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
+- [ ] **conjQ refuses multi-function CHAINS (`PLQ:conjQ:ambiguousChain`, examples2{4,5,6,7,10}).**
+      Its stated reason -- no convention for which edge takes which function -- is the premise
+      biconjQ's own comment calls wrong: row j IS edge j's function (QuaPol.eval). Then f* is the
+      max over edges of each edge's conjugate. The legacy engine refuses them too.
+- [ ] **conjQ refuses a NON-CONVEX UNBOUNDED piece (`PLQ:conjQ:nonConvexPiece`,
+      examplesNonconvex{2}).** Cut along recession directions, then fold as for bounded pieces.
+
 - [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
       irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the mesh,
