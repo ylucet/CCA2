@@ -103,7 +103,7 @@ function [atoms, forms] = collectAtoms(f)
             ed = zeros(0,5);
             for j = own(:).'
                 u = f.V(f.E(j,1),:);  w = f.V(f.E(j,2),:);
-                if f.E(j,3) == 0, ed(end+1,:) = [u, w, 1]; %#ok<AGROW>
+                if f.E(j,3) == 0, ed(end+1,:) = [u, w - u, 1]; %#ok<AGROW>  % a ray runs THROUGH V(b)
                 else, ed(end+1,:) = [u, w - u, 0]; end %#ok<AGROW>
             end
             % AN UNBOUNDED PIECE HAS NO POLYGON: membership is by its half-planes instead.
@@ -143,7 +143,7 @@ function [atoms, forms] = collectAtoms(f)
                 if any(all(abs(rayAt - key) < 1e-12, 2)), continue, end
                 rayAt(end+1,:) = key; %#ok<AGROW>
                 atoms{end+1} = struct('kind', 'ray', 'u', u, 'w', [], ...
-                    'q', QuaPol([u; dv], [1 2 0], f.f(k,:), [0 0])); %#ok<AGROW>
+                    'q', QuaPol([u; u + dv], [1 2 0], f.f(k,:), [0 0])); %#ok<AGROW>
                 continue
             end
             w = u + dv;

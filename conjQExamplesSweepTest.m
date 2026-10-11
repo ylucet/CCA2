@@ -15,7 +15,7 @@ classdef conjQExamplesSweepTest < matlab.unittest.TestCase
     properties (Constant)
         outOfScope = {'PLQ:op:unsupportedType', 'PLQ:QuaPol:notExact'};
         % in scope, not answered yet -- each one a TODO item
-        knownFail = {'examplesNonconvex{2}'};      % PLQ:conjQ:nonConvexPiece: non-convex AND unbounded
+        knownFail = cell(1,0);   % none (examplesNonconvex{2} answered 2026-10-11)
     end
 
     methods (Test)

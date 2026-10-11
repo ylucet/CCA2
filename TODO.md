@@ -52,11 +52,6 @@ DOES carry the value and cannot be reduced the same way.
       examplesNonconvex{1} (a notched polygon) at the vertices (0,0), (2,1) and the edge point
       (0.5,0.5); on the needle examples2{1}, eval at the needle itself. Any oracle built on eval
       under-reports on these domains.
-- [ ] **conjQ refuses a NON-CONVEX UNBOUNDED piece (`PLQ:conjQ:nonConvexPiece`,
-      examplesNonconvex{2}).** Cut along recession directions, then fold as for bounded pieces.
-      The ONE in-scope failure of the conj sweep (conjQExamplesSweepTest.knownFail): 28 pass,
-      6 refused as out of scope (5 cubic, 1 inexact input), 1 fail -- 2026-10-11.
-
 - [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
       irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the mesh,
@@ -72,6 +67,14 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **conjQ on a NON-CONVEX UNBOUNDED piece** -- DONE 2026-10-11. Covered by convex parts (a
+      half-strip per boundary segment plus a wedge at each ray base, swept along an integer
+      direction r that points into the piece from every edge -- checked in integers; no such r
+      is still refused by name), then the max of the parts' conjugates. examplesNonconvex{2}
+      matches |s|^2/2 - dist(s,P)^2/2. The conj sweep is now 29 pass, 6 refused, 0 fail.
+      Found on the way: biconjAtoms read a ray's second vertex as its DIRECTION; a ray runs
+      THROUGH it. Hidden because every fixture's ray base was the origin; fixed, red first.
 
 - [x] **conjQ on multi-function CHAINS** -- DONE 2026-10-11. Row j is edge j's function, so f* is
       the max over edges of each edge's conjugate; examples2{4,5,6,7,10} match a closed-form

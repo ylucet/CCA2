@@ -174,10 +174,10 @@ function [g, dom] = conjPieceQ(obj, k)
     % every decision is the sign of an integer cross product.
     if ~sh.convex
         if ~sh.bounded
-            error('PLQ:conjQ:nonConvexPiece', ...
-                ['face %d is non-convex AND unbounded. Ear clipping needs a closed boundary, so ' ...
-                 'splitting it means cutting along its recession directions first -- a real ' ...
-                 'case, and a separate one.'], k);
+            % AN UNBOUNDED non-convex piece is COVERED by convex parts, then folded like the
+            % triangles below: sup over a union is the max of the sups, overlaps or not.
+            [g, dom] = conjUnboundedNonConvex(obj, k);
+            return
         end
         tris = earClip(Vi, boundaryCycle(sh, Vi));
         g = [];
@@ -1121,3 +1121,79 @@ function P = sign2(N)
         P(i,:) = r / g;
     end
 end
+
+% ------------------------------------------------------------------------------------------------
+function [g, dom] = conjUnboundedNonConvex(obj, k)
+% objective: the conjugate of q_k on an UNBOUNDED NON-CONVEX face, by a cover with convex parts.
+%
+% THE COVER. Find an integer direction r pointing strictly INTO the face from every boundary edge
+% and from both rays -- inward normal . r > 0 throughout, decided in integers. Walking the boundary
+% with the face on the left, every element then moves the same way across r, so the boundary is
+% a GRAPH over the line normal to r, and the face is that graph swept along r:
+%       face = union over segments [p,q] of the half-strip [p,q] + R_+ r
+%              union the wedges  A + cone(dA, r)  and  B + cone(dB, r)  at the two ray bases.
+% Every part is convex and lies in the face, so f* restricted to the face is the MAX of the parts'
+% conjugates -- the same fold as the bounded split, which ear-clips instead. Each part is built as
+% a one-face QuaPol and conjugated by conjPieceQ, so no case analysis is repeated here.
+%
+% No such r (a face whose boundary doubles back along every candidate) is refused by name.
+    [Vi, ~] = ratQ.combineDen(obj.VN, obj.VD);
+    own = find(any(obj.F == k, 2)).';
+    segs = zeros(0,2);  rays = zeros(0,2);          % [a b] vertex indices; for a ray b is its direction
+    nIn = zeros(0,2);
+    for e = own
+        a = obj.E(e,1);  b = obj.E(e,2);
+        d = Vi(b,:) - Vi(a,:);               % a ray runs from V(a) THROUGH V(b), as pieceShape reads it
+        if obj.F(e,1) == k, n = [-d(2), d(1)]; else, n = [d(2), -d(1)]; end   % the face is on n's side
+        nIn(end+1,:) = n; %#ok<AGROW>
+        if obj.E(e,3) == 0, rays(end+1,:) = [a b]; else, segs(end+1,:) = [a b]; end %#ok<AGROW>
+    end
+    if size(rays,1) ~= 2
+        error('PLQ:conjQ:nonConvexPiece', ['face %d is non-convex and unbounded with %d boundary ' ...
+              'rays; the cover needs exactly two.'], k, size(rays,1));
+    end
+    dA = Vi(rays(1,2),:) - Vi(rays(1,1),:);  dB = Vi(rays(2,2),:) - Vi(rays(2,1),:);
+    r = [];
+    for c = [1 1; 1 2; 2 1; 1 3; 3 1; 2 3; 3 2].'
+        cand = ratQ.chkB(c(1)*dA + c(2)*dB, c(1)*abs(dA) + c(2)*abs(dB), 'cover direction');
+        if all(ratQ.chkB(nIn*cand.', abs(nIn)*abs(cand).', 'cover side') > 0)
+            r = cand / max(1, gcd(cand(1), cand(2)));  break
+        end
+    end
+    if isempty(r)
+        error('PLQ:conjQ:nonConvexPiece', ['face %d is non-convex and unbounded, and no direction ' ...
+              'between its rays points into it from every edge, so it is not swept by one ' ...
+              'direction and the cover does not apply.'], k);
+    end
+    q = obj.f(k,:);  V = obj.V;
+    % Every new vertex is an old one plus the INTEGER direction r, so the parts stay exact; the
+    % second point of an original ray is that ray's own V(b).
+    parts = {};
+    for i = 1:size(segs,1)
+        p = V(segs(i,1),:);  w = V(segs(i,2),:);
+        parts{end+1} = onePart([p; w; p + r; w + r], [1 2 1; 1 3 0; 2 4 0], (p + w)/2 + r, q); %#ok<AGROW>
+    end
+    for i = 1:2
+        A = V(rays(i,1),:);  B = V(rays(i,2),:);
+        parts{end+1} = onePart([A; B; A + r], [1 2 0; 1 3 0], (A + B)/2 + r, q); %#ok<AGROW>
+    end
+    g = [];  dom = zeros(0,3);
+    for i = 1:numel(parts)
+        [gi, di] = conjPieceQ(parts{i}, 1);
+        if isempty(g), g = gi; else, g = maxQ(g, gi); end
+        dom = [dom; di]; %#ok<AGROW>
+    end
+end
+
+function P = onePart(V, E, ip, q)
+% A one-face QuaPol on V/E (a ray runs from V(a) through V(b)), with F set so the face is on the side
+% of each edge that holds the interior point ip -- column 1 is the face on an edge's LEFT.
+    F = zeros(size(E,1), 2);
+    for e = 1:size(E,1)
+        a = V(E(e,1),:);
+        d = V(E(e,2),:) - a;                         % segment or ray: towards V(b)
+        if d(1)*(ip(2) - a(2)) - d(2)*(ip(1) - a(1)) > 0, F(e,:) = [1 0]; else, F(e,:) = [0 1]; end
+    end
+    P = QuaPol(V, E, q, F);
+end
+

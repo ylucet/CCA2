@@ -103,6 +103,20 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(h.eval([1 2; 1 -0.5]), [inf; inf], 'and +infinity off it');
         end
 
+        function raysNotBasedAtTheOriginAreReadThroughTheirSecondVertex(testCase)
+        % Found 2026-10-11: a ray edge runs from V(a) THROUGH V(b) (conjQ's pieceShape reads it
+        % so), but biconjAtoms read V(b) as the DIRECTION -- identical when the base is the origin,
+        % which every earlier fixture had. The cone fixture shifted by (0,-2), where the misread
+        % direction (1,-2) leaves the domain: f = (x^2 - (y+2)^2)/2 on (0,-2) + cone((1,0),(1,1)),
+        % so co f = (x - y - 2)^2/2 there.
+            f = QuaPol([0 -2; 1 -2; 1 -1], [1 2 0; 1 3 0], [0 0 0 0, 1, 0, -1, 0, -2, -2], [1 0; 0 1]);
+            h = biconjQ(f);
+            rng(83);  Y = rand(40,2)*4;  Y(:,2) = Y(:,2) .* Y(:,1)/4 - 2;          % in the cone
+            testCase.verifyEqual(h.eval(Y), (Y(:,1) - Y(:,2) - 2).^2/2, 'AbsTol', 1e-12, ...
+                'co f is (x - y - 2)^2/2 on the shifted cone');
+            testCase.verifyEqual(h.eval([0 0; 1 -3]), [inf; inf], 'and +infinity off it');
+        end
+
         function aCONVEXUnboundedPieceBesideAnINDEFINITEOneIsComputed(testCase)
         % Found 2026-10-11: the atom route refused a convex piece with rays
         % (biconjAtoms:unboundedConvexPiece) -- its membership test was polygon-only.

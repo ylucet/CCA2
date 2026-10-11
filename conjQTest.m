@@ -909,6 +909,36 @@ classdef conjQTest < matlab.unittest.TestCase
             end
         end
 
+        function aNONCONVEXUnboundedPieceIsCoveredByConvexParts(testCase)
+        % examplesNonconvex{2}: q = (x^2 + y^2)/2 on the epigraph of a W -- boundary rays from
+        % (-1,0) through (-2,1) and from (1,0) through (2,1) (a ray runs from its first vertex
+        % THROUGH its second), with the notch (-1,0),(0,1),(1,0). Refused
+        % as nonConvexPiece until 2026-10-11. Independent closed form: for q = |x|^2/2,
+        %       f*(s) = |s|^2/2 - dist(s, P)^2/2,
+        % and P = {y >= w(x)} with w the W, so the distance is 0 inside and the distance to the
+        % nearest boundary segment or ray outside.
+            N = QuaPol.examplesNonconvex();  f = N{2};
+            g = conjQ(f);
+            rng(2027);  S = [randn(300,2)*3; 0 0; 0 1; 0 0.5; -1 0; 3 -2; -4 -4];
+            w = @(x) (x <= -1).*(-1-x) + (x > -1 & x <= 0).*(x+1) + (x > 0 & x <= 1).*(1-x) + (x > 1).*(x-1);
+            segs = {[-1 0], [-1 1], inf; [-1 0], [1 1], 1; [0 1], [1 -1], 1; [1 0], [1 1], inf};
+            want = zeros(size(S,1),1);
+            for i = 1:size(S,1)
+                p = S(i,:);
+                if p(2) >= w(p(1)), dist2 = 0;
+                else
+                    dist2 = inf;
+                    for e = 1:size(segs,1)
+                        a = segs{e,1};  d = segs{e,2};
+                        t = min(max(((p - a)*d.')/(d*d.'), 0), segs{e,3});
+                        dist2 = min(dist2, sum((a + t*d - p).^2));
+                    end
+                end
+                want(i) = (p*p.')/2 - dist2/2;
+            end
+            testCase.verifyEqual(g.eval(S), want, 'AbsTol', 1e-10, 'RelTol', 1e-12);
+        end
+
         function aCHAINWhoseRowCountIsNotItsEdgeCountIsStillRefused(testCase)
         % The convention needs one row per edge; any other count really is ambiguous.
             f = QuaPol([0 0; 1 0; 0 1], [1 2 1; 1 3 1], ...
