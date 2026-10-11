@@ -102,6 +102,27 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             end
         end
 
+        function biconjQOnThePOLY2KinkANSWERSWhenTheMeshCannotPlaceACorner(testCase)
+        % biconjQ of the poly2 kink at c = -2 stopped at envelopeMesh:bridgeFaces: two corner
+        % faces have no wedge rows, so no arrangement can place them (TODO). The face list itself
+        % is correct (the test above), so biconjQ returns it unmeshed, as an EnvelopeMin, rather
+        % than refusing. Oracle: the numeric sup over the two pieces' conjugates.
+            V = [-2 0; 2 0; 1 2; -1 2];
+            q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];  q1 = q0;  q1(9) = -2;
+            f = QuaPol(V, [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1], [q0; q1], [1 0; 1 0; 2 0; 2 0; 2 1]);
+            h = biconjQ(f);
+            gA = conjQ(QuaPol(V([1 2 3],:), [1 2 1; 2 3 1; 3 1 1], q0, [1 0;1 0;1 0]));
+            gB = conjQ(QuaPol(V([1 3 4],:), [1 2 1; 2 3 1; 3 1 1], q1, [1 0;1 0;1 0]));
+            rng(29);  W = rand(6,3);  W = W ./ sum(W,2);
+            X = [W*V([1 2 3],:); W*V([1 3 4],:)];
+            v = h.eval(X);
+            for i = 1:size(X,1)
+                want = supOracle(gA, gB, X(i,:));
+                testCase.verifyLessThan(abs(v(i) - want)/max(1,abs(want)), 1e-7, ...
+                    sprintf('biconjQ must equal the definition at (%g,%g)', X(i,1), X(i,2)));
+            end
+        end
+
         function aBRIDGEFaceIsUSEDAndNotJustBuilt(testCase)
         % The faces must actually ANSWER somewhere, or the fixture would be proving nothing about
         % them. `envelopeEval` reports which face supplied each value, so this asks it directly.

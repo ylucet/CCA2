@@ -22,12 +22,6 @@ DOES carry the value and cannot be reduced the same way.
       15, 21, 23, 32 ... 51 by fold 16, 750-1500 s a fold -- the "STEP 3 ... DOES NOT SCALE" entry
       below. Both tests in `biconjCPLQTest` are QUARANTINED by name (assumeFail) until then.
 
-- [ ] **`biconjQ` on the poly2 kink stops at `envelopeMesh:bridgeFaces`** (2026-09-25): a CORNER face
-      whose region has no rows and no outer bound, so the conic mesh cannot place it, and
-      `assembledEnvelope` does not fall back to `envelopeMeshAlg` for that identifier (it does for
-      `bridgeCompetes`). The three overflows before it are fixed (DECISIONS.md 2026-09-25). Reproduce
-      in ~90 s: `biconjQ` of the poly2 kink at c = -2; the refusal message names the reason.
-
 - [ ] **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
       parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area
       owns it too, and their value never exceeds it (max excess 1.1e-16 over 82 points), so dropping
@@ -56,12 +50,23 @@ DOES carry the value and cannot be reduced the same way.
       have polyhedral conjugates too, but co f need not be attained (erratum Example 3), so the
       pair envelopes must carry the recession part.
 
+- [ ] **Corner faces with NO wedge rows cannot be meshed** (poly2 kink c = -2: 2 of 12 corners;
+      `cornerWedgeRows` declines them, so envelopeMesh raises bridgeFaces and envelopeMeshAlg
+      faceKind). biconjQ now returns the unmeshed EnvelopeMin there. Find why cornerWedgeRows
+      declines those two (branchOf undecidable?) and spell their rows.
+
 - [ ] **EnvelopeMin is not meshed, and builds ALL atom pairs.** biconjQ returns it where it used to
       refuse: it answers eval but is not an AlgCon. Two follow-ups: prune pairs/triples to the
       ones adjacent in conjQ(f)'s mesh (erratum Step 1 only needs active pairs), and mesh the
       minimum (envelopePrune/envelopeMesh take one pair's faces today).
 
 ### Done recently
+
+- [x] **`biconjQ` on the poly2 kink answers** (2026-10-11, scope-reduced; residue: the
+      row-less corners item above). Found on the way, both making VALUES wrong: no corners on an
+      irrational parallel-line tie (+inf on 64% of the domain), and corner values read off the
+      other corner's root past a crossing line (0.23 high). Fixed red first; biconjQ falls back to
+      the unmeshed envelope when the mesh cannot place a corner, verified against the sup oracle.
 
 - [x] **Exact-sum audit, second pass** (2026-10-11). The lint now also flags a top-level +/- with
       a product or power (it missed `b^2 - 4ac`, `2*a*q + b`, Horner steps): 17 sites converted to

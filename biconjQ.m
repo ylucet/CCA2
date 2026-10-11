@@ -385,9 +385,28 @@ function h = assembledEnvelope(obj)
     try
         h = envelopeMesh(env);
     catch ME
-        if ~strcmp(ME.identifier, 'envelopeMesh:bridgeCompetes'), rethrow(ME), end
-        h = assembleAlgCrv(envelopeMeshAlg(env));
+        switch ME.identifier
+            case 'envelopeMesh:bridgeCompetes'
+                try
+                    h = assembleAlgCrv(envelopeMeshAlg(env));
+                catch ME2
+                    if ~strcmp(ME2.identifier, 'envelopeMeshAlg:faceKind'), rethrow(ME2), end
+                    h = unmeshed(env);
+                end
+            case 'envelopeMesh:bridgeFaces'
+                % A corner face whose wedge has no rows cannot be placed in any arrangement
+                % (TODO). The face list is still the envelope -- envelopeEval answers for it,
+                % verified against the definition -- so return it unmeshed rather than refuse.
+                h = unmeshed(env);
+            otherwise
+                rethrow(ME)
+        end
     end
+end
+
+function h = unmeshed(env)
+% The pair's face list as an EnvelopeMin of one pair: eval only, no mesh (see EnvelopeMin.m).
+    h = EnvelopeMin({env}, struct('T', {}, 's', {}, 'c', {}), {});
 end
 
 % ------------------------------------------------------------------------------------------------
