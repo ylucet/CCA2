@@ -223,10 +223,16 @@ classdef QuaPol < RatPol & QuaPar
                 region = ones(size(x,1),1);
                 fVal = QuaPol.evalPoly(obj.f,x);
                 return;
+            elseif obj.nv==1 %needle: finite at its one vertex only
+                fVal = inf(size(x,1),1);
+                b = all(abs(x - obj.V) <= sqrt(eps)*max(1,abs(obj.V)), 2);
+                fVal(b) = QuaPol.evalPoly(obj.f(1,:), x(b,:));
+                region = ones(size(x,1),1);
+                return;
             elseif max(obj.F,[],'all')==0 %edge chain   
                 fVal=Inf * ones(size(x,1),1);
                 for i=1:obj.ne%loop on each edge
-                    b = QuaPol.belongToEdge(obj.V(obj.E(i,1),:),obj.V(obj.E(i,2),:),x);%true if x belongs to edge i                    
+                    b = QuaPol.belongToEdge(obj.V(obj.E(i,1),:),obj.V(obj.E(i,2),:),x,obj.E(i,3)~=0);%true if x belongs to edge i (a ray when E(i,3)==0)
                     if any(b)
                         R = QuaPol.evalPoly(obj.f(i,:),x(b,:)); 
                         ib=find(b);
@@ -264,6 +270,9 @@ classdef QuaPol < RatPol & QuaPar
                 % constraint violation for any x will result in the expression to
                 % evaluate as 0 for the point
                 flags = all(([x,ones(size(x,1),1)]*coefficients(abs(obj.P{i}),:)').*sign(obj.P{i})<=0,2);
+                % The half-planes cut out the face's KERNEL, which is the whole face only when it is
+                % convex; the rest of a non-convex face is found by inFace (2026-10-11).
+                if ~all(flags), flags(~flags) = obj.inFace(i, x(~flags,:), coefficients); end
 
                 if any(flags==1)
                     % Checks if any x lies in the current polytope, evaluates them and
@@ -273,6 +282,52 @@ classdef QuaPol < RatPol & QuaPar
                     region(region~=-1 & flags==1) = 0;
                     region(region==-1 & flags==1) = i;
                 end
+            end
+       end
+       function b = inFace(obj, i, x, coefficients)
+        % true where x lies in the CLOSED face i, convex or not, bounded or not.
+        % On an edge of the face (segment, or ray from V(a) through V(b)): in. Otherwise shoot from
+        % x toward a point T on one of the face's edges; the first edge hit, at a point that is not
+        % a vertex, separates x from nothing, so x is in the face iff x is on that edge's face side
+        % -- the side sign(P{i}) marks. A hit at a vertex is ambiguous and retried with another T.
+            e = abs(obj.P{i}(:));  sg = sign(obj.P{i}(:));
+            A = obj.V(obj.E(e,1),:);  B = obj.V(obj.E(e,2),:);  isSeg = obj.E(e,3) ~= 0;
+            n = size(x,1);  b = false(n,1);
+            for j = 1:numel(e)
+                b = b | QuaPol.belongToEdge(A(j,:), B(j,:), x, isSeg(j));
+            end
+            todo = find(~b);
+            tol = 1e-9;
+            for u = [0.5 0.3141 0.7183 0.1618 0.8642]
+                for j0 = 1:numel(e)
+                    if isempty(todo), return; end
+                    T = A(j0,:) + u*(B(j0,:) - A(j0,:));
+                    D = T - x(todo,:);                                   % shot direction, hits at t<=1
+                    tBest = inf(numel(todo),1);  side = zeros(numel(todo),1);  bad = false(numel(todo),1);
+                    for j = 1:numel(e)
+                        w = B(j,:) - A(j,:);
+                        den = D(:,1)*w(2) - D(:,2)*w(1);                 % cross(D, w)
+                        r = A(j,:) - x(todo,:);
+                        tt = (r(:,1)*w(2) - r(:,2)*w(1)) ./ den;          % x + tt*D on edge line
+                        uu = (r(:,1).*D(:,2) - r(:,2).*D(:,1)) ./ den;    % A + uu*w
+                        hit = abs(den) > tol & tt > tol & ...
+                              uu >= -tol & (~isSeg(j) | uu <= 1 + tol);
+                        nearer = hit & tt < tBest - tol;
+                        tie = hit & abs(tt - tBest) <= tol;
+                        atVertex = uu <= tol | (isSeg(j) & uu >= 1 - tol);
+                        tBest(nearer) = tt(nearer);
+                        val = [x(todo,:) ones(numel(todo),1)] * coefficients(e(j),:)';
+                        side(nearer) = sg(j) * val(nearer);
+                        bad(nearer) = atVertex(nearer);
+                        bad = bad | tie;
+                    end
+                    ok = isfinite(tBest) & ~bad & side ~= 0;
+                    b(todo(ok)) = side(ok) < 0;
+                    todo = todo(~ok);
+                end
+            end
+            if ~isempty(todo)
+                error('QuaPol:eval:ambiguous', 'eval: %d point(s) of face %d could not be classified', numel(todo), i);
             end
        end
        function dom = createDom(obj)
@@ -970,7 +1025,7 @@ classdef QuaPol < RatPol & QuaPar
             if isSegment
                 b(b) =  all(min(V1,V2) <= Xb + tol,2) & all( Xb - tol <= max(V1,V2),2);
             else
-                b(b) = all(V1 <= Xb + tol,2);
+                b(b) = (Xb - V1) * (V2 - V1)' >= -tol * norm(V2 - V1);%ray from V1 THROUGH V2
             end
         end
         function b = isCollinear(P, tol)
@@ -1174,8 +1229,12 @@ classdef QuaPol < RatPol & QuaPar
             f = f .* Cw;
             F = [0 1; 0 1; 0 1; 2 1; 2 0; 0 2];
             P{end+1} = QuaPol(V,E,f,F);
-            % 16 half-star domain with 5 rays
-            V = [0,0; -1,0; -1,-1; 0,1; 1,1; 1,0];
+            % 16 half-star domain with 5 rays, sweeping 0 to 225 degrees (not convex)
+            % The rays must come in angular order for F's faces to be the cones between neighbours.
+            % Until 2026-10-11 the 180 and 225 degree rays were swapped, which made face 1 a 315
+            % degree wedge overlapping face 2; eval read every face as its half-plane kernel and so
+            % hid it. DECISIONS.md 2026-10-11.
+            V = [0,0; -1,-1; -1,0; 0,1; 1,1; 1,0];
             E = [1,2,0; 1,3,0; 1,4,0; 1,5,0; 1,6,0];
             F = [0,1; 1,2; 2,3; 3,4; 4,0]; 
             f = zeros(4,1);

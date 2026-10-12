@@ -8406,3 +8406,22 @@ After them the poly2 kinks refuse as `convexPieceCoupling` with the assembly's o
 carried in the message: `envelopeMesh:bridgeFaces`, a CORNER face whose region has no rows, which
 the conic mesh cannot place and the assembly does not route to `envelopeMeshAlg`. That is the next
 limit, and a different kind of one.
+
+## 2026-10-11 — `QuaPol.eval` reads a non-convex face as the face, and `examples{16}` was malformed
+
+**Refuted: the half-plane reading of a face.** `eval` put x in face i iff x satisfied every edge's
+half-plane `sign(P{i})`. That set is the face's KERNEL, which is the face only when it is convex:
+on the notched polygon (`examplesNonconvex{1}`) and the W epigraph (`examplesNonconvex{2}`) it
+returned +inf at vertices, edge points and interior points of the domain. Kept as the fast path; a
+point it rejects goes to `inFace`, which shoots from x at a point on one of the face's edges and
+reads the side of the FIRST edge hit (retrying at a vertex hit). Also: rays in an edge chain were
+read as segments (and `belongToEdge`'s ray test compared coordinates, so a ray toward negative
+coordinates failed), and a needle fell through to the face loop. `QuaPolEvalTest`.
+
+**`examples{16}`, the half-star, had its 180 and 225 degree rays swapped.** `F` gives faces between
+consecutive rays, so the rays must be in angular order; with the swap, face 1's own side signs make
+it a 315 degree wedge overlapping face 2. The kernel reading turned that wedge into the 0-45 cone,
+which happened to equal face 4, so the union was still the documented 0-225 sweep and nobody saw it.
+The correct reading of the malformed mesh made the domain the whole plane and broke the two tests
+pinning its non-convexity. Swapping the two vertices gives the documented half-star; the witness
+(-1,-1), (1,0), midpoint (0,-0.5) is unchanged, and no test was edited.
