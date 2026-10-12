@@ -40,6 +40,18 @@ function [R, info] = bridgeQuadCut(FP, num, den)
     if nargin ~= 3
         error('bridgeQuadCut:nargin', 'expects (FP, num, den).');
     end
+    if ratQ.isBigPoly(FP)
+        % THE BIG FORM (a polynomial past 2^53, kept in BigInteger -- bridgeFaceAlg). This cut is
+        % exact, so its input is read exactly: refused on z-degree first, as a double FP is, and
+        % otherwise brought back by ratQ.fromBig, which raises ratQ:overflow if it does not fit.
+        szB = FP.sz;  szB(end+1:3) = 1;
+        if szB(3) ~= 3
+            error('bridgeQuadCut:zDegree', ...
+                  ['FP must have degree 2 in z -- a bridge face''s value is one of two conjugate ' ...
+                   'roots; got degree %d.'], szB(3) - 1);
+        end
+        FP = ratQ.fromBig(FP);
+    end
     if ~isnumeric(FP) || ndims(FP) > 3
         error('bridgeQuadCut:shape', 'FP must be a polyN in at most three variables.');
     end

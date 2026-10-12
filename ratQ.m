@@ -974,6 +974,74 @@ classdef ratQ
             end
         end
 
+        function out = exactFormula(fn, what, varargin)
+        % objective: an integer formula's result, EXACT and up to a POSITIVE factor -- in doubles
+        %            when they suffice, otherwise recomputed in BigInteger and reduced by content.
+        % [input]  fn   : a handle computing the formula from integer arrays with + - * .^ conv
+        %                 indexing and concatenation only (see bigZ), and NO ratQ.chk inside
+        %          what : names the quantity in an overflow message
+        %          varargin : the integer inputs
+        % [output] out  : fn(varargin{:}) exactly, when every entry is within 2^53; otherwise the
+        %                 same array divided by the gcd of its entries (positive), which must then fit
+        %
+        % THE SAME CODE RUNS BOTH TIMES (2026-10-11): bigZ overloads the operators, so there is no
+        % second spelling of the formula to drift from the first. A caller may use this only where
+        % a positive scaling of the result changes nothing it reads -- a root, a sign, a zero set.
+        % ratQ:overflow if the reduced result still needs more than 53 bits.
+            try
+                out = ratQ.chk(fn(varargin{:}), what);
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+                args = varargin;
+                for k = 1:numel(args)
+                    if isnumeric(args{k}), args{k} = bigZ(args{k}); end
+                end
+                r = fn(args{:});
+                if ~isa(r, 'bigZ'), r = bigZ(r); end
+                out = exactDouble(contentFree(r), what);
+            end
+        end
+
+        function tf = isBigPoly(P)
+        % true when P is in the big form (a struct with sz and c), false for a double array.
+            tf = isstruct(P) && isfield(P, 'c') && isfield(P, 'sz');
+        end
+
+        function n = bigBits(v)
+        % bit length of |v| for one entry of a big form's cell (empty is zero).
+            if isempty(v), n = 0; else, n = double(v.abs().bitLength()); end
+        end
+
+        function A = bigToDouble(B)
+        % objective: the NEAREST double of each coefficient, for a double-precision EVALUATOR only
+        % (algBranch is a cache of the exact (P, b), so rounding its input is a cache's error, not
+        % a decision's). Never for a sign test: those take the big form itself. A double array
+        % passes through unchanged.
+            if ~ratQ.isBigPoly(B), A = B; return, end
+            A = zeros(B.sz);
+            for i = 1:numel(B.c)
+                if ~isempty(B.c{i}), A(i) = B.c{i}.doubleValue(); end
+            end
+        end
+
+        function tf = polyEqual(A, B)
+        % exact equality of two polynomials, either of which may be in the big form. Sizes must
+        % agree (both trimmed the same way), as isequal requires for double arrays.
+            if ~ratQ.isBigPoly(A) && ~ratQ.isBigPoly(B), tf = isequal(A, B); return, end
+            if ~ratQ.isBigPoly(A), A = ratQ.toBig(A); end
+            if ~ratQ.isBigPoly(B), B = ratQ.toBig(B); end
+            tf = isequal(A.sz, B.sz);
+            for i = 1:numel(A.c)
+                if ~tf, return, end
+                a = A.c{i};  b = B.c{i};
+                if isempty(a) || isempty(b)
+                    tf = (isempty(a) || a.signum() == 0) && (isempty(b) || b.signum() == 0);
+                else
+                    tf = a.equals(b);
+                end
+            end
+        end
+
         function A = fromBigOrKeep(B)
         % objective: come back to doubles if the value fits, and STAY BIG if it does not.
         % For the middle of a chain of eliminations, where an intermediate may not fit but the
@@ -1598,6 +1666,110 @@ classdef ratQ
         % intersections of two conics are one vertex, not two.
             chain = ratQ.sturmChain(p);
             n = ratQ.sturmV(chain, a) - ratQ.sturmV(chain, b);
+        end
+
+        function n = countRootsInBig(p, a, b)
+        % objective: countRootsIn for a polynomial whose coefficients are past 2^53 -- the number
+        %            of DISTINCT real roots of p in (a, b], decided in java.math.BigInteger.
+        % [input]  p : a big form (struct sz/c, ratQ.toBig) or a double row, highest degree FIRST
+        %          a, b : DYADIC rational endpoints (doubles that are exact), neither a root of p
+        % [output] n : a nonnegative integer
+        %
+        % Sturm's theorem in its general form: with the chain p, p', -prem, ..., the count of sign
+        % changes V(a) - V(b) is the number of distinct roots in (a, b] for ANY p, squarefree or
+        % not, provided neither endpoint is a root -- the common factor gcd(p, p') multiplies every
+        % chain member and changes no sign difference away from its roots. So no squarefree part is
+        % taken. An endpoint that IS a root raises ratQ:sturmEndpointIsRoot rather than guess.
+        %
+        % Signs are exact throughout: the pseudo-remainder's scaling lc^k is corrected by
+        % sign(lc)^k, every content divided out is positive, and p(n/d) is evaluated as the integer
+        % sum c_i n^i d^(deg-i) with d > 0, which has p's sign.
+            P = ratQ.bigRow(p);
+            if numel(P) <= 1, n = 0; return, end
+            chain = {P, ratQ.bigDeriv(P)};
+            while numel(chain{end}) > 1
+                r = ratQ.bigPrem(chain{end-1}, chain{end});
+                if isempty(r), break, end
+                chain{end+1} = ratQ.bigPrimitive(cellfun(@(c) c.negate(), r, 'UniformOutput', false)); %#ok<AGROW>
+            end
+            n = ratQ.sturmVBig(chain, a) - ratQ.sturmVBig(chain, b);
+        end
+
+        function v = sturmVBig(chain, x)
+        % sign changes of a BigInteger chain at the dyadic x, zeros skipped; p(x) = 0 is refused.
+            [xn, xd] = ratQ.dyadicParts(x);
+            v = 0;  last = 0;
+            for i = 1:numel(chain)
+                c = chain{i};  k = numel(c) - 1;
+                acc = java.math.BigInteger.ZERO;
+                for j = 1:numel(c)                   % c{j} multiplies x^(k-j+1)
+                    acc = acc.add(c{j}.multiply(xn.pow(k-j+1)).multiply(xd.pow(j-1)));
+                end
+                s = acc.signum();
+                if i == 1 && s == 0
+                    error('ratQ:sturmEndpointIsRoot', 'the endpoint %.17g is a root of p.', x);
+                end
+                if s == 0, continue, end
+                if last ~= 0 && s ~= last, v = v + 1; end
+                last = s;
+            end
+        end
+
+        function [n, d] = dyadicParts(x)
+        % x = n/d exactly, d a power of two, as BigInteger
+            d = 1;
+            while x*d ~= round(x*d), d = d*2; end
+            n = java.math.BigInteger(sprintf('%.0f', x*d));
+            d = java.math.BigInteger(sprintf('%.0f', d));
+        end
+
+        function P = bigRow(p)
+        % a coefficient row (highest first) as a cell of BigInteger, leading zeros dropped
+            if ratQ.isBigPoly(p), c = p.c(:).'; else, c = num2cell(p(:).'); end
+            P = cell(1, numel(c));
+            for i = 1:numel(c)
+                v = c{i};
+                if isempty(v), v = java.math.BigInteger.ZERO;
+                elseif isnumeric(v), ratQ.chk(v, 'coefficient'); v = java.math.BigInteger.valueOf(int64(v)); end
+                P{i} = v;
+            end
+            while ~isempty(P) && P{1}.signum() == 0, P(1) = []; end
+        end
+
+        function D = bigDeriv(P)
+            k = numel(P) - 1;
+            D = cell(1, k);
+            for j = 1:k, D{j} = P{j}.multiply(java.math.BigInteger.valueOf(k-j+1)); end
+            D = ratQ.bigPrimitive(D);
+        end
+
+        function P = bigPrimitive(P)
+        % divide by the POSITIVE gcd of the entries (no sign change), leading zeros dropped
+            while ~isempty(P) && P{1}.signum() == 0, P(1) = []; end
+            if isempty(P), return, end
+            g = java.math.BigInteger.ZERO;
+            for i = 1:numel(P), g = g.gcd(P{i}); end
+            if g.compareTo(java.math.BigInteger.ONE) > 0
+                for i = 1:numel(P), P{i} = P{i}.divide(g); end
+            end
+        end
+
+        function r = bigPrem(a, b)
+        % sign-true pseudo-remainder: the remainder of |lc(b)|^k a by b (k = deg a - deg b + 1),
+        % i.e. lc^k scaling corrected by sign(lc)^k so that r has the sign of the true remainder.
+            da = numel(a) - 1;  db = numel(b) - 1;
+            if da < db, r = a; return, end
+            lc = b{1};  k = da - db + 1;
+            f = lc.abs().pow(k);
+            r = cellfun(@(c) c.multiply(f), a, 'UniformOutput', false);
+            while numel(r) - 1 >= db
+                % r(1) is divisible by lc: r = |lc|^k a minus multiples of b
+                q = r{1}.divide(lc);
+                for j = 1:numel(b), r{j} = r{j}.subtract(q.multiply(b{j})); end
+                r(1) = [];
+                while ~isempty(r) && r{1}.signum() == 0, r(1) = []; end
+                if isempty(r), return, end
+            end
         end
 
         function v = sturmV(chain, x)

@@ -507,6 +507,28 @@ classdef ratQTest < matlab.unittest.TestCase
 
         % ---- the exact degree-<=4 real-algebraic kernel -----------------------------------------
 
+        function theBIGSturmCountAgreesWithRootsKnownByConstruction(testCase)
+        % countRootsInBig against polynomials built from their roots (integer and half-integer,
+        % some repeated, so p is not squarefree), at dyadic endpoints that are not roots; then the
+        % same polynomials scaled by 2^40 so the coefficients are past 2^53 and only the big path
+        % can read them -- the count must not change.
+            rng(7);
+            for t = 1:40
+                r = randi([-12 12], 1, randi([1 4])) / 2;
+                r = [r, r(1:randi([0 numel(r)-1]))];          % repeat some roots
+                p = 1;  for z = r, p = conv(p, [2 -2*z]); end  % integer: (2x - 2z)
+                ab = sort((randi([-60 60], 1, 2) + 0.25) / 4);
+                want = nnz(unique(r) > ab(1) & unique(r) <= ab(2));
+                testCase.verifyEqual(ratQ.countRootsInBig(p, ab(1), ab(2)), want, ...
+                    sprintf('roots %s on (%g, %g]', mat2str(r), ab(1), ab(2)));
+                B = ratQ.toBig(p);
+                big = java.math.BigInteger.valueOf(2).pow(40);
+                for i = find(~cellfun(@isempty, B.c)).', B.c{i} = B.c{i}.multiply(big); end
+                testCase.verifyEqual(ratQ.countRootsInBig(B, ab(1), ab(2)), want, 'scaled past 2^53');
+            end
+            testCase.verifyError(@() ratQ.countRootsInBig([1 -3 2], 1, 3), 'ratQ:sturmEndpointIsRoot');
+        end
+
         function sturmCountsRootsExactly(testCase)
         % Sturm's theorem: the number of DISTINCT real roots of p in (a,b] is V(a) - V(b), where V
         % counts sign changes in the Sturm chain. Checked against polynomials whose roots are known

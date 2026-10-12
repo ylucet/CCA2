@@ -193,7 +193,7 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
             [FB, bInfo] = branchIndex(FP, d, N1, m1, q1, N2, m2, q2, Dl, dl, kp, xn, xd);
             break
         catch ME
-            if ~any(strcmp(ME.identifier, {'ratQ:overflow', 'bridgeFaceAlg:branchUndecided'}))
+            if ~any(strcmp(ME.identifier, {'ratQ:overflow', 'bridgeFaceAlg:branchUndecided', 'ratQ:sturmEndpointIsRoot'}))
                 rethrow(ME)
             end
             lastErr = ME;  FB = [];
@@ -307,6 +307,9 @@ function [p, info] = implicitPoly(d, N1, m1, q1, N2, m2, q2)
     end
     muDegree = numel(Psi) - 1;
 
+    if ratQ.isBigPoly(p)
+        [p, info] = bigTail(p, muDegree);  return
+    end
     p = ratQ.trimN(ratQ.contentFree(ratQ.chk(p, 'discriminant')));
     if size(p, 3) < 2
         error('bridgeFaceAlg:noZ', ...
@@ -375,7 +378,15 @@ function C = imageConic(tie, Nk, mk, d, which) %#ok<INUSD>
     Mn = ratQ.chk(d * adjN,  'image map');
     tn = ratQ.chkB(-adjN*mk, abs(adjN)*abs(mk),  'image translation');
     md = ratQ.detExact(Nk);
-    [n2, ~] = ratQ.substAffine(faceOfConic(tie), 1, Mn, tn, md);
+    % AN OVERFLOW OMITS THE ROW, as a singular Nk does (2026-10-11): the row is an outer bound and
+    % never the face, and membership is decided from the pair's own data -- so a conic past 2^53
+    % costs a weaker bound, not a refusal.
+    try
+        [n2, ~] = ratQ.substAffine(faceOfConic(tie), 1, Mn, tn, md);
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        C = [];  return
+    end
     C = ratQ.conic(conicOfFace(n2));
 end
 
@@ -435,6 +446,9 @@ function [b, info] = branchIndex(FP, d, N1, m1, q1, N2, m2, q2, Dl, dl, kp, xn, 
 
     % ---- the fibre FP(x,y,.), exactly, as an integer polynomial in z ---------------------------
     [Pz, ~] = fibre(FP, xn, xd);
+    if ratQ.isBigPoly(Pz)
+        [b, info] = certifyTopBig(Pz, zStar);  return
+    end
     Pz = ratQ.polyTrim(Pz);
     if ~isempty(Pz)
         % The integer content is free to remove and is not free to KEEP: it multiplies every
@@ -495,6 +509,12 @@ function [Pz, deg] = fibre(FP, xn, xd)
 % FP(xn/xd, .) as an integer polynomial in z, HIGHEST DEGREE FIRST, cleared by xd^deg where deg is
 % the largest total degree in (x,y) that appears. Clearing by one power for the whole polynomial
 % rather than per term is what keeps it a polynomial in z with integer coefficients.
+    % ALWAYS IN BigInteger (2026-10-11): the double sum below was checked only at the end, so a
+    % partial sum past 2^53 could round silently, and on erratum Example 2 the fibre itself passed
+    % 2^53. One fibre per witness, so the exact route costs nothing that matters. The double code
+    % is kept below as the reference the big one was written from.
+    if ~ratQ.isBigPoly(FP), FP = ratQ.toBig(FP); end
+    [Pz, deg] = fibreBig(FP, xn, xd);  return
     sz = size(FP);  sz(end+1:3) = 1;
     deg = 0;
     for i = 1:sz(1)
@@ -653,10 +673,118 @@ function p = discBig(cf)
         E = b{1};  C = b{2};  B = b{3};
         q = ratQ.bigAdd(mulAll(C, C), ratQ.bigMul(K(-4), mulAll(B, E)));
     end
-    p = ratQ.fromBig(ratQ.bigContentFree(q));
+    % KEPT BIG WHEN IT DOES NOT FIT (2026-10-11): the reduced polynomial is the ANSWER, and an
+    % answer past 2^53 is stored in ratQ's big form rather than refused. Its readers accept that
+    % form -- algBranch rounds it (a cache), the exact ones read it exactly.
+    p = ratQ.fromBigOrKeep(ratQ.bigContentFree(q));
 end
 
 function r = mulAll(varargin)
     r = varargin{1};
     for k = 2:numel(varargin), r = ratQ.bigMul(r, varargin{k}); end
 end
+
+% --------------------------------------------------------------------------------------------------
+function [p, info] = bigTail(p, muDegree)
+% implicitPoly's tail for a polynomial kept in the big form: it is already content-free
+% (bigContentFree), so what is left is the trim, the z-degree check and the z-content. The z-content
+% candidate is the leading z-coefficient made primitive; when that is a CONSTANT there is nothing to
+% remove, which is the case measured on erratum Example 2. A non-constant candidate would need exact
+% bivariate division in BigInteger, which does not exist yet, so it is refused by name rather than
+% left in (an unremoved content is an extraneous component, i.e. a wrong face).
+    p = trimBig(p);
+    sz = p.sz;  sz(end+1:3) = 1;
+    if sz(3) < 2
+        error('bridgeFaceAlg:noZ', ...
+            ['the eliminated polynomial has degree 0 in z, so it states a condition on x alone ' ...
+             'and names no value. That is a producer defect, not an input one.']);
+    end
+    lead = p.c((sz(3)-1)*sz(1)*sz(2) + (1:sz(1)*sz(2)));
+    if nnz(~cellfun(@isempty, lead)) ~= 1 || isempty(lead{1})
+        error('bridgeFaceAlg:bigZContent', ...
+            ['the implicit polynomial is past 2^53 and its leading z-coefficient is not a ' ...
+             'constant, so its z-content cannot be removed without exact bivariate division in ' ...
+             'BigInteger, which is not built. Refused rather than kept with an extraneous factor.']);
+    end
+    A = ratQ.bigToDouble(p);
+    info = struct('degrees', sz - 1, 'maxCoeff', max(abs(A(:))), 'muDegree', muDegree, ...
+                  'zContentRemoved', false);
+end
+
+function p = trimBig(p)
+% drop trailing all-zero slices of a big polynomial, as ratQ.trimN does for a double array
+    nz = ~cellfun(@isempty, p.c);
+    for i = find(nz).'
+        if p.c{i}.signum() == 0, nz(i) = false; end
+    end
+    sz = p.sz;  sz(end+1:3) = 1;
+    if ~any(nz), p = struct('sz', [1 1], 'c', {{[]}}); return, end
+    [i, j, k] = ind2sub(sz, find(nz));
+    nsz = [max(i), max(j), max(k)];
+    c = cell(prod(nsz), 1);
+    for t = find(nz).'
+        [a, b, d] = ind2sub(sz, t);
+        c{sub2ind(nsz, a, b, d)} = p.c{t};
+    end
+    p = struct('sz', nsz, 'c', {c});
+end
+
+function [Pz, deg] = fibreBig(FP, xn, xd)
+% fibre() for a polynomial in the big form: the same sum, in BigInteger, then the integer content
+% divided out THERE (the caller divides by it anyway) and only then brought back -- or kept big
+% when it still does not fit, in which case branchIndex certifies with ratQ.countRootsInBig.
+    sz = FP.sz;  sz(end+1:3) = 1;
+    deg = 0;
+    for t = 1:numel(FP.c)
+        if isempty(FP.c{t}), continue, end
+        [i, j, ~] = ind2sub(sz, t);
+        deg = max(deg, (i-1) + (j-1));
+    end
+    B  = @(v) java.math.BigInteger.valueOf(int64(v));
+    X1 = B(xn(1));  X2 = B(xn(2));  XD = B(xd);
+    acc = cell(1, sz(3));
+    for t = 1:numel(FP.c)
+        v = FP.c{t};
+        if isempty(v), continue, end
+        [i, j, k] = ind2sub(sz, t);
+        term = v.multiply(X1.pow(i-1)).multiply(X2.pow(j-1)).multiply(XD.pow(deg-(i-1)-(j-1)));
+        if isempty(acc{k}), acc{k} = term; else, acc{k} = acc{k}.add(term); end
+    end
+    big = struct('sz', [1 sz(3)], 'c', {fliplr(acc).'});
+    % KEPT BIG if the reduced fibre is still past 2^53; branchIndex then counts in BigInteger.
+    Pz = ratQ.fromBigOrKeep(ratQ.bigContentFree(big));
+end
+
+function [b, info] = certifyTopBig(Pz, zStar)
+% branchIndex's certification for a fibre past 2^53 (a big form, highest degree first): the same
+% two Sturm counts -- one root in the dyadic bracket, none above it -- in BigInteger. The roots
+% are LOCATED from the rounded coefficients, which is a proposal; only the counts decide.
+    A  = ratQ.bigToDouble(Pz);
+    A  = A(find(A ~= 0, 1):end);
+    if numel(A) <= 1
+        error('bridgeFaceAlg:emptyFibre', 'FP degenerates to a constant at the witness, so it names no value there.');
+    end
+    rz = roots(A);
+    rz = rz(abs(imag(rz)) <= 1e-10*max(1, abs(rz)));
+    rr = sort(real(rz));
+    scale = max(1, abs(zStar));
+    if isempty(rr) || min(abs(rr - zStar)) > 1e-6 * scale
+        error('bridgeFaceAlg:valueNotARoot', ...
+            'the value %.12g computed from the multiplier is not a root of FP at the witness.', zStar);
+    end
+    b  = -1;
+    w  = max(1e-7, 1e-7*scale);
+    lo = dyadic(zStar - w, 'floor');  hi = dyadic(zStar + w, 'ceil');
+    % Cauchy's bound from rounded coefficients: each is within a relative 2^-52 of the exact one,
+    % so doubling the bound and adding one keeps every real root strictly below it.
+    M  = 2*ceil(1 + max(abs(A(2:end)))/abs(A(1))) + 1;
+    inBracket = ratQ.countRootsInBig(Pz, lo, hi);
+    above     = ratQ.countRootsInBig(Pz, hi, M);
+    if inBracket ~= 1 || above ~= 0
+        error('bridgeFaceAlg:branchUndecided', ...
+            ['the top branch could not be CERTIFIED at the witness: %d root(s) in the bracket ' ...
+             '(needs 1) and %d above it (needs 0).'], inBracket, above);
+    end
+    info = struct('value', zStar, 'nRealZ', numel(rr), 'bracket', [lo hi], 'above', above);
+end
+

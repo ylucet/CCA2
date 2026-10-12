@@ -40,6 +40,12 @@ function [s, info] = algCurveSide(FP, FB, num, den, X)
     if nargin ~= 5
         error('algCurveSide:nargin', 'expects (FP, FB, num, den, X).');
     end
+    if ratQ.isBigPoly(FP)
+        % the big form (bridgeFaceAlg): a side is a DECISION, so it is read exactly -- refused on
+        % z-degree as a double FP is, otherwise brought back by ratQ.fromBig (raises if too big)
+        szB = FP.sz;  szB(end+1:3) = 1;
+        if szB(3) == 3, FP = ratQ.fromBig(FP); else, FP = []; end
+    end
     if ~isnumeric(FP) || size(FP,3) ~= 3
         error('algCurveSide:zDegree', ...
               'FP must have degree 2 in z -- a bridge face''s value is one of two roots.');

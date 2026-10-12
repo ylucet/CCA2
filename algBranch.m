@@ -71,9 +71,11 @@ function [z, info] = algBranch(P, X, b, opts)
 %             root's own magnitude is what makes the test mean the same thing at |z| = 1e-3 and at
 %             1e6, and an absolute tolerance measured against the wrong scale is the single most
 %             repeated measurement defect in this project's own record (DECISIONS.md 2026-09-07).
-%   degTol  : leading coefficients below degTol * (the largest coefficient) are dropped before
-%             root-finding, because `roots` on a vector with a ~0 leading entry returns a spurious
-%             root near infinity. Again relative, for the same reason.
+%   degTol  : a leading coefficient within degTol * (the sum of the absolute values of its own
+%             terms) is a zero computed inexactly and is dropped before root-finding, because
+%             `roots` on a vector with a ~0 leading entry returns a spurious root near infinity.
+%             Relative to its OWN terms, not to the largest coefficient: that version dropped a
+%             genuine leader (2026-10-11). For a big P the zero test is exact.
 %   the DOUBLE-ROOT test (quadratic fibres only, fixed at 1e-12): a discriminant within 1e-12 of
 %             zero, relative to the size of its TERMS before cancellation, is a double root -- two
 %             equal real entries, the multiplicity contract above. Without it `roots` can return
@@ -83,6 +85,14 @@ function [z, info] = algBranch(P, X, b, opts)
 %             it only stops the cache from dropping a value that exists.
 
     if nargin < 4, opts = struct(); end
+    % A polynomial kept in BigInteger (past 2^53 -- bridgeFaceAlg) is NOT simply rounded: its
+    % fibre coefficients cancel heavily, and rounding P first was measured wrong by 4 in 1167 on
+    % erratum Example 2 (2026-10-11). So for such a P the fibre p(x,y,.) is summed EXACTLY, in
+    % BigDecimal at the double point, and only its coefficients are rounded -- after the
+    % cancellation, not before. The rounded P is kept for the shape checks and the double-root test.
+    Pbig = [];
+    if ratQ.isBigPoly(P), Pbig = P; end
+    P = ratQ.bigToDouble(P);
     if ~isfield(opts,'imagTol'), opts.imagTol = 1e-10; end
     if ~isfield(opts,'degTol'),  opts.degTol  = 1e-12; end
 
@@ -124,9 +134,15 @@ function [z, info] = algBranch(P, X, b, opts)
         % what it means.
         xs = X(t,1) .^ (0:nx-1);                     % 1 x nx
         ys = (X(t,2) .^ (0:ny-1)).';                 % ny x 1
-        c = zeros(1, nz);
-        for k = 1:nz
-            c(k) = xs * P(:,:,k) * ys;
+        c = zeros(1, nz);  cabs = zeros(1, nz);
+        if isempty(Pbig)
+            for k = 1:nz
+                c(k) = xs * P(:,:,k) * ys;
+                cabs(k) = abs(xs) * abs(P(:,:,k)) * abs(ys);   % the sum's own size, for its error
+            end
+            isZero = abs(c) <= opts.degTol * cabs;
+        else
+            [c, isZero] = exactFibre(Pbig, X(t,:), nx, ny, nz);
         end
 
         % ---- real roots, ascending -------------------------------------------------------------
@@ -138,7 +154,11 @@ function [z, info] = algBranch(P, X, b, opts)
             continue
         end
         cz = c(:).';
-        keep = find(abs(cz) > opts.degTol * scale, 1, 'last');   % drop numerically-zero leaders
+        % DROP A LEADER ONLY IF IT IS ZERO -- exactly, for a big P; within its OWN rounding error
+        % (degTol times the sum of the absolute values of its terms), for a double one. Not
+        % "small next to the largest coefficient": that dropped a genuine leading 16 against
+        % 1.6e17 on erratum Example 2 and returned a cubic's root (2026-10-11).
+        keep = find(~isZero, 1, 'last');
         cz = cz(1:keep);
         if numel(cz) < 2
             continue                                  % degenerated to a constant: no root in z
@@ -179,3 +199,23 @@ function [z, info] = algBranch(P, X, b, opts)
         info = struct('nreal', nreal, 'allReal', {allReal});
     end
 end
+
+function [c, isZero] = exactFibre(B, x, nx, ny, nz)
+% sum_ij P(i,j,k) x^i y^j for each k, exactly (BigDecimal holds every double exactly), then rounded
+    X = java.math.BigDecimal(x(1));  Y = java.math.BigDecimal(x(2));
+    xp = cell(1, nx);  yp = cell(1, ny);
+    xp{1} = java.math.BigDecimal.ONE;  yp{1} = java.math.BigDecimal.ONE;
+    for i = 2:nx, xp{i} = xp{i-1}.multiply(X); end
+    for j = 2:ny, yp{j} = yp{j-1}.multiply(Y); end
+    acc = repmat({java.math.BigDecimal.ZERO}, 1, nz);
+    sz = [nx ny nz];
+    for t = 1:numel(B.c)
+        v = B.c{t};
+        if isempty(v), continue, end
+        [i, j, k] = ind2sub(sz, t);
+        acc{k} = acc{k}.add(java.math.BigDecimal(v).multiply(xp{i}).multiply(yp{j}));
+    end
+    c = cellfun(@(a) a.doubleValue(), acc);
+    isZero = cellfun(@(a) a.signum() == 0, acc);
+end
+

@@ -8425,3 +8425,28 @@ which happened to equal face 4, so the union was still the documented 0-225 swee
 The correct reading of the malformed mesh made the domain the whole plane and broke the two tests
 pinning its non-convexity. Swapping the two vertices gives the documented half-star; the witness
 (-1,-1), (1,0), midpoint (0,-0.5) is unchanged, and no test was edited.
+
+## 2026-10-11 — integer overflow on Example 2: reduce by content in BigInteger, one formula, not per site
+
+**Refuted: rescaling the input.** Example 2's vertices are all multiples of 5 and the 59-bit
+coefficients carried 5^9; rescaling x and the value by 25 shrank the stored polynomial to 45 bits,
+but biconjQ on the rescaled input overflowed EARLIER (corner discriminant) than on the original. A
+change of variables moves the size around; it does not remove it.
+
+**Refuted: storing coefficients as products of small factors.** They factor into small primes
+(largest 19 bits), but the next step adds them, and a sum of products is not a product.
+
+**Adopted.** (1) A polynomial that does not fit after content removal is KEPT in ratQ's big form
+(bridgeFaceAlg), and its readers accept it: algBranch sums the fibre exactly in BigDecimal, the
+exact readers (bridgeQuadCut, algCurveSide) bring it back or refuse on z-degree, the branch
+certification counts roots with ratQ.countRootsInBig. (2) Every other overflow on the way was an
+INTERMEDIATE whose content was huge -- Phi 69-76 bits raw, 18-22 reduced; the pulled-back tie; the
+restricted tie's discriminant. The guard moved four times, so the fix went up a rung: `bigZ` (exact
+integers with MATLAB operators) and `ratQ.exactFormula`, which re-runs the SAME formula code on bigZ
+inputs after a double overflow and divides out the positive content. Legal only where a positive
+factor changes nothing the caller reads (a root, a sign, a zero set) -- each call site says so.
+Cost: BigInteger only where doubles overflow, so every other input is unchanged.
+
+**Found on the way: algBranch dropped genuine leading coefficients.** "Below 1e-12 of the largest
+coefficient" treated a quartic's leader 16 against 1.6e17 as zero and returned a cubic's root (off
+by 4 in 1167). Zero now means within the coefficient's OWN rounding error (exactly, for a big P).

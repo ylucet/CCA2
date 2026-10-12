@@ -10,6 +10,17 @@ classdef algBranchTest < matlab.unittest.TestCase
 
     methods (Test)
 
+        function aSMALLLeadingCoefficientIsKeptWhenItIsNotZero(testCase)
+        % z^2 - 2^50: top root 2^25. The leading coefficient is 2^-50 of the largest, and the old
+        % "relative to the largest coefficient" drop treated it as zero and lost the root (found
+        % 2026-10-11 on erratum Example 2, where a quartic fibre's leader 16 sits against 1.6e17
+        % and came back as a cubic with the wrong top root). Zero means within the coefficient's
+        % OWN rounding error, not small next to another coefficient.
+            P = zeros(1, 1, 3);  P(1,1,1) = -2^50;  P(1,1,3) = 1;
+            testCase.verifyEqual(algBranch(P, [0 0; 3 -1], -1), [2^25; 2^25], 'RelTol', 1e-12);
+            testCase.verifyEqual(algBranch(P, [0 0], 1), -2^25, 'RelTol', 1e-12);
+        end
+
         function theTwoBranchesOfACONEAreTheTwoSIGNSOfANorm(testCase)
         % p = z^2 - (x^2 + y^2), whose branches are -|x| and +|x| -- the shape every bridge face
         % has (affine plus a norm), with the affine part zero. Branch 1 is the LOWER root and

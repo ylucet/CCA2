@@ -38,7 +38,7 @@ DOES carry the value and cannot be reduced the same way.
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
       observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
-- [ ] **Integer width of the STORED answer: erratum Example 2.** Three constructors overflowed on
+- [x] **DONE 2026-10-11: Example 2's biconjugate computes (EnvelopeMin, ~26 min, one run on the shared machine); its 3 tests run. Big polynomial kept in BigInteger, overflowing intermediates reduced by content (ratQ.exactFormula / bigZ), algBranch leader-drop fixed.** **Integer width of the STORED answer: erratum Example 2.** Three constructors overflowed on
       INTERMEDIATES and are fixed (2026-10-11): the corner bracket (now built in BigInteger), the
       rational bridge face (joint content 3.2e17 divided out in BigInteger), and the rational
       corner (s put in lowest terms). The witness search was also wrong (fixed +-8 grid). What is
@@ -46,6 +46,15 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
+- [ ] **Erratum Example 2, cell 6: the erratum's formula is not f** at (32,-5.5).** It gives
+      -1236.247307; f**(x) = max_s <s,x> - f*(s) (concave, 300 starts, fstarOracle and conjQ
+      agree) is -1237.150043, which biconjQ returns. On a grid round D = (35,-5) the formula equals
+      f** on one line only and is above it at 236 of 245 points. Check the erratum PDF against
+      erratumExamplesTest.ex2BiconjCells: transcription error, or the erratum's cell 6 is wrong.
+      erratumBiconjTest now asserts the definition at that point.
+- [ ] **erratumBiconjTest takes ~30 min since Example 2 runs** (biconjQ ~26 min, one shared-machine
+      run). Over the normal budget: split Example 2 into its own suite in the slow bucket, or cache
+      its EnvelopeMin per plqStage.
 - [x] **FIXED 2026-10-11 (QuaPolEvalTest): needle, rays read through their second vertex, non-convex faces by a first-hit shot.** **`QuaPol.eval` returns +inf at points IN the domain** (found 2026-10-11 checking conjQ
       against a numeric sup; conjQ was right each time, by hand): on examples2{3}, a RAY from 0
       along (1,0) with x^2/2, eval is +inf at (2,0) and (3,0) -- the ray read as a segment; on

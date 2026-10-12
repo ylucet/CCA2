@@ -272,11 +272,17 @@ function c = pullback(q, Mn, tn, dd)
 % invertible one -- and the maximiser maps here are rank-deficient BY CONSTRUCTION. A VERTEX
 % candidate's maximiser is CONSTANT (rank 0) and a FACET candidate's has rank 1, which is most of
 % them. Composing forward needs no inverse and is elementary: substitute and clear dd^2.
+%
+% ratQ.exactFormula: the raw conic passes 2^53 on erratum Example 2 (5e18) while its content does
+% not matter -- the caller reads its zero set and its sign, which a positive factor leaves alone.
+    c = ratQ.exactFormula(@pullbackRaw, 'tie pulled back through a maximiser', q, Mn, tn, dd);
+end
+
+function c = pullbackRaw(q, Mn, tn, dd)
     L1 = [Mn(1,1), Mn(1,2), tn(1)];
     L2 = [Mn(2,1), Mn(2,2), tn(2)];
     c = q(1)*mulAff(L1,L1) + q(2)*mulAff(L1,L2) + q(3)*mulAff(L2,L2) ...
         + dd*(q(4)*[0 0 0, L1] + q(5)*[0 0 0, L2]) + [0 0 0 0 0, q(6)*dd^2];
-    c = ratQ.chk(c, 'tie pulled back through a maximiser');
 end
 
 function c = mulAff(f, g)

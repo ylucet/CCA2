@@ -95,6 +95,12 @@ function faces = cornerFaceAlg(n, d, P, tie, side)
             faces = [faces, f1]; %#ok<AGROW>
             continue
         end
+        % THE CONTENT OF (al, be, ga) IS DIVIDED OUT FIRST (2026-10-11): the quadratic's roots do
+        % not see it, valueForm is linear in (al, be, ga) and implicitValue homogeneous of degree
+        % 4, its content removed after -- so only the size changes. On erratum Example 2 the
+        % unreduced discriminant's terms passed 2^53.
+        g  = gcd(gcd(al, be), ga);
+        al = al / g;  be = be / g;  ga = ga / g;
         D = ratQ.chkB(be^2 - 4*al*ga, be^2 + 4*abs(al)*abs(ga), 'corner discriminant');
         if D <= 0, continue, end                   % the facet misses the tie, or touches it
 

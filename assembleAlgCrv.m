@@ -75,8 +75,8 @@ function hit = findAlg(EcA, a)
 % The same edge, by the integer data that defines it.
     hit = 0;
     for j = 1:numel(EcA)
-        if EcA(j).FB == a.FB && isequal(size(EcA(j).FP), size(a.FP)) && ...
-           isequal(EcA(j).FP, a.FP) && isequal(EcA(j).num, a.num) && EcA(j).den == a.den
+        if EcA(j).FB == a.FB && ratQ.polyEqual(EcA(j).FP, a.FP) && ...
+           isequal(EcA(j).num, a.num) && EcA(j).den == a.den
             hit = j;  return
         end
     end

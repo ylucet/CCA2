@@ -355,21 +355,78 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
                 'bridgeFaceAlg:noWitness');
         end
 
-        function AN2POWER53CeilingIsANamedREFUSALAndNotARawOverflow(testCase)
-        % The one input class this producer cannot answer, and it must say so in its own words. The
-        % discriminant multiplies four coefficients that already carry both faces' denominators
-        % cubed, so a pair with large data puts the FACE'S OWN POLYNOMIAL past 2^53 -- the answer
-        % being large, not an intermediate being clumsy. A raw `ratQ:overflow` escaping here would
-        % look exactly like the routine being wrong.
-        %
-        % THE INPUT CHANGED 2026-09-25, because the old one was not in this class. It was
-        % ([0 0 0 0 8 -2 4 -4 2 2], 2, [0 0 0 0 6 -2 3 -5 -3 -7], 7), refused because the double
-        % path's INTERMEDIATES passed 2^53; with the discriminant redone in BigInteger and its
-        % content removed there, its polynomial fits, and it now stops later with a different named
-        % refusal (noWitness). This input's REDUCED polynomial is past 2^53.
-            testCase.verifyError(@() bridgeFaceAlg([0 0 0 0 80 -20 41 -43 23 29], 17, ...
-                                                   [0 0 0 0 61 -19 33 -51 -37 -71], 19), ...
-                'bridgeFaceAlg:polynomialOverflow');
+        function AN2POWER53InputEndsInAFACEOrANamedREFUSALNeverARawOverflow(testCase)
+        % CHANGED 2026-10-11. This asserted the named refusal bridgeFaceAlg:polynomialOverflow for
+        % this input, whose reduced polynomial is past 2^53. That recorded the double storage's
+        % ceiling, not a property of the face: such a polynomial is now KEPT in BigInteger. What
+        % the test was for still holds and is what it asserts now -- a raw ratQ:overflow must not
+        % escape, because it looks exactly like the routine being wrong.
+            try
+                face = bridgeFaceAlg([0 0 0 0 80 -20 41 -43 23 29], 17, ...
+                                     [0 0 0 0 61 -19 33 -51 -37 -71], 19);
+                testCase.verifyTrue(isstruct(face), 'a face, or a named refusal');
+            catch ME
+                testCase.verifyTrue(startsWith(ME.identifier, 'bridgeFaceAlg:'), ...
+                    sprintf('a raw %s escaped: %s', ME.identifier, ME.message));
+            end
+        end
+
+        function aPOLYNOMIALPast2to53IsKeptInBigIntegerAndStillNamesTheValue(testCase)
+        % A bridge pair of erratum Example 2's biconjugate (captured 2026-10-11): its implicit
+        % polynomial, content removed, needs more than 53 bits. It must be KEPT in BigInteger, and
+        % its certified top branch at the witness must be the value the closed form gives there.
+            [face, info] = bridgeFaceAlg([0 0 0 0 1 0 0 50 30 470], 3, ...
+                                         [0 0 0 0 25 10 4 3030 -2854 535327], 214);
+            testCase.verifyTrue(ratQ.isBigPoly(face.FP), 'the polynomial must be kept big');
+            bits = max(cellfun(@(c) ratQ.bigBits(c), face.FP.c));
+            testCase.verifyGreaterThan(bits, 53, 'the input must still exercise the big path');
+            w = face.wit;
+            v = algBranch(face.FP, w(1:2)/w(3), face.FB);
+            testCase.verifyEqual(v, info.value, 'RelTol', 1e-9, ...
+                'the top branch of the big polynomial is the closed-form value at the witness');
+        end
+
+        function aWITNESSQuarticPast2to53IsReducedInBigInteger(testCase)
+        % The pair erratum Example 2 stopped on (2026-10-11): at every witness candidate the raw
+        % membership quartic Phi passed 2^53 (69-76 bits), so the search reported witnessOverflow,
+        % while its content is huge and the reduced quartic needs ~20 bits. bridgePhi must return
+        % that reduced quartic: integral, inside 2^53, and a POSITIVE multiple of the raw one
+        % (same roots, same signs), checked against the double formula's rounded raw coefficients.
+            d = 17490;  N1 = [11880 1980; 1980 330];  m1 = [-1980; -330];
+            N2 = [2650 1590; 1590 954];  m2 = [480710; -166314];
+            Dl = N1 - N2;  dl = m1 - m2;  kp = -14496872;
+            for x = {[33; 2], 1; [43; -4], 2; [252; 10], 8}.'
+                Phi = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, x{1}, x{2});
+                raw = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, x{1}, x{2}, false);
+                testCase.verifyEqual(Phi, round(Phi), 'integral');
+                testCase.verifyLessThan(max(abs(Phi)), 2^53, 'reduced into the double range');
+                testCase.verifyEqual(Phi/norm(Phi), raw/norm(raw), 'AbsTol', 1e-12, ...
+                    'a positive multiple of the raw quartic');
+            end
+        end
+
+        function theBIGFormOfAPolynomialIsReadExactlyLikeTheDoubleOne(testCase)
+        % Differential (umbrella CLAUDE.md section 6): every reader of a face polynomial must give
+        % the same answer on ratQ.toBig(FP) as on FP, where FP fits a double and the double path is
+        % the trusted one. This is what lets the big form reach them only when it is needed.
+            F = fixtures();
+            rng(11);
+            X = round(randn(15, 2)*8)/8;           % algCurveSide needs simple rationals
+            for i = 1:numel(F)
+                fx = F{i};
+                face = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                B = ratQ.toBig(face.FP);
+                testCase.verifyTrue(ratQ.polyEqual(B, face.FP), [fx.name ': polyEqual']);
+                testCase.verifyFalse(ratQ.polyEqual(B, face.FP + (face.FP ~= 0)), [fx.name ': polyEqual differs']);
+                testCase.verifyEqual(algBranch(B, X, face.FB), algBranch(face.FP, X, face.FB), ...
+                    [fx.name ': algBranch']);
+                if size(face.FP, 3) == 3
+                    testCase.verifyEqual(bridgeQuadCut(B, fx.n1, fx.d1), ...
+                        bridgeQuadCut(face.FP, fx.n1, fx.d1), [fx.name ': bridgeQuadCut']);
+                    testCase.verifyEqual(algCurveSide(B, face.FB, fx.n1, fx.d1, X), ...
+                        algCurveSide(face.FP, face.FB, fx.n1, fx.d1, X), [fx.name ': algCurveSide']);
+                end
+            end
         end
 
         function theBRIDGEPairsOfThePOLY2KinkBuildAndVanishOnTheirFace(testCase)

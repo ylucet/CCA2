@@ -8,13 +8,11 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
 % computed ONCE per run and shared by its tests (`biconjCached`); the differential's 3-convex-edge
 % triangle is ~100 s.
 %
-% QUARANTINES, by identifier only (umbrella CLAUDE.md section 8), measured 2026-10-10:
-%   Example 2  bridgeFaceAlg:polynomialOverflow -- an algebraic bridge face's implicit polynomial,
-%              content removed, needs 59 bits: the ANSWER is past what a double stores exactly.
-%              (Until 2026-10-11 it stopped earlier at ratQ:overflow in three constructors whose
-%              intermediates, not results, were large; fixed.) TODO "integer width".
-%   (Example 3 was quarantined on PLQ:biconjQ:notImplemented until 2026-10-11, when the atom
-%   route learned rays -- erratum Case E. It runs now.)
+% QUARANTINES: none since 2026-10-11. Example 2 was quarantined on
+%   bridgeFaceAlg:polynomialOverflow (a bridge polynomial needs 59 bits); the polynomial is now kept
+%   in BigInteger and the intermediates that overflowed after it are reduced by their content
+%   (ratQ.exactFormula / bigZ). biconjQ on Example 2 takes ~26 min on the shared machine (one run),
+%   computed once per run by biconjCached. Example 3 was quarantined until 2026-10-11 too.
 % Any other error, or a wrong value, fails as usual, and a test runs by itself once its refusal goes.
 
     methods (Test)
@@ -36,9 +34,31 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
         end
 
         function ex2BiconjugateMatchesTheErratumCells(testCase)
+        % CELL 6 IS CHECKED AGAINST THE DEFINITION, NOT THE ERRATUM'S FORMULA (changed 2026-10-11,
+        % the first day this test ran -- Example 2 was quarantined before). The formula gives
+        % -1236.247307 at (32,-5.5), but f**(x) = sup_s <s,x> - f*(s), a CONCAVE maximisation in s,
+        % has its maximum -1237.150043 there (300 starts, with fstarOracle and with conjQ alike),
+        % so the formula's value is above f** and cannot be what the code must satisfy. On a grid
+        % round D = (35,-5) the formula equals f** on one line only and exceeds it at 236 of 245
+        % points: it is a candidate, not the envelope. Whether the erratum or its transcription
+        % here is at fault is open (TODO). Cells 1-5 still assert the erratum's values.
             h = erratumBiconjTest.biconjCached(testCase, 2);
             [X, want, names] = erratumExamplesTest.ex2BiconjCells();
             got = h.eval(X);
+            [~, pieces] = erratumExamplesTest.example2();
+            x6 = X(6,:);
+            obj = @(s) -(s*x6.' - erratumExamplesTest.fstarOracle(s, pieces));
+            sup6 = -inf;
+            for s0 = {[60 90], [0 0], [-50 50], [100 -50]}
+                [~, v] = fminsearch(obj, s0{1}, optimset('TolX', 1e-12, 'TolFun', 1e-12, ...
+                                    'MaxFunEvals', 4000, 'MaxIter', 4000));
+                sup6 = max(sup6, -v);
+            end
+            testCase.verifyEqual(got(6), sup6, 'RelTol', 1e-9, ...
+                'Example 2 at (32,-5.5): f** must equal max_s <s,x> - f*(s)');
+            testCase.verifyGreaterThanOrEqual(want(6), sup6 - 1e-9*abs(sup6), ...
+                'the erratum cell-6 formula is an upper bound there (recorded, see above)');
+            X = X(1:5,:);  want = want(1:5);  got = got(1:5);
             for i = 1:size(X,1)
                 testCase.verifyEqual(got(i), want(i), 'RelTol', 1e-9, 'AbsTol', 1e-7, ...
                     sprintf('Example 2, %s at (%g,%g)', names{i}, X(i,1), X(i,2)));
