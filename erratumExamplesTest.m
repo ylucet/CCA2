@@ -243,7 +243,10 @@ classdef erratumExamplesTest < matlab.unittest.TestCase
         end
 
         function [X, want, names] = ex2BiconjCells()
-            X = [8 0.5; 13 -8; 25 0; 28 3; 50 7; 32 -5.5];
+            % cell 6's point was (32,-5.5) until 2026-10-11, which is NOT in cell 6: it lies in cell 4,
+            % conv{G1,G2,G3}, barycentric (0.004, 0.311, 0.685). (35.5,-4) is inside cell 6 =
+            % conv{G2,D,G3}, barycentric (0.385, 0.231, 0.384).
+            X = [8 0.5; 13 -8; 25 0; 28 3; 50 7; 35.5 -4];
             names = {'cell 1 (affine)', 'cell 2 (form (a), vertex B + edge DE)', ...
                      'cell 3 (case (b), quartic)', 'cell 3 (case (b), quartic)', ...
                      'cell 5 (delta = 0 at W = C)', 'cell 6 (delta = 0 at W = D)'};

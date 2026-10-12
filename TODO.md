@@ -46,12 +46,6 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
-- [ ] **Erratum Example 2, cell 6: the erratum's formula is not f** at (32,-5.5).** It gives
-      -1236.247307; f**(x) = max_s <s,x> - f*(s) (concave, 300 starts, fstarOracle and conjQ
-      agree) is -1237.150043, which biconjQ returns. On a grid round D = (35,-5) the formula equals
-      f** on one line only and is above it at 236 of 245 points. Check the erratum PDF against
-      erratumExamplesTest.ex2BiconjCells: transcription error, or the erratum's cell 6 is wrong.
-      erratumBiconjTest now asserts the definition at that point.
 - [ ] **erratumBiconjTest takes ~30 min since Example 2 runs** (biconjQ ~26 min, one shared-machine
       run). Over the normal budget: split Example 2 into its own suite in the slow bucket, or cache
       its EnvelopeMin per plqStage.
