@@ -1,5 +1,29 @@
 # TODO
 
+## 2026-10-14 — biconjugate: what is left, in order
+
+`conj` defaults to the exact engine since 2026-10-11; `biconj` still defaults to `'cplq'` because
+`biconjQ` returns an unmeshed EnvelopeMin on some inputs, not an AlgCon (`QuaPol.m:828`). Measured
+2026-10-14 on `c299801`: `--fast` 765/0 over 60 suites in 616 s, `--normal` 34/0 over 8 suites in
+1948 s; `--slow` not run (stopped for low memory, to be run on another machine).
+
+- [ ] **1. Mesh EnvelopeMin and prune its atom pairs** -- only pairs adjacent in `conjQ(f)`'s mesh
+      (erratum Step 1's active pairs). The main blocker for switching the `biconj` default. Detail
+      under "EnvelopeMin is not meshed" below.
+- [ ] **2. Make the arrangement scale** -- poly2 kink at c = -2, 85 curves, no finish in 90 min.
+      Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
+      Detail under "The global arrangement does not scale" below.
+- [ ] **3. Detect zero-area faces at assembly** -- redundant (no value change), cause known: drop
+      them where the envelope assigns a quadratic face to a cell. Detail under "Faces of ZERO AREA".
+- [ ] **4. `biconjCPLQ` on the poly2 kinks** (legacy engine): crashes fixed, runs take more than
+      4-5 h; both `biconjCPLQTest` tests are switched off (assumeFail) until then. Matters less once
+      `'exact'` is the default.
+- [ ] **5. Suite time** -- `erratumBiconjTest` ~30 min, so `--normal` ran 32 min against its 10-min
+      budget. Move Example 2 to the slow bucket, or cache its EnvelopeMin per `plqStage`.
+- [ ] **6. Two bridge faces owning one cell** (`envelopeMeshAlg:twoBridges`) -- refused by name,
+      never observed. Leave it until an input reaches it.
+- [ ] **7. Decide the `biconj` default** once items 1-2 are done (Yves's call).
+
 ## 2026-09-19 (eighth pass) — corners are COVERAGE; the bridge is the only thing left
 
 Measured before building (DECISIONS.md 2026-09-19): a corner face's value never exceeds the best
