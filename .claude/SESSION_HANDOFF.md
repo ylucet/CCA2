@@ -7,9 +7,9 @@ _2026-10-13_
   (erratum repo D:\AI\67191168115b2b8bc24afaab).
 
 ## State
-- CCA2 branch `overnight/2026-10-10` @ `cf496ea`, local only
-- Erratum repo branch `overnight/2026-10-13` @ `93ca39b`, local only
-- Pushed: no (no upstream; never pushed in overnight mode)
+- CCA2 `main` @ `292002c` (overnight/2026-10-10 merged)
+- Erratum repo `main` @ `93ca39b` (overnight/2026-10-13 merged)
+- Pushed: yes, both (GitHub; Overleaf)
 - Lean: `lake build` green, 267 theorems axiom-clean (2026-10-13)
 - CCA2 MATLAB tests: not run this session (needs VPN)
 - Known reds: none
@@ -17,8 +17,7 @@ _2026-10-13_
 ## Next
 1. If wanted: planar Minkowski-Weyl (H->V unbounded pieces, V->H with cone)
    to drop the cited Rockafellar 19.6; see lean/README "Not formalized".
-2. After Yves's review: merge overnight/2026-10-13 into main (erratum repo).
-3. CCA2: merge overnight/2026-10-10 after fast/normal run on VPN.
+2. CCA2: run fast/normal on VPN (merged commits not re-run).
 
 ## Files
 - `erratum-lean.tex` — revised erratum after Lean
