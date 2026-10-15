@@ -33,6 +33,20 @@ CCA2DIR="${CCA2DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 TIMEOUT="${CCA2_TEST_TIMEOUT:-3600}"
 cd "$CCA2DIR" || exit 1
 
+# MAPLE SHADOWS SYM (measured 2026-10-14, Linux R2024a). A Maple Toolbox for MATLAB is installed
+# under toolbox/maple, and its installer took toolbox/symbolic/symbolic OFF the default path, so
+# `sym` resolves to Maple's old-style @sym class -- which has no `sym.empty`, and every class with
+# a sym-valued property default (region.vx) fails to load. All six slow suites "ERRORED" with no
+# result. Every MATLAB this script starts therefore swaps the real Symbolic Math Toolbox back in;
+# a no-op on a machine without Maple.
+#
+# ONE LINE, ALWAYS (measured 2026-10-14, Linux R2024a): `matlab -batch` there runs only the FIRST
+# line of a multi-line command and exits 0 -- so the COUNTS line never printed and every job read
+# as ERRORED. Windows MATLAB ran all lines, which is why this went unseen. ml_cmd joins the lines
+# with "; " (a doubled ";" is an empty statement, harmless).
+ml_cmd () { local c="$SYMFIX$1"; printf '%s' "${c//$'\n'/; }"; }
+SYMFIX="p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filesep 'maple'])); if ~isempty(m), rmpath(m{:}); addpath(fullfile(matlabroot,'toolbox','symbolic','symbolic')); end; clear p m; "
+
 # ---- BUCKETS ---------------------------------------------------------------------------------
 # fast     : the whole bucket in ONE MATLAB, budget 5 minutes.
 # normal   : the whole bucket in ONE MATLAB, budget 10 minutes.
@@ -109,9 +123,9 @@ run_job () {
             fprintf('COUNTS %d %d %d\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));
             for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\n', r(k).Name); end, end"
     if [ "$TIMEOUT" = "0" ]; then
-        out=$(matlab -batch "$script" 2>&1); rc=$?
+        out=$(matlab -batch "$(ml_cmd "$script")" 2>&1); rc=$?
     else
-        out=$(timeout "$TIMEOUT" matlab -batch "$script" 2>&1); rc=$?
+        out=$(timeout "$TIMEOUT" matlab -batch "$(ml_cmd "$script")" 2>&1); rc=$?
     fi
     elapsed=$(( $(date +%s) - started ))
     {
@@ -124,6 +138,7 @@ run_job () {
             if [ -z "$counts" ]; then
                 printf 'STATUS errored %s %s
 ' "$elapsed" "$rc"
+                printf '%s\n' "$out" | tail -25 | sed 's/^/OUT /'
             else
                 printf 'STATUS ok %s %s
 ' "$elapsed" "$counts"
@@ -226,9 +241,9 @@ if [ "$ONEPROC" -eq 1 ]; then
                 for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\\n', r(k).Name); end, end"
     fi
     if [ "$TIMEOUT" = "0" ]; then
-        out=$(matlab -batch "$script" 2>&1); rc=$?
+        out=$(matlab -batch "$(ml_cmd "$script")" 2>&1); rc=$?
     else
-        out=$(timeout "$TIMEOUT" matlab -batch "$script" 2>&1); rc=$?
+        out=$(timeout "$TIMEOUT" matlab -batch "$(ml_cmd "$script")" 2>&1); rc=$?
     fi
     elapsed=$(( $(date +%s) - run_started ))
     if [ "$rc" -eq 124 ]; then
@@ -258,7 +273,7 @@ for s in "${SUITES[@]}"; do
     if [ "$shard" -eq 1 ]; then
         # Ask MATLAB for the test names once; if that fails for any reason, fall back to running
         # the suite whole rather than losing it.
-        mapfile -t tests < <(matlab -batch "t = matlab.unittest.TestSuite.fromClass(meta.class.fromName('$s')); for k = 1:numel(t), fprintf('TEST %s\n', t(k).ProcedureName); end" 2>/dev/null | sed -n 's/^TEST //p')
+        mapfile -t tests < <(matlab -batch "$SYMFIX t = matlab.unittest.TestSuite.fromClass(meta.class.fromName('$s')); for k = 1:numel(t), fprintf('TEST %s\n', t(k).ProcedureName); end" 2>/dev/null | sed -n 's/^TEST //p')
         if [ "${#tests[@]}" -gt 0 ]; then
             for t in "${tests[@]}"; do JOBS_LIST+=("$s/$t"); done
         else
