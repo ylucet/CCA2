@@ -613,7 +613,14 @@ classdef region
            y = obj.vy(1:obj.nv);
            cx = mean(double(x));
            cy = mean(double(y));
-           a = atan2(y - cy, x - cx);
+           % DOUBLE, NOT SYM (2026-10-14). On sym input atan2 returns exact angles (pi/4,
+           % atan(2) - pi, ...) and `sort` on a sym vector does NOT sort them by value: measured
+           % on Linux R2024a, [0, pi/4, atan(2)-pi, pi] sorted to [0, pi, atan(2)-pi, pi/4]. The
+           % first-quadrant wedge then reached getNormalConeVertex as (M,0),(M,M),(0,0),(0,M) --
+           % not cyclic -- and its conjugate came out on {s2<=0, s1+s2<=0} instead of the third
+           % quadrant (unboundedFaceTest's two affine-envelope tests). The same code was green on
+           % Windows, so the sym ordering is platform-dependent; doubles are not.
+           a = atan2(double(y) - cy, double(x) - cx);
            [~, order] = sort(a);
            obj.vx(1:obj.nv) = x(order);
            obj.vy(1:obj.nv) = y(order);
