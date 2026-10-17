@@ -6,7 +6,7 @@ classdef EnvelopeMin
 % This is NOT a node of the AlgCon lattice: it is not meshed into one subdivision. It answers
 % `eval`, which is what every consumer of biconjQ's result used. Since 2026-10-16 it holds only the
 % ACTIVE pairs and triangles (biconjAtoms' activeAtomPairs). Where that leaves ONE pair and no
-% triangle the minimum is that pair's envelope, which the meshers can almost take (TODO item 1).
+% triangle biconjQ meshes it instead (2026-10-17); a minimum over several pairs stays this.
 
     properties
         pairs   % cell array of envelopeAssemble results

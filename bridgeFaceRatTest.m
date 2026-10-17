@@ -108,20 +108,20 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
         end
 
         function theROWSAreTheFaceAndFPCarriesItsValue(testCase)
-        % What the mesh needs (2026-10-16): `region` is the face's EXACT region as conic rows, and
+        % What the mesh needs (2026-10-16): `cells` is the face's EXACT region as conic rows, and
         % FP/FB its value implicitly -- without them nothing can place a vertex-against-edge face
-        % in an arrangement (envelopeMesh:bridgeFaces). Not yet read by the meshers: see bridgeFaceRat.
+        % in an arrangement (envelopeMesh:bridgeFaces).
             cases = {'basic', zeros(0,3); 'shifted', zeros(0,3); 'shifted', [1 0 0; 0 1 0]; ...
                      'scaled', zeros(0,3)};                  % the pair P meets only 'shifted'
             for c = 1:size(cases,1)
                 name = cases(c,1);  P = cases(c,2);
                 fx = fixtureByName(name{1});
                 face = bridgeFaceRat(fx.n1, fx.d1, fx.n2, fx.d2, P{1});
-                testCase.assertTrue(isfield(face, 'region') && isfield(face, 'FP'), ...
+                testCase.assertTrue(isfield(face, 'cells') && isfield(face, 'FP'), ...
                     sprintf('%s: no rows / no implicit value', name{1}));
                 rng(11);
                 X = face.wit(1:2)/face.wit(3) + (rand(2000,2)*2 - 1)*6;
-                R = face.region{1};
+                R = face.cells{1};
                 inR = true(size(X,1),1);
                 for r = 1:size(R,1)
                     inR = inR & R(r,7) * QuaPar.evalConic(R(r,1:6), X) >= 0;

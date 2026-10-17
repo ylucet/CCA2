@@ -173,13 +173,8 @@ function [face, info] = buildFace(u, w, nu, rq, rl, rc, rd, b1, k1, d, P)
     % the one root of den(x)*z - num(x) = 0. The region is EXACT, not an outer bound: concavity is
     % C*scale <= 0, a line, and each row of P, a quadratic in t along the parabola, becomes a CONIC
     % in x at t* = -B/(2C) once multiplied by 4C^2 > 0. A face whose rows overflow keeps neither.
-    %
-    % HELD AS `region`, NOT `cells`, ON PURPOSE: the meshers read `cells`, and with it they mesh
-    % these envelopes -- but measured 2026-10-16 the result is not yet right (erratum Example 1:
-    % +Inf at 5 of 4000 points, 30x slower than the face list; TODO item 1), so envelopeMesh keeps
-    % refusing the face by name (bridgeFaces). Renaming the field is what turns it on.
     try
-        face.region = {regionRows(face.pair)};
+        face.cells = {regionRows(face.pair)};
         face.FP = implicitValue(face.fN, face.den);
         face.FB = -1;
     catch ME

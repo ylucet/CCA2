@@ -42,7 +42,8 @@ function env = biconjAtoms(f)
 % to 2, same values, 780 s to 281 s (one run each, shared machine).
 %
 % RAYS (erratum Case E) are below, at the restriction to D. WHAT IS NOT HERE: the face list is
-% not meshed into one AlgCon -- `EnvelopeMin.eval` is the function. Verified against the erratum's closed forms in erratumExamplesTest.
+% not meshed into one AlgCon -- `EnvelopeMin.eval` is the function; biconjQ meshes the one-pair
+% case. Verified against the erratum's closed forms in erratumExamplesTest.
 % ==================================================================================================
     if ~isa(f, 'QuaPol'), error('biconjAtoms:input', 'expects a QuaPol; got %s.', class(f)); end
     % AN UNBOUNDED INPUT (erratum Case E). Its rays carry two things. A ray along which f is

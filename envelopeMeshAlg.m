@@ -33,9 +33,13 @@ function [mesh, info] = envelopeMeshAlg(env)
 % the PAIR and not one of them (DECISIONS.md 2026-09-20). `algCurveSide` decides it exactly at a
 % rational point; `meshAlgEval` reads it in doubles, which is what evaluation is allowed to do.
 %
-% STILL REFUSED: two BRIDGE faces competing on one cell. Their difference is not of this shape --
-% both sides are irrational -- and it has not occurred on any fixture here, so it is named
-% (`envelopeMeshAlg:twoBridges`) rather than guessed at.
+% SEVERAL IRRATIONAL faces on one cell (bridges, and irrational CORNERS, which carry value too --
+% 2026-10-17) are not cut against each other: that curve is not of this shape. Each is cut against
+% the quadratics only, so where two of them both beat every quadratic their pieces OVERLAP; the
+% value is still right because every evaluator takes the max over the faces owning a point.
+% `info.overlaps` counts such cells (a fixed-grid read). Until 2026-10-17 this was refused as
+% `envelopeMeshAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
+% Q(sqrt 6), and 18 of its cells overlap.
 
     if nargin ~= 1
         error('envelopeMeshAlg:nargin', 'expects (env).');
@@ -44,10 +48,21 @@ function [mesh, info] = envelopeMeshAlg(env)
         error('envelopeMeshAlg:shape', 'env must be what envelopeAssemble returns.');
     end
 
+    env = envelopeRationalCorners(env);          % a rational corner is a value face (2026-10-17)
     [corners, bridges] = splitBridge(env.bridge);
     [C, req, pairOf] = conicTable(env.quad, corners);
     nQuad = numel(env.quad);
     allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
+    C = addCornerCrossings(C, corners);
+    % THE SAME CURVE BUDGET AS envelopeMesh, for the same reason: one global arrangement, whose cost
+    % grows far faster than its curve count. Without it the poly2 kink at c = -2 (85 curves), once
+    % biconjQ sent irrational-face envelopes here first (2026-10-17), ran >70 min instead of being
+    % declined. envelopeEval answers for the face list.
+    if size(C,1) > 40
+        error('envelopeMeshAlg:arrangementSize', ...
+            'the arrangement has %d curves (budget 40), and a global arrangement of that size does not finish.', ...
+            size(C,1));
+    end
 
     % ---- the arrangement over the CONIC curves ---------------------------------------------------
     cells = {zeros(0,2)};
@@ -64,7 +79,7 @@ function [mesh, info] = envelopeMeshAlg(env)
 
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
     mesh = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
-    nAlg = 0;  nUncovered = 0;
+    nAlg = 0;  nUncovered = 0;  nOverlap = 0;
     for k = 1:numel(cells)
         rows = cells{k};
         [pt, okPt] = interiorPoint(C, rows);
@@ -81,79 +96,88 @@ function [mesh, info] = envelopeMeshAlg(env)
         end
         if ~all(ismember(allPairs, here)), nUncovered = nUncovered + 1; continue, end
 
-        quadApp = app(app <= nQuad);                 % corners never carry the value
-        if numel(bHere) > 1
-            error('envelopeMeshAlg:twoBridges', ...
-                ['two bridge faces own one cell, so the mesh would have to separate two ' ...
-                 'IRRATIONAL values. That curve is not of the bridge-quadratic shape and has not ' ...
-                 'occurred on any fixture here.']);
+        quadApp = app(app <= nQuad);
+        % THE IRRATIONAL CANDIDATES: the bridges owning the cell, and -- since 2026-10-17 -- the
+        % CORNERS that apply to it. "A corner never carries the value" was measured on one fixture
+        % (DECISIONS.md 2026-09-19) and is false in general: on every one-pair atom envelope a
+        % corner is the maximum in slivers near a domain vertex, by up to 8e-6, and ignoring it left
+        % the mesh that much too LOW there.
+        irr = cell(1, 0);
+        for b = bHere, irr{end+1} = struct('FP', bridges{b}.FP, 'FB', bridges{b}.FB); end %#ok<AGROW>
+        for j = app(app > nQuad)
+            [fc, okc] = cornerValueFace(corners{j - nQuad}, pt);
+            if okc, irr{end+1} = fc; end %#ok<AGROW>
         end
-        if isempty(quadApp) && isempty(bHere), nUncovered = nUncovered + 1; continue, end
+        if isempty(quadApp) && isempty(irr), nUncovered = nUncovered + 1; continue, end
+        if numel(irr) > 1 && ~dominantIrrational(irr, C, rows, pt, env.quad, quadApp)
+            nOverlap = nOverlap + 1;
+        end
 
-        sub = winnerFaces(env.quad, quadApp, bridges, bHere, rows, C, pt);
+        sub = winnerFaces(env.quad, quadApp, irr, rows, C, pt);
         for t = 1:numel(sub)
             nAlg = nAlg + numel(sub(t).alg);
             mesh(end+1) = sub(t); %#ok<AGROW>
         end
     end
     info = struct('cells', numel(cells), 'faces', numel(mesh), 'algRows', nAlg, ...
-                  'refused', nUncovered);
+                  'refused', nUncovered, 'overlaps', nOverlap);
 end
 
 % ==================================================================================================
-function out = winnerFaces(quad, quadApp, bridges, bHere, rows, C, pt)
+function out = winnerFaces(quad, quadApp, irr, rows, C, pt)
 % Which applicable face is largest, and the rows that say where. A quad-versus-quad boundary is a
 % CONIC and joins the ordinary rows; a quad-versus-bridge boundary is ALGEBRAIC and joins `.alg`.
     out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
     base = rowsToCon(C, rows);
 
-    if isempty(bHere)
-        % No bridge here: the largest quadratic wins, and ties between two of them are conics.
-        [win, extra] = quadWinner(quad, quadApp, pt);
-        out(end+1) = struct('kind', 'quad', 'num', quad(win).num, 'den', quad(win).den, ...
-                            'FP', [], 'FB', 0, 'con', [base; extra], 'alg', emptyAlg());
+    if isempty(irr)
+        % No bridge here: the largest quadratic wins, and ties between two of them are conics --
+        % one piece PER quadratic (2026-10-17): the winner read at the cell's one point owns only
+        % part of the cell, and the rest was left to no face, a hole.
+        for j = quadApp(:).'
+            out(end+1) = struct('kind', 'quad', 'num', quad(j).num, 'den', quad(j).den, ...
+                                'FP', [], 'FB', 0, 'con', [base; quadOver(quad, quadApp, j)], ...
+                                'alg', emptyAlg()); %#ok<AGROW>
+        end
         return
     end
 
-    f = bridges{bHere};
-    if isempty(quadApp)
-        out(end+1) = struct('kind', 'bridge', 'num', [], 'den', 0, ...
-                            'FP', f.FP, 'FB', f.FB, 'con', base, 'alg', emptyAlg());
-        return
+    % IRRATIONAL faces (bridges, corners) AND quadratics: each irrational face owns where it is above
+    % every quadratic -- one algebraic row per comparison -- and each quadratic owns where it is the
+    % largest quadratic and above every irrational face. Two irrational faces are NOT cut against
+    % each other (that curve is not of the irrational-quadratic shape); where both beat every
+    % quadratic their pieces overlap, and the value is still right because AlgCrv.eval takes the max
+    % over the faces owning a point (counted as `overlaps`, 2026-10-17).
+    for f = irr
+        algRows = emptyAlg();
+        for j = quadApp(:).'
+            algRows(end+1) = struct('FP', f{1}.FP, 'FB', f{1}.FB, 'num', quad(j).num, ...
+                                    'den', quad(j).den, 'side', -1); %#ok<AGROW>
+        end
+        out(end+1) = struct('kind', 'bridge', 'num', [], 'den', 0, 'FP', f{1}.FP, 'FB', f{1}.FB, ...
+                            'con', base, 'alg', algRows); %#ok<AGROW>
     end
 
-    % A bridge AND quadratics: the bridge is the winner exactly where it is above every one of them,
-    % and each comparison is one algebraic row. The complementary pieces are the quadratic winners.
-    [win, extra] = quadWinner(quad, quadApp, pt);
-    algRows = emptyAlg();
+    % ... and, for EACH quadratic, the piece where it is the largest quadratic and beats every
+    % irrational face (one piece for the winner at the cell's point left the rest to no face).
     for j = quadApp(:).'
-        algRows(end+1) = struct('FP', f.FP, 'FB', f.FB, 'num', quad(j).num, ...
-                                'den', quad(j).den, 'side', -1); %#ok<AGROW>
+        algRows = emptyAlg();
+        for f = irr
+            algRows(end+1) = struct('FP', f{1}.FP, 'FB', f{1}.FB, 'num', quad(j).num, ...
+                                    'den', quad(j).den, 'side', 1); %#ok<AGROW>
+        end
+        out(end+1) = struct('kind', 'quad', 'num', quad(j).num, 'den', quad(j).den, ...
+                            'FP', [], 'FB', 0, 'con', [base; quadOver(quad, quadApp, j)], ...
+                            'alg', algRows); %#ok<AGROW>
     end
-    out(end+1) = struct('kind', 'bridge', 'num', [], 'den', 0, 'FP', f.FP, 'FB', f.FB, ...
-                        'con', base, 'alg', algRows);
-
-    % ... and the piece where that one quadratic beats the bridge
-    out(end+1) = struct('kind', 'quad', 'num', quad(win).num, 'den', quad(win).den, ...
-                        'FP', [], 'FB', 0, 'con', [base; extra], ...
-                        'alg', struct('FP', f.FP, 'FB', f.FB, 'num', quad(win).num, ...
-                                      'den', quad(win).den, 'side', 1));
 end
 
-% --------------------------------------------------------------------------------------------------
-function [win, extra] = quadWinner(quad, quadApp, pt)
-% The largest quadratic at the cell's interior point, and the conic rows that pin it against the
-% others. Reading the winner at ONE point is sound only because the cell is then cut by every
-% difference conic, which is what `extra` is.
-    win = quadApp(1);  extra = zeros(0,8);
-    best = ratQ.evalFace(quad(win).num, quad(win).den, pt);
-    for j = quadApp(2:end)
-        v = ratQ.evalFace(quad(j).num, quad(j).den, pt);
-        if v > best, best = v;  win = j; end
-    end
-    for j = quadApp(:).'
-        if j == win, continue, end
-        [c, sgn] = diffConic(quad(win), quad(j));
+function extra = quadOver(quad, quadApp, j)
+% The conic rows saying quadratic j is at least every other applicable one.
+    extra = zeros(0,8);
+    for i = quadApp(:).'
+        if i == j, continue, end
+        [c, sgn] = diffConic(quad(j), quad(i));
         if isempty(c), continue, end
         extra(end+1,:) = [c, sgn, 0]; %#ok<AGROW>
     end
@@ -173,6 +197,72 @@ end
 % --------------------------------------------------------------------------------------------------
 function a = emptyAlg()
     a = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}, 'side', {});
+end
+
+function C = addCornerCrossings(C, corners)
+% An IRRATIONAL corner's value is one root of its FP, the other root being its conjugate corner's
+% plane; the two planes cross where E1(x) = 0 in cornerFaceAlg's valueForm (K z = E0 + E1 sigma),
+% a RATIONAL line. As a curve of the arrangement it makes the corner's branch index constant on
+% every cell, which is what lets a corner carry the value with one FB per cell.
+    for j = 1:numel(corners)
+        c = corners{j};
+        if ~isfield(c, 'sigma') || c.sigma.root == 0, continue, end    % rational corner: one root
+        n = c.src.n;  d = c.src.d;
+        N = [n(5) n(6); n(6) n(7)];  m = [n(8); n(9)];
+        al = c.sigma.quad(1);  be = c.sigma.quad(2);
+        s0n = c.sigma.s0n;  w = c.sigma.w;  na = c.sigma.na;
+        T1 = ratQ.chkB(2*al*(s0n.'*N*w) - be*(w.'*N*w) + 2*na*al*(m.'*w), ...
+                       2*abs(al)*(abs(s0n).'*abs(N)*abs(w)) + abs(be)*(abs(w).'*abs(N)*abs(w)) ...
+                       + 2*na*abs(al)*(abs(m).'*abs(w)), 'corner crossing');
+        E1 = ratQ.chk([2*al*na*d*w(1), 2*al*na*d*w(2), -T1], 'corner crossing');
+        if all(E1(1:2) == 0), continue, end
+        key = [ratQ.conic([0 0 0 E1]), 0];
+        if isempty(find(all(C == key, 2), 1)), C(end+1,:) = key; end %#ok<AGROW>
+    end
+end
+
+function [fc, ok] = cornerValueFace(c, pt)
+% The corner as an implicit face on this cell: its FP, and the index of the root that is its own
+% plane <s,x> - g(s) at the cell's point (constant on the cell: addCornerCrossings).
+    n = c.src.n;  d = c.src.d;  s = c.s(:);
+    z = pt(:).'*s - ((s.'*[n(5) n(6); n(6) n(7)]*s)/2 + [n(8) n(9)]*s + n(10)) / d;
+    [~, info] = algBranch(c.FP, pt, -1);
+    rr = info.allReal{1};
+    fc = [];  ok = false;
+    if isempty(rr), return, end
+    [gap, j] = min(abs(rr - z));
+    if gap > 1e-6 * max(1, abs(z)), return, end
+    fc = struct('FP', c.FP, 'FB', j - numel(rr) - 1);
+    ok = true;
+end
+
+function ok = dominantIrrational(irr, C, rows, pt, quad, quadApp)
+% Do two irrational faces ever BOTH beat every quadratic on this cell? Only there do their pieces
+% overlap. Read on a fixed grid over the cell: a diagnostic for the mesh's topology, never for its
+% values (those are a max, and right either way).
+    [~, okS, P] = cellSamplePoint(C, rows, straightRows(C, rows), 1e3);
+    if ~okS, P = pt; end
+    q = -inf(size(P,1), 1);
+    for j = quadApp(:).', q = max(q, ratQ.evalFace(quad(j).num, quad(j).den, P)); end
+    above = zeros(size(P,1), 1);
+    for f = irr
+        v = algBranch(f{1}.FP, P, f{1}.FB);
+        above = above + (isfinite(v) & v > q + 1e-12 * max(1, abs(q)));
+    end
+    ok = ~any(above > 1);
+end
+
+function H = straightRows(C, rows)
+% The cell's straight rows as normalised half-planes [a b c] >= 0.
+    H = zeros(0,3);
+    for t = 1:size(rows,1)
+        c = C(rows(t,1), 1:6);  br = C(rows(t,1), 7);  sd = rows(t,2);
+        if br == 0 && all(c(1:3) == 0)
+            h = sd * c(4:6);  nr = hypot(h(1), h(2));
+            if nr > 0, h = h / nr; end
+            H(end+1,:) = h; %#ok<AGROW>
+        end
+    end
 end
 
 function [corners, bridges] = splitBridge(bl)
@@ -205,7 +295,7 @@ function [C, req, pairOf] = conicTable(faces, corners)
         for t = 1:size(con,1)
             c = con(t,1:6);
             if all(c(1:5) == 0)
-                if c(6) < 0, keep(:) = false; break, end
+                if ~constHolds(c(6), con(t,7)), req{i} = [NaN NaN];  break, end   % see envelopeMesh
                 keep(t) = false;  continue
             end
             br = 0;
@@ -215,8 +305,13 @@ function [C, req, pairOf] = conicTable(faces, corners)
             if isempty(hit), C(end+1,:) = key;  hit = size(C,1); end %#ok<AGROW>
             r(t,:) = [hit, con(t,7)];
         end
+        if isequaln(req{i}, [NaN NaN]), continue, end
         req{i} = r(keep,:);
     end
+end
+
+function tf = constHolds(c6, side)
+    tf = (side > 0 && c6 >= 0) || (side < 0 && c6 <= 0) || (side == 0 && c6 == 0);
 end
 
 function app = applicable(req, rows)

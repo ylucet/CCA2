@@ -324,9 +324,15 @@ function h = biconjQ(obj)
                 % triple tangent planes -- biconjAtoms' header. An unbounded domain is assembled over
                 % dom f* (erratum Case E, 2026-10-11). The result is an EnvelopeMin, which answers
                 % eval. Where ONE active pair is left and no triangle the minimum IS that pair's
-                % envelope and meshPair could mesh it; not done yet (TODO item 1: measured wrong at
-                % a few points and 30x slower on erratum Example 1, 2026-10-16).
+                % envelope, and it is meshed like the two-piece route's (2026-10-17).
                 h = biconjAtoms(obj);
+                if numel(h.pairs) == 1 && isempty(h.tris)
+                    try
+                        h = meshPair(envelopePrune(h.pairs{1}));
+                    catch ME
+                        if ~isDeclined(ME), rethrow(ME), end
+                    end
+                end
                 return
             end
         end
@@ -379,6 +385,24 @@ end
 function h = meshPair(env)
 % One pair's face list as a mesh: QuaCon when every face is quadratic, AlgCrv when a bridge face
 % competes with a quadratic one, the unmeshed EnvelopeMin where neither arrangement is built.
+%
+% THE ALGEBRAIC MESH FIRST when an irrational face is present (2026-10-17). envelopeMesh builds the
+% whole arrangement before it finds a bridge competing, measured 241 s of a 279 s run on an
+% indefinite triangle, and it carries an IRRATIONAL corner for coverage only, which is wrong where
+% that corner is the maximum. envelopeMeshAlg handles both. Its mesh is kept unless it has no
+% irrational face at all, and then the conic mesh gives the same function as a QuaCon.
+    if hasIrrationalFace(env)
+        try
+            m = envelopeMeshAlg(env);
+            if any(strcmp({m.kind}, 'bridge')), h = assembleAlgCrv(m); return, end
+        catch ME
+            if ~ismember(ME.identifier, {'envelopeMeshAlg:faceKind', 'envelopeMeshAlg:arrangementSize'})
+                rethrow(ME)
+            end
+            h = unmeshed(env);
+            return
+        end
+    end
     try
         h = envelopeMesh(env);
     catch ME
@@ -400,6 +424,12 @@ function h = meshPair(env)
                 rethrow(ME)
         end
     end
+end
+
+function tf = hasIrrationalFace(env)
+% A bridge face, or a corner whose corner point is irrational, once rational corners are faces.
+    env = envelopeRationalCorners(env);
+    tf = ~isempty(env.bridge);
 end
 
 function tf = isDeclined(ME)

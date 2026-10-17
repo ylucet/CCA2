@@ -8504,3 +8504,44 @@ excludes that centre as undecided. On an indefinite triangle's one-pair envelope
 332 cells (mesh +infinity on 902 of 2000 interior points). `cellSamplePoint` now samples a fixed grid
 over the straight polygon's fan and keeps the point deepest inside every row; cellInterior has
 already proved the cell has one. After it: 0 holes, values to 3e-15.
+
+## 2026-10-17 — a lone atom pair IS meshed: three more mesher defects, and corners DO carry the value
+
+Picked up under the ten-strike rule. Cases cached (pruned envelope + mesh) so each fix was one rerun.
+
+**An empty face applied everywhere.** A face whose region holds a constant row that fails (`1 <= 0`)
+is empty; both meshers dropped the row and, the face having no other demand, read it as applying to
+every cell -- and they read the constant without its side (`c(6) < 0`). Erratum Example 1's pair has
+three such faces; they won cells they do not own, values 4x off. Now `[NaN NaN]`, a demand no cell meets.
+
+**"A corner never carries the value" is FALSE in general** (DECISIONS 2026-09-19 measured it on one
+fixture). Measured over 40000 points per case on all four one-pair atom envelopes: a corner is the
+maximum in slivers within 5e-3 of a domain vertex, by up to 8.4e-6, so a mesh carrying corners for
+coverage only was that much too low. Fix, exact where it can be: a corner whose point s is RATIONAL
+(facet crossing the tie at a rational parameter, or a perfect-square discriminant -- all 14 corners
+of the indefinite triangle) IS a rational affine face, so `envelopeRationalCorners` moves it into
+`.quad` before meshing, where its comparisons are conics and alg rows like any quadratic's. An
+IRRATIONAL corner (8 in Example 1, from Q(sqrt 26) and Q(sqrt 6)) is a value face in envelopeMeshAlg
+with its FP and a per-cell branch; the rational line where its two conjugate planes cross (E1 = 0 in
+cornerFaceAlg's valueForm) joins the arrangement so the branch is constant on each cell.
+
+**Two irrational faces in one cell are no longer refused** (`twoBridges` retired). Each irrational
+face is cut against the quadratics only; where two both beat every quadratic their pieces overlap,
+which every evaluator resolves by taking the max, so values are exact and only the partition is not.
+Example 1: 18 such cells. Considered: the corner-corner curve -- the product of four conjugate lines,
+a quartic no branch mechanism here names; not needed for values.
+
+**One piece per applicable quadratic.** The quadratic side of a cell went to the winner read at the
+cell's one point; where another quadratic was larger nobody owned it (a hole 2e-7 from an edge).
+
+**Cost.** meshPair now goes to envelopeMeshAlg first when an irrational face is present:
+envelopeMesh built the whole arrangement before discovering a bridge competes (241 of 279 s on the
+triangle). Example 1: 512 s -> 51 s; the triangle: ~370 s -> 18 s (single runs, shared machine).
+
+**Result.** Both meshes agree with the face list on 4000 points, Example 1 to 1.2e-13, the triangle
+to 1.1e-12, no holes.
+
+**And the curve budget had to follow the route.** Sending irrational-face envelopes to
+envelopeMeshAlg first bypassed envelopeMesh's 40-curve budget, and envelopeAssembleTest's poly2 kink
+(85 curves) then ran >70 min instead of being declined. envelopeMeshAlg now has the same budget
+(`envelopeMeshAlg:arrangementSize`), and meshPair returns the face list unmeshed on it, as before.

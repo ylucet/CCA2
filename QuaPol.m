@@ -826,7 +826,7 @@ classdef QuaPol < RatPol & QuaPar
        % not. Other engines still error inside conj.
        %
        % The default is still 'cplq' here: `conj` switched to 'exact' on 2026-10-11, biconj has
-       % not been decided (biconjQ returns an EnvelopeMin on some inputs, not an AlgCon).
+       % not been decided (biconjQ returns an EnvelopeMin where several atom pairs are active).
             if nargin < 2, engine = 'cplq'; end
             if strcmpi(engine, 'exact')
                 h = biconjQ(obj);

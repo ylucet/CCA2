@@ -1,4 +1,4 @@
-function [pt, ok] = cellSamplePoint(C, rows, H, R)
+function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
 % cellSamplePoint  A point strictly inside an arrangement cell whose straight rows' Chebyshev centre
 %   fails one of its CURVED rows -- the fallback the meshers' interiorPoint needs.
 %
@@ -8,6 +8,7 @@ function [pt, ok] = cellSamplePoint(C, rows, H, R)
 %          R    : the half-width of the bounding box the meshers use for unbounded cells
 % [output] pt   : 1 x 2, the sampled point with the largest relative slack over EVERY row
 %          ok   : false when no sample is strictly inside
+%          P    : every sample strictly inside (m x 2), for a caller that checks a property on the cell
 %
 % WHY IT IS NEEDED (2026-10-16). Both meshers ask a bridge face's membership predicate once per
 % cell, at one interior point, and took that point to be the Chebyshev centre of the STRAIGHT rows.
@@ -16,7 +17,7 @@ function [pt, ok] = cellSamplePoint(C, rows, H, R)
 % mesh +infinity on 902 of 2000 interior points where the face list is finite. cellInterior has
 % already proved every such cell has an interior, so a point exists; this finds one by a FIXED grid
 % (deterministic: the mesh must not depend on a random seed) over a fan of the straight polygon.
-    pt = [0 0];  ok = false;
+    pt = [0 0];  ok = false;  P = zeros(0,2);
     V = polygonVertices(H, R);
     if size(V,1) < 3, return, end
     c0 = mean(V, 1);
@@ -29,10 +30,11 @@ function [pt, ok] = cellSamplePoint(C, rows, H, R)
     best = 0;
     for e = 1:size(V,1)
         a = V(e,:);  b = V(mod(e, size(V,1)) + 1, :);
-        P = c0 + B(:,1) * (a - c0) + B(:,2) * (b - c0);
-        for i = 1:size(P,1)
-            s = slack(C, rows, P(i,:));
-            if s > best, best = s;  pt = P(i,:);  ok = true; end
+        Q = c0 + B(:,1) * (a - c0) + B(:,2) * (b - c0);
+        for i = 1:size(Q,1)
+            s = slack(C, rows, Q(i,:));
+            if s > 0, P(end+1,:) = Q(i,:); end %#ok<AGROW>
+            if s > best, best = s;  pt = Q(i,:);  ok = true; end
         end
     end
 end

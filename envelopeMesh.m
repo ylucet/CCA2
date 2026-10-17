@@ -62,6 +62,7 @@ function [g, info] = envelopeMesh(env)
     if ~isstruct(env) || ~all(isfield(env, {'quad', 'bridge'}))
         error('envelopeMesh:shape', 'env must be what envelopeAssemble returns.');
     end
+    env = envelopeRationalCorners(env);          % a rational corner is a value face (2026-10-17)
     corners = {};  bridges = {};
     for k = 1:numel(env.bridge)
         f = env.bridge{k};
@@ -199,7 +200,12 @@ function [C, req, pairOf] = curveTable(faces, corners)
                 % A CONSTANT row is not a curve. It is vacuous when it holds and empties the face
                 % when it does not, and admitting one makes the exact kernel meet the "curve" 1 = 0.
                 % Measured as reachable on the c = -2 fixture (DECISIONS.md 2026-09-18).
-                if c(6) < 0, req{i} = [];  keep = false(size(con,1),1);  break, end
+                % ...and READ WITH ITS SIDE. Until 2026-10-16 this tested c(6) < 0 alone, and an
+                % empty face then left the loop with NO demands -- which `applicable` reads as
+                % "applies everywhere". Erratum Example 1's pair has three faces whose region holds
+                % `1 <= 0`; they won cells they do not own, 4x off the face list. [NaN NaN] is a
+                % demand no cell meets.
+                if ~constHolds(c(6), con(t,7)), req{i} = [NaN NaN];  break, end
                 keep(t) = false;  continue
             end
             key = [c, branchOf(con, t)];
@@ -207,8 +213,14 @@ function [C, req, pairOf] = curveTable(faces, corners)
             if isempty(hit), C(end+1,:) = key;  hit = size(C,1); end %#ok<AGROW>
             r(t,:) = [hit, con(t,7)];
         end
+        if isequaln(req{i}, [NaN NaN]), continue, end
         req{i} = r(keep,:);
     end
+end
+
+function tf = constHolds(c6, side)
+% A constant row c6 on side `side` (+1: >= 0, -1: <= 0, 0: = 0) holds everywhere or nowhere.
+    tf = (side > 0 && c6 >= 0) || (side < 0 && c6 <= 0) || (side == 0 && c6 == 0);
 end
 
 % --------------------------------------------------------------------------------------------------

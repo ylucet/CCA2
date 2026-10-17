@@ -17,6 +17,13 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
 
     methods (Test)
 
+        function ex1BiconjugateIsMeshed(testCase)
+        % One active pair (a convex piece and a vertex), so biconjQ meshes it (2026-10-17): an AlgCrv
+        % whose two corners from Q(sqrt 26) and Q(sqrt 6) overlap in 18 cells, value-safe (max).
+            h = erratumBiconjTest.biconjCached(testCase, 1);
+            testCase.verifyClass(h, 'AlgCrv');
+        end
+
         function ex1BiconjugateMatchesTheErratumCells(testCase)
         % (H) fails here (P1 is strictly convex): cell 1 is bounded by a CIRCULAR arc and cell 2
         % is affine + 2 sqrt(21) |x - v|, neither of which a rational/polyhedral form can hold.
@@ -87,7 +94,9 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
                 V = cases{k,1};  c = cases{k,2};
                 f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], [0 0 0 0 c], [1 0; 1 0; 1 0]);
                 h = biconjQ(f);
-                testCase.verifyClass(h, 'EnvelopeMin', 'an edge-convex indefinite piece takes the atom route');
+                % the atom route; a single active pair comes back MESHED (2026-10-17)
+                testCase.verifyTrue(isa(h, 'EnvelopeMin') || isa(h, 'AlgCrv') || isa(h, 'QuaCon'), ...
+                    sprintf('triangle %d: biconjQ returned a %s', k, class(h)));
                 W = rand(300,3);  X = (W ./ sum(W,2)) * V;
                 testCase.verifyEqual(h.eval(X), f.biconj().eval(X), 'AbsTol', 1e-10, ...
                     sprintf('triangle %d: atom route and legacy envelope differ', k));
@@ -105,6 +114,28 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             testCase.verifyClass(h, 'EnvelopeMin');
             testCase.verifyEqual(numel(h.pairs), 3, 'active pairs of Example 2');
             testCase.verifyEqual(numel(h.tris), 2, 'active triangles of Example 2');
+        end
+
+        function aSINGLEActivePairIsMeshedAndKeepsItsValues(testCase)
+        % Two atoms leave one pair; with no triangle needing three atoms the minimum IS that pair's
+        % envelope, so biconjQ meshes it (2026-10-17). Four defects stood in the way, each red here
+        % first: the rational bridge face had no rows (envelopeMesh:bridgeFaces); the meshers read
+        % only a face's first pair, and took a cell's interior point from its straight rows only
+        % (holes); an EMPTY face applied everywhere; and a rational CORNER, which does carry the
+        % value near a vertex, was carried for coverage only (1.3e-6 too low).
+            V = [0 0; 3 0; 1 2];
+            f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], [0 0 0 0 2 1 -1 0 1 0], [1 0; 1 0; 1 0]);
+            h = biconjQ(f);
+            testCase.verifyTrue(isa(h, 'AlgCrv') || isa(h, 'QuaCon'), ...
+                sprintf('one active pair should mesh; got %s', class(h)));
+            rng(3);
+            W = [rand(1500,3); rand(500,3).^4];  X = (W ./ sum(W,2)) * V;
+            want = biconjAtoms(f).eval(X);
+            got = h.eval(X);
+            testCase.verifyEqual(isinf(got), isinf(want), 'the mesh has a hole where the face list is finite');
+            fin = isfinite(want);
+            testCase.verifyEqual(got(fin), want(fin), 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
+                'the mesh must carry the face list''s values, near the vertices too');
         end
 
         function aPointBesideTheEDGEIsNotPlusInfinity(testCase)
