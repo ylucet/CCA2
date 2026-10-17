@@ -187,12 +187,7 @@ function h = biconjQ(obj)
             h = assembledEnvelope(obj);
             return
         catch ME
-            if ~startsWith(ME.identifier, 'envelope') && ...
-               ~startsWith(ME.identifier, 'bridgeFace') && ...
-               ~startsWith(ME.identifier, 'bridgeArcCut') && ...
-               ~startsWith(ME.identifier, 'cornerFace')
-                rethrow(ME)
-            end
+            if ~isDeclined(ME), rethrow(ME), end
             % fall through: the checks below name the case in the vocabulary a caller expects --
             % but the refusal CARRIES this reason, because "the assembly declined" and "there is no
             % route" are different news and only the first says what to fix.
@@ -328,7 +323,9 @@ function h = biconjQ(obj)
                 % conjugate, so the envelope is the minimum over the atoms' pairwise envelopes and
                 % triple tangent planes -- biconjAtoms' header. An unbounded domain is assembled over
                 % dom f* (erratum Case E, 2026-10-11). The result is an EnvelopeMin, which answers
-                % eval but is not meshed into one AlgCon.
+                % eval. Where ONE active pair is left and no triangle the minimum IS that pair's
+                % envelope and meshPair could mesh it; not done yet (TODO item 1: measured wrong at
+                % a few points and 30x slower on erratum Example 1, 2026-10-16).
                 h = biconjAtoms(obj);
                 return
             end
@@ -376,7 +373,12 @@ function h = assembledEnvelope(obj)
     pieces = splitPieces(obj);
     gA = conjQ(pieces{1});
     gB = conjQ(pieces{2});
-    env = envelopePrune(envelopeAssemble(gA, gB));
+    h = meshPair(envelopePrune(envelopeAssemble(gA, gB)));
+end
+
+function h = meshPair(env)
+% One pair's face list as a mesh: QuaCon when every face is quadratic, AlgCrv when a bridge face
+% competes with a quadratic one, the unmeshed EnvelopeMin where neither arrangement is built.
     try
         h = envelopeMesh(env);
     catch ME
@@ -398,6 +400,11 @@ function h = assembledEnvelope(obj)
                 rethrow(ME)
         end
     end
+end
+
+function tf = isDeclined(ME)
+% The assembly and mesh machinery's own refusals: a route that declined, not a defect.
+    tf = any(startsWith(ME.identifier, {'envelope', 'bridgeFace', 'bridgeArcCut', 'cornerFace'}));
 end
 
 function h = unmeshed(env)

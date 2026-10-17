@@ -86,7 +86,7 @@ function [g, info] = envelopeMesh(env)
     [C, req, pairOf] = curveTable(env.quad, corners);
     nQuad = numel(env.quad);
     C = addBridgeCurves(C, bridges);       % curves only: a bridge's membership is a PREDICATE
-    allPairs = unique([pairOf, cellfun(@(f) f.pairIndex, bridges)]);
+    allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
     % THE ARRANGEMENT IS GLOBAL, and its cost is not polynomial in any useful sense: every curve
     % re-tests every live cell, whose emptiness test grows with the cell's rows. Measured on the
     % poly2 kink at c = -2 (2026-10-11): 23 curves mesh in minutes; 85 curves passed 370 cells at
@@ -122,7 +122,7 @@ function [g, info] = envelopeMesh(env)
         % point. That is sound because the predicate is CONSTANT on a cell: measured on the c = -2
         % fixture, 50000 points, 40 cells, not one of them mixed (DECISIONS.md 2026-09-19).
         [pt, okPt] = interiorPoint(C, cells{k});
-        here = pairOf(app);
+        here = [pairOf{app}];
         bridgeHere = [];
         if okPt
             for b = 1:numel(bridges)
@@ -172,21 +172,24 @@ end
 % ==================================================================================================
 function [C, req, pairOf] = curveTable(faces, corners)
 % The distinct curves, each face's demand on them (req{i}, an m x 2 list [curveIndex, side]), and
-% which PAIR each face belongs to -- the quadratic faces first, then the corners, so that a face
-% index at most numel(faces) is one whose VALUE can be emitted.
+% which PAIRS each face covers -- ALL of them: envelopePrune hands a dominating face the pairs of the
+% faces it replaced, and reading only the first left those pairs uncovered, so every cell such a face
+% owned dropped out as +infinity (2026-10-16: all four cells of an unbounded cone fixture). The
+% quadratic faces come first, then the corners, so that a face index at most numel(faces) is one
+% whose VALUE can be emitted.
 % Bitwise deduplication, because the rows are canonical integers -- the same argument
 % assembleQuaConCells' own curve table rests on.
     C = zeros(0,7);                                 % [conic(1:6), branch] -- branch 0 for a curve
     n = numel(faces) + numel(corners);
     req = cell(1, n);
-    pairOf = zeros(1, n);
+    pairOf = cell(1, n);                            % ALL the pairs a face covers: see below
     for i = 1:n
         if i <= numel(faces)
             con = faces(i).con;
-            pairOf(i) = faces(i).pair(1);
+            pairOf{i} = faces(i).pair(:).';
         else
             con = corners{i - numel(faces)}.con;
-            pairOf(i) = corners{i - numel(faces)}.pairIndex;
+            pairOf{i} = corners{i - numel(faces)}.pairIndex;
         end
         r = zeros(size(con,1), 2);
         keep = true(size(con,1), 1);
@@ -280,7 +283,10 @@ function [pt, ok] = interiorPoint(C, rows)
             v = c(1)*cand(1)^2 + c(2)*cand(1)*cand(2) + c(3)*cand(2)^2 + ...
                 c(4)*cand(1) + c(5)*cand(2) + c(6);
         end
-        if sd * v <= 0, return, end
+        if sd * v <= 0
+            [pt, ok] = cellSamplePoint(C, rows, H, R);   % a curved row excludes the centre
+            return
+        end
     end
     pt = cand;  ok = true;
 end

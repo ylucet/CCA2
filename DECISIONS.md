@@ -8450,3 +8450,57 @@ Cost: BigInteger only where doubles overflow, so every other input is unchanged.
 **Found on the way: algBranch dropped genuine leading coefficients.** "Below 1e-12 of the largest
 coefficient" treated a quartic's leader 16 against 1.6e17 as zero and returned a cubic's root (off
 by 4 in 1167). Zero now means within the coefficient's OWN rounding error (exactly, for a big P).
+
+## 2026-10-16 — EnvelopeMin keeps only the ACTIVE atom pairs; the rational bridge face gets rows; meshing a lone pair is NOT yet right
+
+**The prune (biconjAtoms `activeAtomPairs`).** erratum Step 1: at a maximiser s of <s,x> - f*(s),
+x is in the hull of the contact points of the forms active at s (plus N_D). A contact point in atom
+A is a subgradient of g_A there, so two atoms holding the forms involved make the PAIR attain, and
+three make the TRIANGLE attain. Only x of positive measure matter (the candidates are convex and
+continuous on polyhedral domains, so equality on a dense set is equality). So a pair is kept only
+if two of its forms tie for the max along an ARC whose contact segments sweep an area, and a
+triangle only if its tie is active and no two atoms hold its three forms. The arc test parametrises
+the tie conic (rationally through one real point, or as lines when degenerate), takes every real
+root of every condition along it, and tests a point inside each interval -- in DOUBLES, like the
+triangles themselves, erring toward keeping (near-ties count, competitors must win by a margin).
+Measured: erratum Example 2, 6 pairs -> 3 and 60 triangles -> 2, values bit-identical on 4000
+points, 780 s -> 281 s (one run each, shared machine). The 3 kept are exactly the 3 that attained
+the minimum on a 4000-point sample before. Small cases: 3 -> 2 pairs on the 3-convex-edge
+triangle, every triangle dropped on the others.
+
+**Exposed on the way: a hairline crack in envelopeEval.** With the redundant pair gone, one point
+1.5e-8 inside the 3-convex-edge triangle read 17x too high. Not the prune: a kept pair read +Inf
+there, because its quadratic face (row x1 <= 0, tolerance 1.5e-8) and its bridge face (sweeping root
+coalescing with det(M_mu) = 0 at mu = -1) both missed a band x1 in [1.5e-8, 2.7e-8] (37 of 2000
+points). The dropped pair had been masking it. Fixed in the evaluator, not the prune: an uncovered
+point is retried 1e-7 away in eight directions, and the face covering the neighbour is evaluated at
+the point itself. Considered and not taken: widening inRegion's tolerance (does not reach the
+bridge's half of the crack), and keeping redundant pairs (hides the defect only where a redundant
+pair happens to exist).
+
+**A lone pair is meshABLE, and NOT turned on.** One active pair and no triangle means the minimum
+IS that pair's envelope (biconjQ `meshPair` is now shared with the two-piece route for this). What blocked every such case was the same
+refusal, `envelopeMesh:bridgeFaces`: the RATIONAL bridge face (vertex against edge) carried no rows.
+It has them now, exactly and in closed form: concavity is a line, C*scale <= 0, and each row of the
+pair P, a quadratic in t along the parabola, becomes a conic in x at t* = -B/(2C) after multiplying
+by 4C^2 > 0. Its value goes to FP = den(x) z - num(x), FB = -1, so envelopeMeshAlg handles it like
+an algebraic face. Rows agree with bridgeMember on 20000 points per face (8 faces); FP agrees with
+the closed form to 3e-14. The rows are stored as `region`, not `cells`, so the meshers still refuse
+the face: turned on, and after the two mesher fixes below, the meshes were still wrong at a few
+points (erratum Example 1: +Inf at 5 of 4000) and much slower (542 s vs 18 s; an indefinite triangle
+150 s vs 17 s, one run each, shared machine). A minimum over SEVERAL pairs is still an EnvelopeMin:
+its pieces are compared across pairs, which no arrangement here builds.
+
+**And a mesher defect it exposed: `pairOf` read only a face's FIRST pair.** envelopePrune gives a
+dominating face the pairs of the faces it replaced (envelopeEval reads them all), but envelopeMesh
+and envelopeMeshAlg kept `pair(1)`, so a cell owned by such a face looked uncovered for the other
+pairs and was dropped: the first meshes of atom-route pairs (with the rows turned on) came back +infinity EVERYWHERE on the
+cone fixtures of biconjQTest, one indefinite triangle and erratum Example 1. Both meshers now take
+the union of every pair a face covers.
+
+**And a second: a cell's interior point was the STRAIGHT rows' Chebyshev centre only.** Both meshers
+ask a bridge's membership once per cell, at one interior point, and dropped a cell whose curved row
+excludes that centre as undecided. On an indefinite triangle's one-pair envelope that dropped 327 of
+332 cells (mesh +infinity on 902 of 2000 interior points). `cellSamplePoint` now samples a fixed grid
+over the straight polygon's fan and keeps the point deepest inside every row; cellInterior has
+already proved the cell has one. After it: 0 holes, values to 3e-15.

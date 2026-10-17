@@ -47,7 +47,7 @@ function [mesh, info] = envelopeMeshAlg(env)
     [corners, bridges] = splitBridge(env.bridge);
     [C, req, pairOf] = conicTable(env.quad, corners);
     nQuad = numel(env.quad);
-    allPairs = unique([pairOf, cellfun(@(f) f.pairIndex, bridges)]);
+    allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
 
     % ---- the arrangement over the CONIC curves ---------------------------------------------------
     cells = {zeros(0,2)};
@@ -71,7 +71,7 @@ function [mesh, info] = envelopeMeshAlg(env)
         if ~okPt, nUncovered = nUncovered + 1; continue, end
 
         app = applicable(req, rows);
-        here = pairOf(app);
+        here = [pairOf{app}];
         bHere = [];
         for b = 1:numel(bridges)
             if bridgeMember(bridges{b}.pair, pt)
@@ -181,7 +181,7 @@ function [corners, bridges] = splitBridge(bl)
         f = bl{k};
         if strcmp(f.kind, 'corner') && ~isempty(f.con)
             corners{end+1} = f; %#ok<AGROW>
-        elseif isfield(f, 'FP') && isfield(f, 'pair')
+        elseif isfield(f, 'FP') && isfield(f, 'pair') && isfield(f, 'cells')   % cells: its outer bound
             bridges{end+1} = f; %#ok<AGROW>
         else
             error('envelopeMeshAlg:faceKind', ...
@@ -194,12 +194,12 @@ end
 function [C, req, pairOf] = conicTable(faces, corners)
     C = zeros(0,7);
     n = numel(faces) + numel(corners);
-    req = cell(1, n);  pairOf = zeros(1, n);
+    req = cell(1, n);  pairOf = cell(1, n);
     for i = 1:n
         if i <= numel(faces)
-            con = faces(i).con;  pairOf(i) = faces(i).pair(1);
+            con = faces(i).con;  pairOf{i} = faces(i).pair(:).';
         else
-            con = corners{i - numel(faces)}.con;  pairOf(i) = corners{i - numel(faces)}.pairIndex;
+            con = corners{i - numel(faces)}.con;  pairOf{i} = corners{i - numel(faces)}.pairIndex;
         end
         r = zeros(size(con,1), 2);  keep = true(size(con,1), 1);
         for t = 1:size(con,1)
@@ -274,11 +274,17 @@ function [pt, ok] = interiorPoint(C, rows)
         end
         if best <= 0, return, end
     end
-    for g = [8 16 64 256 1024]
-        p = round(cand * g) / g;
-        if holdsAll(C, rows, p), pt = p;  ok = true;  return, end
+    for pass = 1:2
+        for g = [8 16 64 256 1024]
+            p = round(cand * g) / g;
+            if holdsAll(C, rows, p), pt = p;  ok = true;  return, end
+        end
+        if holdsAll(C, rows, cand), pt = cand;  ok = true;  return, end
+        if pass == 1                                  % a curved row excludes the centre
+            [cand, found] = cellSamplePoint(C, rows, H, R);
+            if ~found, return, end
+        end
     end
-    if holdsAll(C, rows, cand), pt = cand;  ok = true; end
 end
 
 function tf = holdsAll(C, rows, p)

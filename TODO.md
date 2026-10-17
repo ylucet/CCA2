@@ -7,9 +7,17 @@
 2026-10-14 on `c299801`: `--fast` 765/0 over 60 suites in 616 s, `--normal` 34/0 over 8 suites in
 1948 s; `--slow` not run (stopped for low memory, to be run on another machine).
 
-- [ ] **1. Mesh EnvelopeMin and prune its atom pairs** -- only pairs adjacent in `conjQ(f)`'s mesh
-      (erratum Step 1's active pairs). The main blocker for switching the `biconj` default. Detail
-      under "EnvelopeMin is not meshed" below.
+- [~] **1. Mesh EnvelopeMin and prune its atom pairs** -- PRUNE DONE 2026-10-16 (active pairs and
+      triangles only; Example 2 6 -> 3 pairs, 60 -> 2 triangles, 780 -> 281 s). MESH NOT DONE:
+      (a) ONE active pair (4 of 6 atom fixtures) is meshable in principle -- the rational bridge
+      face now has exact rows (`region`) and FP, and two mesher defects are fixed -- but turned on
+      (rename `region` -> `cells` in bridgeFaceRat, call meshPair in biconjQ) it is still WRONG at a
+      few points and much SLOWER: erratum Example 1 +Inf at 5 of 4000 points and 542 s vs 18 s; an
+      indefinite triangle off by 1.3e-6 rel and 150 s vs 17 s (one run each, shared machine). Three
+      defects found on this path, so stopped here. Next: find the 5 Inf points (likely cell
+      boundaries the sampled interior point misreads), then the cost (arrangement size).
+      (b) SEVERAL pairs (Example 2, the 3-convex-edge triangle) need an arrangement across pairs.
+      DECISIONS.md 2026-10-16.
 - [ ] **2. Make the arrangement scale** -- poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
@@ -19,7 +27,7 @@
       4-5 h; both `biconjCPLQTest` tests are switched off (assumeFail) until then. Matters less once
       `'exact'` is the default.
 - [ ] **5. Suite time** -- `erratumBiconjTest` ~30 min, so `--normal` ran 32 min against its 10-min
-      budget. Move Example 2 to the slow bucket, or cache its EnvelopeMin per `plqStage`.
+      budget. (2026-10-16: 467 s after the pair prune, one run with 2 other suites alongside.) Move Example 2 to the slow bucket, or cache its EnvelopeMin per `plqStage`.
 - [ ] **6. Two bridge faces owning one cell** (`envelopeMeshAlg:twoBridges`) -- refused by name,
       never observed. Leave it until an input reaches it.
 - [ ] **7. Decide the `biconj` default** once items 1-2 are done (Yves's call).
@@ -88,7 +96,8 @@ DOES carry the value and cannot be reduced the same way.
       (each pair's faces only see that pair's curves), or prune curves that bound no live face
       before arranging.
 
-- [ ] **EnvelopeMin is not meshed, and builds ALL atom pairs.** biconjQ returns it where it used to
+- [~] **EnvelopeMin is not meshed, and builds ALL atom pairs.** (2026-10-16: prune done, one-pair
+      case not yet meshed -- see item 1 at the top.) biconjQ returns it where it used to
       refuse: it answers eval but is not an AlgCon. Two follow-ups: prune pairs/triples to the
       ones adjacent in conjQ(f)'s mesh (erratum Step 1 only needs active pairs), and mesh the
       minimum (envelopePrune/envelopeMesh take one pair's faces today).

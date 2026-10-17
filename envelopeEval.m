@@ -73,30 +73,33 @@ function [val, who] = envelopeEval(env, X)
     diverges = false(n,1);
 
     for p = pairs
-        cover = false(n,1);
-        pv = -inf(n,1);  pk = repmat({'none'}, n, 1);  pi = zeros(n,1);
-        for k = find(arrayfun(@(f) any(f.pair == p), env.quad))
-            f = env.quad(k);
-            in = inRegion(f.con, X);
-            if ~any(in), continue, end
-            v = ratQ.evalFace(f.num, f.den, X(in,:));
-            idx = find(in);
-            upd = v > pv(idx);
-            pv(idx(upd)) = v(upd);
-            pk(idx(upd)) = {'quad'};
-            pi(idx(upd)) = k;
-            cover(idx) = true;
-        end
-        for k = 1:numel(env.bridge)
-            face = env.bridge{k};
-            if face.pairIndex ~= p, continue, end
-            in = faceOwns(face, X);
-            idx = find(in);
-            for j = idx(:).'
-                v = bridgeValue(face, X(j,:));
-                if ~isfinite(v), continue, end
-                cover(j) = true;
-                if v > pv(j), pv(j) = v;  pk{j} = 'bridge';  pi(j) = k; end
+        live = find(~diverges);              % a point another pair already sent to +Inf stays there
+        if isempty(live), break, end
+        [pv, pk, pi, cover] = deal(-inf(n,1), repmat({'none'}, n, 1), zeros(n,1), false(n,1));
+        [pv(live), pk(live), pi(live), cover(live)] = pairValue(env, p, X(live,:));
+        % A HAIRLINE CRACK IS NOT A DIVERGENCE (2026-10-16). Where a pair's faces meet, each
+        % membership test has its own tolerance, and next to a degenerate boundary they can both
+        % miss a band ~1e-8 wide: measured on an indefinite triangle, a bridge face whose sweeping
+        % root coalesces with det(M_mu) = 0 at mu = -1, beside a quadratic face cut at x1 <= 0 --
+        % 37 of 2000 points with x1 in [1.5e-8, 2.7e-8] read +Inf from a pair whose domain is the
+        % whole triangle. So an uncovered point is retried at eight points 1e-7 away; if the pair
+        % covers one of them it is finite at x (its domain is closed), and the face that covered
+        % the neighbour is evaluated at x itself. A point that far inside a crack but outside the
+        % domain is within 1e-7 of it, and the envelope is continuous up to that boundary.
+        miss = live(~cover(live)).';
+        if ~isempty(miss)
+            h = 1e-7 * max(1, max(abs(X(miss,:)), [], 2));
+            dirs = [1 0; -1 0; 0 1; 0 -1; 1 1; 1 -1; -1 1; -1 -1] ./ [1; 1; 1; 1; sqrt([2; 2; 2; 2])];
+            for d = 1:size(dirs,1)
+                if isempty(miss), break, end
+                [~, nk, ni, nc] = pairValue(env, p, X(miss,:) + h.*dirs(d,:));
+                for t = find(nc).'
+                    i = miss(t);
+                    v = faceValueAt(env, nk{t}, ni(t), X(i,:));
+                    if ~isfinite(v), continue, end
+                    pv(i) = v;  pk{i} = nk{t};  pi(i) = ni(t);  cover(i) = true;
+                end
+                h = h(~nc);  miss = miss(~nc);
             end
         end
         diverges = diverges | ~cover;
@@ -111,6 +114,46 @@ function [val, who] = envelopeEval(env, X)
     for i = find(fin).'
         who(i).kind = bestKind{i};
         who(i).idx  = bestIdx(i);
+    end
+end
+
+% ==================================================================================================
+function [pv, pk, pi, cover] = pairValue(env, p, X)
+% One cell pair's contribution: the max over its faces that own each point, and whether any does.
+    n = size(X,1);
+    cover = false(n,1);
+    pv = -inf(n,1);  pk = repmat({'none'}, n, 1);  pi = zeros(n,1);
+    for k = find(arrayfun(@(f) any(f.pair == p), env.quad))
+        f = env.quad(k);
+        in = inRegion(f.con, X);
+        if ~any(in), continue, end
+        v = ratQ.evalFace(f.num, f.den, X(in,:));
+        idx = find(in);
+        upd = v > pv(idx);
+        pv(idx(upd)) = v(upd);
+        pk(idx(upd)) = {'quad'};
+        pi(idx(upd)) = k;
+        cover(idx) = true;
+    end
+    for k = 1:numel(env.bridge)
+        face = env.bridge{k};
+        if face.pairIndex ~= p, continue, end
+        in = faceOwns(face, X);
+        idx = find(in);
+        for j = idx(:).'
+            v = bridgeValue(face, X(j,:));
+            if ~isfinite(v), continue, end
+            cover(j) = true;
+            if v > pv(j), pv(j) = v;  pk{j} = 'bridge';  pi(j) = k; end
+        end
+    end
+end
+
+function v = faceValueAt(env, kind, k, x)
+    if strcmp(kind, 'quad')
+        v = ratQ.evalFace(env.quad(k).num, env.quad(k).den, x);
+    else
+        v = bridgeValue(env.bridge{k}, x);
     end
 end
 

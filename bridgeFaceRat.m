@@ -168,6 +168,23 @@ function [face, info] = buildFace(u, w, nu, rq, rl, rc, rd, b1, k1, d, P)
                        'rq', rq, 'rl', rl, 'rc', rc, 'rd', rd, ...
                        'B', B, 'C', C, 'scale', scale, 'P', P);
     face.wit = witnessRat(face.pair);
+    % WHAT THE MESH NEEDS (2026-10-16): the face's region as ROWS and its value IMPLICITLY, the two
+    % things an algebraic bridge face carries. Both are closed form here. The value v = num/den is
+    % the one root of den(x)*z - num(x) = 0. The region is EXACT, not an outer bound: concavity is
+    % C*scale <= 0, a line, and each row of P, a quadratic in t along the parabola, becomes a CONIC
+    % in x at t* = -B/(2C) once multiplied by 4C^2 > 0. A face whose rows overflow keeps neither.
+    %
+    % HELD AS `region`, NOT `cells`, ON PURPOSE: the meshers read `cells`, and with it they mesh
+    % these envelopes -- but measured 2026-10-16 the result is not yet right (erratum Example 1:
+    % +Inf at 5 of 4000 points, 30x slower than the face list; TODO item 1), so envelopeMesh keeps
+    % refusing the face by name (bridgeFaces). Renaming the field is what turns it on.
+    try
+        face.region = {regionRows(face.pair)};
+        face.FP = implicitValue(face.fN, face.den);
+        face.FB = -1;
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+    end
     info.maxCoeff = max(abs([face.fN, face.den]));
     info.scale = scale;
 end
@@ -273,6 +290,47 @@ function [num, den] = numDenBig(A, B, C, scale)
     Nm = both(:,:,1);  Dm = both(:,:,2);
     num = [Nm(3,1), Nm(2,2), Nm(1,3), Nm(2,1), Nm(1,2), Nm(1,1)];  % [xx xy yy x y 1]
     den = [Dm(2,1), Dm(1,2), Dm(1,1)];
+end
+
+function R = regionRows(pr)
+% The face as conic rows [a b c d e f side branch]: concave along the parabola, and t*(x) in P.
+    R = zeros(0,8);
+    R = addRow(R, -sign(pr.scale) * [0 0 0 pr.C]);                 % C*scale <= 0
+    rs = sign(pr.rd);                                              % nu > 0, so this is rd*nu's sign
+    for r = 1:size(pr.P,1)
+        a = pr.P(r,1:2);  c = pr.P(r,3);
+        aw = ratQ.chkB(a*pr.w, abs(a)*abs(pr.w), 'P row along the axis');
+        au = ratQ.chkB(a*pr.u, abs(a)*abs(pr.u), 'P row along the range');
+        % rd*nu*(row at s(t)) = al t^2 + be t + ga
+        al = ratQ.chk(aw*pr.rq, 'row t^2');
+        be = ratQ.chkB(au*pr.rd + aw*pr.rl, abs(au*pr.rd) + abs(aw*pr.rl), 'row t');
+        ga = ratQ.chkB(aw*pr.rc + c*pr.rd*pr.nu, abs(aw*pr.rc) + abs(c*pr.rd*pr.nu), 'row 1');
+        % times 4C^2 at t = -B/(2C):  al B^2 - 2 be B C + 4 ga C^2
+        raw = ratQ.chkB(al*polyMulAff(pr.B, pr.B) - 2*be*polyMulAff(pr.B, pr.C) ...
+                        + 4*ga*polyMulAff(pr.C, pr.C), ...
+                        abs(al)*polyMulAff(abs(pr.B), abs(pr.B)) + 2*abs(be)*polyMulAff(abs(pr.B), abs(pr.C)) ...
+                        + 4*abs(ga)*polyMulAff(abs(pr.C), abs(pr.C)), 'P row in x');
+        R = addRow(R, rs * raw);
+    end
+end
+
+function R = addRow(R, raw)
+% raw >= 0 as a canonical conic row; a constant row is dropped (it holds, or the face is empty and
+% the mesh finds no cell for it).
+    if all(raw(1:5) == 0), return, end
+    nz = find(raw ~= 0, 1);
+    R(end+1,:) = [ratQ.conic(raw), sign(raw(nz)), 0];
+end
+
+function FP = implicitValue(fN, den)
+% den(x)*z - q(x), q the face numerator as [xx xy yy x y 1]: FP(i+1,j+1,k+1) multiplies x^i y^j z^k.
+    q = [fN(5)/2, fN(6), fN(7)/2, fN(8), fN(9), fN(10)];
+    if any(q ~= fix(q)), q = 2*q;  den = 2*den; end
+    FP = zeros(3, 3, 2);
+    FP(3,1,1) = -q(1);  FP(2,2,1) = -q(2);  FP(1,3,1) = -q(3);
+    FP(2,1,1) = -q(4);  FP(1,2,1) = -q(5);  FP(1,1,1) = -q(6);
+    FP(2,1,2) = den(1); FP(1,2,2) = den(2); FP(1,1,2) = den(3);
+    FP = ratQ.chk(FP, 'implicit value');
 end
 
 function c = polyMulAff(f, g)

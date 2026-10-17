@@ -95,6 +95,33 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
         end
     end
 
+    methods (Test)
+        function exampleTwoAssemblesOnlyItsACTIVEPairs(testCase)
+        % erratum Step 1: only atom pairs whose conjugate forms tie for f* along an arc, and only
+        % triangles whose three forms need three atoms. Example 2 has four edge atoms: 6 pairs and
+        % 60 triangles before (2026-10-16), of which exactly pairs (1,3), (2,3), (3,4) ever attained
+        % the minimum on a 4000-point sample. Values are pinned by the tests above.
+            h = erratumBiconjTest.biconjCached(testCase, 2);
+            testCase.verifyClass(h, 'EnvelopeMin');
+            testCase.verifyEqual(numel(h.pairs), 3, 'active pairs of Example 2');
+            testCase.verifyEqual(numel(h.tris), 2, 'active triangles of Example 2');
+        end
+
+        function aPointBesideTheEDGEIsNotPlusInfinity(testCase)
+        % Found 2026-10-16 when the prune dropped a redundant pair: on the 3-convex-edge triangle a
+        % pair's bridge face and its quadratic face both missed a band ~1e-8 wide along x1 = 0
+        % (the bridge's sweeping root meets det(M_mu) = 0 at mu = -1), so the pair read +Inf there
+        % and the minimum took a pair 17x too high. envelopeEval now retries such a point 1e-7
+        % away. On that edge co f = f = x2^2, and this close to it the gap is O(x1).
+            V = [0 0; 1 0; 0 1];
+            f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], [0 0 0 0 2 -3 2 0 0 0], [1 0; 1 0; 1 0]);
+            h = biconjQ(f);
+            x2 = 0.058899440267143444;
+            X = [linspace(1e-9, 1e-7, 400).', x2*ones(400,1)];
+            testCase.verifyEqual(h.eval(X), x2^2*ones(400,1), 'AbsTol', 1e-6);
+        end
+    end
+
     methods (Static)
         function h = biconjCached(testCase, which)
         % biconjQ of erratum example `which`, computed once per MATLAB session, with the

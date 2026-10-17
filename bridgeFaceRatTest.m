@@ -107,6 +107,35 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
             testCase.verifyEqual(bridgeMember(pr, X), want);
         end
 
+        function theROWSAreTheFaceAndFPCarriesItsValue(testCase)
+        % What the mesh needs (2026-10-16): `region` is the face's EXACT region as conic rows, and
+        % FP/FB its value implicitly -- without them nothing can place a vertex-against-edge face
+        % in an arrangement (envelopeMesh:bridgeFaces). Not yet read by the meshers: see bridgeFaceRat.
+            cases = {'basic', zeros(0,3); 'shifted', zeros(0,3); 'shifted', [1 0 0; 0 1 0]; ...
+                     'scaled', zeros(0,3)};                  % the pair P meets only 'shifted'
+            for c = 1:size(cases,1)
+                name = cases(c,1);  P = cases(c,2);
+                fx = fixtureByName(name{1});
+                face = bridgeFaceRat(fx.n1, fx.d1, fx.n2, fx.d2, P{1});
+                testCase.assertTrue(isfield(face, 'region') && isfield(face, 'FP'), ...
+                    sprintf('%s: no rows / no implicit value', name{1}));
+                rng(11);
+                X = face.wit(1:2)/face.wit(3) + (rand(2000,2)*2 - 1)*6;
+                R = face.region{1};
+                inR = true(size(X,1),1);
+                for r = 1:size(R,1)
+                    inR = inR & R(r,7) * QuaPar.evalConic(R(r,1:6), X) >= 0;
+                end
+                inP = bridgeMember(face.pair, X);
+                testCase.assumeTrue(any(inP) && any(~inP), 'fixture must straddle the face');
+                testCase.verifyEqual(inR, inP, sprintf('%s, %d rows of P', name{1}, size(P{1},1)));
+                Xi = X(inP,:);
+                want = arrayfun(@(i) evalRat(face, Xi(i,:)), (1:size(Xi,1)).');
+                testCase.verifyEqual(algBranch(face.FP, Xi, face.FB), want, 'RelTol', 1e-12, ...
+                    'AbsTol', 1e-12, sprintf('%s: FP/FB is not the value', name{1}));
+            end
+        end
+
         function theWITNESSIsFoundWhereverTheFaceIs(testCase)
         % Captured 2026-10-11 from biconjQ on erratum Example 2 (coordinates up to 60): the face
         % lies outside the +-8 grid the witness search walked, so it raised noWitness. The witness

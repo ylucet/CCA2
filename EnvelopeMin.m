@@ -4,7 +4,9 @@ classdef EnvelopeMin
 %   contact triangles. `biconjAtoms` builds it; its header says why the minimum IS co f.
 %
 % This is NOT a node of the AlgCon lattice: it is not meshed into one subdivision. It answers
-% `eval`, which is what every consumer of biconjQ's result used; meshing it is a separate item.
+% `eval`, which is what every consumer of biconjQ's result used. Since 2026-10-16 it holds only the
+% ACTIVE pairs and triangles (biconjAtoms' activeAtomPairs). Where that leaves ONE pair and no
+% triangle the minimum is that pair's envelope, which the meshers can almost take (TODO item 1).
 
     properties
         pairs   % cell array of envelopeAssemble results
