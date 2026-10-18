@@ -17,6 +17,9 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
 
     methods (Test)
 
+        % Example 2's tests MOVED 2026-10-17 to erratumBiconjEx2Test (slow bucket): biconjQ on it is
+        % ~5 min, which kept this suite over the normal bucket's 10-minute budget (TODO item 5).
+
         function ex1BiconjugateIsMeshed(testCase)
         % One active pair (a convex piece and a vertex), so biconjQ meshes it (2026-10-17): an AlgCrv
         % whose two corners from Q(sqrt 26) and Q(sqrt 6) overlap in 18 cells, value-safe (max).
@@ -38,34 +41,6 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             [f, pieces] = erratumExamplesTest.example1();
             erratumExamplesTest.checkEnvelopeDefinition(testCase, h, f, pieces, ...
                 erratumExamplesTest.ex1DualSample());
-        end
-
-        function ex2BiconjugateMatchesTheErratumCells(testCase)
-        % Cell 6's test point was (32,-5.5), which lies in cell 4, not cell 6 (fixed 2026-10-11 in
-        % ex2BiconjCells); with a point inside cell 6 the erratum's formula and biconjQ agree.
-            h = erratumBiconjTest.biconjCached(testCase, 2);
-            [X, want, names] = erratumExamplesTest.ex2BiconjCells();
-            got = h.eval(X);
-            for i = 1:size(X,1)
-                testCase.verifyEqual(got(i), want(i), 'RelTol', 1e-9, 'AbsTol', 1e-7, ...
-                    sprintf('Example 2, %s at (%g,%g)', names{i}, X(i,1), X(i,2)));
-            end
-        end
-
-        function ex2BiconjugateIsAffineOnTheMiddleCell(testCase)
-        % Cell 4 = conv{G1,G2,G3} carries s_bar'x - f*(s_bar), AFFINE; s_bar has no closed form,
-        % so assert the property: the value at a convex combination is the combination of values.
-            h = erratumBiconjTest.biconjCached(testCase, 2);
-            P = [36.5 0.9; 37.5 1.4; 35.5 0.2];       % inside conv{G1,G2,G3}
-            w = [0.2 0.5 0.3];
-            testCase.verifyEqual(h.eval(w*P), w*h.eval(P), 'RelTol', 1e-9, 'AbsTol', 1e-7);
-        end
-
-        function ex2BiconjugateSatisfiesTheDefinition(testCase)
-            h = erratumBiconjTest.biconjCached(testCase, 2);
-            [f, pieces] = erratumExamplesTest.example2();
-            erratumExamplesTest.checkEnvelopeDefinition(testCase, h, f, pieces, ...
-                erratumExamplesTest.ex2DualSample());
         end
 
         function ex3BiconjugateIsX1Squared(testCase)
@@ -105,17 +80,6 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
     end
 
     methods (Test)
-        function exampleTwoAssemblesOnlyItsACTIVEPairs(testCase)
-        % erratum Step 1: only atom pairs whose conjugate forms tie for f* along an arc, and only
-        % triangles whose three forms need three atoms. Example 2 has four edge atoms: 6 pairs and
-        % 60 triangles before (2026-10-16), of which exactly pairs (1,3), (2,3), (3,4) ever attained
-        % the minimum on a 4000-point sample. Values are pinned by the tests above.
-            h = erratumBiconjTest.biconjCached(testCase, 2);
-            testCase.verifyClass(h, 'EnvelopeMin');
-            testCase.verifyEqual(numel(h.pairs), 3, 'active pairs of Example 2');
-            testCase.verifyEqual(numel(h.tris), 2, 'active triangles of Example 2');
-        end
-
         function aSINGLEActivePairIsMeshedAndKeepsItsValues(testCase)
         % Two atoms leave one pair; with no triangle needing three atoms the minimum IS that pair's
         % envelope, so biconjQ meshes it (2026-10-17). Four defects stood in the way, each red here

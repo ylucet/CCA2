@@ -22,8 +22,10 @@
 - [ ] **4. `biconjCPLQ` on the poly2 kinks** (legacy engine): crashes fixed, runs take more than
       4-5 h; both `biconjCPLQTest` tests are switched off (assumeFail) until then. Matters less once
       `'exact'` is the default.
-- [ ] **5. Suite time** -- `erratumBiconjTest` ~30 min, so `--normal` ran 32 min against its 10-min
-      budget. (2026-10-16: 467 s after the pair prune, one run with 2 other suites alongside.) Move Example 2 to the slow bucket, or cache its EnvelopeMin per `plqStage`.
+- [x] **5. Suite time** -- DONE 2026-10-17: Example 2's four tests moved to `erratumBiconjEx2Test`
+      (slow, 376 s); `erratumBiconjTest` is 337 s, was 637 s (single runs, shared machine). The
+      normal bucket as a whole is still over its 10-min budget -- envelopeAssembleTest alone is
+      ~590 s.
 - [x] **6. Two bridge faces owning one cell** -- no longer refused (2026-10-17): overlapping pieces, value by max. Was: (`envelopeMeshAlg:twoBridges`) -- refused by name,
       never observed. Leave it until an input reaches it.
 - [ ] **7. Decide the `biconj` default** once items 1-2 are done (Yves's call).
