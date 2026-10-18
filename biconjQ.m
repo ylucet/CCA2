@@ -328,7 +328,7 @@ function h = biconjQ(obj)
                 h = biconjAtoms(obj);
                 if numel(h.pairs) == 1 && isempty(h.tris)
                     try
-                        h = meshPair(envelopePrune(h.pairs{1}));
+                        h = meshPair(envelopePrune(h.pairs{1}), hullRows(obj));
                     catch ME
                         if ~isDeclined(ME), rethrow(ME), end
                     end
@@ -379,10 +379,10 @@ function h = assembledEnvelope(obj)
     pieces = splitPieces(obj);
     gA = conjQ(pieces{1});
     gB = conjQ(pieces{2});
-    h = meshPair(envelopePrune(envelopeAssemble(gA, gB)));
+    h = meshPair(envelopePrune(envelopeAssemble(gA, gB)), hullRows(obj));
 end
 
-function h = meshPair(env)
+function h = meshPair(env, dom)
 % One pair's face list as a mesh: QuaCon when every face is quadratic, AlgCrv when a bridge face
 % competes with a quadratic one, the unmeshed EnvelopeMin where neither arrangement is built.
 %
@@ -393,7 +393,7 @@ function h = meshPair(env)
 % irrational face at all, and then the conic mesh gives the same function as a QuaCon.
     if hasIrrationalFace(env)
         try
-            m = envelopeMeshAlg(env);
+            m = envelopeMeshAlg(env, dom);
             if any(strcmp({m.kind}, 'bridge')), h = assembleAlgCrv(m); return, end
         catch ME
             if ~ismember(ME.identifier, {'envelopeMeshAlg:faceKind', 'envelopeMeshAlg:arrangementSize'})
@@ -423,6 +423,24 @@ function h = meshPair(env)
             otherwise
                 rethrow(ME)
         end
+    end
+end
+
+function R = hullRows(obj)
+% dom f** = conv(dom f) for a BOUNDED f: its edges as integer rows [a b c], a x + b y + c >= 0, from
+% the EXACT vertices. Empty for an unbounded f -- the mesh is then not clipped.
+    R = zeros(0,3);
+    if any(obj.E(:,3) == 0), return, end
+    V = obj.VN ./ obj.VD;
+    k = convhull(V(:,1), V(:,2));               % counter-clockwise, closed
+    for i = 1:numel(k) - 1
+        a = k(i);  b = k(i+1);
+        pN = obj.VN(a,:);  pD = obj.VD(a);  qN = obj.VN(b,:);  qD = obj.VD(b);
+        n = ratQ.chkB([-(qN(2)*pD - pN(2)*qD), qN(1)*pD - pN(1)*qD], ...
+                      [abs(qN(2)*pD) + abs(pN(2)*qD), abs(qN(1)*pD) + abs(pN(1)*qD)], 'hull edge');
+        r = ratQ.chkB([n*pD, -(n*pN.')], [abs(n)*pD, abs(n)*abs(pN.')], 'hull edge');
+        g = gcd(gcd(r(1), r(2)), r(3));
+        R(end+1,:) = r / g; %#ok<AGROW>
     end
 end
 

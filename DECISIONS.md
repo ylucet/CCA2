@@ -8545,3 +8545,43 @@ to 1.1e-12, no holes.
 envelopeMeshAlg first bypassed envelopeMesh's 40-curve budget, and envelopeAssembleTest's poly2 kink
 (85 curves) then ran >70 min instead of being declined. envelopeMeshAlg now has the same budget
 (`envelopeMeshAlg:arrangementSize`), and meshPair returns the face list unmeshed on it, as before.
+
+## 2026-10-17 — the poly2 kink MESHES: clip, sparse rows, the missing sweep-end curves, majority membership
+
+TODO item 2. The kink at c = -2 had 85 curves and its global arrangement passed 370 cells at curve 30
+and did not finish in 90 min. Now: 905 cells, 2549 faces, 256 s, equal to the face list on 2000
+points (0 off, 0 holes). What it took, each measured on the cached face list:
+
+**Clip to dom f**.** For a bounded f, dom f** = conv(dom f); biconjQ passes its exact hull rows
+(`hullRows`) and the arrangement starts from that polygon. 27 of 85 curves miss it outright.
+
+**Record a row only where its curve splits the cell.** A curve missing a cell has one sign there,
+read at the cell's interior point when a face demands it; recording it anyway made every later
+emptiness test carry rows that bound nothing. Clipped alone the kink reached 788 cells at curve 55
+in 1515 s; with sparse rows the whole arrangement is a few minutes.
+
+**The curves the bridge's outer bound omits.** bridgeFaceAlg gives a sweep end a row only when
+grad g_k is invertible. A RANK-1 end lies on a rational line, and it was missing; a double-line row
+(x - 1)^2 never splits a cell, its line does. Both now join the curve table as splitting curves.
+
+**A bridge's membership by MAJORITY of five spread points, not one.** The one point is rounded to a
+dyadic grid, and on the kink it landed on a special line where a DEGENERATE bridge (both ends
+rank-1) owns a measure-zero set: a whole cell went to a bridge owning none of it (0 of 1922
+samples), 2.7e-4 too high. Not refuted: the predicate is constant on a cell up to measure zero.
+
+**Thin cells.** cellSamplePoint refines its grid 12 -> 48 -> 192 when no point is found (a sliver hid
+a hole). 525 of 905 cells still yield no point; none of 2000 samples falls in one, consistent with
+cellInterior KEEPING its unsure cells ("keeping only costs a cell") -- they are empty, not holes.
+
+**Empty pieces, exactly.** One piece per applicable quadratic made 9881 faces. A piece is dropped
+when cellInterior proves it empty -- first against the ONE quadratic that beats it most often on the
+samples (one extra row is cheap), then against all. 9881 -> 2549 faces; 668 s -> 256 s for that test.
+
+**Moved to the slow bucket**: biconjQ on the kink now meshes, so its test left envelopeAssembleTest
+(normal) for `kinkMeshTest`, which also checks the mesh against the face list.
+
+**Sparse rows inside, FULL rows out.** Recording only splitting curves broke algCrvMeshTest: a face
+of the c = -2 fixture had a vertex ending other than two arcs (bisected: sparse rows alone; the other
+item-2 changes each left it intact). Faces are traced from their rows, so before a cell is emitted
+every unrecorded curve gets its side, read at the cell's five vote points. Feeding the full rows to
+the exact emptiness tests too cost 1734 s on the kink, so those keep the sparse rows: 251 s.

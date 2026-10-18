@@ -1,4 +1,4 @@
-function [mesh, info] = envelopeMeshAlg(env)
+function [mesh, info] = envelopeMeshAlg(env, dom)
 % envelopeMeshAlg  The envelope as a mesh whose EDGES may be algebraic -- the arrangement that
 %   `envelopeMesh` refuses when a bridge face competes.
 %
@@ -41,9 +41,10 @@ function [mesh, info] = envelopeMeshAlg(env)
 % `envelopeMeshAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
 % Q(sqrt 6), and 18 of its cells overlap.
 
-    if nargin ~= 1
-        error('envelopeMeshAlg:nargin', 'expects (env).');
+    if nargin < 1 || nargin > 2
+        error('envelopeMeshAlg:nargin', 'expects (env) or (env, dom).');
     end
+    if nargin < 2, dom = zeros(0,3); end
     if ~isstruct(env) || ~all(isfield(env, {'quad', 'bridge'}))
         error('envelopeMeshAlg:shape', 'env must be what envelopeAssemble returns.');
     end
@@ -54,27 +55,48 @@ function [mesh, info] = envelopeMeshAlg(env)
     nQuad = numel(env.quad);
     allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
     C = addCornerCrossings(C, corners);
-    % THE SAME CURVE BUDGET AS envelopeMesh, for the same reason: one global arrangement, whose cost
-    % grows far faster than its curve count. Without it the poly2 kink at c = -2 (85 curves), once
-    % biconjQ sent irrational-face envelopes here first (2026-10-17), ran >70 min instead of being
-    % declined. envelopeEval answers for the face list.
-    if size(C,1) > 40
-        error('envelopeMeshAlg:arrangementSize', ...
-            'the arrangement has %d curves (budget 40), and a global arrangement of that size does not finish.', ...
-            size(C,1));
-    end
+    C = addBridgeCurves(C, bridges);   % without them a bridge's membership can change inside a cell
+    C = splitLineCurves(C);
 
     % ---- the arrangement over the CONIC curves ---------------------------------------------------
+    % THREE THINGS KEEP IT SMALL (2026-10-17, the poly2 kink at c = -2: 85 curves, >90 min before).
+    %   * CLIPPED to `dom` when the caller knows it -- dom f** is conv(dom f) for a bounded f, and
+    %     every cell outside it is a hole anyway (316 of 332 cells on an indefinite triangle);
+    %   * a row is RECORDED only where its curve splits the cell. A curve missing a cell has one sign
+    %     on it, read at the cell's interior point when a face demands it (`applicable`), so it adds
+    %     nothing to every later emptiness test the cell goes through;
+    %   * a CELL budget, not a curve budget: what costs is the cells, and clipped, a curve count says
+    %     little about them.
     cells = {zeros(0,2)};
+    if ~isempty(dom)
+        base = zeros(0,2);
+        for i = 1:size(dom,1)
+            raw = [0 0 0 dom(i,:)];
+            key = [ratQ.conic(raw), 0];
+            hit = find(all(C == key, 2), 1);
+            if isempty(hit), C(end+1,:) = key;  hit = size(C,1); end %#ok<AGROW>
+            base(end+1,:) = [hit, sign(raw(find(raw ~= 0, 1)))]; %#ok<AGROW>
+        end
+        cells = {base};
+    end
+    maxCells = 3000;
     for j = 1:size(C,1)
         next = {};
         for k = 1:numel(cells)
-            for sd = [1 -1]
-                cand = [cells{k}; j, sd];
-                if cellInterior(C, cand), next{end+1} = cand; end %#ok<AGROW>
+            if any(cells{k}(:,1) == j), next{end+1} = cells{k}; continue, end %#ok<AGROW>
+            live = [cellInterior(C, [cells{k}; j, 1]), cellInterior(C, [cells{k}; j, -1])];
+            if all(live)
+                next{end+1} = [cells{k}; j, 1];  next{end+1} = [cells{k}; j, -1]; %#ok<AGROW>
+            elseif any(live)
+                next{end+1} = cells{k}; %#ok<AGROW>     % the curve misses this cell
             end
         end
         cells = next;
+        if numel(cells) > maxCells
+            error('envelopeMeshAlg:arrangementSize', ...
+                'the arrangement passed %d cells at curve %d of %d; envelopeEval answers for the face list.', ...
+                maxCells, j, size(C,1));
+        end
     end
 
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
@@ -85,11 +107,22 @@ function [mesh, info] = envelopeMeshAlg(env)
         [pt, okPt] = interiorPoint(C, rows);
         if ~okPt, nUncovered = nUncovered + 1; continue, end
 
-        app = applicable(req, rows);
+        app = applicable(req, rows, C, pt);
         here = [pairOf{app}];
         bHere = [];
+        % A BRIDGE'S MEMBERSHIP BY MAJORITY over five spread interior points (2026-10-17). One point,
+        % rounded onto a dyadic grid, can land on a special rational line where a DEGENERATE bridge
+        % (two rank-1 ends) owns a set of measure zero; the poly2 kink gave such a bridge a whole
+        % cell it owns no part of (0 of 1922 samples), 2.7e-4 too high. The predicate is constant on
+        % a cell up to measure zero, so a majority reads the cell's value.
+        [Q, Pw] = votePoints(C, rows, pt);
+        % THE FULL SIGN VECTOR before anything is emitted: the arrangement records only the curves
+        % that split a cell, but a face's rows are what its boundary is traced from, and with the
+        % sparse rows algCrvMeshTest found a face vertex ending other than two arcs (2026-10-17). A
+        % curve the cell does not record has one sign on it -- read at the cell's points.
+        rowsOut = fullRows(C, rows, Q);      % emitted; the exact tests below keep the sparse rows
         for b = 1:numel(bridges)
-            if bridgeMember(bridges{b}.pair, pt)
+            if sum(bridgeMember(bridges{b}.pair, Q)) * 2 > size(Q,1)
                 here(end+1) = bridges{b}.pairIndex; %#ok<AGROW>
                 bHere(end+1) = b; %#ok<AGROW>
             end
@@ -113,7 +146,7 @@ function [mesh, info] = envelopeMeshAlg(env)
             nOverlap = nOverlap + 1;
         end
 
-        sub = winnerFaces(env.quad, quadApp, irr, rows, C, pt);
+        sub = winnerFaces(env.quad, quadApp, irr, rows, C, pt, Pw, rowsOut);
         for t = 1:numel(sub)
             nAlg = nAlg + numel(sub(t).alg);
             mesh(end+1) = sub(t); %#ok<AGROW>
@@ -124,20 +157,21 @@ function [mesh, info] = envelopeMeshAlg(env)
 end
 
 % ==================================================================================================
-function out = winnerFaces(quad, quadApp, irr, rows, C, pt)
+function out = winnerFaces(quad, quadApp, irr, rows, C, pt, Q, rowsOut) %#ok<INUSD>
 % Which applicable face is largest, and the rows that say where. A quad-versus-quad boundary is a
 % CONIC and joins the ordinary rows; a quad-versus-bridge boundary is ALGEBRAIC and joins `.alg`.
     out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
-    base = rowsToCon(C, rows);
+    base = rowsToCon(C, rowsOut);
 
     if isempty(irr)
         % No bridge here: the largest quadratic wins, and ties between two of them are conics --
         % one piece PER quadratic (2026-10-17): the winner read at the cell's one point owns only
         % part of the cell, and the rest was left to no face, a hole.
         for j = quadApp(:).'
+            extra = quadOver(quad, quadApp, j);
+            if ~pieceLive(C, rows, extra, Q), continue, end
             out(end+1) = struct('kind', 'quad', 'num', quad(j).num, 'den', quad(j).den, ...
-                                'FP', [], 'FB', 0, 'con', [base; quadOver(quad, quadApp, j)], ...
-                                'alg', emptyAlg()); %#ok<AGROW>
+                                'FP', [], 'FB', 0, 'con', [base; extra], 'alg', emptyAlg()); %#ok<AGROW>
         end
         return
     end
@@ -161,15 +195,71 @@ function out = winnerFaces(quad, quadApp, irr, rows, C, pt)
     % ... and, for EACH quadratic, the piece where it is the largest quadratic and beats every
     % irrational face (one piece for the winner at the cell's point left the rest to no face).
     for j = quadApp(:).'
+        extra = quadOver(quad, quadApp, j);
+        if ~pieceLive(C, rows, extra, Q), continue, end
         algRows = emptyAlg();
         for f = irr
             algRows(end+1) = struct('FP', f{1}.FP, 'FB', f{1}.FB, 'num', quad(j).num, ...
                                     'den', quad(j).den, 'side', 1); %#ok<AGROW>
         end
         out(end+1) = struct('kind', 'quad', 'num', quad(j).num, 'den', quad(j).den, ...
-                            'FP', [], 'FB', 0, 'con', [base; quadOver(quad, quadApp, j)], ...
-                            'alg', algRows); %#ok<AGROW>
+                            'FP', [], 'FB', 0, 'con', [base; extra], 'alg', algRows); %#ok<AGROW>
     end
+end
+
+function rows = fullRows(C, rows, P)
+% Every curve's side on the cell: recorded ones as recorded, the rest by the sign at the cell's points
+% (the majority of the nonzero signs; a curve tangent at one point does not decide it).
+    have = false(size(C,1), 1);  have(rows(:,1)) = true;
+    for j = find(~have).'
+        c = C(j, 1:6);
+        if C(j,7) ~= 0
+            v = sign(ratQ.pairLineEval(c, C(j,7), P));
+        else
+            v = sign(c(1)*P(:,1).^2 + c(2)*P(:,1).*P(:,2) + c(3)*P(:,2).^2 + c(4)*P(:,1) + c(5)*P(:,2) + c(6));
+        end
+        v = v(v ~= 0);
+        if isempty(v), continue, end                  % on the curve throughout: leave it unrecorded
+        rows(end+1,:) = [j, sign(sum(v))]; %#ok<AGROW>
+    end
+end
+
+function [Q, P] = votePoints(C, rows, pt)
+% The cell's interior point and four more spread over the cell (from cellSamplePoint's grid), and
+% the whole grid sample P for a caller looking for witnesses.
+    Q = pt;
+    [~, ok, P] = cellSamplePoint(C, rows, straightRows(C, rows), 1e3);
+    if ok && size(P,1) >= 4
+        Q = [pt; P(round(linspace(1, size(P,1), 4)), :)];
+    end
+    P = [pt; P];
+end
+
+function tf = pieceLive(C, rows, extra, Q)
+% Does the cell, cut to where quadratic j is the largest, keep an interior? Decided exactly by
+% cellInterior on the cell's rows plus `extra` (2026-10-17): one piece per applicable quadratic
+% made 9153 faces on the poly2 kink, most of them empty. A cell point strictly inside every extra
+% row is a WITNESS of interior and spares the exact test (the points are inside the cell already).
+    if isempty(extra), tf = true; return, end
+    inside = true(size(Q,1), 1);
+    for r = 1:size(extra,1)
+        inside = inside & extra(r,7) * QuaPar.evalConic(extra(r,1:6), Q) > 1e-9 * max(abs(extra(r,1:6)));
+    end
+    if any(inside), tf = true; return, end
+    % ONE dominating quadratic empties the piece, and one extra row is a far cheaper exact test than
+    % all of them: try the rows in order of how often they fail on the samples (2026-10-17).
+    fails = zeros(size(extra,1), 1);
+    for r = 1:size(extra,1)
+        fails(r) = sum(extra(r,7) * QuaPar.evalConic(extra(r,1:6), Q) <= 0);
+    end
+    [~, o] = sort(fails, 'descend');
+    for r = o(1:min(3, end)).'
+        if ~cellInterior([C; extra(r, [1:6 8])], [rows; size(C,1) + 1, extra(r,7)])
+            tf = false;  return
+        end
+    end
+    k = size(extra,1);
+    tf = cellInterior([C; extra(:, [1:6 8])], [rows; size(C,1) + (1:k).', extra(:,7)]);
 end
 
 function extra = quadOver(quad, quadApp, j)
@@ -314,17 +404,109 @@ function tf = constHolds(c6, side)
     tf = (side > 0 && c6 >= 0) || (side < 0 && c6 <= 0) || (side == 0 && c6 == 0);
 end
 
-function app = applicable(req, rows)
+function app = applicable(req, rows, C, pt)
+% A face applies where the cell meets every one of its demands. A demanded curve the cell does not
+% record does not cross the cell, so its sign is the one at the cell's interior point.
     app = [];
     for i = 1:numel(req)
         r = req{i};  ok = true;
         for t = 1:size(r,1)
+            if isnan(r(t,1)), ok = false; break, end
             s = rows(rows(:,1) == r(t,1), 2);
-            if isempty(s) || s(1) ~= r(t,2), ok = false; break, end
+            if isempty(s), s = sideAt(C, r(t,1), pt); end
+            if s(1) ~= r(t,2), ok = false; break, end
         end
         if ok, app(end+1) = i; end %#ok<AGROW>
     end
 end
+
+function s = sideAt(C, j, p)
+    c = C(j, 1:6);  br = C(j, 7);
+    if br ~= 0
+        v = ratQ.pairLineEval(c, br, p);
+    else
+        v = c(1)*p(1)^2 + c(2)*p(1)*p(2) + c(3)*p(2)^2 + c(4)*p(1) + c(5)*p(2) + c(6);
+    end
+    s = sign(v);
+end
+
+function C = addBridgeCurves(C, bridges)
+% A bridge's outer bound (`cells`) joins the curve table as curves with no demand, as in envelopeMesh:
+% then no cell straddles the face's boundary and one membership test per cell is sound.
+%
+% AND THE ENDS THE OUTER BOUND OMITS (2026-10-17). bridgeFaceAlg gives a sweep end a row only when
+% grad g_k is invertible (its image of the tie is then a conic). For a RANK-1 grad g_k that end lies
+% on a rational LINE -- the image of the whole plane -- and it was simply missing: on the poly2 kink
+% a bridge with an EMPTY outer bound was handed a whole cell it owns only part of, 2.7e-4 too high.
+% The line joins as a curve; a double-line row's underlying line likewise (splitLineCurves).
+    for b = 1:numel(bridges)
+        blocks = bridges{b}.cells;
+        if ~iscell(blocks), blocks = {blocks}; end
+        for t = 1:numel(blocks)
+            con = blocks{t};
+            for r = 1:size(con,1)
+                c = con(r,1:6);
+                if all(c(1:5) == 0), continue, end
+                br = 0;
+                if size(con,2) >= 8, br = con(r,8); end
+                C = addKey(C, [c, br]);
+            end
+        end
+        pr = bridges{b}.pair;
+        if ~isfield(pr, 'N1'), continue, end                      % a rational face: exact rows
+        for k = 1:2
+            if k == 1, Nk = pr.N1;  mk = pr.m1; else, Nk = pr.N2;  mk = pr.m2; end
+            if all(Nk(:) == 0) || ratQ.detExact(Nk) ~= 0, continue, end
+            u = Nk(:, find(any(Nk ~= 0, 1), 1));                  % the range of a rank-1 Nk
+            w = [-u(2); u(1)];
+            raw = ratQ.chkB([0 0 0, pr.d*w(1), pr.d*w(2), -(w.'*mk)], ...
+                            [0 0 0, abs(pr.d*w(1)), abs(pr.d*w(2)), abs(w).'*abs(mk)], 'sweep end line');
+            C = addKey(C, [ratQ.conic(raw), 0]);
+        end
+    end
+end
+
+function C = addKey(C, key)
+    if isempty(find(all(C == key, 2), 1)), C(end+1,:) = key; end
+end
+
+function C = splitLineCurves(C)
+% A DOUBLE LINE L^2 (a perfect-square conic, branch 0) has one sign on both sides of L, so as a curve
+% it splits no cell; its line L does. Added as its own curve.
+    for j = 1:size(C,1)
+        c = C(j,1:6);
+        if C(j,7) ~= 0 || all(c(1:3) == 0), continue, end
+        L = squareRoot(c);
+        if ~isempty(L), C = addKey(C, [ratQ.conic([0 0 0 L]), 0]); end
+    end
+end
+
+function L = squareRoot(c)
+% [d e f] with (d x + e y + f)^2 a positive multiple of the conic c = [a b c d e f], else [].
+    L = [];
+    a = c(1);  b = c(2);  cc = c(3);
+    if b^2 ~= 4*a*cc, return, end                                 % quadratic part not a square
+    g = gcd(gcd(abs(a), abs(cc)), abs(b));
+    if g == 0, return, end
+    A = a/g;  B = b/g;  Cq = cc/g;
+    if A < 0 || Cq < 0, A = -A;  B = -B;  Cq = -Cq;  sg = -1; else, sg = 1; end
+    p = round(sqrt(A));  q = round(sqrt(Cq));
+    if p^2 ~= A || q^2 ~= Cq, return, end                         % not a square over the integers
+    if B < 0, q = -q; end                                         % (p x + q y)^2 has cross term 2pq
+    if 2*p*q ~= B, return, end
+    % the full conic must be  sg*g*(p x + q y + r)^2 : match the linear and constant terms
+    k = sg*g;
+    if p ~= 0, r = c(4) / (2*k*p); else, r = c(5) / (2*k*q); end
+    if r ~= fix(r), r2 = 2*r; else, r2 = []; end
+    if ~isempty(r2)                                               % allow a half-integer r: scale by 2
+        Lc = [2*p 2*q r2];  kk = k/4;
+    else
+        Lc = [p q r];  kk = k;
+    end
+    want = kk * [Lc(1)^2, 2*Lc(1)*Lc(2), Lc(2)^2, 2*Lc(1)*Lc(3), 2*Lc(2)*Lc(3), Lc(3)^2];
+    if all(abs(want - c) == 0), L = Lc; end
+end
+
 
 function con = rowsToCon(C, rows)
     con = zeros(size(rows,1), 8);

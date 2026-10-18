@@ -23,36 +23,41 @@ function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
     c0 = mean(V, 1);
     [~, o] = sort(atan2(V(:,2) - c0(2), V(:,1) - c0(1)));
     V = V(o,:);
-    n = 12;
-    [I, J] = meshgrid(0:n, 0:n);
-    keep = I + J < n & I > 0 & J > 0;
-    B = [I(keep), J(keep)] / n;                      % strictly inside each fan triangle
-    best = 0;
-    for e = 1:size(V,1)
-        a = V(e,:);  b = V(mod(e, size(V,1)) + 1, :);
-        Q = c0 + B(:,1) * (a - c0) + B(:,2) * (b - c0);
-        for i = 1:size(Q,1)
-            s = slack(C, rows, Q(i,:));
-            if s > 0, P(end+1,:) = Q(i,:); end %#ok<AGROW>
-            if s > best, best = s;  pt = Q(i,:);  ok = true; end
+    % REFINED until a point is found (2026-10-17): a THIN cell -- a sliver between two close curves --
+    % slips through a 12-step grid, and on the poly2 kink 553 of 905 cells did, one of them a hole.
+    for n = [12 48 192]
+        [I, J] = meshgrid(0:n, 0:n);
+        keep = I + J < n & I > 0 & J > 0;
+        B = [I(keep), J(keep)] / n;                  % strictly inside each fan triangle
+        Q = zeros(0,2);
+        for e = 1:size(V,1)
+            a = V(e,:);  b = V(mod(e, size(V,1)) + 1, :);
+            Q = [Q; c0 + B(:,1) * (a - c0) + B(:,2) * (b - c0)]; %#ok<AGROW>
+        end
+        s = slack(C, rows, Q);
+        if any(s > 0)
+            [~, i] = max(s);
+            pt = Q(i,:);  ok = true;  P = Q(s > 0, :);
+            if size(P,1) > 400, P = P(round(linspace(1, size(P,1), 400)), :); end   % enough for a check
+            return
         end
     end
 end
 
-function s = slack(C, rows, p)
-% The smallest relative margin by which p satisfies the cell's rows (<= 0: not strictly inside).
-    s = inf;
+function s = slack(C, rows, X)
+% The smallest relative margin by which each point satisfies the cell's rows (<= 0: not inside).
+    s = inf(size(X,1), 1);
+    nx = max(1, sqrt(sum(X.^2, 2)));
     for t = 1:size(rows,1)
         c = C(rows(t,1), 1:6);  br = C(rows(t,1), 7);  sd = rows(t,2);
         if br ~= 0
-            v = ratQ.pairLineEval(c, br, p);
-            sc = max(1, norm(p));
+            v = ratQ.pairLineEval(c, br, X);
+            sc = nx;
         else
-            v = c(1)*p(1)^2 + c(2)*p(1)*p(2) + c(3)*p(2)^2 + c(4)*p(1) + c(5)*p(2) + c(6);
-            sc = max(abs(c)) * max(1, norm(p))^2;
+            v = c(1)*X(:,1).^2 + c(2)*X(:,1).*X(:,2) + c(3)*X(:,2).^2 + c(4)*X(:,1) + c(5)*X(:,2) + c(6);
+            sc = max(abs(c)) * nx.^2;
         end
-        s = min(s, sd * v / sc);
-        if s <= 0, return, end
+        s = min(s, sd * v(:) ./ sc);
     end
 end
 

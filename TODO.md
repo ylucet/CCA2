@@ -13,7 +13,8 @@
       (Example 2, the 3-convex-edge triangle) is still an EnvelopeMin -- needs an arrangement
       across pairs. Also: overlapping pieces where two irrational faces both win (Example 1, 18
       cells) -- values exact, partition not. DECISIONS.md 2026-10-16, 2026-10-17.
-- [ ] **2. Make the arrangement scale** -- poly2 kink at c = -2, 85 curves, no finish in 90 min.
+- [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink meshes in 256 s (clipped to
+      dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
 - [ ] **3. Detect zero-area faces at assembly** -- redundant (no value change), cause known: drop
