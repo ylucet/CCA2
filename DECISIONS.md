@@ -8595,3 +8595,28 @@ AlgCrv where a bridge face carries the value, EnvelopeMin where several atom pai
 only; meshing that is TODO item 1's remainder). Tests that meant the legacy engine by `.biconj()` now
 say `'cplq'` (biconjCPLQTest, conjCPLQTest, erratumBiconjTest's differential); biconjQTest pins the
 new default.
+
+## 2026-10-18 — a MINIMUM over several atom pairs is meshed (no triangle face), as a min of maxes
+
+TODO item 1's remainder, the narrower construction (Yves: "do 2"). biconjQ hands envelopeMeshAlg a
+cell array of pair envelopes when several pairs are active and no triangle face is needed; one
+arrangement takes all their curves, and each cell is resolved by `minMaxFaces`.
+
+**Why a max-evaluator makes it exact.** A piece is a choice of one face per pair and of the pair w
+whose choice is smallest; its value is that face. Any face of pair g that applies is <= E_g, so a
+piece's value is <= min_g E_g = f**; the piece whose picks are the pairs' maxima and whose w is the
+minimising pair owns the point with value f**. So the max over owning pieces (every evaluator here)
+is f**. The across-pair conditions are what correctness needs; within-pair ones only prune and are
+dropped where they would compare two irrational faces. Two irrational picks from different pairs are
+ordered on the cell points that satisfy the piece's other rows: one order -> settled, the other ->
+empty piece, mixed -> `envelopeMeshAlg:minIrrational` (biconjQ keeps the EnvelopeMin).
+
+**The cost was undecided cells.** cellInterior keeps a cell it cannot decide (`unsureTie`, a tie mixing
+two quadratic fields); on this two-pair arrangement 2938 of 2974 cells were such slivers at the
+triangle's corners. They are now kept only if cellSamplePoint finds an interior point (liveCell):
+the triangle 434 s -> ~300 s, the kink 251 s -> 215 s, no value or hole change on any fixture.
+
+**Measured:** the 3-convex-edge triangle meshes (2440 faces; mostly empty min-max pieces), equal to
+the EnvelopeMin on 4000 points but for 3 points within 1e-9 of an edge, 3e-9 off -- the evaluators'
+row tolerance. NOT covered: Example 2 (two triangle faces with degree-4 irrational corners; needs a
+type for them). Its biconjugate stays an EnvelopeMin.

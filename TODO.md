@@ -9,10 +9,10 @@
 
 - [~] **1. Mesh EnvelopeMin and prune its atom pairs** -- PRUNE DONE 2026-10-16 (Example 2 6 -> 3
       pairs, 60 -> 2 triangles, 780 -> 281 s). ONE active pair MESHED 2026-10-17 (AlgCrv/QuaCon,
-      equal to the face list on 4000 points; Example 1 51 s). LEFT: a minimum over SEVERAL pairs
-      (Example 2, the 3-convex-edge triangle) is still an EnvelopeMin -- needs an arrangement
-      across pairs. Also: overlapping pieces where two irrational faces both win (Example 1, 18
-      cells) -- values exact, partition not. DECISIONS.md 2026-10-16, 2026-10-17.
+      equal to the face list on 4000 points; Example 1 51 s). SEVERAL pairs without a triangle face
+      MESHED 2026-10-18 (min of maxes; the 3-convex-edge triangle, ~5 min, 2440 mostly-empty faces).
+      LEFT: Example 2 -- triangle faces with degree-4 irrational corners need a mesh type (Yves's
+      call); and overlapping / empty pieces (values exact, partition not). DECISIONS.md 2026-10-16..18.
 - [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink meshes in 256 s (clipped to
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.

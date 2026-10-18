@@ -60,8 +60,9 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
         % convex edges -- vertex-against-edge cells, edge-against-edge cells (delta = 0, they
         % share a vertex) and a triple tangent plane. Before the rational corner landed
         % (cornerFaceAlg, 2026-10-10) these disagreed by up to 2.2.
-            cases = { [0 0; 1 0; 0 1], [2 -3 2 0 0 0];      % 3 convex edges
-                      [0 0; 2 0; 0 2], [1 2 -1 1 0 0];      % 1
+            % The 3-convex-edge triangle ([0 0; 1 0; 0 1], [2 -3 2 0 0 0]) MOVED 2026-10-18 to
+            % minMeshTest (slow): two active pairs, so biconjQ now meshes their minimum (~5 min).
+            cases = { [0 0; 2 0; 0 2], [1 2 -1 1 0 0];      % 1
                       [0 0; 3 0; 1 2], [2 1 -1 0 1 0];      % 2
                       [0 0; 2 0; 1 2], [-1 2 1 0 0 1] };    % 1
             rng(5);

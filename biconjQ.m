@@ -332,6 +332,17 @@ function h = biconjQ(obj)
                     catch ME
                         if ~isDeclined(ME), rethrow(ME), end
                     end
+                elseif isempty(h.tris)
+                    % SEVERAL active pairs and no triangle (2026-10-18): the min over the pairs is
+                    % meshed as a min of maxes in one arrangement -- envelopeMeshAlg's minMaxFaces.
+                    % A triangle face's corners are degree-4 irrationals no mesh type holds yet, and
+                    % two irrational faces that cross in a cell have no curve here: both stay unmeshed.
+                    try
+                        envs = cellfun(@envelopePrune, h.pairs, 'UniformOutput', false);
+                        h = assembleAlgCrv(envelopeMeshAlg(envs, hullRows(obj)));
+                    catch ME
+                        if ~isDeclined(ME), rethrow(ME), end
+                    end
                 end
                 return
             end
