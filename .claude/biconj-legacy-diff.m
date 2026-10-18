@@ -17,7 +17,7 @@ function biconj_legacy()
     for i = 1:numel(fx)
         nm = fx{i}{1};  f = fx{i}{2};
         [he, ee] = tryRun(@() biconjQ(f));
-        [hl, el] = tryRun(@() f.biconj());
+        [hl, el] = tryRun(@() f.biconj('cplq'));
         if isempty(he) && isempty(hl), neither = neither + 1; continue, end
         if isempty(he), onlyL = onlyL + 1;  fprintf('%-22s LEGACY ONLY (%s)\n', nm, ee);  continue, end
         if isempty(hl), onlyE = onlyE + 1;  fprintf('%-22s EXACT ONLY  (%s)\n', nm, el);  continue, end

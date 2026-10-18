@@ -813,10 +813,11 @@ classdef QuaPol < RatPol & QuaPar
        end
        function h = biconj(obj, engine)
        % objective: biconjugate f** = conj(conj(f)); equals the closed convex envelope of f
-       % [input]  engine: 'cplq' (default) | 'symbolic' (alias of 'cplq') | 'exact'
+       % [input]  engine: 'exact' (default) | 'cplq' | 'symbolic' (alias of 'cplq')
        % [output] h: 'cplq' returns a RatPar -- QuaPol (Case A), RatPol (Case B) or QuaParCPLQ
-       %             (Case C); call kind() to learn which. 'exact' returns a QuaCon. See
-       %             biconjCPLQ.m, biconjQ.m and RETURN_TYPE.md.
+       %             (Case C); call kind() to learn which. 'exact' returns a QuaCon, an AlgCrv
+       %             where a bridge face carries the value, or an EnvelopeMin where several atom
+       %             pairs are active (eval only). See biconjCPLQ.m, biconjQ.m and RETURN_TYPE.md.
        %
        % NEITHER ENGINE CONJUGATES TWICE, and for the same reason in both. For 'cplq': for a
        % single bounded triangle f* lives on an unbounded multi-face domain that conjCPLQ cannot
@@ -825,9 +826,10 @@ classdef QuaPol < RatPol & QuaPar
        % of the lifted set, which is both faster and defined on inputs the double conjugation is
        % not. Other engines still error inside conj.
        %
-       % The default is still 'cplq' here: `conj` switched to 'exact' on 2026-10-11, biconj has
-       % not been decided (biconjQ returns an EnvelopeMin where several atom pairs are active).
-            if nargin < 2, engine = 'cplq'; end
+       % THE DEFAULT IS 'exact' since 2026-10-18 (Yves's call; `conj` switched on 2026-10-11). It
+       % answers every input 'cplq' answers that the suites cover, and the poly2 kinks where 'cplq'
+       % runs past 4 h; a minimum over several atom pairs comes back as an EnvelopeMin.
+            if nargin < 2, engine = 'exact'; end
             if strcmpi(engine, 'exact')
                 h = biconjQ(obj);
             elseif strcmpi(engine, 'cplq') || strcmpi(engine, 'symbolic')

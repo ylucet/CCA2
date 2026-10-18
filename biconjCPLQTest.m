@@ -145,7 +145,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % PLQ:conjCPLQ:notImplemented on the second conjugation.
             p = QuaPol([0 0; 1 0; 0 1], biconjCPLQTest.E3, [0 1 0 0 0 0], biconjCPLQTest.F3);
             testCase.verifyEqual(p.conj('cplq').kind(), 'QuaPar');
-            b = p.biconj();
+            b = p.biconj('cplq');
             testCase.verifyEqual(b.kind(), 'RatPol');
             % f = xy >= 0 on this triangle and vanishes at all three vertices, so the largest
             % convex minorant is the zero function.
@@ -166,7 +166,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             for c = 1:numel(cases)
                 [name, V, f6] = deal(cases{c}{:});
                 p = biconjCPLQTest.triangle(V, f6);
-                b = p.biconj();
+                b = p.biconj('cplq');
                 % TYPE: a RatPar, and WHICH one is deliberately not pinned here.
                 % biconj's own contract is "a RatPar -- QuaPol (Case A), RatPol (Case B) or
                 % QuaParCPLQ (Case C); call kind() to learn which". Since 2026-08-18 the convex
@@ -213,7 +213,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
                     convEnvCPLQTest.supBilinearOverPoly(sv, [0 0; 1 1; 3 2]), ...
                     'AbsTol', 1e-6, sprintf('conj at (%g,%g)', sv(1), sv(2)));
             end
-            b = p.biconj();
+            b = p.biconj('cplq');
             testCase.verifyEqual(b.kind(), 'RatPol');
             testCase.verifyGreaterThan(b.nf, 1);                % genuinely split envelope
         end
@@ -223,7 +223,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % f on dom f, it is convex, and it agrees with f at the triangle's vertices (each
             % vertex is an extreme point, so no strictly-better convex minorant exists there).
             p = biconjCPLQTest.triangle([0 0; 3 0; 1 2], [1 3 -1 2 -1 0.5]);
-            b = p.biconj();
+            b = p.biconj('cplq');
             B = [0.6 0.2 0.2; 0.2 0.6 0.2; 0.2 0.2 0.6; 1/3 1/3 1/3; 0.5 0.3 0.2; 0.1 0.45 0.45];
             X = B * p.V;
             testCase.verifyLessThanOrEqual(b.eval(X) - p.eval(X), 1e-9);
@@ -240,7 +240,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
         function convexTriangleIsItsOwnBiconjugate(testCase)
             % f** = f for a closed convex f -- on a bounded domain too, not just Case A.
             p = biconjCPLQTest.triangle([0 0; 1 0; 0 1], [1 0 1 0 0 0]);   % 1/2(x^2+y^2)
-            b = p.biconj();
+            b = p.biconj('cplq');
             X = [0.2 0.2; 0.6 0.2; 0.2 0.6; 1/3 1/3];
             testCase.verifyEqual(b.eval(X), p.eval(X), 'AbsTol', 1e-12);
         end
@@ -248,7 +248,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
         function domainOfTheBiconjugateIsTheTriangle(testCase)
             % dom f** = conv(dom f): finite inside, +Inf outside.
             p = biconjCPLQTest.triangle([0 0; 1 0; 0 1], [0 1 0 0 0 0]);
-            b = p.biconj();
+            b = p.biconj('cplq');
             testCase.verifyTrue(all(isfinite(b.eval([0.2 0.2; 0.1 0.5]))));
             testCase.verifyEqual(b.eval([2 2; -1 0.5]), [Inf; Inf]);
         end
@@ -258,10 +258,10 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % mesh as the QuaPol above and must give the same answer.
             V = [0 0; 2 0; 1 1];
             q = QuaPar(V, biconjCPLQTest.E3, zeros(3,6), [0 1 0 0 0 0], biconjCPLQTest.F3);
-            b = q.biconj();
+            b = q.biconj('cplq');
             testCase.verifyEqual(b.kind(), 'RatPol');
             X = [0.6 0.2; 1.0 0.6; 1.0 1/3];
-            expected = biconjCPLQTest.triangle(V, [0 1 0 0 0 0]).biconj().eval(X);
+            expected = biconjCPLQTest.triangle(V, [0 1 0 0 0 0]).biconj('cplq').eval(X);
             testCase.verifyEqual(b.eval(X), expected, 'AbsTol', 1e-12);
         end
 
@@ -275,7 +275,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
 
         function conjugateOfATriangleBiconjugatesBackToItself(testCase)
             % HISTORY: this was `unsupportedShapesStillErrorAsBefore`, and it asserted that
-            % g.biconj() ERRORS for g = (x*y on a triangle)* -- first with
+            % g.biconj('cplq') ERRORS for g = (x*y on a triangle)* -- first with
             % PLQ:conjCPLQ:notImplemented (the isDomBounded gate), then with
             % QuaParCPLQ:conj:emptyResult. Neither was a property of the input: the biconjugate
             % simply did not work for ANY input, because the last step of the algorithm --
@@ -290,7 +290,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             p = biconjCPLQTest.triangle([0 0; 1 0; 0 1], [0 1 0 0 0 0]);
             g = p.conj('cplq');
             testCase.verifyEqual(g.kind(), 'QuaPar');
-            h = g.biconj();
+            h = g.biconj('cplq');
             % ACCESSOR CHANGED 2026-08-25 (overnight), not the assertion. This read `h.fnd`, which
             % exists only on a QuaParCPLQ. `h` is now a QuaPar: `g` here is max(0,s1,s2), an
             % all-affine function over unbounded faces, so conjugating it takes the new

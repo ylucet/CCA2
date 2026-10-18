@@ -8585,3 +8585,13 @@ of the c = -2 fixture had a vertex ending other than two arcs (bisected: sparse 
 item-2 changes each left it intact). Faces are traced from their rows, so before a cell is emitted
 every unrecorded curve gets its side, read at the cell's five vote points. Feeding the full rows to
 the exact emptiness tests too cost 1734 s on the kink, so those keep the sparse rows: 251 s.
+
+## 2026-10-18 — `biconj` defaults to 'exact' (Yves's call)
+
+TODO item 7, decided by Yves after items 1 (one-pair mesh) and 2 (the kink meshes) landed and all
+three buckets were green (2026-10-17: fast 766/0, the affected normal suites, slow 106/0 with the two
+quarantined cplq kink tests). `conj` switched on 2026-10-11. Return types under 'exact': QuaCon,
+AlgCrv where a bridge face carries the value, EnvelopeMin where several atom pairs are active (eval
+only; meshing that is TODO item 1's remainder). Tests that meant the legacy engine by `.biconj()` now
+say `'cplq'` (biconjCPLQTest, conjCPLQTest, erratumBiconjTest's differential); biconjQTest pins the
+new default.

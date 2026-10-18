@@ -31,7 +31,7 @@
       ~590 s.
 - [x] **6. Two bridge faces owning one cell** -- no longer refused (2026-10-17): overlapping pieces, value by max. Was: (`envelopeMeshAlg:twoBridges`) -- refused by name,
       never observed. Leave it until an input reaches it.
-- [ ] **7. Decide the `biconj` default** once items 1-2 are done (Yves's call).
+- [x] **7. Decide the `biconj` default** -- DONE 2026-10-18: 'exact' (Yves). DECISIONS.md.
 
 ## 2026-09-19 (eighth pass) — corners are COVERAGE; the bridge is the only thing left
 

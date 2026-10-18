@@ -36,14 +36,14 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % quadratic, so the second conjugation is Case A too, and biconj closes the loop.
             caseA = QuaPol([1 0 1 0 0 0]);
             testCase.verifyEqual(caseA.conj('cplq').kind(), 'QuaPol');
-            testCase.verifyEqual(caseA.biconj().kind(), 'QuaPol');
+            testCase.verifyEqual(caseA.biconj('cplq').kind(), 'QuaPol');
 
             % Case B -- single bounded triangle: conj gives a genuine mesh QuaPar; biconj is the
             % convex envelope, a RatPol on the same triangle. f = xy vanishes at all three
             % vertices and is >= 0 on this triangle, so f** is identically zero on it.
             caseB = QuaPol([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
             testCase.verifyEqual(caseB.conj('cplq').kind(), 'QuaPar');
-            bB = caseB.biconj();
+            bB = caseB.biconj('cplq');
             testCase.verifyEqual(bB.kind(), 'RatPol');
             testCase.verifyEqual(bB.eval([0.2 0.2; 1/3 1/3]), [0; 0], 'AbsTol', 1e-12);
 
@@ -56,7 +56,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % since, which is exactly what the gap in the handoff was about. The VALUE check below
             % is what this line is really for and is unchanged.
             caseBconvex = QuaPol([0 0; 1 0; 0 1], E3, [1 0 1 0 0 0], F3);
-            bBc = caseBconvex.biconj();
+            bBc = caseBconvex.biconj('cplq');
             S = [0.2 0.2; 0.6 0.2; 1/3 1/3];
             testCase.verifyEqual(bBc.kind(), 'QuaPol');
             testCase.verifyEqual(bBc.eval(S), caseBconvex.eval(S), 'AbsTol', 1e-12);
@@ -99,10 +99,10 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
             % CASE C's BICONJUGATE NOW WORKS, and this assertion used to pin it as broken.
             %
-            % HISTORY. It first read `verifyEqual(caseC.biconj().kind(), 'QuaParCPLQ')`, which
+            % HISTORY. It first read `verifyEqual(caseC.biconj('cplq').kind(), 'QuaParCPLQ')`, which
             % passes on an EMPTY piece list -- QuaParCPLQ(functionNDomain.empty()).kind() is still
             % 'QuaParCPLQ' -- so it hid the defect entirely. Measured on pristine HEAD
-            % (2026-07-31): caseC.conj('cplq') gave 9 pieces and caseC.biconj() gave ZERO, i.e.
+            % (2026-07-31): caseC.conj('cplq') gave 9 pieces and caseC.biconj('cplq') gave ZERO, i.e.
             % f** = +inf everywhere, for an f that is CONVEX and hence its own biconjugate. It was
             % then changed to verifyError, pinning the loud failure instead of the silent one,
             % with the failing chain traced into functionNDomain.getInterior.
@@ -117,7 +117,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % The getInterior chain is NOT closed: it is still on the path of any INDEFINITE
             % domain, which is why caseCind above stays on the symbolic route. See
             % SUPPORT_MATRIX.md section 7.
-            bC = caseC.biconj();
+            bC = caseC.biconj('cplq');
             SC = [0.2 0.2; 0.5 0.5; 0.8 0.3; 0.1 0.9];
             for i = 1:size(SC,1)
                 testCase.verifyEqual(conjCPLQTest.evalConjResult(bC, SC(i,:)), ...

@@ -158,7 +158,7 @@ closes the 2-face split end to end. For a 4-face split Step 2 completes but cPLQ
 | Operator | Meaning | Notes |
 |---|---|---|
 | `conj(f, engine)` | Fenchel conjugate `f*` | `engine='exact'` (default; exact rationals, no symbolic, returns QuaCon) or `'cplq'` (legacy symbolic, returns RatPar) |
-| `biconj(f)` | `f**`, the closed convex envelope | `conj∘conj`, except a bounded triangle, which goes straight to the envelope — see above |
+| `biconj(f, engine)` | `f**`, the closed convex envelope | `engine='exact'` (default since 2026-10-18; computed directly, never as `conj∘conj`; returns QuaCon, AlgCrv where a curved bridge face carries the value, or EnvelopeMin where several atom pairs are active) or `'cplq'` (legacy symbolic, the table above) |
 | `convEnv(f)` | convex envelope | via `biconj`, or `convEnvCPLQ` directly |
 | `add`, `sub` | pointwise `f±g` | `QuaPol` and `QuaPar`; **not** `RatPol` |
 | `scalarMul`, `negate` | `c·f`, `−f` | all types |

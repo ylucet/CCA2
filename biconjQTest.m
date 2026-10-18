@@ -832,9 +832,9 @@ classdef biconjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(hExact.eval(X), hDirect.eval(X), 'AbsTol', 0);
             testCase.verifyEqual(f.biconj('EXACT').kind(), 'QuaCon');
 
-            % 'symbolic' is the legacy engine; 'cplq' is unchanged and still the default
+            % 'symbolic' is the legacy engine's alias; 'exact' is the default since 2026-10-18
             testCase.verifyEqual(class(f.biconj('symbolic')), class(f.biconj('cplq')));
-            testCase.verifyEqual(class(f.biconj()),           class(f.biconj('cplq')));
+            testCase.verifyEqual(class(f.biconj()),           class(f.biconj('exact')));
         end
 
         function theExactEnginesREFUSALSSurviveTheClassAPI(testCase)
