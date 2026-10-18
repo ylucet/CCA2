@@ -17,8 +17,11 @@
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
-- [ ] **3. Detect zero-area faces at assembly** -- redundant (no value change), cause known: drop
-      them where the envelope assigns a quadratic face to a cell. Detail under "Faces of ZERO AREA".
+- [ ] **3. Detect zero-area faces at assembly** -- MEASURED 2026-10-17, deferred: on the c = -2
+      AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
+      everywhere, kept because envelopeMeshAlg proves emptiness from CONIC rows only (pieceLive) and
+      their emptiness is an ALGEBRAIC row (q >= bridge). No value changes; dropping them unproven
+      could open holes. Needs an emptiness test with an algebraic row. Detail under "Faces of ZERO AREA".
 - [ ] **4. `biconjCPLQ` on the poly2 kinks** (legacy engine): crashes fixed, runs take more than
       4-5 h; both `biconjCPLQTest` tests are switched off (assumeFail) until then. Matters less once
       `'exact'` is the default.
