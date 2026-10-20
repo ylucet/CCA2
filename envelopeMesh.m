@@ -77,6 +77,22 @@ function [g, info] = envelopeMesh(env)
                  'envelopeEval, which answers for it.'], f.kind);
         end
     end
+    % REFUSE BEFORE THE ARRANGEMENT when the outcome is already known (2026-10-20). A bridge that owns
+    % a point where the envelope is finite owns part of a covered cell, which is exactly the
+    % bridgeCompetes refusal below -- reached only after the whole arrangement: 233 s on the c = -2
+    % fixture. Each bridge carries a rational point of itself (`wit`), so asking there is enough.
+    for b = 1:numel(bridges)
+        f = bridges{b};
+        if ~isfield(f, 'wit') || isempty(f.wit), continue, end
+        x = f.wit(1:2) / f.wit(3);
+        if bridgeMember(f.pair, x) && isfinite(envelopeEval(env, x))
+            error('envelopeMesh:bridgeCompetes', ...
+                ['a bridge face owns part of the envelope''s domain, and its value competes with the ' ...
+                 'quadratic faces there. The boundary between them is not a conic, so this envelope ' ...
+                 'cannot be meshed on a conic subdivision -- envelopeMeshAlg can. DECISIONS.md ' ...
+                 '2026-09-19.']);
+        end
+    end
     if isempty(env.quad)
         g = QuaCon(zeros(0,3), zeros(0,3), zeros(0,6), zeros(0,10), zeros(0,1), zeros(0,2), {});
         info = struct('curves', 0, 'cells', 0, 'refined', 0, 'faces', 0);

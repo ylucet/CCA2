@@ -8638,3 +8638,21 @@ takes: a real cell thinner than the grid would be lost; none has been seen.
 sample point. The rest are empty by an ALGEBRAIC row (a quadratic against an irrational face); no
 exact emptiness test with such a row exists here, and dropping one unproven could open a hole, so
 they stay. Values are unaffected (every evaluator takes the max over owning faces).
+
+## 2026-10-20 — empty faces by an ALGEBRAIC row: a certified test, and the hole it first opened
+
+TODO item 3 / 4. `algEmpty` (envelopeMeshAlg) drops a piece when one algebraic row side*(q - z) >= 0
+is proven false on it: R = FP(x,y,q) (bridgeQuadCut) has no zero on the CELL and FP's discriminant
+one strict sign there -- both certified by Bernstein bounds with subdivision (`polySignOn`, new) --
+and the row fails at EVERY cell point inside the piece's conic part.
+
+**First attempt opened 5 holes.** It read the row at ONE point of the piece's conic part. That part
+(a cell cut by conics) can be disconnected, and the row's sign is constant only per connected part.
+Now every sample point must fail; the residual risk is a part no sample reaches (liveCell's class).
+
+**Cost.** Bernstein in loops called nchoosek ~2e9 times (2690 s on one mesh); as cached matrix
+products, and with the certificate cached per (cell, row), the triangle's mesh is 53 s.
+
+**Measured:** the 3-convex-edge triangle 2172 -> 1760 faces (132 own a sample point), values and
+holes unchanged on 4000 points. The ~1600 left have the curve R = 0 crossing their cell, where one
+sign per cell does not hold; proving those empty needs the curve's arrangement, not done.

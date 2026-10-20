@@ -19,7 +19,9 @@
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
-- [ ] **3. Detect zero-area faces at assembly** -- MEASURED 2026-10-17, deferred: on the c = -2
+- [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20: a certified test drops
+      a piece whose algebraic row has one sign on its cell (polySignOn; the triangle 2172 -> 1760
+      faces). Left: pieces whose cell the curve R = 0 crosses. Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeMeshAlg proves emptiness from CONIC rows only (pieceLive) and
       their emptiness is an ALGEBRAIC row (q >= bridge). No value changes; dropping them unproven
@@ -28,9 +30,11 @@
       4-5 h; both `biconjCPLQTest` tests are switched off (assumeFail) until then. Matters less once
       `'exact'` is the default.
 - [x] **5. Suite time** -- DONE 2026-10-17: Example 2's four tests moved to `erratumBiconjEx2Test`
-      (slow, 376 s); `erratumBiconjTest` is 337 s, was 637 s (single runs, shared machine). The
-      normal bucket as a whole is still over its 10-min budget -- envelopeAssembleTest alone is
-      ~590 s.
+      (slow, 376 s); `erratumBiconjTest` is 337 s, was 637 s (single runs, shared machine).
+      2026-10-20: the whole normal bucket is 30/0 in 535 s, within its 10-min budget (was ~1950 s
+      on 10-14): envelopeMesh refuses a competing bridge before building the arrangement (233 s ->
+      fast), and three slow tests moved to slow suites (minMeshTest, kinkMeshTest,
+      envelopeMeshSlowTest).
 - [x] **6. Two bridge faces owning one cell** -- no longer refused (2026-10-17): overlapping pieces, value by max. Was: (`envelopeMeshAlg:twoBridges`) -- refused by name,
       never observed. Leave it until an input reaches it.
 - [x] **7. Decide the `biconj` default** -- DONE 2026-10-18: 'exact' (Yves). DECISIONS.md.

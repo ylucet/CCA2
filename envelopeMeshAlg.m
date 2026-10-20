@@ -236,6 +236,7 @@ function out = winnerFaces(quad, quadApp, irr, rows, C, pt, Q, rowsOut) %#ok<INU
             algRows(end+1) = struct('FP', f{1}.FP, 'FB', f{1}.FB, 'num', quad(j).num, ...
                                     'den', quad(j).den, 'side', 1); %#ok<AGROW>
         end
+        if algEmpty(C, rows, extra, algRows, Q), continue, end
         out(end+1) = struct('kind', 'quad', 'num', quad(j).num, 'den', quad(j).den, ...
                             'FP', [], 'FB', 0, 'con', [base; extra], 'alg', algRows); %#ok<AGROW>
     end
@@ -286,6 +287,97 @@ function tf = liveCell(C, rows)
     if strcmp(info.path, 'unsureTie') || mixed
         [~, tf] = cellSamplePoint(C, rows, straightRows(C, rows), 1e3);
     end
+end
+
+function tf = algEmpty(C, rows, conRows, algRows, Q)
+% Is the piece PROVABLY empty because of one of its algebraic rows (2026-10-20)? pieceLive decides the
+% conic rows only, and on the 3-convex-edge triangle 2040 of 2172 faces were empty by an algebraic row.
+% For a row side*(q - z) >= 0, z one root of FP(x,y,.): its zero set lies in R = FP(x,y,q) = 0
+% (bridgeQuadCut), and the roots of FP part only across its discriminant D. If polySignOn certifies
+% R != 0 on the CELL and D of one strict sign there, the row has one sign on each connected part of
+% the cell -- so a row failing at EVERY sample point of the piece's conic part fails on the piece
+% (one sample per part read at a single point opened five holes: the part can be disconnected).
+% The certificate depends on the cell and the row only, so it is cached across the cell's pieces.
+    tf = false;
+    if isempty(algRows), return, end
+    M = true(size(Q,1),1);
+    for r = 1:size(conRows,1), M = M & conRows(r,7) * QuaPar.evalConic(conRows(r,1:6), Q) > 0; end
+    Qk = Q(M,:);
+    if isempty(Qk), return, end
+    if any(piecePoints([], Qk, zeros(0,8), algRows)), return, end   % a witness: not empty
+    for t = 1:numel(algRows)
+        a = algRows(t);
+        z = algBranch(a.FP, Qk, a.FB);  q = ratQ.evalFace(a.num, a.den, Qk);
+        if ~all(isfinite(z) & a.side * (q - z) < 0), continue, end  % the row must fail at every point
+        if rowCertified(C, rows, a), tf = true; return, end
+    end
+end
+
+function ok = rowCertified(C, rows, a)
+% R != 0 and D of one strict sign (> 0: the branch exists throughout) on the cell, cached per cell.
+    persistent cache lastC
+    key = sprintf('%s|%s|%s|%d', mat2str(sortrows(rows)), mat2str(a.FP(:).'), mat2str(a.num), a.den);
+    if isempty(cache) || ~isequal(lastC, size(C)), cache = containers.Map(); lastC = size(C); end
+    if isKey(cache, key), ok = cache(key); return, end
+    ok = false;
+    [box, inBox] = regionBox(C, rows, zeros(0,8));
+    if ~isempty(box)
+        try
+            R = bridgeQuadCut(a.FP, a.num, a.den);
+            if isnumeric(R) && all(isfinite(R(:))) && polySignOn(R, box, inBox, 4) ~= 0
+                nz = size(a.FP, 3) - 1;
+                if nz == 2
+                    D = padSub(conv2(a.FP(:,:,2), a.FP(:,:,2)), 4 * conv2(a.FP(:,:,3), a.FP(:,:,1)));
+                    ok = polySignOn(D, box, inBox, 4) == 1;
+                elseif nz == 1
+                    ok = polySignOn(a.FP(:,:,2), box, inBox, 4) ~= 0;
+                end
+            end
+        catch
+            ok = false;
+        end
+    end
+    cache(key) = ok;
+end
+
+function D = padSub(A, B)
+    n = max(size(A), size(B));
+    D = zeros(n);  D(1:size(A,1), 1:size(A,2)) = A;
+    D(1:size(B,1), 1:size(B,2)) = D(1:size(B,1), 1:size(B,2)) - B;
+end
+
+function [box, inBox] = regionBox(C, rows, K)
+% A box around the cell (its straight rows, within the meshers' bounding box) and a test rejecting
+% sub-boxes that provably miss the cell's or the piece's conic rows (branch rows are not used).
+    H = straightRows(C, rows);
+    A = [H; 1 0 1e3; -1 0 1e3; 0 1 1e3; 0 -1 1e3];
+    V = zeros(0,2);
+    for i = 1:size(A,1)
+        for j = i+1:size(A,1)
+            Mx = A([i j], 1:2);
+            if abs(det(Mx)) < 1e-12, continue, end
+            x = (Mx \ -A([i j], 3)).';
+            if all(A(:,1:2) * x.' + A(:,3) >= -1e-9 * max(1, norm(x))), V(end+1,:) = x; end %#ok<AGROW>
+        end
+    end
+    if size(V,1) < 3, box = []; inBox = []; return, end
+    box = [min(V(:,1)) max(V(:,1)) min(V(:,2)) max(V(:,2))];
+    rowPolys = {};
+    for t = 1:size(rows,1)
+        if C(rows(t,1), 7) ~= 0, continue, end
+        rowPolys{end+1} = rows(t,2) * conicPoly(C(rows(t,1), 1:6)); %#ok<AGROW>
+    end
+    for r = 1:size(K,1)
+        if size(K,2) >= 8 && K(r,8) ~= 0, continue, end
+        rowPolys{end+1} = K(r,7) * conicPoly(K(r,1:6)); %#ok<AGROW>
+    end
+    inBox = @(b) ~any(cellfun(@(P) polySignOn(P, b, @(~) true, 0) == -1, rowPolys));
+end
+
+function P = conicPoly(c)
+% [a b c d e f] as a dense polyN: P(i+1,j+1) multiplies x^i y^j.
+    P = zeros(3,3);
+    P(3,1) = c(1);  P(2,2) = c(2);  P(1,3) = c(3);  P(2,1) = c(4);  P(1,2) = c(5);  P(1,1) = c(6);
 end
 
 function tf = pieceLive(C, rows, extra, Q)
@@ -527,6 +619,7 @@ function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
                 if ~ok, continue, end
             end
             if ~pieceLive(C, rows, conRows, Q), continue, end
+            if algEmpty(C, rows, conRows, algRows, Q), continue, end
             f = pick{w};
             if strcmp(f.kind, 'quad')
                 out(end+1) = struct('kind', 'quad', 'num', quad(f.j).num, 'den', quad(f.j).den, ...

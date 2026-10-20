@@ -29,6 +29,20 @@ classdef minMeshTest < matlab.unittest.TestCase
         end
     end
 
+    methods (Test)
+        function aPointBesideTheEDGEIsNotPlusInfinity(testCase)
+        % Found 2026-10-16 when the prune dropped a redundant pair: on the 3-convex-edge triangle a
+        % pair's bridge face and its quadratic face both missed a band ~1e-8 wide along x1 = 0
+        % (the bridge's sweeping root meets det(M_mu) = 0 at mu = -1), so the pair read +Inf there
+        % and the minimum took a pair 17x too high. envelopeEval now retries such a point 1e-7
+        % away. On that edge co f = f = x2^2, and this close to it the gap is O(x1).
+            h = minMeshTest.cached();
+            x2 = 0.058899440267143444;
+            X = [linspace(1e-9, 1e-7, 400).', x2*ones(400,1)];
+            testCase.verifyEqual(h.eval(X), x2^2*ones(400,1), 'AbsTol', 1e-6);
+        end
+    end
+
     methods (Static)
         function [h, f, V] = cached()
             persistent C

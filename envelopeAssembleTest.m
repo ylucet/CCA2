@@ -77,31 +77,10 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             end
         end
 
-        function anIRRATIONALStraightTieGetsItsCorners(testCase)
-        % Found 2026-10-11 on the poly2 kink at c = -2 (biconjQ's own fixture): one cell pair ties
-        % on a PARALLEL PAIR of IRRATIONAL lines, (s1 - 2 s2) = -6 +- sqrt(80). A straight tie is
-        % treated as an ordinary facet, but an irrational line cannot be a row, so nothing produced
-        % candidates ON it -- and both faces are linear along it, so the pair's sup sits at its
-        % ends, the corners. The pair covered no point at all and the envelope was +inf on 384 of
-        % 600 points of its own domain. Oracle: the numeric sup, as above.
-            V = [-2 0; 2 0; 1 2; -1 2];
-            q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];  q1 = q0;  q1(9) = -2;
-            gA = conjQ(QuaPol(V([1 2 3],:), [1 2 1; 2 3 1; 3 1 1], q0, [1 0;1 0;1 0]));
-            gB = conjQ(QuaPol(V([1 3 4],:), [1 2 1; 2 3 1; 3 1 1], q1, [1 0;1 0;1 0]));
-            env = envelopeAssemble(gA, gB);
-            rng(23);  W = rand(60,3);  W = W ./ sum(W,2);
-            X = [W*V([1 2 3],:); W*V([1 3 4],:)];
-            v = envelopeEval(env, X);
-            testCase.verifyTrue(all(isfinite(v)), sprintf( ...
-                'the envelope must be finite on its domain; +inf at %d of %d', nnz(~isfinite(v)), numel(v)));
-            for i = 1:8:size(X,1)
-                want = supOracle(gA, gB, X(i,:));
-                testCase.verifyGreaterThanOrEqual(v(i), want - 1e-9*max(1,abs(want)), 'no undershoot');
-                testCase.verifyLessThan(abs(v(i) - want)/max(1,abs(want)), 1e-7, ...
-                    sprintf('the envelope must equal the definition at (%g,%g)', X(i,1), X(i,2)));
-            end
-        end
 
+        % theARRANGEMENTBuildsAMeshThatReproducesFExactly MOVED 2026-10-20 to envelopeMeshSlowTest and
+        % anIRRATIONALStraightTieGetsItsCorners to kinkMeshTest (slow): ~165 s between them kept the
+        % normal bucket over its 10-minute budget (TODO item 5).
         % biconjQOnThePOLY2KinkANSWERSWhenTheMeshCannotPlaceACorner MOVED 2026-10-17 to
         % kinkMeshTest (slow bucket): biconjQ now MESHES the kink (~11 min), which no longer fits
         % this suite's normal budget.
@@ -185,31 +164,6 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             end
         end
 
-        function theARRANGEMENTBuildsAMeshThatReproducesFExactly(testCase)
-        % THE ROUTE THAT WORKS. Both fold orders are ruled out by measurement; building the
-        % ARRANGEMENT once never forms a partial max, so nothing can blow up on the way. On the
-        % convex fixture the mesh must reproduce f itself, at zero tolerance.
-            [fA, fB] = fixture(0);
-            env = envelopePrune(envelopeAssemble(conjQ(fA), conjQ(fB)));
-            [g, info] = envelopeMesh(env);
-            testCase.verifyGreaterThan(g.nf, 0, 'the mesh must have faces');
-            testCase.verifyLessThan(info.cells, 500, ...
-                'the arrangement must stay small -- that is the whole point of not folding');
-            rng(43);
-            worst = 0;  n = 0;
-            for i = 1:150
-                x = [rand, rand];
-                want = min(fA.eval(x), fB.eval(x));
-                if ~isfinite(want), continue, end
-                got = g.eval(x);
-                testCase.verifyTrue(isfinite(got), 'the mesh is finite on the domain');
-                n = n + 1;
-                worst = max(worst, abs(got - want));
-            end
-            testCase.verifyGreaterThan(n, 80, 'the check was actually exercised');
-            testCase.verifyEqual(worst, 0, 'AbsTol', 0, ...
-                'a convex input is its own envelope, and the MESH must say so exactly');
-        end
 
         function aCOMPETINGBridgeIsREFUSEDByTheConicMeshByName(testCase)
         % The boundary of the conic route, said out loud. Since the bridge faces entered the
