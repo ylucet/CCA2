@@ -10,7 +10,9 @@
 - [~] **1. Mesh EnvelopeMin and prune its atom pairs** -- PRUNE DONE 2026-10-16 (Example 2 6 -> 3
       pairs, 60 -> 2 triangles, 780 -> 281 s). ONE active pair MESHED 2026-10-17 (AlgCrv/QuaCon,
       equal to the face list on 4000 points; Example 1 51 s). SEVERAL pairs without a triangle face
-      MESHED 2026-10-18 (min of maxes; the 3-convex-edge triangle, ~5 min, 2440 mostly-empty faces).
+      MESHED 2026-10-18 (min of maxes; the 3-convex-edge triangle 68 s after the curved+branch
+      cellInterior gap was closed in liveCell; 2172 faces, 132 own a point -- the rest empty by an
+      algebraic row, see item 3).
       LEFT: Example 2 -- triangle faces with degree-4 irrational corners need a mesh type (Yves's
       call); and overlapping / empty pieces (values exact, partition not). DECISIONS.md 2026-10-16..18.
 - [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink meshes in 256 s (clipped to

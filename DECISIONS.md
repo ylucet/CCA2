@@ -8620,3 +8620,21 @@ the triangle 434 s -> ~300 s, the kink 251 s -> 215 s, no value or hole change o
 the EnvelopeMin on 4000 points but for 3 points within 1e-9 of an edge, 3e-9 off -- the evaluators'
 row tolerance. NOT covered: Example 2 (two triangle faces with degree-4 irrational corners; needs a
 type for them). Its biconjugate stays an EnvelopeMin.
+
+## 2026-10-18 — cellInterior never tests CURVED and BRANCH rows together; the mesher now does
+
+Cutting the min mesh's cost found the real one: cellInterior decides the curved rows with the straight
+ones (exactly) and the branch rows with the straight ones (a margin) but never the curved and branch
+rows TOGETHER, so a cell empty only because a conic and a branch line exclude each other is kept. On
+the 3-convex-edge triangle's two-pair arrangement 2206 of 2242 cells were such (all path 'margin',
+none with a point at a 192-step grid), each split again by every later curve. envelopeMeshAlg's
+`liveCell` now requires an interior point for a cell mixing curved and branch rows (as for an undecided
+one), and `pieceLive` uses it too. Measured (single runs, shared machine): the triangle's arrangement
+2242 -> 52 cells, biconjQ ~300 s -> 68 s; the kink 0 refused cells, 215 s -> 178 s; erratum Example 1
+77 s -> 23 s; every fixture's values and holes unchanged. The residual risk is the one liveCell already
+takes: a real cell thinner than the grid would be lost; none has been seen.
+
+**Empty faces, what is left.** The triangle's mesh has 2172 faces (2484 before), 132 of which own a
+sample point. The rest are empty by an ALGEBRAIC row (a quadratic against an irrational face); no
+exact emptiness test with such a row exists here, and dropping one unproven could open a hole, so
+they stay. Values are unaffected (every evaluator takes the max over owning faces).

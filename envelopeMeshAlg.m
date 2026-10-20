@@ -109,11 +109,11 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
 
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
     mesh = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
-    nAlg = 0;  nUncovered = 0;  nOverlap = 0;
+    nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;
     for k = 1:numel(cells)
         rows = cells{k};
         [pt, okPt] = interiorPoint(C, rows);
-        if ~okPt, nUncovered = nUncovered + 1; continue, end
+        if ~okPt, nUncovered = nUncovered + 1;  nNoPoint = nNoPoint + 1; continue, end
 
         app = applicable(req, rows, C, pt);
         here = [pairOf{app}];
@@ -187,7 +187,7 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
         end
     end
     info = struct('cells', numel(cells), 'faces', numel(mesh), 'algRows', nAlg, ...
-                  'refused', nUncovered, 'overlaps', nOverlap);
+                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap);
 end
 
 % ==================================================================================================
@@ -274,8 +274,16 @@ function tf = liveCell(C, rows)
 % fields, `unsureTie`) must show an interior point. Kept undecided, such cells were 2938 of 2974 on the
 % 3-convex-edge triangle's two-pair arrangement -- slivers pinched at the domain's corners, each split
 % again by every later curve -- and the cost of the arrangement was theirs (2026-10-18).
+    %
+    % AND A CELL MIXING CURVED AND BRANCH ROWS likewise. cellInterior decides the curved rows with the
+    % straight ones (exactly) and the branch rows with the straight ones (a margin), but never the
+    % curved and branch rows TOGETHER -- so a cell empty only because a conic and a branch line
+    % exclude each other passes both. All 2206 refused cells of that arrangement were such (path
+    % 'margin', no interior point at a 192-step grid).
     [tf, info] = cellInterior(C, rows);
-    if tf && strcmp(info.path, 'unsureTie')
+    if ~tf, return, end
+    mixed = any(C(rows(:,1), 7) ~= 0) && any(C(rows(:,1), 7) == 0 & any(C(rows(:,1), 1:3) ~= 0, 2));
+    if strcmp(info.path, 'unsureTie') || mixed
         [~, tf] = cellSamplePoint(C, rows, straightRows(C, rows), 1e3);
     end
 end
@@ -306,12 +314,12 @@ function tf = pieceLive(C, rows, extra, Q)
     end
     [~, o] = sort(fails, 'descend');
     for r = o(1:min(3, end)).'
-        if ~cellInterior([C; extra(r, [1:6 8])], [rows; size(C,1) + 1, extra(r,7)])
+        if ~liveCell([C; extra(r, [1:6 8])], [rows; size(C,1) + 1, extra(r,7)])
             tf = false;  return
         end
     end
     k = size(extra,1);
-    tf = cellInterior([C; extra(:, [1:6 8])], [rows; size(C,1) + (1:k).', extra(:,7)]);
+    tf = liveCell([C; extra(:, [1:6 8])], [rows; size(C,1) + (1:k).', extra(:,7)]);
 end
 
 function extra = quadOver(quad, quadApp, j)
@@ -450,12 +458,28 @@ function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
 % that is refused by name, and biconjQ keeps the minimum unmeshed.
     out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
     base = rowsToCon(C, rowsOut);
-    cand = cell(1, numel(S));
+    cand = cell(1, numel(S));  whole = cell(1, numel(S));
     for g = 1:numel(S)
         cg = {};
         for j = S(g).quad(:).', cg{end+1} = struct('kind', 'quad', 'j', j, 'FP', [], 'FB', 0); end %#ok<AGROW>
         for f = S(g).irr, cg{end+1} = struct('kind', 'irr', 'j', 0, 'FP', f{1}.FP, 'FB', f{1}.FB); end %#ok<AGROW>
-        cand{g} = cg;
+        % VIABLE PICKS ONLY (2026-10-18): a face can be pair g's pick only where it is the largest
+        % of pair g's faces, and that is decided ONCE per face -- exactly, on its conic rows --
+        % instead of once per combination of picks (2440 faces on the 3-convex-edge triangle,
+        % most of them combinations no point realises).
+        keep = true(1, numel(cg));
+        for o = 1:numel(cg)
+            if ~strcmp(cg{o}.kind, 'quad'), continue, end
+            r = zeros(0,8);  a = emptyAlg();
+            for o2 = 1:numel(cg)
+                if o2 == o || ~strcmp(cg{o2}.kind, 'quad'), continue, end
+                [r, a] = geRows(quad, cg{o}, cg{o2}, r, a, Q);
+            end
+            keep(o) = pieceLive(C, rows, r, Q);
+        end
+        cand{g} = cg(keep);
+        if isempty(cand{g}), cand{g} = cg; end         % something is the max: never leave a hole
+        whole{g} = cg;                                 % every face of pair g, for the rows
     end
     sizes = cellfun(@numel, cand);
     for idx = 1:prod(sizes)
@@ -464,12 +488,13 @@ function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
         for w = 1:numel(S)
             conRows = zeros(0,8);  algRows = emptyAlg();  ok = true;
             for g = 1:numel(S)                         % pick{g} is the largest of pair g
-                for o = 1:numel(cand{g})
-                    if o == sub{g}, continue, end
-                    if ~strcmp(pick{g}.kind, 'quad') && ~strcmp(cand{g}{o}.kind, 'quad')
+                for o = 1:numel(whole{g})
+                    other = whole{g}{o};
+                    if isequal(other, pick{g}), continue, end
+                    if ~strcmp(pick{g}.kind, 'quad') && ~strcmp(other.kind, 'quad')
                         continue                       % within a pair: pruning only, see above
                     end
-                    [conRows, algRows, ok] = geRows(quad, pick{g}, cand{g}{o}, conRows, algRows, Q);
+                    [conRows, algRows, ok] = geRows(quad, pick{g}, other, conRows, algRows, Q);
                     if ~ok, break, end
                 end
                 if ~ok, break, end
