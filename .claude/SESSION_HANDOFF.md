@@ -1,30 +1,33 @@
 # Session Handoff
 
-_2026-10-20_
+_Last updated: 2026-10-20T17:56-07:00_
 
-## Blocked
-- Push: GitHub rejected the stored credentials ("Invalid username or token") on 2026-10-20; re-auth
-  (`gh auth login`) and push main (8+ commits ahead).
-- Erratum text changes: Yves to review erratum-lean.tex / erratum-diff.pdf
-  (erratum repo D:\AI\67191168115b2b8bc24afaab).
-- Example 2's mesh: its triangle faces have degree-4 irrational corners; needs a mesh type (Yves).
+## What happened this session
+The biconjugate list (TODO items 1-7) was worked through: active atom-pair prune, meshing of one-pair
+and several-pair (min of maxes) EnvelopeMins, the poly2 kink meshes (~3 min, was >90 min), `biconj`
+now defaults to 'exact' (Yves's call), suites rebalanced so the normal bucket fits its budget, and a
+certified Bernstein test drops empty faces caused by algebraic rows. Every change and its
+measurements is in DECISIONS.md 2026-10-16..20.
 
-## State
-- CCA2 `main`: biconj defaults to 'exact' (2026-10-18). biconjQ returns QuaCon / AlgCrv everywhere
-  the suites reach except erratum Example 2 (EnvelopeMin, eval only).
-- Done this stretch (DECISIONS.md 2026-10-16..20): active-pair prune; one-pair and several-pair
-  meshing (min of maxes); the poly2 kink meshes (~3 min); corners carry value; cellInterior's
-  curved+branch gap handled in liveCell; certified algebraic-row emptiness (algEmpty/polySignOn).
-- Buckets: fast 766/0; slow 106/0 (2026-10-17) plus the new slow suites kinkMeshTest,
-  erratumBiconjEx2Test, minMeshTest, envelopeMeshSlowTest; normal 30/0 in 535 s (within budget).
-- Lean: unchanged since 2026-10-13 (267 theorems, axiom-clean).
+## Where things stand
+- Branch: `main` @ `e09b1e2` -- "feat(mesh): certified emptiness for algebraic rows; normal bucket within budget"
+- Pushed: no -- GitHub credentials missing/invalid on this machine (`gh auth login` needed); ~10 commits ahead of origin
+- Tests (2026-10-20): fast 766/0; normal 30/0 in 535 s (budget 600); slow mesh suites green
+  (minMeshTest 3/0, kinkMeshTest 3/0, algCrvMeshTest 3/0, erratumBiconjEx2Test 4/0,
+  envelopeMeshSlowTest 1/0). Full `--slow` last run whole on 2026-10-17 (106/0).
 
-## Next
-1. Push (after re-auth).
-2. Remaining empty faces (TODO item 3): pieces whose cell the curve R = 0 crosses.
-3. Optional: planar Minkowski-Weyl in Lean (lean/README "Not formalized").
+## Next steps
+- Re-auth (`gh auth login`) and push main.
+- Yves: erratum text review (erratum-lean.tex / erratum-diff.pdf, erratum repo 67191168115b2b8bc24afaab).
+- Yves: Example 2's mesh needs a type for triangle faces with degree-4 irrational corners; it stays
+  an EnvelopeMin (eval only) until then.
+- TODO item 3 remainder: ~1600 empty faces on the 3-convex-edge triangle whose cell the curve
+  R = FP(x,y,q) = 0 crosses -- needs that curve's arrangement to prove them empty (values unaffected).
+- Optional: planar Minkowski-Weyl in Lean (lean/README "Not formalized").
 
-## Files
-- `DECISIONS.md` 2026-10-16..20 entries -- every change above, with measurements.
-- `envelopeMeshAlg.m` -- the mesher (header + minMaxFaces, liveCell, algEmpty).
-- `polySignOn.m`, `cellSamplePoint.m`, `envelopeRationalCorners.m` -- new helpers.
+## Relevant files
+- `envelopeMeshAlg.m` -- the mesher: header, minMaxFaces (several pairs), liveCell, pieceLive, algEmpty
+- `biconjQ.m` (meshPair, hullRows), `biconjAtoms.m` (activeAtomPairs), `envelopeEval.m` (crack retry)
+- New helpers: `polySignOn.m`, `cellSamplePoint.m`, `envelopeRationalCorners.m`
+- New slow suites: `kinkMeshTest.m`, `minMeshTest.m`, `erratumBiconjEx2Test.m`, `envelopeMeshSlowTest.m`
+- `DECISIONS.md` (2026-10-16..20), `TODO.md` (biconjugate list at the top)
