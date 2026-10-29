@@ -19,9 +19,11 @@
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
-- [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20: a certified test drops
-      a piece whose algebraic row has one sign on its cell (polySignOn; the triangle 2172 -> 1760
-      faces). Left: pieces whose cell the curve R = 0 crosses. Was MEASURED 2026-10-17, deferred: on the c = -2
+- [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20/29: a pointwise certified
+      test (algRowFails) drops a piece one of whose algebraic rows fails everywhere on it (the
+      triangle 2172 -> 1760 -> 1162 faces, 198 own a point). Left (964): pieces empty only by
+      SEVERAL algebraic rows jointly, and rows TOUCHING zero on the piece's boundary, which a strict
+      box sign cannot certify (DECISIONS 2026-10-29). Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeMeshAlg proves emptiness from CONIC rows only (pieceLive) and
       their emptiness is an ALGEBRAIC row (q >= bridge). No value changes; dropping them unproven

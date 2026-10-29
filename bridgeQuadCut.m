@@ -26,10 +26,12 @@ function [R, info] = bridgeQuadCut(FP, num, den)
 % substituting a rational function into an integer polynomial and clearing the denominator leaves an
 % integer polynomial. With FP of degree 2 in z and q of degree 2 in (x, y),
 %
-%       R = FP_2 q_n^2 + FP_1 q_n den + FP_0 den^2 ,
+%       R = FP_2 q_n^2 + FP_1 q_n (2 den) + FP_0 (2 den)^2 ,
 %
-% where FP_k is FP's coefficient of z^k -- a polynomial in (x, y) alone -- and q_n is num's
-% quadratic. Degree 2 in z is what makes this three terms rather than a resultant.
+% where FP_k is FP's coefficient of z^k -- a polynomial in (x, y) alone -- and q_n is TWICE num's
+% quadratic, in the plain monomial basis (the weighted one halves x^2 and y^2), so q = q_n / (2 den).
+% R is then (2 den)^2 FP(x, y, q) up to its content. Degree 2 in z is what makes this three terms
+% rather than a resultant.
 %
 % WHAT IT COSTS. R has degree up to 2*max(deg FP_k) + 4, well above two, so it is NOT a conic: this
 % is precisely the edge the `Conic` subdivision level cannot store, and the reason the subdivision
@@ -78,11 +80,13 @@ function [R, info] = bridgeQuadCut(FP, num, den)
     F0 = FP(:,:,1);  F1 = FP(:,:,2);  F2 = FP(:,:,3);
 
     % ---- the quadratic face's numerator as a polyN in (x, y) ---------------------------------------
-    % RatCon's weighted basis: entries 5..10 are [xx xy yy x y 1] with the SAME weights `eval` uses.
+    % RatCon's weighted basis: entries 5..10 are [xx/2 xy yy/2 x y 1] (QuaPar.evalPoly). Doubled to
+    % stay integer: q = Q / D with Q = 2 * numerator and D = 2 den, as algCurveSide reads it. Until
+    % 2026-10-29 the 1/2 was dropped, so R was not FP(x, y, q) on any face with a square term.
     Q = zeros(3,3);
-    Q(3,1) = num(5);   Q(2,2) = num(6);   Q(1,3) = num(7);
-    Q(2,1) = num(8);   Q(1,2) = num(9);   Q(1,1) = num(10);
-    D = zeros(1,1);  D(1,1) = den;
+    Q(3,1) = num(5);     Q(2,2) = 2*num(6);   Q(1,3) = num(7);
+    Q(2,1) = 2*num(8);   Q(1,2) = 2*num(9);   Q(1,1) = 2*num(10);
+    D = zeros(1,1);  D(1,1) = 2*den;
 
     % ---- R = F2 Q^2 + F1 Q D + F0 D^2 -------------------------------------------------------------
     R = ratQ.polyAddN(ratQ.polyMulN(F2, ratQ.polyMulN(Q, Q)), ...

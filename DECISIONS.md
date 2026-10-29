@@ -8656,3 +8656,31 @@ products, and with the certificate cached per (cell, row), the triangle's mesh i
 **Measured:** the 3-convex-edge triangle 2172 -> 1760 faces (132 own a sample point), values and
 holes unchanged on 4000 points. The ~1600 left have the curve R = 0 crossing their cell, where one
 sign per cell does not hold; proving those empty needs the curve's arrangement, not done.
+
+## 2026-10-29 — empty faces where R = 0 crosses the cell: a POINTWISE certificate; and bridgeQuadCut dropped the basis' 1/2
+
+TODO item 3's remainder. **Bug found on the way:** `bridgeQuadCut` read num(5), num(7) as the x^2,
+y^2 coefficients, but the weighted basis (QuaPar.evalPoly) halves both, so on any face with a square
+term R was not FP(x, y, q) (14 of 36 quadratics per pair on the 3-convex-edge triangle). It fed the
+2026-10-20 certificate and the AlgCrv vertex/incidence curves (algCrvVertices.curveTable,
+algCrvIncidence.curvePoly). Red first: algCurveSideTest/theCUTReadsTheFaceInTheWEIGHTEDBasis
+(R / FP(x,y,q) one constant at 40 points). algCurveSide already read the weights right.
+
+**The certificate** (`algRowFails`, new): with a, b, c the fibre's coefficients and m = -b/2a,
+q < z_hi <=> q < m or F(q)/a < 0, and the three like it -- each a sign of a, 2aq + b, F(q) or the
+discriminant, certified per sub-box by polySignOn, subdividing where undecided. A box the OTHER
+root's curve crosses still decides, so R = 0 crossing the cell is no obstacle, and nothing rests on
+sample points reaching every connected part (the 10-20 residual risk). It replaces rowCertified.
+Oracle: 300 random rows, every certified box checked with algBranch at 404 points (algRowFailsTest);
+swapping the hi/lo branch rule turns 5 of its 7 tests red.
+
+**Second cause, measured:** all 896 faces then left with one row failing on a 301-grid had a BRANCH
+row, which regionBox's sub-box filter ignored -- it examined the far side of the chosen line, where
+the row may hold. Branch rows are affine; a box is now rejected when every corner is clear of the
+line by 1e-7 (the line is a double).
+
+**Measured** (envIn of minMeshTest's fixture, 4000 points): faces 1760 -> 1368 (certificate) -> 1162
+(branch rows); faces owning a point 198 throughout; holes unchanged; max |mesh - EnvelopeMin|
+7.5e-9 (the 1e-8 row tolerance). Left: 964 empty faces -- of the 1368-stage ones, 274 are empty only
+by several algebraic rows jointly, and a quarter of the single-row ones have the row within 3e-5 of
+zero on the piece (q meets z on its boundary), which a strict box sign cannot certify at any depth.

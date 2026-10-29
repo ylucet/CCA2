@@ -16,7 +16,7 @@ function s = polySignOn(P, box, inBox, depth)
 % it clears a margin relative to the largest one, so rounding cannot turn a zero into a sign.
 %
 % WHAT IT IS FOR: proving a mesh piece EMPTY when its emptiness is an algebraic row (a quadratic
-% against an irrational face) -- see envelopeMeshAlg's algRowEmpty. Answering 0 only costs a face.
+% against an irrational face) -- see algRowFails and envelopeMeshAlg's algEmpty. Answering 0 only costs a face.
     if nargin < 4, depth = 6; end
     s = signRec(P, box, inBox, depth);
 end

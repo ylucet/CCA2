@@ -290,14 +290,16 @@ function tf = liveCell(C, rows)
 end
 
 function tf = algEmpty(C, rows, conRows, algRows, Q)
-% Is the piece PROVABLY empty because of one of its algebraic rows (2026-10-20)? pieceLive decides the
-% conic rows only, and on the 3-convex-edge triangle 2040 of 2172 faces were empty by an algebraic row.
-% For a row side*(q - z) >= 0, z one root of FP(x,y,.): its zero set lies in R = FP(x,y,q) = 0
-% (bridgeQuadCut), and the roots of FP part only across its discriminant D. If polySignOn certifies
-% R != 0 on the CELL and D of one strict sign there, the row has one sign on each connected part of
-% the cell -- so a row failing at EVERY sample point of the piece's conic part fails on the piece
-% (one sample per part read at a single point opened five holes: the part can be disconnected).
-% The certificate depends on the cell and the row only, so it is cached across the cell's pieces.
+% Is the piece PROVABLY empty because of one of its algebraic rows? pieceLive decides the conic rows
+% only, and on the 3-convex-edge triangle 2040 of 2172 faces were empty by an algebraic row.
+% A row failing at every sample point of the piece's conic part is a CANDIDATE; algRowFails then
+% certifies it false at every point of that part, by Bernstein signs on sub-boxes (2026-10-29).
+%
+% Until 2026-10-29 the certificate was R = FP(x,y,q) != 0 and D of one sign on the CELL, read at the
+% sample points (2026-10-20). That left the ~1600 faces whose cell R = 0 crosses, it relied on a
+% sample reaching every connected part of the piece (one sample per part had opened five holes),
+% and bridgeQuadCut's R dropped the basis' 1/2 on x^2 and y^2, so on faces with a square term it was
+% not the cut at all. The pointwise certificate needs no sample and no connectivity argument.
     tf = false;
     if isempty(algRows), return, end
     M = true(size(Q,1),1);
@@ -309,41 +311,32 @@ function tf = algEmpty(C, rows, conRows, algRows, Q)
         a = algRows(t);
         z = algBranch(a.FP, Qk, a.FB);  q = ratQ.evalFace(a.num, a.den, Qk);
         if ~all(isfinite(z) & a.side * (q - z) < 0), continue, end  % the row must fail at every point
-        if rowCertified(C, rows, a), tf = true; return, end
+        if rowFails(C, rows, conRows, a), tf = true; return, end
     end
 end
 
-function ok = rowCertified(C, rows, a)
-% R != 0 and D of one strict sign (> 0: the branch exists throughout) on the cell, cached per cell.
-    persistent cache lastC
-    key = sprintf('%s|%s|%s|%d', mat2str(sortrows(rows)), mat2str(a.FP(:).'), mat2str(a.num), a.den);
-    if isempty(cache) || ~isequal(lastC, size(C)), cache = containers.Map(); lastC = size(C); end
-    if isKey(cache, key), ok = cache(key); return, end
+function ok = rowFails(C, rows, conRows, a)
+% algRowFails on the piece's conic part (cell rows plus conRows), cached on the rows' CURVES, not
+% their indices, so that a cache entry cannot outlive the arrangement it was computed on.
+    persistent cache
+    if isempty(cache), cache = containers.Map(); end
     ok = false;
-    [box, inBox] = regionBox(C, rows, zeros(0,8));
+    try
+        key = sprintf('%s|%s|%s|%s|%d|%d|%d', mat2str(sortrows([C(rows(:,1),:), rows(:,2)])), ...
+                      mat2str(sortrows(conRows)), mat2str(a.FP(:).'), mat2str(a.num), a.den, a.FB, a.side);
+    catch
+        key = '';                                    % a BigInteger FP: not cached
+    end
+    if ~isempty(key) && isKey(cache, key), ok = cache(key); return, end
+    [box, inBox] = regionBox(C, rows, conRows);
     if ~isempty(box)
         try
-            R = bridgeQuadCut(a.FP, a.num, a.den);
-            if isnumeric(R) && all(isfinite(R(:))) && polySignOn(R, box, inBox, 4) ~= 0
-                nz = size(a.FP, 3) - 1;
-                if nz == 2
-                    D = padSub(conv2(a.FP(:,:,2), a.FP(:,:,2)), 4 * conv2(a.FP(:,:,3), a.FP(:,:,1)));
-                    ok = polySignOn(D, box, inBox, 4) == 1;
-                elseif nz == 1
-                    ok = polySignOn(a.FP(:,:,2), box, inBox, 4) ~= 0;
-                end
-            end
+            ok = algRowFails(a, box, inBox, 6);
         catch
             ok = false;
         end
     end
-    cache(key) = ok;
-end
-
-function D = padSub(A, B)
-    n = max(size(A), size(B));
-    D = zeros(n);  D(1:size(A,1), 1:size(A,2)) = A;
-    D(1:size(B,1), 1:size(B,2)) = D(1:size(B,1), 1:size(B,2)) - B;
+    if ~isempty(key), cache(key) = ok; end
 end
 
 function [box, inBox] = regionBox(C, rows, K)
@@ -371,7 +364,28 @@ function [box, inBox] = regionBox(C, rows, K)
         if size(K,2) >= 8 && K(r,8) ~= 0, continue, end
         rowPolys{end+1} = K(r,7) * conicPoly(K(r,1:6)); %#ok<AGROW>
     end
-    inBox = @(b) ~any(cellfun(@(P) polySignOn(P, b, @(~) true, 0) == -1, rowPolys));
+    % BRANCH rows too (2026-10-29): without them the box test kept the far side of a line pair's
+    % chosen line, where an algebraic row may hold, and all 896 faces left undecided on the
+    % 3-convex-edge triangle had one. A branch row is AFFINE, so its maximum on a box is at a corner;
+    % the line is a double (pairLineEval, roots of a quadratic), so a box is rejected only when it is
+    % clear of the line by a margin -- keeping a box is always safe.
+    lines = zeros(0,8);
+    for t = 1:size(rows,1)
+        if C(rows(t,1), 7) ~= 0, lines(end+1,:) = [C(rows(t,1), 1:6), rows(t,2), C(rows(t,1), 7)]; end %#ok<AGROW>
+    end
+    if size(K,2) >= 8, lines = [lines; K(K(:,8) ~= 0, 1:8)]; end
+    inBox = @(b) ~any(cellfun(@(P) polySignOn(P, b, @(~) true, 0) == -1, rowPolys)) && ...
+                 ~lineMisses(lines, b);
+end
+
+function tf = lineMisses(lines, b)
+% Does box b lie strictly on the wrong side of one of the branch rows?
+    tf = false;
+    X = [b(1) b(3); b(2) b(3); b(1) b(4); b(2) b(4)];
+    for r = 1:size(lines,1)
+        v = lines(r,7) * ratQ.pairLineEval(lines(r,1:6), lines(r,8), X);
+        if max(v) < -1e-7 * max([1; abs(v)]), tf = true; return, end
+    end
 end
 
 function P = conicPoly(c)

@@ -51,6 +51,24 @@ classdef algCurveSideTest < matlab.unittest.TestCase
                           'the constant 1 is above -|x| everywhere, inside and out');
         end
 
+        function theCUTReadsTheFaceInTheWEIGHTEDBasis(t)
+        % Found 2026-10-29: bridgeQuadCut read num(5) and num(7) as the x^2 and y^2 coefficients,
+        % but the weighted basis eval uses carries 1/2 on both (QuaPar.evalPoly), so on a face with a
+        % square term R was not FP(x, y, q) and its zero set was not the boundary. The definition:
+        % R(x) is a FIXED multiple of FP(x, y, q(x)), q read by ratQ.evalFace.
+            FP = zeros(3,3,3);
+            FP(1,1,3) = 1;  FP(2,2,2) = 3;  FP(3,1,1) = -1;  FP(1,3,1) = -1;  FP(1,1,1) = -1;
+            num = [0 0 0 0, 3, -1, 2, 1, -2, 5];  den = 3;
+            R = bridgeQuadCut(FP, num, den);
+            rng(11);  X = randn(40, 2);
+            q = ratQ.evalFace(num, den, X);
+            F = zeros(size(X,1), 1);
+            for k = 1:3, F = F + evalPoly2(FP(:,:,k), X) .* q.^(k-1); end
+            ratio = evalPoly2(R, X) ./ F;
+            t.verifyLessThan(max(abs(ratio - ratio(1))), 1e-8 * abs(ratio(1)), ...
+                             'R / FP(x, y, q(x)) must be one constant');
+        end
+
         function aPointONTheCurveIsReportedAsZero(t)
             [FP, num, den] = fixture();
             % The DYADIC points of the unit circle are its axis points -- (3/5, 4/5) is on the
