@@ -51,6 +51,55 @@ classdef algRowFailsTest < matlab.unittest.TestCase
             t.verifyTrue(algRowFails(a, [-3 1 -1 1], inBox));
         end
 
+        function aTOUCHINGRowHoldsOnlyOnACurve(t)
+        % q = 0 against z = (x - y)^2 holds on the diagonal alone: F(q) = -(x - y)^2 has no strict
+        % sign on any box the diagonal crosses, so this needs the squared factor divided out.
+            L = zeros(3,3);  L(3,1) = 1;  L(2,2) = -2;  L(1,3) = 1;   % (x - y)^2
+            FP = zeros(3,3,2);  FP(1,1,2) = 1;  FP(:,:,1) = -L;        % z = (x - y)^2
+            a = struct('FP', FP, 'FB', 1, 'num', zeros(1,10), 'den', 1, 'side', 1);
+            t.verifyTrue(algRowFails(a, [-1 1 -1 1], @(~) true), 'linear fibre');
+            FP = zeros(3,3,3);  FP(1,1,3) = 1;  FP(:,:,2) = -L;  FP(1,1,2) = 1;  FP(:,:,1) = -L;
+            a.FP = FP;  a.FB = -1;                                     % (z - (x-y)^2)(z + 1): upper
+            t.verifyTrue(algRowFails(a, [-1 1 -1 1], @(~) true), 'quadratic fibre');
+            a.num(10) = 1;  a.den = 100;                               % q = 1/100: a band, not a curve
+            t.verifyFalse(algRowFails(a, [-1 1 -1 1], @(~) true), 'a row holding on a band');
+        end
+
+        function twoRowsEmptyOnlyJOINTLY(t)
+        % q = 2x >= +sqrt(.) holds for x > 1/sqrt3, q = 2x <= -sqrt(.) for x < -1/sqrt3: each holds
+        % on part of the box, never both at one point.
+            a = [row(-1, 1, [0 0 0 0 0 0 0 2 0 0]), row(1, -1, [0 0 0 0 0 0 0 2 0 0])];
+            box = [-3 3 -1 1];
+            t.verifyFalse(algRowFails(a(1), box, @(~) true), 'the first row alone holds somewhere');
+            t.verifyFalse(algRowFails(a(2), box, @(~) true), 'the second too');
+            t.verifyTrue(algRowFails(a, box, @(~) true), 'together they hold nowhere');
+        end
+
+        function aCERTIFIEDPairOfRowsNeverHoldsTogetherRandomInputs(t)
+        % The definition for several rows: wherever algRowFails says true, no sample has every row
+        % holding (algBranch and ratQ.evalFace, sharing no code with the certificate).
+            rng(30);  nCert = 0;  nJoint = 0;
+            for trial = 1:300
+                a = [randRow(), randRow()];
+                c = randn(1,2);  h = 0.05 + rand(1,2);
+                box = [c(1) - h(1), c(1) + h(1), c(2) - h(2), c(2) + h(2)];
+                if ~algRowFails(a, box, @(~) true, 5), continue, end
+                nCert = nCert + 1;
+                X = [box(1) + (box(2) - box(1)) * rand(400,1), box(3) + (box(4) - box(3)) * rand(400,1)];
+                holds = true(size(X,1), 1);
+                for k = 1:2
+                    z = algBranch(a(k).FP, X, a(k).FB);  q = ratQ.evalFace(a(k).num, a(k).den, X);
+                    holds = holds & isfinite(z) & a(k).side * (q - z) >= 0;
+                end
+                t.verifyFalse(any(holds), sprintf('trial %d: both rows hold at a sample', trial));
+                if ~algRowFails(a(1), box, @(~) true, 5) && ~algRowFails(a(2), box, @(~) true, 5)
+                    nJoint = nJoint + 1;                   % neither row alone was enough
+                end
+            end
+            t.verifyGreaterThan(nCert, 20, 'too few certified trials to mean anything');
+            t.verifyGreaterThan(nJoint, 0, 'no trial needed both rows');
+        end
+
         function aCERTIFIEDRowFailsAtEveryPointRandomInputs(t)
         % The definition, against the evaluator that shares no code with the certificate: wherever
         % algRowFails says true, algBranch and ratQ.evalFace find the row false at every sample.
@@ -86,4 +135,15 @@ function a = row(FB, side, num)
     FP = zeros(3,3,3);
     FP(1,1,3) = 1;  FP(3,1,1) = -1;  FP(1,3,1) = -1;  FP(1,1,1) = -1;    % z^2 = x^2 + y^2 + 1
     a = struct('FP', FP, 'FB', FB, 'num', num, 'den', 1, 'side', side);
+end
+
+function a = randRow()
+% A random row on a random quadratic fibre, as aCERTIFIEDRowFailsAtEveryPointRandomInputs draws them.
+    FP = zeros(3,3,3);
+    FP(1,1,3) = randi([1 3]) * sign(randn);
+    FP(:,:,2) = randi([-2 2], 3) .* fliplr(triu(ones(3)));
+    FP(:,:,1) = randi([-3 3], 3) .* fliplr(triu(ones(3)));
+    br = [-2 -1 1 2];
+    a = struct('FP', FP, 'FB', br(randi(4)), 'num', [0 0 0 0, randi([-3 3], 1, 6)], ...
+               'den', randi(3), 'side', 2*randi(2) - 3);
 end

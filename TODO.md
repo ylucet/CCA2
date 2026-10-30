@@ -21,9 +21,10 @@
       Detail under "The global arrangement does not scale" below.
 - [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20/29: a pointwise certified
       test (algRowFails) drops a piece one of whose algebraic rows fails everywhere on it (the
-      triangle 2172 -> 1760 -> 1162 faces, 198 own a point). Left (964): pieces empty only by
-      SEVERAL algebraic rows jointly, and rows TOUCHING zero on the piece's boundary, which a strict
-      box sign cannot certify (DECISIONS 2026-10-29). Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
+      triangle 2172 -> 1760 -> 1162 -> 620 faces; jointly-empty rows and touching rows with a
+      squared factor, 2026-10-30). Left (463): ~half fail by a clear margin but the region box is
+      too coarse for depth 6; the rest touch zero near (0,0) and on x = y. DECISIONS 2026-10-29/30.
+      Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeMeshAlg proves emptiness from CONIC rows only (pieceLive) and
       their emptiness is an ALGEBRAIC row (q >= bridge). No value changes; dropping them unproven

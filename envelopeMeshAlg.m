@@ -307,23 +307,35 @@ function tf = algEmpty(C, rows, conRows, algRows, Q)
     Qk = Q(M,:);
     if isempty(Qk), return, end
     if any(piecePoints([], Qk, zeros(0,8), algRows)), return, end   % a witness: not empty
+    nFail = zeros(numel(algRows), 1);
     for t = 1:numel(algRows)
         a = algRows(t);
         z = algBranch(a.FP, Qk, a.FB);  q = ratQ.evalFace(a.num, a.den, Qk);
-        if ~all(isfinite(z) & a.side * (q - z) < 0), continue, end  % the row must fail at every point
+        nFail(t) = sum(~(isfinite(z) & a.side * (q - z) >= 0));
+        if nFail(t) < size(Qk,1), continue, end      % a lone row must fail at every point
         if rowFails(C, rows, conRows, a), tf = true; return, end
+    end
+    % JOINTLY (2026-10-30): no sample has every row holding, but no one row fails at all of them --
+    % 274 faces of the 3-convex-edge triangle. A sub-box is decided by whichever row fails on it; the
+    % rows failing most often are tried first.
+    if numel(algRows) > 1
+        [~, o] = sort(nFail, 'descend');
+        tf = rowFails(C, rows, conRows, algRows(o));
     end
 end
 
 function ok = rowFails(C, rows, conRows, a)
-% algRowFails on the piece's conic part (cell rows plus conRows), cached on the rows' CURVES, not
+% algRowFails (one row, or several jointly) on the piece's conic part (cell rows plus conRows), cached on the rows' CURVES, not
 % their indices, so that a cache entry cannot outlive the arrangement it was computed on.
     persistent cache
     if isempty(cache), cache = containers.Map(); end
     ok = false;
     try
-        key = sprintf('%s|%s|%s|%s|%d|%d|%d', mat2str(sortrows([C(rows(:,1),:), rows(:,2)])), ...
-                      mat2str(sortrows(conRows)), mat2str(a.FP(:).'), mat2str(a.num), a.den, a.FB, a.side);
+        key = sprintf('%s|%s', mat2str(sortrows([C(rows(:,1),:), rows(:,2)])), mat2str(sortrows(conRows)));
+        for t = 1:numel(a)
+            key = [key, sprintf('|%s|%s|%d|%d|%d', mat2str(a(t).FP(:).'), mat2str(a(t).num), ...
+                                a(t).den, a(t).FB, a(t).side)]; %#ok<AGROW>
+        end
     catch
         key = '';                                    % a BigInteger FP: not cached
     end

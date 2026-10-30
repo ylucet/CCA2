@@ -8684,3 +8684,24 @@ line by 1e-7 (the line is a double).
 7.5e-9 (the 1e-8 row tolerance). Left: 964 empty faces -- of the 1368-stage ones, 274 are empty only
 by several algebraic rows jointly, and a quarter of the single-row ones have the row within 3e-5 of
 zero on the piece (q meets z on its boundary), which a strict box sign cannot certify at any depth.
+
+## 2026-10-30 — empty faces: rows empty JOINTLY, and TOUCHING rows (a squared factor)
+
+Continues 2026-10-29 (1162 faces, 198 owning a point). Two measured classes, two extensions of
+`algRowFails`:
+
+- **Jointly empty** (274 at the 1368 stage): no one row fails on the whole piece. A sub-box is now
+  decided by whichever row is certified false on it. Red first (twoRowsEmptyOnlyJOINTLY, and a
+  300-trial random pair oracle). Triangle 1162 -> 1074.
+- **Touching** (margin 0 at grid points on x = y, x = 0, ...): factored, the cut polynomials carry
+  SQUARED factors -- (x - y)^2, x^2 -- so q meets z along a curve without crossing, and no box on
+  that curve gets a strict sign. `squareFreeSign` divides G^2 out (G = gcd(F, dF/dx or dF/dy),
+  exact, ratQ); the quotient has F's sign off G = 0, so the certificate now proves the piece has NO
+  INTERIOR rather than no point. Dropping it is safe for the reason corners were (2026-10-17): its
+  points on G = 0 lie on the closed boundary of faces with area. Red first
+  (aTOUCHINGRowHoldsOnlyOnACurve; a band q = 1/100 stays refused).
+
+**Measured:** triangle 1162 -> 620 faces; holes unchanged, max |mesh - EnvelopeMin| 7.5e-9 on 4000
+points. Faces owning a point 198 -> 157: all 41 dropped ones own their points only through the
+evaluator's 1e-9 row tolerance -- at every such point some row's slack is <= 0 (largest 0 over all
+41), i.e. they are zero-area faces the tolerance lets claim a point.
