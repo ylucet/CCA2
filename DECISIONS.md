@@ -8766,3 +8766,21 @@ only on a disk of radius 1/64 left of the corner, catches it.
 hypotenuse, where 5x^2 - 1, 4x^2 - 2xy - y^2, the edge and a row all vanish. The blow-up needs the
 corner exactly; at a rounded one the lowest order is a tiny nonzero, so it refuses. Would need the
 substitution over Q(sqrt5) (or a Taylor/interval cone argument with the vertex isolated exactly).
+
+## 2026-10-30 (fourth) — algBranch's double-root window collapsed DISTINCT roots; it is now rounding-sized
+
+The emptiness certificate above dropped a face on the poly2 kink that "owned" a sample, and
+kinkMeshTest read a hole at (-0.6852, 0.8766). Exact arithmetic (vpa): the certificate was right --
+q lies BETWEEN the fibre's roots there (q - z_hi = -1.1e-6), and the bridge face owns the point
+(slack +1.1e-6). algBranch was wrong: the point is 4e-6 from the bridge's merge curve, D = 1.3e-11
+is inside the double-root window (1e-12 of the terms, 2026-09-25), and both branches came back as
+the mean, 6.6e-6 off. The face list carried the same error, so mesh and reference agreed on a
+wrong value until the mesh stopped relying on the face that only the error made own the point.
+
+Fix: within 16 eps of the terms (dq's rounding) it is the double root, the mean; past that, inside
+the old window, a positive dq gets the stable quadratic formula, a negative one keeps the mean.
+Splitting EVERY dq >= 0 was tried first and refuted by erratumBiconjTest: on Example 1's edge
+y = 2x, D = 0 exactly, a rounding-size dq > 0 split the branches by sqrt(eps) and the mesh came out
+2e-8 above the definition's sup (definition 1.67118512046912, face list 1.67118512045491).
+Red first: aNEARDoubleRootIsNOTCollapsedToTheMean (mean 1e-6 off), aTRUEDoubleRootIsNotSPLITByRounding
+(red on the split-everything variant).

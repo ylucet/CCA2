@@ -82,7 +82,10 @@ function [z, info] = algBranch(P, X, b, opts)
 %             the double root as a complex pair past imagTol, and the point has no branch at all:
 %             the c = -2 AlgCrv evaluated to +Inf on parts of its domain edges x = 0 and y = 1, where
 %             the bridge's two branches meet (2026-09-25). It decides nothing a mesh depends on;
-%             it only stops the cache from dropping a value that exists.
+%             it only stops the cache from dropping a value that exists. Inside that window but
+%             past dq's rounding (16 eps of the terms), a positive discriminant still gets its two
+%             roots (stable formula) -- the mean was 6.6e-6 off a branch near the poly2 kink's merge
+%             curve (2026-10-30).
 
     if nargin < 4, opts = struct(); end
     % A polynomial kept in BigInteger (past 2^53 -- bridgeFaceAlg) is NOT simply rounded: its
@@ -182,8 +185,22 @@ function [z, info] = algBranch(P, X, b, opts)
             ca = zeros(1, 3);
             for k = 1:3, ca(k) = abs(xs) * abs(P(:,:,k)) * abs(ys); end
             dq = cz(2)^2 - 4*cz(3)*cz(1);
-            if abs(dq) <= 1e-12 * (ca(2)^2 + 4*ca(3)*ca(1))
+            T = ca(2)^2 + 4*ca(3)*ca(1);
+            % ...but the window is wide (1e-12 of the terms, ~5000x dq's rounding error), and a
+            % computed dq > 0 past ROUNDING is two real roots up to ~1e-5 apart: collapsing them to
+            % the mean put a branch 6.6e-6 off near the poly2 kink's merge curve (2026-10-30,
+            % aNEARDoubleRootIsNOTCollapsedToTheMean), so those get the stable quadratic formula.
+            % Within rounding (16 eps of the terms) it IS the double root and the mean is exact --
+            % splitting a true D = 0 by sqrt(rounding) put erratum Example 1's edge y = 2x 2e-8 high.
+            if abs(dq) <= 16 * eps * T
                 rr = [1; 1] * (-cz(2) / (2*cz(3)));
+            elseif abs(dq) <= 1e-12 * T
+                if dq > 0
+                    qq = -(cz(2) + sign(cz(2) + (cz(2) == 0)) * sqrt(dq)) / 2;
+                    rr = sort([qq / cz(3); cz(1) / qq]);
+                else
+                    rr = [1; 1] * (-cz(2) / (2*cz(3)));
+                end
             end
         end
         allReal{t} = rr;

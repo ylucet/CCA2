@@ -90,6 +90,32 @@ classdef algBranchTest < matlab.unittest.TestCase
             end
         end
 
+        function aNEARDoubleRootIsNOTCollapsedToTheMean(testCase)
+        % (z - 1)^2 = x: at x = 1e-12 the branches are 1 +- 1e-6, distinct, but the discriminant 4x
+        % is within the double-root test's 1e-12 of its terms (~8), and the mean 1 came back for
+        % both -- 1e-6 off. On the poly2 kink (2026-10-30) the same collapse, 6.6e-6 off near the
+        % bridge's merge curve, made the bridge face lose a point it owns (exact: slack +1.1e-6)
+        % and kinkMeshTest read a hole. Only a NEGATIVE computed discriminant is the double root.
+            P = zeros(2,1,3);
+            P(1,1,3) = 1;  P(1,1,2) = -2;  P(1,1,1) = 1;  P(2,1,1) = -1;   % z^2 - 2z + 1 - x
+            for x = [1e-12 3e-13 1e-14]
+                testCase.verifyEqual(algBranch(P, [x 0], -1), 1 + sqrt(x), 'AbsTol', 1e-9, sprintf('upper, x = %g', x));
+                testCase.verifyEqual(algBranch(P, [x 0], 1), 1 - sqrt(x), 'AbsTol', 1e-9, sprintf('lower, x = %g', x));
+            end
+        end
+
+        function aTRUEDoubleRootIsNotSPLITByRounding(testCase)
+        % (z - (x + y))^2: D = 0 exactly, computed as a rounding-size number of either sign. Split
+        % by the formula, the branches sit ~sqrt(eps) apart -- erratum Example 1's edge y = 2x
+        % came out 2e-8 high that way (2026-10-30). Within rounding it is the double root.
+            P = zeros(3,3,3);
+            P(1,1,3) = 1;  P(2,1,2) = -2;  P(1,2,2) = -2;              % z^2 - 2(x+y) z
+            P(3,1,1) = 1;  P(2,2,1) = 2;  P(1,3,1) = 1;                % + (x+y)^2
+            rng(11);  X = rand(200, 2) * 3 - 1;
+            testCase.verifyEqual(algBranch(P, X, -1), sum(X,2), 'AbsTol', 1e-12, 'upper');
+            testCase.verifyEqual(algBranch(P, X, 1), sum(X,2), 'AbsTol', 1e-12, 'lower');
+        end
+
         function aQUARTICBranchIsSelectedByIndexAndNotByMagnitude(testCase)
         % Four distinct real roots at every point, so every index is exercised and an implementation
         % that sorted by |z| rather than by z would get two of them wrong.
