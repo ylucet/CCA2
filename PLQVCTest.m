@@ -502,7 +502,7 @@ classdef PLQVCTest < matlab.unittest.TestCase
         % acute one and reported convex.
         %
         % The witness needs no convexity routine at all, which is why it is the assertion: two
-        % points the mesh itself puts in the domain whose midpoint the mesh puts outside it.
+        % points the subdivision itself puts in the domain whose midpoint the subdivision puts outside it.
             p = PLQVC.examples();  p = p{16};
             v = p.eval([-1 -1; 1 0; 0 -0.5]);
             testCase.verifyTrue(all(isfinite(v(1:2))), 'both witness points are in the domain');
@@ -516,7 +516,7 @@ classdef PLQVCTest < matlab.unittest.TestCase
         % face index, so every boundary edge asked about face 1 whatever its own face was:
         % accidentally right for face 1, wrong for every other.
         %
-        % The mesh is the closed upper half-plane split by the ray x=0, y>=0. Edge 2 (the negative
+        % The subdivision is the closed upper half-plane split by the ray x=0, y>=0. Edge 2 (the negative
         % x-axis) has face 1 on its finite side; edge 3 (the positive x-axis) has face 2. Face 1 is
         % x^2+y^2 and face 2 is x^2-y^2, so the two edges MUST answer differently -- which is the
         % whole point of the fixture, and what the count could not express.

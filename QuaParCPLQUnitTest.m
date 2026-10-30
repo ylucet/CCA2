@@ -154,7 +154,7 @@ classdef QuaParCPLQUnitTest < matlab.unittest.TestCase
             f = QuaParCPLQUnitTest.twoHalfPlanes(v(1), v(2));
             other = QuaPol([1 0 1 0 0 0]);             % a full-domain quadratic, a different class
             testCase.verifyError(@() add(f, other), 'QuaParCPLQ:add:unsupportedType', ...
-                'mixing a QuaParCPLQ with another mesh class must be refused by name');
+                'mixing a QuaParCPLQ with another subdivision class must be refused by name');
         end
     end
 end

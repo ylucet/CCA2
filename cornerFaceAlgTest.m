@@ -46,7 +46,7 @@ classdef cornerFaceAlgTest < matlab.unittest.TestCase
         % Found 2026-10-11, the poly2 kink at c = -2 (pair 15: an affine face against a rank-1 one,
         % tied on irrational parallel lines). A wedge edge A + sigma*B with A PARALLEL to B is the
         % RATIONAL line B scaled by (lambda + sigma); its conjugate product is a DOUBLE line, which
-        % pairLineData rejects (ratQ:notALinePair), so the corner got no rows and the mesh could
+        % pairLineData rejects (ratQ:notALinePair), so the corner got no rows and the subdivision could
         % not place it. Every corner of the pair must come with two rows that agree with its KKT
         % predicate.
             P = [-1 2 4; 1 -2 6; 2 1 -8; 3 2 -10; 1 0 -2];

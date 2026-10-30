@@ -151,7 +151,7 @@ classdef QuaParTest < matlab.unittest.TestCase
         % point to NO face at all, so eval returned its Inf initialization. The fix is a
         % conic-magnitude-relative tolerance; this test pins it.
         %
-        % The mesh below is not hand-made: it is case 2 of
+        % The subdivision below is not hand-made: it is case 2 of
         % sweepQuaParEvalAtVertices(20260802, 200), the first subdivision that sweep produces
         % with a vertex the exact test cannot locate. That sweep is committed alongside this
         % test and reports 225 of 1205 vertices (18.7%) unlocatable under the exact test and 0
@@ -221,7 +221,7 @@ classdef QuaParTest < matlab.unittest.TestCase
             E = [1 2 1; 2 3 1; 3 1 1];
             f = [0 0 0 0, 2, 0, 2, 0, 0, 0];
             F = [1 0; 1 0; 1 0];
-            testCase.verifyWarningFree(@() QuaPar(V, E, f, F), 'the well-formed mesh still builds');
+            testCase.verifyWarningFree(@() QuaPar(V, E, f, F), 'the well-formed subdivision still builds');
 
             % F with the wrong number of ROWS is the ordinary way to reach this guard.
             testCase.verifyError(@() QuaPar(V, E, f, F(1:2,:)), 'QuaPar:size', ...

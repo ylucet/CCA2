@@ -1,21 +1,21 @@
-classdef envelopeMeshCornersTest < matlab.unittest.TestCase
-% [fast] A CORNER face in the mesh carries its REGION, not its value.
+classdef envelopeSubdivisionCornersTest < matlab.unittest.TestCase
+% [fast] A CORNER face in the subdivision carries its REGION, not its value.
 %
 % Measured on the c = -2 fixture (DECISIONS.md 2026-09-19): wherever a corner face owns a point its
 % value never exceeds the best quadratic face owning the same point, and the largest excess is
-% exactly 0.0e0. So the mesh carries a corner for what its wedge DECIDES -- by `envelopeEval`'s rule
+% exactly 0.0e0. So the subdivision carries a corner for what its wedge DECIDES -- by `envelopeEval`'s rule
 % the envelope is the max over faces and a PAIR with no face owning x is +infinity there, so a pair
 % whose only candidate is a corner makes the domain end where that wedge does.
 %
 % The envelope here is built by hand rather than assembled, because a corner face never occurs
 % without a BRIDGE face in a real assembly and a bridge's region is still a predicate -- so this is
 % the only way to exercise the path until that is solved. `envelopeEval` is the oracle: it was
-% verified against the definition, and the mesh is a re-arrangement of the same faces.
+% verified against the definition, and the subdivision is a re-arrangement of the same faces.
 
     methods (Test)
         function theDOMAINEndsWhereTheCornersWEDGEDoes(t)
             [env, corner] = fixture();
-            [g, info] = envelopeMesh(env);
+            [g, info] = envelopeSubdivision(env);
             t.verifyEqual(info.corners, 1, 'the corner must have been carried, not refused');
             t.verifyGreaterThan(info.faces, 0);
 
@@ -24,14 +24,14 @@ classdef envelopeMeshCornersTest < matlab.unittest.TestCase
             ref = envelopeEval(env, X);
             got = g.eval(X);
             t.verifyEqual(isfinite(got), isfinite(ref), ...
-                          'the mesh and the evaluator must agree on the DOMAIN, point by point');
+                          'the subdivision and the evaluator must agree on the DOMAIN, point by point');
 
             both = isfinite(ref) & isfinite(got);
             t.verifyGreaterThan(sum(both), 0, 'the fixture must have a nonempty domain');
             t.verifyLessThan(max(abs(got(both) - ref(both))), 1e-9, ...
                              'and on the VALUE wherever both are finite');
 
-            % The domain really is the wedge: every point the mesh answers finitely satisfies the
+            % The domain really is the wedge: every point the subdivision answers finitely satisfies the
             % corner's own KKT predicate, and points outside it are +infinity.
             inWedge = false(size(X,1),1);
             for i = 1:size(X,1)
@@ -43,11 +43,11 @@ classdef envelopeMeshCornersTest < matlab.unittest.TestCase
         end
 
         function aFaceWhoseRegionHasNORowsIsStillRefusedByName(t)
-        % A corner has rows; a bridge does not, and admitting one would mesh a region nothing
+        % A corner has rows; a bridge does not, and admitting one would subdivide a region nothing
         % describes. The refusal names the kind so a caller can tell the two apart.
             env = fixture();
             env.bridge{end+1} = struct('kind', 'algebraic', 'pairIndex', 1);
-            t.verifyError(@() envelopeMesh(env), 'envelopeMesh:bridgeFaces');
+            t.verifyError(@() envelopeSubdivision(env), 'envelopeSubdivision:bridgeFaces');
         end
     end
 end

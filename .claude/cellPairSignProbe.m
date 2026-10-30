@@ -104,7 +104,7 @@ end
 
 function V = vertsOf(g)
 % QuaCon.vertexCoords realises the NAMED vertices as doubles on demand -- the class deliberately
-% does not store them, so this is the one call that turns the exact mesh into a bounding box.
+% does not store them, so this is the one call that turns the exact subdivision into a bounding box.
     V = g.vertexCoords();
     V = V(all(isfinite(V), 2), :);
 end

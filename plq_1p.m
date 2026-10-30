@@ -1306,7 +1306,7 @@ classdef plq_1p
         %
         % NOT size(envelope,2) -- that was G5. They are two different arrays and only the
         % ordinary path keeps them in step: `conjugate`'s SEPARABLE branch legitimately returns
-        % the whole conjugate as ONE block (a mesh that partitions the dual plane, already
+        % the whole conjugate as ONE block (a subdivision that partitions the dual plane, already
         % maximal) over an envelope that may have several faces, and its FRAME-CHANGE branch used
         % to copy a multi-face envelope while collapsing conjfia to one block. Sizing the loop
         % from the envelope indexed past the end of conjfia on both -- `MATLAB:badsubscript`,

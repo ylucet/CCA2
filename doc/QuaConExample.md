@@ -138,7 +138,7 @@ top vertices `V4, V5, V6` never win anywhere. **17 faces remain**, each connecte
 
 ### 3.2 The 17 faces
 
-Mesh vertices numbered as in §4.1: `1 = (0,0)`, `2 = (60,10)`, `3 = (15,10)`, `4 = (5,10)`,
+Subdivision vertices numbered as in §4.1: `1 = (0,0)`, `2 = (60,10)`, `3 = (15,10)`, `4 = (5,10)`,
 `5 = (-5,10)`, `6 = (-15,10)`, `7 = (-60,10)`.
 
 | face | `f*(s)` | the maximiser sits |

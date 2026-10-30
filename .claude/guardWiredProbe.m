@@ -100,15 +100,15 @@ function s = firstLine(m)
 end
 
 function [g, note] = curvedRayQuaPar()
-% A QuaPar carrying a PARABOLIC edge on a RAY -- built by MUTATING a valid polyhedral mesh rather
+% A QuaPar carrying a PARABOLIC edge on a RAY -- built by MUTATING a valid polyhedral subdivision rather
 % than by writing one.
 %
-% WHY MUTATE. A hand-written mesh was refused by `orderEdges` ("Face 1 has ..."): a lone ray edge
-% does not bound a face, so reaching this state by construction means satisfying every mesh
+% WHY MUTATE. A hand-written subdivision was refused by `orderEdges` ("Face 1 has ..."): a lone ray edge
+% does not bound a face, so reaching this state by construction means satisfying every subdivision
 % invariant at once for an object that exists only to be refused. Building a valid triangle and
 % then setting one edge's conic and flag reaches exactly the state the guard is about and leaves
 % nothing else in the object invalid. QuaConTest reaches the CLOSED-edge refusal the same way.
-    note = ['a valid triangle mesh with one edge mutated to carry a parabola (y = x^2) AND the ' ...
+    note = ['a valid triangle subdivision with one edge mutated to carry a parabola (y = x^2) AND the ' ...
             'ray flag E(1,3) = 0'];
     V = [0 0; 1 0; 0 1];
     E = [1 2 1; 2 3 1; 3 1 1];

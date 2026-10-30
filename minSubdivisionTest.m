@@ -1,13 +1,13 @@
-classdef minMeshTest < matlab.unittest.TestCase
+classdef minSubdivisionTest < matlab.unittest.TestCase
 % biconjQ on an indefinite triangle with THREE convex edges: three edge atoms, two ACTIVE pairs and
-% no triangle face, so co f is the minimum of two pair envelopes -- meshed since 2026-10-18 as a min
-% of maxes in one arrangement (envelopeMeshAlg's minMaxFaces).
+% no triangle face, so co f is the minimum of two pair envelopes -- subdivided since 2026-10-18 as a min
+% of maxes in one arrangement (envelopeSubdivisionAlg's minMaxFaces).
 %
 % BUCKET: slow -- biconjQ here is ~5 min on the shared machine (one run), computed once per session.
 
     methods (Test)
-        function theMinimumOverTWOPairsIsMESHED(testCase)
-            [h, f, V] = minMeshTest.cached();
+        function theMinimumOverTWOPairsIsSUBDIVIDED(testCase)
+            [h, f, V] = minSubdivisionTest.cached();
             testCase.verifyClass(h, 'AlgCrv');
             want = biconjAtoms(f);
             testCase.verifyEqual(numel(want.pairs), 2, 'the fixture must have two active pairs');
@@ -22,8 +22,8 @@ classdef minMeshTest < matlab.unittest.TestCase
 
         function itAgreesWithTheLEGACYEnvelope(testCase)
         % The differential erratumBiconjTest runs on the other triangles (umbrella CLAUDE.md
-        % section 6): convEnvCPLQ shares no code with the atom route or the mesh.
-            [h, f, V] = minMeshTest.cached();
+        % section 6): convEnvCPLQ shares no code with the atom route or the subdivision.
+            [h, f, V] = minSubdivisionTest.cached();
             rng(5);  W = rand(300,3);  X = (W ./ sum(W,2)) * V;
             testCase.verifyEqual(h.eval(X), f.biconj('cplq').eval(X), 'AbsTol', 1e-10);
         end
@@ -36,7 +36,7 @@ classdef minMeshTest < matlab.unittest.TestCase
         % (the bridge's sweeping root meets det(M_mu) = 0 at mu = -1), so the pair read +Inf there
         % and the minimum took a pair 17x too high. envelopeEval now retries such a point 1e-7
         % away. On that edge co f = f = x2^2, and this close to it the gap is O(x1).
-            h = minMeshTest.cached();
+            h = minSubdivisionTest.cached();
             x2 = 0.058899440267143444;
             X = [linspace(1e-9, 1e-7, 400).', x2*ones(400,1)];
             testCase.verifyEqual(h.eval(X), x2^2*ones(400,1), 'AbsTol', 1e-6);

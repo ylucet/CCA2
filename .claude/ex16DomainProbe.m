@@ -1,6 +1,6 @@
 function ex16DomainProbe()
 % Is the domain of QuaPol.examples(){16} convex? isConvexQ says no and the legacy dom.isConvex
-% says yes, so one of them is wrong. Decided WITHOUT either of them: pick two points the mesh
+% says yes, so one of them is wrong. Decided WITHOUT either of them: pick two points the subdivision
 % itself says are in the domain and ask whether their midpoint is.
 %
 % The domain is a union of cones at the origin, so membership is tested through eval, which

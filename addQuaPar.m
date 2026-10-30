@@ -46,7 +46,7 @@ function h = addQuaPar(f, g)
         return
     end
     if f.nv == 0                     % f finite everywhere: add its row to every g face, keep g's
-        h = g; h.f = g.f + f.f;      % own domain/mesh untouched
+        h = g; h.f = g.f + f.f;      % own domain/subdivision untouched
         return
     end
     if g.nv == 0

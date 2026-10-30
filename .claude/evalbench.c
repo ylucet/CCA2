@@ -4,9 +4,9 @@
  * per-call cost decides whether a CCA2 conjugate can be a constraint at all. Three strategies,
  * all in double precision, all returning value AND gradient:
  *
- *   A  mesh + linear scan        locate the cell by testing cells in order (early exit per cell)
- *   B  mesh + O(1) bucket        a uniform grid over the bounding box names 1..3 candidate cells
- *   C  no mesh, per-piece sup    f*(s) = max_k sup_{x in T_k} <s,x> - q_k(x), closed form
+ *   A  subdivision + linear scan        locate the cell by testing cells in order (early exit per cell)
+ *   B  subdivision + O(1) bucket        a uniform grid over the bounding box names 1..3 candidate cells
+ *   C  no subdivision, per-piece sup    f*(s) = max_k sup_{x in T_k} <s,x> - q_k(x), closed form
  *   D  baseline                  a small expression tree walked like SCIPexprEval does
  *
  * Every cell predicate is evaluated with the FULL conic form (a x^2 + b xy + c y^2 + d x + e y + f)
@@ -25,7 +25,7 @@ static double now_s(void) {
     return (double)clock() / (double)CLOCKS_PER_SEC;
 }
 
-/* ---------------------------------------------------------------- mesh strategies (A, B) */
+/* ---------------------------------------------------------------- subdivision strategies (A, B) */
 typedef struct { double a, b, c, d, e, f; } conic;      /* a x^2 + b xy + c y^2 + d x + e y + f */
 typedef struct { conic g[4]; double q[6]; } cell;       /* 4 constraints <= 0, one quadratic face */
 
@@ -40,15 +40,15 @@ static inline double face_at(const double *q, double x, double y, double *gx, do
     return ((q[0] * x + q[1] * y + q[3]) * x) + ((q[2] * y + q[4]) * y) + q[5];
 }
 
-static cell *mesh;
+static cell *subdivision;
 static int   NCELL, GRID;                 /* NCELL = GRID*GRID boxes over [0,1]^2 */
 
-static void build_mesh(int g) {
+static void build_subdivision(int g) {
     GRID = g; NCELL = g * g;
-    mesh = malloc(sizeof(cell) * NCELL);
+    subdivision = malloc(sizeof(cell) * NCELL);
     double h = 1.0 / g;
     for (int i = 0; i < g; i++) for (int j = 0; j < g; j++) {
-        cell *C = &mesh[i * g + j];
+        cell *C = &subdivision[i * g + j];
         double x0 = i * h, x1 = (i + 1) * h, y0 = j * h, y1 = (j + 1) * h;
         /* four affine constraints, stored (and evaluated) in the conic form */
         C->g[0] = (conic){0,0,0, -1, 0,  x0};   /* x0 - x <= 0 */
@@ -61,7 +61,7 @@ static void build_mesh(int g) {
 
 static double eval_scan(double x, double y, double *gx, double *gy) {
     for (int c = 0; c < NCELL; c++) {
-        const cell *C = &mesh[c];
+        const cell *C = &subdivision[c];
         if (conic_at(&C->g[0], x, y) > 0) continue;
         if (conic_at(&C->g[1], x, y) > 0) continue;
         if (conic_at(&C->g[2], x, y) > 0) continue;
@@ -77,14 +77,14 @@ static double eval_bucket(double x, double y, double *gx, double *gy, int cand) 
     int base = i * GRID + j;
     for (int t = 0; t < cand; t++) {                 /* cand-1 near misses, then the hit */
         int c = (base + NCELL - t) % NCELL;
-        const cell *C = &mesh[c];
+        const cell *C = &subdivision[c];
         if (conic_at(&C->g[0], x, y) > 0) continue;
         if (conic_at(&C->g[1], x, y) > 0) continue;
         if (conic_at(&C->g[2], x, y) > 0) continue;
         if (conic_at(&C->g[3], x, y) > 0) continue;
         return face_at(C->q, x, y, gx, gy);
     }
-    const cell *C = &mesh[base];
+    const cell *C = &subdivision[base];
     return face_at(C->q, x, y, gx, gy);
 }
 
@@ -93,7 +93,7 @@ static double eval_bucket(double x, double y, double *gx, double *gy, int cand) 
  * plane into SLABS whose interiors contain no vertex, so inside one slab the edges crossing it
  * never cross each other and are totally ordered in y. Query = binary search x for the slab,
  * then binary search y among that slab's ordered edges. O(log N) against the bucket's O(1).
- * On this box mesh the two searches ARE the two coordinate searches, which is the cheapest the
+ * On this box subdivision the two searches ARE the two coordinate searches, which is the cheapest the
  * method can ever be -- a real conic arrangement pays more per comparison, because "which side
  * of this arc" is a conic evaluation rather than a compare against a stored number. */
 static double *slabx, *slaby;
@@ -111,7 +111,7 @@ static double eval_slab(double x, double y, double *gx, double *gy) {
     lo = 0; hi = GRID;
     while (hi - lo > 1) { int mid = (lo + hi) >> 1; if (y < slaby[mid]) hi = mid; else lo = mid; }
     int j = lo;
-    const cell *C = &mesh[i * GRID + j];
+    const cell *C = &subdivision[i * GRID + j];
     return face_at(C->q, x, y, gx, gy);
 }
 
@@ -123,17 +123,17 @@ static double eval_slab(double x, double y, double *gx, double *gy) {
 static int lastcell = 0;
 
 static double eval_cached(double x, double y, double *gx, double *gy) {
-    const cell *C = &mesh[lastcell];
+    const cell *C = &subdivision[lastcell];
     if (conic_at(&C->g[0], x, y) <= 0 && conic_at(&C->g[1], x, y) <= 0 &&
         conic_at(&C->g[2], x, y) <= 0 && conic_at(&C->g[3], x, y) <= 0)
         return face_at(C->q, x, y, gx, gy);
     int i = (int)(x * GRID); if (i < 0) i = 0; if (i >= GRID) i = GRID - 1;
     int j = (int)(y * GRID); if (j < 0) j = 0; if (j >= GRID) j = GRID - 1;
     lastcell = i * GRID + j;
-    return face_at(mesh[lastcell].q, x, y, gx, gy);
+    return face_at(subdivision[lastcell].q, x, y, gx, gy);
 }
 
-/* ------------------------------------------------------- strategy C: no mesh, per-piece sup */
+/* ------------------------------------------------------- strategy C: no subdivision, per-piece sup */
 typedef struct { double V[3][2]; double Q[3]; double be[2]; double ga; } piece;  /* Q = [q11 q12 q22] */
 static piece *pieces;
 static int NPIECE;
@@ -289,34 +289,34 @@ int main(void) {
     printf("--- baseline: a ~20-node expression tree, value + forward-mode gradient\n");
     TIMEIT("D  expression tree (20 nodes)", eval_tree(X, Y, &gx, &gy), 5000000L);
 
-    printf("\n--- mesh strategies: cell location, then one quadratic face\n");
+    printf("\n--- subdivision strategies: cell location, then one quadratic face\n");
     int gs[] = {3, 6, 9, 16, 32};             /* 9, 36, 81, 256, 1024 cells */
     for (int i = 0; i < 5; i++) {
-        build_mesh(gs[i]);
+        build_subdivision(gs[i]);
         snprintf(buf, sizeof buf, "A  linear scan, %4d cells", NCELL);
         TIMEIT(buf, eval_scan(X, Y, &gx, &gy), 2000000L);
-        free(mesh);
+        free(subdivision);
     }
     for (int i = 0; i < 5; i++) {
-        build_mesh(gs[i]);
+        build_subdivision(gs[i]);
         snprintf(buf, sizeof buf, "B  bucket + 1 candidate, %4d cells", NCELL);
         TIMEIT(buf, eval_bucket(X, Y, &gx, &gy, 1), 5000000L);
         snprintf(buf, sizeof buf, "B  bucket + 3 candidates, %4d cells", NCELL);
         TIMEIT(buf, eval_bucket(X, Y, &gx, &gy, 3), 5000000L);
-        free(mesh);
+        free(subdivision);
     }
 
     printf("\n--- slab method: two binary searches (O(log N)) instead of one bucket index\n");
     for (int i = 0; i < 5; i++) {
-        build_mesh(gs[i]); build_slabs();
+        build_subdivision(gs[i]); build_slabs();
         snprintf(buf, sizeof buf, "E  slab / binary search, %4d cells", NCELL);
         TIMEIT(buf, eval_slab(X, Y, &gx, &gy), 5000000L);
-        free(slabx); free(slaby); free(mesh);
+        free(slabx); free(slaby); free(subdivision);
     }
 
     printf("\n--- coherent queries (a random walk of step 1e-3): test the last cell first\n");
     for (int i = 3; i < 5; i++) {
-        build_mesh(gs[i]);
+        build_subdivision(gs[i]);
         double bestt = 1e30;
         long NIT = 5000000L;
         for (int r = 0; r < REPS; r++) {
@@ -335,10 +335,10 @@ int main(void) {
         }
         snprintf(buf, sizeof buf, "F  cached cell + bucket, %4d cells", NCELL);
         printf("%-34s %8.1f ns/eval\n", buf, 1e9 * bestt / NIT);
-        free(mesh);
+        free(subdivision);
     }
 
-    printf("\n--- no mesh: max over pieces of a closed-form 2-D sup (gradient = argmax)\n");
+    printf("\n--- no subdivision: max over pieces of a closed-form 2-D sup (gradient = argmax)\n");
     int ps[] = {3, 6, 12, 24};
     for (int i = 0; i < 4; i++) {
         build_pieces(ps[i]);

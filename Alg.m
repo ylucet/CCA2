@@ -28,7 +28,7 @@ classdef (Abstract) Alg
    %       (z - <2a,x-2a> - 2c)^2 - R^2*|x-2a|^2 = 0 .
    %
    % "Not a polynomial in x" is not "not algebraic", and the difference is what makes this level
-   % cheap: every stored coefficient stays an integer, so equality stays bitwise and every mesh
+   % cheap: every stored coefficient stays an integer, so equality stays bitwise and every subdivision
    % predicate stays an exact integer sign -- the properties the whole exact pipeline rests on.
    % The general (different-Hessian) case is bigger and still implicit and still rational:
    % measured degrees (x,y,z) from (2,2,2) isotropic to (6,6,4) anisotropic, integer coefficients

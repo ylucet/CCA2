@@ -3,9 +3,9 @@ classdef (Abstract) RatCon < AlgCon & Rat
    % face still has a FORMULA.
    %
    % IT NO LONGER DECLARES THE DATA. Until 2026-09-13 this class was the lattice's root and the one
-   % place the mesh properties lived. The function axis then gained a top level (Qua < Rat < Alg,
+   % place the subdivision properties lived. The function axis then gained a top level (Qua < Rat < Alg,
    % see Alg.m), so the root moved UP to AlgCon and the properties, their `set.` validators, the
-   % edge-flag statics and `kind`/`isMeshed`/`setPinnedDefaults` moved with it -- unchanged, and
+   % edge-flag statics and `kind`/`isSubdivided`/`setPinnedDefaults` moved with it -- unchanged, and
    % still declared exactly once. Nothing else about this class changed, and no type below it
    % changed behaviour: everything that was a RatCon still is one, and is additionally an Alg,
    % which is the honest reading (a rational function IS algebraic).
@@ -67,8 +67,8 @@ classdef (Abstract) RatCon < AlgCon & Rat
    % site serves the whole lattice and no type can be made to lie about itself.
    %
    % QuaParCPLQ deliberately does NOT inherit from QuaPar: it carries the same mathematical type
-   % (marked Qua, and Par via this class) but not the mesh, so making `isa(x,'QuaPar')` true for it
-   % would invite callers to read V/E/F that it does not have. `isMeshed()` is the intended test.
+   % (marked Qua, and Par via this class) but not the subdivision, so making `isa(x,'QuaPar')` true for it
+   % would invite callers to read V/E/F that it does not have. `isSubdivided()` is the intended test.
    %
    % NO STORED TYPE FLAG, BY DESIGN. `kind()` is a METHOD returning the object's actual class name,
    % not a property set at construction: a stored flag can drift out of sync with the real class

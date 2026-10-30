@@ -89,7 +89,7 @@ end
 function f = kink(shape, c)
 % Two positive definite pieces that agree on the shared edge FOR EVERY c, because the perturbation
 % is a multiple of that edge's own linear form, which vanishes there. One knob sweeps convex, flat
-% and non-convex without ever producing a mesh that is not a function. DECISIONS 2026-09-05.
+% and non-convex without ever producing a subdivision that is not a function. DECISIONS 2026-09-05.
     q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];
     if shape == "square2"
         V = [0 0; 1 0; 1 1; 0 1];  lin = [-1 1 0];

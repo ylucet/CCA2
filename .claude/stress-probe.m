@@ -38,8 +38,8 @@ function stress_probe()
     report('4 unbounded pieces, 4 quadratics', QuaPol(V4, E4, f4, F4), [], [], [], []);
 
     % ---- MIXED: a bounded triangle next to an unbounded wedge --------------------------------
-    % (fixture withdrawn: QuaPol's own constructor rejects it, so it tests my mesh-writing rather
-    % than conjQ. Building a valid mixed mesh by hand is its own exercise.)
+    % (fixture withdrawn: QuaPol's own constructor rejects it, so it tests my subdivision-writing rather
+    % than conjQ. Building a valid mixed subdivision by hand is its own exercise.)
 
     % ---- LARGE coefficients: does the exact kernel overflow? -----------------------------------
     V = [0 0; 1 0; 1 1; 0 1];

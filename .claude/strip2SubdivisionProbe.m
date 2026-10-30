@@ -1,6 +1,6 @@
-function strip2MeshProbe()
+function strip2SubdivisionProbe()
 % Is the sweep's `strip2` fixture the function it was meant to be, or is its split edge oriented
-% backwards? Asked BEFORE looking at biconjQ, because a malformed mesh would make the routine's
+% backwards? Asked BEFORE looking at biconjQ, because a malformed subdivision would make the routine's
 % answer meaningless rather than wrong.
 %
 % The intended function: q0 on the unit square {0<=x<=1, 0<=y<=1} and q0 + c*(y-1) on the strip

@@ -3,19 +3,27 @@
 ## 2026-10-14 — biconjugate: what is left, in order
 
 `conj` defaults to the exact engine since 2026-10-11; `biconj` still defaults to `'cplq'` because
-`biconjQ` returns an unmeshed EnvelopeMin on some inputs, not an AlgCon (`QuaPol.m:828`). Measured
+`biconjQ` returns an unsubdivided EnvelopeMin on some inputs, not an AlgCon (`QuaPol.m:828`). Measured
 2026-10-14 on `c299801`: `--fast` 765/0 over 60 suites in 616 s, `--normal` 34/0 over 8 suites in
 1948 s; `--slow` not run (stopped for low memory, to be run on another machine).
 
-- [~] **1. Mesh EnvelopeMin and prune its atom pairs** -- PRUNE DONE 2026-10-16 (Example 2 6 -> 3
-      pairs, 60 -> 2 triangles, 780 -> 281 s). ONE active pair MESHED 2026-10-17 (AlgCrv/QuaCon,
+- [~] **1. Subdivision EnvelopeMin and prune its atom pairs** -- PRUNE DONE 2026-10-16 (Example 2 6 -> 3
+      pairs, 60 -> 2 triangles, 780 -> 281 s). ONE active pair SUBDIVIDED 2026-10-17 (AlgCrv/QuaCon,
       equal to the face list on 4000 points; Example 1 51 s). SEVERAL pairs without a triangle face
-      MESHED 2026-10-18 (min of maxes; the 3-convex-edge triangle 68 s after the curved+branch
+      SUBDIVIDED 2026-10-18 (min of maxes; the 3-convex-edge triangle 68 s after the curved+branch
       cellInterior gap was closed in liveCell; 2172 faces, 132 own a point -- the rest empty by an
       algebraic row, see item 3).
-      LEFT: Example 2 -- triangle faces with degree-4 irrational corners need a mesh type (Yves's
+      LEFT: Example 2 -- triangle faces with degree-4 irrational corners need a subdivision type (Yves's
       call); and overlapping / empty pieces (values exact, partition not). DECISIONS.md 2026-10-16..18.
-- [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink meshes in 256 s (clipped to
+      EXAMPLE 2 PLAN (Yves 2026-10-30: implicit storage, DECISIONS 2026-10-30 (fifth)):
+        a. dualPoint: the exact name of s0 -- conics, eliminant R(s1), isolating interval, s2 = -S0/S1;
+           plus the exact sign of an integer polynomial at s0.                               [fast tests]
+        b. the triangle face: value and barycentric rows affine in x over Q(s0), double cache.
+        c. subdivision: triangle piece + each min-of-maxes piece cut by 'outside T' (three conjunctions),
+           skipped where a rational hull of T's vertex boxes misses the cell.
+        d. the AlgCrv type and evaluators carry the new face/row kind; biconjQ subdivides Example 2;
+           test: equal to the EnvelopeMin on 4000 points + the definition check (slow).
+- [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink is subdivided in 256 s (clipped to
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
@@ -26,7 +34,7 @@
       Q(sqrt5). DECISIONS 2026-10-29/30 (third).
       Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
-      everywhere, kept because envelopeMeshAlg proves emptiness from CONIC rows only (pieceLive) and
+      everywhere, kept because envelopeSubdivisionAlg proves emptiness from CONIC rows only (pieceLive) and
       their emptiness is an ALGEBRAIC row (q >= bridge). No value changes; dropping them unproven
       could open holes. Needs an emptiness test with an algebraic row. Detail under "Faces of ZERO AREA".
 - [ ] **4. `biconjCPLQ` on the poly2 kinks** (legacy engine): crashes fixed, runs take more than
@@ -35,10 +43,10 @@
 - [x] **5. Suite time** -- DONE 2026-10-17: Example 2's four tests moved to `erratumBiconjEx2Test`
       (slow, 376 s); `erratumBiconjTest` is 337 s, was 637 s (single runs, shared machine).
       2026-10-20: the whole normal bucket is 30/0 in 535 s, within its 10-min budget (was ~1950 s
-      on 10-14): envelopeMesh refuses a competing bridge before building the arrangement (233 s ->
-      fast), and three slow tests moved to slow suites (minMeshTest, kinkMeshTest,
-      envelopeMeshSlowTest).
-- [x] **6. Two bridge faces owning one cell** -- no longer refused (2026-10-17): overlapping pieces, value by max. Was: (`envelopeMeshAlg:twoBridges`) -- refused by name,
+      on 10-14): envelopeSubdivision refuses a competing bridge before building the arrangement (233 s ->
+      fast), and three slow tests moved to slow suites (minSubdivisionTest, kinkSubdivisionTest,
+      envelopeSubdivisionSlowTest).
+- [x] **6. Two bridge faces owning one cell** -- no longer refused (2026-10-17): overlapping pieces, value by max. Was: (`envelopeSubdivisionAlg:twoBridges`) -- refused by name,
       never observed. Leave it until an input reaches it.
 - [x] **7. Decide the `biconj` default** -- DONE 2026-10-18: 'exact' (Yves). DECISIONS.md.
 
@@ -47,7 +55,7 @@
 Measured before building (DECISIONS.md 2026-09-19): a corner face's value never exceeds the best
 quadratic face owning the same point -- largest excess exactly 0.0e0 -- so it needs no algebraic face
 at all. It is carried for its REGION: every pair must be covered on a cell or the envelope is
-+infinity there. `envelopeMesh` does that now and refuses only faces whose region has no rows.
++infinity there. `envelopeSubdivision` does that now and refuses only faces whose region has no rows.
 
 A BRIDGE face is strictly above the best quadratic at 22 of 60 sampled points, by up to 1.2e-1, so it
 DOES carry the value and cannot be reduced the same way.
@@ -77,8 +85,8 @@ DOES carry the value and cannot be reduced the same way.
       the straight rows alone (inscribed radius 0.29 in all four faces). So the place to drop them
       is where the envelope decides a quadratic face owns a cell, not in the incidence.
 
-- [ ] **Two BRIDGE faces owning one cell** -- `envelopeMeshAlg:twoBridges`, refused by name and never
-      observed. `envelopeMesh:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
+- [ ] **Two BRIDGE faces owning one cell** -- `envelopeSubdivisionAlg:twoBridges`, refused by name and never
+      observed. `envelopeSubdivision:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
 - [x] **DONE 2026-10-11: Example 2's biconjugate computes (EnvelopeMin, ~26 min, one run on the shared machine); its 3 tests run. Big polynomial kept in BigInteger, overflowing intermediates reduced by content (ratQ.exactFormula / bigZ), algBranch leader-drop fixed.** **Integer width of the STORED answer: erratum Example 2.** Three constructors overflowed on
       INTERMEDIATES and are fixed (2026-10-11): the corner bracket (now built in BigInteger), the
@@ -99,18 +107,18 @@ DOES carry the value and cannot be reduced the same way.
       under-reports on these domains.
 - [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
-      irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the mesh,
+      irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the subdivision,
       whose single global arrangement passed 370 cells at curve 30 of 85 and did not finish in
-      90 min. `envelopeMesh` now refuses past 40 curves (`envelopeMesh:arrangementSize`) and
-      biconjQ returns the unmeshed EnvelopeMin, as before. Fix: arrange PER CONJUGATE CELL PAIR
+      90 min. `envelopeSubdivision` now refuses past 40 curves (`envelopeSubdivision:arrangementSize`) and
+      biconjQ returns the unsubdivided EnvelopeMin, as before. Fix: arrange PER CONJUGATE CELL PAIR
       (each pair's faces only see that pair's curves), or prune curves that bound no live face
       before arranging.
 
-- [~] **EnvelopeMin is not meshed, and builds ALL atom pairs.** (2026-10-16: prune done, one-pair
-      case not yet meshed -- see item 1 at the top.) biconjQ returns it where it used to
+- [~] **EnvelopeMin is not subdivided, and builds ALL atom pairs.** (2026-10-16: prune done, one-pair
+      case not yet subdivided -- see item 1 at the top.) biconjQ returns it where it used to
       refuse: it answers eval but is not an AlgCon. Two follow-ups: prune pairs/triples to the
-      ones adjacent in conjQ(f)'s mesh (erratum Step 1 only needs active pairs), and mesh the
-      minimum (envelopePrune/envelopeMesh take one pair's faces today).
+      ones adjacent in conjQ(f)'s subdivision (erratum Step 1 only needs active pairs), and subdivide the
+      minimum (envelopePrune/envelopeSubdivision take one pair's faces today).
 
 ### Done recently
 
@@ -152,7 +160,7 @@ DOES carry the value and cannot be reduced the same way.
       row-less corners item above). Found on the way, both making VALUES wrong: no corners on an
       irrational parallel-line tie (+inf on 64% of the domain), and corner values read off the
       other corner's root past a crossing line (0.23 high). Fixed red first; biconjQ falls back to
-      the unmeshed envelope when the mesh cannot place a corner, verified against the sup oracle.
+      the unsubdivided envelope when the subdivision cannot place a corner, verified against the sup oracle.
 
 - [x] **Exact-sum audit, second pass** (2026-10-11). The lint now also flags a top-level +/- with
       a product or power (it missed `b^2 - 4ac`, `2*a*q + b`, Horner steps): 17 sites converted to
@@ -178,14 +186,14 @@ DOES carry the value and cannot be reduced the same way.
       whole-plane cell; bridgeMember refused a rational face; cornerFaceAlg dropped every corner
       where a facet meets the tie ONCE (the generic vertex-vs-edge case).
 
-- [x] **The exact mesh moved up to AlgCon** (2026-09-22): `fN fD EcQ Vname FC` declared once; the
+- [x] **The exact subdivision moved up to AlgCon** (2026-09-22): `fN fD EcQ Vname FC` declared once; the
       copies on QuaCon, AlgCrv and QuaPol are gone. The 09-20 refutation was QuaPol's own fN/fD
       left in place. fast 714/0, normal 24/0. DECISIONS.md 2026-09-22.
 
 - [x] **An edge with more than two vertices -> ARCS** (2026-09-22): `algCrvIncidence` traces each
-      curve between the mesh vertices on it and keeps the arcs that bound a face by the side test.
+      curve between the subdivision vertices on it and keeps the arcs that bound a face by the side test.
       On the c = -2 object both faces with area get closed boundaries, degree 2 at every vertex
-      (was up to 17); `algCrvMeshTest` (slow) pins it. Found and fixed on the way in
+      (was up to 17); `algCrvSubdivisionTest` (slow) pins it. Found and fixed on the way in
       `algCrvVertices`: corners lost to per-pair dedup, axis-parallel lines never meeting, tangent
       corners off by 2e-4 (now snapped only on an exact rational check). The "vertex named twice"
       question is answered by clustering: one name per edge PAIR stays, one breakpoint per POINT.
@@ -211,8 +219,8 @@ DOES carry the value and cannot be reduced the same way.
 - [x] **The bridge/quadratic BOUNDARY** (2026-09-20/21): settled by `Crv` + `AlgCrv` and the
       `biconjQ` route. A curved-tie input now returns an AlgCrv instead of refusing.
 
-- [x] **`biconjQ`'s curved-tie route** (2026-09-21): `assembledEnvelope` tries `envelopeMesh` first
-      and falls back to `assembleAlgCrv(envelopeMeshAlg(env))` on `envelopeMesh:bridgeCompetes`, so
+- [x] **`biconjQ`'s curved-tie route** (2026-09-21): `assembledEnvelope` tries `envelopeSubdivision` first
+      and falls back to `assembleAlgCrv(envelopeSubdivisionAlg(env))` on `envelopeSubdivision:bridgeCompetes`, so
       the RETURN TYPE says which case the input was -- QuaCon when every edge is a conic, AlgCrv
       when a bridge face's value competes. Measured on the diagonal-kink fixture: c = 0 gives a
       QuaCon of 2 faces, c = -2 an AlgCrv of 4, both agreeing with the assembled envelope's
@@ -240,14 +248,14 @@ DOES carry the value and cannot be reduced the same way.
 `cellInterior`: rational rows by the exact tests that existed, then a margin LP in doubles, then the
 ties by an exact Farkas certificate in the branch rows' own quadratic field. On the c = -2 fixture
 486 live cells against the relaxed test's 31104, with ZERO cells left undecided (DECISIONS.md
-2026-09-19). Wired into `envelopeMesh`; `conicMeet` refuses a constant by name; the Q(t) arithmetic
+2026-09-19). Wired into `envelopeSubdivision`; `conicMeet` refuses a constant by name; the Q(t) arithmetic
 lives once in `ratQ`.
 
 ### Next, in order
 
 1. **The corner faces' VALUES.** Their regions can enter an arrangement now, their values cannot: a
-   corner's value is affine with quadratic-irrational coefficients (`FP`/`FB`), and the mesh emits a
-   QuaCon of quadratic faces. `envelopeMesh` refuses an envelope with corner faces for that reason
+   corner's value is affine with quadratic-irrational coefficients (`FP`/`FB`), and the subdivision emits a
+   QuaCon of quadratic faces. `envelopeSubdivision` refuses an envelope with corner faces for that reason
    alone now -- it is an OUTPUT TYPE question, not a geometry one.
 2. **The BRIDGE face's region**, still a predicate: its cut is refuted twice (DECISIONS 2026-09-17).
    Either solve it, or carry a bridge as a predicate face in a type that allows one.
@@ -267,13 +275,13 @@ The relaxed test is also the slowest of the three. So:
    arithmetic runs on the ties only (2128 of 10118 calls in the measurement). That is what
    `cellHasInterior` already documents for its own kernel.
 2. **A constant row is not a curve.** A face's `con` can carry `1 >= 0`; it must be dropped before
-   the arrangement. `envelopeMesh` has this hole and has not met it yet.
+   the arrangement. `envelopeSubdivision` has this hole and has not met it yet.
 3. **`conicMeet` throws `ratQ:notFinite` on a constant** — `conicMeet([1 0 0 0 0 -1], [0 0 0 0 0 1])`,
    because `lineMeetsConic` computes `-f/d` with `d = e = 0`. It should refuse by name.
 
 ## 2026-09-18 (fifth pass) — the ARRANGEMENT is built and verified; what it does not finish is named
 
-`envelopeMesh`: collect the distinct region curves, build the arrangement incrementally, read each
+`envelopeSubdivision`: collect the distinct region curves, build the arrangement incrementally, read each
 cell's applicable faces off its signs, refine by the winner. On the convex fixture, 52 pruned faces
 -> 13 curves -> 58 cells -> a QuaCon of 321 faces that reproduces **f exactly** (0.0e0 at 200
 points). No partial max is ever formed, which is what ruled out both fold orders.
@@ -285,7 +293,7 @@ before the per-piece checks, and falls through to the old refusal if it cannot f
 
 A BRIDGE or CORNER face's region is a PREDICATE, so it has no signs for an arrangement -- and a
 two-piece input that is piecewise convex but not convex is exactly the case with CURVED ties. So the
-arrangement gives the MESH and the BOUNDARY; a container for a predicate-region face gives `biconj`
+arrangement gives the SUBDIVISION and the BOUNDARY; a container for a predicate-region face gives `biconj`
 a RETURN VALUE. **Both are needed.**
 
 ### Next, in order
@@ -294,7 +302,7 @@ a RETURN VALUE. **Both are needed.**
    with the KKT predicate, wired into `cornerFaceAlg.con`. What is left is the ARRANGEMENT's side of
    it: a branch row names one line of a pair, so a curve's identity becomes (conic, branch) and the
    emptiness tests (`ratQ.feasible2`, `cellHasInterior`) need to take a branch row as that line
-   rather than as the conic's sign. That is now the only thing between the corners and the mesh.
+   rather than as the conic's sign. That is now the only thing between the corners and the subdivision.
 
    The first attempt at these rows, and the ONE SIGN in the field arithmetic that made it fail, are
    in DECISIONS.md 2026-09-18 -- worth reading before touching `cornerWedgeRows`.
@@ -317,13 +325,13 @@ a RETURN VALUE. **Both are needed.**
 
 ## 2026-09-18 (fourth pass) — CORRECTION: the pair-level fold is right, and it explodes
 
-The previous entry said `maxQ` was refuted as the way to build the mesh. Half right: folding
+The previous entry said `maxQ` was refuted as the way to build the subdivision. Half right: folding
 individual FACES is wrong (a QuaCon is +infinity off its faces, a candidate that does not apply is
 -infinity), but folding a whole PAIR is SEMANTICALLY CORRECT -- a pair's contribution really is
 +infinity outside its candidate regions. What kills it is cost, not meaning:
 
     pairs folded   1  2  3  4  5  6   7   8   9   10   11   12
-    mesh faces     5  8 15 24 48 63 252 270 675 1323 1917 3726        (c = 0)
+    subdivision faces     5  8 15 24 48 63 252 270 675 1323 1917 3726        (c = 0)
 
 roughly doubling per fold, against an envelope with a handful of faces; c = -2 behaves the same.
 
@@ -355,7 +363,7 @@ pieces only the full max deletes. **Do not try a third fold order.**
 - The 2^53 ceiling: `polynomialOverflow` is a named refusal; the general answer is the modular route.
 
 
-## 2026-09-18 (third pass) — the PRUNE lands; the mesh needs an ARRANGEMENT, not a fold
+## 2026-09-18 (third pass) — the PRUNE lands; the subdivision needs an ARRANGEMENT, not a fold
 
 `envelopePrune`: drop a face when another is at least as large everywhere it applies and applies
 everywhere it does. Exact (`ratQ.feasible2` for the inclusion, `ratQ.quadSignOnPoly` for the
@@ -363,15 +371,15 @@ comparison), sound by construction, and measured at 120 -> 52, 142 -> 94, 110 ->
 value and every finiteness verdict unchanged. A dominating face INHERITS the dropped one's pair --
 without that the domain collapses, 60 of 300 points flipping to +infinity.
 
-**`maxQ` IS REFUTED as the way to build the mesh.** A `QuaCon` is +infinity off its faces; a
+**`maxQ` IS REFUTED as the way to build the subdivision.** A `QuaCon` is +infinity off its faces; a
 candidate that does not apply is -infinity. The envelope is a sup of PARTIAL functions, so folding
-the pruned list with `maxQ` collapses it to an EMPTY mesh after about ten faces -- measured on both
+the pruned list with `maxQ` collapses it to an EMPTY subdivision after about ten faces -- measured on both
 fixtures. The earlier explosion was the same mismatch, not a size problem.
 
 ### What is left is now ONE item, not two
 
 **THE ARRANGEMENT.** Overlay the (pruned) faces' regions and take the max per cell. That gives the
-mesh `biconj` would return AND the boundary the paper's figures and topology tables need, so the two
+subdivision `biconj` would return AND the boundary the paper's figures and topology tables need, so the two
 remaining items are the same item. `envelopeEval` already answers correctly from the face list, so
 nothing is blocked except the return type.
 
@@ -404,9 +412,9 @@ against a square that is a ninth of it. Values unchanged: 0.0e0 convex, 8.6e-13 
 1. **The DOMINATION PRUNE.** Folding the faces pairwise with `maxQ` is exact and EXPLODES -- 5, 6,
    38, 35, 40, 125, 610 faces over seven of eighteen pairs, against an envelope with a handful. The
    prune is an exact quadratic sign test on a polygon (`ratQ.quadSignOnPoly`): does some candidate
-   beat this one on the whole of its region. Without it there is no compact mesh.
+   beat this one on the whole of its region. Without it there is no compact subdivision.
 2. **A container** for a face whose membership is a predicate -- the bridge and corner faces -- or
-   the observation, once the prune lands, that a compacted mesh no longer needs one.
+   the observation, once the prune lands, that a compacted subdivision no longer needs one.
 3. Then `biconjQ`'s `convexPieceCoupling` route.
 
 ### After that
@@ -433,9 +441,9 @@ the whole square. `envelopeAssembleTest` (normal bucket) pins all three.
 2. **The DOMINATION PRUNE.** Folding the pairs pairwise with `maxQ` is exact and EXPLODES -- 5, 6,
    38, 35, 40, 125, 610 faces over seven of eighteen pairs. The prune is an exact quadratic sign
    test on a polygon (`ratQ.quadSignOnPoly`): does some candidate beat this one on the whole of its
-   region. Without it there is no compact mesh; with it the faces should collapse to a handful.
+   region. Without it there is no compact subdivision; with it the faces should collapse to a handful.
 3. **The container**, for a face whose membership is a predicate -- or the observation, once 1 and 2
-   land, that a compacted mesh no longer needs one.
+   land, that a compacted subdivision no longer needs one.
 
 ### After that
 
@@ -570,9 +578,9 @@ pins that), and the exact cut ROWS are still produced for a line tie.
 ### The next item, and it is a question about `eval`, not about geometry
 
 Both failures are the same failure: **the cut boundary is a SEGMENT -- a BOUNDED piece of a line --
-and `FC` can only say "this side of this whole curve".** `AlgCon`'s classic mesh already carries
+and `FC` can only say "this side of this whole curve".** `AlgCon`'s classic subdivision already carries
 bounded edges (`E` names two endpoints); the H-form the evaluator uses does not. So the next step is
-to ask whether a face's membership can be decided from the bounded-edge mesh instead of from `FC`,
+to ask whether a face's membership can be decided from the bounded-edge subdivision instead of from `FC`,
 BEFORE any third construction over sign conditions is attempted.
 
 Then, in order: the cut for parabola and hyperbola ties (23 of the 29 bridge pairs the fixtures
@@ -722,7 +730,7 @@ it is bookkeeping rather than new mathematics.
   cells over five fixtures — but it computes in DOUBLES. Every candidate is a rational in the
   cell's own data: the stationary point is a 2x2 solve (`ratQ.solve2`), each facet's parameter
   interval is a comparison of rationals, and each facet parabola's vertex is `-a1/(2*a2)` with
-  integer `a1`, `a2`. So this is `ratQ` bookkeeping, and it is what a mesh-deciding predicate
+  integer `a1`, `a2`. So this is `ratQ` bookkeeping, and it is what a subdivision-deciding predicate
   needs. Nothing external blocks it.
 - [x] **AN EXERCISE HARNESS FOR EVERY NAMED GUARD** — LANDED 2026-09-07 as `guardExerciseTest.m`
   (fast bucket, 17 tests, in `suite.sh`). **113 named identifiers, 57 with no assertion anywhere;
@@ -784,7 +792,7 @@ it is bookkeeping rather than new mathematics.
   MAX: over each cell pair `P_ij` the max `G = max(gA_i, gB_j)` is one quadratic (a non-bridge
   piece) or splits along the tie conic (a bridge pair, three faces), and `f** = max over pieces of
   sup over the piece`. **Every candidate is FEASIBLE for its own piece, so the assembly cannot
-  overshoot** whatever the mesh looks like — the whole correctness question is whether every
+  overshoot** whatever the subdivision looks like — the whole correctness question is whether every
   maximiser is some piece's candidate, and that is checked directly. Four fixtures (unit square at
   c = 0, -1, -2 and an anisotropic 2x1 rectangle): **600 sample points, 0 overshoot, 0 undershoot**,
   worst gap to the definition 4.0e-9 (`fminsearch`'s own accuracy); **coverage 1600/1600** random
@@ -796,7 +804,7 @@ it is bookkeeping rather than new mathematics.
     even TIE at a random point — they need constructed points, which is the check above.
   - What is NOT done: the per-piece evaluation is in doubles. The exact candidate enumeration
     already exists (`.claude/cellFaceExactProbe.m`) and swapping it in is a substitution; the
-    quartic's roots would need the same treatment. The MESH decisions are already exact.
+    quartic's roots would need the same treatment. The SUBDIVISION decisions are already exact.
 - [x] **Tidy `.claude/cellFaceRegionProbe.m`** — DONE 2026-09-07, and it was not only hygiene. The
   threshold is now derived from the trace step (dr = 4.5e-3) and the residual is compared in the
   plane's own units rather than scale-free. The "remaining pooled label pair" turned out to be a
@@ -1095,7 +1103,7 @@ hand -- one where the middle vertex is dominated (one cell, the chord) and one V
 survive (two cells).
 
 `chainNotImplemented` is now UNREACHABLE and kept as an assertion: every chain is routed before
-`thinEnvelope` is called, so a multi-edge mesh arriving there is a routing defect.
+`thinEnvelope` is called, so a multi-edge subdivision arriving there is a routing defect.
 
 Every chain in `examples2` carries `x^2` or `y^2` along its edges, so all of them curve UPWARD and
 are correctly refused; the corpus cannot exercise either new path and fixtures were written for both.
@@ -1118,7 +1126,7 @@ are correctly refused; the corpus cannot exercise either new path and fixtures w
     What is left uncovered in `ratQ` and `conjQ` is dominated by INTERNAL INVARIANTS --
     `signAtNoConverge`, `isolateNoConverge`, `pseudoRemNotIntegral`, and `conjQ`'s ear-clipping
     guards (`notSimple`, `noEar`, `repeatedVertex`) -- whose own comments argue they cannot fire
-    for a squarefree integer polynomial or a well-formed mesh. Classified in `SUPPORT_MATRIX.md`
+    for a squarefree integer polynomial or a well-formed subdivision. Classified in `SUPPORT_MATRIX.md`
     section 3.1 rather than chased.
     Item 1 did not REMOVE branches from `biconjQ` -- the convex short-circuit gained a route
     rather than losing one -- so the earlier guess that it would was wrong.
@@ -1144,7 +1152,7 @@ is a 4x4 determinant of quadratics, so its entries are degree-8 products; measur
     input coeff   3      10      30     100     300    1000    3000    10000
     resultant  5.2e3  2.5e4   1.9e6   2.3e8  1.8e10  2.3e12  1.8e14  OVERFLOW
 
-**3. IT IS RARE.** 0 overflows in 822 `conicMeet` calls over the corpus's finished meshes, and 0
+**3. IT IS RARE.** 0 overflows in 822 `conicMeet` calls over the corpus's finished subdivisions, and 0
 while building 12 random conjugates across all six Hessian classes. It needs conic coefficients
 above ~5,000, which arise only from denominators compounding in a deep fold.
 
@@ -1182,7 +1190,7 @@ that shape. If the exact path ever stops being cold, that is the first place to 
 **A. Do nothing; keep the named refusal.** Where it fires, `cellHasInterior` keeps the cell and the
 vertex is left unnamed -- both sound, costing at most an extra face. Zero work, and the ceiling is
 documented. Against: an input a user legitimately writes (coefficients in the thousands) silently
-gets a fatter mesh, with no signal at the API level.
+gets a fatter subdivision, with no signal at the API level.
 
 **B. `java.math.BigInteger` on the COLD PATH only.** MATLAB ships a JVM, so this needs no compiler,
 no licence and no VPN -- the one unbounded option with no new dependency. 121x doubles, which at a
@@ -1221,7 +1229,7 @@ means 5.6x on the input coefficient) for that risk. `ratQ.m`'s own header alread
 
 ## 2026-09-05 - CURVED VERTICES are named, and the INCIDENCE arrays are built
 
-Both were blocked on the sign kernel and both are now done, so `QuaCon` is a complete mesh rather
+Both were blocked on the sign kernel and both are now done, so `QuaCon` is a complete subdivision rather
 than a face list.
 
 **Curved corners.** The name `[edgeA edgeB rootIdx]` was always able to STORE an irrational corner
@@ -1353,7 +1361,7 @@ and are now fixed:
 
 - **`noFace` on a FULL-PLANE input.** `QuaPol.energy` -- `(x^2+y^2)/2` on all of `R^2`, the most
   elementary convex input there is -- raised, because `quaPolAsQuaCon` looks for a FACE and a
-  full-domain mesh has none. `co f = f`, with no constraints at all.
+  full-domain subdivision has none. `co f = f`, with no constraints at all.
 - **`unbounded` on a CONVEX input.** `co f = f` whatever the shape of the domain; all an unbounded
   piece changes is how each edge's SIDE is decided -- a recession direction settles it, and for a
   half-plane piece only `F` does. Exactly the reasoning `conjQ`'s `pieceShape` already used.
@@ -1442,7 +1450,7 @@ is now **5.55e-16**; two entries still disagree about the DOMAIN only.
 
 ### A new invariant, worth more than the fix
 
-`checkQuaConConsistent.m`: no two cells may overlap while carrying different functions. Such a mesh
+`checkQuaConConsistent.m`: no two cells may overlap while carrying different functions. Such a subdivision
 does not define a function at all -- `eval` resolves it by first match, so the answer depends on
 cell ORDER -- and the failure is silent. EXACT for pairs whose constraints are all straight
 (`ratQ.feasible2` decides their intersection), SAMPLED as a backstop for curved pairs.
@@ -1502,7 +1510,7 @@ attained.
 different functions. That check is cheap and would have caught this class immediately; it is worth
 adding whether or not the fix is quick.
 
-## 2026-09-04 (overnight) — MULTI-PIECE envelope, and a malformed-mesh convention found
+## 2026-09-04 (overnight) — MULTI-PIECE envelope, and a malformed-subdivision convention found
 
 **Item 2 of the three envelope items is done.** The envelope COUPLES its pieces -- the convex hull
 of a union is not the union of hulls -- so unlike the conjugate it is not a fold. But that coupling
@@ -1527,9 +1535,9 @@ triangle BELOW the diagonal, is on its RIGHT. Written the other way, `P{1}`'s si
 own edges -- and `QuaPol.eval` then reports the wrong piece at interior points.
 
 **Why the `conj` test passed anyway, and why that is worth knowing:** the code and the oracle BOTH
-read a face as the polygon its edges bound, which is what a user means and what a well-formed mesh
+read a face as the polygon its edges bound, which is what a user means and what a well-formed subdivision
 says. They agreed with each other while disagreeing with `eval`. A shared assumption between code
-and oracle is invisible to any amount of differential testing -- only reading the mesh through a
+and oracle is invisible to any amount of differential testing -- only reading the subdivision through a
 THIRD route (`eval` / `P`) exposed it. Fixed in `conjQTest`, `biconjQTest`, `.claude/coverage-probe.m`
 and `.claude/biconj-probe.m`; `conjQTest` still 38/38 afterwards, which confirms the reading was
 right and only the fixture was wrong.
@@ -1549,14 +1557,14 @@ H-form already expresses with an equality side, so this needed no new storage:
 
 **Ordering is load-bearing, and the wrong order was silent about which case it was in.** An affine
 or PSD `q` on such a domain IS convex, so the convex short-circuit claimed it and then tried to read
-a FACE -- and these meshes have `nf = 0` and an empty `F`. Measured: the needle and the convex
+a FACE -- and these subdivisions have `nf = 0` and an empty `F`. Measured: the needle and the convex
 segment both raised `noFace` while the CONCAVE segment, which falls past the short-circuit, worked.
 The dimension check now runs first.
 
 Refused, and correctly: a RAY domain, where `q` curving down makes the envelope `-inf` -- a right
 answer with nowhere to be stored, the gap `conjCPLQ` records as `convEnvUnbounded:minusInfinity`.
 And a CHAIN of edges, which is not thin at all: the convex hull of two non-collinear segments is a
-two-dimensional polygon, so that belongs with the ordinary lower-hull case read from the whole mesh.
+two-dimensional polygon, so that belongs with the ordinary lower-hull case read from the whole subdivision.
 
 **Two envelope items left**: MULTI-piece (the envelope couples pieces, so it is not a fold) and
 edge-CONVEX (needs [COAP] A.2-A.5, and is the `AlgAlg` trigger).
@@ -1642,7 +1650,7 @@ into a named refusal. It is now ANSWERED instead.
 triangulating a non-convex face and folding the pieces with `maxQ` is EXACT, not an approximation.
 The triangulation is exact too -- **ear clipping**, whose every decision is the sign of an integer
 cross product (does this corner turn left; does another corner lie inside this candidate triangle).
-A floating-point triangulator could return a different mesh for the same polygon depending on
+A floating-point triangulator could return a different subdivision for the same polygon depending on
 rounding, and each triangle's conjugate would then be exact about the wrong thing.
 
 Two details that had to be right:
@@ -1683,7 +1691,7 @@ came out BELOW the true one at **54 of 303** dual points. Wrong in the direction
 treats as impossible, so the existing sweeps would never have caught it -- they all use convex
 polygons. NOW REFUSED by name (`PLQ:conjQ:nonConvexPiece`), detected exactly while building the
 half-planes, with the remedy in the message: split the face into convex pieces, since `conj` turns
-a union into a MAX and `maxQ` recombines them. **The mesh already knew** -- `QuaPol.orderEdges`
+a union into a MAX and `maxQ` recombines them. **The subdivision already knew** -- `QuaPol.orderEdges`
 reports `isConvex = 0` for such a face.
 
 **2. A FOUR-PIECE input CRASHED**, `MATLAB:badsubscript`, an unnamed crash rather than a named
@@ -1749,7 +1757,7 @@ this case exists to build.
 
 **The caveat stands and is worth repeating**: evaluating a line- or point-supported function in
 floating point answers `+inf` almost surely, because a random double is never exactly on the line.
-The mesh is exactly right and every predicate that built it is exact; it is simply not an object to
+The subdivision is exactly right and every predicate that built it is exact; it is simply not an object to
 probe interactively. `QuaCon.eval` says so at the point where it tests an equality.
 
 ## 2026-09-04 (final) — items (1) and (2) DONE. Only the THIN dual domain is left.
@@ -1773,7 +1781,7 @@ cells -- while a PSD-singular H leaves a genuinely thin domain.
 **(2) A domain of dimension < 2 is now READ.** The conjugate of such an input is FULL-dimensional,
 so this needed no storage work either: a needle at `p` with value `c` gives `<s,p> - c`, affine on
 all of `R^2`; a segment gives the clamped one-dimensional maximum, which is exactly `caseD`'s
-candidate set. The only new code is `degenerateShape`, because such a mesh has `nf = 0` and an empty
+candidate set. The only new code is `degenerateShape`, because such a subdivision has `nf = 0` and an empty
 `F`, so there is no face to read the geometry from and every edge belongs to the single piece.
 `caseD` is used unconditionally there: the problem is ONE-dimensional, so what decides its shape is
 the curvature ALONG the edge, `d'Hd`, not the definiteness of H in the plane. A chain carrying more
@@ -1808,7 +1816,7 @@ This is THREE of the five full-plane cells too -- ND, indefinite and NSD-singula
 misleading.** The conjugate of a low-dimensional input is FULL-dimensional: a needle at `p` with
 value `c` conjugates to `<s,p> - c`, affine and finite on all of `R^2`; a segment carrying an affine
 `f` conjugates to a max of two affine functions, again finite everywhere. Both are ordinary
-`QuaCon`s. What is missing is the INPUT side -- `pieceShape` looks for a face and these meshes have
+`QuaCon`s. What is missing is the INPUT side -- `pieceShape` looks for a face and these subdivisions have
 `nf = 0` -- so this is reading work, not representation work.
 
 **3. `dom f*` is a POINT or a LINE -- the only case that needs an extension, and it is one value in
@@ -2163,7 +2171,7 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       half re-split), two of them slivers of area 8.7e-05 against 2.7e-02. **Every face's own Step 2
       conjugate is EXACT** at the bad point -- 1.032507658472 to twelve digits, four times over --
       and folding faces 2 and 3 keeps it; the FOURTH fold returns 1.005089907622. Pairwise folds of
-      any two faces are all exact: only folding a sliver into the ALREADY-ACCUMULATED mesh loses it,
+      any two faces are all exact: only folding a sliver into the ALREADY-ACCUMULATED subdivision loses it,
       which is why every two-operand `maxQuaParTest` passes.
       **It is also far worse than 2.742e-02**, which was only the worst on a probe grid of radius
       <= 6: the fold cross-check finds `f*(-10,0) = 47.10181578` against a true 10.86895777, an
@@ -2535,7 +2543,7 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
 - [x] **B6 -- NOT A GAP, corrected 2026-08-25.** Listed as "Step 3 with a non-triangular envelope
       piece". The guard is in `conjPolygonalDomain`'s fan loop and says something else: it fires
       when `conjSingleTriangle` hands back a `QuaParCPLQ`, i.e. that ONE TRIANGLE's Step 2 fell back
-      to symbolic, and Step 3's numeric max cannot mix a mesh with cPLQ's symbolic form. Refusing to
+      to symbolic, and Step 3's numeric max cannot mix a subdivision with cPLQ's symbolic form. Refusing to
       mix them is right. And it is not a gap: `conjCPLQ` lists `PLQ:conjCPLQ:notImplemented` in its
       fallback catch, so under `auto` the domain routes to Case C and gets an answer. A symbolic
       FALLBACK, and one that shrinks automatically as the Step 2 fallbacks (G1, G4) close --
@@ -2543,8 +2551,8 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
 
 - [x] **G12 -- DONE 2026-08-25 (overnight). `route='symbolic'` now has a destination for a single
       triangle.** Case B ignored the route entirely, so a triangle came back as the same numeric
-      mesh whatever the caller asked for -- and `biconjCPLQ` asks for the symbolic form exactly
-      when the numeric first conjugate is a CURVED mesh, because the second conjugation cannot take
+      subdivision whatever the caller asked for -- and `biconjCPLQ` asks for the symbolic form exactly
+      when the numeric first conjugate is a CURVED subdivision, because the second conjugation cannot take
       one. The escape did nothing. The destination is cPLQ's own PER-TRIANGLE form,
       `conjEnvelopeViaCPLQ`, which `conjSingleTriangle` already falls back to -- NOT Case C, which
       does not cover a single triangle and raises `cplqFailed` after 102 s (that route was tried
@@ -2552,7 +2560,7 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
       Measured: `x*y` over {(0,0),(1,0),(0,1)} returns a QuaParCPLQ in 14.4 s, exact to 0.000e+00
       against the closed form `max(0,s1,s2)`. On the {(-1,1),(-3,-3),(-4,-3)} triangle cPLQ itself
       raises `cplqFailed` -- a pre-existing limit of that pipeline on that fixture, now named
-      rather than silently answered with the numeric mesh. Pinned by
+      rather than silently answered with the numeric subdivision. Pinned by
       `conjSymFreeTest/routeSYMBOLICHasSomewhereToGoForASingleTriangle`.
 
 - [x] **G13 -- SUBSUMED 2026-08-25 by the legacy pins.** Its measurement stands and is worth
@@ -2595,8 +2603,8 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
         * **LINE** (PSD rank 1) -- 2026-08-26. Two opposite rays; `eval` ignored the ray marker and
           `belongToEdge`'s ray test was coordinate-wise.
         * **EMPTY** (a negative eigenvalue) -- 2026-08-27. f* = +inf everywhere, which a
-          full-domain mesh with constant `+inf` represents exactly. Verified safe downstream
-          (eval/isMeshed/kind/isConvex/addition) before adopting.
+          full-domain subdivision with constant `+inf` represents exactly. Verified safe downstream
+          (eval/isSubdivided/kind/isConvex/addition) before adopting.
       **One consequence, pinned:** conjugating the EMPTY result gives -inf everywhere -- correct
       ((+inf)* = -inf) and outside the PLQ class. `biconjCPLQ` never reaches it today.
       **The transferable lesson:** three for three, "blocked on the return type" was wrong and the
@@ -2605,7 +2613,7 @@ the work is not "rewrite Step 3"; it is **shrink the set of inputs that fall bac
 
 - [x] **G15 -- ANSWERED 2026-08-26, and the hypothesis was WRONG.** The
       `rectBiconjugateIsAConvexUnderestimator` timeout is NOT item 2's hole. Measured:
-      `conjugateOfPiecePoly` -- the step that consumes the holed mesh, and the only one a hole
+      `conjugateOfPiecePoly` -- the step that consumes the holed subdivision, and the only one a hole
       could plausibly derail -- takes **191 s** of the 3600 s budget and TERMINATES, turning 32
       cells into **111 cells in 32 blocks**. The remaining cost is the pointwise max across those
       111, i.e. `functionNDomain.maxOfList`.
@@ -2660,7 +2668,7 @@ in ONE coordinate), and no tower of square roots is enough either (an `f*` verte
 with Galois group S4). Order matters below; each item says what decides it.
 
 Terminology used throughout: **Row 7** is the recommendation of `CONJ_FIELD_PROOF.md` section 8.2 —
-store the mesh in **H-form** (faces as sign conditions on rational conics, edges as rational conics,
+store the subdivision in **H-form** (faces as sign conditions on rational conics, edges as rational conics,
 a vertex named by the PAIR OF CONICS it solves rather than by coordinates) and run every predicate
 through an interval **filter** first, dropping to the exact kernel only when the interval straddles
 zero. That file is UNTRACKED at the time of writing — another session left it in the tree — so this
@@ -2693,7 +2701,7 @@ section states what it needs rather than pointing at it.
       tuned tolerance) with a terminating exact fallback, or it is the refuted double-plus-tolerance
       design wearing a disguise.
 
-- [ ] **When Row 7 lands, INDEX the mesh for evaluation — do not linear-scan.**
+- [ ] **When Row 7 lands, INDEX the subdivision for evaluation — do not linear-scan.**
       Measured (`.claude/evalbench.c`, gcc -O2 -march=native, min of three runs, value AND gradient
       every call; the caveats are in `DECISIONS.md`):
 
@@ -2702,7 +2710,7 @@ section states what it needs rather than pointing at it.
           uniform bucket       9 ... 1024 cells                24 ...    27 ns
           slab, two binary searches                            15 ...    26 ns
           cached cell + bucket, COHERENT queries                        11.5 ns
-          no mesh, per-piece closed-form sup   3 / 6 / 24 pieces  105 / 215 / 822 ns
+          no subdivision, per-piece closed-form sup   3 / 6 / 24 pieces  105 / 215 / 822 ns
 
       Take the **uniform bucket plus a last-cell cache**: flat in the cell count, O(N) to build,
       and SCIP's queries move in small steps so the previous cell usually still holds. Skip the
@@ -2728,10 +2736,10 @@ section states what it needs rather than pointing at it.
 gradient at any point is already a global linear underestimator, the max over a box is attained at
 one of four corners, and the min is the global min when it is inside — the interval evaluation that
 usually dominates propagation is nearly free. Evaluation is pure double precision: the exact kernel
-is a BUILD-time cost and the finished mesh compiles to flat arrays, so the degree-4 vertex question
+is a BUILD-time cost and the finished subdivision compiles to flat arrays, so the degree-4 vertex question
 never reaches the solver. The gradient jumps across cell boundaries; the value does not, and either
 side is a valid subgradient, so separation stays correct but an Ipopt-based heuristic will feel it.
-Building the mesh is minutes to an hour, so it must be once-per-constraint preprocessing, never
+Building the subdivision is minutes to an hour, so it must be once-per-constraint preprocessing, never
 reached from a node.
 
 ## 2026-08-23 — RETURN TYPES: `QuaCon` for `conj`, `AlgCon` for `biconj`
@@ -2884,7 +2892,7 @@ blocker for making the split the default, and it was a casualty of the double le
       where the sup is attained. See `DECISIONS.md`.
 
 - [x] **5. `RatPar`'s `V (:,2){mustBeNumeric}` -- DECIDED 2026-08-18: leave it.** It costs cells
-      and time, not correctness; the default path no longer goes through the mesh; and the change
+      and time, not correctness; the default path no longer goes through the subdivision; and the change
       is lattice-wide against a design the classes state deliberately. `DECISIONS.md` records what
       would reverse it.
 
@@ -3303,7 +3311,7 @@ blocker for making the split the default, and it was a casualty of the double le
       **TWO defects, and the description this item used to carry was wrong about the
       cause.** Measured 2026-08-15; full write-up in `DECISIONS.md`.
       **(1a) The pinned test no longer fails the way it says.** Since `conj` began returning a
-      MESHED QuaPar for a bounded multi-face domain, `biconj`'s second conjugation is handed a
+      SUBDIVIDED QuaPar for a bounded multi-face domain, `biconj`'s second conjugation is handed a
       CURVED QuaPar and `quaPolToPlq` refuses it -- the test ERRORS at `quaPolToPlq:curvedEdge`
       before any of (1b) is reached. Either the second conjugation learns to take a curved QuaPar,
       or `biconj` routes a bounded multi-face domain through the symbolic form on purpose.
@@ -3328,7 +3336,7 @@ blocker for making the split the default, and it was a casualty of the double le
            is quadratic rather than comparing a constraint COUNT to the vertex count.
         3. `biconj` on a bounded multi-face domain takes its FIRST conjugate in symbolic form
            (`conjCPLQ(..., 'symbolic')`), because the second conjugation cannot take the curved
-           MESH `conj` now returns and died at `quaPolToPlq:curvedEdge`.
+           SUBDIVISION `conj` now returns and died at `quaPolToPlq:curvedEdge`.
       Unit level: the half-lens conjugates to 3 cells matching a brute-force sup at all 10 probe
       points (2 identical wrong cells before).
       **REMAINING, and it is a REFACTOR, not a fix.** `f**` is exact at 5 of 7 probe points; the
@@ -3637,7 +3645,7 @@ NEAR the arcs; but "18/2, two pins fixed" means "fixed where the tests sample", 
 ones). Over 60 shifts: **65% exact, 15% assemble-to-WRONG, 20% error.** So the fixes generalise
 well (not ad-hoc), but the 15% wrong is the TOP next task: it is the SAME pre-existing far-field
 over-extension as [0.5 0.5]'s residual 2/68 (a decided unbounded polyhedral cell reaching past its
-g1 face near a mesh vertex), which the arc-assembly fixes newly EXPOSE by letting those cases
+g1 face near a subdivision vertex), which the arc-assembly fixes newly EXPOSE by letting those cases
 assemble instead of erroring. conj's verification catches it in production. Fixing that far-field
 coverage bug should turn most of the 15% wrong (and [0.5 0.5]'s 2/68) green.
 
@@ -3653,7 +3661,7 @@ two-arc split). The [0.5 0.5] fixture chained ~9 distinct arc-handling bugs; six
 - **[0.5 0.5] `twoCurvedWhereTheSplitCurveCrossesAnArc` -- now ASSEMBLES, red by VALUE (2/68).**
   Six bugs fixed to get here (see the four commits above); the remaining error is UNRELATED to the
   arc machinery. The 2 wrong samples are `(-3.98109,0.61148)` and `(-5.09537,0.13508)` -- both far
-  out in the lower-left, both essentially ON g1's mesh vertex `V5=(-3.98249,0.610504)` and its
+  out in the lower-left, both essentially ON g1's subdivision vertex `V5=(-3.98249,0.610504)` and its
   face-3/face-4 boundary ray (dir `(-0.857,-0.514)`). Piece `src[4 3]` (a DECIDED unbounded
   polyhedral strip, untouched by any session change) over-extends a hair past g1's edge 4 there and
   evaluates g1-face-4's quadratic (~0.47/1.23) where g1's real value via the neighbouring face is 0.
@@ -3689,13 +3697,13 @@ two-arc split). The [0.5 0.5] fixture chained ~9 distinct arc-handling bugs; six
   **arc-vs-HALF-PLANE** path (`clipPolyHalfPlaneCurved`), a DIFFERENT code path -- and it does not
   produce the matching `x+y=0` ray (its `src[6 2]` pieces 15/16 sit at `x+y=0.5` and `1.0`, and
   piece 15 has a bounded vertex exactly at `(-2.03125,2.03125)` but no ray along `(-1,1)`). So piece
-  5's ray has no neighbour because the two clip paths DISAGREE along the shared g1 mesh edge.
+  5's ray has no neighbour because the two clip paths DISAGREE along the shared g1 subdivision edge.
   Post-passthrough T-junction scan finds nothing collinear with the ray, confirming it is not a
   subdivision miss. FIX DIRECTION (not yet done -- delicate, high regression risk to the arc
   machinery): make the arc-vs-half-plane clip of g2f2 by g1f6 produce the same `x+y=0` boundary the
   arc-vs-arc clip of g2f2 by g1f2 does, i.e. reconcile `clipPolyHalfPlaneCurved` with
   `clipPolyByConic` along a shared straight g1 edge.
-  DECISIVE CHECK NOW DONE (confirms "f6 clip under-producing"): g1's mesh for [0.5 0.5] has
+  DECISIVE CHECK NOW DONE (confirms "f6 clip under-producing"): g1's subdivision for [0.5 0.5] has
   `E(6,:)=[2 7 0]` a RAY from V2=(-2,2) in dir (-0.707,0.707) lying on `x+y=0`, with `F(6,:)=[2 6]`
   -- so it is exactly the g1 face-2/face-6 boundary and it runs to INFINITY. Therefore `src[6 2]`
   (=g1f6 n g2f2) must have a matching `x+y=0` ray, and `clipByFace(facePoly(g1,6), facePoly(g2,2))`

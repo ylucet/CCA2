@@ -3,7 +3,7 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
 %   CERTIFIED by Bernstein bounds on sub-boxes: true only when that was shown, false otherwise.
 %   Given SEVERAL rows, is at least one of them false at every point -- their conjunction empty.
 %
-% [input]  a     : the row(s), as envelopeMeshAlg stores them -- .FP (polyN in x, y, z of degree 1
+% [input]  a     : the row(s), as envelopeSubdivisionAlg stores them -- .FP (polyN in x, y, z of degree 1
 %                  or 2 in z), .FB (algBranch's index), .num/.den (the quadratic face, weighted
 %                  basis), .side (+1 or -1); a struct array for several rows
 %          box   : [x0 x1 y0 y1], a box containing the region
@@ -20,7 +20,7 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
 % row holds somewhere on the piece, never all together. A sub-box is decided when ANY row is
 % certified false on it, so different rows may decide different boxes.
 %
-% WHY POINTWISE (2026-10-29). The first test (envelopeMeshAlg, 2026-10-20) proved the
+% WHY POINTWISE (2026-10-29). The first test (envelopeSubdivisionAlg, 2026-10-20) proved the
 % row's sign CONSTANT on a cell -- R = FP(x, y, q) != 0 there -- and read it at sample points, so a
 % cell the curve R = 0 crosses could never be decided: ~1600 faces of the 3-convex-edge triangle.
 % But R = 0 is where q meets EITHER root, and a box the OTHER root's curve crosses can still have

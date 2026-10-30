@@ -33,7 +33,7 @@ classdef AlgCrvTest < matlab.unittest.TestCase
         function theEVALUATORReadsBothTheEdgeAndTheIMPLICITValue(t)
         % Inside the unit circle the constant 1 is above |x|, so the face owns those points and its
         % value is the CONSTANT; outside, the face owns nothing and the answer is +infinity, which is
-        % what a hole in a mesh means everywhere in this toolbox.
+        % what a hole in a subdivision means everywhere in this toolbox.
             g = fixture();
             inside  = [0 0; 0.5 0; 0 0.5; -0.25 0.25];
             outside = [2 0; 0 -3; 1.5 1.5];

@@ -1,4 +1,4 @@
-classdef algCrvMeshTest < matlab.unittest.TestCase
+classdef algCrvSubdivisionTest < matlab.unittest.TestCase
 % [slow] The EDGE LIST of the real curved-tie AlgCrv (c = -2, the diagonal-kink fixture that
 % `biconjQ` returns as an AlgCrv), checked against the DEFINITION of a face boundary rather than
 % against stored numbers: at every vertex point of a face's boundary exactly two of its arcs end.
@@ -15,7 +15,7 @@ classdef algCrvMeshTest < matlab.unittest.TestCase
         function build(t)
             fA = tri([0 0; 1 0; 1 1], 0);  fB = tri([0 0; 1 1; 0 1], -2);
             env = envelopePrune(envelopeAssemble(conjQ(fA), conjQ(fB)));
-            t.G = assembleAlgCrv(envelopeMeshAlg(env));
+            t.G = assembleAlgCrv(envelopeSubdivisionAlg(env));
             [t.V, t.info] = algCrvVertices(t.G);
             t.X = t.info.X;
         end

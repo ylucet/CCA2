@@ -1,5 +1,5 @@
-classdef meshPredicateTest < matlab.unittest.TestCase
-% Unit tests for the mesh PREDICATES the three sibling mesh classes each implement:
+classdef subdivisionPredicateTest < matlab.unittest.TestCase
+% Unit tests for the subdivision PREDICATES the three sibling subdivision classes each implement:
 % `isFaceConvex`, `isEdgeContinuous`, `isEdgeConvex`, `isConvex`, `isDomBounded`,
 % `belongToEdge`, `evalHessian`, `matrixForm`, `oneNormConjugate`.
 %
@@ -13,15 +13,15 @@ classdef meshPredicateTest < matlab.unittest.TestCase
 % implementations must agree, and a divergence between siblings is itself a defect worth failing
 % on. All three constructors accept (V,E,f,F), which is what makes the sharing possible.
 %
-% BUCKET: fast. Everything here is closed-form numerics on 2-face meshes; nothing calls the
+% BUCKET: fast. Everything here is closed-form numerics on 2-face subdivisions; nothing calls the
 % Symbolic Math Toolbox.
 
     methods (Static)
 
         % ---- fixtures ---------------------------------------------------------------------------
-        % One mesh shape throughout: the unit square split by the diagonal (0,0)-(1,1) into a lower
+        % One subdivision shape throughout: the unit square split by the diagonal (0,0)-(1,1) into a lower
         % and an upper triangle. Two faces, one INTERIOR edge (the diagonal) and four boundary
-        % edges, which is the smallest mesh on which "across an edge" means anything.
+        % edges, which is the smallest subdivision on which "across an edge" means anything.
         function [V, E, F] = splitSquare()
             V = [0 0; 1 0; 1 1; 0 1];
             E = [1 2 1;      % boundary, lower face only
@@ -34,12 +34,12 @@ classdef meshPredicateTest < matlab.unittest.TestCase
 
         function p = build(cls, f)
         % The split square carrying the per-face coefficient rows f (2 x 6, [x^2 xy y^2 x y 1]).
-            [V, E, F] = meshPredicateTest.splitSquare();
+            [V, E, F] = subdivisionPredicateTest.splitSquare();
             switch cls
                 case 'QuaPol', p = QuaPol(V, E, f, F);
                 case 'QuaPar', p = QuaPar(V, E, f, F);
                 case 'RatPol', p = RatPol(V, E, f, F);
-                otherwise, error('meshPredicateTest:cls', 'unknown class %s', cls);
+                otherwise, error('subdivisionPredicateTest:cls', 'unknown class %s', cls);
             end
         end
 
@@ -79,7 +79,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % rebuild f from the pieces and compare to the coefficients as written -- at random points,
         % not at a golden value. Run for all three classes, which must agree.
             rng(20260831);
-            for cls = meshPredicateTest.classes()
+            for cls = subdivisionPredicateTest.classes()
                 for trial = 1:8
                     c = round((rand(1,6)-0.5)*8, 3);
                     [L, Q, C] = feval([cls{1} '.matrixForm'], c);
@@ -89,7 +89,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
                     for i = 1:size(P,1)
                         z = P(i,:).';
                         got  = 0.5*(z.'*Q*z) + L.'*z + c(6);
-                        want = meshPredicateTest.polyVal(c, z(1), z(2));
+                        want = subdivisionPredicateTest.polyVal(c, z(1), z(2));
                         testCase.verifyEqual(got, want, 'AbsTol', 1e-12, sprintf( ...
                             '%s.matrixForm trial %d at (%g,%g)', cls{1}, trial, z(1), z(2)));
                     end
@@ -103,14 +103,14 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         function evalHessianMatchesFiniteDifferences(testCase)
             rng(20260831);
             h = 1e-4;
-            for cls = meshPredicateTest.classes()
+            for cls = subdivisionPredicateTest.classes()
                 for trial = 1:6
                     c = round((rand(1,6)-0.5)*6, 3);
                     X = (rand(3,2)-0.5)*3;
                     [H, g] = feval([cls{1} '.evalHessian'], c, X);
                     for i = 1:size(X,1)
                         x = X(i,1); y = X(i,2);
-                        f  = @(a,b) meshPredicateTest.polyVal(c, a, b);
+                        f  = @(a,b) subdivisionPredicateTest.polyVal(c, a, b);
                         fdH = [ (f(x+h,y) - 2*f(x,y) + f(x-h,y))/h^2, ...
                                 (f(x+h,y+h) - f(x+h,y-h) - f(x-h,y+h) + f(x-h,y-h))/(4*h^2); 0 0];
                         fdH(2,1) = fdH(1,2);
@@ -131,7 +131,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % test above, which always passes points.
             c = [2 -1 3 5 -4 7];                     % x^2 - xy + 1.5y^2 + 5x - 4y + 7
             want = [2 -1; -1 3];                     % = Q, which IS the Hessian in this basis
-            for cls = meshPredicateTest.classes()
+            for cls = subdivisionPredicateTest.classes()
                 H = feval([cls{1} '.evalHessian'], c);
                 testCase.verifyEqual(H, want, 'AbsTol', 1e-12, sprintf( ...
                     '%s.evalHessian(c) with no point', cls{1}));
@@ -141,7 +141,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % =========================================================================================
         % isFaceConvex / isEdgeContinuous / isEdgeConvex / isConvex
         %
-        % Four fixtures on the same mesh, chosen so that each predicate is the ONLY thing that
+        % Four fixtures on the same subdivision, chosen so that each predicate is the ONLY thing that
         % separates two of them -- otherwise a predicate that always returned the same answer
         % would pass.
         %
@@ -153,9 +153,9 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % =========================================================================================
         function convexFixtureIsConvexEverywhere(testCase)
             f = [1 0 1 0 0 0; 1 0 1 0 0 0];          % x^2 + y^2 on both faces
-            j = meshPredicateTest.diagonalEdge();
-            for cls = meshPredicateTest.classes()
-                p = meshPredicateTest.build(cls{1}, f);
+            j = subdivisionPredicateTest.diagonalEdge();
+            for cls = subdivisionPredicateTest.classes()
+                p = subdivisionPredicateTest.build(cls{1}, f);
                 testCase.verifyTrue(p.isFaceConvex(1), sprintf('%s: face 1 of x^2+y^2', cls{1}));
                 testCase.verifyTrue(p.isFaceConvex(2), sprintf('%s: face 2 of x^2+y^2', cls{1}));
                 testCase.verifyTrue(p.isEdgeContinuous(j), sprintf('%s: same function both sides', cls{1}));
@@ -172,9 +172,9 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % outputs, and isConvex must be false -- a discontinuous function on a connected domain
         % cannot be convex.
             f = [0 0 0 0 0 0; 0 0 0 0 0 1];
-            j = meshPredicateTest.diagonalEdge();
-            for cls = meshPredicateTest.classes()
-                p = meshPredicateTest.build(cls{1}, f);
+            j = subdivisionPredicateTest.diagonalEdge();
+            for cls = subdivisionPredicateTest.classes()
+                p = subdivisionPredicateTest.build(cls{1}, f);
                 testCase.verifyFalse(p.isEdgeContinuous(j), sprintf( ...
                     '%s: a jump of 1 across the diagonal was not detected', cls{1}));
                 [cvx, cont] = p.isEdgeConvex(j);
@@ -191,9 +191,9 @@ classdef meshPredicateTest < matlab.unittest.TestCase
 
         function concaveFacesAreNotFaceConvex(testCase)
             f = [-1 0 -1 0 0 0; -1 0 -1 0 0 0];      % -(x^2 + y^2)
-            j = meshPredicateTest.diagonalEdge();
-            for cls = meshPredicateTest.classes()
-                p = meshPredicateTest.build(cls{1}, f);
+            j = subdivisionPredicateTest.diagonalEdge();
+            for cls = subdivisionPredicateTest.classes()
+                p = subdivisionPredicateTest.build(cls{1}, f);
                 testCase.verifyFalse(p.isFaceConvex(1), sprintf( ...
                     '%s: -(x^2+y^2) is concave, so the face is not convex', cls{1}));
                 testCase.verifyFalse(p.isConvex(), sprintf('%s: overall convexity', cls{1}));
@@ -209,9 +209,9 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % yet the function has a downward kink across the diagonal, so its subdifferential there is
         % empty and it is not convex. Only isEdgeConvex can tell -- which is what it is for.
             f = [0 0 0 0 0 0; 0 0 0 -1 1 0];
-            j = meshPredicateTest.diagonalEdge();
-            for cls = meshPredicateTest.classes()
-                p = meshPredicateTest.build(cls{1}, f);
+            j = subdivisionPredicateTest.diagonalEdge();
+            for cls = subdivisionPredicateTest.classes()
+                p = subdivisionPredicateTest.build(cls{1}, f);
                 testCase.verifyTrue(p.isFaceConvex(1), sprintf('%s: an affine face is convex', cls{1}));
                 testCase.verifyTrue(p.isFaceConvex(2), sprintf('%s: an affine face is convex', cls{1}));
                 testCase.verifyTrue(p.isEdgeContinuous(j), sprintf( ...
@@ -228,10 +228,10 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         function boundaryEdgesAreVacuouslyContinuous(testCase)
         % An edge with only one face beside it has nothing to be discontinuous across, and the
         % documented answer is true. Asserted because it is the early-return branch and a predicate
-        % that got it backwards would make every bounded mesh look discontinuous.
+        % that got it backwards would make every bounded subdivision look discontinuous.
             f = [1 0 1 0 0 0; 1 0 1 0 0 0];
-            for cls = meshPredicateTest.classes()
-                p = meshPredicateTest.build(cls{1}, f);
+            for cls = subdivisionPredicateTest.classes()
+                p = subdivisionPredicateTest.build(cls{1}, f);
                 for j = 1:4                                   % the four boundary edges
                     testCase.verifyTrue(p.isEdgeContinuous(j), sprintf( ...
                         '%s: boundary edge %d has one face and must read continuous', cls{1}, j));
@@ -247,7 +247,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         %
         % The unbounded fixture is a genuine WEDGE -- the first quadrant, one vertex at the origin
         % and two rays -- not the square with a segment flag flipped to 0. Flipping a flag makes a
-        % mesh whose face boundary no longer closes, and the constructor rejects it
+        % subdivision whose face boundary no longer closes, and the constructor rejects it
         % (QuaPol/orderEdges: "Face 1 has ..."), which tests the constructor's validation rather
         % than isDomBounded. A ray's second vertex is a DIRECTION MARKER, so an unbounded fixture
         % has to be built as one from the start.
@@ -256,8 +256,8 @@ classdef meshPredicateTest < matlab.unittest.TestCase
             Vw = [0 0; 1 0; 0 1];
             Ew = [1 2 0; 1 3 0];                              % two rays from the origin
             Fw = [1 0; 0 1];                                  % the quadrant is left of e1, right of e2
-            for cls = meshPredicateTest.classes()
-                pB = meshPredicateTest.build(cls{1}, f);
+            for cls = subdivisionPredicateTest.classes()
+                pB = subdivisionPredicateTest.build(cls{1}, f);
                 testCase.verifyTrue(pB.isDomBounded(), sprintf( ...
                     '%s: every edge is a segment, so the domain is bounded', cls{1}));
                 switch cls{1}
@@ -284,7 +284,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
                   0.5 0.3];   % off the line entirely
             wantSeg = [true; false; false; false];
             wantRay = [true; true;  false; false];
-            for cls = meshPredicateTest.classes()
+            for cls = subdivisionPredicateTest.classes()
                 fn = [cls{1} '.belongToEdge'];
                 if ~ismember('belongToEdge', methods(cls{1})), continue, end
                 gotSeg = logical(feval(fn, V1, V2, X, true));
@@ -300,7 +300,7 @@ classdef meshPredicateTest < matlab.unittest.TestCase
         % oneNormConjugate -- a named fixture that is only worth keeping if it is the right one
         % =========================================================================================
         function oneNormConjugateIsTheIndicatorOfTheUnitInfinityBall(testCase)
-        % (||.||_1)* is the indicator of the unit ball of the dual norm, ||.||_inf. So the mesh
+        % (||.||_1)* is the indicator of the unit ball of the dual norm, ||.||_inf. So the subdivision
         % must evaluate to 0 strictly inside [-1,1]^2 and to +inf outside it. Asserted rather than
         % assumed: the method is a hand-written vertex list, and nothing else in the toolbox has
         % ever checked that the list says what its name claims.
@@ -333,12 +333,12 @@ classdef meshPredicateTest < matlab.unittest.TestCase
                          [0 0 0 0 0 0; 0 0 0 0 0 1], 'discontinuous'
                          [-1 0 -1 0 0 0; -1 0 -1 0 0 0], 'concave'
                          [0 0 0 0 0 0; 0 0 0 -1 1 0], 'kinked' };
-            j = meshPredicateTest.diagonalEdge();
+            j = subdivisionPredicateTest.diagonalEdge();
             for k = 1:size(fixtures,1)
                 f = fixtures{k,1}; nm = fixtures{k,2};
                 got = struct('faceConvex',[], 'edgeCont',[], 'edgeConvex',[], 'convex',[], 'bounded',[]);
-                for cls = meshPredicateTest.classes()
-                    p = meshPredicateTest.build(cls{1}, f);
+                for cls = subdivisionPredicateTest.classes()
+                    p = subdivisionPredicateTest.build(cls{1}, f);
                     [cvx, cont] = p.isEdgeConvex(j);
                     got.faceConvex(end+1) = p.isFaceConvex(1);
                     got.edgeCont(end+1)   = p.isEdgeContinuous(j);

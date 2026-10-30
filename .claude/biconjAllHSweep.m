@@ -8,10 +8,10 @@ function biconjAllHSweep(nRep)
 % about a positive definite piece, an indefinite one, an unbounded domain, or two pieces at all.
 %
 % THE MULTI-PIECE FIXTURES ARE CONTINUOUS BY CONSTRUCTION, which is what makes them usable. On a
-% mesh split by one edge, put q0 on one side and q0 + c*l on the other, where l is the shared
+% subdivision split by one edge, put q0 on one side and q0 + c*l on the other, where l is the shared
 % edge's own linear form. l vanishes on the edge, so f is continuous there for every c -- and the
 % SIGN of c is exactly what decides convexity across the edge (isConvexQ's delta). So one knob
-% sweeps convex, affine-jump and non-convex without ever producing a mesh that is not a function.
+% sweeps convex, affine-jump and non-convex without ever producing a subdivision that is not a function.
 %
 % THE ORACLE is the definition of the convex envelope, in three parts, none of which mentions a
 % lower hull:
@@ -178,8 +178,8 @@ function f = buildFixture(shape, H, L, k0, c)
             % Edge 4 runs (0,1) -> (1,1), so its direction is (1,0) and its LEFT is +y -- the
             % UPPER face. F(j,1) is the left face, so face 2 goes in column 1. Written [1 2] at
             % first, which silently swapped the two quadratics and made the sweep report 9 bad
-            % answers against a mesh that was not the intended function at all
-            % (.claude/strip2MeshProbe.m).
+            % answers against a subdivision that was not the intended function at all
+            % (.claude/strip2SubdivisionProbe.m).
             F = [1 0; 0 1; 1 0; 2 1; 0 2; 2 0];
             f = QuaPol(V, E, [q0; addLin(q0, c, [0 1 -1])], F);
         case 'halfplane'    % the closed upper half-plane split by the ray x=0, y>=0; l = x
@@ -202,7 +202,7 @@ end
 
 % ------------------------------------------------------------------------------------------------
 function X = sampleDomain(f, n)
-% Points the mesh itself says are in the domain. Rejection sampling over a box, which is the only
+% Points the subdivision itself says are in the domain. Rejection sampling over a box, which is the only
 % method that works for the unbounded shapes too.
     B = 4;
     P = B*(2*rand(6*n, 2) - 1);

@@ -168,7 +168,7 @@ function [face, info] = buildFace(u, w, nu, rq, rl, rc, rd, b1, k1, d, P)
                        'rq', rq, 'rl', rl, 'rc', rc, 'rd', rd, ...
                        'B', B, 'C', C, 'scale', scale, 'P', P);
     face.wit = witnessRat(face.pair);
-    % WHAT THE MESH NEEDS (2026-10-16): the face's region as ROWS and its value IMPLICITLY, the two
+    % WHAT THE SUBDIVISION NEEDS (2026-10-16): the face's region as ROWS and its value IMPLICITLY, the two
     % things an algebraic bridge face carries. Both are closed form here. The value v = num/den is
     % the one root of den(x)*z - num(x) = 0. The region is EXACT, not an outer bound: concavity is
     % C*scale <= 0, a line, and each row of P, a quadratic in t along the parabola, becomes a CONIC
@@ -311,7 +311,7 @@ end
 
 function R = addRow(R, raw)
 % raw >= 0 as a canonical conic row; a constant row is dropped (it holds, or the face is empty and
-% the mesh finds no cell for it).
+% the subdivision finds no cell for it).
     if all(raw(1:5) == 0), return, end
     nz = find(raw ~= 0, 1);
     R(end+1,:) = [ratQ.conic(raw), sign(raw(nz)), 0];

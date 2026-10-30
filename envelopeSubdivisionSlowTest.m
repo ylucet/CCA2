@@ -1,18 +1,18 @@
-classdef envelopeMeshSlowTest < matlab.unittest.TestCase
-% The conic mesh of the CONVEX two-triangle fixture, at zero tolerance -- moved 2026-10-20 from
+classdef envelopeSubdivisionSlowTest < matlab.unittest.TestCase
+% The conic subdivision of the CONVEX two-triangle fixture, at zero tolerance -- moved 2026-10-20 from
 % envelopeAssembleTest (normal), where its ~94 s kept the bucket over budget (TODO item 5).
 %
 % BUCKET: slow.
 
     methods (Test)
-        function theARRANGEMENTBuildsAMeshThatReproducesFExactly(testCase)
+        function theARRANGEMENTBuildsASubdivisionThatReproducesFExactly(testCase)
         % THE ROUTE THAT WORKS. Both fold orders are ruled out by measurement; building the
         % ARRANGEMENT once never forms a partial max, so nothing can blow up on the way. On the
-        % convex fixture the mesh must reproduce f itself, at zero tolerance.
+        % convex fixture the subdivision must reproduce f itself, at zero tolerance.
             [fA, fB] = fixture(0);
             env = envelopePrune(envelopeAssemble(conjQ(fA), conjQ(fB)));
-            [g, info] = envelopeMesh(env);
-            testCase.verifyGreaterThan(g.nf, 0, 'the mesh must have faces');
+            [g, info] = envelopeSubdivision(env);
+            testCase.verifyGreaterThan(g.nf, 0, 'the subdivision must have faces');
             testCase.verifyLessThan(info.cells, 500, ...
                 'the arrangement must stay small -- that is the whole point of not folding');
             rng(43);
@@ -22,13 +22,13 @@ classdef envelopeMeshSlowTest < matlab.unittest.TestCase
                 want = min(fA.eval(x), fB.eval(x));
                 if ~isfinite(want), continue, end
                 got = g.eval(x);
-                testCase.verifyTrue(isfinite(got), 'the mesh is finite on the domain');
+                testCase.verifyTrue(isfinite(got), 'the subdivision is finite on the domain');
                 n = n + 1;
                 worst = max(worst, abs(got - want));
             end
             testCase.verifyGreaterThan(n, 80, 'the check was actually exercised');
             testCase.verifyEqual(worst, 0, 'AbsTol', 0, ...
-                'a convex input is its own envelope, and the MESH must say so exactly');
+                'a convex input is its own envelope, and the SUBDIVISION must say so exactly');
         end
     end
 end

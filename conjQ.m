@@ -66,7 +66,7 @@ function [g, dom] = conjQ(obj)
     % segment and indexing vertex 0. See RatCon.assertEdgeFlags. Nothing produces one
     % today, so this fires on nothing; it is here for when a bridge face is first stored.
     %
-    % AFTER the input-type check, deliberately: a non-QuaPol has no mesh to inspect, and
+    % AFTER the input-type check, deliberately: a non-QuaPol has no subdivision to inspect, and
     % reading obj.E first replaced this routine's named type refusal with an access error.
     RatCon.assertNoClosedEdges(obj.E, 'conjQ');
     obj.assertOperable();
@@ -139,7 +139,7 @@ function [g, dom] = conjPieceQ(obj, k)
     % storage: a needle at p with value c conjugates to <s,p> - c, affine and finite on all of R^2,
     % and a segment to a max over its two endpoints and, where the restriction is concave, its
     % interior stationary point. That is exactly caseD's candidate set, so the only new code is
-    % building the shape -- there is no face to read it from, since such a mesh has nf = 0 and an
+    % building the shape -- there is no face to read it from, since such a subdivision has nf = 0 and an
     % empty F, so every edge belongs to the single piece.
     %
     % caseD unconditionally, never caseB, and the reason is that the problem is ONE-dimensional:
@@ -512,7 +512,7 @@ function s = sgnOf(row, want)
 %
 % ratQ.conic makes the first nonzero entry positive, which may have negated the whole row. The
 % face's side must follow that negation, or the cell silently becomes its own complement -- which
-% is a wrong answer that still produces a plausible mesh.
+% is a wrong answer that still produces a plausible subdivision.
 %
 % Takes either the three LINEAR coefficients [d e f] or a full conic [a b c d e f]; the caller has
 % one or the other depending on whether the constraint came from a half-plane or from a difference
@@ -624,7 +624,7 @@ function sh = pieceShape(obj, k, Vi, vd)
             elseif obj.F(jg,1) == k
                 sgn = -1;
             else
-                error('PLQ:conjQ:badMesh', ...
+                error('PLQ:conjQ:badSubdivision', ...
                     'edge %d lists faces [%d %d], neither of which is face %d.', ...
                     jg, obj.F(jg,1), obj.F(jg,2), k);
             end
@@ -986,7 +986,7 @@ function tris = earClip(Vi, cyc)
 % WHY EAR CLIPPING AND NOT A LIBRARY. Every decision is a sign test on an integer: whether a corner
 % turns left (a cross product) and whether another vertex lies inside a candidate triangle (three
 % cross products). So the triangulation is DECIDED rather than estimated, which is the whole
-% premise here -- a floating-point triangulator could return a different mesh for the same polygon
+% premise here -- a floating-point triangulator could return a different subdivision for the same polygon
 % depending on rounding, and each triangle's conjugate would then be exact about the wrong thing.
 %
 % Two theorems make the loop terminate: every simple polygon with more than three vertices has at

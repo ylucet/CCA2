@@ -77,13 +77,13 @@ order — a genuine diamond, because that is what a product lattice is:
              \    /
              QuaPol       quadratic on polyhedral  — the input type
 
-        QuaParCPLQ         same maths as QuaPar, still in symbolic form (no mesh)
+        QuaParCPLQ         same maths as QuaPar, still in symbolic form (no subdivision)
 ```
 
 ```matlab
 g = f.conj();          % always a RatPar
 g.kind()               % 'QuaPol' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
-g.isMeshed()           % false only for the symbolic QuaParCPLQ form
+g.isSubdivided()           % false only for the symbolic QuaParCPLQ form
 
 isa(g, 'Qua')          % ask about ONE axis: is the function a polynomial?
 isa(g, 'Pol')          % ...is the subdivision polyhedral?
@@ -199,7 +199,7 @@ leave users wondering which to use.
 |---|---|
 | `Rat.m`, `Qua.m` | function-type axis markers (rational ⊃ polynomial) |
 | `Par.m`, `Pol.m` | subdivision-type axis markers (parabolic ⊃ polyhedral) |
-| `RatPar.m` | abstract parent of all function types; holds all data; `kind()`, `isMeshed()` |
+| `RatPar.m` | abstract parent of all function types; holds all data; `kind()`, `isSubdivided()` |
 | `QuaPol.m` | quadratic on polyhedral — the input type |
 | `QuaPar.m` | quadratic on parabolic — the conjugate's type |
 | `RatPol.m` | rational on polyhedral — the convex envelope's type |

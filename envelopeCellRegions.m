@@ -78,7 +78,7 @@ function faces = envelopeCellRegions(N, m, q, dd, P)
 %
 % WHY IT MATTERS THAT THESE ARE EXACT. The value at a point may be a double -- CONJ_FIELD_PROOF.md
 % 8.0 lists the operations that must leave Q and evaluating a finished function is not among them.
-% But a REGION is a mesh decision: it says which formula holds where, and a tolerance there returns
+% But a REGION is a subdivision decision: it says which formula holds where, and a tolerance there returns
 % a plausible number from the wrong face. So every row here is an integer row and every comparison
 % that built it was a comparison against zero.
 %

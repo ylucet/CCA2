@@ -35,7 +35,7 @@ function [Vname, info] = algCrvVertices(g)
 %
 % MEMBERSHIP IS DECIDED IN DOUBLES, and that is deliberate rather than a gap. `assembleQuaConCells`
 % already does the same for a curved corner, with the same argument: a vertex that is wrongly kept
-% or wrongly dropped changes the mesh's TOPOLOGY, never any face's VALUE, because `eval` reads the
+% or wrongly dropped changes the subdivision's TOPOLOGY, never any face's VALUE, because `eval` reads the
 % face functions and their sign conditions and neither mentions a vertex. The exact test would be
 % the sign of a rational polynomial at a degree-16 algebraic number, which `ratQ.signAt` can do for
 % a conic row but not for a BRANCH row -- that one is a comparison against a root, not a sign.

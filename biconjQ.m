@@ -89,7 +89,7 @@ function h = biconjQ(obj)
     % segment and indexing vertex 0. See RatCon.assertEdgeFlags. Nothing produces one
     % today, so this fires on nothing; it is here for when a bridge face is first stored.
     %
-    % AFTER the input-type check, deliberately: a non-QuaPol has no mesh to inspect, and
+    % AFTER the input-type check, deliberately: a non-QuaPol has no subdivision to inspect, and
     % reading obj.E first replaced this routine's named type refusal with an access error.
     RatCon.assertNoClosedEdges(obj.E, 'biconjQ');
     obj.assertOperable();
@@ -104,7 +104,7 @@ function h = biconjQ(obj)
     %
     % BEFORE the convex short-circuit, not after, and the ordering is load-bearing: an affine or
     % PSD q on such a domain IS convex, so that branch would claim it and then read a face through
-    % pieceGeometryB -- and these meshes have nf = 0 and an empty F, so there is no face to read.
+    % pieceGeometryB -- and these subdivisions have nf = 0 and an empty F, so there is no face to read.
     % Measured: the needle and the convex segment both raised noFace while the CONCAVE segment,
     % which falls past the short-circuit, worked.
     if obj.dom.dim < 2
@@ -115,9 +115,9 @@ function h = biconjQ(obj)
         % work at all. So the convention exists and is already relied on.
         %
         % Two non-collinear segments have a 2-DIMENSIONAL convex hull, so co f is an ordinary
-        % lower-hull answer read from the whole mesh. That is concaveEnvelope, unchanged; only the
+        % lower-hull answer read from the whole subdivision. That is concaveEnvelope, unchanged; only the
         % GATHER differs, iterating edges instead of faces.
-        if isChainMesh(obj)
+        if isChainSubdivision(obj)
             assertChainEdgeConcave(obj);
             if isChain(obj)
                 h = concaveEnvelope(obj);       % non-collinear: a 2-D hull
@@ -153,7 +153,7 @@ function h = biconjQ(obj)
         if obj.nv == 0
             % The whole plane, one face: co f = f with no constraints at all. QuaPol.energy is
             % exactly this, and it used to raise noFace because quaPolAsQuaCon looks for a FACE and
-            % a full-domain mesh has none.
+            % a full-domain subdivision has none.
             h = assembleQuaConCells(struct('num', obj.fN(1,:), 'den', obj.fD(1), ...
                                            'con', zeros(0,7)));
             return
@@ -174,8 +174,8 @@ function h = biconjQ(obj)
     % Where every piece is convex but f is not, the envelope must BRIDGE the gradient jump, and the
     % lower-hull machinery below cannot: a bridge is not determined by the vertex values. That case
     % used to be refused outright (`convexPieceCoupling`). It is now COMPUTED, by assembling the
-    % envelope from the two pieces' conjugates and meshing the result -- `envelopeAssemble`,
-    % `envelopePrune`, `envelopeMesh`, each verified in its own suite.
+    % envelope from the two pieces' conjugates and subdividing the result -- `envelopeAssemble`,
+    % `envelopePrune`, `envelopeSubdivision`, each verified in its own suite.
     %
     % It is attempted only for TWO pieces, because that is what the assembly takes, and it is
     % attempted BEFORE the per-piece checks so that their refusal is not raised for a case that now
@@ -324,22 +324,22 @@ function h = biconjQ(obj)
                 % triple tangent planes -- biconjAtoms' header. An unbounded domain is assembled over
                 % dom f* (erratum Case E, 2026-10-11). The result is an EnvelopeMin, which answers
                 % eval. Where ONE active pair is left and no triangle the minimum IS that pair's
-                % envelope, and it is meshed like the two-piece route's (2026-10-17).
+                % envelope, and it is subdivided like the two-piece route's (2026-10-17).
                 h = biconjAtoms(obj);
                 if numel(h.pairs) == 1 && isempty(h.tris)
                     try
-                        h = meshPair(envelopePrune(h.pairs{1}), hullRows(obj));
+                        h = subdividePair(envelopePrune(h.pairs{1}), hullRows(obj));
                     catch ME
                         if ~isDeclined(ME), rethrow(ME), end
                     end
                 elseif isempty(h.tris)
                     % SEVERAL active pairs and no triangle (2026-10-18): the min over the pairs is
-                    % meshed as a min of maxes in one arrangement -- envelopeMeshAlg's minMaxFaces.
-                    % A triangle face's corners are degree-4 irrationals no mesh type holds yet, and
-                    % two irrational faces that cross in a cell have no curve here: both stay unmeshed.
+                    % subdivided as a min of maxes in one arrangement -- envelopeSubdivisionAlg's minMaxFaces.
+                    % A triangle face's corners are degree-4 irrationals no subdivision type holds yet, and
+                    % two irrational faces that cross in a cell have no curve here: both stay unsubdivided.
                     try
                         envs = cellfun(@envelopePrune, h.pairs, 'UniformOutput', false);
-                        h = assembleAlgCrv(envelopeMeshAlg(envs, hullRows(obj)));
+                        h = assembleAlgCrv(envelopeSubdivisionAlg(envs, hullRows(obj)));
                     catch ME
                         if ~isDeclined(ME), rethrow(ME), end
                     end
@@ -374,63 +374,63 @@ function h = assembledEnvelope(obj)
 %
 % f** = sup_s [<s,x> - f*(s)] and f* = max over the pieces of each piece's conjugate, so the envelope
 % splits over the overlay of the two conjugates' cells. `envelopeAssemble` walks those cell pairs,
-% `envelopePrune` drops the faces that can never be the maximum, and `envelopeMesh` builds the
+% `envelopePrune` drops the faces that can never be the maximum, and `envelopeSubdivision` builds the
 % arrangement -- which is the only route that does not form a partial max, and partial maxima are
 % what made every fold order explode (DECISIONS.md 2026-09-18).
 %
-% TWO MESHES, and the cheaper one is tried first. `envelopeMesh` returns a QuaCon, which is what a
+% TWO SUBDIVISIONS, and the cheaper one is tried first. `envelopeSubdivision` returns a QuaCon, which is what a
 % caller wants whenever the answer fits: every face quadratic, every edge a conic. It refuses --
-% `envelopeMesh:bridgeCompetes` -- exactly when a BRIDGE face's value competes with a quadratic
+% `envelopeSubdivision:bridgeCompetes` -- exactly when a BRIDGE face's value competes with a quadratic
 % one, because that boundary has degree four and no conic subdivision holds it as an edge.
 %
-% For that case `envelopeMeshAlg` builds the same arrangement with such an edge allowed, and
+% For that case `envelopeSubdivisionAlg` builds the same arrangement with such an edge allowed, and
 % `assembleAlgCrv` puts it in an `AlgCrv` -- algebraic faces on an algebraic subdivision, the type
 % the subdivision axis grew for (Crv.m). So the RETURN TYPE says which case the input was, and both
 % are verified against `envelopeEval` in their own suites.
     pieces = splitPieces(obj);
     gA = conjQ(pieces{1});
     gB = conjQ(pieces{2});
-    h = meshPair(envelopePrune(envelopeAssemble(gA, gB)), hullRows(obj));
+    h = subdividePair(envelopePrune(envelopeAssemble(gA, gB)), hullRows(obj));
 end
 
-function h = meshPair(env, dom)
-% One pair's face list as a mesh: QuaCon when every face is quadratic, AlgCrv when a bridge face
-% competes with a quadratic one, the unmeshed EnvelopeMin where neither arrangement is built.
+function h = subdividePair(env, dom)
+% One pair's face list as a subdivision: QuaCon when every face is quadratic, AlgCrv when a bridge face
+% competes with a quadratic one, the unsubdivided EnvelopeMin where neither arrangement is built.
 %
-% THE ALGEBRAIC MESH FIRST when an irrational face is present (2026-10-17). envelopeMesh builds the
+% THE ALGEBRAIC SUBDIVISION FIRST when an irrational face is present (2026-10-17). envelopeSubdivision builds the
 % whole arrangement before it finds a bridge competing, measured 241 s of a 279 s run on an
 % indefinite triangle, and it carries an IRRATIONAL corner for coverage only, which is wrong where
-% that corner is the maximum. envelopeMeshAlg handles both. Its mesh is kept unless it has no
-% irrational face at all, and then the conic mesh gives the same function as a QuaCon.
+% that corner is the maximum. envelopeSubdivisionAlg handles both. Its subdivision is kept unless it has no
+% irrational face at all, and then the conic subdivision gives the same function as a QuaCon.
     if hasIrrationalFace(env)
         try
-            m = envelopeMeshAlg(env, dom);
+            m = envelopeSubdivisionAlg(env, dom);
             if any(strcmp({m.kind}, 'bridge')), h = assembleAlgCrv(m); return, end
         catch ME
-            if ~ismember(ME.identifier, {'envelopeMeshAlg:faceKind', 'envelopeMeshAlg:arrangementSize'})
+            if ~ismember(ME.identifier, {'envelopeSubdivisionAlg:faceKind', 'envelopeSubdivisionAlg:arrangementSize'})
                 rethrow(ME)
             end
-            h = unmeshed(env);
+            h = unsubdivided(env);
             return
         end
     end
     try
-        h = envelopeMesh(env);
+        h = envelopeSubdivision(env);
     catch ME
         switch ME.identifier
-            case 'envelopeMesh:bridgeCompetes'
+            case 'envelopeSubdivision:bridgeCompetes'
                 try
-                    h = assembleAlgCrv(envelopeMeshAlg(env));
+                    h = assembleAlgCrv(envelopeSubdivisionAlg(env));
                 catch ME2
-                    if ~strcmp(ME2.identifier, 'envelopeMeshAlg:faceKind'), rethrow(ME2), end
-                    h = unmeshed(env);
+                    if ~strcmp(ME2.identifier, 'envelopeSubdivisionAlg:faceKind'), rethrow(ME2), end
+                    h = unsubdivided(env);
                 end
-            case {'envelopeMesh:bridgeFaces', 'envelopeMesh:arrangementSize'}
+            case {'envelopeSubdivision:bridgeFaces', 'envelopeSubdivision:arrangementSize'}
                 % A corner face whose wedge has no rows cannot be placed in any arrangement, and an
                 % arrangement past the curve budget does not finish (TODO). The face list is still
                 % the envelope -- envelopeEval answers for it, verified against the definition --
-                % so return it unmeshed rather than refuse.
-                h = unmeshed(env);
+                % so return it unsubdivided rather than refuse.
+                h = unsubdivided(env);
             otherwise
                 rethrow(ME)
         end
@@ -439,7 +439,7 @@ end
 
 function R = hullRows(obj)
 % dom f** = conv(dom f) for a BOUNDED f: its edges as integer rows [a b c], a x + b y + c >= 0, from
-% the EXACT vertices. Empty for an unbounded f -- the mesh is then not clipped.
+% the EXACT vertices. Empty for an unbounded f -- the subdivision is then not clipped.
     R = zeros(0,3);
     if any(obj.E(:,3) == 0), return, end
     V = obj.VN ./ obj.VD;
@@ -462,12 +462,12 @@ function tf = hasIrrationalFace(env)
 end
 
 function tf = isDeclined(ME)
-% The assembly and mesh machinery's own refusals: a route that declined, not a defect.
+% The assembly and subdivision machinery's own refusals: a route that declined, not a defect.
     tf = any(startsWith(ME.identifier, {'envelope', 'bridgeFace', 'bridgeArcCut', 'cornerFace'}));
 end
 
-function h = unmeshed(env)
-% The pair's face list as an EnvelopeMin of one pair: eval only, no mesh (see EnvelopeMin.m).
+function h = unsubdivided(env)
+% The pair's face list as an EnvelopeMin of one pair: eval only, no subdivision (see EnvelopeMin.m).
     h = EnvelopeMin({env}, struct('T', {}, 's', {}, 'c', {}), {});
 end
 
@@ -935,15 +935,15 @@ function h = quaPolAsQuaCon(obj)
     h = assembleQuaConCells(cells);
 end
 
-function tf = isChainMesh(obj)
-% objective: is this mesh a CHAIN at all -- two or more edges and no faces -- collinear or not?
+function tf = isChainSubdivision(obj)
+% objective: is this subdivision a CHAIN at all -- two or more edges and no faces -- collinear or not?
     tf = ~isempty(obj.F) && ~any(obj.F(:) ~= 0) && ~isempty(obj.E) && size(obj.E,1) >= 2 ...
          && obj.nv >= 3;
 end
 
 % ------------------------------------------------------------------------------------------------
 function tf = isChain(obj)
-% objective: is this mesh a CHAIN -- a domain of dimension < 2 made of two or more edges whose
+% objective: is this subdivision a CHAIN -- a domain of dimension < 2 made of two or more edges whose
 %   convex hull is 2-dimensional?
 %
 % Collinear chains are excluded deliberately: their hull is still 1-dimensional, so the answer is a
@@ -951,7 +951,7 @@ function tf = isChain(obj)
 % that assumes a 2-D domain.
     tf = false;
     % NO FACES is the defining property and must be tested FIRST. Without it every ordinary 2-D
-    % mesh with two edges and three vertices answers yes, and concaveEnvelope then reads its
+    % subdivision with two edges and three vertices answers yes, and concaveEnvelope then reads its
     % geometry from edges instead of faces -- which is how leaving this out broke eleven tests at
     % once rather than none.
     if isempty(obj.F) || any(obj.F(:) ~= 0), return, end
@@ -1126,7 +1126,7 @@ function h = thinEnvelope(obj)
 %
 % A CHAIN of edges is not handled here and is not thin: the convex hull of two non-collinear
 % segments is a two-dimensional polygon, so that case belongs with the ordinary envelope, reading
-% its vertices from the whole mesh rather than from a face.
+% its vertices from the whole subdivision rather than from a face.
     [fN, fD] = obj.faceQ(1);
     Hn = [fN(5) fN(6); fN(6) fN(7)];
     Ln = [fN(8); fN(9)];
@@ -1150,7 +1150,7 @@ function h = thinEnvelope(obj)
         % UNREACHABLE, and kept as an assertion rather than deleted. Every chain -- collinear or
         % not -- is routed before thinEnvelope is called: a non-collinear one to concaveEnvelope's
         % 2-D hull, a collinear one to collinearChainEnvelope's 1-D hull along its own span. So a
-        % multi-edge mesh arriving HERE means the routing above let one through.
+        % multi-edge subdivision arriving HERE means the routing above let one through.
         error('PLQ:biconjQ:chainNotImplemented', ...
             ['a chain of %d edges reached thinEnvelope, which handles only a single segment. ' ...
              'Chains are routed before this point, so this is a defect in that routing.'], ...

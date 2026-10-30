@@ -78,11 +78,11 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
         end
 
 
-        % theARRANGEMENTBuildsAMeshThatReproducesFExactly MOVED 2026-10-20 to envelopeMeshSlowTest and
-        % anIRRATIONALStraightTieGetsItsCorners to kinkMeshTest (slow): ~165 s between them kept the
+        % theARRANGEMENTBuildsASubdivisionThatReproducesFExactly MOVED 2026-10-20 to envelopeSubdivisionSlowTest and
+        % anIRRATIONALStraightTieGetsItsCorners to kinkSubdivisionTest (slow): ~165 s between them kept the
         % normal bucket over its 10-minute budget (TODO item 5).
-        % biconjQOnThePOLY2KinkANSWERSWhenTheMeshCannotPlaceACorner MOVED 2026-10-17 to
-        % kinkMeshTest (slow bucket): biconjQ now MESHES the kink (~11 min), which no longer fits
+        % biconjQOnThePOLY2KinkANSWERSWhenTheSubdivisionCannotPlaceACorner MOVED 2026-10-17 to
+        % kinkSubdivisionTest (slow bucket): biconjQ now SUBDIVIDES the kink (~11 min), which no longer fits
         % this suite's normal budget.
 
         function aBRIDGEFaceIsUSEDAndNotJustBuilt(testCase)
@@ -165,16 +165,16 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
         end
 
 
-        function aCOMPETINGBridgeIsREFUSEDByTheConicMeshByName(testCase)
+        function aCOMPETINGBridgeIsREFUSEDByTheConicSubdivisionByName(testCase)
         % The boundary of the conic route, said out loud. Since the bridge faces entered the
-        % arrangement for COVERAGE (1bc6a10), a curved tie's bridge is placed in the mesh, and what
+        % arrangement for COVERAGE (1bc6a10), a curved tie's bridge is placed in the subdivision, and what
         % is refused is only the case the conic subdivision cannot hold: a bridge whose value
         % COMPETES with a quadratic face inside a cell, because the boundary between them has degree
         % 4. That refusal is the one `biconjQ` falls back on to return an AlgCrv. (Before 1bc6a10
-        % this fixture was refused earlier, as `envelopeMesh:bridgeFaces`, a region with no rows.)
+        % this fixture was refused earlier, as `envelopeSubdivision:bridgeFaces`, a region with no rows.)
             [fA, fB] = fixture(-2);
             env = envelopeAssemble(conjQ(fA), conjQ(fB));
-            testCase.verifyError(@() envelopeMesh(env), 'envelopeMesh:bridgeCompetes');
+            testCase.verifyError(@() envelopeSubdivision(env), 'envelopeSubdivision:bridgeCompetes');
         end
 
         function theARGUMENTSAreChecked(testCase)
@@ -187,8 +187,8 @@ classdef envelopeAssembleTest < matlab.unittest.TestCase
             testCase.verifyError(@() envelopeEval(env, [0 0 0]), 'envelopeEval:points');
             testCase.verifyError(@() envelopePrune(), 'envelopePrune:nargin');
             testCase.verifyError(@() envelopePrune(struct('a',1)), 'envelopePrune:shape');
-            testCase.verifyError(@() envelopeMesh(), 'envelopeMesh:nargin');
-            testCase.verifyError(@() envelopeMesh(struct('a',1)), 'envelopeMesh:shape');
+            testCase.verifyError(@() envelopeSubdivision(), 'envelopeSubdivision:nargin');
+            testCase.verifyError(@() envelopeSubdivision(struct('a',1)), 'envelopeSubdivision:shape');
         end
     end
 end

@@ -73,14 +73,14 @@ Step 0 matters more than it looks, and is **built** (2026-08-18, `mergeSameQuadF
 first by both `biconjCPLQ` and `conjCPLQ`). `biconjugateTest` hands the unit square in as two
 triangles sharing a diagonal; merged, it is one face, cases 1–4 become reachable, and the
 piece-coupling that forces case 6 disappears. Measured on exactly that input: `biconj` **0.1 s**
-returning a meshed `QuaPol` where it used to take the long route and come out WRONG (the
+returning a subdivided `QuaPol` where it used to take the long route and come out WRONG (the
 known-failing `biconjugateOverATwoFaceSubdivisionIsTheEnvelope`, now green), and `conj` **0.8 s**
 exact where it used to assemble ten pieces through Step 3.
 
 Two things the implementation had to learn, both measured:
 
 * **A merge needs a CONVEX union, not just a shared edge.** Three wedges round one vertex fuse
-  into a reflex wedge, and this representation cannot express one — the mesh builds and then
+  into a reflex wedge, and this representation cannot express one — the subdivision builds and then
   `eval` returns `+inf` inside the merged face, because a face is read as an intersection of
   half-planes. Each candidate merge is therefore built and checked with `orderEdges`' own
   `isConvex`, and refused if it fails. For a FAN this is restrictive by arithmetic: three wedges
@@ -216,14 +216,14 @@ And `biconj` over a box, the whole of `checkBoxEnvelopeForSCIP`, start of sessio
 
 | box case | before | after |
 |---|---|---|
-| `x*y` | 62 s, no mesh | **0 s**, `QuaPol` |
-| `3xy+7x-2y+5` | 49 s, no mesh | **0 s**, `QuaPol` |
+| `x*y` | 62 s, no subdivision | **0 s**, `QuaPol` |
+| `3xy+7x-2y+5` | 49 s, no subdivision | **0 s**, `QuaPol` |
 | `x^2-y^2` | **ERROR** | **0 s**, `QuaPol` |
-| `(x^2+y^2)/2` | 456 s, no mesh | **0 s**, `QuaPol` |
-| `x*y` on a sub-box | 43 s, no mesh | **0 s**, `QuaPol` |
-| `x*y` on a wide box | 42 s, no mesh | **0 s**, `QuaPol` |
+| `(x^2+y^2)/2` | 456 s, no subdivision | **0 s**, `QuaPol` |
+| `x*y` on a sub-box | 43 s, no subdivision | **0 s**, `QuaPol` |
+| `x*y` on a wide box | 42 s, no subdivision | **0 s**, `QuaPol` |
 
-Every row also went from a mesh-less `QuaParCPLQ` to a meshed `QuaPol`, which is what a consumer
+Every row also went from a subdivision-less `QuaParCPLQ` to a subdivided `QuaPol`, which is what a consumer
 can actually read (`RETURN_TYPE.md` records that change).
 
 ---

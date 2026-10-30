@@ -2,7 +2,7 @@ function edgeConvexIndexProbe()
 % Is `k = sum(obj.F(j,:)>0)` really used as a FACE INDEX in isEdgeConvex, and does it give a wrong
 % answer? Rung 1 of the ladder: observe, do not edit.
 %
-% The mesh is the closed upper half-plane split by the ray x=0, y>=0. Edge 2 is the negative
+% The subdivision is the closed upper half-plane split by the ray x=0, y>=0. Edge 2 is the negative
 % x-axis, whose only finite face is face 1; edge 3 is the positive x-axis, whose only finite face
 % is face 2. Both are boundary edges, so both take the k==1 branch, and both then ask
 % isFaceConvex(1) -- accidentally right for edge 2 and wrong for edge 3.

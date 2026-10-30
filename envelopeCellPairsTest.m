@@ -22,7 +22,7 @@ classdef envelopeCellPairsTest < matlab.unittest.TestCase
         % the probe prints as polyhedral.
         %
         % THE FOURTH FIXTURE IS NOT THE UNIT SQUARE ON PURPOSE: three runs on one geometry answer
-        % one geometry, and the 2x1 rectangle is anisotropic, so its dual mesh is not symmetric
+        % one geometry, and the 2x1 rectangle is anisotropic, so its dual subdivision is not symmetric
         % under swapping the coordinates.
             %            name                        c    meet same poly bridge
             want = { 'unit square, c = 0 (CONVEX)',  0,    18,   2,   8,   10; ...

@@ -44,7 +44,7 @@ certainly have.
 
 * **Do:** run `checkBoxEnvelopeForSCIP` and rewrite 0.0.1 from its output.
 * **Closes when:** the table is re-derived, with its date, on the current tree.
-* **DONE 2026-08-18.** All six rows OK at 0 s, every one returning a MESHED `QuaPol`; both former
+* **DONE 2026-08-18.** All six rows OK at 0 s, every one returning a SUBDIVIDED `QuaPol`; both former
   ERROR rows pass. 0.0.1 is rewritten from that run (log: `.claude/boxenvelope.log`).
 
 ### A2. Fix the DIAGONAL terms over a box -- the one correctness gap on SCIP's path.
@@ -145,7 +145,7 @@ is the cross-piece work -- Step 3's maximum, and the second conjugation that fol
    `max(0,x,y)` -- convex, and its own biconjugate -- goes the whole way round. Setting the flag
    is free and is the entire fix; that is a caller-side lever, not a pipeline one.
 2. **The two-triangle spelling of a box is now the one-face spelling** (Step 0, 2026-08-18), so
-   the shape tests in this table are reached by the meshes callers actually build, not only by
+   the shape tests in this table are reached by the subdivisions callers actually build, not only by
    the tidiest one.
 
 ### B2. The consequence for SCIP -- the entry point is `biconj`, and Step 3 is never reached
@@ -158,7 +158,7 @@ point a separator should call is simply
 
 and for every shape QPLIB's box-domain terms present -- bilinear over the unit box, bilinear over
 a sub-box after branching, and the diagonal `x_i^2` terms -- that call returns in **0.01 s or
-less**, in closed form, as a **meshed `QuaPol`** the bridge can read directly. The plan's own
+less**, in closed form, as a **subdivided `QuaPol`** the bridge can read directly. The plan's own
 premise (call the per-piece closed form rather than `biconj`) is therefore obsolete: `biconj`
 IS the per-piece closed form for these shapes.
 
@@ -212,7 +212,7 @@ correcting several load-bearing assumptions about what "ready" actually requires
 conditions, each with a measurement on the CURRENT tree:
 
 1. ~~`checkBoxEnvelopeForSCIP` shows **no ERROR rows** (A1, A2).~~ **MET 2026-08-18** -- six rows,
-   no ERROR, every one 0 s and meshed. Unaffected by anything since; not re-measured.
+   no ERROR, every one 0 s and subdivided. Unaffected by anything since; not re-measured.
 2. ~~The direct-formula / symbolic map exists and names the entry point a separator should call
    (B1, B2).~~ **MET 2026-08-18** -- the map is B1, the entry point is `q.biconj('cplq')`, and on
    SCIP's own shapes it answers in 0.01 s without reaching Step 3.
@@ -294,7 +294,7 @@ the per-term cost is 0.01 s, so C1's target must be re-scoped around the NON-box
 the only one that still reaches Step 3. A1 and A2 are also close: `x^2 - y^2` over the unit box
 now returns in 0.00 s through the separable route (B1's table;
 `biconjCPLQTest.separableOverABoxTakesTheOneDimensionalRoute` pins it), so section 0.0.1's two
-ERROR rows and its "no mesh" headline both need re-deriving.
+ERROR rows and its "no subdivision" headline both need re-deriving.
 
 **Update 2026-08-29: sequencing is effectively done.** A1/A2/B are all closed; what remains is
 gate item 4 (quarantine the known reds, confirm the slow bucket) and the fold-strategy work that

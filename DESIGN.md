@@ -79,8 +79,8 @@ code. Cross-check the actual repo file list before assuming an operator or engin
   with inheritance following the grid's own partial order:
   `RatPar < Rat & Par`, `RatPol < RatPar & Pol`, `QuaPar < RatPar & Qua`,
   `QuaPol < RatPol & QuaPar` (a genuine diamond — that is what a product lattice is);
-  `QuaParCPLQ < RatPar & Qua` carries the same maths as a `QuaPar` but no mesh, so it deliberately
-  does NOT inherit from `QuaPar` (`isMeshed()` is the intended test).
+  `QuaParCPLQ < RatPar & Qua` carries the same maths as a `QuaPar` but no subdivision, so it deliberately
+  does NOT inherit from `QuaPar` (`isSubdivided()` is the intended test).
   **Both axes have since grown a THIRD level, above the previous top, so no existing type's
   behaviour changed either time**: the subdivision axis gained `Conic` (an edge may be any conic —
   a conjugate's edges are only parabolic when the pieces compared are ADJACENT, see
@@ -765,7 +765,7 @@ code. Cross-check the actual repo file list before assuming an operator or engin
     Verified: `(1,1)` now evaluates to exactly `1`; full suite re-run clean (147/147) after this fix
     plus the two `nf` fixes above.
 - `scalarMul`/`negate` — an instance method on each of `QuaPol`/`QuaPar`/`RatPol` (trivial:
-  scales `f`, the numerator for `RatPol`; domain/mesh untouched). No `RatPar`, so no single
+  scales `f`, the numerator for `RatPol`; domain/subdivision untouched). No `RatPar`, so no single
   shared implementation; each class has its own copy.
 - `add` — `QuaPol` and `QuaPar` (`QuaPol.add`/`QuaPar.add`, in `addQuaPol.m`/`addQuaPar.m`):
   overlays the two domain subdivisions by pairwise convex-polygon clipping and sums the two
@@ -1123,7 +1123,7 @@ the plan:
 
 ## 0. TL;DR — what to build
 
-1. **Anchor data structure:** keep the released `PLQVC` mesh (`V/E/f/F` + adjacency `P`
+1. **Anchor data structure:** keep the released `PLQVC` subdivision (`V/E/f/F` + adjacency `P`
    + `dom`). It already represents quadratic-on-polyhedral functions and all degenerate
    1D cases, and ships the linear-time convexity test.
 2. **Three function families must be storable** (per [COAP]/[JOGO]):
@@ -1181,7 +1181,7 @@ the plan:
 
 | File | Type | Description |
 |------|------|-------------|
-| `CCA2/PLQVC.m` | `classdef` (value) | **The anchor.** 2D piecewise linear-quadratic/cubic function. Domain = vertex/edge/face mesh (`V`,`E`,`F`) + face adjacency list `P` + `dom` struct. Function = `nf×10` cubic coefficient matrix `f` (quadratic uses 6). Methods: constructor, `eval`, `createP`/`createDom`/`orderEdges` (topology), `isConvex`/`isFaceConvex`/`isEdgeConvex`/`isEdgeContinuous`/`isQuadratic`/`isDomBounded` (tests), `disp`/`plot`/`plotDomain`/`plotDomainGraph`/`plotVertexes`. Static helpers: `evalHessian`, `evalPoly`, `matrixForm`, `lineEquation`, `isPositiveSemidefinite`, `isCubicConvexOnEdge`, `belongToEdge`, `isCollinear`. Static factories: `examples`, `examples2`, `examplesNonconvex`, `examplesDiscontinuous`, plus `oneNorm`, `oneNormConjugate`, `energy`, `cubic1`. |
+| `CCA2/PLQVC.m` | `classdef` (value) | **The anchor.** 2D piecewise linear-quadratic/cubic function. Domain = vertex/edge/face subdivision (`V`,`E`,`F`) + face adjacency list `P` + `dom` struct. Function = `nf×10` cubic coefficient matrix `f` (quadratic uses 6). Methods: constructor, `eval`, `createP`/`createDom`/`orderEdges` (topology), `isConvex`/`isFaceConvex`/`isEdgeConvex`/`isEdgeContinuous`/`isQuadratic`/`isDomBounded` (tests), `disp`/`plot`/`plotDomain`/`plotDomainGraph`/`plotVertexes`. Static helpers: `evalHessian`, `evalPoly`, `matrixForm`, `lineEquation`, `isPositiveSemidefinite`, `isCubicConvexOnEdge`, `belongToEdge`, `isCollinear`. Static factories: `examples`, `examples2`, `examplesNonconvex`, `examplesDiscontinuous`, plus `oneNorm`, `oneNormConjugate`, `energy`, `cubic1`. |
 | `CCA2/PLQVCTest.m` | test class | Unit tests (`matlab.unittest`). |
 
 **Naming convention** (class header): **P**iecewise **L**inear-**C**ubic, **V** = vertex
@@ -1267,7 +1267,7 @@ keep only the **Fitzpatrick** routine and the **nonconvex test functions** as ex
 
 ### II.1 Design principles
 
-1. **One data-structure family, organized as a hierarchy.** The released `PLQVC` mesh is the
+1. **One data-structure family, organized as a hierarchy.** The released `PLQVC` subdivision is the
    substrate. Generalize it along two independent axes — *boundary type* (linear ⊂ parabolic)
    and *function type* (polynomial ⊂ rational) — and expose the combinations the math needs as
    a class hierarchy (II.3). The most general parent stores everything (incl. cubics, usable by
@@ -1476,7 +1476,7 @@ KKT critical point that isn't the actual conjugate).
 For each primal entity collect `(Q,q,κ)` and active constraints `Ax≤β`, then solve, symbolically
 in the dual parameter `s`, via KKT
 `[Q Aᵀ; A 0][x;λ]=[s−q; β]`. Optimizer `x*(s)` is affine in `s`; back-substitution gives the
-piece value; the active-set critical region is the dual cell. Assemble cells into the dual mesh.
+piece value; the active-set critical region is the dual cell. Assemble cells into the dual subdivision.
 `partialConj` = the same solve with `s` on selected coordinates only
 (`_plq2_quad_face_partconj`/`_plq2_lin_face_partconj`). Reuse `PLQVC.matrixForm`/`lineEquation`/
 `orderEdges` for `(Q,q)` and adjacency; build the result through the constructor.
@@ -1494,7 +1494,7 @@ at each entity, which is not well defined for a nonconvex `f`. So `conj(f,'graph
 convex, same restriction as `'pqp'`.
 
 Represent the graph of `f` as a **point cloud with a neighbour graph**: each entity carries a
-point `x`, value `y=f(x)`, and subgradient(s) `s∈∂f(x)`; adjacency = the mesh neighbour graph.
+point `x`, value `y=f(x)`, and subgradient(s) `s∈∂f(x)`; adjacency = the subdivision neighbour graph.
 The Legendre transform is a **primal↔dual swap**: dual point = subgradient `s`, dual value =
 `sᵀx−f(x)`, entity types swap (Face↔Vertex, Ray↔Ray, Segment↔Segment); reconnect via the same
 adjacency. Convert `QuaPol→PLQVG` (gradients from `evalHessian`; vertex normal-cone fans from

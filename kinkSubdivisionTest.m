@@ -1,34 +1,34 @@
-classdef kinkMeshTest < matlab.unittest.TestCase
+classdef kinkSubdivisionTest < matlab.unittest.TestCase
 % biconjQ on the poly2 kink at c = -2: the two-piece envelope whose single global arrangement had 85
-% curves and did not finish in 90 min (TODO item 2). Since 2026-10-17 it is MESHED: the arrangement is
+% curves and did not finish in 90 min (TODO item 2). Since 2026-10-17 it is SUBDIVIDED: the arrangement is
 % clipped to dom f** = conv(dom f), a curve's row is recorded only where it splits a cell, and a
-% bridge's membership is read by majority -- envelopeMeshAlg's header.
+% bridge's membership is read by majority -- envelopeSubdivisionAlg's header.
 %
 % BUCKET: slow -- one biconjQ, ~11 min on the shared machine (one run), computed once per session.
 
     methods (Test)
-        function theKinkIsMESHEDAndAgreesWithItsFaceList(testCase)
-        % Mesh against the unmeshed face list, which envelopeAssembleTest verifies against the
-        % definition: the mesh must add no hole and change no value.
-            [h, env, V] = kinkMeshTest.cached();
+        function theKinkIsSUBDIVIDEDAndAgreesWithItsFaceList(testCase)
+        % Subdivision against the unsubdivided face list, which envelopeAssembleTest verifies against the
+        % definition: the subdivision must add no hole and change no value.
+            [h, env, V] = kinkSubdivisionTest.cached();
             testCase.verifyClass(h, 'AlgCrv');
             rng(4);  W = [rand(1500,4); rand(500,4).^4];  X = (W ./ sum(W,2)) * V;
             want = envelopeEval(env, X);
             got = h.eval(X);
-            testCase.verifyEqual(isinf(got), isinf(want), 'a hole in the mesh where the face list is finite');
+            testCase.verifyEqual(isinf(got), isinf(want), 'a hole in the subdivision where the face list is finite');
             fin = isfinite(want);
             testCase.verifyEqual(got(fin), want(fin), 'RelTol', 1e-9, 'AbsTol', 1e-9);
         end
 
         function theKinkSatisfiesTheDEFINITION(testCase)
         % Oracle: the numeric sup over the two pieces' conjugates (moved from envelopeAssembleTest,
-        % where this asserted the unmeshed answer).
-            [h, ~, V, gA, gB] = kinkMeshTest.cached();
+        % where this asserted the unsubdivided answer).
+            [h, ~, V, gA, gB] = kinkSubdivisionTest.cached();
             rng(29);  W = rand(6,3);  W = W ./ sum(W,2);
             X = [W*V([1 2 3],:); W*V([1 3 4],:)];
             v = h.eval(X);
             for i = 1:size(X,1)
-                want = kinkMeshTest.supOracle(gA, gB, X(i,:));
+                want = kinkSubdivisionTest.supOracle(gA, gB, X(i,:));
                 testCase.verifyLessThan(abs(v(i) - want)/max(1,abs(want)), 1e-7, ...
                     sprintf('biconjQ must equal the definition at (%g,%g)', X(i,1), X(i,2)));
             end
@@ -43,7 +43,7 @@ classdef kinkMeshTest < matlab.unittest.TestCase
         % candidates ON it -- and both faces are linear along it, so the pair's sup sits at its
         % ends, the corners. The pair covered no point at all and the envelope was +inf on 384 of
         % 600 points of its own domain. Oracle: the numeric sup, as above.
-            [~, ~, V, gA, gB] = kinkMeshTest.cached();
+            [~, ~, V, gA, gB] = kinkSubdivisionTest.cached();
             env = envelopeAssemble(gA, gB);
             rng(23);  W = rand(60,3);  W = W ./ sum(W,2);
             X = [W*V([1 2 3],:); W*V([1 3 4],:)];
@@ -51,7 +51,7 @@ classdef kinkMeshTest < matlab.unittest.TestCase
             testCase.verifyTrue(all(isfinite(v)), sprintf( ...
                 'the envelope must be finite on its domain; +inf at %d of %d', nnz(~isfinite(v)), numel(v)));
             for i = 1:8:size(X,1)
-                want = kinkMeshTest.supOracle(gA, gB, X(i,:));
+                want = kinkSubdivisionTest.supOracle(gA, gB, X(i,:));
                 testCase.verifyGreaterThanOrEqual(v(i), want - 1e-9*max(1,abs(want)), 'no undershoot');
                 testCase.verifyLessThan(abs(v(i) - want)/max(1,abs(want)), 1e-7, ...
                     sprintf('the envelope must equal the definition at (%g,%g)', X(i,1), X(i,2)));

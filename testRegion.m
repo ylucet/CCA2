@@ -638,7 +638,7 @@ classdef testRegion < matlab.unittest.TestCase
         % run to infinity. The particular starting facet is not part of the contract, so it is not
         % asserted; see testCreation's note on why pinning an order here was brittle.
         %
-        % Fixture: the four-facet unbounded polyhedron from the QPLIB-shaped dual meshes.
+        % Fixture: the four-facet unbounded polyhedron from the QPLIB-shaped dual subdivisions.
             s_1 = sym('s1');
             s_2 = sym('s2');
             ineq(1) = s_1 + 2*s_2 + 4;

@@ -62,7 +62,7 @@ classdef QuaCon < RatCon & Qua
 %             ellipse are not distinguished by the edge's endpoints -- so the sign is stored.
 %             `CONJ_FIELD_PROOF.md` 8.6 calls exactly this the H-representation.
 %
-% WHAT IS INHERITED AND USED. The COMBINATORIAL half of RatCon's mesh carries over untouched,
+% WHAT IS INHERITED AND USED. The COMBINATORIAL half of RatCon's subdivision carries over untouched,
 % because none of it mentions a coordinate: `nv`/`ne`/`nf`, `E` (edge endpoints as vertex INDICES,
 % plus the segment/ray flag), `F` (edge -> the face on each side), `P` (the face adjacency lists),
 % `dom` and `fIsConvex`.
@@ -77,7 +77,7 @@ classdef QuaCon < RatCon & Qua
 % `den` IS filled, with the honest value: a QuaCon is a Qua, so its denominator is identically 1.
 %
 % NOTHING HERE IS APPROXIMATE, WITH ONE NAMED EXCEPTION. Every stored number is an exact integer and
-% every mesh-deciding comparison is exact. `vertexCoords` and `eval` return doubles on purpose:
+% every subdivision-deciding comparison is exact. `vertexCoords` and `eval` return doubles on purpose:
 % `CONJ_FIELD_PROOF.md` 8.0 lists the operations that must leave Q -- building a vertex, the sign of
 % a rational polynomial at one, and comparing two of them -- and EVALUATING the finished function at
 % a point is not among them. `ratQ.evalFace` says the same thing. So point location inside `eval`
@@ -225,13 +225,13 @@ classdef QuaCon < RatCon & Qua
             obj.den = repmat([0 0 1], nf, 1);
        end
 
-       function tf = isMeshed(obj) %#ok<MANU>
-       % objective: whether this object carries an explicit mesh. It does.
+       function tf = isSubdivided(obj) %#ok<MANU>
+       % objective: whether this object carries an explicit subdivision. It does.
        %
        % OVERRIDDEN because RatCon's version tests `~isempty(obj.f)`, and a QuaCon's `f` is empty
-       % by design (the faces live in fN/fD). The inherited test would report a fully meshed object
-       % as unmeshed, which is the opposite of the truth and would send callers down
-       % QuaParCPLQ's "mesh not yet reconstructed" path.
+       % by design (the faces live in fN/fD). The inherited test would report a fully subdivided object
+       % as unsubdivided, which is the opposite of the truth and would send callers down
+       % QuaParCPLQ's "subdivision not yet reconstructed" path.
             tf = true;
        end
 
@@ -242,7 +242,7 @@ classdef QuaCon < RatCon & Qua
        % NOT STORED, NOT CACHED, AND THAT IS THE DESIGN. A vertex of f* has degree up to 4 over Q
        % and is generically irrational (of twelve feasible continuous three-piece configurations
        % the vertex quartic is irreducible over Q in TEN -- CONJ_FIELD_PROOF.md 8.0), so any stored
-       % coordinate would be a rounded copy of the truth, and the mesh would then be deciding its
+       % coordinate would be a rounded copy of the truth, and the subdivision would then be deciding its
        % own combinatorics from rounded data. That is the failure this class exists to remove.
        % Coordinates are an OUTPUT convenience -- plotting, evaluation, a user's eye -- and the
        % caller who wants them repeatedly should hold the result, not ask the object to.
@@ -278,7 +278,7 @@ classdef QuaCon < RatCon & Qua
        % tolerance appears. CONJ_FIELD_PROOF.md 8.0 lists the operations that must leave Q --
        % building a vertex, the sign of a rational polynomial at one, comparing two of them -- and
        % evaluating the finished function at a point is not among them; ratQ.evalFace records the
-       % same split. The mesh is decided exactly, then evaluated in doubles.
+       % same split. The subdivision is decided exactly, then evaluated in doubles.
        %
        % WHAT IS NOT YET BUILT, STATED PLAINLY. The sign test below is the FILTER of
        % CONJ_FIELD_PROOF.md 8.7 without its exact fallback: a point within `tol` of a face
@@ -318,7 +318,7 @@ classdef QuaCon < RatCon & Qua
                     if Ck(r,2) == 0
                         % ON the curve. A THIN face, and the honest caveat is that a point picked
                         % at random in floating point is never exactly on a line, so such a face
-                        % answers +inf almost surely -- the mesh is still exactly right, and the
+                        % answers +inf almost surely -- the subdivision is still exactly right, and the
                         % exact predicates that build it are unaffected. See this class's header.
                         viol = max(viol, abs(q(:)) ./ scale);
                     else

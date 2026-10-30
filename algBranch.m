@@ -15,7 +15,7 @@ function [z, info] = algBranch(P, X, b, opts)
 %          opts : (optional) struct, fields `imagTol` and `degTol` -- see TOLERANCES.
 % [output] z    : n x 1 values, NaN where the branch does not exist at that point.
 %          info : struct with `nreal` (n x 1 real-root count) and `allReal` (n x 1 cell of the
-%                 sorted real roots), for callers that need to see the whole fibre -- the mesh
+%                 sorted real roots), for callers that need to see the whole fibre -- the subdivision
 %                 builder does, to check that the branch count is constant on a face.
 %                 COUNTED WITH MULTIPLICITY: a double root is two entries, so branches b and b+1
 %                 agree there. Collapsing them would need a tolerance (`roots` separates a true
@@ -63,7 +63,7 @@ function [z, info] = algBranch(P, X, b, opts)
 % route exists and is deliberately not taken here: isolate the real roots by a Sturm sequence over
 % Q (ratQ already counts Sturm sequences for the bridge region's own membership test) and refine
 % to a rational interval. That is the follow-up for a caller that needs a DECISION rather than a
-% value; no mesh predicate calls this routine, precisely so that no decision rests on it.
+% value; no subdivision predicate calls this routine, precisely so that no decision rests on it.
 %
 % TOLERANCES, both of which are of the cache and not of the mathematics.
 %   imagTol : a computed root counts as real when |imag| <= imagTol * max(1,|root|). `roots` returns
@@ -81,7 +81,7 @@ function [z, info] = algBranch(P, X, b, opts)
 %             equal real entries, the multiplicity contract above. Without it `roots` can return
 %             the double root as a complex pair past imagTol, and the point has no branch at all:
 %             the c = -2 AlgCrv evaluated to +Inf on parts of its domain edges x = 0 and y = 1, where
-%             the bridge's two branches meet (2026-09-25). It decides nothing a mesh depends on;
+%             the bridge's two branches meet (2026-09-25). It decides nothing a subdivision depends on;
 %             it only stops the cache from dropping a value that exists. Inside that window but
 %             past dq's rounding (16 eps of the terms), a positive discriminant still gets its two
 %             roots (stable formula) -- the mean was 6.6e-6 off a branch near the poly2 kink's merge
@@ -153,7 +153,7 @@ function [z, info] = algBranch(P, X, b, opts)
         if scale == 0
             % p(x,y,.) is identically zero: every z satisfies it, so the face names no value here.
             % Left as NaN rather than raised -- it is a legitimate question with no answer, and the
-            % caller (a mesh builder checking branch counts) wants to see it, not to be stopped.
+            % caller (a subdivision builder checking branch counts) wants to see it, not to be stopped.
             continue
         end
         cz = c(:).';

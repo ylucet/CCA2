@@ -97,20 +97,20 @@ SYMFIX="p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filese
 # ORDER at the end -- a run's output does not depend on how the scheduler happened to interleave
 # it. Per-job elapsed times are printed, which is what tells you where to shard next.
 FAST_SUITES=(guardExerciseTest erratumExamplesTest biconjAtomsTest envelopeEvalTest conjQExamplesSweepTest PLQVCTest QuaPolExactTest QuaPolEvalTest bigZTest QuaParCPLQUnitTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
-             algBranchTest algRowFailsTest AlgConTest bridgeFaceAlgTest bridgeFaceRatTest algCurveSideTest AlgCrvTest algCrvVerticesTest algCrvIncidenceTest cellInteriorTest compactCellsTest cornerWedgeRowsTest cornerFaceAlgTest exactSumLintTest envelopeMeshCornersTest envelopeCellPairsTest envelopeCellRegionsTest
+             algBranchTest algRowFailsTest AlgConTest bridgeFaceAlgTest bridgeFaceRatTest algCurveSideTest AlgCrvTest algCrvVerticesTest algCrvIncidenceTest cellInteriorTest compactCellsTest cornerWedgeRowsTest cornerFaceAlgTest exactSumLintTest envelopeSubdivisionCornersTest envelopeCellPairsTest envelopeCellRegionsTest
              clipArcByHalfPlaneTest conicMeetTest conjConvexPolygonTest conjEdgeLowerBoundTest
              biconjCPLQUnitTest biconjQTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest
              convEnvCPLQTest
              domainIsConvexDTest exactQTest frameAndFanTest infConvTest isConvexQTest
-             lasryLionsTest maxQTest maxQuaParTest mergeSameQuadFacesTest meshPredicateTest
+             lasryLionsTest maxQTest maxQuaParTest mergeSameQuadFacesTest subdivisionPredicateTest
              moreauTest proxAverageTest
              QuaConTest ratQTest regionTest regionUnitTest symbolicFunctionUnitTest
              testSymbolicFunction)
-NORMAL_SUITES=(erratumBiconjTest conjDefinitionAuditTest envelopeAssembleTest envelopeMeshAlgTest cplqAdapterTest functionNDomainTest regionMinusTest testfunctionNDomain)
+NORMAL_SUITES=(erratumBiconjTest conjDefinitionAuditTest envelopeAssembleTest envelopeSubdivisionAlgTest cplqAdapterTest functionNDomainTest regionMinusTest testfunctionNDomain)
 # Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
 # wall clock at the suite's whole runtime.
 SHARD_SUITES=(testcPLQ testMaxMultiRegion)
-SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest algCrvMeshTest kinkMeshTest erratumBiconjEx2Test minMeshTest envelopeMeshSlowTest)  # algCrvMeshTest: closed form but ~11 min of fixture, too long for normal
+SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest algCrvSubdivisionTest kinkSubdivisionTest erratumBiconjEx2Test minSubdivisionTest envelopeSubdivisionSlowTest)  # algCrvSubdivisionTest: closed form but ~11 min of fixture, too long for normal
 # Individual tests here run for many minutes; see the VERYLONG note above.
 VERYLONG_SUITES=(testcPLQ testMaxMultiRegion)
 

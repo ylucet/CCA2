@@ -143,14 +143,14 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
         %
         % REVISED 2026-08-28. The parked assemblePieces diff (G1/G10) landed, and on THIS fixture
         % it now fails inside `checkOrphanHalfEdges` (`maxQuaPar:internal`) BEFORE the point where
-        % `CCA2_CONJ_VERIFY` has anything to gate -- that guard is an internal MESH-CONSISTENCY
+        % `CCA2_CONJ_VERIFY` has anything to gate -- that guard is an internal SUBDIVISION-CONSISTENCY
         % check (does every boundary half-edge have a partner), not a DEFINITION check (does the
         % answer match the sup), so it is correctly unconditional. The premise this test pinned --
         % "for this fixture, turning verification off recovers an answer" -- is no longer true:
         % there is no reachable answer for this input any more, checks on or off, because assembly
         % itself cannot complete. What IS still true and worth pinning is the property one level
         % up: the switch controls DEFINITION verification only, and does not (and must not) bypass
-        % structural mesh consistency. Asserting the SAME error with the flag off is that
+        % structural subdivision consistency. Asserting the SAME error with the flag off is that
         % assertion, not a weakened one -- see conjCPLQTest.sweepCase21HitsTheKnownStep3LegacyGapNotANewFailure
         % for the fixture's own accepted trade-off.
             prev = getGlobal();
@@ -160,7 +160,7 @@ classdef conjEdgeLowerBoundTest < matlab.unittest.TestCase
             q = QuaPol(W, [1 2 1; 2 3 1; 3 1 1], f6, [1 0; 1 0; 1 0]);
             setGlobal(0);
             testCase.verifyError(@() conjCPLQ(q, [], 'numeric'), 'maxQuaPar:internal', ...
-                'mesh-consistency checks must stay on even with CCA2_CONJ_VERIFY=0');
+                'subdivision-consistency checks must stay on even with CCA2_CONJ_VERIFY=0');
         end
     end
 

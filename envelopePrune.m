@@ -6,19 +6,19 @@ function [env, info] = envelopePrune(env)
 %   handful. This removes that surplus, exactly: measured 120 -> 52, 142 -> 94 and 110 -> 38 on the
 %   three standard fixtures, with every value and every finiteness verdict unchanged.
 %
-% IT DOES NOT MAKE `maxQ` THE WAY TO BUILD A MESH, and the reason is worth stating precisely because
+% IT DOES NOT MAKE `maxQ` THE WAY TO BUILD A SUBDIVISION, and the reason is worth stating precisely because
 % half of it was got wrong once already (DECISIONS.md 2026-09-18, and its correction):
 %
 %   * folding individual FACES is SEMANTICALLY WRONG. A `QuaCon` is +infinity off its faces, while a
 %     candidate that does not apply contributes nothing -- -infinity. Measured: the fold collapses
-%     to an empty mesh after about ten faces.
+%     to an empty subdivision after about ten faces.
 %   * folding a whole PAIR is semantically RIGHT -- a pair's contribution really is +infinity
 %     outside its candidate regions -- and it EXPLODES: 5, 8, 15, 24, 48, 63, 252, 270, 675, 1323,
 %     1917, 3726 faces over twelve pairs, against an envelope with a handful. The growth is
 %     intrinsic: a max over the FIRST k pairs is a partial max, which genuinely has many pieces that
 %     only the full max deletes.
 %
-% So the mesh means building the ARRANGEMENT once -- overlay the regions, decide the winner per cell
+% So the subdivision means building the ARRANGEMENT once -- overlay the regions, decide the winner per cell
 % -- and this routine's job is to make that input as small as it can exactly be.
 %
 % [input]  env : as `envelopeAssemble` returns it

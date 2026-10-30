@@ -1,5 +1,5 @@
 classdef AlgCon < Alg & Conic
-   % AlgCon: the ROOT of the type lattice, the ONE place the mesh data is declared, and the type
+   % AlgCon: the ROOT of the type lattice, the ONE place the subdivision data is declared, and the type
    % `biconj` returns when a face of the convex envelope has no formula.
    %
    % It takes over the first two roles from RatCon, whose header stated them and still explains
@@ -62,7 +62,7 @@ classdef AlgCon < Alg & Conic
    % four legacy types and QuaCon are untouched; `Rat < Alg` is the whole of the edit they see.
 
    properties
-        % Everything the lattice shares, declared here ONCE -- the nine mesh properties AND the two
+        % Everything the lattice shares, declared here ONCE -- the nine subdivision properties AND the two
         % axis-varying ones (`den`, `Ec`). No child declares any property of its own; see the
         % "DATA LIVES HERE, ONCE" note above for why that is forced rather than merely tidy.
         nv {mustBeInteger,mustBeNonnegative}%number of vertices
@@ -140,7 +140,7 @@ classdef AlgCon < Alg & Conic
             % all-zero when the object is a Pol -- a polyhedral subdivision is exactly a parabolic
             % one with no curvature.
 
-        % ---- the EXACT mesh: integers, empty wherever nothing exact was supplied ---------------
+        % ---- the EXACT subdivision: integers, empty wherever nothing exact was supplied ---------------
         % Declared here and not on the leaves, as the rule above says. Until 2026-09-22 QuaPol
         % declared fN/fD, QuaCon all five and AlgCrv all five again, because AlgCrv cannot extend
         % QuaCon (a QuaCon is a Rat, and a Rat may not carry an implicit face). The first attempt at
@@ -151,7 +151,7 @@ classdef AlgCon < Alg & Conic
         fD (:,1) {mustBeNumeric}   % nf x 1  positive integer denominators
         EcQ (:,6){mustBeNumeric}   % ne x 6  primitive integer conics, ratQ.conic form
         Vname {mustBeInteger,mustBeNonnegative} % a vertex NAMED, not placed: nv x 3
-                                   % [edgeA edgeB rootIdx] on a conic mesh (QuaCon), nv x 5
+                                   % [edgeA edgeB rootIdx] on a conic subdivision (QuaCon), nv x 5
                                    % [edgeA tableA edgeB tableB rootIdx] on a Crv (AlgCrv), whose edges
                                    % come from two tables. The width is each constructor's to check.
         FC                         % cell(nf,1) of each face's rows [edgeIndex, sign, branch, table];
@@ -368,10 +368,10 @@ classdef AlgCon < Alg & Conic
             k = class(obj);
        end
 
-       function tf = isMeshed(obj)
-       % objective: whether this object carries an explicit V/E/F mesh (true for QuaPol, RatPol
-       %            and QuaPar) or is still held in cPLQ's symbolic form with the mesh not yet
-       %            reconstructed (false for QuaParCPLQ, whose inherited mesh properties are empty
+       function tf = isSubdivided(obj)
+       % objective: whether this object carries an explicit V/E/F subdivision (true for QuaPol, RatPol
+       %            and QuaPar) or is still held in cPLQ's symbolic form with the subdivision not yet
+       %            reconstructed (false for QuaParCPLQ, whose inherited subdivision properties are empty
        %            precisely because reconstructing V/E/Ec/F/P from it is still open -- see
        %            QuaParCPLQ.m and DESIGN.md II.5.1).
        % [output] tf : logical
@@ -388,7 +388,7 @@ classdef AlgCon < Alg & Conic
        % must not trip over an empty matrix just because the object happens to be the pinned
        % specialization.
        %
-       % Called by the LEAF constructor only, after it has written the mesh -- see this file's
+       % Called by the LEAF constructor only, after it has written the subdivision -- see this file's
        % CONSTRUCTOR PROTOCOL note. Leaves whatever is already set untouched, so a RatPol keeps its
        % genuine denominators and a QuaPar keeps its genuine conics.
             if isempty(obj.den), obj.den = repmat([0 0 1], size(obj.f,1), 1); end

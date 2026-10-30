@@ -41,7 +41,7 @@ classdef QuaPar < RatPar & Qua
    % of quadratic functions. The class is an extension of piecewise linear-quadratic functions to bivariate CUBIC 
    % polynomials with CONNECTED domain forming a polyhedral partition. Disconnected domains are not supported.
    
-   % The nine mesh properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
+   % The nine subdivision properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
    % declares them verbatim as they used to appear here. QuaPar -- QUAdratic on a PARabolic
    % subdivision -- adds exactly one thing of its own, the per-edge conic `Ec` below (a QuaPar with
    % Ec all-zero behaves exactly like a QuaPol). See RatPar.m for the hierarchy.
@@ -710,7 +710,7 @@ classdef QuaPar < RatPar & Qua
        % UNIT TESTS ONLY. `isConvexQ` is the exact test and is the only one any production path
        % may call; this one stays as a differential SECOND SOURCE for it, and for the cubic and
        % inexact inputs isConvexQ refuses by design. Measured 2026-09-05: no production caller
-       % remains -- `meshPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
+       % remains -- `subdivisionPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
        %
        % Why it is not simply deleted: as a second source it earns its keep. The differential
        % sweep against it is what found the `examples{16}` domain defect, and a second
@@ -919,7 +919,7 @@ classdef QuaPar < RatPar & Qua
        function h = addQuadratic(obj, A, b, c)
        % objective: h(x) = f(x) + (1/2 x'Ax + b'x + c), adding a FULL-DOMAIN quadratic to f
        % [input]  obj: QuaPar, operable (degree<=2); A: 2x2 (symmetric); b: 2x1 or 1x2; c: scalar
-       % [output] h  : QuaPar, same domain/mesh (V/E/Ec/F/P/dom unchanged) as obj -- a full-domain
+       % [output] h  : QuaPar, same domain/subdivision (V/E/Ec/F/P/dom unchanged) as obj -- a full-domain
        %               quadratic is finite everywhere, so it never restricts obj's domain -- only
        %               its per-face coefficients, columns 5:10 = [x^2 xy y^2 x y const], change,
        %               identically on every face
@@ -931,7 +931,7 @@ classdef QuaPar < RatPar & Qua
        function h = addScaledEnergy(obj, alpha)
        % objective: h(x) = f(x) + alpha*(x1^2+x2^2), a convenience wrapper over addQuadratic
        % [input]  obj: QuaPar, operable (degree<=2); alpha: real scalar
-       % [output] h  : QuaPar, same domain/mesh as obj
+       % [output] h  : QuaPar, same domain/subdivision as obj
             h = addQuadratic(obj, 2*alpha*eye(2), [0;0], 0);
        end
 

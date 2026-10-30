@@ -1,6 +1,6 @@
 classdef mergeSameQuadFacesTest < matlab.unittest.TestCase
     % Step 0 of `conj`/`biconj`: an interior edge whose two sides carry the same quadratic is a
-    % line the CALLER drew, not a property of f, and every dispatch downstream reads the mesh.
+    % line the CALLER drew, not a property of f, and every dispatch downstream reads the subdivision.
     %
     % The case this exists for is the unit square handed in as two triangles sharing its diagonal:
     % the same function as the one-face square, which answers by McCormick in 0 s, while the
@@ -72,7 +72,7 @@ classdef mergeSameQuadFacesTest < matlab.unittest.TestCase
         function aReflexUnionIsRefused(testCase)
         % MEASURED, not assumed. Three wedges round the origin, the outer two carrying the same
         % affine piece: their union is a 225-degree REFLEX wedge, and this representation cannot
-        % express one -- the merged mesh builds without complaint and then eval returns +inf at
+        % express one -- the merged subdivision builds without complaint and then eval returns +inf at
         % (2,3), a point inside the reflex face, because a face is read as an intersection of
         % half-planes. So the merge is refused and the edge kept.
             V = [0 0; -1 0; 1 1; 0 -1];
@@ -122,12 +122,12 @@ classdef mergeSameQuadFacesTest < matlab.unittest.TestCase
 
         function biconjOfTheTwoFaceSquareIsMcCormickAndImmediate(testCase)
         % END TO END, and it is the reason Step 0 is in the dispatch rather than in a utility
-        % nobody calls: with the mesh normalised, biconj of the two-face square takes the
-        % McCormick short-circuit and returns a MESHED QuaPol -- max(0, x+y-1) over the square.
+        % nobody calls: with the subdivision normalised, biconj of the two-face square takes the
+        % McCormick short-circuit and returns a SUBDIVIDED QuaPol -- max(0, x+y-1) over the square.
             p = mergeSameQuadFacesTest.twoTriangleSquare([0 1 0 0 0 0; 0 1 0 0 0 0]);
             h = p.biconj('cplq');
             testCase.verifyEqual(kind(h), 'QuaPol', ...
-                'the long route returns a mesh-less QuaParCPLQ; the short-circuit returns a mesh');
+                'the long route returns a subdivision-less QuaParCPLQ; the short-circuit returns a subdivision');
             X = [0.75 0.25; 0.5 0.5; 0.25 0.25; 0.9 0.6; 0.2 0.8; 0.1 0.1; 0.6 0.6];
             for i = 1:size(X,1)
                 testCase.verifyEqual(h.eval(X(i,:)), max(0, X(i,1) + X(i,2) - 1), ...

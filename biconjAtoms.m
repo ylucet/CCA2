@@ -33,7 +33,7 @@ function env = biconjAtoms(f)
 %            in its own atom; the face is <s0,x> - g(s0) on the contact triangle. These are the
 %            erratum's Case A polygons (e.g. conv{G1,G2,G3} in its Example 2). s0 is generally
 %            irrational (two conics meeting), so it is computed in DOUBLES and refined by Newton;
-%            this is a face's DATA, not a mesh decision, and like every face here it is evaluated
+%            this is a face's DATA, not a subdivision decision, and like every face here it is evaluated
 %            in doubles.
 %
 % ONLY THE ACTIVE CANDIDATES (2026-10-16, erratum Step 1): a pair is assembled only where two of
@@ -42,7 +42,7 @@ function env = biconjAtoms(f)
 % to 2, same values, 780 s to 281 s (one run each, shared machine).
 %
 % RAYS (erratum Case E) are below, at the restriction to D. WHAT IS NOT HERE: the face list is
-% not meshed into one AlgCon -- `EnvelopeMin.eval` is the function; biconjQ meshes the one-pair
+% not subdivided into one AlgCon -- `EnvelopeMin.eval` is the function; biconjQ subdivides the one-pair
 % case. Verified against the erratum's closed forms in erratumExamplesTest.
 % ==================================================================================================
     if ~isa(f, 'QuaPol'), error('biconjAtoms:input', 'expects a QuaPol; got %s.', class(f)); end
@@ -109,7 +109,7 @@ function [ab, tris] = activeAtomPairs(atoms, forms, tris, D)
 % And only points x of positive measure matter: every candidate is convex and >= co f, so a minimum
 % that equals co f on a dense set equals it everywhere on the interior (each candidate is continuous
 % on its polyhedral domain, Rockafellar 10.2). So a form pair counts only if the two forms tie for
-% the max along an ARC (an isolated tie point is a vertex of f*'s mesh, which is a triangle's job),
+% the max along an ARC (an isolated tie point is a vertex of f*'s subdivision, which is a triangle's job),
 % and only if their contact segments sweep an area -- two vertices, or a vertex on an edge's line,
 % or two edges on one line, sweep only that line.
 %
@@ -306,7 +306,7 @@ function tf = bothActive(s, i, j, forms, D)
 end
 
 function tf = triangleActive(tr, forms, D)
-% A triangle's tie s0 is a vertex of f*'s mesh only if no other form beats it there.
+% A triangle's tie s0 is a vertex of f*'s subdivision only if no other form beats it there.
     s = tr.s(:);
     tf = inDom(s, D, -1);
     v = tr.c;
@@ -567,7 +567,7 @@ function [poly, eidx] = piecePolygon(f, k)
     while nxt ~= order(1)
         order(end+1) = nxt; %#ok<AGROW>
         nxt = E(E(:,1) == nxt, 2);
-        if numel(nxt) ~= 1, error('biconjAtoms:mesh', 'face %d is not a simple polygon.', k); end
+        if numel(nxt) ~= 1, error('biconjAtoms:subdivision', 'face %d is not a simple polygon.', k); end
     end
     poly = f.V(order, :);
 end

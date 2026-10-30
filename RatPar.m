@@ -2,7 +2,7 @@ classdef (Abstract) RatPar < RatCon & Par
    % RatPar: rational function on a PARABOLIC subdivision -- the level of the lattice at which
    % every edge conic is a parabola or a line (b^2 - 4ac = 0).
    %
-   % IT DECLARES NOTHING. All mesh data (V/E/f/F/P/dom/nv/ne/nf/fIsConvex) and both axis-varying
+   % IT DECLARES NOTHING. All subdivision data (V/E/f/F/P/dom/nv/ne/nf/fIsConvex) and both axis-varying
    % properties (`den`, `Ec`) live once on RatCon -- see RatCon.m's "DATA LIVES HERE, ONCE" note
    % for why a property defined in two superclasses is fatal in MATLAB and why that forces a
    % single declaration site. This class exists to carry the `Par` marker, nothing else, and it is

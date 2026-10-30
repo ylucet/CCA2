@@ -2,7 +2,7 @@ function refuseProbe()
 % WHICH error refuses a pair, and on what shape of input? Stop after a few -- the identifier and the
 % degrees are what decide whether the vertex route holds.
     L = load(fullfile(tempdir, 'branchRowPruning_env.mat'));  env = L.env;
-    g = assembleAlgCrv(envelopeMeshAlg(env));
+    g = assembleAlgCrv(envelopeSubdivisionAlg(env));
     A = cell(1, numel(g.EcA));
     for j = 1:numel(g.EcA), A{j} = bridgeQuadCut(g.EcA(j).FP, g.EcA(j).num, g.EcA(j).den); end
     C = cell(1, size(g.EcQ,1));

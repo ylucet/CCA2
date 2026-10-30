@@ -123,7 +123,7 @@ classdef conicMeetTest < matlab.unittest.TestCase
 
         function twoConicsSharingAComponentAreReportedDegenerateRatherThanIntersected(testCase)
         % Infinitely many intersections is not a vertex. Returning four coincident points here is
-        % the failure mode that would put a phantom vertex into the mesh.
+        % the failure mode that would put a phantom vertex into the subdivision.
             [P, info] = conicMeet([1 0 1 0 0 -1], [1 0 1 0 0 -1]);
             testCase.verifyTrue(info.degenerate);
             testCase.verifyEmpty(P);

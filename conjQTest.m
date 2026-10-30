@@ -115,12 +115,12 @@ classdef conjQTest < matlab.unittest.TestCase
             V  = [0 0; 1 0; 1 1; 0 1];
             E  = [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1];
             % F(5,:) = [2 1], NOT [1 2]. F(j,:) is [left, right] of edge j, and face 1 -- the
-            % triangle BELOW the diagonal -- is on its RIGHT. Written the other way the mesh is
+            % triangle BELOW the diagonal -- is on its RIGHT. Written the other way the subdivision is
             % MALFORMED: P{1}'s signs then describe {y >= 0, y >= x, x <= 1}, an unbounded
             % region whose corners are not the endpoints of face 1's own edges, and QuaPol.eval
             % reports the wrong piece at interior points. This test passed anyway, because the
             % code and the oracle both read the face as the polygon its edges bound -- which is
-            % what a user means and what a WELL-FORMED mesh says. Measured 2026-09-04.
+            % what a user means and what a WELL-FORMED subdivision says. Measured 2026-09-04.
             F  = [1 0; 1 0; 2 0; 2 0; 2 1];       % face 1 = edges 1,2,5; face 2 = edges 3,4,5
             H1 = [1 0; 0 1];  L1 = [0;0];  k1 = 0;
             H2 = [4 1; 1 3];  L2 = [-2;1]; k2 = 0;
@@ -185,7 +185,7 @@ classdef conjQTest < matlab.unittest.TestCase
             g = conjQ(conjQTest.wedge([0 0], [1 0], [0 1], [0 0 0 0, -2, 0, -2, 1, 1, 0]));
             testCase.verifyEqual(g.nf, 0, 'no faces is how "+infinity everywhere" is spelled');
             testCase.verifyTrue(all(isinf(g.eval([0 0; 1 2; -3 4; 1e6 -1e6]))));
-            testCase.verifyTrue(g.isMeshed(), 'it is still a well-formed object');
+            testCase.verifyTrue(g.isSubdivided(), 'it is still a well-formed object');
         end
 
         function aFullPlaneQuadraticWithNegativeCurvatureAlsoConjugatesToPlusInfinity(testCase)
@@ -427,7 +427,7 @@ classdef conjQTest < matlab.unittest.TestCase
         end
 
         function noConjugateInTheFixtureCorpusHasOverlappingCells(testCase)
-        % THE INVARIANT ITSELF, applied broadly. A mesh whose cells overlap while carrying
+        % THE INVARIANT ITSELF, applied broadly. A subdivision whose cells overlap while carrying
         % different functions does not define a function at all -- eval resolves it by first match,
         % so the answer depends on cell ORDER, and the failure is silent. Measured across the
         % corpus: 2 of 29 conjugates were inconsistent before the half-plane fixes, 0 of 29 after.
@@ -661,7 +661,7 @@ classdef conjQTest < matlab.unittest.TestCase
         % WHERE THE EXACT FEASIBILITY TEST EARNS ITS KEEP. Add a vertex at the midpoint of an edge
         % and give q strict concavity: q(midpoint) then EXCEEDS the average of the two endpoints,
         % so the lifted point sits strictly above the chord and that vertex never attains the max.
-        % Its cell is EMPTY -- not small, empty -- and must not appear in the mesh.
+        % Its cell is EMPTY -- not small, empty -- and must not appear in the subdivision.
             V = [0 0; 1/2 0; 1 0; 1 1; 0 1];
             E = [1 2 1; 2 3 1; 3 4 1; 4 5 1; 5 1 1];
             F = [ones(5,1), zeros(5,1)];
@@ -875,7 +875,7 @@ classdef conjQTest < matlab.unittest.TestCase
         % ---- the input guards, which had no test ---------------------------------------------
         % Added 2026-09-05 alongside ratQ's. conjQ's remaining uncovered lines are dominated by
         % INTERNAL INVARIANTS of the ear-clipping triangulation (notSimple, noEar, repeatedVertex,
-        % degenerate) which a well-formed mesh cannot reach; those are classified in
+        % degenerate) which a well-formed subdivision cannot reach; those are classified in
         % SUPPORT_MATRIX.md rather than chased. These two are reachable by a caller.
 
         function conjQREFUSESANonQuaPolByName(testCase)

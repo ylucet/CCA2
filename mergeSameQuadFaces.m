@@ -3,7 +3,7 @@ function [g, nMerged] = mergeSameQuadFaces(obj)
 %
 % objective: delete every interior edge whose two sides carry the SAME quadratic AND whose two
 %   faces have a convex union, fusing the faces it separated. The function is unchanged -- such
-%   an edge carries no information -- but the MESH is, and the mesh is what every dispatch
+%   an edge carries no information -- but the SUBDIVISION is, and the subdivision is what every dispatch
 %   downstream reads.
 %
 % [input]  obj      : any RatPar. Only a QuaPol (quadratic on a polyhedral subdivision) is
@@ -19,13 +19,13 @@ function [g, nMerged] = mergeSameQuadFaces(obj)
 % as the unit square handed in as one face, and the second answers in 0 s while the first used to
 % go the whole way round -- triangulate, per-piece conjugate, Step 3, second conjugation -- and
 % come out wrong (biconjugateTest.biconjugateOverATwoFaceSubdivisionIsTheEnvelope). The answer
-% must not depend on how the caller drew the mesh, so the mesh is normalised before the dispatch
+% must not depend on how the caller drew the subdivision, so the subdivision is normalised before the dispatch
 % reads it.
 %
 % THE CONVEXITY GUARD IS NOT OPTIONAL, and it was measured rather than assumed. Two faces sharing
 % an edge can have a NON-CONVEX union -- three wedges round the origin, the outer two carrying the
 % same affine piece, fuse into a 225-degree reflex wedge -- and this representation does not
-% support one: the merged mesh builds without complaint and then `eval` returns +inf at a point
+% support one: the merged subdivision builds without complaint and then `eval` returns +inf at a point
 % inside the reflex face, because a face is read as the intersection of the half-planes its edges
 % define. So a candidate merge is BUILT and its merged face checked with `orderEdges`, whose
 % isConvex flag is exactly this question; a merge that fails is skipped and its edge kept.
@@ -45,7 +45,7 @@ function [g, nMerged] = mergeSameQuadFaces(obj)
 % ALGORITHM.md.
 %
 % An edge with the SAME face on both sides is left alone as well: it is a slit, not a shared
-% boundary, and removing it would change the domain rather than the mesh.
+% boundary, and removing it would change the domain rather than the subdivision.
 
     g = obj;
     nMerged = 0;
@@ -57,14 +57,14 @@ function [g, nMerged] = mergeSameQuadFaces(obj)
     % test sets CCA2_NO_STEP0 and keeps exercising the multi-face path deliberately.
     if ~isempty(getenv('CCA2_NO_STEP0')), return, end
 
-    % QuaPol only: needs a mesh, no conics (Pol), one polynomial per face (Qua).
+    % QuaPol only: needs a subdivision, no conics (Pol), one polynomial per face (Qua).
     if ~(isa(obj, 'Qua') && isa(obj, 'Pol')), return, end
-    if ~ismethod(obj, 'isDomBounded'), return, end          % QuaParCPLQ carries no mesh
+    if ~ismethod(obj, 'isDomBounded'), return, end          % QuaParCPLQ carries no subdivision
     if isempty(obj.nf) || obj.nf < 2 || obj.ne < 1, return, end
 
     % ONE MERGE AT A TIME, restarting after each: dropping an edge renumbers the faces, the edges
     % and the vertices, so a batch pass computed against the original numbering would be applying
-    % a stale plan. The meshes here are small (a handful of faces) and each step is one
+    % a stale plan. The subdivisions here are small (a handful of faces) and each step is one
     % construction, so the simple loop is the right trade.
     changed = true;
     while changed
@@ -87,7 +87,7 @@ end
 % ------------------------------------------------------------------------------------------------
 function h = dropInteriorEdge(g, j, a, b)
 % Delete edge j and fuse faces a and b (b's rows go away, a keeps the quadratic). Empty when the
-% result is not a well-formed mesh with a CONVEX merged face -- the caller then keeps the edge.
+% result is not a well-formed subdivision with a CONVEX merged face -- the caller then keeps the edge.
     h = [];
 
     keepF = true(g.nf, 1); keepF(b) = false;
@@ -128,7 +128,7 @@ function h = dropInteriorEdge(g, j, a, b)
         cand = QuaPol(g.V(used,:), E, fNew, Fnew);
         [~, isConv] = cand.orderEdges(fMap(a));
     catch
-        return                                % not a mesh this representation can express
+        return                                % not a subdivision this representation can express
     end
     if ~isConv, return, end                   % a reflex face: eval cannot read it (see header)
     h = cand;

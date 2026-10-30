@@ -2,7 +2,7 @@ function [rows, info] = cornerWedgeRows(f, n, d, tie, side)
 % cornerWedgeRows  A corner face's WEDGE as [conic, side, branch] rows, so that a face whose region
 %   is a predicate can enter an arrangement after all.
 %
-% objective: `envelopeMesh` reads a cell's applicable faces off its signs, which needs every face's
+% objective: `envelopeSubdivision` reads a cell's applicable faces off its signs, which needs every face's
 %   region spelled as rows over the INTEGERS. A corner's region is `M \ (p - x) >= 0`, two half-planes
 %   whose coefficients are quadratic irrationals -- so no row of it exists over Q on its own. Its
 %   CONJUGATE PAIR does, and `ratQ.pairLineData` names one line of such a pair exactly.

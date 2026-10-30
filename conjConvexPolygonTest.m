@@ -153,7 +153,7 @@ classdef conjConvexPolygonTest < matlab.unittest.TestCase
         end
 
         function aClockwiseOrNonConvexPolygonIsRefusedRatherThanMirrored(testCase)
-        % An orientation slip produces a perfectly well-formed mesh built on the wrong side, whose
+        % An orientation slip produces a perfectly well-formed subdivision built on the wrong side, whose
         % values are wrong on a whole region and right at the dual points. Refusing is the only
         % safe answer.
             testCase.verifyError(@() conjConvexPolygon([0 0; 0 1; 1 0], [], [], eye(2), [0;0], 0), ...

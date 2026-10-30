@@ -1,5 +1,5 @@
-function [g, info] = envelopeMesh(env)
-% envelopeMesh  Turn an assembled envelope's FACE LIST into one mesh, by building the ARRANGEMENT of
+function [g, info] = envelopeSubdivision(env)
+% envelopeSubdivision  Turn an assembled envelope's FACE LIST into one subdivision, by building the ARRANGEMENT of
 %   its regions once rather than folding the faces together.
 %
 % objective: the last step between a verified envelope and an object `biconj` can return. Both fold
@@ -47,20 +47,20 @@ function [g, info] = envelopeMesh(env)
 % So a corner face is carried for its REGION alone. Its rows join the arrangement, and what they
 % decide is COVERAGE: by `envelopeEval`'s rule the envelope is the max over faces, and a PAIR with
 % no face owning x makes it +infinity there. A cell where every pair is covered emits the largest
-% QUADRATIC face; a cell where some pair is not is left out, and a hole in the mesh is exactly
+% QUADRATIC face; a cell where some pair is not is left out, and a hole in the subdivision is exactly
 % +infinity. A cell covered ONLY by a corner face would need an algebraic face after all, and is
-% refused by name (`envelopeMesh:algebraicFace`) rather than silently mis-valued -- it did not occur
+% refused by name (`envelopeSubdivision:algebraicFace`) rather than silently mis-valued -- it did not occur
 % on any fixture here.
 %
 % WHAT IT STILL DOES NOT COVER: a BRIDGE face, whose region is a predicate with no rows at all
-% (DECISIONS.md 2026-09-17). `envelopeMesh:bridgeFaces` names that, and `envelopeEval` answers for
+% (DECISIONS.md 2026-09-17). `envelopeSubdivision:bridgeFaces` names that, and `envelopeEval` answers for
 % such an envelope.
 
     if nargin ~= 1
-        error('envelopeMesh:nargin', 'expects (env).');
+        error('envelopeSubdivision:nargin', 'expects (env).');
     end
     if ~isstruct(env) || ~all(isfield(env, {'quad', 'bridge'}))
-        error('envelopeMesh:shape', 'env must be what envelopeAssemble returns.');
+        error('envelopeSubdivision:shape', 'env must be what envelopeAssemble returns.');
     end
     env = envelopeRationalCorners(env);          % a rational corner is a value face (2026-10-17)
     corners = {};  bridges = {};
@@ -71,7 +71,7 @@ function [g, info] = envelopeMesh(env)
         elseif isfield(f, 'cells') && ~isempty(f.cells) && isfield(f, 'pair')
             bridges{end+1} = f; %#ok<AGROW>
         else
-            error('envelopeMesh:bridgeFaces', ...
+            error('envelopeSubdivision:bridgeFaces', ...
                 ['this envelope has a face whose region is a PREDICATE with no rows and no outer ' ...
                  'bound (kind %s), so nothing places it in an arrangement. Keep using ' ...
                  'envelopeEval, which answers for it.'], f.kind);
@@ -86,10 +86,10 @@ function [g, info] = envelopeMesh(env)
         if ~isfield(f, 'wit') || isempty(f.wit), continue, end
         x = f.wit(1:2) / f.wit(3);
         if bridgeMember(f.pair, x) && isfinite(envelopeEval(env, x))
-            error('envelopeMesh:bridgeCompetes', ...
+            error('envelopeSubdivision:bridgeCompetes', ...
                 ['a bridge face owns part of the envelope''s domain, and its value competes with the ' ...
                  'quadratic faces there. The boundary between them is not a conic, so this envelope ' ...
-                 'cannot be meshed on a conic subdivision -- envelopeMeshAlg can. DECISIONS.md ' ...
+                 'cannot be subdivided on a conic subdivision -- envelopeSubdivisionAlg can. DECISIONS.md ' ...
                  '2026-09-19.']);
         end
     end
@@ -106,12 +106,12 @@ function [g, info] = envelopeMesh(env)
     allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
     % THE ARRANGEMENT IS GLOBAL, and its cost is not polynomial in any useful sense: every curve
     % re-tests every live cell, whose emptiness test grows with the cell's rows. Measured on the
-    % poly2 kink at c = -2 (2026-10-11): 23 curves mesh in minutes; 85 curves passed 370 cells at
+    % poly2 kink at c = -2 (2026-10-11): 23 curves subdivision in minutes; 85 curves passed 370 cells at
     % curve 30 and did not finish in 90 minutes. Refuse by name past the budget -- the face list
     % is still the envelope, and envelopeEval answers for it.
     maxCurves = 40;
     if size(C,1) > maxCurves
-        error('envelopeMesh:arrangementSize', ...
+        error('envelopeSubdivision:arrangementSize', ...
             ['the arrangement has %d curves (budget %d), and a global arrangement of that size ' ...
              'does not finish. envelopeEval answers for the face list.'], size(C,1), maxCurves);
     end
@@ -155,18 +155,18 @@ function [g, info] = envelopeMesh(env)
         if ~all(ismember(allPairs, here)), nUncovered = nUncovered + 1; continue, end
         if ~isempty(bridgeHere)
             % A BRIDGE CARRIES THE VALUE -- measured strictly above the best quadratic face at 22 of
-            % 60 points -- so where one owns part of a cell the mesh would have to draw
+            % 60 points -- so where one owns part of a cell the subdivision would have to draw
             % {bridge value = quadratic value}, i.e. FP(x, y, q(x,y)) = 0, of degree well above two
             % and not an edge a CONIC subdivision can hold. Refused by name rather than mis-valued.
-            error('envelopeMesh:bridgeCompetes', ...
+            error('envelopeSubdivision:bridgeCompetes', ...
                 ['a bridge face owns part of a cell, and its value competes with the quadratic ' ...
                  'faces there. The boundary between them is not a conic, so this envelope cannot ' ...
-                 'be meshed on a conic subdivision -- envelopeEval answers for it. DECISIONS.md ' ...
+                 'be subdivided on a conic subdivision -- envelopeEval answers for it. DECISIONS.md ' ...
                  '2026-09-19.']);
         end
         quadApp = app(app <= nQuad);
         if isempty(quadApp)
-            error('envelopeMesh:algebraicFace', ...
+            error('envelopeSubdivision:algebraicFace', ...
                 ['a cell is covered only by CORNER faces, whose value is affine with ' ...
                  'quadratic-irrational coefficients and cannot be stored on a conic subdivision. ' ...
                  'Measured never to occur on the fixtures here -- the corner''s value always ties ' ...

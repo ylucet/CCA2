@@ -1,6 +1,6 @@
 function assemblyProbe(varargin)
 % THE ASSEMBLY: walk the cell pairs, build every face, and stitch the bridge and non-bridge faces
-% into ONE mesh whose evaluation is the biconjugate.
+% into ONE subdivision whose evaluation is the biconjugate.
 %
 % WHAT THIS JOINS. Every ingredient was built and verified separately:
 %
@@ -24,7 +24,7 @@ function assemblyProbe(varargin)
 %
 % WHY A MAX OF SUPS NEEDS NO GLUING ARGUMENT, which is what makes the assembly this short. Every
 % candidate this evaluator forms is <s,x> - G(s) at a point s that is FEASIBLE for its own piece,
-% so no candidate can exceed f**(x): the assembly cannot overshoot, whatever the mesh looks like.
+% so no candidate can exceed f**(x): the assembly cannot overshoot, whatever the subdivision looks like.
 % It can only UNDERSHOOT, and only by missing the global maximiser -- so the whole correctness
 % question is "is every maximiser some piece's candidate", and that is the enumeration below. The
 % two are checked separately: the coverage check says the pieces cover the plane, the value check
@@ -43,12 +43,12 @@ function assemblyProbe(varargin)
 %     .claude/bridgeRegionSides.m, so the arc candidates are its roots in [0,1]. Nothing new is
 %     derived here; the bridge machinery is called.
 %
-% WHAT IS EXACT AND WHAT IS NOT, said plainly. The MESH decisions are exact: which pairs meet
+% WHAT IS EXACT AND WHAT IS NOT, said plainly. The SUBDIVISION decisions are exact: which pairs meet
 % (ratQ.feasible2) and which are bridges (ratQ.quadSignOnPoly) are integer predicates. The
 % per-piece EVALUATION here is in doubles -- the candidate enumeration is the one
 % .claude/cellFaceExactProbe.m already implements over Q, and swapping it in is a substitution, not
 % new mathematics. The quartic's roots are found numerically for the same reason. So this probe
-% answers "does the stitched mesh reproduce f**", not "is every stitch decided in Q".
+% answers "does the stitched subdivision reproduce f**", not "is every stitch decided in Q".
 %
 %   assemblyProbe             % three fixtures, 120 sample points each
 %   assemblyProbe(400)
@@ -63,7 +63,7 @@ function assemblyProbe(varargin)
     %
     % A FOURTH FIXTURE THAT IS NOT THE UNIT SQUARE, because three runs on one geometry answer one
     % geometry. The rectangle splits into two triangles the same way but is anisotropic, so its
-    % dual mesh is not symmetric under swapping the coordinates.
+    % dual subdivision is not symmetric under swapping the coordinates.
     F = { 'unit square, c = 0 (CONVEX)',  [0 0; 1 0; 1 1], [0 0; 1 1; 0 1],  0, [0 1; 0 1]; ...
           'unit square, c = -1',          [0 0; 1 0; 1 1], [0 0; 1 1; 0 1], -1, [0 1; 0 1]; ...
           'unit square, c = -2',          [0 0; 1 0; 1 1], [0 0; 1 1; 0 1], -2, [0 1; 0 1]; ...
@@ -74,7 +74,7 @@ function assemblyProbe(varargin)
         fA = tri(F{k,2}, 0);
         fB = tri(F{k,3}, c);
         gA = conjQ(fA);   gB = conjQ(fB);
-        [pieces, stats] = buildMesh(gA, gB);
+        [pieces, stats] = buildSubdivision(gA, gB);
         report(stats, pieces);
         coverage(pieces, gA, gB);
         domainCheck(pieces, box);
@@ -84,7 +84,7 @@ function assemblyProbe(varargin)
 end
 
 % ================================================================================================
-function [pieces, stats] = buildMesh(gA, gB)
+function [pieces, stats] = buildSubdivision(gA, gB)
 % WALK THE CELL PAIRS AND BUILD THE PIECES. Both filters are the exact ones; nothing here is a
 % tolerance.
     pieces = struct('kind', {}, 'P', {}, 'g', {}, 'g2', {}, 'q', {}, 'side', {}, 'ij', {});
@@ -134,8 +134,8 @@ function p = mkPiece(kind, P, g, g2, q, side, ij)
 end
 
 % ================================================================================================
-function [v, who, vFacet] = evalMesh(pieces, x)
-% THE STITCHED MESH, EVALUATED. The max over every piece's candidates, with the winner's name.
+function [v, who, vFacet] = evalSubdivision(pieces, x)
+% THE STITCHED SUBDIVISION, EVALUATED. The max over every piece's candidates, with the winner's name.
 %
 % `vFacet` is the best value attained by a FACET candidate alone -- a facet vertex, a facet
 % endpoint or a constant facet. It is reported because the facet candidates never come out as the
@@ -179,7 +179,7 @@ end
 function [best, who, bestFacet] = polyCands(g, P, x, q, want)
 % sup over { s in P : want*q(s) >= 0 } of <s,x> - g(s), by candidate enumeration. want = 0 means no
 % conic restriction. Every candidate returned is FEASIBLE, which is what forbids an overshoot.
-% `bestFacet` is the same max taken over the FACET candidates only; see evalMesh for why.
+% `bestFacet` is the same max taken over the FACET candidates only; see evalSubdivision for why.
     H = g.A;  y = x - g.b;  cc = g.k;
     best = -inf;  who = 'none';  bestFacet = -inf;
 
@@ -306,7 +306,7 @@ function report(stats, pieces)
     nB = sum(strcmp({pieces.kind}, 'bridge'));
     fprintf('cell pairs %d | meet in 2-D %d | identical faces %d | non-bridge %d | BRIDGE %d\n', ...
             stats.nPairs, stats.nMeet, stats.nSame, stats.nNonBridge, stats.nBridge);
-    fprintf('mesh: %d pieces (%d polyhedral, %d bridge pairs carrying 3 faces each)\n', ...
+    fprintf('subdivision: %d pieces (%d polyhedral, %d bridge pairs carrying 3 faces each)\n', ...
             numel(pieces), numel(pieces) - nB, nB);
     if stats.nSkipCurved > 0
         fprintf('  NOTE: %d cell(s) skipped -- a curved cell edge, which this assembly does not cover\n', ...
@@ -334,14 +334,14 @@ function coverage(pieces, gA, gB)
 end
 
 function domainCheck(pieces, box)
-% IS THE MESH FINITE EXACTLY ON dom f**? The value check above only samples INSIDE the domain, so
-% on its own it says nothing about the boundary of the answer -- and "the mesh is finite where the
+% IS THE SUBDIVISION FINITE EXACTLY ON dom f**? The value check above only samples INSIDE the domain, so
+% on its own it says nothing about the boundary of the answer -- and "the subdivision is finite where the
 % envelope is infinite" is a face too many, while the reverse is a face missing.
 %
 % dom f** = conv(dom f) = the primal box, so this is a decidable statement with an independent
 % right answer. Points within a margin of the box's boundary are SKIPPED rather than counted:
 % there the sup is finite but unbounded-in-the-limit and a double evaluation legitimately goes
-% either way, so counting them would measure the tolerance rather than the mesh.
+% either way, so counting them would measure the tolerance rather than the subdivision.
     marg = 0.02;
     nIn = 0;  nOut = 0;  badIn = 0;  badOut = 0;
     for a = box(1,1)-1 : 0.1 : box(1,2)+1
@@ -349,7 +349,7 @@ function domainCheck(pieces, box)
             x = [a; b];
             d = max([box(:,1) - x; x - box(:,2)]);   % signed distance to the box, in the inf-norm
             if abs(d) < marg, continue, end
-            v = evalMesh(pieces, x);
+            v = evalSubdivision(pieces, x);
             if d < 0
                 nIn = nIn + 1;
                 if ~isfinite(v), badIn = badIn + 1; end
@@ -370,8 +370,8 @@ function facetHardPoints(pieces, gA, gB)
 %
 % THE CONSTRUCTION. Take s0 in the relative interior of a facet of a piece, and set x = grad(s0)
 % for that piece's own face. Then s0 is a maximiser of <s,x> - G(s) provided the piece's face IS
-% the max at s0, which is checked rather than assumed. The mesh must return that value AND a facet
-% candidate must attain it -- if only the value matched, the mesh could be reading it off some
+% the max at s0, which is checked rather than assumed. The subdivision must return that value AND a facet
+% candidate must attain it -- if only the value matched, the subdivision could be reading it off some
 % other piece and the facet loop would still be dead code.
     nH = 0;  nVal = 0;  nFacet = 0;
     for k = 1:numel(pieces)
@@ -397,7 +397,7 @@ function facetHardPoints(pieces, gA, gB)
             if abs(max(gA.eval(s0.'), gB.eval(s0.')) - gv) > 1e-9 * max(1, abs(gv)), continue, end
             x = H*s0 + b;
             want = s0.'*x - gv;
-            [v, ~, vF] = evalMesh(pieces, x);
+            [v, ~, vF] = evalSubdivision(pieces, x);
             nH = nH + 1;
             if isfinite(v) && abs(v - want) <= 1e-8 * max(1, abs(want)), nVal = nVal + 1; end
             if isfinite(vF) && abs(vF - want) <= 1e-8 * max(1, abs(want)), nFacet = nFacet + 1; end
@@ -422,7 +422,7 @@ function verify(pieces, gA, gB, fA, fB, c, box, n)
     worst = 0;  worstAt = [0 0];  nOver = 0;  nUnder = 0;  nSkip = 0;  kinds = {};  nFacetTie = 0;
     for t = 1:n
         x = X(t,:).';
-        [vA, who, vF] = evalMesh(pieces, x);
+        [vA, who, vF] = evalSubdivision(pieces, x);
         if isfinite(vA) && isfinite(vF) && abs(vF - vA) <= 1e-9 * max(1, abs(vA))
             nFacetTie = nFacetTie + 1;
         end
@@ -438,7 +438,7 @@ function verify(pieces, gA, gB, fA, fB, c, box, n)
             n - nSkip, n, nSkip);
     fprintf('       worst relative gap to the definition %.3e at (%.3f, %.3f)\n', ...
             worst, worstAt(1), worstAt(2));
-    fprintf('       %d points where the mesh OVERSHOT, %d where it UNDERSHOT (tol 1e-6)\n', ...
+    fprintf('       %d points where the subdivision OVERSHOT, %d where it UNDERSHOT (tol 1e-6)\n', ...
             nOver, nUnder);
     u = unique(kinds);
     fprintf('       winning face kinds:');
@@ -456,7 +456,7 @@ function verify(pieces, gA, gB, fA, fB, c, box, n)
             x = rand(2,1) .* (box(:,2) - box(:,1)) + box(:,1);
             [v1, r1] = fA.eval(x.');   [v2, r2] = fB.eval(x.');
             if r1 > 0, fv = v1; elseif r2 > 0, fv = v2; else, continue, end
-            va = evalMesh(pieces, x);
+            va = evalSubdivision(pieces, x);
             if ~isfinite(va), continue, end
             nP = nP + 1;
             worstP = max(worstP, abs(va - fv) / max(1, abs(fv)));
@@ -468,7 +468,7 @@ end
 % ================================================================================================
 % ---- oracle -------------------------------------------------------------------------------------
 function v = envelopeByDefinition(gA, gB, x)
-% f**(x) = sup_s <s,x> - max(gA(s), gB(s)), by direct search. Shares no arithmetic with the mesh.
+% f**(x) = sup_s <s,x> - max(gA(s), gB(s)), by direct search. Shares no arithmetic with the subdivision.
     h = @(s) -( s(:).' * x - max(gA.eval(s(:).'), gB.eval(s(:).')) );
     best = inf;
     for s0 = [x, [0;0], -x, 2*x]

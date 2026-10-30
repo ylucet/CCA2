@@ -21,7 +21,7 @@ classdef QuaConTest < matlab.unittest.TestCase
             [qc, qp] = QuaConTest.unitSquareBothWays();
 
             testCase.verifyEqual(qc.vertexCoords(), qp.V, 'AbsTol', 0, ...
-                'a vertex realised from its NAME must be the same point the legacy mesh stores');
+                'a vertex realised from its NAME must be the same point the legacy subdivision stores');
 
             rng(20260903);
             X = [ 0.25 0.25;  0.5 0.5;  0.9 0.1;  0 0;  1 1;  0.5 0; ...
@@ -191,11 +191,11 @@ classdef QuaConTest < matlab.unittest.TestCase
 
         % ---- the consistency checker's own FAILURE path ----------------------------------------
 
-        function theConsistencyCheckerDETECTSAnInconsistentMesh(testCase)
+        function theConsistencyCheckerDETECTSAnInconsistentSubdivision(testCase)
         % A DETECTOR WHOSE DETECTION BRANCH HAS NEVER RUN IS NOT VERIFIED. checkQuaConConsistent is
         % asserted across the whole fixture corpus, and every fixture passes -- which means its
         % "found an inconsistency" path was dead code, reported as 13 uncovered lines. Coverage
-        % named it; this test exercises it, on meshes built to BE inconsistent.
+        % named it; this test exercises it, on subdivisions built to BE inconsistent.
         %
         % Both halves are driven separately, because they answer different questions: the EXACT
         % half decides a pair whose constraints are all straight (ratQ.feasible2 on their
@@ -231,7 +231,7 @@ classdef QuaConTest < matlab.unittest.TestCase
         function OVERLAPAloneIsNotADefectAndNorIsADIFFERENTFunctionElsewhere(testCase)
         % The two controls that stop the previous test from passing for the wrong reason. The
         % invariant is "overlapping AND carrying different functions" -- neither half alone is a
-        % defect, and a checker that flagged either would fire on every correct mesh.
+        % defect, and a checker that flagged either would fire on every correct subdivision.
             [V, E, Ec, F, sq] = QuaConTest.overlapParts();
             fA = [0 0 0 0 0 0 0 0 0 1];
             fB = [0 0 0 0 0 0 0 0 0 5];
@@ -241,7 +241,7 @@ classdef QuaConTest < matlab.unittest.TestCase
                 QuaCon(V, E, Ec, [fA; fA], [1;1], F, {sq; sq}), 300), ...
                 'two cells may coincide as long as they agree');
 
-            % different functions on DISJOINT cells: the ordinary state of every correct mesh
+            % different functions on DISJOINT cells: the ordinary state of every correct subdivision
             left  = [1 1; 2 -1; 3 -1; 4 1];      % x <= 1
             right = [1 1; 2 1; 3 -1; 4 -1];      % x >= 1
             testCase.verifyTrue(checkQuaConConsistent( ...
@@ -249,12 +249,12 @@ classdef QuaConTest < matlab.unittest.TestCase
                 'cells that do not meet may carry whatever they like');
         end
 
-        function aQuaConReportsItselfAsMeshedAlthoughItsDoubleFieldsAreEmpty(testCase)
-        % RatCon.isMeshed tests ~isempty(obj.f), and a QuaCon's f is empty BY DESIGN, so the
+        function aQuaConReportsItselfAsSubdividedAlthoughItsDoubleFieldsAreEmpty(testCase)
+        % RatCon.isSubdivided tests ~isempty(obj.f), and a QuaCon's f is empty BY DESIGN, so the
         % inherited answer would be exactly backwards and would send callers down QuaParCPLQ's
-        % "mesh not yet reconstructed" path.
+        % "subdivision not yet reconstructed" path.
             qc = QuaConTest.unitSquareBothWays();
-            testCase.verifyTrue(qc.isMeshed());
+            testCase.verifyTrue(qc.isSubdivided());
             testCase.verifyEqual(qc.kind(), 'QuaCon');
             testCase.verifyTrue(isa(qc, 'RatCon') && isa(qc, 'Qua') && isa(qc, 'Conic'));
             testCase.verifyFalse(isa(qc, 'RatPar'), ...
@@ -281,7 +281,7 @@ classdef QuaConTest < matlab.unittest.TestCase
         % is a silent wrong answer rather than a crash. These five checks had no test, which for a
         % validator is the worst state to be in: it passes forever whatever it does.
         %
-        % Each mutation changes ONE thing about a mesh that is otherwise valid, so a failure names
+        % Each mutation changes ONE thing about a subdivision that is otherwise valid, so a failure names
         % the check rather than the fixture.
             [V, E, Ec, fN, fD, F, FC] = QuaConTest.squareParts();
 
@@ -428,7 +428,7 @@ classdef QuaConTest < matlab.unittest.TestCase
 
         function [V, E, Ec, F, sq] = overlapParts()
         % The unit square's four lines plus the unit circle, and the square as sign conditions.
-        % Deliberately shared by the inconsistency tests so the meshes differ ONLY in what is
+        % Deliberately shared by the inconsistency tests so the subdivisions differ ONLY in what is
         % under test -- which cells exist and what they carry.
             Ec = [0 0 0 0 1  0;      % y = 0
                   0 0 0 1 0 -1;      % x = 1
@@ -505,7 +505,7 @@ classdef QuaConTest < matlab.unittest.TestCase
         function edgeFlagsAcceptSegmentRayAndCLOSEDAndNothingElse(testCase)
         % The convention, asserted where it is defined. A closed conic edge -- a whole ellipse --
         % has no endpoints, and the bridge face's own domain is bounded by two of them
-        % (DECISIONS.md 2026-09-06), so column 3 gained a third value rather than the mesh gaining
+        % (DECISIONS.md 2026-09-06), so column 3 gained a third value rather than the subdivision gaining
         % a class. That is the same move FC's side column made when it gained 0 for "ON the curve".
             testCase.verifyEqual(RatCon.assertEdgeFlags([1 2 1; 3 4 0; 0 0 2]), ...
                                  [1 2 1; 3 4 0; 0 0 2], 'all three values are legal');
@@ -531,13 +531,13 @@ classdef QuaConTest < matlab.unittest.TestCase
                        [0 0 0 0, 2, 0, 2, 0, 0, 0], [1 0; 1 0; 1 0]);
             testCase.verifyClass(conjQ(f), 'QuaCon', 'the untouched fixture still answers');
 
-            g = f;  g.E(1,1:2) = 0;  g.E(1,3) = 2;      % the same mesh with one CLOSED edge
+            g = f;  g.E(1,1:2) = 0;  g.E(1,3) = 2;      % the same subdivision with one CLOSED edge
             testCase.verifyError(@() conjQ(g),   'RatCon:closedEdge');
             testCase.verifyError(@() biconjQ(g), 'RatCon:closedEdge');
         end
 
         function assertNoClosedEdgesPassesEverythingTheToolboxActuallyBuildsToday(testCase)
-        % The guard must cost nothing on real meshes: no routine produces a closed edge yet, so it
+        % The guard must cost nothing on real subdivisions: no routine produces a closed edge yet, so it
         % has to fire on none of them. A guard that fired on ordinary input would be a regression
         % dressed as a safety check.
             f = QuaPol([0 0; 1 0; 1 1; 0 1], [1 2 1; 2 3 1; 3 4 1; 4 1 1], ...

@@ -12,7 +12,7 @@ function [pairs, stats] = envelopeCellPairs(gA, gB, D)
 % gA_i and {q <= 0} carrying gB_j, whose common boundary is the arc that carries the BRIDGE face.
 %
 % This routine answers which of those each pair is, and it answers it with INTEGER PREDICATES: the
-% classification decides the MESH, and `CONJ_FIELD_PROOF.md` 8.0 puts mesh decisions on the exact
+% classification decides the SUBDIVISION, and `CONJ_FIELD_PROOF.md` 8.0 puts subdivision decisions on the exact
 % side of the line. Nothing here is a tolerance.
 %
 % [input]  gA, gB : QuaCon, the exact conjugates of the two pieces (conjQ of each).

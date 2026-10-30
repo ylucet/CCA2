@@ -28,7 +28,7 @@ classdef QuaPol < RatPol & QuaPar
    % of quadratic functions. The class is an extension of piecewise linear-quadratic functions to bivariate CUBIC 
    % polynomials with CONNECTED domain forming a polyhedral partition. Disconnected domains are not supported.
    
-   % All nine mesh properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
+   % All nine subdivision properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
    % declares them verbatim as they used to appear here; QuaPol -- quadratic on a polyhedral
    % subdivision -- is the specialization that adds nothing of its own (no per-face denominator
    % like RatPol's `den`, no per-edge conic like QuaPar's `Ec`). See RatPar.m for the hierarchy
@@ -61,7 +61,7 @@ classdef QuaPol < RatPol & QuaPar
         % second copy that can silently disagree with the object -- needs two copies that both
         % claim authority, and there are never two here. Both fields go when the float pipeline
         % does, leaving nothing to unpick.
-        % fN / fD are declared on AlgCon (the exact mesh, once); QuaPol fills them.
+        % fN / fD are declared on AlgCon (the exact subdivision, once); QuaPol fills them.
         VN (:,2){mustBeNumeric} = []    % nv x 2 integer vertex numerators over VD
         VD (:,1) {mustBeNumeric} = []   % nv x 1 positive integer denominators
    end
@@ -631,7 +631,7 @@ classdef QuaPol < RatPol & QuaPar
        % UNIT TESTS ONLY. `isConvexQ` is the exact test and is the only one any production path
        % may call; this one stays as a differential SECOND SOURCE for it, and for the cubic and
        % inexact inputs isConvexQ refuses by design. Measured 2026-09-05: no production caller
-       % remains -- `meshPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
+       % remains -- `subdivisionPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
        %
        % Why it is not simply deleted: as a second source it earns its keep. The differential
        % sweep against it is what found the `examples{16}` domain defect, and a second
@@ -861,7 +861,7 @@ classdef QuaPol < RatPol & QuaPar
        function h = addQuadratic(obj, A, b, c)
        % objective: h(x) = f(x) + (1/2 x'Ax + b'x + c), adding a FULL-DOMAIN quadratic to f
        % [input]  obj: QuaPol, operable (degree<=2); A: 2x2 (symmetric); b: 2x1 or 1x2; c: scalar
-       % [output] h  : QuaPol, same domain/mesh as obj (a full-domain quadratic is finite
+       % [output] h  : QuaPol, same domain/subdivision as obj (a full-domain quadratic is finite
        %               everywhere, so it never restricts obj's domain -- only its per-face
        %               coefficients, columns 5:10 = [x^2 xy y^2 x y const], change, identically
        %               on every face)
@@ -873,7 +873,7 @@ classdef QuaPol < RatPol & QuaPar
        function h = addScaledEnergy(obj, alpha)
        % objective: h(x) = f(x) + alpha*(x1^2+x2^2), a convenience wrapper over addQuadratic
        % [input]  obj: QuaPol, operable (degree<=2); alpha: real scalar
-       % [output] h  : QuaPol, same domain/mesh as obj
+       % [output] h  : QuaPol, same domain/subdivision as obj
             h = addQuadratic(obj, 2*alpha*eye(2), [0;0], 0);
        end
 

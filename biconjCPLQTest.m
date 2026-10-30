@@ -255,7 +255,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
 
         function polyhedralQuaParTriangleTakesTheSameRoute(testCase)
             % QuaPar.biconj routes through biconjCPLQ too: an all-zero-Ec triangle is the same
-            % mesh as the QuaPol above and must give the same answer.
+            % subdivision as the QuaPol above and must give the same answer.
             V = [0 0; 2 0; 1 1];
             q = QuaPar(V, biconjCPLQTest.E3, zeros(3,6), [0 1 0 0 0 0], biconjCPLQTest.F3);
             b = q.biconj('cplq');
@@ -294,7 +294,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
             % ACCESSOR CHANGED 2026-08-25 (overnight), not the assertion. This read `h.fnd`, which
             % exists only on a QuaParCPLQ. `h` is now a QuaPar: `g` here is max(0,s1,s2), an
             % all-affine function over unbounded faces, so conjugating it takes the new
-            % `conjAffinePLQ` route (TODO.md G2) and comes back as a MESH instead of cPLQ's
+            % `conjAffinePLQ` route (TODO.md G2) and comes back as a SUBDIVISION instead of cPLQ's
             % symbolic form. That is an improvement -- the same values, numerically, without the
             % symbolic pipeline -- and this test's own header says it asserts the VALUE, so it must
             % read whichever representation it is handed rather than pin one.
@@ -429,7 +429,7 @@ classdef biconjCPLQTest < matlab.unittest.TestCase
         function v = evalAnyResult(g, x)
         % Evaluate a conj/biconj result whatever representation it came back as. Same idiom as
         % conjCPLQTest.evalConjResult: since the numeric routes were widened, one input family can
-        % legitimately produce a QuaParCPLQ or a mesh, and a test that is about VALUES must not
+        % legitimately produce a QuaParCPLQ or a subdivision, and a test that is about VALUES must not
         % hard-code either.
             if isa(g, 'QuaParCPLQ')
                 v = evalFunctionNDomain(g.fnd, x);

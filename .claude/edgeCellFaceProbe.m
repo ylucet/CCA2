@@ -26,14 +26,14 @@ function edgeCellFaceProbe()
 %       h_k = mu^2 * h11 / 2  -  c ,
 %
 % independent of which point on the line is taken. So the stationary case contributes ONE candidate
-% on a measure-zero set of `x`, which matters for the mesh and not for a generic point.
+% on a measure-zero set of `x`, which matters for the subdivision and not for a generic point.
 %
 % WHAT THIS PROBE ESTABLISHES, STATED NARROWLY. It checks the FORMULA -- that the candidate set
 % above is complete and each closed form is right -- against an independent numeric sup, on real
 % conjQ output. It computes in DOUBLES. Making it exact is a separate step: every candidate is a
 % rational in the cell's own data, so it is bookkeeping rather than new mathematics, but it is not
 % done here and must not be read as done. The exactness discipline this project runs on is about
-% the PREDICATES that decide a mesh, and no mesh is being decided yet.
+% the PREDICATES that decide a subdivision, and no subdivision is being decided yet.
 
     fixtures = { 'triangle', tri([0 0; 1 0; 1 1], 0), ...
                  'square',   poly([0 0; 1 0; 1 1; 0 1]), ...

@@ -3,7 +3,7 @@ classdef domainIsConvexDTest < matlab.unittest.TestCase
 %
 % BUCKET: fast (a few 2x2 determinants; no symbolic call anywhere).
 %
-% It is a predicate on the MESH ARRAYS, so it is tested on mesh arrays directly. That is what makes
+% It is a predicate on the SUBDIVISION ARRAYS, so it is tested on subdivision arrays directly. That is what makes
 % the recession-direction branch reachable at all: for a cone whose ray direction points sit on the
 % rays, a violating direction always comes with a violating vertex, and the vertex loop returns
 % first. Placing the direction point closer in separates the two, which is exactly the case the
@@ -58,7 +58,7 @@ classdef domainIsConvexDTest < matlab.unittest.TestCase
             testCase.verifyFalse(domainIsConvexD(dart, E, F));
         end
 
-        function aTHINMeshIsREFUSEDRatherThanCalledConvex(testCase)
+        function aTHINSubdivisionIsREFUSEDRatherThanCalledConvex(testCase)
         % Every edge with +infinity on both sides means the domain has dimension < 2, and the
         % containment test says nothing about it -- the loop would find no boundary edge and return
         % a vacuous true. Measured before wiring this in (.claude/domConvexDiff.m): four fixtures
@@ -68,7 +68,7 @@ classdef domainIsConvexDTest < matlab.unittest.TestCase
             V = [0 0; 1 0; 1 1];
             E = [1 2 1; 2 3 1];
             F = [0 0; 0 0];
-            testCase.verifyError(@() domainIsConvexD(V, E, F), 'PLQ:domainIsConvexD:thinMesh');
+            testCase.verifyError(@() domainIsConvexD(V, E, F), 'PLQ:domainIsConvexD:thinSubdivision');
         end
 
         function itAgreesWithTheEXACTTestOnEveryTwoDimensionalFixture(testCase)

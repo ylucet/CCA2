@@ -33,7 +33,7 @@ classdef RatPol < RatPar & Pol
    % of quadratic functions. The class is an extension of piecewise linear-quadratic functions to bivariate CUBIC 
    % polynomials with CONNECTED domain forming a polyhedral partition. Disconnected domains are not supported.
    
-   % The nine mesh properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
+   % The nine subdivision properties (nv, ne, nf, V, E, f, F, P, dom) are INHERITED from RatPar, which
    % declares them verbatim as they used to appear here. RatPol -- rational on a POLYhedral
    % subdivision -- adds exactly one thing of its own, the per-face denominator `den` below;
    % inherited `f` is this class's NUMERATOR, and the value on face k is
@@ -513,7 +513,7 @@ classdef RatPol < RatPar & Pol
        % UNIT TESTS ONLY. `isConvexQ` is the exact test and is the only one any production path
        % may call; this one stays as a differential SECOND SOURCE for it, and for the cubic and
        % inexact inputs isConvexQ refuses by design. Measured 2026-09-05: no production caller
-       % remains -- `meshPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
+       % remains -- `subdivisionPredicateTest` and `.claude/isconvexqProbe.m` are the only ones left.
        %
        % Why it is not simply deleted: as a second source it earns its keep. The differential
        % sweep against it is what found the `examples{16}` domain defect, and a second

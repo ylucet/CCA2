@@ -1,15 +1,15 @@
 function env = envelopeRationalCorners(env)
 % envelopeRationalCorners  Move every corner face whose corner point is RATIONAL from `env.bridge`
-%   to `env.quad`, as the rational affine face it is -- so a mesher compares its VALUE exactly.
+%   to `env.quad`, as the rational affine face it is -- so a subdivider compares its VALUE exactly.
 %
 % [input]  env : as `envelopeAssemble` returns it
 % [output] env : the same envelope; such corners now sit in `.quad` (num, den, con, pair) and
 %                no longer in `.bridge`
 %
-% WHY (2026-10-17). Both meshers carried corners for COVERAGE only, on the strength of a measurement
+% WHY (2026-10-17). Both subdividers carried corners for COVERAGE only, on the strength of a measurement
 % that a corner never exceeds the best quadratic face owning the same point (DECISIONS.md
 % 2026-09-19). That is false in general: on every one-pair atom envelope a corner is the maximum in
-% slivers near a domain vertex, by up to 8e-6, and the meshes came out that much too LOW there. A
+% slivers near a domain vertex, by up to 8e-6, and the subdivisions came out that much too LOW there. A
 % corner's value is <s,x> - g(s) at its corner point s, and whenever s is rational -- the facet
 % crosses the tie at a rational parameter, including when the discriminant is a perfect square --
 % that is an affine face with rational coefficients: a `.quad` face in every respect, whose

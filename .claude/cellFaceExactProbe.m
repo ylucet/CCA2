@@ -10,7 +10,7 @@ function cellFaceExactProbe(varargin)
 % `CONJ_FIELD_PROOF.md` 8.0 lists the operations that must leave Q and evaluating a finished
 % function is not among them. But the CANDIDATE SELECTION is a predicate: which facet wins, whether
 % a parabola's vertex lies inside its interval, whether a stationary point is in the cell. Those
-% decide the MESH, and a tolerance there picks the wrong face and returns a plausible wrong number.
+% decide the SUBDIVISION, and a tolerance there picks the wrong face and returns a plausible wrong number.
 %
 % EVERY DECISION IS A SIGN OF A RATIONAL, and every quantity is one:
 %

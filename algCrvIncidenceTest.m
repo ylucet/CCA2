@@ -55,7 +55,7 @@ classdef algCrvIncidenceTest < matlab.unittest.TestCase
             V = algCrvVertices(g);
             [E, ~, info] = algCrvIncidence(g, V);
             t.verifyEmpty(V, 'nothing meets');
-            t.verifyEqual(info.rays, 2, 'so both edges are unbounded as far as this mesh knows');
+            t.verifyEqual(info.rays, 2, 'so both edges are unbounded as far as this subdivision knows');
             t.verifyEqual(unique(E(:,5)).', 0, 'and the flag says so');
         end
 
@@ -72,7 +72,7 @@ classdef algCrvIncidenceTest < matlab.unittest.TestCase
             t.verifyGreaterThanOrEqual(info.unowned, 1, 'the lower half bounds no face');
 
             circ = find(E(:,1) == 1 & E(:,2) == 0);
-            t.verifyEqual(numel(circ), 2, 'the circle is two arcs of the mesh');
+            t.verifyEqual(numel(circ), 2, 'the circle is two arcs of the subdivision');
             [~, iv] = algCrvVertices(g);  X = iv.X;
             for r = circ.'
                 ends = sortrows(round(X(E(r,3:4),:), 9));

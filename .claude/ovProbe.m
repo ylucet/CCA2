@@ -1,7 +1,7 @@
 function ovProbe()
 % WHERE does the overflow come from? One failing pair, with the stack.
     L = load(fullfile(tempdir, 'branchRowPruning_env.mat'));  env = L.env;
-    g = assembleAlgCrv(envelopeMeshAlg(env));
+    g = assembleAlgCrv(envelopeSubdivisionAlg(env));
     A = cell(1, numel(g.EcA));
     for j = 1:numel(g.EcA), A{j} = bridgeQuadCut(g.EcA(j).FP, g.EcA(j).num, g.EcA(j).den); end
     for i = 1:numel(A)-1

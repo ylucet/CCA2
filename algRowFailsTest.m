@@ -1,6 +1,6 @@
 classdef algRowFailsTest < matlab.unittest.TestCase
 % [fast] algRowFails: an algebraic row side * (q - z) >= 0 certified FALSE on a whole region, by
-% Bernstein signs on sub-boxes -- what lets envelopeMeshAlg drop a face whose cell the curve
+% Bernstein signs on sub-boxes -- what lets envelopeSubdivisionAlg drop a face whose cell the curve
 % R = FP(x, y, q) = 0 crosses (2026-10-29).
 %
 % BUCKET: fast (Bernstein bounds on small boxes; no symbolic call).

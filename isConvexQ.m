@@ -44,7 +44,7 @@ function [tf, why] = isConvexQ(obj)
 % reason. Nothing here needs ratQ's degree-4 sign kernel: grad d is affine, hence delta is affine
 % along the edge, and an affine function on a segment is nonnegative iff it is at both endpoints.
 %
-% ORIENTATION IS LOAD-BEARING and is fixed by the mesh, not chosen: F(j,1) is the face on the LEFT
+% ORIENTATION IS LOAD-BEARING and is fixed by the subdivision, not chosen: F(j,1) is the face on the LEFT
 % of edge j (QuaPol.orderEdges), and a = (-(v2y - v1y), v2x - v1x) is the edge direction rotated a
 % quarter turn counterclockwise, so a points into the LEFT face. Hence i = F(j,1), j = F(j,2) in
 % the theorem's labelling and d = f_{F(j,1)} - f_{F(j,2)}. Getting this backwards would report
@@ -229,7 +229,7 @@ function [ok, jBad] = domainIsConvex(obj)
         if iL ~= 0 && iR ~= 0, continue, end          % an interior edge is not a domain constraint
         if iL == 0 && iR == 0
             error('PLQ:isConvexQ:danglingEdge', ...
-                'edge %d has +infinity on both sides, so the mesh is not a subdivision.', j);
+                'edge %d has +infinity on both sides, so the subdivision is not a subdivision.', j);
         end
         [P1, D1] = vertexOf(obj, obj.E(j,1));
         [P2, D2] = vertexOf(obj, obj.E(j,2));

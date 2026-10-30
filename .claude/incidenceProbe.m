@@ -2,7 +2,7 @@ function incidenceProbe()
 % Is the incidence CONSISTENT with the tables it was read from? Three checks, each against the
 % definition rather than against a stored number.
     L = load(fullfile(tempdir, 'branchRowPruning_env.mat'));  env = L.env;
-    g = assembleAlgCrv(envelopeMeshAlg(env));
+    g = assembleAlgCrv(envelopeSubdivisionAlg(env));
     V = algCrvVertices(g);
     [E, F, info] = algCrvIncidence(g, V);
     fprintf(['%d edges | segments %d | rays %d | shared by two faces %d | ' ...

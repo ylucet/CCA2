@@ -127,7 +127,7 @@ end
 % ============================================================================================
 function tf_ = facesOverlap(g1, c1, g2, c2)
 % Does some curved face of g1 share two-dimensional area with some curved face of g2? Decided by
-% locating grid points in BOTH meshes -- QuaPar.eval returns the face index as its second output,
+% locating grid points in BOTH subdivisions -- QuaPar.eval returns the face index as its second output,
 % so this uses the same point location the pipeline itself uses rather than a reimplementation.
     tf_ = false;
     R = 3*max(1, max(abs([g1.V(:); g2.V(:)])));

@@ -1,22 +1,22 @@
 function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
 % cellSamplePoint  A point strictly inside an arrangement cell whose straight rows' Chebyshev centre
-%   fails one of its CURVED rows -- the fallback the meshers' interiorPoint needs.
+%   fails one of its CURVED rows -- the fallback the subdividers' interiorPoint needs.
 %
 % [input]  C    : the curve table, rows [a b c d e f branch]
 %          rows : the cell, [curveIndex side]
 %          H    : the cell's straight rows as [a b c] with a x + b y + c >= 0, normalised
-%          R    : the half-width of the bounding box the meshers use for unbounded cells
+%          R    : the half-width of the bounding box the subdividers use for unbounded cells
 % [output] pt   : 1 x 2, the sampled point with the largest relative slack over EVERY row
 %          ok   : false when no sample is strictly inside
 %          P    : every sample strictly inside (m x 2), for a caller that checks a property on the cell
 %
-% WHY IT IS NEEDED (2026-10-16). Both meshers ask a bridge face's membership predicate once per
+% WHY IT IS NEEDED (2026-10-16). Both subdividers ask a bridge face's membership predicate once per
 % cell, at one interior point, and took that point to be the Chebyshev centre of the STRAIGHT rows.
 % A cell cut by a conic is often a crescent that misses that centre, and such a cell was dropped as
 % undecided -- measured on an indefinite triangle's one-pair envelope: 327 of 332 cells dropped, the
-% mesh +infinity on 902 of 2000 interior points where the face list is finite. cellInterior has
+% subdivision +infinity on 902 of 2000 interior points where the face list is finite. cellInterior has
 % already proved every such cell has an interior, so a point exists; this finds one by a FIXED grid
-% (deterministic: the mesh must not depend on a random seed) over a fan of the straight polygon.
+% (deterministic: the subdivision must not depend on a random seed) over a fan of the straight polygon.
     pt = [0 0];  ok = false;  P = zeros(0,2);
     V = polygonVertices(H, R);
     if size(V,1) < 3, return, end

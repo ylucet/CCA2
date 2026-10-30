@@ -240,7 +240,7 @@ end
 function f = tri(V, c)
 % A positive definite quadratic on one triangle, perturbed by c times the linear form that vanishes
 % on the shared diagonal y = x. The two pieces therefore agree there for EVERY c, so one knob
-% sweeps convex, flat and non-convex without ever producing a mesh that is not a function --
+% sweeps convex, flat and non-convex without ever producing a subdivision that is not a function --
 % DECISIONS 2026-09-05's construction.
     q = [0 0 0 0, 2, 0, 2, 0, 0, 0];
     q(8) = q(8) - c;

@@ -789,7 +789,7 @@ because they are separate pieces of work and 6 delivers the correctness on its o
 What changes: a face is stored as a list of sign conditions on rational conics; an edge is a
 rational conic plus its two bounding vertices *named by which conics they solve*; a vertex is not a
 pair of numbers at all but the label "the intersection of conic `i` and conic `j` that lies in
-this branch". Nothing in the mesh is ever an irrational number.
+this branch". Nothing in the subdivision is ever an irrational number.
 
 *Pro:* by Theorem 1 **every stored number is rational** — no extension field appears in the data
 structure at all. Canonicalisation becomes easy (normalise a rational conic vector to a primitive
@@ -977,7 +977,7 @@ than a temporary one. Within it, target **7**, reach it via **5**. Concretely:
    with an isolating interval, sign-of-a-rational-polynomial-at-it, and comparison. That single
    component makes `conj` **and the envelope** exact and complete, and it is bounded work because
    Theorems 2 and 4 both cap the degree at 4.
-3. Then move the mesh to **H-form** so no vertex is ever stored, and add the interval filter. At
+3. Then move the subdivision to **H-form** so no vertex is ever stored, and add the interval filter. At
    that point every number in a `QuaPar` is rational and the algebraic kernel is a cold path.
 4. Until step 2 lands, pair whatever is in place with option **8**'s detection, so the reachable
    failure is a named refusal instead of a wrong answer.
@@ -1045,7 +1045,7 @@ silently:
 
 * the CCA2 `f`-rows first published here used the **monomial** convention
   `[x^2 xy y^2 x y const]` and so halved the two diagonal entries. `QuaPol.matrixForm` stores the
-  **raw Hessian** (`f = 1/2 x'Qx + L'x + c10`), so the mesh handed to CCA2 encoded a different
+  **raw Hessian** (`f = 1/2 x'Qx + L'x + c10`), so the subdivision handed to CCA2 encoded a different
   function, and `isEdgeContinuous` correctly reported the interior edges as discontinuous. With
   the rows corrected (4.1) `isEdgeContinuous` returns 1 on all four interior edges. **No
   mathematical result is affected**: every theorem, oracle check and trace in this note is
@@ -1069,7 +1069,7 @@ silently:
 * The **three-piece** one ran 69 s and died with `symbolic:kernel:InvalidReturnType` inside
   `symbolicFunction.getDen` <- `symbolicFunction.subsF` <- `region.funcVertices:2731`, after
   printing an `intmax` sentinel coordinate (`2147483647`) for a vertex.
-* The **five-piece continuous** one is accepted as a mesh (`nv=7 ne=11 nf=5`, `PARTITION OK`
+* The **five-piece continuous** one is accepted as a subdivision (`nv=7 ne=11 nf=5`, `PARTITION OK`
   twice) and then dies after 8 s at `plq_1p.conjugateFunction:579` with
   `MATLAB:UndefinedFunction / Unrecognized function or variable 'd'`, via
   `plq_1p.conjugate:384` <- `plq.maximum:167` <- `conjCPLQ:164`. It is immediately preceded by

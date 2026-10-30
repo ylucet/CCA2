@@ -46,7 +46,7 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
             for k = 1:numel(cases)
                 q = conjSymFreeTest.tri(cases{k}{1}, cases{k}{2});
                 g = conjCPLQ(q, [], 'numeric');
-                testCase.verifyTrue(g.isMeshed(), sprintf('triangle case %d returned no mesh', k));
+                testCase.verifyTrue(g.isSubdivided(), sprintf('triangle case %d returned no subdivision', k));
                 testCase.verifyFalse(isa(g, 'QuaParCPLQ'), sprintf('triangle case %d went symbolic', k));
             end
         end
@@ -83,9 +83,9 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
             testCase.verifyFalse(q.isDomBounded);
             g = conjCPLQ(q, [], 'numeric');
             testCase.verifyFalse(isa(g, 'QuaParCPLQ'), 'this must not need the symbolic path');
-            testCase.verifyTrue(g.isMeshed());
+            testCase.verifyTrue(g.isSubdivided());
 
-            % Which quadrant each face occupies is DERIVED from the mesh rather than hardcoded:
+            % Which quadrant each face occupies is DERIVED from the subdivision rather than hardcoded:
             % getting the face-to-cone assignment wrong by hand silently compares against the
             % wrong closed form. Same construction as conjCPLQTest's own version of this fixture.
             S = [0 0; 1 1; -1 -1; 2 0.5; -0.5 2; 3 -1; -2 3; 0.25 -0.75];
@@ -168,11 +168,11 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
 
         function routeSYMBOLICHasSomewhereToGoForASingleTriangle(testCase)
         % TODO.md G12. `route='symbolic'` is documented as skipping the numeric path, and Case B
-        % used to ignore it entirely: a single bounded triangle came back as the same numeric mesh
+        % used to ignore it entirely: a single bounded triangle came back as the same numeric subdivision
         % whatever the caller asked for. That is not only a testability point -- `biconjCPLQ` asks
-        % for the symbolic form exactly when the numeric first conjugate is a CURVED mesh, because
+        % for the symbolic form exactly when the numeric first conjugate is a CURVED subdivision, because
         % the second conjugation cannot take one, and for a triangle it was handed the same curved
-        % mesh back. The escape did nothing.
+        % subdivision back. The escape did nothing.
         %
         % Gating Case B on ~forceSymbolic so it fell through to Case C is REFUTED (DECISIONS.md
         % 2026-08-25 G12): Case C does not cover a single triangle and raises cplqFailed after
@@ -186,7 +186,7 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
             testCase.verifyEqual(class(gs), 'QuaParCPLQ', ...
                 'route=symbolic on a triangle must return cPLQ''s symbolic form');
             gn = conjCPLQ(q, [], 'numeric');
-            testCase.verifyFalse(isa(gn, 'QuaParCPLQ'), 'route=numeric must stay a mesh');
+            testCase.verifyFalse(isa(gn, 'QuaParCPLQ'), 'route=numeric must stay a subdivision');
             S = [0 0; 1 1; -1 -1; 2 0.5; -0.5 2; 1 -1];
             for i = 1:size(S,1)
                 s = S(i,:);
@@ -220,7 +220,7 @@ classdef conjSymFreeTest < matlab.unittest.TestCase
 
         function sg = quadrantSignOf(V, E, F, k)
         % objective: which quadrant face k of the four-wedge fixture occupies, as a sign pair,
-        %   derived from the mesh's own ray directions rather than hardcoded.
+        %   derived from the subdivision's own ray directions rather than hardcoded.
             ds = zeros(0,2);
             for j = 1:size(E,1)
                 if any(F(j,:) == k)

@@ -3,8 +3,8 @@ function [R, info] = bridgeQuadCut(FP, num, den)
 %   conic subdivision cannot hold, made exactly and over the integers.
 %
 % objective: a bridge face carries the envelope's value -- measured strictly above the best
-%   quadratic face at 22 of 60 points -- so where the two compete the mesh has to draw the boundary
-%   between them. `envelopeMesh:bridgeCompetes` refuses there today. This is that boundary.
+%   quadratic face at 22 of 60 points -- so where the two compete the subdivision has to draw the boundary
+%   between them. `envelopeSubdivision:bridgeCompetes` refuses there today. This is that boundary.
 %
 % [input]  FP  : the bridge face's implicit polynomial, ratQ's dense polyN in (x, y, z), degree 2
 %                in z -- P(i+1,j+1,k+1) is the coefficient of x^i y^j z^k

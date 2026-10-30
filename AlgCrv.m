@@ -15,10 +15,10 @@ classdef AlgCrv < AlgCon & Crv
    % it and a quadratic face has degree 4, which a conic subdivision cannot hold as an edge.
    % AlgCon.m records why the FUNCTION axis had to grow; Crv.m records why this one did.
    %
-   % THE ALGEBRAIC EDGE TABLE IS `AlgCon.EcA`, declared in the one place the mesh lives and pinned
+   % THE ALGEBRAIC EDGE TABLE IS `AlgCon.EcA`, declared in the one place the subdivision lives and pinned
    % empty unless the object is a Crv -- exactly the rule `den`, `Ec`, `FP` and `FB` already follow.
    % This class is the concrete cell where that pin is released, plus the evaluator that reads such
-   % an edge. The EXACT mesh it also needs (`fN`, `fD`, `EcQ`, `Vname`, `FC`) is inherited from
+   % an edge. The EXACT subdivision it also needs (`fN`, `fD`, `EcQ`, `Vname`, `FC`) is inherited from
    % AlgCon, where it is declared once; until 2026-09-22 it was duplicated here (DECISIONS).
    %
    % AN FC ROW MAY NOW NAME EITHER TABLE. A row is [edgeIndex, side, branch, table], where table 0
@@ -32,15 +32,15 @@ classdef AlgCrv < AlgCon & Crv
    % point, by counting how many roots of the fibre lie at or below q -- no root is ever computed
    % and no irrational value is ever formed. `eval` below reads it in DOUBLES, deliberately and for
    % the same reason QuaCon.eval does: the operations that must leave Q are the PREDICATES that
-   % decide a mesh, and reading a finished function at a point is not one of them.
+   % decide a subdivision, and reading a finished function at a point is not one of them.
 
 
    methods
       function obj = AlgCrv(Vname, E, EcQ, fN, fD, F, FC, FP, FB, EcA)
-      % objective: the mesh, exactly as AlgCon takes it, plus the algebraic edge table.
+      % objective: the subdivision, exactly as AlgCon takes it, plus the algebraic edge table.
       % [input]  as RatCon's constructor, then FP/FB (the implicit faces) and EcA (the new edges)
       %
-      % THE CONSTRUCTOR PROTOCOL of RatCon applies unchanged: the LEAF writes the mesh and then
+      % THE CONSTRUCTOR PROTOCOL of RatCon applies unchanged: the LEAF writes the subdivision and then
       % calls setPinnedDefaults, because MATLAB re-runs a shared base constructor once per
       % inheritance path and the second run would otherwise clobber the first.
          if nargin == 0, return, end
@@ -62,7 +62,7 @@ classdef AlgCrv < AlgCon & Crv
       % [output] val : n x 1;  idx : n x 1 face index, 0 where none owns it
       %
       % A HOLE IS +INFINITY, not a gap: outside `dom f**` the supremum diverges, and leaving the
-      % cell out of the mesh is how every producer here says so.
+      % cell out of the subdivision is how every producer here says so.
          if nargin ~= 2
             error('AlgCrv:nargin', 'expects (obj, X).');
          end

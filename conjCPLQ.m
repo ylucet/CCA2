@@ -65,12 +65,12 @@ function g = conjCPLQ(obj, idx, route)
     %
     % The two produce the SAME function in different representations, so choosing between them is
     % a representation decision, not a mathematical one -- and biconjCPLQ has to make it. Since
-    % 2026-08-13 the numeric path completes on a bounded multi-face domain and returns a MESHED
+    % 2026-08-13 the numeric path completes on a bounded multi-face domain and returns a SUBDIVIDED
     % QuaPar with parabolic edges, which is what the SCIP bridge wants; but f** = (f*)* then hands
     % that curved QuaPar to a second conjugation, and quaPolToPlq requires a polyhedral domain, so
     % biconj died at quaPolToPlq:curvedEdge on every such input. The symbolic form conjugates
     % again through cPLQ's own machinery, which handles a curved domain. So conj keeps returning
-    % the mesh and biconj asks for the symbolic form on purpose.
+    % the subdivision and biconj asks for the symbolic form on purpose.
     if nargin < 3 || isempty(route), route = 'auto'; end
     if ~ismember(lower(route), {'auto','symbolic','numeric'})
         error('PLQ:conjCPLQ:route', ...
@@ -87,10 +87,10 @@ function g = conjCPLQ(obj, idx, route)
 
     % ---- STEP 0: NORMALISE the subdivision ---------------------------------------------------
     % An interior edge whose two sides carry the same quadratic is a line the caller drew, not a
-    % property of f, and every case below dispatches on the mesh: Case A needs one face and no
+    % property of f, and every case below dispatches on the subdivision: Case A needs one face and no
     % vertices, Case B one bounded triangle, Case C triangulates and then pays Step 3 to maximise
     % ACROSS the pieces -- pieces that this normalisation may have removed entirely. Deleting such
-    % an edge changes the mesh and not the function. See mergeSameQuadFaces.m, ALGORITHM.md Step 0.
+    % an edge changes the subdivision and not the function. See mergeSameQuadFaces.m, ALGORITHM.md Step 0.
     obj = mergeSameQuadFaces(obj);
 
     % ---- Case A: full-domain quadratic (no vertices, single face) -----------------------
@@ -99,7 +99,7 @@ function g = conjCPLQ(obj, idx, route)
         [L, Q, C] = QuaPol.matrixForm(obj.f);   %#ok<ASGLU> (C is empty for quadratics)
         kappa = obj.f(end);
         if isinf(kappa)
-            % obj is ITSELF a degenerate +-inf-everywhere mesh -- exactly conjCPLQ's own output
+            % obj is ITSELF a degenerate +-inf-everywhere subdivision -- exactly conjCPLQ's own output
             % for an indefinite full-domain quadratic (the `evs(1) < -tolE` branch below,
             % DECISIONS.md 2026-08-27 B3), reached here because a caller conjugated it a second
             % time. Q and L are exactly zero in that representation (nothing else produces this
@@ -129,7 +129,7 @@ function g = conjCPLQ(obj, idx, route)
         % NOT STRICTLY CONVEX. This used to be one lumped `notImplemented`, and that hid the fact
         % that it is THREE different objects, only one of which is even the same KIND of gap. The
         % mathematics is three lines in each case and is written out below; what none of them has
-        % is somewhere to be PUT. A QuaPol/QuaPar face is two-dimensional, and while the mesh does
+        % is somewhere to be PUT. A QuaPol/QuaPar face is two-dimensional, and while the subdivision does
         % carry a `dim < 2` domain (nv=1 needle, nv=2/ne=1 segment-or-ray, both with nf=0), QuaPar
         % `eval` locates a point on such a domain with `belongToEdge`, which is membership of a
         % SEGMENT between two vertices -- so a whole LINE has no representation and a needle
@@ -144,11 +144,11 @@ function g = conjCPLQ(obj, idx, route)
             % A negative eigenvalue: f decreases without bound along that eigendirection, so no
             % affine function minorises it, conv f = -inf, and f*(s) = +inf for EVERY s.
             %
-            % dom f* is EMPTY, and this used to refuse on the grounds that "no QuaPol/QuaPar mesh
+            % dom f* is EMPTY, and this used to refuse on the grounds that "no QuaPol/QuaPar subdivision
             % encodes it" -- nf=0 means dim<2, not empty. That is true of the DOMAIN and beside the
-            % point: the FUNCTION is representable. A full-domain mesh (nv=0, nf=1) whose constant
+            % point: the FUNCTION is representable. A full-domain subdivision (nv=0, nf=1) whose constant
             % is +inf evaluates to +inf everywhere, which is exactly f*. Checked 2026-08-27:
-            % `eval` returns Inf at every point, `isMeshed` and `kind` behave, `isConvex` says
+            % `eval` returns Inf at every point, `isSubdivided` and `kind` behave, `isConvex` says
             % true (the indicator of the empty set IS convex), and addition propagates +inf rather
             % than producing NaN.
             %
@@ -157,9 +157,9 @@ function g = conjCPLQ(obj, idx, route)
             %
             % ONE THING THE CALLER MUST KNOW, so it is stated rather than discovered: conjugating
             % this BACK gives -inf everywhere, which is NOT a PLQ function -- `conj` of the result
-            % returns a mesh evaluating to -Inf. That is mathematically correct ((+inf)* = -inf)
+            % returns a subdivision evaluating to -Inf. That is mathematically correct ((+inf)* = -inf)
             % and outside the class this library represents, so a caller computing f** on a
-            % function with a negative curvature direction gets a -inf mesh, not an error.
+            % function with a negative curvature direction gets a -inf subdivision, not an error.
             % `biconjCPLQ` short-circuits convex inputs and never reaches it; nothing else in the
             % repository conjugates twice without checking. Recorded in DECISIONS.md 2026-08-27.
             g = QuaPar([0 0 0 0 0 inf]);
@@ -211,9 +211,9 @@ function g = conjCPLQ(obj, idx, route)
             % single triangle -- its header scopes it to nf>1 and/or a non-triangular face, and
             % sending one there raises cplqFailed after 102 s (measured, DECISIONS.md 2026-08-25
             % G12). `conjEnvelopeViaCPLQ` is the symbolic form for exactly this shape, so the
-            % route now has somewhere to go and `biconjCPLQ`'s curved-mesh escape stops being a
+            % route now has somewhere to go and `biconjCPLQ`'s curved-subdivision escape stops being a
             % no-op here: it asks for the symbolic form precisely because the second conjugation
-            % cannot take a curved mesh, and it used to get the same curved mesh back.
+            % cannot take a curved subdivision, and it used to get the same curved subdivision back.
             g = conjEnvelopeViaCPLQ(convEnvCPLQ(obj));
             return
         end
@@ -324,7 +324,7 @@ function verifyEdgeBound(g, obj)
 % only check that covers that route.
     global CCA2_CONJ_VERIFY %#ok<GVMIS>
     if ~isempty(CCA2_CONJ_VERIFY) && ~CCA2_CONJ_VERIFY, return, end
-    if ~isa(g, 'RatPar') || ~g.isMeshed(), return, end
+    if ~isa(g, 'RatPar') || ~g.isSubdivided(), return, end
     S = edgeBoundProbes(g);
     lb = conjEdgeLowerBound(obj, S);
     for i = 1:size(S,1)
@@ -461,7 +461,7 @@ function g = conjPolygonalDomain(obj)
 %     as before. That path needs BOUNDED triangles, so a non-convex UNBOUNDED face declines here
 %     and the caller routes the whole domain to Case C.
 %
-% Any per-piece result that is not a mesh is refused rather than worked around: it means that
+% Any per-piece result that is not a subdivision is refused rather than worked around: it means that
 % piece's own Step 2 fell back to cPLQ's symbolic form, and mixing the two representations inside
 % Step 3 is the confusion this branch exists to avoid.
     % ALL-AFFINE INPUT GOES TO conjAffinePLQ, WHOLE (TODO.md G2). Every face affine means f* is a
@@ -583,7 +583,7 @@ function [W, dF, dL] = faceBoundary(obj, i)
 %
 % Built from the EDGE INCIDENCE rather than from obj.P{i}. That list is documented clockwise and
 % starting from a particular ray, and re-deriving the convention here is exactly the kind of
-% off-by-one that produces a well-formed mesh on the wrong side. A convex face's boundary is a
+% off-by-one that produces a well-formed subdivision on the wrong side. A convex face's boundary is a
 % chain, so walking the incidence is unambiguous, and the orientation is then MEASURED.
     ej = find(any(obj.F == i, 2));
     if isempty(ej)
@@ -689,7 +689,7 @@ function g = conjEnvelopeViaCPLQ(env)
 % conjPieceCPLQ + maxQuaPar pair, for the envelopes the numeric path cannot take: those with a
 % genuinely rational face, which Step 1 emits whenever it has to split an indefinite triangle
 % (2- or 3-convex-edge). Returns a QuaParCPLQ, exactly as Case C does -- the same wrapper, for the
-% same reason (the V/E/Ec/F/P mesh is not reconstructed from cPLQ's symbolic regions; see
+% same reason (the V/E/Ec/F/P subdivision is not reconstructed from cPLQ's symbolic regions; see
 % QuaParCPLQ.m).
 %
 % This is "start from cPLQ" applied where it belongs. Note carefully WHICH half is reused: cPLQ's

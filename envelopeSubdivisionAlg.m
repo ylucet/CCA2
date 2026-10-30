@@ -1,15 +1,15 @@
-function [mesh, info] = envelopeMeshAlg(env, dom)
-% envelopeMeshAlg  The envelope as a mesh whose EDGES may be algebraic -- the arrangement that
-%   `envelopeMesh` refuses when a bridge face competes.
+function [subdivision, info] = envelopeSubdivisionAlg(env, dom)
+% envelopeSubdivisionAlg  The envelope as a subdivision whose EDGES may be algebraic -- the arrangement that
+%   `envelopeSubdivision` refuses when a bridge face competes.
 %
 % objective: a bridge face carries the envelope's value, and where it competes with a quadratic face
-%   the boundary is `FP(x, y, q(x,y)) = 0`, of degree four. `envelopeMesh` raises
-%   `envelopeMesh:bridgeCompetes` there because a conic subdivision cannot hold that edge. This
+%   the boundary is `FP(x, y, q(x,y)) = 0`, of degree four. `envelopeSubdivision` raises
+%   `envelopeSubdivision:bridgeCompetes` there because a conic subdivision cannot hold that edge. This
 %   builds the same arrangement with such edges allowed, so the GEOMETRY can be verified before the
 %   output TYPE is grown to store it.
 %
 % [input]  env  : as `envelopeAssemble` returns it, ideally pruned
-% [output] mesh : struct array, one entry per face, with
+% [output] subdivision : struct array, one entry per face, with
 %                   .kind  'quad' | 'bridge'
 %                   .num, .den   the value, when kind is 'quad'
 %                   .FP, .FB     the value, when kind is 'bridge'
@@ -25,24 +25,24 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
 % rows, the corner wedges, the bridges' outer bounds -- and every cell's emptiness is decided by
 % `cellInterior`. Corner faces are carried for COVERAGE only, because a corner never carries the
 % value (measured, DECISIONS.md 2026-09-19), and a pair with no face owning a cell makes the
-% envelope +infinity there, which is a hole in the mesh.
+% envelope +infinity there, which is a hole in the subdivision.
 %
 % NEW: where two applicable faces cannot be separated by a conic, the cell is split by an ALGEBRAIC
 % row instead of being refused. Such a row is `(FP, FB, num, den, side)` -- the curve is the rational
 % `bridgeQuadCut` polynomial, and `side` picks one of its two branches, because that polynomial names
 % the PAIR and not one of them (DECISIONS.md 2026-09-20). `algCurveSide` decides it exactly at a
-% rational point; `meshAlgEval` reads it in doubles, which is what evaluation is allowed to do.
+% rational point; `subdivisionAlgEval` reads it in doubles, which is what evaluation is allowed to do.
 %
 % SEVERAL IRRATIONAL faces on one cell (bridges, and irrational CORNERS, which carry value too --
 % 2026-10-17) are not cut against each other: that curve is not of this shape. Each is cut against
 % the quadratics only, so where two of them both beat every quadratic their pieces OVERLAP; the
 % value is still right because every evaluator takes the max over the faces owning a point.
 % `info.overlaps` counts such cells (a fixed-grid read). Until 2026-10-17 this was refused as
-% `envelopeMeshAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
+% `envelopeSubdivisionAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
 % Q(sqrt 6), and 18 of its cells overlap.
 
     if nargin < 1 || nargin > 2
-        error('envelopeMeshAlg:nargin', 'expects (env) or (env, dom).');
+        error('envelopeSubdivisionAlg:nargin', 'expects (env) or (env, dom).');
     end
     if nargin < 2, dom = zeros(0,3); end
     % SEVERAL PAIRS (2026-10-18): a cell array of pair envelopes is the MINIMUM over them -- an
@@ -51,7 +51,7 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
     if iscell(env), envs = env; else, envs = {env}; end
     for g = 1:numel(envs)
         if ~isstruct(envs{g}) || ~all(isfield(envs{g}, {'quad', 'bridge'}))
-            error('envelopeMeshAlg:shape', 'env must be what envelopeAssemble returns.');
+            error('envelopeSubdivisionAlg:shape', 'env must be what envelopeAssemble returns.');
         end
     end
     [env, grpQ, grpB] = combinePairs(envs);
@@ -101,14 +101,14 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
         end
         cells = next;
         if numel(cells) > maxCells
-            error('envelopeMeshAlg:arrangementSize', ...
+            error('envelopeSubdivisionAlg:arrangementSize', ...
                 'the arrangement passed %d cells at curve %d of %d; envelopeEval answers for the face list.', ...
                 maxCells, j, size(C,1));
         end
     end
 
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
-    mesh = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
+    subdivision = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
     nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;
     for k = 1:numel(cells)
         rows = cells{k};
@@ -126,7 +126,7 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
         [Q, Pw] = votePoints(C, rows, pt);
         % THE FULL SIGN VECTOR before anything is emitted: the arrangement records only the curves
         % that split a cell, but a face's rows are what its boundary is traced from, and with the
-        % sparse rows algCrvMeshTest found a face vertex ending other than two arcs (2026-10-17). A
+        % sparse rows algCrvSubdivisionTest found a face vertex ending other than two arcs (2026-10-17). A
         % curve the cell does not record has one sign on it -- read at the cell's points.
         rowsOut = fullRows(C, rows, Q);      % emitted; the exact tests below keep the sparse rows
         for b = 1:numel(bridges)
@@ -157,7 +157,7 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
             sub = minMaxFaces(env.quad, S, rows, C, Pw, rowsOut);
             for t = 1:numel(sub)
                 nAlg = nAlg + numel(sub(t).alg);
-                mesh(end+1) = sub(t); %#ok<AGROW>
+                subdivision(end+1) = sub(t); %#ok<AGROW>
             end
             continue
         end
@@ -168,7 +168,7 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
         % CORNERS that apply to it. "A corner never carries the value" was measured on one fixture
         % (DECISIONS.md 2026-09-19) and is false in general: on every one-pair atom envelope a
         % corner is the maximum in slivers near a domain vertex, by up to 8e-6, and ignoring it left
-        % the mesh that much too LOW there.
+        % the subdivision that much too LOW there.
         irr = cell(1, 0);
         for b = bHere, irr{end+1} = struct('FP', bridges{b}.FP, 'FB', bridges{b}.FB); end %#ok<AGROW>
         for j = app(app > nQuad)
@@ -183,10 +183,10 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
         sub = winnerFaces(env.quad, quadApp, irr, rows, C, pt, Pw, rowsOut);
         for t = 1:numel(sub)
             nAlg = nAlg + numel(sub(t).alg);
-            mesh(end+1) = sub(t); %#ok<AGROW>
+            subdivision(end+1) = sub(t); %#ok<AGROW>
         end
     end
-    info = struct('cells', numel(cells), 'faces', numel(mesh), 'algRows', nAlg, ...
+    info = struct('cells', numel(cells), 'faces', numel(subdivision), 'algRows', nAlg, ...
                   'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap);
 end
 
@@ -365,7 +365,7 @@ function ok = rowFails(C, rows, conRows, a)
 end
 
 function [box, inBox, rowPolys, V] = regionBox(C, rows, K)
-% A box around the cell (its straight rows, within the meshers' bounding box) and a test rejecting
+% A box around the cell (its straight rows, within the subdividers' bounding box) and a test rejecting
 % sub-boxes that provably miss the cell's or the piece's conic rows or branch rows. rowPolys: the
 % conic rows as polynomials >= 0 on the region, which algRowFails divides out of a row's F(q); V the
 % straight rows' polygon vertices, the corners algRowFails blows up at (exact ones only certify).
@@ -468,7 +468,7 @@ end
 
 % --------------------------------------------------------------------------------------------------
 function [c, sgn] = diffConic(fw, fj)
-% The curve {v_w = v_j}, with the sign that means "w is the larger", as `envelopeMesh` spells it.
+% The curve {v_w = v_j}, with the sign that means "w is the larger", as `envelopeSubdivision` spells it.
     num = ratQ.chkB(fw.num * fj.den - fj.num * fw.den, abs(fw.num) * abs(fj.den) + abs(fj.num) * abs(fw.den), 'face difference');
     raw = [num(5), 2*num(6), num(7), 2*num(8), 2*num(9), 2*num(10)];
     if all(raw == 0) || any(num(1:4) ~= 0), c = [];  sgn = 0;  return, end
@@ -521,7 +521,7 @@ end
 
 function ok = dominantIrrational(irr, C, rows, pt, quad, quadApp)
 % Do two irrational faces ever BOTH beat every quadratic on this cell? Only there do their pieces
-% overlap. Read on a fixed grid over the cell: a diagnostic for the mesh's topology, never for its
+% overlap. Read on a fixed grid over the cell: a diagnostic for the subdivision's topology, never for its
 % values (those are a max, and right either way).
     [~, okS, P] = cellSamplePoint(C, rows, straightRows(C, rows), 1e3);
     if ~okS, P = pt; end
@@ -588,7 +588,7 @@ function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
 % needs. The within-pair ones ("pick_g is the largest of g") only prune pieces, so where they would
 % compare two irrational faces of one pair they are simply left out. Two irrational faces from
 % DIFFERENT pairs must be ordered: if their order is not the same at every sample point of the cell
-% that is refused by name, and biconjQ keeps the minimum unmeshed.
+% that is refused by name, and biconjQ keeps the minimum unsubdivided.
     out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
     base = rowsToCon(C, rowsOut);
     cand = cell(1, numel(S));  whole = cell(1, numel(S));
@@ -654,7 +654,7 @@ function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
                     tol = 1e-12 * max(1, abs(vb));
                     if all(va >= vb - tol), continue, end
                     if all(va <= vb + tol), ok = false; break, end
-                    error('envelopeMeshAlg:minIrrational', ...
+                    error('envelopeSubdivisionAlg:minIrrational', ...
                         'two irrational faces from different pairs cross inside one piece of a minimum over pairs.');
                 end
                 if ~ok, continue, end
@@ -704,7 +704,7 @@ function [conRows, algRows, ok] = geRows(quad, a, b, conRows, algRows, Q)
         tol = 1e-12 * max(1, abs(vb));
         if all(va >= vb - tol), return, end             % a >= b on the whole cell (sampled)
         if all(va <= vb + tol), ok = false; return, end % never: the piece is empty
-        error('envelopeMeshAlg:minIrrational', ...
+        error('envelopeSubdivisionAlg:minIrrational', ...
             'two irrational faces from different pairs cross inside one cell of a minimum over pairs.');
     end
 end
@@ -718,7 +718,7 @@ function [corners, bridges] = splitBridge(bl)
         elseif isfield(f, 'FP') && isfield(f, 'pair') && isfield(f, 'cells')   % cells: its outer bound
             bridges{end+1} = f; %#ok<AGROW>
         else
-            error('envelopeMeshAlg:faceKind', ...
+            error('envelopeSubdivisionAlg:faceKind', ...
                   'a face of kind %s has neither rows nor an implicit value.', f.kind);
         end
     end
@@ -739,7 +739,7 @@ function [C, req, pairOf] = conicTable(faces, corners)
         for t = 1:size(con,1)
             c = con(t,1:6);
             if all(c(1:5) == 0)
-                if ~constHolds(c(6), con(t,7)), req{i} = [NaN NaN];  break, end   % see envelopeMesh
+                if ~constHolds(c(6), con(t,7)), req{i} = [NaN NaN];  break, end   % see envelopeSubdivision
                 keep(t) = false;  continue
             end
             br = 0;
@@ -785,7 +785,7 @@ function s = sideAt(C, j, p)
 end
 
 function C = addBridgeCurves(C, bridges)
-% A bridge's outer bound (`cells`) joins the curve table as curves with no demand, as in envelopeMesh:
+% A bridge's outer bound (`cells`) joins the curve table as curves with no demand, as in envelopeSubdivision:
 % then no cell straddles the face's boundary and one membership test per cell is sound.
 %
 % AND THE ENDS THE OUTER BOUND OMITS (2026-10-17). bridgeFaceAlg gives a sweep end a row only when

@@ -25,14 +25,14 @@ classdef isConvexQTest < matlab.unittest.TestCase
         % a CONCAVITY test that would pass every fixture below just as happily, so it gets a pair
         % whose only difference is the sign.
         %
-        % |x| + |y| and its negative have the same mesh and identically ZERO Hessians, so the
+        % |x| + |y| and its negative have the same subdivision and identically ZERO Hessians, so the
         % Hessian test cannot separate them and the domain test cannot either (both are the plane).
         % Only the sign of delta can, which is why the reason string is asserted too.
             p = QuaPol.oneNorm();
             [tf, why] = isConvexQ(p);
             testCase.verifyTrue(tf, sprintf('|x|+|y| must be convex; got "%s"', why));
 
-            q = QuaPol(p.V, p.E, -p.f, p.F);       % -(|x|+|y|), concave, same mesh
+            q = QuaPol(p.V, p.E, -p.f, p.F);       % -(|x|+|y|), concave, same subdivision
             [tf2, why2] = isConvexQ(q);
             testCase.verifyFalse(tf2, '-(|x|+|y|) must not be convex');
             testCase.verifySubstring(why2, 'subdifferential', ...
@@ -77,8 +77,8 @@ classdef isConvexQTest < matlab.unittest.TestCase
 
         function theHalfStarDomainIsNotConvexAndTheWitnessProvesIt(testCase)
         % examples{16} is where the exact test and the legacy doubles one disagree, so it is
-        % settled by the DEFINITION rather than by either of them: two points the mesh itself puts
-        % in the domain whose midpoint the mesh puts outside it.
+        % settled by the DEFINITION rather than by either of them: two points the subdivision itself puts
+        % in the domain whose midpoint the subdivision puts outside it.
             f = QuaPol.examples();  f = f{16};
             a = [-1 -1];  b = [1 0];  mid = (a + b)/2;
             v = f.eval([a; b; mid]);
@@ -173,8 +173,8 @@ classdef isConvexQTest < matlab.unittest.TestCase
 
         function theSameFunctionOnBOTHSidesIsConvexWhenTheQuadraticIs(testCase)
         % The companion of the previous test, and the reason condition (d) is not vacuous: with
-        % delta identically zero the same mesh is convex, so the rejection above is about the jump
-        % and not about the mesh being unbounded.
+        % delta identically zero the same subdivision is convex, so the rejection above is about the jump
+        % and not about the subdivision being unbounded.
             f = isConvexQTest.upperHalfPlaneSplit([2 0 2 0 0 0], [2 0 2 0 0 0]);
             [tf, why] = isConvexQ(f);
             testCase.verifyTrue(tf, sprintf('x^2+y^2 on the half-plane is convex; got "%s"', why));

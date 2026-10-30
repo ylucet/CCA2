@@ -39,7 +39,7 @@ function g = conjConvexPolygon(W, dFirst, dLast, A, L, c)
 %   C_i  one per VERTEX. The maximiser is v_i, so f*(s) = <s,v_i> - q(v_i) -- affine, on the
 %        vertex's normal cone translated to the dual point s_i = grad q(v_i).
 %
-% The dual mesh is those cells glued exactly as the polygon's own boundary is: S_k meets F0 along
+% The dual subdivision is those cells glued exactly as the polygon's own boundary is: S_k meets F0 along
 % the segment s_k s_{k+1}, and meets C_k and C_{k+1} along the two rays from those dual points in
 % the direction of edge k's OUTWARD NORMAL. A ray edge of the polygon is the same construction
 % with its far dual point at infinity, so S_k becomes a CONE at the one finite dual point it has,
@@ -111,14 +111,14 @@ function g = conjConvexPolygon(W, dFirst, dLast, A, L, c)
     S = (A*W.' + L).';                            % s_i = grad q(v_i), one per polygon vertex
     scale = dualScale(S, A, dFirst, dLast);       % a length for placing ray marker points
 
-    % ---- assemble the mesh ---------------------------------------------------------------------
+    % ---- assemble the subdivision ---------------------------------------------------------------------
     % Edges are declared with the PAIR of faces they separate, unoriented, and `finish` decides
     % which is left and which is right from each face's own representative interior point. Doing
     % it by reasoning instead was tried and got two of the six cases backwards -- the two rays of
     % one strip have OPPOSITE orientations relative to that strip, and the polygon's two recession
     % rays differ from each other as well, because one is walked inward and the other outward.
     % A representative point cannot be wrong about which side it is on.
-    B = meshBuilder(scale);
+    B = subdivisionBuilder(scale);
     idxS = zeros(n,1);
     for i = 1:n, idxS(i) = B.vertex(S(i,:)); end
 
@@ -215,7 +215,7 @@ function g = conjConvexPolygon(W, dFirst, dLast, A, L, c)
     g = QuaPol(Vd, E, f, F);
 
     % An orientation or adjacency slip shows up as a face whose function is never reached, which
-    % is silent in the values at most probe points and catastrophic at a few. The mesh is small,
+    % is silent in the values at most probe points and catastrophic at a few. The subdivision is small,
     % so checking it is cheap and it is checked always rather than under a flag.
     assertEveryFaceReachable(g, size(f,1));
 end
@@ -263,7 +263,7 @@ end
 
 function assertOrientation(W, dFirst, dLast, base, dir, nrm)
 % objective: refuse a polygon that is not CCW, or whose ray directions do not point out of it,
-%            rather than returning a mesh built on the wrong side.
+%            rather than returning a subdivision built on the wrong side.
 %
 % The test is the definition: an outward normal must not point towards any other vertex of the
 % polygon. Checked against every vertex rather than against a centroid, because a centroid of an
@@ -301,10 +301,10 @@ function assertOrientation(W, dFirst, dLast, base, dir, nrm)
 end
 
 function d = dualScale(S, A, dFirst, dLast)
-% objective: a length at which to place the ray MARKER points, so that the mesh's stored second
+% objective: a length at which to place the ray MARKER points, so that the subdivision's stored second
 %            vertex of a ray is neither degenerate nor absurdly far from the rest of it.
 %   The markers are only direction carriers (RatCon.m's `E`), but eval and plotting read them as
-%   coordinates, so their magnitude should match the mesh's.
+%   coordinates, so their magnitude should match the subdivision's.
     d = 1;
     if size(S,1) >= 2
         d = 0.5 * max(pdistMax(S));
@@ -324,7 +324,7 @@ function mx = pdistMax(S)
     end
 end
 
-function B = meshBuilder(scale)
+function B = subdivisionBuilder(scale)
 % objective: accumulate vertices, edges and per-edge face adjacency without the caller having to
 %            keep three parallel index spaces straight. `finish` orients each edge's [left right]
 %            from the faces the caller declared, which is the one thing that cannot be got right
@@ -425,7 +425,7 @@ function s6 = vertexFun(v, A, L, c)
 end
 
 function assertEveryFaceReachable(g, nf)
-% objective: every face of the built mesh must be the one `eval` selects somewhere inside it.
+% objective: every face of the built subdivision must be the one `eval` selects somewhere inside it.
 %   A face that no point reaches is an adjacency or orientation slip, and it is silent -- the
 %   values stay right at most probe points and are wrong on a region.
     miss = [];

@@ -13,9 +13,9 @@ classdef unboundedFaceTest < matlab.unittest.TestCase
         function v = evalAnyConj(g, x)
         % Evaluate a conj result whatever representation it came back as -- the same idiom as
         % conjCPLQTest.evalConjResult and biconjCPLQTest.evalAnyResult. Since the numeric routes
-        % were widened, one input family can legitimately produce a QuaParCPLQ or a mesh, and a
+        % were widened, one input family can legitimately produce a QuaParCPLQ or a subdivision, and a
         % test about VALUES must not hard-code either. Note the two disagree on how "uncovered"
-        % reads: NaN from the symbolic form, +inf from a mesh.
+        % reads: NaN from the symbolic form, +inf from a subdivision.
             if isa(g, 'QuaParCPLQ')
                 v = evalFunctionNDomain(g.fnd, x);
             else
@@ -158,7 +158,7 @@ classdef unboundedFaceTest < matlab.unittest.TestCase
             % ACCESSOR CHANGED 2026-08-26, not the assertion. This read `g.fnd` and tested the
             % outside with `isnan`, both of which assume a QuaParCPLQ. f = |x|+|y| is ALL-AFFINE
             % over four cones, so it now takes the `conjAffinePLQ` route (TODO.md G2) and comes
-            % back as a QuaPol MESH in 0.95 s instead of going through the symbolic pipeline --
+            % back as a QuaPol SUBDIVISION in 0.95 s instead of going through the symbolic pipeline --
             % where "uncovered" reads as +inf rather than NaN.
             %
             % The values are unchanged and were re-measured before this edit: 0 at all six probe

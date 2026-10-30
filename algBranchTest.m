@@ -95,7 +95,7 @@ classdef algBranchTest < matlab.unittest.TestCase
         % is within the double-root test's 1e-12 of its terms (~8), and the mean 1 came back for
         % both -- 1e-6 off. On the poly2 kink (2026-10-30) the same collapse, 6.6e-6 off near the
         % bridge's merge curve, made the bridge face lose a point it owns (exact: slack +1.1e-6)
-        % and kinkMeshTest read a hole. Only a NEGATIVE computed discriminant is the double root.
+        % and kinkSubdivisionTest read a hole. Only a NEGATIVE computed discriminant is the double root.
             P = zeros(2,1,3);
             P(1,1,3) = 1;  P(1,1,2) = -2;  P(1,1,1) = 1;  P(2,1,1) = -1;   % z^2 - 2z + 1 - x
             for x = [1e-12 3e-13 1e-14]

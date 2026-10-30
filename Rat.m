@@ -28,7 +28,7 @@ classdef (Abstract) Rat < Alg
    % WHERE BEHAVIOUR SHOULD GO. When function-axis behaviour is factored out of the concrete
    % classes, it belongs here (on Rat) or on Qua: evaluating a face's formula, matrixForm,
    % evalHessian, scalarMul, negate, addQuadratic, degree -- everything that touches only the
-   % coefficients `f`/`den` and never the mesh. Subdivision-axis behaviour (point location,
+   % coefficients `f`/`den` and never the subdivision. Subdivision-axis behaviour (point location,
    % orderEdges, createDom, clipping) belongs on Par/Pol instead.
    %
    % NOT MODELLED AS A TYPE: the numerator's DEGREE. `f` is stored in the 10-wide cubic basis, so

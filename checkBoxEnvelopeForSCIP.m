@@ -53,12 +53,12 @@ function s = describeShape(h)
 % Can the SCIP bridge, which reads V/E/F/f/den off a RatPol, consume this?
     s = class(h);
     try
-        hasMesh = ~isempty(h.V) && ~isempty(h.E) && ~isempty(h.F);
+        hasSubdivision = ~isempty(h.V) && ~isempty(h.E) && ~isempty(h.F);
     catch
-        hasMesh = false;
+        hasSubdivision = false;
     end
-    if ~hasMesh
-        s = [s ' NO-MESH'];
+    if ~hasSubdivision
+        s = [s ' NO-SUBDIVISION'];
     end
 end
 

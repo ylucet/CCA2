@@ -15,8 +15,8 @@ function s = polySignOn(P, box, inBox, depth)
 % meet the region are kept. The coefficients are computed in doubles; a coefficient counts only when
 % it clears a margin relative to the largest one, so rounding cannot turn a zero into a sign.
 %
-% WHAT IT IS FOR: proving a mesh piece EMPTY when its emptiness is an algebraic row (a quadratic
-% against an irrational face) -- see algRowFails and envelopeMeshAlg's algEmpty. Answering 0 only costs a face.
+% WHAT IT IS FOR: proving a subdivision piece EMPTY when its emptiness is an algebraic row (a quadratic
+% against an irrational face) -- see algRowFails and envelopeSubdivisionAlg's algEmpty. Answering 0 only costs a face.
     if nargin < 4, depth = 6; end
     s = signRec(P, box, inBox, depth);
 end
@@ -40,7 +40,7 @@ end
 function B = bernstein(P, b)
 % Bernstein coefficients of P on box b: substitute x = x0 + hx u, y = y0 + hy v, then convert the
 % power basis in (u, v) on [0,1]^2. All as matrix products with cached binomial tables -- the loop
-% form called nchoosek ~2e9 times on one mesh (2026-10-20).
+% form called nchoosek ~2e9 times on one subdivision (2026-10-20).
     [n1, n2] = size(P);
     A = shiftMat(n1, b(1), b(2) - b(1)) * P * shiftMat(n2, b(3), b(4) - b(3)).';
     B = convMat(n1) * A * convMat(n2).';

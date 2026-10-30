@@ -4,7 +4,7 @@ function vertexCost()
 % three different sizes. Measured before any table is built: the resultant's DEGREE, the size of its
 % coefficients, and the time -- which together say whether the exact route is affordable at all.
     L = load(fullfile(tempdir, 'branchRowPruning_env.mat'));  env = L.env;
-    g = assembleAlgCrv(envelopeMeshAlg(env));
+    g = assembleAlgCrv(envelopeSubdivisionAlg(env));
     fprintf('AlgCrv: %d conic edges, %d algebraic edges\n', size(g.EcQ,1), numel(g.EcA));
 
     % the algebraic edges as explicit curves in (x,y)

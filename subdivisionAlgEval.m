@@ -1,29 +1,29 @@
-function [val, who] = meshAlgEval(mesh, X)
-% meshAlgEval  Evaluate a mesh whose edges may be ALGEBRAIC -- the counterpart of `QuaCon.eval` for
-%   what `envelopeMeshAlg` builds, until the output type can store such an edge.
+function [val, who] = subdivisionAlgEval(subdivision, X)
+% subdivisionAlgEval  Evaluate a subdivision whose edges may be ALGEBRAIC -- the counterpart of `QuaCon.eval` for
+%   what `envelopeSubdivisionAlg` builds, until the output type can store such an edge.
 %
-% [input]  mesh : as `envelopeMeshAlg` returns it
+% [input]  subdivision : as `envelopeSubdivisionAlg` returns it
 %          X    : n x 2
 % [output] val  : n x 1, +Inf where no face owns the point -- which IS the envelope there, a hole in
-%                 the mesh being how +infinity is expressed
+%                 the subdivision being how +infinity is expressed
 %          who  : n x 1 face index, 0 where none owns it
 %
 % EVALUATION IS IN DOUBLES, deliberately, exactly as `QuaCon.eval` and `envelopeEval` are: the
-% operations that must leave Q are the PREDICATES that decide the mesh, and reading a finished
+% operations that must leave Q are the PREDICATES that decide the subdivision, and reading a finished
 % function at a point is not one of them. The algebraic rows are therefore read through `algBranch`
-% here; `algCurveSide` is what decides them when the mesh is being BUILT.
+% here; `algCurveSide` is what decides them when the subdivision is being BUILT.
     if nargin ~= 2
-        error('meshAlgEval:nargin', 'expects (mesh, X).');
+        error('subdivisionAlgEval:nargin', 'expects (subdivision, X).');
     end
     if ~isnumeric(X) || size(X,2) ~= 2
-        error('meshAlgEval:points', 'X must be n x 2; got %s.', mat2str(size(X)));
+        error('subdivisionAlgEval:points', 'X must be n x 2; got %s.', mat2str(size(X)));
     end
     n = size(X,1);
     val = inf(n,1);  who = zeros(n,1);
     for i = 1:n
         x = X(i,:);
-        for k = 1:numel(mesh)
-            f = mesh(k);
+        for k = 1:numel(subdivision)
+            f = subdivision(k);
             if ~conHolds(f.con, x), continue, end
             if ~algHolds(f.alg, x), continue, end
             v = faceValue(f, x);

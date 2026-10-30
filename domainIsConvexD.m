@@ -1,7 +1,7 @@
 function tf = domainIsConvexD(V, E, F, tol)
-% domainIsConvexD  Is the domain of a mesh CONVEX. Doubles, for createDom.
+% domainIsConvexD  Is the domain of a subdivision CONVEX. Doubles, for createDom.
 %
-% objective: decide convexity of `dom f` from the mesh alone, without walking its boundary.
+% objective: decide convexity of `dom f` from the subdivision alone, without walking its boundary.
 %
 % [input]  V : nv x 2 vertices; E : ne x 3 [v1 v2 isSegment]; F : ne x 2 face indices, 0 = +infinity
 %          tol : (optional) relative tolerance, default sqrt(eps)
@@ -17,7 +17,7 @@ function tf = domainIsConvexD(V, E, F, tol)
 % THE ALGORITHM, which is an H-representation containment test rather than a walk. A polyhedral set
 % is convex iff it is the intersection of the closed half-planes of its own boundary edges, so:
 %
-%   1. collect every recession direction of the mesh -- one per RAY edge;
+%   1. collect every recession direction of the subdivision -- one per RAY edge;
 %   2. for each BOUNDARY edge (exactly one finite side), take the line through its endpoints,
 %      oriented so the finite side is `l >= 0`;
 %   3. require every vertex to satisfy `l >= 0` and every recession direction to satisfy the
@@ -32,7 +32,7 @@ function tf = domainIsConvexD(V, E, F, tol)
 % O(ne * nv), not the O(ne) a boundary walk would be. Deliberate: nv is small here and each
 % predicate is a 2x2 determinant. `isConvexQ` runs the same test over the INTEGERS, with no
 % tolerance at all, and is what the exact pipeline uses; this is the doubles twin for the legacy
-% mesh property.
+% subdivision property.
 %
 % TOLERANCE. Each test is a signed DISTANCE -- the line's normal is divided out -- so `tol` is
 % comparable across edges of different lengths, and it is scaled by the magnitude of the point so
@@ -41,17 +41,17 @@ function tf = domainIsConvexD(V, E, F, tol)
     if nargin < 4, tol = sqrt(eps); end
     tf = true;
     if isempty(F) || isempty(E) || isempty(V), return, end
-    % A THIN mesh -- every edge with +infinity on both sides -- has no boundary edge, so the loop
+    % A THIN subdivision -- every edge with +infinity on both sides -- has no boundary edge, so the loop
     % below would find nothing to violate and return true vacuously. That is not an answer: a
     % non-collinear chain of edges has a 1-dimensional NON-convex domain. Refuse it by name;
     % createDom decides those before it gets here.
     if all(F(:) == 0)
-        error('PLQ:domainIsConvexD:thinMesh', ...
+        error('PLQ:domainIsConvexD:thinSubdivision', ...
             ['every edge has +infinity on both sides, so the domain has dimension < 2 and this ' ...
              'test says nothing about it.']);
     end
 
-    % Every recession direction of the mesh, normalised.
+    % Every recession direction of the subdivision, normalised.
     dirs = zeros(0,2);
     for k = 1:size(E,1)
         if E(k,3) == 0
@@ -64,7 +64,7 @@ function tf = domainIsConvexD(V, E, F, tol)
     for j = 1:size(F,1)
         iL = F(j,1);  iR = F(j,2);
         if (iL ~= 0 && iR ~= 0) || (iL == 0 && iR == 0)
-            continue     % an interior edge is not a domain constraint; a dangling one is not a mesh
+            continue     % an interior edge is not a domain constraint; a dangling one is not a subdivision
         end
         v1 = V(E(j,1),:);  v2 = V(E(j,2),:);
         a = [-(v2(2)-v1(2)), v2(1)-v1(1)];      % the LEFT normal of the edge direction

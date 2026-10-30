@@ -19,7 +19,7 @@ stood before that, because the reasoning is what justifies the lattice.
 A caller could not write `g = f.conj(); h = g.add(...)` without knowing which of three classes
 came back. Worse, `QuaParCPLQ` was not a peer of the other two — a thin wrapper around the
 vendored cPLQ `functionNDomain`, carrying a symbolic representation rather than a `V/E/Ec/f/F`
-mesh. It was given the *operator surface* of a `QuaPar` (`conj`/`add`/`scalarMul`/`addQuadratic`/
+subdivision. It was given the *operator surface* of a `QuaPar` (`conj`/`add`/`scalarMul`/`addQuadratic`/
 `addScaledEnergy`/`eval`) precisely so that `infConv`/`moreau`/`proxAverage`/`QuaPar.biconj`
 compose with it unchanged — but that was duck typing, not a type guarantee.
 
@@ -36,8 +36,8 @@ so every `conj` result satisfies `isa(g,'RatPar')`, and `RatPar.kind()` discrimi
 static return type is uniform; a caller needs no class dispatch.**
 
 **The residual is DATA, not type.** `QuaParCPLQ` is a `RatPar` but stores its pieces in `fnd` (a
-cPLQ `functionNDomain` array) and leaves the inherited `V/E/Ec/f/F` mesh empty — reconstructing
-that mesh from the exact symbolic regions is the separate task its own header describes. Two
+cPLQ `functionNDomain` array) and leaves the inherited `V/E/Ec/f/F` subdivision empty — reconstructing
+that subdivision from the exact symbolic regions is the separate task its own header describes. Two
 consequences a downstream caller can hit:
   * reading `g.V` on a Case C result gives `[]`;
   * `QuaParCPLQ.add` refuses a `QuaPol`/`QuaPar` operand, so `infConv` of a Case A/B result with a
@@ -70,7 +70,7 @@ Widen every result to `QuaPar`, converting `QuaPol` results up (`toQuaPar.m` alr
 - **Pro:** single return type; small change; `toQuaPar` exists.
 - **Con:** **wrong for the biconjugate direction.** `f**` of a nonconvex `QuaPol` is a `RatPol`
   (a genuinely rational convex envelope, [COAP] A.3/A.4) — `QuaPar` has no denominator and cannot
-  represent it. Also forces a full-domain quadratic to carry an empty mesh. Fails on the type
+  represent it. Also forces a full-domain quadratic to carry an empty subdivision. Fails on the type
   cycle `DESIGN.md` II.2 actually needs.
 
 ### Option C — build `RatPar` as a real parent; return `RatPar` with a type flag *(recommended)*
@@ -128,7 +128,7 @@ polynomial `p(x,y,z)` and a BRANCH INDEX naming which real root in `z` is its va
 formula. See `Alg.m`, `AlgCon.m` and `DECISIONS.md` 2026-09-13.
 
 So the lattice is now a 3 x 3 product, `Qua < Rat < Alg` against `Pol < Par < Conic`, with
-**`AlgCon` as its root and the one place the mesh data is declared** — `RatCon < AlgCon & Rat`,
+**`AlgCon` as its root and the one place the subdivision data is declared** — `RatCon < AlgCon & Rat`,
 and everything below is unchanged.
 
 **`AlgCon` is CONCRETE where `RatCon` is abstract**, the one place this lattice departs from the
@@ -203,13 +203,13 @@ what a caller receives:
 * **convex or affine `f`** — `co f = f`, so `biconj` returns the INPUT unchanged, a `QuaPol`.
   Previously it went through Step 1, which re-derived the same function and returned a `RatPol`.
 * **separable `f` over a box** — the envelope is one 1-D envelope per axis, built on the input's
-  own mesh, so it is likewise a `QuaPol`.
+  own subdivision, so it is likewise a `QuaPol`.
 
 Both remain within `biconj`'s stated contract ("a RatPar -- QuaPol (Case A), RatPol (Case B) or
 QuaParCPLQ (Case C); call `kind()` to learn which"), and both are strictly MORE useful to the SCIP
 bridge than the old answer: a `QuaPol` carries `V/E/F/f` and a unit `den`, so the bridge can read
 it directly, where the previous conj-of-conj path for those inputs returned a `QuaParCPLQ` with NO
-MESH at all.
+SUBDIVISION at all.
 
 `biconjCPLQTest/matchesIndependentBiconjugate` used to assert `kind() == 'RatPol'` for every row.
 It now asserts `isa(b, 'RatPar')` and keeps every VALUE check unchanged -- the type was pinning an

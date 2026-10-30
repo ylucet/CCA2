@@ -44,7 +44,7 @@ classdef biconjQTest < matlab.unittest.TestCase
         function theDimensionCheckRunsBEFORETheConvexShortCircuit(testCase)
         % ORDERING IS LOAD-BEARING HERE, and the wrong order is silent about which case it is in:
         % an affine or PSD q on a low-dimensional domain IS convex, so the convex branch would
-        % claim it and then try to read a FACE -- and such a mesh has nf = 0 and an empty F.
+        % claim it and then try to read a FACE -- and such a subdivision has nf = 0 and an empty F.
         % Measured while building this: the needle and the convex segment both raised noFace, while
         % the CONCAVE segment, which falls past the short-circuit, worked.
             needle = QuaPol([1 2], zeros(0,3), [0 0 0 0 0 0 0 0 0 5], zeros(0,2));
@@ -401,7 +401,7 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         function noEnvelopeInTheFixtureSetHasOverlappingCells(testCase)
         % The invariant conjQ's half-plane defects broke, asked of the ENVELOPE too rather than
-        % assumed: no two cells may overlap while carrying different functions. Such a mesh does
+        % assumed: no two cells may overlap while carrying different functions. Such a subdivision does
         % not define a function at all -- eval resolves it by first match, so the answer depends on
         % cell ORDER, and the failure is silent. biconjQ shares assembleQuaConCells with conjQ, so
         % it is exposed to the same class. Measured across the shapes below: 0 of 12 inconsistent
@@ -433,7 +433,7 @@ classdef biconjQTest < matlab.unittest.TestCase
 
         function aFULLPLANEConvexQuadraticIsItsOwnEnvelope(testCase)
         % QuaPol.energy -- (x^2+y^2)/2 on all of R^2 -- is the most elementary convex input there
-        % is, and it used to RAISE noFace: quaPolAsQuaCon looks for a FACE, and a full-domain mesh
+        % is, and it used to RAISE noFace: quaPolAsQuaCon looks for a FACE, and a full-domain subdivision
         % has none. co f = f, with no constraints at all.
             f = QuaPol.energy();
             h = biconjQ(f);
@@ -714,8 +714,8 @@ classdef biconjQTest < matlab.unittest.TestCase
 
             % THE KINKED SIDE IS NOW ANSWERED, and this assertion used to pin the refusal. The
             % contract changed deliberately on 2026-09-21: the envelope is assembled from the
-            % pieces' conjugates and meshed, and where a BRIDGE face's value competes with a
-            % quadratic one the boundary has degree 4, so the mesh comes back as an `AlgCrv` --
+            % pieces' conjugates and subdivided, and where a BRIDGE face's value competes with a
+            % quadratic one the boundary has degree 4, so the subdivision comes back as an `AlgCrv` --
             % algebraic faces on an algebraic subdivision -- rather than a QuaCon. What is asserted
             % now is the ANSWER rather than the refusal, against the assembled envelope's own
             % evaluator, which was verified against the definition.

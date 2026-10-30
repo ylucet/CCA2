@@ -7,7 +7,7 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   (it used to refuse). New `biconjAtoms`: split each non-convex piece into its vertices and convex
   edges (erratum Thm 1), take the min over atom-pair envelopes and triple tangent planes. Erratum
   Example 1 exact in all 4 cells; matches the legacy triangle envelope to 1e-14 on 4 triangles.
-  Result type is a new `EnvelopeMin` (eval only, not meshed) — see Needs a decision.
+  Result type is a new `EnvelopeMin` (eval only, not subdivided) — see Needs a decision.
 - Three bugs fixed on the way (each red first): whole-plane conjugate cells were skipped in pair
   enumeration; rational bridge faces had no membership test; corners where a cell facet meets a
   parabolic tie once were all dropped (made the envelope +inf).
@@ -21,8 +21,8 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   OTHER corner's value past a crossing line (0.23 too high). Both fixed, red first.
 - Two corners of the poly2 kink that had no region rows now have them (a wedge edge that is a
   rational line times an irrational number). Verified against the corner's own KKT test.
-  Consequence: the kink now reaches the global mesh, which has 85 curves and did not finish in
-  90 min; the mesh now refuses past 40 curves by name and biconjQ returns the evaluable face list
+  Consequence: the kink now reaches the global subdivision, which has 85 curves and did not finish in
+  90 min; the subdivision now refuses past 40 curves by name and biconjQ returns the evaluable face list
   (verified against the definition), exactly as before.
 - Erratum Example 2's biconjugate gets much further: three overflows on intermediate numbers
   fixed (each red first, from the captured input) and a witness search that only looked in a
@@ -37,7 +37,7 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
 ## What is broken
 - Erratum Example 2 biconj: one algebraic face's stored polynomial needs 59 bits — 3 tests
   quarantined on that. Needs wider storage for implicit polynomials (TODO).
-- poly2 kink biconj is still not MESHED (evaluable only): the single global arrangement has 85
+- poly2 kink biconj is still not SUBDIVIDED (evaluable only): the single global arrangement has 85
   curves. Fix is a per-cell-pair arrangement (TODO).
 
 ## Needs a decision
@@ -46,8 +46,8 @@ Branch: overnight/2026-10-10 (from main @ 08f1391)
   the item and retire the two quarantined legacy tests in favour of the exact route's tests
   [my pick]; (b) keep it for a dedicated session; (c) keep the legacy tests quarantined forever.
 - **Return type of biconjQ on the new route.** It returns `EnvelopeMin` (a min of face lists,
-  answers `eval`), not an AlgCon node. Options: (a) keep it as a separate type until meshing lands
-  [what I did — reversible]; (b) mesh before returning (needs envelopeMesh on several pairs);
+  answers `eval`), not an AlgCon node. Options: (a) keep it as a separate type until subdividing lands
+  [what I did — reversible]; (b) subdivision before returning (needs envelopeSubdivision on several pairs);
   (c) return it only under an explicit engine flag. I'd keep (a).
 
 ## Where I stopped
@@ -56,8 +56,8 @@ normal 30/0, with 3 quarantined (all erratum Example 2). Every item still in TOD
 either a decision (above) or a redesign rather than a fix:
 - carry the implicit polynomial in BigInteger through the bridge witness, branch and side
   decisions (Example 2);
-- arrange per cell pair instead of globally (poly2 kink mesh);
-- mesh and prune EnvelopeMin;
+- arrange per cell pair instead of globally (poly2 kink subdivision);
+- subdivision and prune EnvelopeMin;
 - an exact interior-emptiness test for algebraic regions (zero-area faces);
 - find a fixture for two bridge faces in one cell.
 The first of these is the next session's natural start: it completes all three erratum examples.

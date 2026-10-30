@@ -1436,7 +1436,7 @@ classdef ratQ
         % lines (the H-form), and some of those lists describe the empty set -- a polygon vertex
         % that never attains the max contributes a cell that is empty, not small. Emitting it
         % anyway is not wrong for `eval` (no point satisfies it) but it inflates the face count and
-        % puts a face into the mesh that bounds nothing. `strict` separates the other degenerate
+        % puts a face into the subdivision that bounds nothing. `strict` separates the other degenerate
         % case: a cell that is a single point or a segment is nonempty and still carries no
         % two-dimensional face.
         %
@@ -1810,7 +1810,7 @@ classdef ratQ
         % [output] s : -1, 0 or +1
         %
         % THE PREDICATE EVERYTHING ELSE IS BUILT ON. A vertex of f* is a root of an exact quartic
-        % (conicMeet returns it), and every mesh question -- is this vertex inside that face, which
+        % (conicMeet returns it), and every subdivision question -- is this vertex inside that face, which
         % of two crossings comes first, do these two cells share a facet -- is the sign of a
         % rational polynomial AT such a number. CONJ_FIELD_PROOF.md 8.0 lists exactly these.
         %
@@ -2190,7 +2190,7 @@ classdef ratQ
         % objective: evaluate the face function n/d at points X (k x 2), in double precision.
         % Evaluation is deliberately NOT exact: CONJ_FIELD_PROOF.md 8.0 lists the operations that
         % must leave Q, and evaluating f* at a point is not one of them. Exactness is for the
-        % PREDICATES that decide the mesh; the mesh once built is evaluated in doubles.
+        % PREDICATES that decide the subdivision; the subdivision once built is evaluated in doubles.
             v = QuaPar.evalPoly(n, X) / d;
         end
 

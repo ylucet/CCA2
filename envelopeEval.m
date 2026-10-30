@@ -2,7 +2,7 @@ function [val, who] = envelopeEval(env, X)
 % envelopeEval  The value of an assembled convex envelope: the MAX over the faces whose region
 %   contains the point.
 %
-% objective: `envelopeAssemble` returns the envelope as its FACES rather than as one mesh, because
+% objective: `envelopeAssemble` returns the envelope as its FACES rather than as one subdivision, because
 %   folding them pairwise explodes (its header has the measurement). This is how such an envelope is
 %   evaluated, and the rule is the one the assembly rests on:
 %

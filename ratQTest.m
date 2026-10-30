@@ -586,7 +586,7 @@ classdef ratQTest < matlab.unittest.TestCase
         end
 
         function signAtDecidesTheSignOfAPolynomialAtAnAlgebraicNumber(testCase)
-        % THE PREDICATE THE MESH NEEDS. Given a root alpha of p isolated in [a,b], decide sign(q(alpha))
+        % THE PREDICATE THE SUBDIVISION NEEDS. Given a root alpha of p isolated in [a,b], decide sign(q(alpha))
         % EXACTLY -- no tolerance, and correct even when q(alpha) is zero.
             % alpha = sqrt(2), the positive root of x^2 - 2
             p = [1 0 -2];

@@ -2,7 +2,7 @@ function bridgeWinnerConstant()
 % Does the WINNER change inside a cell, once bridge faces are in the max?
 %
 % A corner never carries the value, so it needed no boundary against a quadratic face. A bridge DOES
-% (22 of 60 points, up to 1.2e-1), so if the winner changes inside a cell the mesh needs the curve
+% (22 of 60 points, up to 1.2e-1), so if the winner changes inside a cell the subdivision needs the curve
 % {bridge value = quadratic value} -- which is FP(x, y, q(x,y)) = 0, a rational curve of degree well
 % above two, and not an edge any conic subdivision can hold. If instead each cell has ONE winner
 % throughout, the arrangement already separates them and nothing new is needed.

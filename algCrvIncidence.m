@@ -3,14 +3,14 @@ function [E, F, info] = algCrvIncidence(g, Vname, X)
 %   which faces each edge separates.
 %
 % objective: `algCrvVertices` names the vertices, which is what an object needs to have topology at
-%   all; this is what a figure or an edge list needs on top of it. Without it the mesh is a set of
+%   all; this is what a figure or an edge list needs on top of it. Without it the subdivision is a set of
 %   faces that happen to share curves, with nothing saying they are adjacent.
 %
 % [input]  g     : AlgCrv
 %          Vname : as `algCrvVertices` returns it -- nv x 5 [edgeA tableA edgeB tableB rootIdx]
 %          X     : optional, nv x 2, the vertices' coordinates -- `algCrvVertices`'s info.X. When
 %                  omitted it is recomputed by calling `algCrvVertices` again (minutes).
-% [output] E     : one row per ARC of the mesh, [edgeIndex, table, vA, vB, flag]. vA and vB index
+% [output] E     : one row per ARC of the subdivision, [edgeIndex, table, vA, vB, flag]. vA and vB index
 %                  ROWS OF Vname and are 0 where the arc has no such endpoint; flag is 1 for a
 %                  segment, 0 for a ray or line. Several rows may share edgeIndex: an edge is split
 %                  into the arcs between consecutive vertices along it, an arc that bounds no face is
@@ -30,11 +30,11 @@ function [E, F, info] = algCrvIncidence(g, Vname, X)
 % The VERTICES are exact names (`algCrvVertices`). Which vertices an arc runs between, and which
 % faces it bounds, is decided in DOUBLES -- the same trade `algCrvVertices` makes for membership and
 % `assembleQuaConCells` for a curved corner, for the same reason: an arc wrongly split changes the
-% mesh's TOPOLOGY and never a face's VALUE, since `eval` reads the face functions and their sign
+% subdivision's TOPOLOGY and never a face's VALUE, since `eval` reads the face functions and their sign
 % conditions and neither mentions an arc. The exact alternative is comparing algebraic numbers of
 % degree up to 16 along a quartic. What is decided numerically, and nothing else:
 %
-%   * THE BREAKPOINTS of an edge are every vertex of the mesh lying on its curve -- not only the
+%   * THE BREAKPOINTS of an edge are every vertex of the subdivision lying on its curve -- not only the
 %     names that mention it, because a vertex named for one spelling of a curve lies on the others;
 %   * THE ARCS: the curve is traced from each breakpoint along every branch leaving it (sign changes
 %     of the curve on a small circle: two at a smooth point, more at a node) to the next breakpoint,
@@ -110,7 +110,7 @@ function [E, F, info] = algCrvIncidence(g, Vname, X)
                 end
                 X = i2.X;
             end
-            % THE BREAKPOINTS ARE EVERY MESH VERTEX ON THE CURVE, not only those named for it: the
+            % THE BREAKPOINTS ARE EVERY SUBDIVISION VERTEX ON THE CURVE, not only those named for it: the
             % diagonal x + y = 1 of the c = -2 object passes through (1/2, 1/2), a vertex named for
             % the pair of lines (x-1)^2 - y^2 that contains the diagonal, and not splitting there left
             % two faces' boundaries meeting at a point that one of them did not know was a corner.
@@ -163,7 +163,7 @@ function [E, F, info] = algCrvIncidence(g, Vname, X)
         Fall{end+1} = fs; %#ok<AGROW>
     end
 
-    % ---- ONE ARC OF THE MESH, SEVERAL ROWS OF THE TABLE -----------------------------------------------
+    % ---- ONE ARC OF THE SUBDIVISION, SEVERAL ROWS OF THE TABLE -----------------------------------------------
     % The conic table holds the same zero set under different integer rows -- on the c = -2 object
     % y = 1 is there as y - 1, 1 - y, y^2 - 1 and (y - 1)^2 -- so one boundary arc can be traced once
     % per spelling. Two traced arcs with the same endpoint POINTS and the same midpoint are the same

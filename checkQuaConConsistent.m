@@ -1,7 +1,7 @@
 function [ok, report] = checkQuaConConsistent(g, nSample)
 % checkQuaConConsistent  Does this QuaCon's subdivision carry a single well-defined function?
 %
-% objective: detect cells that OVERLAP while carrying DIFFERENT functions. Such a mesh does not
+% objective: detect cells that OVERLAP while carrying DIFFERENT functions. Such a subdivision does not
 %   define a function at all -- `eval` resolves it by first match, so the answer depends on cell
 %   ORDER -- and the failure is silent, which is why this exists.
 %
@@ -14,7 +14,7 @@ function [ok, report] = checkQuaConConsistent(g, nSample)
 %
 %   EXACT, for a pair whose constraints are ALL LINEAR: their intersection is a polyhedron, and
 %   ratQ.feasible2 decides whether it has interior exactly. If it does and the two face functions
-%   differ as exact rationals, the mesh is inconsistent -- decided, not estimated.
+%   differ as exact rationals, the subdivision is inconsistent -- decided, not estimated.
 %
 %   SAMPLED, as a backstop for pairs involving a CURVED constraint, which the exact test cannot
 %   reach until Phase 2c's kernel lands. Sampling can only CONFIRM an overlap, never rule one out,

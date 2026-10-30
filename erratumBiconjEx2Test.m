@@ -1,7 +1,7 @@
 classdef erratumBiconjEx2Test < matlab.unittest.TestCase
 % Erratum Example 2's biconjugate through biconjQ -- the tests erratumBiconjTest held until
 % 2026-10-17. Three indefinite pieces, four edge atoms, three active pairs and two triangle faces:
-% an EnvelopeMin (a minimum over several pairs is not meshed; TODO item 1).
+% an EnvelopeMin (a minimum over several pairs is not subdivided; TODO item 1).
 %
 % BUCKET: slow -- biconjQ on Example 2 is ~5 min on the shared machine (one run), computed once per
 % process by erratumBiconjTest.biconjCached and shared by the tests below.

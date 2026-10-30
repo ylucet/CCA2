@@ -152,7 +152,7 @@ classdef biconjugateTest < matlab.unittest.TestCase
         %
         % (0.66,0.18) below is that point; keep it. See region.maxFromPts for the fix.
         %
-        % STEP 0 IS SWITCHED OFF HERE ON PURPOSE. Since 2026-08-18 conj normalises the mesh first
+        % STEP 0 IS SWITCHED OFF HERE ON PURPOSE. Since 2026-08-18 conj normalises the subdivision first
         % (mergeSameQuadFaces), and these two triangles carry the SAME quadratic -- so the input
         % would become the one-face square and this test would stop exercising the two-face route
         % it exists to pin. The lens is the two-face route's own failure mode, so the flag stays.
@@ -194,8 +194,8 @@ classdef biconjugateTest < matlab.unittest.TestCase
             p = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
             % FIXED 2026-08-18 by Step 0 (mergeSameQuadFaces): the two faces carry the same
             % quadratic, so the diagonal is a line the CALLER drew and is deleted before the
-            % dispatch reads the mesh. biconj then takes the McCormick short-circuit and answers
-            % in 0.1 s with a meshed QuaPol. Everything below is the record of what it took to
+            % dispatch reads the subdivision. biconj then takes the McCormick short-circuit and answers
+            % in 0.1 s with a subdivided QuaPol. Everything below is the record of what it took to
             % find that out, and is kept because two of the diagnoses along the way were WRONG.
             %
             % THE DEFECT THIS USED TO PIN. The SAME function on the SAME domain gave the right

@@ -1,8 +1,8 @@
-function g = assembleAlgCrv(mesh)
-% assembleAlgCrv  Turn `envelopeMeshAlg`'s faces into an AlgCrv -- the typed object `biconj` returns
+function g = assembleAlgCrv(subdivision)
+% assembleAlgCrv  Turn `envelopeSubdivisionAlg`'s faces into an AlgCrv -- the typed object `biconj` returns
 %   for an input whose pieces meet along a CURVED tie.
 %
-% [input]  mesh : as `envelopeMeshAlg` returns it -- .kind, .num/.den or .FP/.FB, .con, .alg
+% [input]  subdivision : as `envelopeSubdivisionAlg` returns it -- .kind, .num/.den or .FP/.FB, .con, .alg
 % [output] g    : AlgCrv
 %
 % DEDUPLICATION IS BITWISE for the conic edges, which is the whole reason those rows are canonical
@@ -16,22 +16,22 @@ function g = assembleAlgCrv(mesh)
 % a caller that wants VALUES does not, since `eval` reads FC and the two edge tables and neither
 % mentions a vertex. `withVertices` below is the one-line way to ask.
     if nargin ~= 1
-        error('assembleAlgCrv:nargin', 'expects (mesh).');
+        error('assembleAlgCrv:nargin', 'expects (subdivision).');
     end
-    if ~isstruct(mesh)
-        error('assembleAlgCrv:shape', 'mesh must be envelopeMeshAlg''s struct array.');
+    if ~isstruct(subdivision)
+        error('assembleAlgCrv:shape', 'subdivision must be envelopeSubdivisionAlg''s struct array.');
     end
 
     EcQ = zeros(0,6);
     EcA = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {});
-    FC  = cell(1, numel(mesh));
-    fN  = zeros(numel(mesh), 10);
-    fD  = ones(numel(mesh), 1);
-    FP  = cell(numel(mesh), 1);
-    FB  = zeros(numel(mesh), 1);
+    FC  = cell(1, numel(subdivision));
+    fN  = zeros(numel(subdivision), 10);
+    fD  = ones(numel(subdivision), 1);
+    FP  = cell(numel(subdivision), 1);
+    FB  = zeros(numel(subdivision), 1);
 
-    for k = 1:numel(mesh)
-        f = mesh(k);
+    for k = 1:numel(subdivision)
+        f = subdivision(k);
         rows = zeros(0,4);
         for t = 1:size(f.con,1)
             c = f.con(t,1:6);

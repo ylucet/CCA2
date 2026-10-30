@@ -3,7 +3,7 @@ function vertexProbe()
 % definition is the check: a vertex named [edgeA tableA edgeB tableB rootIdx] must be a point where
 % both curves vanish and every row of its face holds.
     L = load(fullfile(tempdir, 'branchRowPruning_env.mat'));  env = L.env;
-    g = assembleAlgCrv(envelopeMeshAlg(env));
+    g = assembleAlgCrv(envelopeSubdivisionAlg(env));
     [V, info] = algCrvVertices(g);
     fprintf('%d faces | candidates %d | NAMED %d | refused %d | %.0f s\n', ...
             g.nf, info.candidates, info.named, info.refused, info.seconds);

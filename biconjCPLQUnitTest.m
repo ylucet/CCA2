@@ -22,7 +22,7 @@ classdef biconjCPLQUnitTest < matlab.unittest.TestCase
 % general Case C path, which is symbolic, is deliberately not exercised here.
 
     methods (Static)
-        function [V, E, F] = boxMesh(lo, hi)
+        function [V, E, F] = boxSubdivision(lo, hi)
         % One face, four segments, counter-clockwise -- the axis-aligned box shape the separable
         % branch requires.
             V = [lo(1) lo(2); hi(1) lo(2); hi(1) hi(2); lo(1) hi(2)];
@@ -32,7 +32,7 @@ classdef biconjCPLQUnitTest < matlab.unittest.TestCase
 
         function v = evalCoefRow(c, x, y)
         % The stored WEIGHTED basis, written out: a row [a b c d e f] means
-        % a/2 x^2 + b xy + c/2 y^2 + d x + e y + f. See meshPredicateTest for why the halves are
+        % a/2 x^2 + b xy + c/2 y^2 + d x + e y + f. See subdivisionPredicateTest for why the halves are
         % on the pure squares only.
             c = c(end-5:end);
             v = 0.5*c(1)*x.^2 + c(2)*x.*y + 0.5*c(3)*y.^2 + c(4)*x + c(5)*y + c(6);
@@ -72,7 +72,7 @@ classdef biconjCPLQUnitTest < matlab.unittest.TestCase
         % is available in closed form independently of the routine, and that is what it is checked
         % against -- not against a coefficient row.
             lo = [-1 -2]; hi = [2 3];
-            [V, E, F] = biconjCPLQUnitTest.boxMesh(lo, hi);
+            [V, E, F] = biconjCPLQUnitTest.boxSubdivision(lo, hi);
             % -x^2 - 2y^2 in the weighted basis: c1/2 = -1, c3/2 = -2.
             a = -1; b = -2;
             p = QuaPol(V, E, [2*a 0 2*b 0 0 0], F);
@@ -100,7 +100,7 @@ classdef biconjCPLQUnitTest < matlab.unittest.TestCase
         % The two properties that hold for ANY f**, asserted on the same fixture so that a wrong
         % closed form is caught even where it happens to match the chord at the corners.
             lo = [0 0]; hi = [3 2];
-            [V, E, F] = biconjCPLQUnitTest.boxMesh(lo, hi);
+            [V, E, F] = biconjCPLQUnitTest.boxSubdivision(lo, hi);
             c = [-2 0 -1 1 -3 4];                          % concave separable plus a linear part
             p = QuaPol(V, E, c, F);
             h = biconjCPLQ(p);
@@ -162,10 +162,10 @@ classdef biconjCPLQUnitTest < matlab.unittest.TestCase
         % =========================================================================================
         function aPolyhedralQuaParGivesTheSameAnswerAsTheEquivalentQuaPol(testCase)
         % `asQuaPol` rebuilds a polyhedral QuaPar as a QuaPol because convEnvCPLQ documents a
-        % QuaPol input. The two carry the identical mesh, so the biconjugate must not depend on
+        % QuaPol input. The two carry the identical subdivision, so the biconjugate must not depend on
         % which class it arrived in -- and that is exactly what the rebuild is for.
             lo = [0 0]; hi = [2 2];
-            [V, E, F] = biconjCPLQUnitTest.boxMesh(lo, hi);
+            [V, E, F] = biconjCPLQUnitTest.boxSubdivision(lo, hi);
             c = [-2 0 -2 0 0 0];
             hPol = biconjCPLQ(QuaPol(V, E, c, F));
             hPar = biconjCPLQ(QuaPar(V, E, c, F));         % all-zero Ec: polyhedral

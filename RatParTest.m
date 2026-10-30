@@ -48,7 +48,7 @@ classdef RatParTest < matlab.unittest.TestCase
                 1 1 1 1 1 1 1 1     % QuaPol    -- everything: bottom of the lattice
                 1 0 1 1 1 1 0 0     % RatPol     -- rational, polyhedral
                 1 1 1 0 1 0 1 0     % QuaPar     -- quadratic, parabolic
-                1 1 1 0 1 0 0 0 ];  % QuaParCPLQ -- same math as QuaPar, but no mesh (see below)
+                1 1 1 0 1 0 0 0 ];  % QuaParCPLQ -- same math as QuaPar, but no subdivision (see below)
             samples = RatParTest.oneOfEach();
             for i = 1:numel(samples)
                 for j = 1:numel(types)
@@ -170,19 +170,19 @@ classdef RatParTest < matlab.unittest.TestCase
             testCase.verifyError(@() RatPar(), 'MATLAB:class:abstract');
         end
 
-        function isMeshedSeparatesTheSymbolicForm(testCase)
-            % QuaParCPLQ holds cPLQ's own symbolic form with no reconstructed V/E/Ec/F/P mesh, so
-            % its inherited mesh properties are empty for a real reason (the reconstruction is
+        function isSubdividedSeparatesTheSymbolicForm(testCase)
+            % QuaParCPLQ holds cPLQ's own symbolic form with no reconstructed V/E/Ec/F/P subdivision, so
+            % its inherited subdivision properties are empty for a real reason (the reconstruction is
             % still open, DESIGN.md II.5.1). It deliberately does NOT inherit from QuaPar -- that
-            % would make isa(x,'QuaPar') true and invite callers to read a mesh it does not have --
+            % would make isa(x,'QuaPar') true and invite callers to read a subdivision it does not have --
             % but it does carry the same TRAITS, since it is mathematically quadratic-on-parabolic.
             V = [0 0; 1 0; 0 1]; E = [1 2 1; 2 3 1; 3 1 1]; F = [1 0; 1 0; 1 0];
-            testCase.verifyTrue(QuaPol(V, E, [0 1 0 0 0 0], F).isMeshed());
-            testCase.verifyTrue(RatPol(V, E, [0 1 0 0 0 0], F).isMeshed());
-            testCase.verifyTrue(QuaPar(V, E, zeros(3,6), [0 1 0 0 0 0], F).isMeshed());
+            testCase.verifyTrue(QuaPol(V, E, [0 1 0 0 0 0], F).isSubdivided());
+            testCase.verifyTrue(RatPol(V, E, [0 1 0 0 0 0], F).isSubdivided());
+            testCase.verifyTrue(QuaPar(V, E, zeros(3,6), [0 1 0 0 0 0], F).isSubdivided());
 
             sym = QuaParCPLQ();
-            testCase.verifyFalse(sym.isMeshed());
+            testCase.verifyFalse(sym.isSubdivided());
             testCase.verifyFalse(isa(sym, 'QuaPar'));
             testCase.verifyTrue(isa(sym, 'Qua') && isa(sym, 'Par'));
         end

@@ -108,9 +108,9 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
         end
 
         function theROWSAreTheFaceAndFPCarriesItsValue(testCase)
-        % What the mesh needs (2026-10-16): `cells` is the face's EXACT region as conic rows, and
+        % What the subdivision needs (2026-10-16): `cells` is the face's EXACT region as conic rows, and
         % FP/FB its value implicitly -- without them nothing can place a vertex-against-edge face
-        % in an arrangement (envelopeMesh:bridgeFaces).
+        % in an arrangement (envelopeSubdivision:bridgeFaces).
             cases = {'basic', zeros(0,3); 'shifted', zeros(0,3); 'shifted', [1 0 0; 0 1 0]; ...
                      'scaled', zeros(0,3)};                  % the pair P meets only 'shifted'
             for c = 1:size(cases,1)

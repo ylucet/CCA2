@@ -45,9 +45,9 @@ function [env, info] = envelopeAssemble(gA, gB, D)
 % its own pair, so no pair can overshoot, and the pairs cover the plane -- so the max over the faces
 % IS the envelope. `.claude/assemblyProbe.m` measured both halves.
 %
-% WHY THE FACES ARE RETURNED RATHER THAN A SINGLE MESH. Folding the pairs pairwise with `maxQ` is
-% exact and it EXPLODES: each fold overlays two meshes, and measured on the convex fixture the
-% running mesh went 5, 6, 38, 35, 40, 125, 610 faces over seven of eighteen pairs -- while the
+% WHY THE FACES ARE RETURNED RATHER THAN A SINGLE SUBDIVISION. Folding the pairs pairwise with `maxQ` is
+% exact and it EXPLODES: each fold overlays two subdivisions, and measured on the convex fixture the
+% running subdivision went 5, 6, 38, 35, 40, 125, 610 faces over seven of eighteen pairs -- while the
 % envelope itself has a handful. The growth is real rather than a defect: the intermediate maxima
 % carry pieces that later pairs dominate away, and nothing in the fold knows that yet. Controlling
 % it needs a domination prune (does some candidate beat this one on the whole of its region -- an

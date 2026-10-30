@@ -1,5 +1,5 @@
 function cornerCells()
-% How much of the mesh can an ALGEBRAIC face be emitted into without a new curve type?
+% How much of the subdivision can an ALGEBRAIC face be emitted into without a new curve type?
 %
 % A corner face's value is affine with quadratic-irrational coefficients, so where it has to be
 % COMPARED with a quadratic face the boundary is a conic with coefficients in Q(sigma) -- one member

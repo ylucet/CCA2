@@ -745,7 +745,7 @@ function pieces = dropDegeneratePieces(pieces)
 % and pair with nothing, which surfaces three stages later as "a boundary edge of piece N has no
 % matching neighbour".
 % WHAT IT DROPS IS REPORTED under MAXQP_ASSERT. A dropped cell is the one thing here that can turn
-% a partition into one with a HOLE, so when an assembled mesh comes back uncovered at a point this
+% a partition into one with a HOLE, so when an assembled subdivision comes back uncovered at a point this
 % is the first list to read. Silent removal meant that question could only be answered by editing
 % this function, which is how G10's investigation started.
 % Reported at MAXQP_ASSERT >= 0, not >= 1, so that MAXQP_ASSERT = 0 gives the drop list WITHOUT
@@ -1386,7 +1386,7 @@ function pieces = insertGlobalPassthrough(pieces)
         if settled, return, end
     end
     % Six rounds without settling means the splits are chasing each other rather than converging;
-    % that is a defect in the split, not a case to accept quietly with a half-consistent mesh.
+    % that is a defect in the split, not a case to accept quietly with a half-consistent subdivision.
     error('maxQuaPar:internal', ...
         ['insertGlobalPassthrough did not reach a fixed point in 6 rounds (%d pieces). Each round ' ...
          'must either split nothing or strictly refine, so this means a split is re-creating the ' ...
@@ -2242,7 +2242,7 @@ function ts = conicRootsAlong(Ecut, base, dir, tlo, thi, ~)
 % |slope| * 1e-7, which sits far BELOW that tolerance, so sign2 returned 0 on both sides, the
 % product was 0 rather than negative, and EVERY genuine crossing was discarded. Measured on the
 % first curved fixture: clipPolyByConic found 0 crossings on cells that demonstrably had one, kept
-% them whole, and left them extended past the true arrangement vertex to one of g1's own mesh
+% them whole, and left them extended past the true arrangement vertex to one of g1's own subdivision
 % vertices -- which is what surfaced as an unmatched ray in assemblePieces three stages later.
 %
 % A quadratic changes sign exactly at a SIMPLE root, and touches without crossing at a double one,
@@ -3260,7 +3260,7 @@ function newPieces = splitUnboundedAtOneCrossing(cell, hit, diffRow, f1row, f2ro
     % winner then comes out of the sign of a computed zero.
     %
     % MEASURED, and the reproducer is two lines of data: h1 = max(s1,0)^2/2 and h2 = max(s2,0)^2/2,
-    % each a two-cell mesh split by one axis. Their max should split the first quadrant along
+    % each a two-cell subdivision split by one axis. Their max should split the first quadrant along
     % s2 = s1; instead maxQuaPar returned 4 cells with the whole first quadrant carrying h1, so
     % f*(2,3) came back 2.0 where the truth is 4.5. This is what sends every 4-cone dual -- the
     % conjugate of anything with wedge faces -- to a wrong answer, and it is why unbounded input
@@ -4321,7 +4321,7 @@ function opp = matchHalfEdges(pieces, HE)
             % symbolic fallback: piece 1 src [1 3] carries the straight edge
             % (-0.209275,-0.909936)->(-0.210638,-0.912444) and piece 2 src [2 4] carries the same
             % boundary as an arc, 5.76e-05 away. Both came out of matchHalfEdges with ZERO
-            % candidates -- rejected here, not lost to greedy consumption -- and the assembled mesh
+            % candidates -- rejected here, not lost to greedy consumption -- and the assembled subdivision
             % then had a hole at (-0.866025,0.5).
             if any(HE(h2).ec ~= 0) ~= any(HE(h).ec ~= 0)
                 if ~HE(h).isSeg, continue; end            % rays carry no conic; nothing to test

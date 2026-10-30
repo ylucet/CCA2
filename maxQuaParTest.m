@@ -52,9 +52,9 @@ classdef maxQuaParTest < matlab.unittest.TestCase
         % conjugate -- on a scope claim refuted 2026-09-06. The CONDITION was then measured in
         % real `conjQ` output (52 occurrences over eight two-piece kink fixtures, 0 on both
         % single-piece controls), and this test closes the gap between "the condition occurs" and
-        % "the guard fires": it fires, on an input that violates no other mesh invariant.
+        % "the guard fires": it fires, on an input that violates no other subdivision invariant.
         %
-        % The mesh is built valid and then MUTATED, deliberately. A hand-written mesh carrying a
+        % The subdivision is built valid and then MUTATED, deliberately. A hand-written subdivision carrying a
         % lone curved ray is refused earlier by `orderEdges`, because a ray edge does not bound a
         % face -- so constructing one means satisfying every invariant at once for an object that
         % exists only to be refused. Mutating one edge of a valid triangle reaches exactly the

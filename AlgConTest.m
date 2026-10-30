@@ -75,7 +75,7 @@ classdef AlgConTest < matlab.unittest.TestCase
 
         function anALLZEROBranchListIsAcceptedEverywhere(testCase)
         % A face WITH a formula carries branch 0, so all-zero FB must be legal on a rational type:
-        % it is what a producer writes while filling a mesh whose faces are not all algebraic yet,
+        % it is what a producer writes while filling a subdivision whose faces are not all algebraic yet,
         % and refusing it would force the producer to special-case its own bookkeeping.
             q = QuaPol([3 1 3 0 0 0]);
             q.FB = zeros(size(q.f,1),1);

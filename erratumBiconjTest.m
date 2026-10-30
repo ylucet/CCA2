@@ -20,8 +20,8 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
         % Example 2's tests MOVED 2026-10-17 to erratumBiconjEx2Test (slow bucket): biconjQ on it is
         % ~5 min, which kept this suite over the normal bucket's 10-minute budget (TODO item 5).
 
-        function ex1BiconjugateIsMeshed(testCase)
-        % One active pair (a convex piece and a vertex), so biconjQ meshes it (2026-10-17): an AlgCrv
+        function ex1BiconjugateIsSubdivided(testCase)
+        % One active pair (a convex piece and a vertex), so biconjQ subdivides it (2026-10-17): an AlgCrv
         % whose two corners from Q(sqrt 26) and Q(sqrt 6) overlap in 18 cells, value-safe (max).
             h = erratumBiconjTest.biconjCached(testCase, 1);
             testCase.verifyClass(h, 'AlgCrv');
@@ -61,7 +61,7 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
         % share a vertex) and a triple tangent plane. Before the rational corner landed
         % (cornerFaceAlg, 2026-10-10) these disagreed by up to 2.2.
             % The 3-convex-edge triangle ([0 0; 1 0; 0 1], [2 -3 2 0 0 0]) MOVED 2026-10-18 to
-            % minMeshTest (slow): two active pairs, so biconjQ now meshes their minimum (~5 min).
+            % minSubdivisionTest (slow): two active pairs, so biconjQ now subdivides their minimum (~5 min).
             cases = { [0 0; 2 0; 0 2], [1 2 -1 1 0 0];      % 1
                       [0 0; 3 0; 1 2], [2 1 -1 0 1 0];      % 2
                       [0 0; 2 0; 1 2], [-1 2 1 0 0 1] };    % 1
@@ -70,7 +70,7 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
                 V = cases{k,1};  c = cases{k,2};
                 f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], [0 0 0 0 c], [1 0; 1 0; 1 0]);
                 h = biconjQ(f);
-                % the atom route; a single active pair comes back MESHED (2026-10-17)
+                % the atom route; a single active pair comes back SUBDIVIDED (2026-10-17)
                 testCase.verifyTrue(isa(h, 'EnvelopeMin') || isa(h, 'AlgCrv') || isa(h, 'QuaCon'), ...
                     sprintf('triangle %d: biconjQ returned a %s', k, class(h)));
                 W = rand(300,3);  X = (W ./ sum(W,2)) * V;
@@ -81,10 +81,10 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
     end
 
     methods (Test)
-        function aSINGLEActivePairIsMeshedAndKeepsItsValues(testCase)
+        function aSINGLEActivePairIsSubdividedAndKeepsItsValues(testCase)
         % Two atoms leave one pair; with no triangle needing three atoms the minimum IS that pair's
-        % envelope, so biconjQ meshes it (2026-10-17). Four defects stood in the way, each red here
-        % first: the rational bridge face had no rows (envelopeMesh:bridgeFaces); the meshers read
+        % envelope, so biconjQ subdivides it (2026-10-17). Four defects stood in the way, each red here
+        % first: the rational bridge face had no rows (envelopeSubdivision:bridgeFaces); the subdividers read
         % only a face's first pair, and took a cell's interior point from its straight rows only
         % (holes); an EMPTY face applied everywhere; and a rational CORNER, which does carry the
         % value near a vertex, was carried for coverage only (1.3e-6 too low).
@@ -92,19 +92,19 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], [0 0 0 0 2 1 -1 0 1 0], [1 0; 1 0; 1 0]);
             h = biconjQ(f);
             testCase.verifyTrue(isa(h, 'AlgCrv') || isa(h, 'QuaCon'), ...
-                sprintf('one active pair should mesh; got %s', class(h)));
+                sprintf('one active pair should be subdivided; got %s', class(h)));
             rng(3);
             W = [rand(1500,3); rand(500,3).^4];  X = (W ./ sum(W,2)) * V;
             want = biconjAtoms(f).eval(X);
             got = h.eval(X);
-            testCase.verifyEqual(isinf(got), isinf(want), 'the mesh has a hole where the face list is finite');
+            testCase.verifyEqual(isinf(got), isinf(want), 'the subdivision has a hole where the face list is finite');
             fin = isfinite(want);
             testCase.verifyEqual(got(fin), want(fin), 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
-                'the mesh must carry the face list''s values, near the vertices too');
+                'the subdivision must carry the face list''s values, near the vertices too');
         end
 
-        % aPointBesideTheEDGEIsNotPlusInfinity MOVED 2026-10-20 to minMeshTest (slow): its fixture is
-        % the 3-convex-edge triangle, whose biconjugate is now meshed (~1-5 min).
+        % aPointBesideTheEDGEIsNotPlusInfinity MOVED 2026-10-20 to minSubdivisionTest (slow): its fixture is
+        % the 3-convex-edge triangle, whose biconjugate is now subdivided (~1-5 min).
     end
 
     methods (Static)

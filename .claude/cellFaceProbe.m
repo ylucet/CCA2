@@ -31,7 +31,7 @@ function cellFaceProbe(varargin)
 % and `a2 = 0` is exactly the degenerate direction -- no special-casing on the rank anywhere.
 %
 % STILL DOUBLES, STILL SAID PLAINLY. Every candidate is a rational in the cell's own data, so
-% exactness is bookkeeping rather than new mathematics; it is not done here. No mesh is being
+% exactness is bookkeeping rather than new mathematics; it is not done here. No subdivision is being
 % decided yet, which is the only reason that is acceptable.
 %
 %   cellFaceProbe            % 150 sample points per cell

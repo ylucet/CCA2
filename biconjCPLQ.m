@@ -58,7 +58,7 @@ function h = biconjCPLQ(obj)
     % Every short-circuit below is stated over a SHAPE -- one bilinear face on a four-vertex box,
     % one face on a rotated box, one face on a product domain -- so a caller who draws the same
     % function as two triangles instead of one square gets none of them. Deleting an interior edge
-    % whose two sides carry the same quadratic changes the mesh and not the function, and it is
+    % whose two sides carry the same quadratic changes the subdivision and not the function, and it is
     % what makes the answer independent of how the domain was drawn. See mergeSameQuadFaces.m and
     % ALGORITHM.md's Step 0.
     obj = mergeSameQuadFaces(obj);
@@ -117,8 +117,8 @@ function h = biconjCPLQ(obj)
     % WHY SHORT-CIRCUIT IT. Nothing is gained by deriving a known closed form the long way: this
     % input took 40-63 s through triangulate -> per-piece conjugate -> Step 3 -> second
     % conjugation, and it is the one shape where the answer has been in the literature since
-    % Al-Khayyal & Falk (1983). It also returns a MESHED QuaPol rather than the QuaParCPLQ with
-    % no mesh that the long route produces, which is what a consumer can actually read.
+    % Al-Khayyal & Falk (1983). It also returns a SUBDIVIDED QuaPol rather than the QuaParCPLQ with
+    % no subdivision that the long route produces, which is what a consumer can actually read.
     %
     % This does NOT help the SCIP spike -- SCIP already applies McCormick on box domains, so CCA2
     % was only ever reimplementing it there (SUPPORT_MATRIX.md 0.0.1). It helps a CCA2 user.
@@ -173,23 +173,23 @@ function h = biconjCPLQ(obj)
     % f** = (f*)*, and f* is the same function whichever representation conjCPLQ returns -- so
     % this is a representation choice, not a mathematical one. It has to be made because the two
     % representations are not equally conjugable: since 2026-08-13 the numeric path completes here
-    % and returns a MESHED QuaPar with parabolic edges (which is what the SCIP bridge wants from
+    % and returns a SUBDIVIDED QuaPar with parabolic edges (which is what the SCIP bridge wants from
     % conj), and handing that to a second conjugation dies at quaPolToPlq:curvedEdge, because
     % quaPolToPlq requires a polyhedral domain. The symbolic QuaParCPLQ conjugates again through
     % cPLQ's own machinery, which handles a curved domain.
     %
-    % So conj keeps returning the mesh and biconj asks for the symbolic form. Measured on f = x*y
+    % So conj keeps returning the subdivision and biconj asks for the symbolic form. Measured on f = x*y
     % over the unit square given as TWO triangles: this route returns the McCormick envelope
-    % max(0, x+y-1); the meshed route errors before producing anything.
+    % max(0, x+y-1); the subdivided route errors before producing anything.
     if obj.isDomBounded && ~hasCurvedEdge(obj)
         g = conj(obj, 'cplq');
-        % ONLY when the mesh is CURVED. Taking the symbolic route unconditionally here was
+        % ONLY when the subdivision is CURVED. Taking the symbolic route unconditionally here was
         % measured to be a regression: for a CONVEX q on this domain the numeric first conjugate
         % is polyhedral, the second conjugation handles it, and forcing the symbolic form instead
         % puts it back on the functionNDomain.getInterior chain that SUPPORT_MATRIX.md section 7
         % records as broken -- conjCPLQTest/biconjCoverageByInputCase pins exactly that, and it
-        % went red. A curved mesh is the only thing the second conjugation cannot take.
-        if isMeshed(g) && hasCurvedEdge(g)
+        % went red. A curved subdivision is the only thing the second conjugation cannot take.
+        if isSubdivided(g) && hasCurvedEdge(g)
             g = conjCPLQ(asQuaPol(obj), [], 'symbolic');
         end
         h = conj(g, 'cplq');
@@ -208,7 +208,7 @@ function tf = hasCurvedEdge(obj)
 end
 
 function p = asQuaPol(obj)
-% convEnvCPLQ documents its input as a QuaPol; a polyhedral QuaPar carries the identical mesh, so
+% convEnvCPLQ documents its input as a QuaPol; a polyhedral QuaPar carries the identical subdivision, so
 % rebuild it as one rather than relying on convEnvCPLQ tolerating the other class.
     if isa(obj, 'QuaPol')
         p = obj;

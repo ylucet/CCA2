@@ -38,7 +38,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(caseA.conj('cplq').kind(), 'QuaPol');
             testCase.verifyEqual(caseA.biconj('cplq').kind(), 'QuaPol');
 
-            % Case B -- single bounded triangle: conj gives a genuine mesh QuaPar; biconj is the
+            % Case B -- single bounded triangle: conj gives a genuine subdivision QuaPar; biconj is the
             % convex envelope, a RatPol on the same triangle. f = xy vanishes at all three
             % vertices and is >= 0 on this triangle, so f** is identically zero on it.
             caseB = QuaPol([0 0; 1 0; 0 1], E3, [0 1 0 0 0 0], F3);
@@ -63,7 +63,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
 
             % Case C -- general bounded multi-face domain. Its CONVEX member no longer takes the
             % symbolic route at all: conjCPLQ's Case B2 fan-triangulates a bounded polygon and
-            % conjugates each triangle in closed form, so this comes back as a mesh QuaPar. The
+            % conjugates each triangle in closed form, so this comes back as a subdivision QuaPar. The
             % values are unchanged by that (measured across five quadratics on this exact domain,
             % worst |new - old| = 0); what changed is the route, and hence the type.
             V = [0 0; 1 0; 1 1; 0 1];
@@ -80,13 +80,13 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % strictly better, so pinning the exact class was pinning a representation detail the
             % test itself says it is not about.
             gC = caseC.conj('cplq');
-            testCase.verifyInstanceOf(gC, 'QuaPar', 'must be a mesh, not the symbolic form');
+            testCase.verifyInstanceOf(gC, 'QuaPar', 'must be a subdivision, not the symbolic form');
             testCase.verifyFalse(isa(gC, 'QuaParCPLQ'), 'must not fall back to the symbolic path');
 
             % An INDEFINITE quadratic on the same domain used to go to Case C, because every
             % triangle's conjugate is then curved and Step 3 took at most one curved operand.
             % Arc-vs-arc assembly (2026-08-13) lifted that limit, so this now completes on the
-            % numeric route and returns a MESHED QuaPar -- pinned here the other way round, with
+            % numeric route and returns a SUBDIVIDED QuaPar -- pinned here the other way round, with
             % the values checked, since the route is the thing this test is about.
             caseCind = QuaPol(V, E, [0 1 0 0 0 0; 0 1 0 0 0 0], F);
             gInd = caseCind.conj('cplq');
@@ -109,7 +109,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             %
             % None of that chain was fixed. What changed is that the FIRST conjugation no longer
             % goes through it: Case B2 answers this domain in closed form, so the second
-            % conjugation is handed a clean mesh QuaPar instead of the symbolic pieces whose
+            % conjugation is handed a clean subdivision QuaPar instead of the symbolic pieces whose
             % latent getInterior bug it used to trip over. f = (x^2+y^2)/2 is convex, so f** = f
             % exactly, and that is what is asserted now -- the strongest available statement, and
             % one no return-type check can fake.
@@ -166,7 +166,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         %
         %   Q indefinite / a negative eigenvalue  -> conv f = -inf, so f* = +inf EVERYWHERE.
         %                                            dom f* is empty; the FUNCTION is a full-domain
-        %                                            mesh whose constant is +inf.
+        %                                            subdivision whose constant is +inf.
         %   Q = 0 (affine)                        -> f* is the indicator of the single point L:
         %                                            a NEEDLE (nv=1, ne=0).
         %   Q PSD of rank 1                       -> f* is finite only on a LINE through L:
@@ -196,7 +196,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % f* for the empty-domain case is +inf everywhere. Conjugating THAT gives -inf everywhere,
         % which is mathematically correct ((+inf)* = -inf) and is NOT a PLQ function: it is outside
         % the class this library represents. So a caller computing f** on a function with a
-        % negative curvature direction gets a -inf mesh rather than an error.
+        % negative curvature direction gets a -inf subdivision rather than an error.
         %
         % Pinned so the behaviour is deliberate rather than discovered. If a future return type
         % gains a way to say "not a PLQ function", this is the site that should use it.
@@ -419,7 +419,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyEqual(convEnvCPLQ(q).nf, 4);   % confirms the (now recursive) split
             g = q.conj('cplq');
             % ROUTE CHANGED 2026-08-13: the four-face envelope's conjugate now assembles
-            % numerically (arc-vs-arc), so this returns a meshed QuaPar instead of the symbolic
+            % numerically (arc-vs-arc), so this returns a subdivided QuaPar instead of the symbolic
             % QuaParCPLQ. The ground-truth checks below are unchanged and are what matters.
             testCase.verifyEqual(g.kind(), 'QuaPar');
 
@@ -560,7 +560,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                 % READ CHANGED 2026-08-24: was evalFunctionNDomain(g.fnd, ...), which only a
                 % QuaParCPLQ has. This shape now takes the NUMERIC route -- conjCPLQ's polygon path
                 % is no longer gated on isDomBounded, and conjConvexPolygon handles a convex face
-                % with recession directions -- so g is a meshed QuaPar here. evalConjResult is this
+                % with recession directions -- so g is a subdivided QuaPar here. evalConjResult is this
                 % file's own route-agnostic reader and its header says it exists for exactly this.
                 got = conjCPLQTest.evalConjResult(g, S(t,:));
                 testCase.verifyEqual(got, best, 'AbsTol', 1e-9, ...
@@ -658,7 +658,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             testCase.verifyTrue(q.isDomBounded);
 
             g = q.conj('cplq');
-            % ROUTING CHANGED 2026-08-13: the numeric route now completes here, so the result is a MESHED QuaPar rather than the symbolic QuaParCPLQ this used to pin. That is the arc-vs-arc work of 2026-08-13: maxQuaPar assembles two curved operands, so conjCPLQ no longer has to fall back to cPLQ's Step 2/3. The VALUES are what this test is really for, and they are checked below (exact, error 0, against the closed-form sup).
+            % ROUTING CHANGED 2026-08-13: the numeric route now completes here, so the result is a SUBDIVIDED QuaPar rather than the symbolic QuaParCPLQ this used to pin. That is the arc-vs-arc work of 2026-08-13: maxQuaPar assembles two curved operands, so conjCPLQ no longer has to fall back to cPLQ's Step 2/3. The VALUES are what this test is really for, and they are checked below (exact, error 0, against the closed-form sup).
             testCase.verifyTrue(isa(g, 'RatPar'));
 
             nt = 220; [uu,vv] = meshgrid(linspace(0,1,nt));
@@ -737,7 +737,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
                     % a QuaPol, which is a QuaPar with every edge conic pinned to zero. That is the
                     % same property, more strongly. The VALUE checks below are untouched.
                     testCase.verifyInstanceOf(g, 'QuaPar', sprintf( ...
-                        'polygon %d quadratic %d is not a mesh', pi, qi));
+                        'polygon %d quadratic %d is not a subdivision', pi, qi));
                     testCase.verifyFalse(isa(g, 'QuaParCPLQ'), sprintf( ...
                         'polygon %d quadratic %d fell back to the symbolic path', pi, qi));
                     for t = 1:size(S,1)
@@ -764,7 +764,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
             % NO LONGER FALLS BACK. maxQuaPar took at most one curved operand when this was
             % written, which is why an indefinite quadratic over a polygon had to go to Case C.
             % Arc-vs-arc assembly (2026-08-13) removed that limit, so the numeric route completes
-            % and returns a meshed QuaPar. Kept as a pin on the ROUTE, now the other way round,
+            % and returns a subdivided QuaPar. Kept as a pin on the ROUTE, now the other way round,
             % with the values checked against the closed-form sup over the unit box.
             testCase.verifyEqual(g.kind(), 'QuaPar');
             S = [3 -1; -2 3; 1 1; 0 -3; 4 4; -3 -3; 2 2; 0.5 0.5];
@@ -812,7 +812,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
         % f* = +inf everywhere: dom f* is EMPTY.
         %
         % That is the right answer and it is refused rather than returned, for the same reason as
-        % `PLQ:conjCPLQ:conjugateHasEmptyDomain` in Case A -- no mesh encodes an empty domain
+        % `PLQ:conjCPLQ:conjugateHasEmptyDomain` in Case A -- no subdivision encodes an empty domain
         % (nf = 0 means dim < 2, not empty). What this test pins is that the refusal is BY NAME and
         % identifies the cause, rather than a generic notImplemented that would read as "we have
         % not got to it yet".
@@ -999,7 +999,7 @@ classdef conjCPLQTest < matlab.unittest.TestCase
     methods (Static)
         function v = evalConjResult(g, s)
         % Evaluate a conj('cplq') result whatever route produced it. A QuaParCPLQ wraps a cPLQ
-        % functionNDomain array and is read with evalFunctionNDomain; a QuaPar/QuaPol is a mesh
+        % functionNDomain array and is read with evalFunctionNDomain; a QuaPar/QuaPol is a subdivision
         % and has its own eval. Since Case B2 the same input family can produce either, so a test
         % that is about VALUES must not hard-code one of the two.
             if isa(g, 'QuaParCPLQ')
