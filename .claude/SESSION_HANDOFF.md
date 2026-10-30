@@ -18,7 +18,6 @@ measurements is in DECISIONS.md 2026-10-16..20.
 
 ## Next steps
 - Re-auth (`gh auth login`) and push main.
-- Yves: erratum text review (erratum-lean.tex / erratum-diff.pdf, erratum repo 67191168115b2b8bc24afaab).
 - Yves: Example 2's mesh needs a type for triangle faces with degree-4 irrational corners; it stays
   an EnvelopeMin (eval only) until then.
 - TODO item 3 remainder: ~1600 empty faces on the 3-convex-edge triangle whose cell the curve
