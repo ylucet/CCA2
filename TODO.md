@@ -19,12 +19,11 @@
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
       Detail under "The global arrangement does not scale" below.
-- [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20/29: a pointwise certified
+- [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20/30: a pointwise certified
       test (algRowFails) drops a piece one of whose algebraic rows fails everywhere on it (the
-      triangle 2172 -> 1760 -> 1162 -> 620 -> 492 faces, 2026-10-30). Left (335): 299 are
-      undecided only at ONE vertex on the domain edge where every row is 0 -- needs a local
-      (cone + remainder) certificate at the vertex, not subdivision; 36 with spread-out undecided
-      boxes, unanalysed. DECISIONS 2026-10-29/30.
+      triangle 2172 -> 1760 -> 1162 -> 620 -> 492 -> 384 -> 298 -> 158 -> 138 faces, 2026-10-30; 134 own a point). Left: 4 faces at
+      the IRRATIONAL corner (1/sqrt5, 1 - 1/sqrt5) -- the blow-up there needs the substitution over
+      Q(sqrt5). DECISIONS 2026-10-29/30 (third).
       Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeMeshAlg proves emptiness from CONIC rows only (pieceLive) and

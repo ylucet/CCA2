@@ -8722,3 +8722,47 @@ on the domain edge, e.g. (0.2231, 0.7769) on x + y = 1, where every row is exact
 meet f there). No box containing a zero of a row gets a strict sign, at any depth; certifying
 those needs a LOCAL argument at the vertex (first-order cone condition plus a remainder bound), not
 more subdivision. 36 have leaves spread out (up to 170), not yet analysed.
+
+## 2026-10-30 (third) — the "vertex where every row is 0" was mostly NOT a corner: region factors, full rows, blow-up
+
+The previous entry's diagnosis (299 faces undecided at one vertex where every row is 0, needing a
+cone + remainder certificate) was right about the symptom and wrong about most of the cause.
+Printed per undecided leaf (row signs, polynomial values, near-zero rows), three separate defects:
+
+1. **A row vanishing on the region's EDGE.** On the hypotenuse leaves, a linear-fibre row's
+   b q + c was a multiple of 1 - x - y: it fails inside, is 0 on the edge, holds outside, so no box
+   straddling the edge has one sign -- at any depth. A region row g >= 0 that divides the
+   polynomial EXACTLY leaves its sign wherever g > 0; algRowFails now divides the region's conic
+   rows out (`factors`), like the squared factors. Same claim: the row fails off a curve.
+   Triangle 492 -> 384.
+2. **b or D vanishing at the corner (0, 0).** A linear fibre's b and a quadratic one's
+   discriminant were multiples of x + y >= 0; every polynomial of the test (a, 2aq+b, F(q), D, b)
+   is now reduced the same way. 384 -> 298.
+3. **The mesher passed the SPARSE rows.** The certificate got the arrangement's recorded rows, the
+   face is emitted with fullRows (every curve's side on the cell); x >= 0, x + y >= 0 through the
+   corner are only in the latter, so the factors in (1)/(2) were missing for 132 faces that
+   certified when called with the face's own rows. algEmpty now gets rowsOut. 298 -> 158.
+
+Each step dropped some faces that "own" sample points: 11, 4 and 8, all with every owned point
+having some row of slack <= 1e-16 (largest -6.9e-18 in the last batch) -- zero-area faces that
+the evaluator's 1e-9 tolerance lets claim a point, as on 2026-10-30 (first).
+
+**A genuine corner, blown up.** The 20 faces then left at (0, 0) have a row whose zero curve is
+TANGENT to the region at the corner, from outside: every box containing the corner, or near it
+(undecided boxes at every scale, out to 6 boxes), holds points of the wrong sign. Substituting
+x = px + s, y = py + s t (|t| <= 1, and the 3 other charts) and dividing by the exact power of s
+gives G(s, t) with P's sign for s > 0, whose G(0, t) is P's lowest form along (1, t) -- nonzero
+on the region's directions. algRowFails, after the plain subdivision fails, certifies the largest
+square around each region vertex (a quarter of the box, halved to 1/256) whose four charts pass,
+and boxes inside it are decided. Exact or refused: dyadic corner (denominator <= 2^8), integer
+coefficients, a magnitude bound below 2^52, and only exactly-zero lowest orders divided out --
+a wrong corner only fails to certify. The (0 0) corner certified all 20: triangle 158 -> 138 faces,
+all 134 owning a point kept, holes and max |mesh - EnvelopeMin| (7.5e-9) unchanged.
+A mutation (charts ignoring the sign of s, so x < px never examined) passed the random wedge test
+(the outer subdivision catches rows holding far out); aCornerChartOnTheNEGATIVESide, a row holding
+only on a disk of radius 1/64 left of the corner, catches it.
+
+**Left: an IRRATIONAL corner.** 4 faces (2 mirror pairs) meet at (1/sqrt5, 1 - 1/sqrt5) on the
+hypotenuse, where 5x^2 - 1, 4x^2 - 2xy - y^2, the edge and a row all vanish. The blow-up needs the
+corner exactly; at a rounded one the lowest order is a tiny nonzero, so it refuses. Would need the
+substitution over Q(sqrt5) (or a Taylor/interval cone argument with the vertex isolated exactly).

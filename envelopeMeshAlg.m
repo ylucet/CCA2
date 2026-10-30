@@ -191,7 +191,7 @@ function [mesh, info] = envelopeMeshAlg(env, dom)
 end
 
 % ==================================================================================================
-function out = winnerFaces(quad, quadApp, irr, rows, C, pt, Q, rowsOut) %#ok<INUSD>
+function out = winnerFaces(quad, quadApp, irr, rows, C, pt, Q, rowsOut)
 % Which applicable face is largest, and the rows that say where. A quad-versus-quad boundary is a
 % CONIC and joins the ordinary rows; a quad-versus-bridge boundary is ALGEBRAIC and joins `.alg`.
     out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
@@ -236,7 +236,7 @@ function out = winnerFaces(quad, quadApp, irr, rows, C, pt, Q, rowsOut) %#ok<INU
             algRows(end+1) = struct('FP', f{1}.FP, 'FB', f{1}.FB, 'num', quad(j).num, ...
                                     'den', quad(j).den, 'side', 1); %#ok<AGROW>
         end
-        if algEmpty(C, rows, extra, algRows, Q), continue, end
+        if algEmpty(C, rowsOut, extra, algRows, Q), continue, end    % the face's own rows, see algEmpty
         out(end+1) = struct('kind', 'quad', 'num', quad(j).num, 'den', quad(j).den, ...
                             'FP', [], 'FB', 0, 'con', [base; extra], 'alg', algRows); %#ok<AGROW>
     end
@@ -300,6 +300,11 @@ function tf = algEmpty(C, rows, conRows, algRows, Q)
 % sample reaching every connected part of the piece (one sample per part had opened five holes),
 % and bridgeQuadCut's R dropped the basis' 1/2 on x^2 and y^2, so on faces with a square term it was
 % not the cut at all. The pointwise certificate needs no sample and no connectivity argument.
+%
+% `rows` are the FULL rows the face is emitted with (fullRows: every curve's side on the cell), not
+% the sparse ones the arrangement recorded (2026-10-30). The region is the same set; but the rows
+% the cell does not record -- x >= 0, x + y >= 0 through the triangle's corner -- are the factors
+% algRowFails divides out, and with the sparse rows 132 faces at that corner stayed.
     tf = false;
     if isempty(algRows), return, end
     M = true(size(Q,1),1);
@@ -348,10 +353,10 @@ function ok = rowFails(C, rows, conRows, a)
         key = '';                                    % a BigInteger FP: not cached
     end
     if ~isempty(key) && isKey(cache, key), ok = cache(key); return, end
-    [box, inBox] = regionBox(C, rows, conRows);
+    [box, inBox, factors, corners] = regionBox(C, rows, conRows);
     if ~isempty(box)
         try
-            ok = algRowFails(a, box, inBox, 6);
+            ok = algRowFails(a, box, inBox, 6, factors, corners);
         catch
             ok = false;
         end
@@ -359,9 +364,11 @@ function ok = rowFails(C, rows, conRows, a)
     if ~isempty(key), cache(key) = ok; end
 end
 
-function [box, inBox] = regionBox(C, rows, K)
+function [box, inBox, rowPolys, V] = regionBox(C, rows, K)
 % A box around the cell (its straight rows, within the meshers' bounding box) and a test rejecting
-% sub-boxes that provably miss the cell's or the piece's conic rows (branch rows are not used).
+% sub-boxes that provably miss the cell's or the piece's conic rows or branch rows. rowPolys: the
+% conic rows as polynomials >= 0 on the region, which algRowFails divides out of a row's F(q); V the
+% straight rows' polygon vertices, the corners algRowFails blows up at (exact ones only certify).
     H = straightRows(C, rows);
     A = [H; 1 0 1e3; -1 0 1e3; 0 1 1e3; 0 -1 1e3];
     V = zeros(0,2);
@@ -373,7 +380,7 @@ function [box, inBox] = regionBox(C, rows, K)
             if all(A(:,1:2) * x.' + A(:,3) >= -1e-9 * max(1, norm(x))), V(end+1,:) = x; end %#ok<AGROW>
         end
     end
-    if size(V,1) < 3, box = []; inBox = []; return, end
+    if size(V,1) < 3, box = []; inBox = []; rowPolys = {}; V = zeros(0,2); return, end
     box = [min(V(:,1)) max(V(:,1)) min(V(:,2)) max(V(:,2))];
     rowPolys = {};
     for t = 1:size(rows,1)
@@ -653,7 +660,7 @@ function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
                 if ~ok, continue, end
             end
             if ~pieceLive(C, rows, conRows, Q), continue, end
-            if algEmpty(C, rows, conRows, algRows, Q), continue, end
+            if algEmpty(C, rowsOut, conRows, algRows, Q), continue, end
             f = pick{w};
             if strcmp(f.kind, 'quad')
                 out(end+1) = struct('kind', 'quad', 'num', quad(f.j).num, 'den', quad(f.j).den, ...
