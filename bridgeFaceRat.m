@@ -296,17 +296,57 @@ function R = regionRows(pr)
         a = pr.P(r,1:2);  c = pr.P(r,3);
         aw = ratQ.chkB(a*pr.w, abs(a)*abs(pr.w), 'P row along the axis');
         au = ratQ.chkB(a*pr.u, abs(a)*abs(pr.u), 'P row along the range');
-        % rd*nu*(row at s(t)) = al t^2 + be t + ga
-        al = ratQ.chk(aw*pr.rq, 'row t^2');
-        be = ratQ.chkB(au*pr.rd + aw*pr.rl, abs(au*pr.rd) + abs(aw*pr.rl), 'row t');
-        ga = ratQ.chkB(aw*pr.rc + c*pr.rd*pr.nu, abs(aw*pr.rc) + abs(c*pr.rd*pr.nu), 'row 1');
-        % times 4C^2 at t = -B/(2C):  al B^2 - 2 be B C + 4 ga C^2
-        raw = ratQ.chkB(al*polyMulAff(pr.B, pr.B) - 2*be*polyMulAff(pr.B, pr.C) ...
-                        + 4*ga*polyMulAff(pr.C, pr.C), ...
-                        abs(al)*polyMulAff(abs(pr.B), abs(pr.B)) + 2*abs(be)*polyMulAff(abs(pr.B), abs(pr.C)) ...
-                        + 4*abs(ga)*polyMulAff(abs(pr.C), abs(pr.C)), 'P row in x');
+        try
+            % rd*nu*(row at s(t)) = al t^2 + be t + ga
+            al = ratQ.chk(aw*pr.rq, 'row t^2');
+            be = ratQ.chkB(au*pr.rd + aw*pr.rl, abs(au*pr.rd) + abs(aw*pr.rl), 'row t');
+            ga = ratQ.chkB(aw*pr.rc + c*pr.rd*pr.nu, abs(aw*pr.rc) + abs(c*pr.rd*pr.nu), 'row 1');
+            % times 4C^2 at t = -B/(2C):  al B^2 - 2 be B C + 4 ga C^2
+            raw = ratQ.chkB(al*polyMulAff(pr.B, pr.B) - 2*be*polyMulAff(pr.B, pr.C) ...
+                            + 4*ga*polyMulAff(pr.C, pr.C), ...
+                            abs(al)*polyMulAff(abs(pr.B), abs(pr.B)) + 2*abs(be)*polyMulAff(abs(pr.B), abs(pr.C)) ...
+                            + 4*abs(ga)*polyMulAff(abs(pr.C), abs(pr.C)), 'P row in x');
+        catch ME
+            if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+            raw = rowBig(pr, aw, au, c);
+        end
         R = addRow(R, rs * raw);
     end
+end
+
+function raw = rowBig(pr, aw, au, c)
+% The same row in BigInteger, its content divided out. Erratum Example 2 (2026-10-30): the products
+% pass 2^53 although the row, like the face (numDenBig), has a large content -- and without its rows
+% the face could not enter a subdivision at all (envelopeSubdivisionAlg:faceKind).
+    I = @(v) java.math.BigInteger(sprintf('%.0f', v));
+    al = I(aw).multiply(I(pr.rq));
+    be = I(au).multiply(I(pr.rd)).add(I(aw).multiply(I(pr.rl)));
+    ga = I(aw).multiply(I(pr.rc)).add(I(c).multiply(I(pr.rd)).multiply(I(pr.nu)));
+    BB = affMulBig(pr.B, pr.B);  BC = affMulBig(pr.B, pr.C);  CC = affMulBig(pr.C, pr.C);
+    two = java.math.BigInteger.valueOf(2);  four = java.math.BigInteger.valueOf(4);
+    v = cell(1,6);  g = java.math.BigInteger.ZERO;
+    for i = 1:6
+        v{i} = al.multiply(BB{i}).subtract(two.multiply(be).multiply(BC{i})).add(four.multiply(ga).multiply(CC{i}));
+        g = g.gcd(v{i});
+    end
+    raw = zeros(1,6);
+    for i = 1:6
+        if g.signum() > 0, v{i} = v{i}.divide(g); end
+        if v{i}.abs().bitLength() > 53
+            error('ratQ:overflow', 'P row in x: %s past 2^53 after its content is removed.', ...
+                  char(v{i}.toString()));
+        end
+        raw(i) = v{i}.doubleValue();
+    end
+end
+
+function P = affMulBig(f, g)
+% polyMulAff in BigInteger: [xx xy yy x y 1] of the product of two affine forms [gx gy c]
+    I = @(v) java.math.BigInteger(sprintf('%.0f', v));
+    F = arrayfun(I, f, 'UniformOutput', false);  G = arrayfun(I, g, 'UniformOutput', false);
+    P = {F{1}.multiply(G{1}), F{1}.multiply(G{2}).add(F{2}.multiply(G{1})), F{2}.multiply(G{2}), ...
+         F{1}.multiply(G{3}).add(F{3}.multiply(G{1})), F{2}.multiply(G{3}).add(F{3}.multiply(G{2})), ...
+         F{3}.multiply(G{3})};
 end
 
 function R = addRow(R, raw)

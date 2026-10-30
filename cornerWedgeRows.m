@@ -90,6 +90,8 @@ function [rows, info] = cornerWedgeRows(f, n, d, tie, side)
     info = struct('witness', [], 'kind', {{}}, 'refused', '');
 
     sg = (-be + f.sigma.root*sqrt(be^2 - 4*al*ga)) / (2*al);   % OUR root, in doubles
+    I = ratQ.isolateRoots(Q);                   % ... and EXACTLY: the larger root when root*al > 0
+    ivS = I(1 + (f.sigma.root * sign(al) > 0) * (size(I,1) - 1), :);
     xw = f.p - f.M * [1; 1];                    % strictly interior: mu = [1; 1] > 0 there
     info.witness = xw(:).';
     info.pExact = [qval(p1, sg), qval(p2, sg)];        % the corner's gradient, rebuilt
@@ -97,7 +99,7 @@ function [rows, info] = cornerWedgeRows(f, n, d, tie, side)
 
     for i = 1:2
         [A, B] = edgeForm(adjM(i,:), {p1, p2}, Q);
-        [r, kind] = rowFor(A, B, Q, xw, sg);
+        [r, kind] = rowFor(A, B, Q, xw, ivS);
         if isempty(r)
             rows = zeros(0,8);
             info.refused = kind;
@@ -123,7 +125,7 @@ function [A, B] = edgeForm(adjRow, p, Q)
 end
 
 % --------------------------------------------------------------------------------------------------
-function [row, kind] = rowFor(A, B, Q, xw, sg)
+function [row, kind] = rowFor(A, B, Q, xw, ivS)
 % The edge as a row: its conjugate pair, which branch of it, and which side the witness is on.
     row = [];
     if all(B == 0)
@@ -167,7 +169,7 @@ function [row, kind] = rowFor(A, B, Q, xw, sg)
     catch err
         kind = ['pair:' err.identifier];  return
     end
-    [b, ok] = branchOf(C, A, B, sg);
+    [b, ok] = branchOf(pd, A, B, Q, ivS);
     if ~ok, kind = 'branch';  return, end
     v = ratQ.pairLineEval(C, b, xw(:).');
     if abs(v) <= 1e-9 * max(1, max(abs(C)))
@@ -178,24 +180,61 @@ function [row, kind] = rowFor(A, B, Q, xw, sg)
 end
 
 % --------------------------------------------------------------------------------------------------
-function [b, ok] = branchOf(C, A, B, sg)
-% WHICH line of the pair is ours: the one that VANISHES where ours does. Two points ON our own line
-% decide it -- the two lines of the pair are distinct, the discriminant of the corner's quadratic
-% being positive, so the other branch is bounded away from zero at those points.
+function [b, ok] = branchOf(pd, A, B, Q, ivS)
+% WHICH line of the pair is ours, DECIDED. Our edge A + sigma B is one of the pair's two lines, so
+% its slope (or, for a parallel pair, its level) is one of the two roots pairLineData isolates --
+% and an element of Q(sigma), whose sign against a rational between the two is decided exactly.
+%
+% It replaced (2026-10-30) a test in DOUBLES: both lines read at points 1 and 3 units along our
+% edge, ours accepted when it vanished there and the other did not, against cutoffs relative to
+% max|C| max|X|^2. At erratum Example 2's scale (|x| ~ 1e4) the cutoff for "the other vanishes too"
+% was 200 while the other line read 15.6, and the corner was refused (cornerWedgeRowsTest
+% aLARGEScaleCornerGetsItsRowsAndTheyAreTheWedge). An exact decision has no scale.
     b = 0;  ok = false;
-    L = A + sg*B;                               % our own edge, in doubles
-    nrm = hypot(L(1), L(2));
-    if nrm == 0, return, end
-    x0 = -L(3) * [L(1), L(2)] / nrm^2;          % the foot of the perpendicular from the origin
-    t  = [-L(2), L(1)] / nrm;                   % along the edge
-    X  = [x0 + t; x0 - t; x0 + 3*t];
-    sc = max(abs(C)) * max(1, max(abs(X(:))))^2;
-    r  = [max(abs(ratQ.pairLineEval(C, 1, X))), max(abs(ratQ.pairLineEval(C, 2, X)))];
-    [lo, b] = min(r);
-    if lo > 1e-7 * sc || r(3-b) < 1e-4 * sc
-        b = 0;  return                          % neither vanishes, or both do: not decidable here
+    if strcmp(pd.kind, 'parallel')
+        k = find(pd.form ~= 0, 1);
+        % the line is lambda (u x + v y - t): t = -L3 form_k / L_k
+        num = @(c) [-A(3)*pd.form(k)*c(2) - c(1)*A(k), -B(3)*pd.form(k)*c(2) - c(1)*B(k), 1];
+        den = [A(k), B(k), 1];
+    else
+        sv = qsSignBig([A(2), B(2), 1], Q, ivS);
+        if pd.vertical
+            b = 1 + (sv == 0);  ok = true;      % branch 2 is the vertical line, by pairLineData
+            return
+        end
+        if sv == 0, return, end                 % our line vertical, the pair's not: not ours
+        % slope t = -L1/L2
+        num = @(c) [-A(1)*c(2) - c(1)*A(2), -B(1)*c(2) - c(1)*B(2), 1];
+        den = [A(2), B(2), 1];
     end
+    sd = qsSignBig(den, Q, ivS);
+    if sd == 0, return, end
+    % Ours is one of the two roots, ascending in pd.iv, so ONE comparison decides it: against a SHORT
+    % dyadic m between them. The intervals' own ends are long dyadics (bisection) and overflowed 2^53
+    % in the products below on Example 2's corners.
+    m = shortBetween(pd.iv(1,2), pd.iv(2,1));
+    [mn, md] = ratQ.toRational(m);
+    st = sd * qsSignBig(ratQ.chk(num([mn md]), 'slope bound'), Q, ivS);           % sign(t - m)
+    b = 1 + (st > 0);                           % t = m only if m is root 1, the end of (lo1, hi1]
     ok = true;
+end
+
+function s = qsSignBig(u, Q, iv)
+% ratQ.qsSign in BigInteger: the sign of (u1 + u2 sigma)/u3, u3 > 0, at the root of Q in iv. The
+% double path's gcd overflowed 2^53 on Example 2's corners.
+    if u(2) == 0, s = sign(u(1)); return, end
+    s = isolatedRootSign([u(2), u(1)], Q, iv) * sign(u(3));
+end
+
+function m = shortBetween(a, b)
+% The dyadic with the fewest bits in [a, b] (a <= b), strictly inside when a < b.
+    if a == b, m = a; return, end
+    for k = ceil(log2(max(abs([a b]) + 1))):-1:-1074
+        m = ceil(a / 2^k) * 2^k;
+        if m == a, m = m + 2^k; end
+        if m < b, return, end
+    end
+    m = (a + b) / 2;
 end
 
 function v = qval(u, sg)

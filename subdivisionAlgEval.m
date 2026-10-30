@@ -26,6 +26,7 @@ function [val, who] = subdivisionAlgEval(subdivision, X)
             f = subdivision(k);
             if ~conHolds(f.con, x), continue, end
             if ~algHolds(f.alg, x), continue, end
+            if isfield(f, 'tri') && ~triHolds(f.tri, f.tfs, x), continue, end
             v = faceValue(f, x);
             if isnan(v), continue, end
             if isinf(val(i)) || v > val(i), val(i) = v;  who(i) = k; end
@@ -64,8 +65,23 @@ function tf = algHolds(alg, x)
     end
 end
 
+function tf = triHolds(tri, tfs, x)
+% side * s_e(x) >= 0 for each row [t e side] -- the e-th side of triangle t, read in doubles from
+% its corner cache and oriented +1 toward the opposite corner (triangleFaceSide decides it exactly).
+    tf = true;
+    for r = 1:size(tri,1)
+        T = tfs(tri(r,1)).T;  i = tri(r,2);  j = mod(i,3) + 1;  o = 6 - i - j;
+        e = T(j,:) - T(i,:);
+        cr = @(p) e(1)*(p(2) - T(i,2)) - e(2)*(p(1) - T(i,1));
+        v = cr(x) * sign(cr(T(o,:)));
+        if tri(r,3) * v < -1e-9 * max(1, norm(e)) * max(1, norm(x)), tf = false; return, end
+    end
+end
+
 function v = faceValue(f, x)
-    if strcmp(f.kind, 'bridge')
+    if strcmp(f.kind, 'triangle')
+        v = x * f.tf.s - f.tf.c;
+    elseif strcmp(f.kind, 'bridge')
         v = algBranch(f.FP, x, f.FB);
     else
         v = ratQ.evalFace(f.num, f.den, x);

@@ -8809,3 +8809,32 @@ rational interval isolating one root of R, with `s2` a rational function of `s1`
 row (the three barycentric coordinates `lambda_i(x; s0) >= 0`) and the value are affine in x with
 coefficients in Q(s0): evaluated in doubles from the cached `s0`, decided at a rational x by the
 sign of an integer polynomial at an isolated root (Sturm on R, exact).
+
+## 2026-10-30 (sixth) — Example 2 subdivision, steps (a)-(c): the dual point named; two scale defects on the way
+
+**(a) dualPoint / dualPointSign / isolatedRootSign.** s0 named as (two integer conics, shear k,
+eliminant R(u), dyadic interval, v = -S0/S1); sign of an integer P(s) at s0 by reduction to N(u)
+and a BigInteger Sturm/gcd decision. The double path (ratQ.signAt) overflowed 2^53 on the first random
+cubic; everything is BigInteger now. Mutation-checked (dropping sign(S1)^m, skipping the
+S1(u0) ~= 0 test): both killed -- from OUTSIDE the project folder, which MATLAB's current folder
+otherwise shadows (both "survived" when run from D:\AI\CCA2).
+
+**(b) triangleFace.** Exact forms (biconjAtoms formQ: each form as an integer conic over Gd, the
+contact point its gradient), `biconjAtoms(f, 'triangles')` (~1 s, no pair assembly). Example 2:
+conv{G1,G2,G3} has a degree-4 s0 (quartic eliminant); the other triangle ties three VERTEX forms and
+its s0 is RATIONAL -- an ordinary affine face. The third tie g2 = g3, not in the name, vanishes
+exactly at the named point (test).
+
+**(c) cutTriangles.** co f = min(pairs, plane on T) and the plane is <= every pair inside T, so the
+subdivision is the pairs' with T cut OUT (mandatory: evaluators take the MAX over owners). A rational
+T adds its three edge lines to the arrangement; a named T adds a rational BOX proved to contain it
+(corners against the box ends, decided), and only the pieces inside the box are cut by its sides.
+The box ends must be SHORT dyadics: 2^-30 of the scale overflowed the decided polynomials.
+
+**Two defects that blocked Example 2's pairs before any triangle, both scale, both fixed red first:**
+* cornerWedgeRows chose a corner's branch in DOUBLES (both conjugate lines read 1 and 3 units along
+  the edge, cutoffs relative to max|C| max|X|^2): at |x| ~ 1e4 the cutoff for "the other line
+  vanishes too" was 200 while it read 15.6, and 40 corners got no rows. Now decided: the edge's slope
+  (or level) is an element of Q(sigma) compared with a short dyadic between the pair's two roots.
+* bridgeFaceRat's region rows overflowed in the products although each row has a large content
+  (like the value, numDenBig 2026-10-11); 3 faces had neither rows nor FP. BigInteger, content out.

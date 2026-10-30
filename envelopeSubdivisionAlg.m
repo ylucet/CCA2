@@ -1,4 +1,4 @@
-function [subdivision, info] = envelopeSubdivisionAlg(env, dom)
+function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
 % envelopeSubdivisionAlg  The envelope as a subdivision whose EDGES may be algebraic -- the arrangement that
 %   `envelopeSubdivision` refuses when a bridge face competes.
 %
@@ -9,6 +9,9 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom)
 %   output TYPE is grown to store it.
 %
 % [input]  env  : as `envelopeAssemble` returns it, ideally pruned
+%          dom  : (optional) rows [a b c], a x + b y + c >= 0, the subdivision is clipped to
+%          cuts : (optional) integer lines [a b c] added to the arrangement as curves, so that every
+%                 face lies on one side of each and records it -- cutTriangles' rational lines
 % [output] subdivision : struct array, one entry per face, with
 %                   .kind  'quad' | 'bridge'
 %                   .num, .den   the value, when kind is 'quad'
@@ -41,10 +44,11 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom)
 % `envelopeSubdivisionAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
 % Q(sqrt 6), and 18 of its cells overlap.
 
-    if nargin < 1 || nargin > 2
-        error('envelopeSubdivisionAlg:nargin', 'expects (env) or (env, dom).');
+    if nargin < 1 || nargin > 3
+        error('envelopeSubdivisionAlg:nargin', 'expects (env), (env, dom) or (env, dom, cuts).');
     end
     if nargin < 2, dom = zeros(0,3); end
+    if nargin < 3, cuts = zeros(0,3); end
     % SEVERAL PAIRS (2026-10-18): a cell array of pair envelopes is the MINIMUM over them -- an
     % EnvelopeMin with no triangle face. Their faces go into one arrangement, tagged by pair, and each
     % cell is resolved as a min of maxes (minMaxFaces). One pair is exactly the path below.
@@ -65,6 +69,9 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom)
     C = addCornerCrossings(C, corners);
     C = addBridgeCurves(C, bridges);   % without them a bridge's membership can change inside a cell
     C = splitLineCurves(C);
+    for i = 1:size(cuts,1)
+        C = addKey(C, [ratQ.conic([0 0 0 cuts(i,:)]), 0]);
+    end
 
     % ---- the arrangement over the CONIC curves ---------------------------------------------------
     % THREE THINGS KEEP IT SMALL (2026-10-17, the poly2 kink at c = -2: 85 curves, >90 min before).

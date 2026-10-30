@@ -166,6 +166,38 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
             testCase.verifyEqual(nonConcave, 0, 'the face must only exist where the objective is concave');
         end
 
+        function aLARGECommonFactorFaceStillGetsItsROWSAndImplicitValue(testCase)
+        % Captured 2026-10-30 from biconjAtoms on erratum Example 2: the three faces whose region
+        % rows overflowed 2^53 in the products (al B^2 - 2 be B C + 4 ga C^2) although each row has a
+        % large content, like the value itself. Without rows the face cannot enter a subdivision
+        % (envelopeSubdivisionAlg:faceKind), which blocked Example 2's pairs entirely. The rows must
+        % be the face -- the same region bridgeMember decides -- and FP/FB its value.
+            n2 = [0 0 0 0 25 10 4 3030 -2854 535327];
+            cases = {[0 0 0 0 0 0 0 60 10 -2660], 1, [1 0 -130; 5 2 -357; -5 -2 892]; ...
+                     [0 0 0 0 0 0 0 30 20 305],   2, [-1 0 -5; -5 -2 357; 5 2 178]; ...
+                     [0 0 0 0 0 0 0 60 10 -2660], 1, [5 3 -1073; -5 -2 357; 5 2 178]};
+            for c = 1:size(cases,1)
+                face = bridgeFaceRat(cases{c,1}, cases{c,2}, n2, 214, cases{c,3});
+                testCase.verifyTrue(isfield(face, 'cells') && isfield(face, 'FP'), ...
+                    sprintf('case %d: no rows / no implicit value', c));
+                if ~isfield(face, 'cells'), continue, end
+                rng(13);
+                X = face.wit(1:2)/face.wit(3) + (rand(3000,2)*2 - 1)*20;
+                R = face.cells{1};
+                inR = true(size(X,1),1);
+                for r = 1:size(R,1)
+                    inR = inR & R(r,7) * QuaPar.evalConic(R(r,1:6), X) >= 0;
+                end
+                inP = bridgeMember(face.pair, X);
+                testCase.verifyTrue(any(inP) && any(~inP), sprintf('case %d must straddle the face', c));
+                testCase.verifyEqual(inR, inP, sprintf('case %d: rows vs bridgeMember', c));
+                Xi = X(inP,:);
+                want = arrayfun(@(i) evalRat(face, Xi(i,:)), (1:size(Xi,1)).');
+                testCase.verifyEqual(algBranch(face.FP, Xi, face.FB), want, 'RelTol', 1e-10, ...
+                    'AbsTol', 1e-8, sprintf('case %d: FP/FB is not the value', c));
+            end
+        end
+
         function bridgeFaceAlgDELEGATESToItRatherThanRefusing(testCase)
         % One entry point, two face kinds: a caller asks bridgeFaceAlg and gets whichever face the
         % pair actually has. The singular pencil used to be a refusal.

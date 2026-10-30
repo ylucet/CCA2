@@ -284,6 +284,10 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'addQuaPol:internal',                       'internal'; ...
                 'biconjAtoms:subdivision',                         'internal'; ... % a face that is not a simple polygon: QuaPol's constructor cannot build one
                 'biconjAtoms:uncovered',                    'internal'; ... % a tie whose forms no atom holds: every form is built from an atom's own vertex, edge or piece
+                'biconjAtoms:vertexIndex',                  'internal'; ... % an atom endpoint that is not a vertex of f: every one is read off f.V
+                'cutTriangles:box',                         'loop-safety'; ... % the box widens to the triangle's own size, which always holds it
+                'isolatedRootSign:noConverge',              'loop-safety'; ... % bisection after the exact zero test: separation is positive
+                'triangleFace:flat',                        'internal'; ... % tripleFaces drops a contact triangle of (near) zero area first
                 'bridgeArcCut:witnessOnCut',                'internal'; ...
                 'bridgeFaceAlg:bigZContent',                'todo'; ... % a big polynomial with z-content: no fixture yet
                 'bridgeFaceAlg:branchOverflow',             'todo'; ...

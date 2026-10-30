@@ -1,9 +1,12 @@
-function env = biconjAtoms(f)
+function env = biconjAtoms(f, mode)
 % biconjAtoms  The convex envelope of a bounded QuaPol as the MINIMUM over its ATOMS' pairwise
 %   envelopes and their triple tangent planes -- the route for non-convex pieces that curve UP
 %   along an edge, which biconjQ's lower-hull path cannot take.
 %
 % [input]  f   : QuaPol, exact (fN/fD), operable; bounded or not.
+%          mode : (optional) 'triangles' -- return only the ACTIVE triangle faces (the struct array
+%                 EnvelopeMin.tris would hold, with each form's exact conic), without assembling
+%                 a single pair. The pairs are what cost minutes; the triangles cost a second.
 % [output] env : EnvelopeMin -- `env.eval(X)` is co f at the points X.
 %
 % ==================================================================================================
@@ -46,6 +49,9 @@ function env = biconjAtoms(f)
 % case. Verified against the erratum's closed forms in erratumExamplesTest.
 % ==================================================================================================
     if ~isa(f, 'QuaPol'), error('biconjAtoms:input', 'expects a QuaPol; got %s.', class(f)); end
+    if nargin > 1 && ~strcmp(mode, 'triangles')
+        error('biconjAtoms:mode', 'the only mode is ''triangles''; got %s.', mat2str(mode));
+    end
     % AN UNBOUNDED INPUT (erratum Case E). Its rays carry two things. A ray along which f is
     % strictly convex is an ATOM like a convex edge, with t in [0, inf). A ray along which f grows
     % at most linearly is not an atom at all: its sup sits at the base vertex, and what it does is
@@ -81,6 +87,7 @@ function env = biconjAtoms(f)
     % three forms need three different atoms.
     tris = tripleFaces(forms, D);
     [ab, tris] = activeAtomPairs(atoms, forms, tris, D);
+    if nargin > 1, env = tris; return, end
     g = cell(1, numel(atoms));
     for a = unique(ab(:)).'
         g{a} = conjQ(atoms{a}.q);
@@ -453,11 +460,12 @@ function [atoms, forms] = collectAtoms(f)
 % Atoms (QuaPols) and FORMS (closed-form conjugate pieces for the triples), deduplicated.
     atoms = {};
     forms = struct('kind', {}, 'A', {}, 'b', {}, 'c', {}, 'u', {}, 'd', {}, 'al', {}, 'be', {}, ...
-                   'H', {}, 'L', {}, 'poly', {}, 'tmax', {});
+                   'H', {}, 'L', {}, 'poly', {}, 'tmax', {}, 'Gn', {}, 'Gd', {});
     cvx = {};                                    % the convex-piece atoms' regions (see inPiece)
     edgeAt = zeros(0,4);                         % [u w] of each edge atom, for dedup
     rayAt = zeros(0,4);                          % [u d] of each RAY atom, d primitive
     vtx = zeros(0,2);  vval = zeros(0,1);        % every vertex that gets a form
+    vface = zeros(0,1);                          % ... and the face its value was read from
     for k = 1:f.nf
         [n, d] = f.faceQ(k);
         H = [n(5) n(6); n(6) n(7)] / d;  L = [n(8); n(9)] / d;  k0 = n(10) / d;
@@ -481,9 +489,9 @@ function [atoms, forms] = collectAtoms(f)
             ed = [poly, poly([2:m 1],:) - poly, zeros(m,1)];
         end
         for i = 1:size(ed,1)
-            [vtx, vval] = addVertex(vtx, vval, ed(i,1:2), q(ed(i,1:2)));
-            if ~ed(i,5), [vtx, vval] = addVertex(vtx, vval, ed(i,1:2) + ed(i,3:4), ...
-                                                 q(ed(i,1:2) + ed(i,3:4))); end
+            [vtx, vval, vface] = addVertex(vtx, vval, vface, ed(i,1:2), q(ed(i,1:2)), k);
+            if ~ed(i,5), [vtx, vval, vface] = addVertex(vtx, vval, vface, ed(i,1:2) + ed(i,3:4), ...
+                                                 q(ed(i,1:2) + ed(i,3:4)), k); end
         end
         if isCvx
             cvx{end+1} = poly; %#ok<AGROW>
@@ -491,7 +499,7 @@ function [atoms, forms] = collectAtoms(f)
             if n(5)*n(7) - n(6)^2 > 0
                 Hi = inv(H);
                 forms(end+1) = mkForm('piece', Hi, -Hi*L, 0.5*L.'*Hi*L - k0, [], [], [], [], ...
-                                      H, L, poly); %#ok<AGROW>
+                                      H, L, poly, formQ('piece', f, k)); %#ok<AGROW>
             end
         end
         for i = 1:size(ed,1)
@@ -500,7 +508,8 @@ function [atoms, forms] = collectAtoms(f)
             if al <= 0, continue, end            % a ray of linear growth only shapes dom f* (D)
             be = (u*H + L.') * dv.';  ga = q(u);
             fm = mkForm('edge', dv.'*dv/(2*al), u.' - be*dv.'/(2*al), ...
-                        -ga + be^2/(4*al), u, dv, al, be, [], [], []);
+                        -ga + be^2/(4*al), u, dv, al, be, [], [], [], ...
+                        formQ('edge', f, k, vertexIndex(f, u), vertexIndex(f, u + dv)));
             if isRay, fm.tmax = inf; end
             forms(end+1) = fm; %#ok<AGROW>
             if isCvx, continue, end              % the convex piece's atom already holds it
@@ -522,7 +531,7 @@ function [atoms, forms] = collectAtoms(f)
     end
     for i = 1:size(vtx,1)
         forms(end+1) = mkForm('vertex', zeros(2), vtx(i,:).', -vval(i), vtx(i,:), [], [], [], ...
-                              [], [], []); %#ok<AGROW>
+                              [], [], [], formQ('vertex', f, vface(i), vertexIndex(f, vtx(i,:)))); %#ok<AGROW>
         p = vtx(i,:);
         covered = any(cellfun(@(P) inPiece(p, P), cvx));
         for j = 1:size(edgeAt,1)
@@ -546,15 +555,100 @@ function [atoms, forms] = collectAtoms(f)
     atoms = atoms(keep);
 end
 
-function fm = mkForm(kind, A, b, c, u, d, al, be, H, L, poly)
+function fm = mkForm(kind, A, b, c, u, d, al, be, H, L, poly, G)
+% G = {Gn, Gd}: the form EXACTLY, as the conic Gn/Gd -- see formQ.
     fm = struct('kind', kind, 'A', A, 'b', b, 'c', c, 'u', u, 'd', d, 'al', al, 'be', be, ...
-                'H', H, 'L', L, 'poly', poly, 'tmax', 1);
+                'H', H, 'L', L, 'poly', poly, 'tmax', 1, 'Gn', G{1}, 'Gd', G{2});
 end
 
-function [vtx, vval] = addVertex(vtx, vval, p, v)
+function [vtx, vval, vface] = addVertex(vtx, vval, vface, p, v, k)
     if ~isempty(vtx) && any(all(abs(vtx - p) < 1e-12, 2)), return, end
-    vtx(end+1,:) = p;  vval(end+1,1) = v;
+    vtx(end+1,:) = p;  vval(end+1,1) = v;  vface(end+1,1) = k;
 end
+
+function i = vertexIndex(f, p)
+% The vertex of f at p, whose EXACT coordinates f.vertexQ holds; p is a double read off f.V (or
+% u + (w - u) in doubles), so a miss beyond rounding is a defect, not a case.
+    [dmin, i] = min(vecnorm(f.V - p, 2, 2));
+    if dmin > 1e-9 * max(1, norm(p))
+        error('biconjAtoms:vertexIndex', 'no vertex of f lies at %s.', mat2str(p, 17));
+    end
+end
+
+function G = formQ(kind, f, k, varargin)
+% A form whose exact conic passes 2^53 gets none ({[], []}): the doubles carry eval and the pairs as
+% before, and only a triangle face through it stays unnamed (triangleFace refuses it by name).
+    try
+        G = formQExact(kind, f, k, varargin{:});
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        G = {[], []};
+    end
+end
+
+function G = formQExact(kind, f, k, iu, iw)
+% The form EXACTLY: the conic Gn/Gd (Gn 1x6 integers [a b c d e f] in s, Gd > 0) equal to
+% g(s) = sup over the atom of <s,x> - f(x), from f's exact face k and exact vertices. Its gradient
+% is the CONTACT point -- m(s) = grad g(s) for all three kinds -- so a triangle face's corners are
+% affine in s. A triangle's dual point s0 is a common root of two differences of these
+% (dualPoint), and nothing about it may rest on the doubles above (DECISIONS 2026-10-30 (fifth)).
+%   vertex u : g = <s,u> - q(u)
+%   edge u-w : g = <s,u> - q(u) + (<s,dv> - be)^2 / (4 al),  dv = w - u, al = dv'H dv / 2,
+%              be = (H u + L)'dv     (t* = (<s,dv> - be) / (2 al) is the contact parameter)
+%   piece    : g = (s - L)' H^-1 (s - L) / 2 - k0
+    [n, d] = f.faceQ(k);
+    H = {[n(5) d], [n(6) d]; [n(6) d], [n(7) d]};  L = {[n(8) d]; [n(9) d]};  k0 = [n(10) d];
+    qv = @(u) qadd(qadd(qmul([1 2], quad(H, u, u)), qadd(qmul(L{1}, u{1}), qmul(L{2}, u{2}))), k0);
+    switch kind
+        case 'vertex'
+            u = vq(f, iu);
+            c = {[0 1], [0 1], [0 1], u{1}, u{2}, qneg(qv(u))};
+        case 'edge'
+            u = vq(f, iu);  w = vq(f, iw);
+            dv = {qadd(w{1}, qneg(u{1})); qadd(w{2}, qneg(u{2}))};
+            al = qmul([1 2], quad(H, dv, dv));
+            Hu = {qadd(qadd(qmul(H{1,1}, u{1}), qmul(H{1,2}, u{2})), L{1}); ...
+                  qadd(qadd(qmul(H{2,1}, u{1}), qmul(H{2,2}, u{2})), L{2})};
+            be = qadd(qmul(Hu{1}, dv{1}), qmul(Hu{2}, dv{2}));
+            i4 = qinv(qmul([4 1], al));  i2 = qinv(qmul([2 1], al));
+            c = {qmul(qmul(dv{1}, dv{1}), i4), qmul(qmul([2 1], qmul(dv{1}, dv{2})), i4), ...
+                 qmul(qmul(dv{2}, dv{2}), i4), ...
+                 qadd(u{1}, qneg(qmul(qmul(be, dv{1}), i2))), ...
+                 qadd(u{2}, qneg(qmul(qmul(be, dv{2}), i2))), ...
+                 qadd(qmul(qmul(be, be), i4), qneg(qv(u)))};
+        case 'piece'
+            dt = qadd(qmul(H{1,1}, H{2,2}), qneg(qmul(H{1,2}, H{1,2})));
+            Hi = {qmul(H{2,2}, qinv(dt)), qneg(qmul(H{1,2}, qinv(dt))); ...
+                  qneg(qmul(H{1,2}, qinv(dt))), qmul(H{1,1}, qinv(dt))};
+            HiL = {qadd(qmul(Hi{1,1}, L{1}), qmul(Hi{1,2}, L{2})); ...
+                   qadd(qmul(Hi{2,1}, L{1}), qmul(Hi{2,2}, L{2}))};
+            c = {qmul([1 2], Hi{1,1}), Hi{1,2}, qmul([1 2], Hi{2,2}), qneg(HiL{1}), qneg(HiL{2}), ...
+                 qadd(qmul([1 2], qadd(qmul(L{1}, HiL{1}), qmul(L{2}, HiL{2}))), qneg(k0))};
+    end
+    nums = cellfun(@(r) r(1), c);  dens = cellfun(@(r) r(2), c);
+    [N, D] = ratQ.combineDen(nums(:), dens(:));
+    [Gn, Gd] = ratQ.canon(N(:).', D);
+    G = {Gn, Gd};
+end
+
+function u = vq(f, i)
+    [vn, vd] = f.vertexQ(i);
+    u = {[vn(1) vd]; [vn(2) vd]};
+end
+
+function r = quad(H, a, b)
+% a' H b for rational 2-vectors and a rational 2x2 H
+    r = [0 1];
+    for i = 1:2
+        for j = 1:2, r = qadd(r, qmul(qmul(a{i}, H{i,j}), b{j})); end
+    end
+end
+
+% rationals as [num den], every result canonical (ratQ raises past 2^53 rather than round)
+function r = qadd(a, b), [n, d] = ratQ.add(a(1), a(2), b(1), b(2)); r = [n d]; end
+function r = qmul(a, b), [n, d] = ratQ.scale(a(1), a(2), b(1), b(2)); r = [n d]; end
+function r = qinv(a),    [n, d] = ratQ.div(1, 1, a(1), a(2)); r = [n d]; end
+function r = qneg(a),    r = [-a(1) a(2)]; end
 
 function [poly, eidx] = piecePolygon(f, k)
 % Face k's vertices in boundary order (counter-clockwise), and its edge indices.
@@ -620,7 +714,7 @@ function tris = tripleFaces(forms, D)
 % the face <s0,x> - g(s0) holds on T + N_D(s0) (erratum Case E), G its generators. Off the
 % boundary G is empty. A tie outside D keeps its triangle alone -- still a chord of f, so still
 % an upper bound.
-    tris = struct('T', {}, 's', {}, 'c', {}, 'G', {}, 'forms', {});
+    tris = struct('T', {}, 's', {}, 'c', {}, 'G', {}, 'forms', {}, 'Gn', {}, 'Gd', {});
     n = numel(forms);
     for a = 1:n
         for b = a+1:n
@@ -636,7 +730,9 @@ function tris = tripleFaces(forms, D)
                     ar = (M(2,1)-M(1,1))*(M(3,2)-M(1,2)) - (M(2,2)-M(1,2))*(M(3,1)-M(1,1));
                     if abs(ar) <= 1e-9 * max(1, max(abs(M(:))))^2, continue, end
                     tris(end+1) = struct('T', M, 's', s0.', 'c', gval(F3(1), s0), ...
-                                         'G', normalCone(D, s0), 'forms', [a b c]); %#ok<AGROW>
+                                         'G', normalCone(D, s0), 'forms', [a b c], ...
+                                         'Gn', vertcat(F3.Gn), 'Gd', vertcat(F3.Gd)); %#ok<AGROW>
+                    % (a form without an exact conic leaves Gn short of 3 rows: triangleFace refuses)
                 end
             end
         end

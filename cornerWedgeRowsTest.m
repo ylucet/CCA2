@@ -28,6 +28,35 @@ classdef cornerWedgeRowsTest < matlab.unittest.TestCase
             t.verifyGreaterThan(total, 0);
         end
 
+        function aLARGEScaleCornerGetsItsRowsAndTheyAreTheWedge(t)
+        % Erratum Example 2, pair 1 (2026-10-30): two corners at |s| ~ 100 whose wedge edges sit at
+        % |x| ~ 1e4. The branch was chosen by evaluating both lines at points 1 and 3 units along
+        % the edge against a cutoff of 1e-4 * max|C| * max|X|^2 -- here 200, while the OTHER line
+        % read 15.6 there -- so it was judged to vanish too and the corner was refused: no rows,
+        % and envelopeSubdivisionAlg could not take Example 2's pairs at all.
+            src = {[0 0 0 0 1 0 0 50 30 470], 3, [180 -180 -54 -21420 38628 -1330974], 1};
+            F = {struct('sigma', struct('quad', [-1 -1014 -145674], 'root', -1, 's0n', [250;0], ...
+                        'w', [0;-2], 'na', 4), 'M', [2 -14514.396127262564;0 18021.362323642461], ...
+                        'p', [37.5;10], 's', [62.5;86.635534040347579]), ...
+                 struct('sigma', struct('quad', [1 1490 -1034475], 'root', 1, 's0n', [13210;7926], ...
+                        'w', [-6;10], 'na', 136), 'M', [-10 -11960.18251112353;-6 14850], ...
+                        'p', [41.459503782260846;10], 's', [74.378511346782531;96.202481088695777])};
+            rng(12);
+            for k = 1:2
+                f = F{k};
+                rows = cornerWedgeRows(f, src{:});
+                t.verifyEqual(size(rows), [2 8], sprintf('corner %d gets both edges', k));
+                if ~isequal(size(rows), [2 8]), continue, end
+                X = f.p.' + 60 * (rand(400,2) - 0.5);       % around the apex, both sides of both edges
+                for i = 1:size(X,1)
+                    mu = f.M \ (f.p - X(i,:).');
+                    if min(abs(mu)) < 1e-9 * max(1, norm(X(i,:))), continue, end
+                    byRows = all(arrayfun(@(r) rows(r,7)*rowValue(rows(r,:), X(i,:)) >= 0, 1:2));
+                    t.verifyEqual(byRows, all(mu >= 0), sprintf('corner %d, point %d', k, i));
+                end
+            end
+        end
+
         function eachEDGEPassesThroughTheCornerItBounds(t)
         % The sharper statement, and the one that caught the defect this file was written for: edge i
         % is the line { mu_i = 0 }, which CONTAINS the corner's gradient p. A row whose line misses p
