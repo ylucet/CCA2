@@ -305,20 +305,28 @@ function tf = algEmpty(C, rows, conRows, algRows, Q)
     M = true(size(Q,1),1);
     for r = 1:size(conRows,1), M = M & conRows(r,7) * QuaPar.evalConic(conRows(r,1:6), Q) > 0; end
     Qk = Q(M,:);
-    if isempty(Qk), return, end
-    if any(piecePoints([], Qk, zeros(0,8), algRows)), return, end   % a witness: not empty
+    % A WITNESS must be STRICT (2026-10-30): read with piecePoints' 1e-9 tolerance, a point where a
+    % touching row holds with equality kept zero-area faces. And NO sample in the piece is no reason
+    % to stop: the certificate needs none, and returning there left ~250 faces failing by a clear
+    % margin (each certified at depth 6 even on the whole domain's box) never tried.
+    holds = true(size(Qk,1), 1);
     nFail = zeros(numel(algRows), 1);
     for t = 1:numel(algRows)
         a = algRows(t);
         z = algBranch(a.FP, Qk, a.FB);  q = ratQ.evalFace(a.num, a.den, Qk);
-        nFail(t) = sum(~(isfinite(z) & a.side * (q - z) >= 0));
-        if nFail(t) < size(Qk,1), continue, end      % a lone row must fail at every point
-        if rowFails(C, rows, conRows, a), tf = true; return, end
+        ok = isfinite(z) & a.side * (q - z) > 1e-9 * max(1, abs(z));
+        holds = holds & ok;
+        nFail(t) = sum(~ok);
+    end
+    if any(holds), return, end                       % a witness: not empty
+    for t = 1:numel(algRows)
+        if isempty(Qk) || nFail(t) < size(Qk,1), continue, end   % a lone row must fail at every point
+        if rowFails(C, rows, conRows, algRows(t)), tf = true; return, end
     end
     % JOINTLY (2026-10-30): no sample has every row holding, but no one row fails at all of them --
     % 274 faces of the 3-convex-edge triangle. A sub-box is decided by whichever row fails on it; the
-    % rows failing most often are tried first.
-    if numel(algRows) > 1
+    % rows failing most often are tried first. With no sample in the piece, every row together.
+    if numel(algRows) > 1 || isempty(Qk)
         [~, o] = sort(nFail, 'descend');
         tf = rowFails(C, rows, conRows, algRows(o));
     end

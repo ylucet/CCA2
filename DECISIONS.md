@@ -8705,3 +8705,20 @@ Continues 2026-10-29 (1162 faces, 198 owning a point). Two measured classes, two
 points. Faces owning a point 198 -> 157: all 41 dropped ones own their points only through the
 evaluator's 1e-9 row tolerance -- at every such point some row's slack is <= 0 (largest 0 over all
 41), i.e. they are zero-area faces the tolerance lets claim a point.
+
+## 2026-10-30 (second) — no sample in the piece is no reason to stop; the remainder is a CORNER
+
+**Depth was refuted as the cause.** ~250 of the 463 faces left failed by a clear margin on a grid;
+fitted boxes certified them at depth 6, so depth looked like the problem -- but the same faces
+certify at depth 6 on the WHOLE domain's box. The mesher never tried them: algEmpty returned when
+none of the cell's 5 sample points fell in the piece. It now goes straight to the joint
+certificate there (no sample needed), and a witness of non-emptiness must hold strictly (the 1e-9
+tolerance counted touching points). Triangle 620 -> 492 faces, the 157 owning a point all kept,
+holes and values unchanged.
+
+**The 335 left, measured** (algRowFails instrumented to list its undecided depth-8 leaves, on the
+domain's box): for 299 the undecided leaves are 1-3 boxes around ONE point -- a vertex of the piece
+on the domain edge, e.g. (0.2231, 0.7769) on x + y = 1, where every row is exactly 0 (all faces
+meet f there). No box containing a zero of a row gets a strict sign, at any depth; certifying
+those needs a LOCAL argument at the vertex (first-order cone condition plus a remainder bound), not
+more subdivision. 36 have leaves spread out (up to 170), not yet analysed.
