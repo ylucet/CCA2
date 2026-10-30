@@ -8838,3 +8838,16 @@ The box ends must be SHORT dyadics: 2^-30 of the scale overflowed the decided po
   (or level) is an element of Q(sigma) compared with a short dyadic between the pair's two roots.
 * bridgeFaceRat's region rows overflowed in the products although each row has a large content
   (like the value, numDenBig 2026-10-11); 3 faces had neither rows nor FP. BigInteger, content out.
+
+## 2026-10-30 (seventh) — Example 2's PAIRS do not fit one global arrangement: > 60000 cells at curve 68 of 75
+
+Measured after (sixth) unblocked every face (all 40 corners and 3 rational bridges now carry rows):
+envelopeSubdivisionAlg on Example 2's three pruned pairs, clipped to conv(dom f), passes its
+3000-cell budget at curve 64 of 75, and with the budget raised to 60000 (scratch copy) passes THAT
+at curve 68 -- the last of the pairs' own curves; the 7 triangle cut lines come after it. So the
+triangles are not the cost and raising the budget is not the fix: every curve splits every cell it
+crosses over the whole hull, and 68 curves from three pairs multiply. Example 2's biconjugate stays
+the EnvelopeMin (values exact). Next: arrange LOCALLY -- a curve splits only the cells where a face
+it bounds can apply (its pair's cell-pair region), or per pair then overlay -- TODO item 1 step c'.
+Also planned, smaller: cut the triangles AFTER the arrangement (pieces meeting T, decided by
+cellInterior with T's lines or box) instead of adding 7 global lines.

@@ -21,6 +21,10 @@
         b. the triangle face: value and barycentric rows affine in x over Q(s0), double cache.
         c. subdivision: triangle piece + each min-of-maxes piece cut by 'outside T' (three conjunctions),
            skipped where a rational hull of T's vertex boxes misses the cell.
+        a-c DONE 2026-10-30 (d56fc74; c verified on a synthetic subdivision, fast).
+        c'. BLOCKER, measured: Example 2's pairs need > 60000 cells in the GLOBAL arrangement (curve 68
+           of 75; DECISIONS (seventh)). Arrange locally (a curve splits only cells where a face it
+           bounds can apply), or per pair then overlay; then cut T post hoc instead of 7 global lines.
         d. the AlgCrv type and evaluators carry the new face/row kind; biconjQ subdivides Example 2;
            test: equal to the EnvelopeMin on 4000 points + the definition check (slow).
 - [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink is subdivided in 256 s (clipped to
