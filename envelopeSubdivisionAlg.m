@@ -66,12 +66,13 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
     [C, req, pairOf] = conicTable(env.quad, corners);
     nQuad = numel(env.quad);
     allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
-    C = addCornerCrossings(C, corners);
-    C = addBridgeCurves(C, bridges);   % without them a bridge's membership can change inside a cell
-    C = splitLineCurves(C);
+    [C, cEnds] = addCornerCrossings(C, corners);
+    [C, bEnds] = addBridgeCurves(C, bridges);   % without them a bridge's membership can change inside a cell
+    [C, lEnds] = splitLineCurves(C);
     for i = 1:size(cuts,1)
         C = addKey(C, [ratQ.conic([0 0 0 cuts(i,:)]), 0]);
     end
+    owners = curveOwners(C, req, nQuad, bridges, cEnds, bEnds, lEnds);
 
     % ---- the arrangement over the CONIC curves ---------------------------------------------------
     % THREE THINGS KEEP IT SMALL (2026-10-17, the poly2 kink at c = -2: 85 curves, >90 min before).
@@ -94,19 +95,34 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
         end
         cells = {base};
     end
+    % A LOCAL ARRANGEMENT (2026-10-31). A curve splits a cell only where it can change something
+    % there: some face (or bridge block) it bounds must be satisfiable on the cell by its OTHER
+    % rows. Where none is, every face it bounds is inapplicable on the whole cell whichever side of
+    % the curve a point lies, so the cell is not split, and the curve is remembered as SKIPPED -- it
+    % may cross the cell, so it is never emitted as a row of it (fullRows). Why applicability stays
+    % constant on every final cell: a face whose row j was skipped on an ancestor A has no point of A
+    % meeting its other rows, so it applies nowhere on A; every other face has all its rows recorded
+    % or one-signed. Emptiness is liveCell's, which is sound; an undecided test splits.
+    % Example 2's three pairs passed 60000 cells globally (DECISIONS 2026-10-30 (seventh)).
+    skips = {zeros(1,0)};
+    nSkip = 0;
     maxCells = 3000;
     for j = 1:size(C,1)
-        next = {};
+        next = {};  nextSk = {};
         for k = 1:numel(cells)
-            if any(cells{k}(:,1) == j), next{end+1} = cells{k}; continue, end %#ok<AGROW>
+            if any(cells{k}(:,1) == j), next{end+1} = cells{k};  nextSk{end+1} = skips{k}; continue, end %#ok<AGROW>
             live = [liveCell(C, [cells{k}; j, 1]), liveCell(C, [cells{k}; j, -1])];
-            if all(live)
+            if all(live) && ~relevantHere(C, owners{j}, cells{k})
+                next{end+1} = cells{k};  nextSk{end+1} = [skips{k}, j]; %#ok<AGROW>
+                nSkip = nSkip + 1;
+            elseif all(live)
                 next{end+1} = [cells{k}; j, 1];  next{end+1} = [cells{k}; j, -1]; %#ok<AGROW>
+                nextSk{end+1} = skips{k};  nextSk{end+1} = skips{k}; %#ok<AGROW>
             elseif any(live)
-                next{end+1} = cells{k}; %#ok<AGROW>     % the curve misses this cell
+                next{end+1} = cells{k};  nextSk{end+1} = skips{k}; %#ok<AGROW>   % the curve misses this cell
             end
         end
-        cells = next;
+        cells = next;  skips = nextSk;
         if numel(cells) > maxCells
             error('envelopeSubdivisionAlg:arrangementSize', ...
                 'the arrangement passed %d cells at curve %d of %d; envelopeEval answers for the face list.', ...
@@ -135,7 +151,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
         % that split a cell, but a face's rows are what its boundary is traced from, and with the
         % sparse rows algCrvSubdivisionTest found a face vertex ending other than two arcs (2026-10-17). A
         % curve the cell does not record has one sign on it -- read at the cell's points.
-        rowsOut = fullRows(C, rows, Q);      % emitted; the exact tests below keep the sparse rows
+        rowsOut = fullRows(C, rows, Q, skips{k});      % emitted; the exact tests below keep the sparse rows
         for b = 1:numel(bridges)
             if sum(bridgeMember(bridges{b}.pair, Q)) * 2 > size(Q,1)
                 here(end+1) = bridges{b}.pairIndex; %#ok<AGROW>
@@ -194,7 +210,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
         end
     end
     info = struct('cells', numel(cells), 'faces', numel(subdivision), 'algRows', nAlg, ...
-                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap);
+                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap, 'skipped', nSkip);
 end
 
 % ==================================================================================================
@@ -249,10 +265,11 @@ function out = winnerFaces(quad, quadApp, irr, rows, C, pt, Q, rowsOut)
     end
 end
 
-function rows = fullRows(C, rows, P)
+function rows = fullRows(C, rows, P, skipped)
 % Every curve's side on the cell: recorded ones as recorded, the rest by the sign at the cell's points
-% (the majority of the nonzero signs; a curve tangent at one point does not decide it).
-    have = false(size(C,1), 1);  have(rows(:,1)) = true;
+% (the majority of the nonzero signs; a curve tangent at one point does not decide it). A SKIPPED
+% curve may cross the cell (it bounds nothing that applies here) and is left out.
+    have = false(size(C,1), 1);  have(rows(:,1)) = true;  have(skipped) = true;
     for j = find(~have).'
         c = C(j, 1:6);
         if C(j,7) ~= 0
@@ -489,11 +506,13 @@ function a = emptyAlg()
     a = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}, 'side', {});
 end
 
-function C = addCornerCrossings(C, corners)
+function [C, ends] = addCornerCrossings(C, corners)
 % An IRRATIONAL corner's value is one root of its FP, the other root being its conjugate corner's
 % plane; the two planes cross where E1(x) = 0 in cornerFaceAlg's valueForm (K z = E0 + E1 sigma),
 % a RATIONAL line. As a curve of the arrangement it makes the corner's branch index constant on
-% every cell, which is what lets a corner carry the value with one FB per cell.
+% every cell, which is what lets a corner carry the value with one FB per cell. `ends` pairs each
+% such line's key with its corner, the face it matters for (curveOwners).
+    ends = cell(0, 2);
     for j = 1:numel(corners)
         c = corners{j};
         if ~isfield(c, 'sigma') || c.sigma.root == 0, continue, end    % rational corner: one root
@@ -508,6 +527,7 @@ function C = addCornerCrossings(C, corners)
         if all(E1(1:2) == 0), continue, end
         key = [ratQ.conic([0 0 0 E1]), 0];
         if isempty(find(all(C == key, 2), 1)), C(end+1,:) = key; end %#ok<AGROW>
+        ends(end+1,:) = {key, j}; %#ok<AGROW>
     end
 end
 
@@ -791,7 +811,7 @@ function s = sideAt(C, j, p)
     s = sign(v);
 end
 
-function C = addBridgeCurves(C, bridges)
+function [C, ends] = addBridgeCurves(C, bridges)
 % A bridge's outer bound (`cells`) joins the curve table as curves with no demand, as in envelopeSubdivision:
 % then no cell straddles the face's boundary and one membership test per cell is sound.
 %
@@ -800,6 +820,8 @@ function C = addBridgeCurves(C, bridges)
 % on a rational LINE -- the image of the whole plane -- and it was simply missing: on the poly2 kink
 % a bridge with an EMPTY outer bound was handed a whole cell it owns only part of, 2.7e-4 too high.
 % The line joins as a curve; a double-line row's underlying line likewise (splitLineCurves).
+% `ends` pairs each sweep-end line's key with its bridge: it matters only inside the outer bound.
+    ends = cell(0, 2);
     for b = 1:numel(bridges)
         blocks = bridges{b}.cells;
         if ~iscell(blocks), blocks = {blocks}; end
@@ -823,6 +845,7 @@ function C = addBridgeCurves(C, bridges)
             raw = ratQ.chkB([0 0 0, pr.d*w(1), pr.d*w(2), -(w.'*mk)], ...
                             [0 0 0, abs(pr.d*w(1)), abs(pr.d*w(2)), abs(w).'*abs(mk)], 'sweep end line');
             C = addKey(C, [ratQ.conic(raw), 0]);
+            ends(end+1,:) = {[ratQ.conic(raw), 0], b}; %#ok<AGROW>
         end
     end
 end
@@ -831,15 +854,108 @@ function C = addKey(C, key)
     if isempty(find(all(C == key, 2), 1)), C(end+1,:) = key; end
 end
 
-function C = splitLineCurves(C)
+function [C, ends] = splitLineCurves(C)
 % A DOUBLE LINE L^2 (a perfect-square conic, branch 0) has one sign on both sides of L, so as a curve
-% it splits no cell; its line L does. Added as its own curve.
+% it splits no cell; its line L does. Added as its own curve; `ends` pairs L's key with the double
+% line's index, whose regions L matters for.
+    ends = cell(0, 2);
     for j = 1:size(C,1)
         c = C(j,1:6);
         if C(j,7) ~= 0 || all(c(1:3) == 0), continue, end
         L = squareRoot(c);
-        if ~isempty(L), C = addKey(C, [ratQ.conic([0 0 0 L]), 0]); end
+        if ~isempty(L)
+            C = addKey(C, [ratQ.conic([0 0 0 L]), 0]);
+            ends(end+1,:) = {[ratQ.conic([0 0 0 L]), 0], j}; %#ok<AGROW>
+        end
     end
+end
+
+function owners = curveOwners(C, req, nQuad, bridges, cEnds, bEnds, lEnds)
+% For each curve, the regions where it can matter, as row blocks [curve side]: for a face's row, the
+% face's OTHER rows; for a bridge's outer-bound row, the other rows of that block; for a corner's
+% crossing line, the corner's rows; for a bridge's sweep-end line, each block of its outer bound; for
+% a double line's line, the double line's own regions. A curve with no recorded owner (a cut, a
+% domain row) gets the empty block -- it matters everywhere. Duplicates are dropped.
+    n = size(C,1);
+    owners = cell(1, n);
+    for i = 1:numel(req)
+        r = req{i};
+        if isempty(r) || any(isnan(r(:))), continue, end
+        for t = 1:size(r,1)
+            owners{r(t,1)}{end+1} = r(r(:,1) ~= r(t,1), :);
+        end
+    end
+    for b = 1:numel(bridges)
+        blocks = bridgeBlocks(C, bridges{b});
+        for t = 1:numel(blocks)
+            r = blocks{t};
+            for u = 1:size(r,1)
+                owners{r(u,1)}{end+1} = r(r(:,1) ~= r(u,1), :);
+            end
+        end
+    end
+    for e = 1:size(cEnds,1)
+        j = find(all(C == cEnds{e,1}, 2), 1);
+        r = req{nQuad + cEnds{e,2}};
+        if any(isnan(r(:))), continue, end
+        owners{j}{end+1} = r(r(:,1) ~= j, :);
+    end
+    for e = 1:size(bEnds,1)
+        j = find(all(C == bEnds{e,1}, 2), 1);
+        blocks = bridgeBlocks(C, bridges{bEnds{e,2}});
+        for t = 1:numel(blocks), owners{j}{end+1} = blocks{t}(blocks{t}(:,1) ~= j, :); end
+    end
+    for e = 1:size(lEnds,1)                       % after the faces, so the double line's are there
+        j = find(all(C == lEnds{e,1}, 2), 1);
+        src = owners{lEnds{e,2}};
+        if isempty(src), src = {zeros(0,2)}; end
+        owners{j} = [owners{j}, src];
+    end
+    for j = 1:n
+        if isempty(owners{j}), owners{j} = {zeros(0,2)}; continue, end
+        keys = cellfun(@(r) mat2str(sortrows(r)), owners{j}, 'UniformOutput', false);
+        [~, ia] = unique(keys, 'stable');
+        owners{j} = owners{j}(ia);
+    end
+end
+
+function blocks = bridgeBlocks(C, bridge)
+% A bridge's outer bound as row blocks over C. A constant row is dropped: an unsatisfiable one only
+% makes the block empty, and keeping it is the safe side.
+    raw = bridge.cells;
+    if ~iscell(raw), raw = {raw}; end
+    blocks = cell(1, numel(raw));
+    for t = 1:numel(raw)
+        con = raw{t};  r = zeros(0,2);
+        for u = 1:size(con,1)
+            c = con(u,1:6);
+            if all(c(1:5) == 0), continue, end
+            br = 0;
+            if size(con,2) >= 8, br = con(u,8); end
+            r(end+1,:) = [find(all(C == [c, br], 2), 1), con(u,7)]; %#ok<AGROW>
+        end
+        blocks{t} = r;
+    end
+end
+
+function tf = relevantHere(C, owners, rows)
+% Can some region the curve bounds meet the cell? Decided per region by liveCell on the cell's rows
+% with the region's; a region demanding the opposite side of a curve the cell records is empty.
+    tf = true;
+    for o = 1:numel(owners)
+        r = owners{o};
+        if isempty(r), return, end
+        clash = false;  keep = true(size(r,1), 1);
+        for t = 1:size(r,1)
+            s = rows(rows(:,1) == r(t,1), 2);
+            if isempty(s), continue, end
+            if s(1) ~= r(t,2), clash = true; break, end
+            keep(t) = false;
+        end
+        if clash, continue, end
+        if ~any(keep) || liveCell(C, [rows; r(keep,:)]), return, end
+    end
+    tf = false;
 end
 
 function L = squareRoot(c)

@@ -8851,3 +8851,17 @@ the EnvelopeMin (values exact). Next: arrange LOCALLY -- a curve splits only the
 it bounds can apply (its pair's cell-pair region), or per pair then overlay -- TODO item 1 step c'.
 Also planned, smaller: cut the triangles AFTER the arrangement (pieces meeting T, decided by
 cellInterior with T's lines or box) instead of adding 7 global lines.
+
+## 2026-10-31 — a curve splits only the cells where a face it bounds can apply (local arrangement)
+
+envelopeSubdivisionAlg now asks, before splitting a cell by curve j, whether some region j bounds
+(a face's OTHER rows, a bridge block's other rows, a corner's rows for its crossing line, a bridge's
+outer bound for its sweep-end line) can meet the cell -- liveCell, sound. If none can, every face j
+bounds is inapplicable on the whole cell, so the cell stays whole and j is remembered as SKIPPED: it
+may cross the cell, so fullRows never emits it as a row. Measured: identical faces and values to
+the global arrangement on both envelopeSubdivisionAlgTest fixtures (0 mismatches on 4000 points),
+58 -> 32 cells on the convex one and 56 -> 26 s on the curved one (single runs, shared machine);
+Example 2's three pairs together 2978 cells (was > 60000). That did NOT make Example 2 finish: in
+one arrangement a cell met 41-47 faces of the three pairs and minMaxFaces took 6-270 s per cell
+(78% in algEmpty), days in all. Each pair ALONE is 33-69 s, 44-85 cells, equal to envelopeEval
+(0 holes on 3000 points) -- hence the next step: subdivide per pair, then overlay.

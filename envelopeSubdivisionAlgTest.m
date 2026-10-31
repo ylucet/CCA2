@@ -47,6 +47,24 @@ classdef envelopeSubdivisionAlgTest < matlab.unittest.TestCase
             t.verifyEqual(max(abs(got(both) - ref(both))), 0, 'AbsTol', 1e-9);
         end
 
+        function aCurveSplitsOnlyWhereAFaceItBoundsCanApply(t)
+        % The LOCAL arrangement (2026-10-31): a curve does not split a cell on which no face it
+        % bounds can apply. Then it may CROSS a final cell, so the faces' rows must leave it out --
+        % agreement with the evaluator on domain and value is what that has to keep. Measured: the
+        % convex fixture goes from 58 cells to 32 with 20 skips, faces and values identical.
+            env = fixture(0);
+            [subdivision, info] = envelopeSubdivisionAlg(env);
+            t.verifyGreaterThan(info.skipped, 0, 'some curve must be skipped, or this tests nothing');
+            rng(37);
+            X = [rand(600,1), rand(600,1); rand(200,1)*4-1.5, rand(200,1)*4-1.5];
+            ref = envelopeEval(env, X);
+            got = subdivisionAlgEval(subdivision, X);
+            t.verifyEqual(isfinite(got), isfinite(ref), 'a skipped curve must not cut a face short');
+            both = isfinite(ref) & isfinite(got);
+            t.verifyGreaterThan(sum(both), 300);
+            t.verifyEqual(max(abs(got(both) - ref(both))), 0, 'AbsTol', 1e-9);
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() envelopeSubdivisionAlg(), 'envelopeSubdivisionAlg:nargin');
             t.verifyError(@() envelopeSubdivisionAlg(struct('a', 1)), 'envelopeSubdivisionAlg:shape');
