@@ -45,6 +45,18 @@ function tf = cellHasInterior(EcQ, rows)
         if ~ratQ.feasible2(P, true), tf = false; return, end
     end
 
+    % ---- a row that holds ONLY ON ITS CURVE -----------------------------------------------------
+    % side * c >= 0 with side * c a NEGATIVE SEMIDEFINITE form (homogenised: -(x-y)^2, -(x^2+y^2),
+    % -(x-1)^2) is the curve c = 0 itself, which has no interior. The vertex test below cannot see
+    % this: such a curve meets the others at points that satisfy every row with equality, and a
+    % vertex is evidence of a cell's closure, not of its interior. Found 2026-10-31 on the convex
+    % envelope fixture: 12 of the 13 faces in a cell were points and lines kept that way.
+    for r = 1:size(rows,1)
+        if rows(r,2) ~= 0 && ~isLine(r) && negSemidefinite(rows(r,2) * EcQ(rows(r,1), 1:6))
+            tf = false;  return
+        end
+    end
+
     % ---- an ARRANGEMENT VERTEX that satisfies the cell strictly enough --------------------------
     % Every pair of bounding curves; each meeting point is a root of conicMeet's exact quartic, and
     % whether it satisfies the other constraints is decided exactly.
@@ -83,6 +95,24 @@ function tf = cellHasInterior(EcQ, rows)
     % CONFIRM, which is why an empty result below returns false only after the vertex test also
     % found nothing: together they are the pipeline's cells, and the routine errs toward keeping.
     tf = probeInterior(EcQ, rows);
+end
+
+function tf = negSemidefinite(c)
+% Is a x^2 + b xy + c y^2 + d x + e y + f <= 0 everywhere, i.e. is the homogenised form
+% [2a b d; b 2c e; d e 2f] negative semidefinite? Exactly, by every principal minor of its negative
+% being >= 0, in integers. Coefficients too large for the 3 x 3 minor to be exact answer FALSE --
+% the cell is then kept, the direction this routine errs in.
+    M = -[2*c(1) c(2) c(4); c(2) 2*c(3) c(5); c(4) c(5) 2*c(6)];
+    tf = false;
+    if any(M(:) ~= round(M(:))) || max(abs(M(:))) > 2^16 || ~any(M(:)), return, end
+    if any(diag(M) < 0), return, end
+    for p = [1 2; 1 3; 2 3].'
+        if M(p(1),p(1)) * M(p(2),p(2)) - M(p(1),p(2))^2 < 0, return, end
+    end
+    % six products of at most 2^48 each: exact in doubles
+    d = M(1,1)*M(2,2)*M(3,3) + 2*M(1,2)*M(2,3)*M(1,3) - M(1,1)*M(2,3)^2 - M(2,2)*M(1,3)^2 ...
+        - M(3,3)*M(1,2)^2;
+    tf = d >= 0;
 end
 
 function tf = satisfiesAll(EcQ, rows, x)

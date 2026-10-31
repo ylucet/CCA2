@@ -142,6 +142,7 @@ function f = triangleItself(tf, t, L, keys, flip, tfs, like)
 % T as one face: rational -> an affine 'quad' on its three lines; named -> kind 'triangle'.
     f = like(1);
     f.FP = [];  f.FB = 0;  f.alg = like(1).alg([]);  f.tri = zeros(0,3);  f.tf = [];  f.tfs = tfs;
+    if isfield(f, 'ii'), f.ii = like(1).ii([]); end      % T is one face: no tie row of the overlay
     if strcmp(tf.kind, 'rational')
         [num, den] = planeQ(tf);
         f.kind = 'quad';  f.num = num;  f.den = den;

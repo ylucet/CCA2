@@ -2,7 +2,8 @@ function [val, who] = subdivisionAlgEval(subdivision, X)
 % subdivisionAlgEval  Evaluate a subdivision whose edges may be ALGEBRAIC -- the counterpart of `QuaCon.eval` for
 %   what `envelopeSubdivisionAlg` builds, until the output type can store such an edge.
 %
-% [input]  subdivision : as `envelopeSubdivisionAlg` returns it
+% [input]  subdivision : as `envelopeSubdivisionAlg` returns it -- including the tie rows `.ii` of a minimum over
+%                 several pairs, value_1 >= value_2
 %          X    : n x 2
 % [output] val  : n x 1, +Inf where no face owns the point -- which IS the envelope there, a hole in
 %                 the subdivision being how +infinity is expressed
@@ -26,6 +27,7 @@ function [val, who] = subdivisionAlgEval(subdivision, X)
             f = subdivision(k);
             if ~conHolds(f.con, x), continue, end
             if ~algHolds(f.alg, x), continue, end
+            if isfield(f, 'ii') && ~iiHolds(f.ii, x), continue, end
             if isfield(f, 'tri') && ~triHolds(f.tri, f.tfs, x), continue, end
             v = faceValue(f, x);
             if isnan(v), continue, end
@@ -62,6 +64,15 @@ function tf = algHolds(alg, x)
         if ~isfinite(v), tf = false; return, end
         q = ratQ.evalFace(a.num, a.den, x);
         if a.side * (q - v) < -1e-9, tf = false; return, end
+    end
+end
+
+function tf = iiHolds(ii, x)
+% value_1(x) >= value_2(x) for two irrational faces (a minimum over pairs), read in doubles.
+    tf = true;
+    for t = 1:numel(ii)
+        v1 = algBranch(ii(t).FP1, x, ii(t).FB1);  v2 = algBranch(ii(t).FP2, x, ii(t).FB2);
+        if ~isfinite(v1) || ~isfinite(v2) || v1 - v2 < -1e-9, tf = false; return, end
     end
 end
 

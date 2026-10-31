@@ -1,4 +1,4 @@
-function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
+function [pt, ok, P] = cellSamplePoint(C, rows, H, R, dense)
 % cellSamplePoint  A point strictly inside an arrangement cell whose straight rows' Chebyshev centre
 %   fails one of its CURVED rows -- the fallback the subdividers' interiorPoint needs.
 %
@@ -6,6 +6,9 @@ function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
 %          rows : the cell, [curveIndex side]
 %          H    : the cell's straight rows as [a b c] with a x + b y + c >= 0, normalised
 %          R    : the half-width of the bounding box the subdividers use for unbounded cells
+%          dense: (optional, default false) true keeps sampling past the first grid that finds a point,
+%                 up to the 48-step one, and returns up to 4000 samples -- for a caller that WITNESSES
+%                 sub-pieces of the cell (minOverlay), where 400 coarse samples miss most of them
 % [output] pt   : 1 x 2, the sampled point with the largest relative slack over EVERY row
 %          ok   : false when no sample is strictly inside
 %          P    : every sample strictly inside (m x 2), for a caller that checks a property on the cell
@@ -17,6 +20,7 @@ function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
 % subdivision +infinity on 902 of 2000 interior points where the face list is finite. cellInterior has
 % already proved every such cell has an interior, so a point exists; this finds one by a FIXED grid
 % (deterministic: the subdivision must not depend on a random seed) over a fan of the straight polygon.
+    if nargin < 5, dense = false; end
     pt = [0 0];  ok = false;  P = zeros(0,2);
     V = polygonVertices(H, R);
     if size(V,1) < 3, return, end
@@ -35,10 +39,18 @@ function [pt, ok, P] = cellSamplePoint(C, rows, H, R)
             Q = [Q; c0 + B(:,1) * (a - c0) + B(:,2) * (b - c0)]; %#ok<AGROW>
         end
         s = slack(C, rows, Q);
-        if any(s > 0)
-            [~, i] = max(s);
-            pt = Q(i,:);  ok = true;  P = Q(s > 0, :);
-            if size(P,1) > 400, P = P(round(linspace(1, size(P,1), 400)), :); end   % enough for a check
+        if dense && n < 192 && (n < 48 || ~any(s > 0))
+            if any(s > 0) && ~ok
+                [~, i] = max(s);  pt = Q(i,:);  ok = true;
+            end
+            P = [P; Q(s > 0, :)]; %#ok<AGROW>
+            continue
+        end
+        if any(s > 0) || ok
+            if ~ok, [~, i] = max(s);  pt = Q(i,:);  ok = true; end
+            P = [P; Q(s > 0, :)];
+            cap = 400;  if dense, cap = 4000; end
+            if size(P,1) > cap, P = P(round(linspace(1, size(P,1), cap)), :); end   % enough for a check
             return
         end
     end

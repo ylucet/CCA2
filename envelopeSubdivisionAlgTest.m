@@ -65,6 +65,25 @@ classdef envelopeSubdivisionAlgTest < matlab.unittest.TestCase
             t.verifyEqual(max(abs(got(both) - ref(both))), 0, 'AbsTol', 1e-9);
         end
 
+        function theMINIMUMOfTwoEnvelopesIsTheOverlayOfTheirSubdivisions(t)
+        % SEVERAL PAIRS (2026-10-31): each envelope is subdivided alone and the two are overlaid
+        % (minOverlay). The definition is pointwise -- the minimum of the two evaluators -- so
+        % agreement on domain and value is again the whole statement. Two convex fixtures keep this
+        % in the normal bucket; the tie rows of two irrational faces are minSubdivisionTest's.
+            e1 = fixture(0);  e2 = fixture(1);
+            [subdivision, info] = envelopeSubdivisionAlg({e1, e2});
+            t.verifyEqual(info.pairCells > 0, [true true], 'each pair must be subdivided');
+            t.verifyGreaterThan(info.faces, 0);
+            rng(41);
+            X = [rand(600,1), rand(600,1); rand(200,1)*4-1.5, rand(200,1)*4-1.5];
+            ref = min(envelopeEval(e1, X), envelopeEval(e2, X));
+            got = subdivisionAlgEval(subdivision, X);
+            t.verifyEqual(isfinite(got), isfinite(ref), 'the overlay must agree on the DOMAIN');
+            both = isfinite(ref) & isfinite(got);
+            t.verifyGreaterThan(sum(both), 300);
+            t.verifyEqual(max(abs(got(both) - ref(both))), 0, 'AbsTol', 1e-9, 'and on the VALUE');
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() envelopeSubdivisionAlg(), 'envelopeSubdivisionAlg:nargin');
             t.verifyError(@() envelopeSubdivisionAlg(struct('a', 1)), 'envelopeSubdivisionAlg:shape');

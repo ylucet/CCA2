@@ -24,6 +24,7 @@ function g = assembleAlgCrv(subdivision)
 
     EcQ = zeros(0,6);
     EcA = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {});
+    EcI = struct('FP1', {}, 'FB1', {}, 'FP2', {}, 'FB2', {});
     FC  = cell(1, numel(subdivision));
     fN  = zeros(numel(subdivision), 10);
     fD  = ones(numel(subdivision), 1);
@@ -51,6 +52,17 @@ function g = assembleAlgCrv(subdivision)
             end
             rows(end+1,:) = [hit, a.side, 0, 1]; %#ok<AGROW>
         end
+        if isfield(f, 'ii')                         % a minimum over pairs: table 2, see AlgCrv
+            for t = 1:numel(f.ii)
+                r = f.ii(t);
+                hit = findTie(EcI, r);
+                if hit == 0
+                    EcI(end+1) = struct('FP1', r.FP1, 'FB1', r.FB1, 'FP2', r.FP2, 'FB2', r.FB2); %#ok<AGROW>
+                    hit = numel(EcI);
+                end
+                rows(end+1,:) = [hit, 1, 0, 2]; %#ok<AGROW>
+            end
+        end
         FC{k} = rows;
 
         if strcmp(f.kind, 'bridge')
@@ -61,7 +73,7 @@ function g = assembleAlgCrv(subdivision)
         end
     end
 
-    g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, fN, fD, zeros(0,2), FC, FP, FB, EcA);
+    g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, fN, fD, zeros(0,2), FC, FP, FB, EcA, EcI);
 end
 
 function g = withVertices(g)  %#ok<DEFNU>
@@ -77,6 +89,16 @@ function hit = findAlg(EcA, a)
     for j = 1:numel(EcA)
         if EcA(j).FB == a.FB && ratQ.polyEqual(EcA(j).FP, a.FP) && ...
            isequal(EcA(j).num, a.num) && EcA(j).den == a.den
+            hit = j;  return
+        end
+    end
+end
+
+function hit = findTie(EcI, r)
+    hit = 0;
+    for j = 1:numel(EcI)
+        if EcI(j).FB1 == r.FB1 && EcI(j).FB2 == r.FB2 && ratQ.polyEqual(EcI(j).FP1, r.FP1) && ...
+           ratQ.polyEqual(EcI(j).FP2, r.FP2)
             hit = j;  return
         end
     end

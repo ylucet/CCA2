@@ -334,9 +334,10 @@ function h = biconjQ(obj)
                     end
                 elseif isempty(h.tris)
                     % SEVERAL active pairs and no triangle (2026-10-18): the min over the pairs is
-                    % subdivided as a min of maxes in one arrangement -- envelopeSubdivisionAlg's minMaxFaces.
-                    % A triangle face's corners are degree-4 irrationals no subdivision type holds yet, and
-                    % two irrational faces that cross in a cell have no curve here: both stay unsubdivided.
+                    % subdivided pair by pair and the subdivisions overlaid -- envelopeSubdivisionAlg's
+                    % minOverlay (2026-10-31); two irrational faces of different pairs are ordered by a
+                    % tie row, AlgCrv's table 2. A triangle face's corners are degree-4 irrationals no
+                    % subdivision type holds yet: that case stays unsubdivided.
                     try
                         envs = cellfun(@envelopePrune, h.pairs, 'UniformOutput', false);
                         h = assembleAlgCrv(envelopeSubdivisionAlg(envs, hullRows(obj)));

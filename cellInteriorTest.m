@@ -114,6 +114,20 @@ classdef cellInteriorTest < matlab.unittest.TestCase
             t.verifyEqual(s, -1);
         end
 
+        function aCellPINCHEDToAPointByNegativeSquaresIsEmpty(t)
+        % -(x-y)^2 >= 0 and -(x^2+y^2) >= 0 hold only at the origin. Found 2026-10-31: the vertex
+        % test met the two curves at the origin, which satisfies both, and kept the cell -- on the
+        % convex envelope fixture 12 of the 13 faces in a cell were such points and lines, and an
+        % overlay of several pairs multiplies them. A row that is a NEGATIVE SEMIDEFINITE form
+        % holds only on its own curve, which has no interior.
+            C = [1 -2 1 0 0 0 0; 1 0 1 0 0 0 0];
+            t.verifyFalse(cellInterior(C, [1 -1; 2 -1]), 'a point is not a 2-D cell');
+            t.verifyFalse(cellInterior([0 0 0 1 0 0 0; 1 0 0 -2 0 1 0], [1 1; 2 -1]), ...
+                          '-(x-1)^2 >= 0 is the line x = 1, whatever else the cell says');
+            t.verifyTrue(cellInterior([1 -2 1 0 0 0 0; 1 0 1 0 0 -1 0], [1 1; 2 -1]), ...
+                         'the control: (x-y)^2 >= 0 holds everywhere, and inside the unit disk is 2-D');
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() cellInterior([0 0 0 1 0 0, 0]), 'cellInterior:nargin');
             t.verifyError(@() cellInterior([0 0 0 1 0 0], [1 1]), 'cellInterior:shape');

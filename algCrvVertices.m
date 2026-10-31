@@ -46,6 +46,10 @@ function [Vname, info] = algCrvVertices(g)
     if ~isa(g, 'AlgCrv')
         error('algCrvVertices:type', 'expects an AlgCrv; got a %s.', class(g));
     end
+    if any(cellfun(@(r) size(r,2) >= 4 && any(r(:,4) == 2), g.FC))
+        error('algCrvVertices:tieRow', ['a face has a TIE row (table 2, two implicit values) -- the ' ...
+              'curve where they tie is never formed, so there is nothing to intersect.']);
+    end
     t0 = tic;
     Vname = zeros(0,5);
     info = struct('candidates', 0, 'named', 0, 'refused', 0, 'seconds', 0, 'why', {{}}, ...

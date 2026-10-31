@@ -8865,3 +8865,29 @@ Example 2's three pairs together 2978 cells (was > 60000). That did NOT make Exa
 one arrangement a cell met 41-47 faces of the three pairs and minMaxFaces took 6-270 s per cell
 (78% in algEmpty), days in all. Each pair ALONE is 33-69 s, 44-85 cells, equal to envelopeEval
 (0 holes on 3000 points) -- hence the next step: subdivide per pair, then overlay.
+
+## 2026-10-31 (second) — several pairs: each subdivided alone, then OVERLAID; a point-cell defect fixed
+
+minMaxFaces (all pairs' curves in one arrangement, each cell resolved as a min of maxes) is replaced
+by minOverlay: each pair is subdivided alone, every tuple of cells (one per pair) that meets is
+visited, and for each choice of one face per covered pair and each covered pair w the piece "pick_w
+<= every other pick" is emitted. Under the max-evaluator that is exact: a face of pair g owning x is
+<= E_g(x), and the piece whose picks are the pairs' maxima, w the minimiser, gives min_g E_g. Two
+irrational picks are ordered by a TIE ROW (value_1 >= value_2), which minMaxFaces refused by name
+(minIrrational); AlgCrv stores it as table 2 (`EcI`), its evaluator reads it in doubles, and
+algCrvVertices/algCrvIncidence refuse it by name. Measured on the 3-convex-edge triangle: equal to
+the face list and to the old subdivision on 4000 points (5.7e-10); 1184 faces with no pruning of the
+picks, 240 with it (dense samples, then conic and certified algebraic emptiness on the picks), the old
+route 138. minSubdivisionTest 3/0.
+
+THE DEFECT, red first (cellInteriorTest): cellHasInterior kept a cell whenever two of its curves met
+at a point satisfying every row -- but a vertex is evidence of the closure, not of an interior.
+-(x-y)^2 >= 0 with -(x^2+y^2) >= 0 is the origin and was kept. A row whose sided form is negative
+semidefinite (exact integer minors) now empties the cell. The convex envelope fixture: 26 -> 6 faces.
+
+EXAMPLE 2 STILL DOES NOT FINISH, and why, measured: the pairs' subdivisions keep 6-11 faces per cell
+of which 1-2 have area; the rest are QUADRATIC faces the bridge face touches along a curve (q >= bridge
+holds only on the tangency), which neither the conic test nor algRowFails (strict failure) can refute.
+In the overlay they multiply: ~40 pick combinations per tuple, ~13 min for the first 3 of 302 tuples
+(one run, shared machine; 70% exact branch fibres for the witness). The point-cell fix does not touch
+them. Next: certify "q <= bridge on the cell" with touching allowed -- then the piece has no interior.

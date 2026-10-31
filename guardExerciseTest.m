@@ -73,6 +73,16 @@ classdef guardExerciseTest < matlab.unittest.TestCase
             t.verifyError(@() algCrvIncidence(g, flipud(V)), 'algCrvIncidence:coords');
         end
 
+        function algCrvIncidenceTieRow(t)                                    % reachable
+            % A minimum over pairs leaves a tie row (table 2) -- two implicit values, no polynomial.
+            FP = zeros(3,3,3);  FP(1,1,3) = 1;  FP(3,1,1) = -1;  FP(1,3,1) = -1;
+            FP2 = zeros(3,3,3);  FP2(1,1,3) = 1;  FP2(3,1,1) = -4;
+            EcI = struct('FP1', FP, 'FB1', 2, 'FP2', FP2, 'FB2', 2);
+            g = AlgCrv(zeros(0,3), zeros(0,3), zeros(0,6), zeros(1,10), 1, zeros(0,2), {[1 1 0 2]}, ...
+                       {FP}, 2, struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}), EcI);
+            t.verifyError(@() algCrvIncidence(g, zeros(0,5)), 'algCrvIncidence:tieRow');
+        end
+
         function envelopeSubdivisionAlgebraicFace(t)                                % reachable
             % A cell covered ONLY by corner faces would need a face whose value is affine with
             % quadratic-irrational coefficients, which a conic subdivision cannot store. Measured
@@ -321,7 +331,6 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'envelopeEval:faceKind',                    'internal'; ...
                 'envelopeSubdivision:arrangementSize',             'todo'; ... % fired by the poly2 kink at c = -2 (85 curves) inside biconjQ, which catches it; a direct exercise needs the 130 s assembly
                 'envelopeSubdivisionAlg:arrangementSize',          'todo'; ... % the same budget, reached by the same kink through subdividePair
-                'envelopeSubdivisionAlg:minIrrational',            'todo'; ... % two irrational picks from different pairs crossing in one piece; no fixture reaches it since the order is read on the piece's own points
                 'cellInterior:embed',                       'internal'; ...
                 'envelopeSubdivisionAlg:faceKind',                 'internal'; ...
                 'exactQ:internal',                          'internal'; ...

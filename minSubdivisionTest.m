@@ -1,7 +1,7 @@
 classdef minSubdivisionTest < matlab.unittest.TestCase
 % biconjQ on an indefinite triangle with THREE convex edges: three edge atoms, two ACTIVE pairs and
-% no triangle face, so co f is the minimum of two pair envelopes -- subdivided since 2026-10-18 as a min
-% of maxes in one arrangement (envelopeSubdivisionAlg's minMaxFaces).
+% no triangle face, so co f is the minimum of two pair envelopes -- subdivided since 2026-10-18; since
+% 2026-10-31 each pair alone and the two overlaid (envelopeSubdivisionAlg's minOverlay).
 %
 % BUCKET: slow -- biconjQ here is ~5 min on the shared machine (one run), computed once per session.
 

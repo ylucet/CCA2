@@ -33,12 +33,23 @@ classdef AlgCrv < AlgCon & Crv
    % and no irrational value is ever formed. `eval` below reads it in DOUBLES, deliberately and for
    % the same reason QuaCon.eval does: the operations that must leave Q are the PREDICATES that
    % decide a subdivision, and reading a finished function at a point is not one of them.
+   %
+   % TABLE 2 IS `EcI`, A TIE BETWEEN TWO IMPLICIT VALUES (2026-10-31): value_1(x) >= value_2(x), with
+   % FP1/FB1 and FP2/FB2 taken from the entry. A minimum over pairs orders an irrational face of one
+   % pair against an irrational face of another, and the curve where the two tie is never formed --
+   % the row names the two branches. It lives here and not on AlgCon because only this type has it;
+   % `algCrvVertices` and `algCrvIncidence` refuse it by name, since a tie row has no polynomial
+   % they could intersect.
 
+   properties
+      EcI (:,1) struct = struct('FP1', {}, 'FB1', {}, 'FP2', {}, 'FB2', {})   % table 2: value_1 >= value_2
+   end
 
    methods
-      function obj = AlgCrv(Vname, E, EcQ, fN, fD, F, FC, FP, FB, EcA)
+      function obj = AlgCrv(Vname, E, EcQ, fN, fD, F, FC, FP, FB, EcA, EcI)
       % objective: the subdivision, exactly as AlgCon takes it, plus the algebraic edge table.
-      % [input]  as RatCon's constructor, then FP/FB (the implicit faces) and EcA (the new edges)
+      % [input]  as RatCon's constructor, then FP/FB (the implicit faces), EcA (the new edges) and EcI
+      %          (the tie rows, table 2)
       %
       % THE CONSTRUCTOR PROTOCOL of RatCon applies unchanged: the LEAF writes the subdivision and then
       % calls setPinnedDefaults, because MATLAB re-runs a shared base constructor once per
@@ -53,6 +64,7 @@ classdef AlgCrv < AlgCon & Crv
          obj.fN = fN;  obj.fD = fD;  obj.F = F;  obj.FC = FC;
          obj.FP = FP;  obj.FB = FB;
          obj.EcA = EcA;
+         if nargin >= 11, obj.EcI = EcI; end
          obj = obj.setPinnedDefaults();
       end
 
@@ -84,7 +96,7 @@ classdef AlgCrv < AlgCon & Crv
 
    methods (Access = private)
       function tf = faceOwns(obj, k, x)
-      % Every row of face k, conic or algebraic. The tolerance is QuaCon.eval's: a point within it
+      % Every row of face k, conic, algebraic or tie. The tolerance is QuaCon.eval's: a point within it
       % of a boundary is accepted, and on a boundary two faces agree anyway, the envelope being
       % continuous there.
          tf = true;
@@ -92,7 +104,13 @@ classdef AlgCrv < AlgCon & Crv
          for t = 1:size(rows,1)
             tbl = 0;
             if size(rows,2) >= 4, tbl = rows(t,4); end
-            if tbl == 1
+            if tbl == 2
+               r = obj.EcI(rows(t,1));
+               v1 = algBranch(r.FP1, x, r.FB1);  v2 = algBranch(r.FP2, x, r.FB2);
+               if ~isfinite(v1) || ~isfinite(v2) || rows(t,2) * (v1 - v2) < -1e-9
+                  tf = false; return
+               end
+            elseif tbl == 1
                a = obj.EcA(rows(t,1));
                v = algBranch(a.FP, x, a.FB);
                if ~isfinite(v), tf = false; return, end

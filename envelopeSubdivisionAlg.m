@@ -19,7 +19,10 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
 %                   .con   conic rows [a b c d e f sign branch], as everywhere else
 %                   .alg   algebraic rows, a struct array with .FP .FB .num .den .side, meaning
 %                          side * (q(x) - value_FB(x)) >= 0
-%          info : .cells, .faces, .algRows, .refused
+%                   .ii    (several pairs only) rows ordering TWO irrational values, a struct array
+%                          with .FP1 .FB1 .FP2 .FB2, meaning value_1(x) >= value_2(x)
+%          info : .cells, .faces, .algRows, .refused, .skipped; one pair also .cellCon (each cell
+%                 with an interior point, as con rows) and .faceCell (the cell of each face)
 %
 % ==================================================================================================
 % WHAT IS NEW HERE, AND WHAT IS DELIBERATELY THE SAME
@@ -49,20 +52,27 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
     end
     if nargin < 2, dom = zeros(0,3); end
     if nargin < 3, cuts = zeros(0,3); end
-    % SEVERAL PAIRS (2026-10-18): a cell array of pair envelopes is the MINIMUM over them -- an
-    % EnvelopeMin with no triangle face. Their faces go into one arrangement, tagged by pair, and each
-    % cell is resolved as a min of maxes (minMaxFaces). One pair is exactly the path below.
+    % SEVERAL PAIRS: a cell array of pair envelopes is the MINIMUM over them -- an EnvelopeMin with no
+    % triangle face. Each pair is subdivided ALONE and the subdivisions are OVERLAID (minOverlay,
+    % 2026-10-31). Until then all the pairs' curves went into one arrangement resolved per cell as a
+    % min of maxes; on Example 2 that passed 60000 cells, and even arranged locally (2978 cells) a cell
+    % met 41-47 faces and took 6-270 s, while each pair alone took 33-69 s and 44-85 cells.
     if iscell(env), envs = env; else, envs = {env}; end
     for g = 1:numel(envs)
         if ~isstruct(envs{g}) || ~all(isfield(envs{g}, {'quad', 'bridge'}))
             error('envelopeSubdivisionAlg:shape', 'env must be what envelopeAssemble returns.');
         end
     end
-    [env, grpQ, grpB] = combinePairs(envs);
-    nGrp = numel(envs);
+    if numel(envs) > 1
+        subs = cell(1, numel(envs));  infos = cell(1, numel(envs));
+        for g = 1:numel(envs)
+            [subs{g}, infos{g}] = envelopeSubdivisionAlg(envs{g}, dom, cuts);
+        end
+        [subdivision, info] = minOverlay(subs, infos);
+        return
+    end
+    env = combinePairs(envs);
     [corners, bridges] = splitBridge(env.bridge);
-    grpCorner = grpB(cellfun(@(f) strcmp(f.kind, 'corner') && ~isempty(f.con), env.bridge));
-    grpBridge = grpB(cellfun(@(f) ~(strcmp(f.kind, 'corner') && ~isempty(f.con)), env.bridge));
     [C, req, pairOf] = conicTable(env.quad, corners);
     nQuad = numel(env.quad);
     allPairs = unique([pairOf{:}, cellfun(@(f) f.pairIndex, bridges)]);
@@ -133,10 +143,12 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
     subdivision = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
     nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;
+    cellCon = {};  faceCell = zeros(1, 0);      % the cells, for an overlay of several pairs
     for k = 1:numel(cells)
         rows = cells{k};
         [pt, okPt] = interiorPoint(C, rows);
         if ~okPt, nUncovered = nUncovered + 1;  nNoPoint = nNoPoint + 1; continue, end
+        cellCon{end+1} = rowsToCon(C, rows); %#ok<AGROW>
 
         app = applicable(req, rows, C, pt);
         here = [pairOf{app}];
@@ -157,32 +169,6 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
                 here(end+1) = bridges{b}.pairIndex; %#ok<AGROW>
                 bHere(end+1) = b; %#ok<AGROW>
             end
-        end
-        if nGrp > 1
-            % EACH PAIR is finite here only where all of ITS cell pairs are covered; the minimum is
-            % over the pairs that are.
-            S = struct('quad', {}, 'irr', {});
-            for g = 1:nGrp
-                pg = allPairs(pairGroup(allPairs) == g);
-                if ~all(ismember(pg, here)), continue, end
-                qa = app(app <= nQuad);  qa = qa(grpQ(qa) == g);
-                ir = cell(1, 0);
-                for b = bHere(grpBridge(bHere) == g), ir{end+1} = struct('FP', bridges{b}.FP, 'FB', bridges{b}.FB); end %#ok<AGROW>
-                for j = app(app > nQuad)
-                    if grpCorner(j - nQuad) ~= g, continue, end
-                    [fc, okc] = cornerValueFace(corners{j - nQuad}, pt);
-                    if okc, ir{end+1} = fc; end %#ok<AGROW>
-                end
-                if isempty(qa) && isempty(ir), continue, end
-                S(end+1) = struct('quad', qa, 'irr', {ir}); %#ok<AGROW>
-            end
-            if isempty(S), nUncovered = nUncovered + 1; continue, end
-            sub = minMaxFaces(env.quad, S, rows, C, Pw, rowsOut);
-            for t = 1:numel(sub)
-                nAlg = nAlg + numel(sub(t).alg);
-                subdivision(end+1) = sub(t); %#ok<AGROW>
-            end
-            continue
         end
         if ~all(ismember(allPairs, here)), nUncovered = nUncovered + 1; continue, end
 
@@ -207,10 +193,12 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
         for t = 1:numel(sub)
             nAlg = nAlg + numel(sub(t).alg);
             subdivision(end+1) = sub(t); %#ok<AGROW>
+            faceCell(end+1) = numel(cellCon); %#ok<AGROW>
         end
     end
     info = struct('cells', numel(cells), 'faces', numel(subdivision), 'algRows', nAlg, ...
-                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap, 'skipped', nSkip);
+                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap, 'skipped', nSkip, ...
+                  'cellCon', {cellCon}, 'faceCell', faceCell);
 end
 
 % ==================================================================================================
@@ -600,140 +588,221 @@ function n = pairStride()
     n = 1e6;
 end
 
-function g = pairGroup(p)
-    g = floor((p - 1) / pairStride()) + 1;
-end
 
-function out = minMaxFaces(quad, S, rows, C, Q, rowsOut)
-% THE MINIMUM OVER PAIRS OF THE MAXIMUM OVER EACH PAIR'S FACES, on one cell (2026-10-18). A piece is a
-% choice of one face per pair and of the pair w whose choice is the smallest; its value is that face.
+function [out, info] = minOverlay(subs, infos)
+% THE MINIMUM OVER PAIRS, from each pair's own subdivision (2026-10-31). Every pair's cells partition
+% the domain; a cell either carries faces (the pair is finite there, its value the max over them) or
+% none (the pair is +infinity there). The overlay visits every TUPLE of cells, one per pair, that
+% meets -- decided by liveCell on the union of their rows -- and on it emits, for every choice of one
+% face per covered pair and every covered pair w, the piece "the face picked for w, where it is <= the
+% face picked for every other covered pair".
 %
-% WHY THE VALUE IS EXACT UNDER A MAX-EVALUATOR. Any face of pair g that applies is <= E_g, the pair's
-% value; a piece requires pick_w <= pick_g for every g, so its value is <= min_g E_g = f**. And the
-% piece whose picks ARE the pairs' maxima, with w the minimising pair, owns the point with value f**.
-% So the max over the pieces owning a point is f** -- the across-pair conditions are what correctness
-% needs. The within-pair ones ("pick_g is the largest of g") only prune pieces, so where they would
-% compare two irrational faces of one pair they are simply left out. Two irrational faces from
-% DIFFERENT pairs must be ordered: if their order is not the same at every sample point of the cell
-% that is refused by name, and biconjQ keeps the minimum unsubdivided.
-    out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
-    base = rowsToCon(C, rowsOut);
-    cand = cell(1, numel(S));  whole = cell(1, numel(S));
-    for g = 1:numel(S)
-        cg = {};
-        for j = S(g).quad(:).', cg{end+1} = struct('kind', 'quad', 'j', j, 'FP', [], 'FB', 0); end %#ok<AGROW>
-        for f = S(g).irr, cg{end+1} = struct('kind', 'irr', 'j', 0, 'FP', f{1}.FP, 'FB', f{1}.FB); end %#ok<AGROW>
-        % VIABLE PICKS ONLY (2026-10-18): a face can be pair g's pick only where it is the largest
-        % of pair g's faces, and that is decided ONCE per face -- exactly, on its conic rows --
-        % instead of once per combination of picks (2440 faces on the 3-convex-edge triangle,
-        % most of them combinations no point realises).
-        keep = true(1, numel(cg));
-        for o = 1:numel(cg)
-            if ~strcmp(cg{o}.kind, 'quad'), continue, end
-            r = zeros(0,8);  a = emptyAlg();
-            for o2 = 1:numel(cg)
-                if o2 == o || ~strcmp(cg{o2}.kind, 'quad'), continue, end
-                [r, a] = geRows(quad, cg{o}, cg{o2}, r, a, Q);
-            end
-            keep(o) = pieceLive(C, rows, r, Q);
+% WHY THE VALUE IS EXACT UNDER A MAX-EVALUATOR. A face of pair g owning x is <= E_g(x), and a pair whose
+% cell is a hole is +infinity at x. So a piece's value is <= min_g E_g = f**, and the piece whose picks
+% ARE the pairs' maxima, with w the minimising pair, owns x with value f**. No condition WITHIN a pair
+% is needed -- each pair's subdivision already took care of its max.
+%
+% THE ACROSS-PAIR CONDITIONS. Two quadratics: a conic row. A quadratic and an irrational face: an
+% algebraic row, as within a pair. TWO IRRATIONAL faces: an `.ii` row, value_1 >= value_2, read in
+% doubles by the evaluator -- the curve where two implicit values tie is not stored (minMaxFaces
+% refused this case by name, `minIrrational`; Example 2 reaches it). A piece is dropped only when its
+% conic rows are PROVABLY empty; one whose algebraic rows may be empty is kept, which costs a face of
+% no area, never a value.
+    nP = numel(subs);
+    keys = zeros(0,7);
+    cellRows = cell(1, nP);  covered = cell(1, nP);  facesOf = cell(1, nP);
+    for g = 1:nP
+        cc = infos{g}.cellCon;
+        cellRows{g} = cell(1, numel(cc));
+        for k = 1:numel(cc)
+            [keys, cellRows{g}{k}] = keyRows(keys, cc{k});
         end
-        cand{g} = cg(keep);
-        if isempty(cand{g}), cand{g} = cg; end         % something is the max: never leave a hole
-        whole{g} = cg;                                 % every face of pair g, for the rows
+        facesOf{g} = arrayfun(@(k) find(infos{g}.faceCell == k), 1:numel(cc), 'UniformOutput', false);
+        covered{g} = ~cellfun(@isempty, facesOf{g});
     end
-    sizes = cellfun(@numel, cand);
-    for idx = 1:prod(sizes)
-        sub = cell(1, numel(S));  [sub{:}] = ind2sub([sizes 1], idx);
-        pick = cellfun(@(c, i) c{i}, cand, sub, 'UniformOutput', false);
-        for w = 1:numel(S)
-            conRows = zeros(0,8);  algRows = emptyAlg();  ok = true;
-            for g = 1:numel(S)                         % pick{g} is the largest of pair g
-                for o = 1:numel(whole{g})
-                    other = whole{g}{o};
-                    if isequal(other, pick{g}), continue, end
-                    if ~strcmp(pick{g}.kind, 'quad') && ~strcmp(other.kind, 'quad')
-                        continue                       % within a pair: pruning only, see above
-                    end
-                    [conRows, algRows, ok] = geRows(quad, pick{g}, other, conRows, algRows, Q);
-                    if ~ok, break, end
-                end
-                if ~ok, break, end
+
+    % ---- the tuples of cells that meet ---------------------------------------------------------
+    tup = num2cell((1:numel(cellRows{1})).');
+    trow = cellRows{1};
+    for g = 2:nP
+        nt = {};  nr = {};
+        for a = 1:numel(trow)
+            for k = 1:numel(cellRows{g})
+                [r, clash] = mergeRows(trow{a}, cellRows{g}{k});
+                if clash || ~liveCell(keys, r), continue, end
+                nt{end+1} = [tup{a}, k]; %#ok<AGROW>
+                nr{end+1} = r; %#ok<AGROW>
             end
-            if ~ok, continue, end
-            deferred = {};
-            for g = setdiff(1:numel(S), w)             % ... and pair w's is the smallest
-                if ~strcmp(pick{g}.kind, 'quad') && ~strcmp(pick{w}.kind, 'quad')
-                    deferred{end+1} = {pick{g}, pick{w}}; %#ok<AGROW>
+        end
+        tup = nt;  trow = nr;
+    end
+
+    % ---- the pieces of each tuple --------------------------------------------------------------
+    out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {}, 'ii', {});
+    nUnsure = 0;  nII = 0;  nHole = 0;  nCombo = 0;
+    for t = 1:numel(tup)
+        G = find(arrayfun(@(g) covered{g}(tup{t}(g)), 1:nP));
+        if isempty(G), nHole = nHole + 1; continue, end
+        base = zeros(0,8);                       % every pair's cell, holes included
+        for g = 1:nP, base = [base; infos{g}.cellCon{tup{t}(g)}]; end %#ok<AGROW>
+        [~, ~, PX] = cellSamplePoint(keys, trow{t}, straightRows(keys, trow{t}), 1e3, true);
+        P = struct('X', PX, 'Z', containers.Map());  % branch values at PX, computed once per face
+        % The picks, one face per covered pair, grown pair by pair and pruned as soon as they
+        % cannot meet: a common sample point keeps a choice, else the conic rows and then algEmpty
+        % decide. Without the pruning the picks multiply -- 1184 faces on the 3-convex-edge
+        % triangle, 240 with it, against 138 for the single arrangement it replaced.
+        combos = {struct('pick', {{}}, 'con', base, 'alg', emptyAlg())};
+        for i = 1:numel(G)
+            nc = {};
+            for c = 1:numel(combos)
+                for k = facesOf{G(i)}{tup{t}(G(i))}
+                    fk = subs{G(i)}(k);
+                    con = unique([combos{c}.con; fk.con(:, 1:8)], 'rows', 'stable');
+                    alg = [combos{c}.alg, fk.alg];
+                    if ~overlayLive(keys, trow{t}, con, alg, emptyII(), P, false), continue, end
+                    nc{end+1} = struct('pick', {[combos{c}.pick, {fk}]}, 'con', con, 'alg', alg); %#ok<AGROW>
+                end
+            end
+            combos = nc;
+        end
+        nCombo = nCombo + numel(combos);
+        for c = 1:numel(combos)
+            pick = combos{c}.pick;
+            for w = 1:numel(G)
+                f = pick{w};
+                con = combos{c}.con;  alg = combos{c}.alg;  ii = emptyII();
+                for i = 1:numel(G)
+                    if i == w, continue, end
+                    [con, alg, ii] = leRows(f, pick{i}, con, alg, ii);
+                end
+                con = unique(con, 'rows', 'stable');
+                if ~overlayLive(keys, trow{t}, con, alg, ii, P, true)
                     continue
                 end
-                [conRows, algRows, ok] = geRows(quad, pick{g}, pick{w}, conRows, algRows, Q);
-                if ~ok, break, end
+                if ~witnessed(con, alg, ii, P), nUnsure = nUnsure + 1; end
+                nII = nII + numel(ii);
+                out(end+1) = struct('kind', f.kind, 'num', f.num, 'den', f.den, 'FP', f.FP, ...
+                                    'FB', f.FB, 'con', con, 'alg', alg, 'ii', ii); %#ok<AGROW>
             end
-            if ~ok, continue, end
-            % TWO IRRATIONAL PICKS from different pairs: their order matters only where the piece's
-            % other conditions hold, so it is read on the cell's points that satisfy them.
-            if ~isempty(deferred)
-                M = piecePoints(quad, Q, conRows, algRows);
-                if ~any(M), continue, end              % no point of the cell: nothing to own
-                for d = 1:numel(deferred)
-                    a = deferred{d}{1};  b = deferred{d}{2};    % need a >= b
-                    va = algBranch(a.FP, Q(M,:), a.FB);  vb = algBranch(b.FP, Q(M,:), b.FB);
-                    tol = 1e-12 * max(1, abs(vb));
-                    if all(va >= vb - tol), continue, end
-                    if all(va <= vb + tol), ok = false; break, end
-                    error('envelopeSubdivisionAlg:minIrrational', ...
-                        'two irrational faces from different pairs cross inside one piece of a minimum over pairs.');
-                end
-                if ~ok, continue, end
-            end
-            if ~pieceLive(C, rows, conRows, Q), continue, end
-            if algEmpty(C, rowsOut, conRows, algRows, Q), continue, end
-            f = pick{w};
-            if strcmp(f.kind, 'quad')
-                out(end+1) = struct('kind', 'quad', 'num', quad(f.j).num, 'den', quad(f.j).den, ...
-                                    'FP', [], 'FB', 0, 'con', [base; conRows], 'alg', algRows); %#ok<AGROW>
-            else
-                out(end+1) = struct('kind', 'bridge', 'num', [], 'den', 0, 'FP', f.FP, 'FB', f.FB, ...
-                                    'con', [base; conRows], 'alg', algRows); %#ok<AGROW>
-            end
+        end
+    end
+    nAlg = sum(arrayfun(@(f) numel(f.alg), out));
+    info = struct('cells', numel(tup), 'faces', numel(out), 'algRows', nAlg, 'iiRows', nII, ...
+                  'refused', nHole, 'unsure', nUnsure, 'combos', nCombo, ...
+                  'pairCells', cellfun(@(x) x.cells, infos), 'pairFaces', cellfun(@(x) x.faces, infos), ...
+                  'skipped', sum(cellfun(@(x) x.skipped, infos)));
+end
+
+function [keys, rows] = keyRows(keys, con)
+% con rows [a b c d e f sign branch] as [index side] into a shared curve table.
+    rows = zeros(0,2);
+    for t = 1:size(con,1)
+        key = con(t, [1:6 8]);
+        hit = find(all(keys == key, 2), 1);
+        if isempty(hit), keys(end+1,:) = key;  hit = size(keys,1); end %#ok<AGROW>
+        rows(end+1,:) = [hit, con(t,7)]; %#ok<AGROW>
+    end
+end
+
+function [r, clash] = mergeRows(a, b)
+    clash = false;  r = a;
+    for t = 1:size(b,1)
+        s = a(a(:,1) == b(t,1), 2);
+        if isempty(s), r(end+1,:) = b(t,:); %#ok<AGROW>
+        elseif s(1) ~= b(t,2), clash = true; return
         end
     end
 end
 
-function M = piecePoints(quad, Q, conRows, algRows) %#ok<INUSL>
-% Which of the cell's points satisfy a piece's conic and algebraic rows.
-    M = true(size(Q,1), 1);
-    for r = 1:size(conRows,1)
-        M = M & conRows(r,7) * QuaPar.evalConic(conRows(r,1:6), Q) >= 0;
-    end
-    for t = 1:numel(algRows)
-        a = algRows(t);
-        z = algBranch(a.FP, Q, a.FB);  q = ratQ.evalFace(a.num, a.den, Q);
-        M = M & isfinite(z) & a.side * (q - z) >= -1e-9;
+function [con, alg, ii] = leRows(f, o, con, alg, ii)
+% The rows saying face f <= face o.
+    if strcmp(f.kind, 'quad') && strcmp(o.kind, 'quad')
+        [c, sgn] = diffConic(o, f);                 % o >= f
+        if ~isempty(c), con(end+1,:) = [c, sgn, 0]; end
+    elseif strcmp(f.kind, 'quad')                   % quad f <= irrational o
+        alg(end+1) = struct('FP', o.FP, 'FB', o.FB, 'num', f.num, 'den', f.den, 'side', -1);
+    elseif strcmp(o.kind, 'quad')                   % irrational f <= quad o
+        alg(end+1) = struct('FP', f.FP, 'FB', f.FB, 'num', o.num, 'den', o.den, 'side', 1);
+    elseif ~(isequal(f.FP, o.FP) && f.FB == o.FB)
+        ii(end+1) = struct('FP1', o.FP, 'FB1', o.FB, 'FP2', f.FP, 'FB2', f.FB);
     end
 end
 
-function [conRows, algRows, ok] = geRows(quad, a, b, conRows, algRows, Q)
-% The rows saying face a >= face b. ok = false when they PROVABLY cannot hold on the cell's points
-% (two irrational faces ordered the wrong way at every sample) -- the piece is then empty.
-    ok = true;
-    if strcmp(a.kind, 'quad') && strcmp(b.kind, 'quad')
-        if a.j == b.j, return, end
-        [c, sgn] = diffConic(quad(a.j), quad(b.j));
-        if ~isempty(c), conRows(end+1,:) = [c, sgn, 0]; end
-    elseif strcmp(a.kind, 'quad')                       % quad a >= irrational b
-        algRows(end+1) = struct('FP', b.FP, 'FB', b.FB, 'num', quad(a.j).num, 'den', quad(a.j).den, 'side', 1);
-    elseif strcmp(b.kind, 'quad')                       % irrational a >= quad b
-        algRows(end+1) = struct('FP', a.FP, 'FB', a.FB, 'num', quad(b.j).num, 'den', quad(b.j).den, 'side', -1);
-    else
-        if isequal(a.FP, b.FP) && a.FB == b.FB, return, end
-        va = algBranch(a.FP, Q, a.FB);  vb = algBranch(b.FP, Q, b.FB);
-        tol = 1e-12 * max(1, abs(vb));
-        if all(va >= vb - tol), return, end             % a >= b on the whole cell (sampled)
-        if all(va <= vb + tol), ok = false; return, end % never: the piece is empty
-        error('envelopeSubdivisionAlg:minIrrational', ...
-            'two irrational faces from different pairs cross inside one cell of a minimum over pairs.');
+function ii = emptyII()
+    ii = struct('FP1', {}, 'FB1', {}, 'FP2', {}, 'FB2', {});
+end
+
+function tf = overlayLive(keys, rows, con, alg, ii, P, final)
+% A witness among the tuple's sample points spares the exact tests. Otherwise the conic rows decide,
+% then algEmpty certifies the algebraic ones on the conic part -- on the rows without a branch,
+% a larger region, so an emptiness proved there holds on the piece. Tie rows are not certified: a
+% piece only they empty is kept, at no cost to a value. On the FINAL pieces (`final`) algEmpty is
+% skipped: the picks were already certified, and measured on the same triangle it removed 2 faces
+% of 240 (single runs on a shared machine, no speed claim).
+    if witnessed(con, alg, ii, P), tf = true; return, end
+    k0 = all(con(:,1:5) == 0, 2);
+    if any(con(k0,7) .* con(k0,6) < 0), tf = false; return, end
+    [K, r] = keyRows(keys, con(~k0,:));
+    tf = liveCell(K, unique([rows; r], 'rows'));
+    if ~tf || isempty(alg) || final, return, end
+    plain = ~k0 & con(:,8) == 0;
+    tf = ~algEmpty(keys, rows, con(plain, 1:7), alg, P.X);
+end
+
+function tf = witnessed(con, alg, ii, PP)
+% A sample point of the tuple strictly inside every row. The branch values are the costly part --
+% an exact fibre per point on Example 2's integers -- so each face's are cached on the tuple's
+% samples and computed only at the points still in play.
+    P = PP.X;
+    if isempty(P), tf = false; return, end
+    M = true(size(P,1), 1);
+    for r = 1:size(con,1)
+        if con(r,8) ~= 0
+            v = ratQ.pairLineEval(con(r,1:6), con(r,8), P);
+        else
+            v = QuaPar.evalConic(con(r,1:6), P);
+        end
+        M = M & con(r,7) * v > 1e-9 * max(1, max(abs(con(r,1:6))));
+        if ~any(M), tf = false; return, end
     end
+    % At most K points go on to the branch rows: a witness is an economy, not the test, and a
+    % piece none of them witnesses is decided exactly by the caller.
+    K = 96;  in = find(M);
+    if numel(in) > K, M(:) = false;  M(in(round(linspace(1, numel(in), K)))) = true; end
+    for t = 1:numel(alg)
+        a = alg(t);
+        z = branchAt(PP, a.FP, a.FB, M);  q = ratQ.evalFace(a.num, a.den, P(M,:));
+        M(M) = isfinite(z) & a.side * (q - z) > 1e-9;
+        if ~any(M), tf = false; return, end
+    end
+    for t = 1:numel(ii)
+        z1 = branchAt(PP, ii(t).FP1, ii(t).FB1, M);  z2 = branchAt(PP, ii(t).FP2, ii(t).FB2, M);
+        M(M) = isfinite(z1) & isfinite(z2) & z1 - z2 > 1e-9;
+        if ~any(M), tf = false; return, end
+    end
+    tf = any(M);
+end
+
+function z = branchAt(PP, FP, FB, M)
+% algBranch(FP, X(M,:), FB), each point computed at most once per tuple.
+    try
+        w = double(FP(:));
+        key = sprintf('%d|%d|%.17g|%.17g', FB, numel(w), sum(w), sum(w .* (1:numel(w)).'));
+    catch
+        z = algBranch(FP, PP.X(M,:), FB);  return    % an FP doubles cannot key: not cached
+    end
+    if isKey(PP.Z, key)
+        e = PP.Z(key);
+        if ~isequal(e.FP, FP), z = algBranch(FP, PP.X(M,:), FB); return, end
+    else
+        e = struct('FP', FP, 'v', nan(size(PP.X,1), 1), 'done', false(size(PP.X,1), 1));
+    end
+    need = M & ~e.done;
+    if any(need)
+        e.v(need) = algBranch(FP, PP.X(need,:), FB);  e.done(need) = true;
+        PP.Z(key) = e;
+    end
+    z = e.v(M);
 end
 
 function [corners, bridges] = splitBridge(bl)

@@ -57,6 +57,36 @@ classdef AlgCrvTest < matlab.unittest.TestCase
                           'the value is the upper branch of the cone, |x|');
         end
 
+        function aTIERowBetweenTwoImplicitValuesIsReadByTheEvaluator(t)
+        % A MINIMUM over pairs (2026-10-31) orders two irrational faces against each other, and the
+        % curve where they tie is stored as the pair of branches, table 2. Here |x| >= 2|x_1|, which
+        % holds where y^2 >= 3 x^2: the face owns (0.1, 1) and not (1, 0.1).
+            [FP, num, den] = cone();
+            FP2 = zeros(3,3,3);  FP2(1,1,3) = 1;  FP2(3,1,1) = -4;     % z^2 = 4 x^2
+            EcA = struct('FP', FP, 'FB', 2, 'num', num, 'den', den);
+            EcI = struct('FP1', FP, 'FB1', 2, 'FP2', FP2, 'FB2', 2);
+            g = AlgCrv(zeros(0,3), zeros(0,3), zeros(0,6), zeros(1,10), 1, zeros(0,2), {[1 1 0 2]}, ...
+                       {FP}, 2, EcA([]), EcI);
+            v = g.eval([0.1 1; -0.2 0.9; 1 0.1; -0.8 -0.3]);
+            t.verifyEqual(v(1:2), hypot([0.1; -0.2], [1; 0.9]), 'AbsTol', 1e-12, ...
+                          'where the tie row holds the face owns the point');
+            t.verifyTrue(all(isinf(v(3:4))), 'and where it fails the face does not');
+            t.verifyError(@() algCrvVertices(g), 'algCrvVertices:tieRow', ...
+                          'the topology routines do not read a tie row, and say so');
+        end
+
+        function assembleAlgCrvCarriesATieRow(t)
+            [FP, num, den] = cone();
+            FP2 = zeros(3,3,3);  FP2(1,1,3) = 1;  FP2(3,1,1) = -4;
+            f = struct('kind', 'bridge', 'num', num, 'den', den, 'FP', FP, 'FB', 2, ...
+                       'con', zeros(0,8), 'alg', struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}, 'side', {}), ...
+                       'ii', struct('FP1', FP, 'FB1', 2, 'FP2', FP2, 'FB2', 2));
+            g = assembleAlgCrv([f, f]);
+            t.verifyEqual(numel(g.EcI), 1, 'the same tie row twice is one edge');
+            t.verifyTrue(isinf(g.eval([1 0.1])));
+            t.verifyEqual(g.eval([0.1 1]), hypot(0.1, 1), 'AbsTol', 1e-12);
+        end
+
         function theARGUMENTSAreChecked(t)
             g = fixture();
             t.verifyError(@() g.eval(), 'AlgCrv:nargin');
