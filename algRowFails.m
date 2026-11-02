@@ -5,7 +5,8 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
 %
 % [input]  a     : the row(s), as envelopeSubdivisionAlg stores them -- .FP (polyN in x, y, z of degree 1
 %                  or 2 in z), .FB (algBranch's index), .num/.den (the quadratic face, weighted
-%                  basis), .side (+1 or -1); a struct array for several rows
+%                  basis), .side (+1 or -1); a struct array for several rows. A point where the
+%                  row's branch does not exist counts as failing, as every reader takes it
 %          box   : [x0 x1 y0 y1], a box containing the region
 %          inBox : function handle, inBox(b) false only when sub-box b PROVABLY misses the region
 %          depth : subdivision levels allowed (default 6)
@@ -98,7 +99,6 @@ function r = rowPolys(a, factors)
 % cannot be certified at all (shape, branch index, non-finite coefficients).
     r = [];
     FP = a.FP;
-    if ratQ.isBigPoly(FP), FP = ratQ.fromBig(FP); end
     num = double(a.num(:).');
     if numel(num) ~= 10 || any(num(1:4) ~= 0) || ~(a.den > 0), return, end
     % q = Q / Dn: twice the weighted numerator, in the plain monomial basis (as bridgeQuadCut)
@@ -107,29 +107,94 @@ function r = rowPolys(a, factors)
     Q(2,1) = 2*num(8);  Q(1,2) = 2*num(9);  Q(1,1) = 2*num(10);
     Dn = 2 * double(a.den);
     want = -a.side;                                  % the sign q - z must have for the row to fail
-    switch size(FP, 3) - 1
+    if ratQ.isBigPoly(FP), nz = FP.sz(3); else, nz = size(FP, 3); end
+    switch nz - 1
         case 2
-            A = FP(:,:,3);  B = FP(:,:,2);  C0 = FP(:,:,1);
             hi = any(a.FB == [-1 2]);
             if ~hi && ~any(a.FB == [1 -2]), return, end
-            P = {A, ...                                                   % a
-                 padAdd(2 * conv2(A, Q), Dn * B), ...                     % Dn (2aq + b)
-                 padAdd(padAdd(conv2(A, conv2(Q, Q)), Dn * conv2(B, Q)), Dn^2 * C0), ...  % Dn^2 F(q)
-                 padAdd(conv2(B, B), -4 * conv2(A, C0))};                 % D
             test = @(s) quadOK(s, hi, want);
         case 1
-            A = FP(:,:,2);  C0 = FP(:,:,1);
             if ~any(a.FB == [1 -1]), return, end
-            P = {A, padAdd(conv2(A, Q), Dn * C0)};                       % b, Dn (b q + c)
             test = @(s) s(1) ~= 0 && s(1) * s(2) == want;
         otherwise
             return
+    end
+    % BIG INTEGERS (2026-11-02). Erratum Example 2's bridges have FP past 2^53, and ratQ.fromBig
+    % raised here -- so no row of theirs was ever certified. And a double FP can overflow in the
+    % products below, silently. Both go through BigInteger: the same formulas (signPolys) on bigZ,
+    % the content divided out, and the result back in doubles -- exactly when it fits, otherwise
+    % ROUNDED to the nearest double. That rounding is sound for what reads it: polySignOn counts a
+    % Bernstein coefficient only past a margin of 1e-10 of the largest, and a relative error of
+    % 2^-53 per coefficient moves each Bernstein coefficient by far less (they are convex
+    % combinations). The exact reductions below (squared factors, region factors) need integers
+    % within 2^53 and simply refuse a rounded polynomial, which keeps it whole -- sign-correct.
+    big = ratQ.isBigPoly(FP);
+    if ~big
+        bound = signPolys(abs(FP), abs(Q), Dn, nz - 1, 4);  % every partial sum of the products, bounded
+        big = any(cellfun(@(p) any(p(:) >= 2^53), bound));
+    end
+    try
+        if big
+            P = signPolys(toZ(FP), Q, bigZ(Dn), nz - 1);
+            P = cellfun(@fromZ, P, 'UniformOutput', false);
+        else
+            P = signPolys(FP, Q, Dn, nz - 1);
+        end
+    catch
+        return
     end
     if any(cellfun(@(p) ~all(isfinite(p(:))), P)), return, end
     % EVERY sign is read with its squared factors and the region's factors divided out: each then
     % has the original sign off a finite union of curves, so the conclusion holds off them too
     P = cellfun(@(p) divideOut(squareFreeSign(p), factors), P, 'UniformOutput', false);
     r = struct('P', {P}, 'test', test);
+end
+
+function P = signPolys(FP, Q, Dn, deg, k4)
+% The sign polynomials of a row, from FP's z-coefficients: in doubles, or in bigZ (same code).
+% k4 = -4 (D = b^2 - 4ac); a bound on |every partial sum| is the same with |inputs| and k4 = +4.
+    if nargin < 5, k4 = -4; end
+    if deg == 2
+        A = FP(:,:,3);  B = FP(:,:,2);  C0 = FP(:,:,1);
+        P = {A, ...                                                       % a
+             padAdd(2 * conv2g(A, Q), Dn * B), ...                        % Dn (2aq + b)
+             padAdd(padAdd(conv2g(A, conv2g(Q, Q)), Dn * conv2g(B, Q)), Dn^2 * C0), ...  % Dn^2 F(q)
+             padAdd(conv2g(B, B), k4 * conv2g(A, C0))};                   % D
+    else
+        A = FP(:,:,2);  C0 = FP(:,:,1);
+        P = {A, padAdd(conv2g(A, Q), Dn * C0)};                          % b, Dn (b q + c)
+    end
+end
+
+function Z = toZ(FP)
+% ratQ's big form (or a double array) as a bigZ array of the same shape.
+    if ~ratQ.isBigPoly(FP), Z = bigZ(FP); return, end
+    c = FP.c;
+    c(cellfun(@isempty, c)) = {java.math.BigInteger.ZERO};
+    Z = bigZ(reshape(c, FP.sz));
+end
+
+function p = fromZ(p)
+% Content divided out; exact doubles when they fit, the nearest ones otherwise (see BIG INTEGERS).
+    if ~isa(p, 'bigZ'), return, end
+    p = contentFree(p);
+    try
+        p = exactDouble(p, 'row sign polynomial');
+    catch
+        p = double(p);
+    end
+end
+
+function C = conv2g(A, B)
+% conv2, also for bigZ operands.
+    if isnumeric(A) && isnumeric(B), C = conv2(A, B); return, end
+    [a1, a2] = size(A);  [b1, b2] = size(B);
+    C = bigZ(zeros(a1 + b1 - 1, a2 + b2 - 1));
+    for i = 1:a1
+        for j = 1:a2
+            C(i:i+b1-1, j:j+b2-1) = C(i:i+b1-1, j:j+b2-1) + A(i,j) .* B;
+        end
+    end
 end
 
 function tf = boxRec(rows, b, inBox, depth, sq)
@@ -230,11 +295,15 @@ function ok = quadOK(s, hi, want)
     if s(1) == 0, ok = false; return, end
     u = s(2) * s(1);                                 % sign(q - m)
     v = s(3) * s(1);                                 % sign(F(q) / a): -1 is "between the roots"
-    dPos = s(4) == 1;
-    if hi && want == -1,      ok = (u == -1 && dPos) || v == -1;
-    elseif hi,                ok = u == 1 && v == 1 && dPos;
-    elseif want == -1,        ok = u == -1 && v == 1 && dPos;
-    else,                     ok = (u == 1 && dPos) || v == -1;
+    % WHERE THE BRANCH DOES NOT EXIST (D < 0) THE ROW FAILS -- every reader takes it so (the
+    % evaluator's algHolds and algEmpty require a finite value) -- so no conclusion needs a sign of
+    % D: each is right wherever the roots exist, and D < 0 fails the row by itself (2026-11-02).
+    % Until then u = -1 and u = +1 alone required D > 0, and a box on a face's discriminant curve --
+    % erratum Example 2's faces end on theirs at the cells' edges -- never had that sign.
+    if hi && want == -1,      ok = u == -1 || v == -1;
+    elseif hi,                ok = u == 1 && v == 1;
+    elseif want == -1,        ok = u == -1 && v == 1;
+    else,                     ok = u == 1 || v == -1;
     end
 end
 
@@ -290,6 +359,8 @@ end
 
 function S = padAdd(A, B)
     n = max(size(A), size(B));
-    S = zeros(n);  S(1:size(A,1), 1:size(A,2)) = A;
+    S = zeros(n);
+    if isa(A, 'bigZ') || isa(B, 'bigZ'), S = bigZ(S); end
+    S(1:size(A,1), 1:size(A,2)) = A;
     S(1:size(B,1), 1:size(B,2)) = S(1:size(B,1), 1:size(B,2)) + B;
 end

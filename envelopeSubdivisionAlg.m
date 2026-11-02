@@ -142,7 +142,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
 
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
     subdivision = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
-    nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;
+    nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;  nBelow = 0;
     cellCon = {};  faceCell = zeros(1, 0);      % the cells, for an overlay of several pairs
     for k = 1:numel(cells)
         rows = cells{k};
@@ -185,6 +185,10 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
             if okc, irr{end+1} = fc; end %#ok<AGROW>
         end
         if isempty(quadApp) && isempty(irr), nUncovered = nUncovered + 1; continue, end
+        if numel(irr) > 1
+            [irr, nDrop] = dropBelow(irr, C, rows, Pw);
+            nBelow = nBelow + nDrop;
+        end
         if numel(irr) > 1 && ~dominantIrrational(irr, C, rows, pt, env.quad, quadApp)
             nOverlap = nOverlap + 1;
         end
@@ -197,7 +201,8 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
         end
     end
     info = struct('cells', numel(cells), 'faces', numel(subdivision), 'algRows', nAlg, ...
-                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap, 'skipped', nSkip, ...
+                  'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap, 'below', nBelow, ...
+                  'skipped', nSkip, ...
                   'cellCon', {cellCon}, 'faceCell', faceCell);
 end
 
@@ -532,6 +537,55 @@ function [fc, ok] = cornerValueFace(c, pt)
     if gap > 1e-6 * max(1, abs(z)), return, end
     fc = struct('FP', c.FP, 'FB', j - numel(rr) - 1);
     ok = true;
+end
+
+function [irr, nDrop] = dropBelow(irr, C, rows, P)
+% The irrational faces CERTIFIED below another one on the whole cell (algFaceBelow), dropped
+% (2026-11-02). Each is cut against the same quadratics, so a face below another owns a subset of
+% what that one owns and the max is unchanged. On erratum Example 2 a pair's cell carried 6-11
+% irrational faces, one of them ever the maximum (300 samples, every cell), and the overlay of the
+% pairs multiplied them. The candidates for "above" are read at the cell's points, most often the
+% largest first; reading them is a choice, the certificate is the decision.
+    nDrop = 0;
+    % THE SAME FACE TWICE first -- equal FP and FB, from two bridges or corners: one is enough.
+    % Exact (ratQ.polyEqual); on Example 2 the remaining faces of a cell came in such pairs.
+    keep = true(1, numel(irr));
+    for i = 2:numel(irr)
+        for j = 1:i-1
+            if keep(j) && irr{i}.FB == irr{j}.FB && isequal(size3(irr{i}.FP), size3(irr{j}.FP)) && ...
+               ratQ.polyEqual(irr{i}.FP, irr{j}.FP)
+                keep(i) = false;  nDrop = nDrop + 1;  break
+            end
+        end
+    end
+    irr = irr(keep);
+    n = numel(irr);
+    if n < 2, return, end
+    V = -inf(size(P,1), n);
+    for i = 1:n
+        v = algBranch(ratQ.bigToDouble(irr{i}.FP), P, irr{i}.FB);
+        v(~isfinite(v)) = -inf;  V(:,i) = v;
+    end
+    [~, top] = max(V, [], 2);
+    [~, order] = sort(accumarray(top, 1, [n 1]), 'descend');
+    above = order(1:min(2, n)).';
+    [box, inBox, factors, corners] = regionBox(C, rows, zeros(0,8));
+    if isempty(box), return, end
+    keep = true(1, n);
+    for i = 1:n
+        for j = above
+            if j == i || ~keep(j), continue, end
+            if all(V(:,i) <= V(:,j)) && algFaceBelow(irr{i}, irr{j}, box, inBox, 5, factors, corners)
+                keep(i) = false;  nDrop = nDrop + 1;  break
+            end
+        end
+    end
+    irr = irr(keep);
+end
+
+function sz = size3(P)
+    if ratQ.isBigPoly(P), sz = P.sz; else, sz = size(P); end
+    sz = [sz, ones(1, 3 - numel(sz))];
 end
 
 function ok = dominantIrrational(irr, C, rows, pt, quad, quadApp)

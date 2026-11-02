@@ -26,9 +26,10 @@
            of 75; DECISIONS (seventh)). Arrange locally (a curve splits only cells where a face it
            bounds can apply), or per pair then overlay; then cut T post hoc instead of 7 global lines.
            DONE 2026-10-31: local arrangement (8c4d63d) and per pair + overlay with tie rows (DECISIONS
-           2026-10-31 (second)). LEFT for Example 2: the pairs' TANGENT quadratic faces (q >= bridge
-           only on a curve) are kept unrefuted and multiply in the overlay (~40 picks per tuple, 302
-           tuples). Needs a certificate that q <= bridge on the cell WITH touching -> no interior.
+           2026-10-31 (second)). LEFT for Example 2: the overlay multiplies each pair's faces per cell
+           (302 tuples). NOT tangent quadratics as first written: OVERLAPPING IRRATIONAL faces, 6-11 a
+           cell, one of them ever the max. Certified dominance + exact duplicates dropped 2026-11-02:
+           98/283/113 -> 42/134/62 faces (DECISIONS 2026-11-02). Next: measure the overlay on those.
         d. the AlgCrv type and evaluators carry the new face/row kind; biconjQ subdivides Example 2;
            test: equal to the EnvelopeMin on 4000 points + the definition check (slow).
 - [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink is subdivided in 256 s (clipped to

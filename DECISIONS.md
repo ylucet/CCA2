@@ -8891,3 +8891,32 @@ holds only on the tangency), which neither the conic test nor algRowFails (stric
 In the overlay they multiply: ~40 pick combinations per tuple, ~13 min for the first 3 of 302 tuples
 (one run, shared machine; 70% exact branch fibres for the witness). The point-cell fix does not touch
 them. Next: certify "q <= bridge on the cell" with touching allowed -- then the piece has no interior.
+
+## 2026-11-02 — Example 2's pairs: the faces that multiply are OVERLAPPING IRRATIONAL ones; dropped when certified below another
+
+The 2026-10-31 (second) diagnosis -- tangent quadratic faces -- was wrong, measured: Example 2's pairs are
+95/266/~100 irrational faces against 3/17/~13 quadratic ones, a cell carries 6-11 of them (every
+irrational face is cut against the quadratics only, so all that apply own the whole cell), and on
+300 samples per cell exactly ONE is ever the maximum (17 of 98 faces win anywhere in pair 1). Three
+changes, values unchanged on all three pairs (2000 points against the previous subdivision: 0
+difference, 0 domain mismatches):
+
+- **Exact duplicates** (equal FP and FB from two bridges) are kept once.
+- **algFaceBelow** certifies z_lo <= z_hi on a cell (strictly off a curve, where both branches
+  exist): per box a fitted quadratic separator q, then z_lo < q and q < z_hi as two algRowFails
+  rows with the cell's rows as factors. A face below another on its cell owns a subset of what
+  that one owns (both cut against the same quadratics), so the max is unchanged. A constant
+  separator was tried first and is too weak where the faces slope; without the cell's factors no
+  box on a face's discriminant edge (y = 5/2 here) got a sign.
+- **algRowFails** (a) formed its sign polynomials via ratQ.fromBig, which RAISES on Example 2's
+  FP past 2^53 -- the caller's catch turned that into "not certified", so no algebraic row of
+  Example 2 was ever decided; they are now formed in BigInteger and rounded once (inside
+  polySignOn's 1e-10 margin), and a double FP whose products would pass 2^53 goes the same way.
+  (b) no longer requires D > 0: a point with no branch fails a row for every reader (algHolds,
+  algEmpty), so each conclusion right where the roots exist is right everywhere. Checked on the
+  300 random rows: 90 certified, 45 with samples lacking the branch, 0 with a finite sample where
+  the row holds. Two test lines pinned the old, stronger claim (branch exists on a certified box;
+  "undecided without D's factor") and were changed to the evaluator's reading.
+
+Pairs 98/283/113 -> 42/134/62 faces (one run each, shared machine: 95/139/224 s).
+

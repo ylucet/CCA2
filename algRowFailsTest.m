@@ -98,8 +98,10 @@ classdef algRowFailsTest < matlab.unittest.TestCase
             t.verifyTrue(algRowFails(a, [0 1 0 1], inBox, 6, {xy}), 'b divided by x + y');
             FP = zeros(2,2,3);  FP(1,1,3) = 1;  FP(:,:,1) = -xy;       % z^2 = x + y, D = 4 (x + y)
             a = struct('FP', FP, 'FB', -1, 'num', [0 0 0 0 0 0 0 0 0 -1], 'den', 1, 'side', 1);  % -1 >= +sqrt
-            t.verifyFalse(algRowFails(a, [0 1 0 1], inBox, 6, {}), 'without the factor: undecided');
-            t.verifyTrue(algRowFails(a, [0 1 0 1], inBox, 6, {xy}), 'D divided by x + y');
+            % D's sign is no longer read for this conclusion (q = -1 below the roots' mean 0 puts it
+            % below the upper root wherever the roots exist; 2026-11-02), so the factor is not needed
+            t.verifyTrue(algRowFails(a, [0 1 0 1], inBox, 6, {}), 'D is not needed');
+            t.verifyTrue(algRowFails(a, [0 1 0 1], inBox, 6, {xy}), 'and dividing it out does no harm');
             a.side = -1;                                               % -1 <= +sqrt holds
             t.verifyFalse(algRowFails(a, [0 1 0 1], inBox, 6, {xy}), 'a row holding');
         end
@@ -256,7 +258,7 @@ classdef algRowFailsTest < matlab.unittest.TestCase
         function aCERTIFIEDRowFailsAtEveryPointRandomInputs(t)
         % The definition, against the evaluator that shares no code with the certificate: wherever
         % algRowFails says true, algBranch and ratQ.evalFace find the row false at every sample.
-            rng(29);  nCert = 0;  nRef = 0;
+            rng(29);  nCert = 0;  nRef = 0;  nFin = 0;
             for trial = 1:300
                 FP = zeros(3,3,3);
                 FP(1,1,3) = randi([1 3]) * sign(randn);
@@ -272,14 +274,42 @@ classdef algRowFailsTest < matlab.unittest.TestCase
                 X = [box(1) + (box(2) - box(1)) * rand(400,1), box(3) + (box(4) - box(3)) * rand(400,1)];
                 X = [X; box([1 3]); box([2 3]); box([1 4]); box([2 4])]; %#ok<AGROW>
                 z = algBranch(a.FP, X, a.FB);  q = ratQ.evalFace(a.num, a.den, X);
-                t.verifyTrue(all(isfinite(z)), sprintf('trial %d: the branch must exist on the box', trial));
-                t.verifyTrue(all(a.side * (q - z) < 0), sprintf('trial %d: the row holds at a sample', trial));
+                % the row as the evaluator reads it (subdivisionAlgEval's algHolds): a point with no
+                % branch fails it. (Until 2026-11-02 a certificate also implied the branch EXISTS on
+                % the box; no caller needs that, and requiring it left every box on a discriminant
+                % curve undecided.)
+                holds = isfinite(z) & a.side * (q - z) >= 0;
+                t.verifyFalse(any(holds), sprintf('trial %d: the row holds at a sample', trial));
+                nFin = nFin + sum(isfinite(z));
                 if polySignOn(bridgeQuadCut(a.FP, a.num, a.den), box, @(~) true, 5) == 0
                     nRef = nRef + 1;                       % one the old certificate could not give
                 end
             end
             t.verifyGreaterThan(nCert, 20, 'too few certified trials to mean anything');
             t.verifyGreaterThan(nRef, 0, 'no certified trial had R = 0 crossing its box');
+            t.verifyGreaterThan(nFin, 200 * nCert, 'most samples must have the branch, or this tests nothing');
+        end
+
+        function aBIGIntegerFibreIsCertifiedAsItsDoubleTwin(t)
+        % Erratum Example 2's bridges carry FP past 2^53 (ratQ's big form). rowPolys called
+        % ratQ.fromBig, which raises there, and envelopeSubdivisionAlg's caller turned the raise into
+        % "not certified" -- so no algebraic row of those pairs was ever decided (2026-11-02). The
+        % sign polynomials are formed in BigInteger instead. Two inputs: z^2 = x^2 + y^2 + 1 scaled by
+        % K^2 (content K^2, reduced back exactly), and the same with the constant moved by one unit
+        % (no content: the reduced polynomial is past 2^53 too) -- its branch differs by ~1e-37.
+            K = 2^30 + 1;
+            a = row(-1, 1, [0 0 0 0 0 0 0 2 0 0]);
+            box = [-3 0.3 -1 1];
+            t.verifyTrue(algRowFails(a, box, @(~) true), 'the double twin must be certified');
+            B = ratQ.bigMul(ratQ.bigMul(ratQ.toBig(a.FP), ratQ.toBig(K)), ratQ.toBig(K));
+            t.verifyTrue(ratQ.isBigPoly(B) && ratQ.bigBits(B.c{1}) > 53, 'the fixture must be past 2^53');
+            a.FP = B;
+            t.verifyTrue(algRowFails(a, box, @(~) true), 'scaled by K^2');
+            B.c{1} = B.c{1}.subtract(java.math.BigInteger.ONE);
+            a.FP = B;
+            t.verifyTrue(algRowFails(a, box, @(~) true), 'scaled by K^2, constant moved by one');
+            a = row(-1, 1, [0 0 0 0 0 0 0 2 0 0]);  a.FP = B;
+            t.verifyFalse(algRowFails(a, [-3 1 -1 1], @(~) true), 'and a row holding at (1, 0) is not');
         end
     end
 end
