@@ -18,6 +18,8 @@ biconjQ subdivides Example 2, slow test against EnvelopeMin on 4000 points.
   biconjQ still returns the EnvelopeMin by default; a new verylong test lifts the budget.
 - Speed (fa541f1): two heavy Example 2 tuples 780 s -> 147 s, same faces (single runs, shared
   machine): quadratic fibres solved vectorised, line pairs and row polynomials remembered.
+- Example 2's WHOLE overlay now: 3299 faces in ~21 min (one run, shared machine). Yesterday's
+  projection was ~12000 faces and ~4 h.
 - Tests: fast 814/0, normal 32/0 on fa541f1; subdivision slow suites 15/0 and the slow
   Example 2 suite 4/0 on b856958.
 
@@ -25,10 +27,11 @@ biconjQ subdivides Example 2, slow test against EnvelopeMin on 4000 points.
 Nothing known.
 
 ## Needs a decision
-- Example 2 by default: subdivide (hours) or decline (now)? I kept DECLINE with a budget,
-  reversible by one number. Options: (a) keep the budget [my pick]; (b) make subdividing opt-in
-  only and skip even the ~3 min of pair subdivisions before the refusal; (c) lift it once the
-  overlay is fast enough.
+- Example 2 by default: subdivide (~30 min in biconjQ now) or decline (current)? I kept DECLINE
+  with a piece budget, reversible by one number. Options: (a) keep declining [my pick until the
+  tangent faces are cut]; (b) raise the default budget so biconjQ subdivides it (the slow
+  Example 2 suite would take ~30 min more); (c) opt-in only, skipping the ~3 min of pair
+  subdivisions spent before the refusal.
 
 ## Where I stopped
 Running the verylong Example 2 subdivision test (budget lifted) from a snapshot of fa541f1, plus

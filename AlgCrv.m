@@ -95,74 +95,74 @@ classdef AlgCrv < AlgCon & Crv
          end
          n = size(X,1);
          val = inf(n,1);  idx = zeros(n,1);
-         for i = 1:n
-            for k = 1:obj.nf
-               if ~obj.faceOwns(k, X(i,:)), continue, end
-               v = obj.faceValue(k, X(i,:));
-               if isnan(v), continue, end
-               if isinf(val(i)) || v > val(i), val(i) = v;  idx(i) = k; end
-            end
+         % FACE BY FACE over all points at once (2026-11-01): erratum Example 2's subdivision has
+         % thousands of faces, and the point-by-face loop called algBranch once per pair. The rows
+         % are read with the same tolerances and the max keeps the same (first) face on a tie.
+         for k = 1:obj.nf
+            M = obj.facePoints(k, X);
+            if ~any(M), continue, end
+            v = nan(n,1);  v(M) = obj.faceValues(k, X(M,:));
+            up = M & ~isnan(v) & (isinf(val) | v > val);
+            val(up) = v(up);  idx(up) = k;
          end
       end
    end
 
    methods (Access = private)
-      function tf = faceOwns(obj, k, x)
-      % Every row of face k, conic, algebraic or tie. The tolerance is QuaCon.eval's: a point within it
-      % of a boundary is accepted, and on a boundary two faces agree anyway, the envelope being
-      % continuous there.
-         tf = true;
+      function M = facePoints(obj, k, X)
+      % faceOwns for every row of X at once.
+         M = true(size(X,1), 1);
          rows = obj.FC{k};
          for t = 1:size(rows,1)
+            if ~any(M), return, end
+            P = X(M,:);  ok = true(size(P,1), 1);
             tbl = 0;
             if size(rows,2) >= 4, tbl = rows(t,4); end
             if tbl == 3
                T = obj.Tri(rows(t,1)).T;  i = rows(t,2);  j = mod(i,3) + 1;  o = 6 - i - j;
                e = T(j,:) - T(i,:);
-               cr = @(p) e(1)*(p(2) - T(i,2)) - e(2)*(p(1) - T(i,1));
-               if rows(t,3) * cr(x) * sign(cr(T(o,:))) < -1e-9 * max(1, norm(e)) * max(1, norm(x))
-                  tf = false; return
-               end
+               so = sign(e(1)*(T(o,2) - T(i,2)) - e(2)*(T(o,1) - T(i,1)));
+               cr = (e(1)*(P(:,2) - T(i,2)) - e(2)*(P(:,1) - T(i,1))) * so;
+               ok = ~(rows(t,3) * cr < -1e-9 * max(1, norm(e)) * max(1, sqrt(sum(P.^2, 2))));
             elseif tbl == 2
                r = obj.EcI(rows(t,1));
-               v1 = algBranch(r.FP1, x, r.FB1);  v2 = algBranch(r.FP2, x, r.FB2);
-               if ~isfinite(v1) || ~isfinite(v2) || rows(t,2) * (v1 - v2) < -1e-9
-                  tf = false; return
-               end
+               v1 = algBranch(r.FP1, P, r.FB1);  v2 = algBranch(r.FP2, P, r.FB2);
+               ok = isfinite(v1) & isfinite(v2) & ~(rows(t,2) * (v1 - v2) < -1e-9);
             elseif tbl == 1
                a = obj.EcA(rows(t,1));
-               v = algBranch(a.FP, x, a.FB);
-               if ~isfinite(v), tf = false; return, end
-               q = ratQ.evalFace(a.num, a.den, x);
-               if rows(t,2) * (q - v) < -1e-9, tf = false; return, end
+               v = algBranch(a.FP, P, a.FB);
+               q = ratQ.evalFace(a.num, a.den, P);
+               ok = isfinite(v) & ~(rows(t,2) * (q - v) < -1e-9);
             else
                c = obj.EcQ(rows(t,1), :);
                br = 0;
                if size(rows,2) >= 3, br = rows(t,3); end
                if br ~= 0
-                  v = ratQ.pairLineEval(c, br, x);
+                  v = ratQ.pairLineEval(c, br, P);
                else
-                  v = c(1)*x(1)^2 + c(2)*x(1)*x(2) + c(3)*x(2)^2 + ...
-                      c(4)*x(1) + c(5)*x(2) + c(6);
+                  v = c(1)*P(:,1).^2 + c(2)*P(:,1).*P(:,2) + c(3)*P(:,2).^2 + ...
+                      c(4)*P(:,1) + c(5)*P(:,2) + c(6);
                end
                if rows(t,2) == 0
-                  if abs(v) > 1e-9, tf = false; return, end      % an EQUALITY row: a THIN face
-               elseif rows(t,2) * v < -1e-9
-                  tf = false; return
+                  ok = ~(abs(v) > 1e-9);                     % an EQUALITY row: a THIN face
+               else
+                  ok = ~(rows(t,2) * v < -1e-9);
                end
             end
+            M(M) = ok;
          end
       end
 
-      function v = faceValue(obj, k, x)
-      % FP/FB when face k carries no formula, fN/fD when it does -- AlgCon's own rule.
+      function v = faceValues(obj, k, X)
+      % faceValue for every row of X at once.
          if numel(obj.FT) >= k && obj.FT(k) > 0
-            v = x * obj.Tri(obj.FT(k)).s(:) - obj.Tri(obj.FT(k)).c;
+            v = X * obj.Tri(obj.FT(k)).s(:) - obj.Tri(obj.FT(k)).c;
          elseif ~isempty(obj.FP) && numel(obj.FP) >= k && ~isempty(obj.FP{k})
-            v = algBranch(obj.FP{k}, x, obj.FB(k));
+            v = algBranch(obj.FP{k}, X, obj.FB(k));
          else
-            v = ratQ.evalFace(obj.fN(k,:), obj.fD(k), x);
+            v = ratQ.evalFace(obj.fN(k,:), obj.fD(k), X);
          end
       end
+
    end
 end
