@@ -3,11 +3,11 @@
 _2026-11-02_
 
 ## Blocked
-- Push: `gh auth login` needed (no GitHub credentials on the old machine).
+Nothing.
 
 ## State
 - Branch `main` @ `c0bd4f6` — "perf(subdivision): overlay witnesses in doubles; corner charts only where a row vanishes"
-- Pushed: no (credentials)
+- Pushed: yes (origin/main, 2026-11-02)
 - Tests: fast 813/0, normal 32/0 (2026-11-02); slow last whole 2026-10-17, the subdivision slow suites 2026-10-31
 - Known reds: none
 
