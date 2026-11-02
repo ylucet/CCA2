@@ -8985,3 +8985,7 @@ calls; the big form's fibre is still summed exactly per point, so both forms giv
 doubles), ratQ.pairLineEval remembers pairLineData per conic (134 k exact root isolations), and
 algRowFails remembers a row's square-free sign polynomials by its exact integers. What remains on
 top: algRowFails' Bernstein recursion and the region-factor division per piece.
+Measured on two tangent pairs of pair 1: the "t - m_k" half (E1, degree 12) fits doubles after its
+content (4e8); the tangency lives in the "F_k(t)" half, E2 = 16 A_w^2 Res_z(F_k, F_w), degree 20 with
+coefficients 2e21-2e23 and content far too small to help. So the route needs an exact big-integer
+square-free part of E2 (or G found otherwise and G^2 | E2 checked by a bigZ division).
