@@ -8965,3 +8965,23 @@ its side decided (polygon clear of the line, else cellInterior with the line on 
 crossed face is split. Also fixed: pieces split for T1 were never looked at for T2. AlgCrv carries
 the named triangle as table 3 (rows [t e side 3]) and FT (the face that IS a triangle); biconjQ
 subdivides pairs + triangles, and Example 2 reaches it only with the budget lifted.
+
+**What is left of the face count: TANGENT faces** (measured 2026-11-02, pair 1 cells 5 and 2): the
+faces a pair's cell keeps beside its winner touch it along a CURVE (gap 1e-12 on a 401^2 grid,
+roots of the two fibres equal to 8 digits), so no separator q can pass strictly between them. An
+exact route exists and is NOT built: with t = z_w = (-B + e sqrt D)/(2A) (e = +-sign A by branch),
+"z_k < t" is a sign condition on t - m_k and F_k(t)/A_k, each of the form P + Q sqrt(D) -- for a
+quadratic F_k, P1 = A_w B_k - A_k B_w, Q1 = e A_k; P2 = A_k (B_w^2 + D) - 2 A_w B_w B_k + 4 A_w^2 C_k,
+Q2 = 2 e P1 -- whose sign is sign P where P^2 - Q^2 D > 0, sign Q where < 0. The tangency is a
+squared factor G^2 of E = P^2 - Q^2 D, to be divided out as algRowFails does. The obstacle: E is of
+degree ~20 with coefficients far past 2^53, and ratQ.polyGcdBiv / polyDivExact are doubles-only, so
+squareFreeSign refuses it and the box test never decides near G = 0. Needs a big-integer bivariate
+gcd (or G found numerically and G^2 | E checked by an exact bigZ division).
+
+**Overlay cost, continued (2026-11-02)**: two heavy Example 2 tuples (7, 11; 141 faces either way)
+780 s -> 374 s (division filter) -> 147 s, single runs on a shared machine, so read the ratio
+loosely. The rest: algBranch solves fibres of degree <= 2 in z on all points at once (7.1 M `roots`
+calls; the big form's fibre is still summed exactly per point, so both forms give identical
+doubles), ratQ.pairLineEval remembers pairLineData per conic (134 k exact root isolations), and
+algRowFails remembers a row's square-free sign polynomials by its exact integers. What remains on
+top: algRowFails' Bernstein recursion and the region-factor division per piece.

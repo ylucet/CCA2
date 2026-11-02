@@ -10,6 +10,34 @@ classdef algBranchTest < matlab.unittest.TestCase
 
     methods (Test)
 
+        function theVECTORISEDPathAgreesWithThePointwiseOne(t)
+        % 2026-11-01: a fibre of degree <= 2 in z is solved on all points at once (one output);
+        % asking for info takes the pointwise loop. Random quadratic and linear fibres, plus points
+        % ON a discriminant curve (double roots) and fibres whose leader vanishes on a line.
+            rng(1101);
+            for trial = 1:60
+                P = randi([-9 9], 3, 3, 3);
+                if mod(trial, 5) == 0, P(:,:,3) = 0; end                 % linear in z
+                if mod(trial, 7) == 0, P(:,:,3) = 0;  P(2,1,3) = 1; end  % leader x: zero on x = 0
+                X = randn(200, 2) * 3;
+                X(1:20, 1) = 0;
+                % the fibre z^2 - (x - y)^2 ... double root on x = y
+                for b = [1 2 -1 -2]
+                    z1 = algBranch(P, X, b);
+                    [z2, ~] = algBranch(P, X, b);
+                    t.verifyEqual(isnan(z1), isnan(z2), sprintf('trial %d branch %d: which points have it', trial, b));
+                    k = ~isnan(z1);
+                    t.verifyEqual(z1(k), z2(k), 'RelTol', 1e-9, 'AbsTol', 1e-9, sprintf('trial %d branch %d', trial, b));
+                end
+            end
+            P = zeros(3,3,3);  P(1,1,3) = 1;  P(3,1,1) = -1;  P(2,2,1) = 2;  P(1,3,1) = -1;   % z^2 - (x-y)^2
+            X = [linspace(-2, 2, 50).', linspace(-2, 2, 50).' + [zeros(25,1); 1e-9 * ones(25,1)]];
+            for b = [1 -1]
+                z1 = algBranch(P, X, b);  [z2, ~] = algBranch(P, X, b);
+                t.verifyEqual(z1, z2, 'AbsTol', 1e-9);
+            end
+        end
+
         function aSMALLLeadingCoefficientIsKeptWhenItIsNotZero(testCase)
         % z^2 - 2^50: top root 2^25. The leading coefficient is 2^-50 of the largest, and the old
         % "relative to the largest coefficient" drop treated it as zero and lost the root (found

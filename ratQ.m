@@ -2652,7 +2652,19 @@ classdef ratQ
         % A CACHE, in exactly the sense QuaCon.Vx is a cache of the vertex Vname names: the decision
         % is `ratQ.pairLineSign`, this is what `eval` uses at a point where a tolerance is already
         % the convention (QuaCon.eval's own header says where that line is drawn).
-            info = ratQ.pairLineData(c);
+            % pairLineData isolates the pair's roots exactly on every call; the overlay of erratum
+            % Example 2 made 134k calls on a few hundred pairs (2026-11-01), so it is remembered by
+            % the conic's coefficients -- exact integers, so equal keys are the same pair.
+            persistent memo
+            if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+            key = sprintf('%.17g,', c(1:6));
+            if isKey(memo, key)
+                info = memo(key);
+            else
+                info = ratQ.pairLineData(c);
+                if memo.Count > 20000, memo.remove(memo.keys()); end
+                memo(key) = info;
+            end
             if strcmp(info.kind, 'parallel')
                 r = sort(roots(info.quad));
                 v = info.form(1)*X(:,1) + info.form(2)*X(:,2) - r(b);

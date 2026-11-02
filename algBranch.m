@@ -124,6 +124,16 @@ function [z, info] = algBranch(P, X, b, opts)
              '(x,y) alone. A face stored this way is a producer defect, not an evaluation one.']);
     end
 
+    % VECTORISED for a double fibre of degree <= 2 in z (2026-11-01): erratum Example 2's overlay
+    % called `roots` 7.1 million times, one point at a time. The same decisions, made on columns:
+    % the leader dropped where it is zero to its own rounding, the double-root windows below, and
+    % a complex pair counted real under imagTol. The values are the stable quadratic formula's,
+    % within a few ulps of `roots`; algBranchTest checks the two paths against each other.
+    if nargout < 2 && nz <= 3
+        z = fibreLow(P, Pbig, X, b, opts, nx, ny, nz);
+        return
+    end
+
     n = size(X,1);
     z = nan(n,1);
     allReal = cell(n,1);
@@ -215,6 +225,63 @@ function [z, info] = algBranch(P, X, b, opts)
     if nargout > 1
         info = struct('nreal', nreal, 'allReal', {allReal});
     end
+end
+
+function z = fibreLow(P, Pbig, X, b, opts, nx, ny, nz)
+% algBranch's loop for fibres of degree <= 2 in z, on all points at once. A big P's fibre is still
+% summed exactly point by point (exactFibre); only the roots are taken together, so the big and the
+% double form of one polynomial give the same doubles (bridgeFaceAlgTest).
+    n = size(X,1);
+    Vx = X(:,1) .^ (0:nx-1);  Vy = X(:,2) .^ (0:ny-1);
+    Ax = abs(Vx);  Ay = abs(Vy);
+    c = zeros(n, 3);  ca = zeros(n, 3);
+    for k = 1:nz
+        ca(:,k) = sum((Ax * abs(P(:,:,k))) .* Ay, 2);
+    end
+    if isempty(Pbig)
+        for k = 1:nz
+            c(:,k) = sum((Vx * P(:,:,k)) .* Vy, 2);
+        end
+        isZero = abs(c) <= opts.degTol * ca;
+    else
+        isZero = false(n, 3);
+        for t = 1:n
+            [c(t,1:nz), isZero(t,1:nz)] = exactFibre(Pbig, X(t,:), nx, ny, nz);
+        end
+    end
+    isZero(:, nz+1:3) = true;
+    z = nan(n, 1);
+    lead = 3 * ~isZero(:,3);
+    lead(lead == 0 & ~isZero(:,2)) = 2;              % the fibre's degree after dropping zero leaders
+    % ---- LINEAR: one root, -c0/c1 (what `roots` computes for a 1 x 1 companion) ----------------
+    L = lead == 2 & max(abs(c), [], 2) > 0;
+    if any(L) && (b == 1 || b == -1)
+        z(L) = -c(L,1) ./ c(L,2);
+    end
+    % ---- QUADRATIC ---------------------------------------------------------------------------
+    Q = lead == 3;
+    if ~any(Q), return, end
+    a = c(Q,3);  bb = c(Q,2);  c0 = c(Q,1);
+    dq = bb.^2 - 4*a.*c0;
+    T = ca(Q,2).^2 + 4*ca(Q,3).*ca(Q,1);
+    lo = nan(size(a));  hi = lo;
+    mean2 = -bb ./ (2*a);
+    dbl = abs(dq) <= 16 * eps * T | (abs(dq) <= 1e-12 * T & dq <= 0);
+    lo(dbl) = mean2(dbl);  hi(dbl) = mean2(dbl);
+    two = ~dbl & dq > 0;
+    qq = -(bb(two) + sign(bb(two) + (bb(two) == 0)) .* sqrt(dq(two))) / 2;
+    r1 = qq ./ a(two);  r2 = c0(two) ./ qq;
+    lo(two) = min(r1, r2);  hi(two) = max(r1, r2);
+    cpx = ~dbl & dq < 0;                             % a complex pair: real only within imagTol
+    im = sqrt(-dq(cpx)) ./ (2 * abs(a(cpx)));
+    re = mean2(cpx);
+    ok = im <= opts.imagTol * max(1, hypot(re, im));
+    w = find(cpx);  w = w(ok);
+    lo(w) = re(ok);  hi(w) = re(ok);
+    v = nan(size(a));
+    if b == 1 || b == -2, v = lo; elseif b == 2 || b == -1, v = hi; end
+    zq = nan(nnz(Q), 1);  zq(:) = v;
+    z(Q) = zq;
 end
 
 function [c, isZero] = exactFibre(B, x, nx, ny, nz)

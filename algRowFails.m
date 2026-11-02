@@ -129,6 +129,30 @@ function r = rowPolys(a, factors)
     % 2^-53 per coefficient moves each Bernstein coefficient by far less (they are convex
     % combinations). The exact reductions below (squared factors, region factors) need integers
     % within 2^53 and simply refuse a rounded polynomial, which keeps it whole -- sign-correct.
+    % REMEMBERED by the row's integers (2026-11-01): the products and the square-free reduction do
+    % not depend on the region, and on an erratum Example 2 overlay the same row came back for
+    % piece after piece. The key is exact -- every coefficient, the big ones as decimal strings.
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+    key = rowKey(FP, num, a.den);
+    if ~isempty(key) && isKey(memo, key)
+        P = memo(key);
+    else
+        P = squareFreePolys(FP, Q, Dn, nz);
+        if isempty(P), return, end
+        if ~isempty(key)
+            if memo.Count > 5000, memo.remove(memo.keys()); end
+            memo(key) = P;
+        end
+    end
+    % EVERY sign is read with its squared factors and the region's factors divided out: each then
+    % has the original sign off a finite union of curves, so the conclusion holds off them too
+    P = cellfun(@(p) divideOut(p, factors), P, 'UniformOutput', false);
+    r = struct('P', {P}, 'test', test);
+end
+
+function P = squareFreePolys(FP, Q, Dn, nz)
+% The row's sign polynomials with their squared factors divided out; {} when they cannot be formed.
     big = ratQ.isBigPoly(FP);
     if ~big
         bound = signPolys(abs(FP), abs(Q), Dn, nz - 1, 4);  % every partial sum of the products, bounded
@@ -142,13 +166,27 @@ function r = rowPolys(a, factors)
             P = signPolys(FP, Q, Dn, nz - 1);
         end
     catch
-        return
+        P = {};  return
     end
-    if any(cellfun(@(p) ~all(isfinite(p(:))), P)), return, end
-    % EVERY sign is read with its squared factors and the region's factors divided out: each then
-    % has the original sign off a finite union of curves, so the conclusion holds off them too
-    P = cellfun(@(p) divideOut(squareFreeSign(p), factors), P, 'UniformOutput', false);
-    r = struct('P', {P}, 'test', test);
+    if any(cellfun(@(p) ~all(isfinite(p(:))), P)), P = {}; return, end
+    P = cellfun(@squareFreeSign, P, 'UniformOutput', false);
+end
+
+function key = rowKey(FP, num, den)
+% An exact text key for (FP, num, den); '' when one cannot be formed cheaply.
+    try
+        if ratQ.isBigPoly(FP)
+            c = FP.c;  e = cellfun(@isempty, c);
+            s = cell(size(c));  s(e) = {'0'};
+            s(~e) = cellfun(@(v) char(v.toString()), c(~e), 'UniformOutput', false);
+            k1 = [sprintf('%d,', FP.sz), '|', strjoin(s(:).', ',')];
+        else
+            k1 = [sprintf('%d,', size(FP)), '|', sprintf('%.17g,', FP(:))];
+        end
+        key = [k1, '|', sprintf('%.17g,', double(num)), '|', sprintf('%.17g', double(den))];
+    catch
+        key = '';
+    end
 end
 
 function P = signPolys(FP, Q, Dn, deg, k4)
