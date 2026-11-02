@@ -8931,3 +8931,37 @@ rows before inBox, a corner is blown up only where some row polynomial vanishes,
 only the region factors through the corner. Full overlay, measured to tuple 21: ~50 s and ~40 faces
 per tuple -- ~4 h and ~12000 faces for 302 tuples. The face COUNT is the next problem, not the time.
 
+
+## 2026-11-01 — Example 2's overlay: tie rows certified, faces below the MAX dropped; triangles cut AFTER the overlay
+
+Measured on erratum Example 2's three pruned pairs (single runs, shared machine -- counts, not times):
+
+- **Tie rows are certified** (minOverlay's tieEmpty): a final piece no sample witnesses is dropped
+  when one of its tie rows value_1 >= value_2 is false on its conic part, value_1 <= value_2 shown by
+  algFaceBelow (strictly off a curve). First 10 tuples 397 -> 326 faces, values identical on 3000
+  points.
+- **A face below the MAX of the others** in a pair's cell is dropped (dropBelow's second pass;
+  algFaceBelow takes several upper faces and picks one per sub-box). Pairs 43/134/62 -> 42/98/59.
+  Per cell, every pair keeps ONE winning bridge and 1-2 bridges that own the whole cell but are
+  never the max (8000 samples, pair 1: 15 win, 21 never max, 6 own no sample). Most of those TOUCH
+  the winner along a curve (gap down to 1e-6 at samples), which no fitted separator certifies; a
+  few with a clear gap failed only at leaf boxes where the separator crosses the upper root's mean
+  (the row is then a disjunction): leaf boxes now get 6 levels of row certificate, which certified
+  one more of ten. Tried and reverted: fitting the separator below that mean -- infeasible on the
+  failing boxes (the lower face is above the mean there).
+- **algEmpty on the FINAL pieces too** (it was skipped there): tuple 7 124 -> 99 faces.
+- Together, first 30 tuples: 1236 -> 852 faces, values identical on 6000 points (960 owned).
+- **Cost**: 60% of an overlay tuple was algRowFails' exact division of each sign polynomial by
+  each region factor (1.1 M polyDivExact, nearly all failing). A double filter (the polynomial
+  clearly nonzero at a point of the factor's zero set, complex points included; a constant has no
+  non-constant divisor) cuts one tuple's divisions 5476 -> 70, faces unchanged.
+- **A piece budget** on the overlay (default 4000, the sum over tuples of the picks' product times
+  the covered pairs): Example 2 bounds at 11567 (14563 before the pruning), so biconjQ declines it
+  by name (envelopeSubdivisionAlg:overlaySize) and returns the EnvelopeMin; opts.overlayBudget = Inf
+  lifts it (erratumBiconjEx2SubdivisionTest, verylong).
+
+Step d: cutTriangles no longer needs the cut lines in the arrangement -- a face without the row has
+its side decided (polygon clear of the line, else cellInterior with the line on each side) and a
+crossed face is split. Also fixed: pieces split for T1 were never looked at for T2. AlgCrv carries
+the named triangle as table 3 (rows [t e side 3]) and FT (the face that IS a triangle); biconjQ
+subdivides pairs + triangles, and Example 2 reaches it only with the budget lifted.

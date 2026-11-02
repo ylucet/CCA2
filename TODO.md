@@ -31,8 +31,14 @@
            cell, one of them ever the max. Certified dominance + exact duplicates dropped 2026-11-02:
            98/283/113 -> 42/134/62 faces (DECISIONS 2026-11-02). Overlay now ~50 s and ~40 faces a
            tuple (~4 h, ~12000 faces): cut the face count (most pieces unwitnessed: tie rows unproved).
-        d. the AlgCrv type and evaluators carry the new face/row kind; biconjQ subdivides Example 2;
-           test: equal to the EnvelopeMin on 4000 points + the definition check (slow).
+           2026-11-01 (overnight): tie rows certified, faces below the MAX of others dropped, algEmpty on
+           final pieces; first 30 tuples 1236 -> 852 faces, values identical; pairs 42/98/59. LEFT:
+           bridges TOUCHING the winner along a curve (most of what a pair cell keeps) -- no fitted
+           separator certifies those; needs a touching-aware certificate. DECISIONS 2026-11-01.
+        d. DONE 2026-11-01 except the long run: triangles cut AFTER the overlay (cutTriangles decides/
+           splits), AlgCrv table 3 + FT, biconjQ subdivides pairs + triangles. Example 2 is past the
+           overlay's piece budget (11567 > 4000) so biconjQ still returns the EnvelopeMin by default;
+           erratumBiconjEx2SubdivisionTest (verylong, budget lifted) compares on 4000 points.
 - [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink is subdivided in 256 s (clipped to
       dom f**, sparse rows, sweep-end curves, majority membership; DECISIONS.md). Was: poly2 kink at c = -2, 85 curves, no finish in 90 min.
       Arrange per conjugate cell pair, or prune curves that bound no live face. Overlaps item 1.
