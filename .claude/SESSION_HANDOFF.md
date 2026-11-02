@@ -1,32 +1,26 @@
 # Session Handoff
 
-_Last updated: 2026-10-20T17:56-07:00_
+_2026-11-02_
 
-## What happened this session
-The biconjugate list (TODO items 1-7) was worked through: active atom-pair prune, subdividing of one-pair
-and several-pair (min of maxes) EnvelopeMins, the poly2 kink subdivided (~3 min, was >90 min), `biconj`
-now defaults to 'exact' (Yves's call), suites rebalanced so the normal bucket fits its budget, and a
-certified Bernstein test drops empty faces caused by algebraic rows. Every change and its
-measurements is in DECISIONS.md 2026-10-16..20.
+## Blocked
+- Push: `gh auth login` needed (no GitHub credentials on the old machine).
 
-## Where things stand
-- Branch: `main` @ `e09b1e2` -- "feat(subdivision): certified emptiness for algebraic rows; normal bucket within budget"
-- Pushed: no -- GitHub credentials missing/invalid on this machine (`gh auth login` needed); ~10 commits ahead of origin
-- Tests (2026-10-20): fast 766/0; normal 30/0 in 535 s (budget 600); slow subdivision suites green
-  (minSubdivisionTest 3/0, kinkSubdivisionTest 3/0, algCrvSubdivisionTest 3/0, erratumBiconjEx2Test 4/0,
-  envelopeSubdivisionSlowTest 1/0). Full `--slow` last run whole on 2026-10-17 (106/0).
+## State
+- Branch `main` @ `c0bd4f6` — "perf(subdivision): overlay witnesses in doubles; corner charts only where a row vanishes"
+- Pushed: no (credentials)
+- Tests: fast 813/0, normal 32/0 (2026-11-02); slow last whole 2026-10-17, the subdivision slow suites 2026-10-31
+- Known reds: none
 
-## Next steps
-- Re-auth (`gh auth login`) and push main.
-- Yves: Example 2's subdivision needs a type for triangle faces with degree-4 irrational corners; it stays
-  an EnvelopeMin (eval only) until then.
-- TODO item 3 remainder: ~1600 empty faces on the 3-convex-edge triangle whose cell the curve
-  R = FP(x,y,q) = 0 crosses -- needs that curve's arrangement to prove them empty (values unaffected).
-- Optional: planar Minkowski-Weyl in Lean (lean/README "Not formalized").
+## Next
+1. Example 2 overlay: ~4 h, ~12000 faces (`.claude/ex2Overlay.m`). Cut the face COUNT first:
+   13 of 21 pieces on tuple 1 have no witness (tie rows unproved). DECISIONS 2026-11-02 (both).
+2. Step d (TODO item 1): cut the triangles AFTER the overlay (no cut lines in the arrangement);
+   biconjQ subdivides Example 2; slow test vs EnvelopeMin on 4000 points.
+3. Daily slow run (`bash .claude/suite.sh --slow`) — not run since the local arrangement.
 
-## Relevant files
-- `envelopeSubdivisionAlg.m` -- the subdivider: header, minMaxFaces (several pairs), liveCell, pieceLive, algEmpty
-- `biconjQ.m` (subdividePair, hullRows), `biconjAtoms.m` (activeAtomPairs), `envelopeEval.m` (crack retry)
-- New helpers: `polySignOn.m`, `cellSamplePoint.m`, `envelopeRationalCorners.m`
-- New slow suites: `kinkSubdivisionTest.m`, `minSubdivisionTest.m`, `erratumBiconjEx2Test.m`, `envelopeSubdivisionSlowTest.m`
-- `DECISIONS.md` (2026-10-16..20), `TODO.md` (biconjugate list at the top)
+## Files
+- `envelopeSubdivisionAlg.m` — dropBelow, minOverlay, branchAt
+- `algFaceBelow.m` — one face certified below another
+- `algRowFails.m` — big-integer rows; no D sign
+- `.claude/ex2Overlay.m` — regenerates Example 2's run
+- `TODO.md` item 1 c'/d; `DECISIONS.md` 2026-11-02
