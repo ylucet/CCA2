@@ -1,4 +1,4 @@
-function h = biconjQ(obj)
+function h = biconjQ(obj, opts)
 % biconjQ  The biconjugate f** = cl co f, computed EXACTLY over the rationals.
 %
 % objective: the closed convex envelope of a QuaPol, with every coefficient an exact rational and
@@ -7,6 +7,8 @@ function h = biconjQ(obj)
 % [input]  obj : QuaPol, operable (degree <= 2) and EXACT (it must carry fN/fD -- see
 %                QuaPol.assertExact for why computing exactly on inexact data is worse than not
 %                computing at all).
+%          opts : (optional) struct; .overlayBudget is passed to envelopeSubdivisionAlg (default
+%                 there 4000; Inf subdivides erratum Example 2, ~hours -- DECISIONS 2026-11-01)
 % [output] h   : QuaCon.
 %
 % ------------------------------------------------------------------------------------------------
@@ -326,6 +328,7 @@ function h = biconjQ(obj)
                 % eval. Where ONE active pair is left and no triangle the minimum IS that pair's
                 % envelope, and it is subdivided like the two-piece route's (2026-10-17).
                 h = biconjAtoms(obj);
+                if nargin < 2 || isempty(opts), opts = struct(); end
                 if numel(h.pairs) == 1 && isempty(h.tris)
                     try
                         h = subdividePair(envelopePrune(h.pairs{1}), hullRows(obj));
@@ -336,11 +339,26 @@ function h = biconjQ(obj)
                     % SEVERAL active pairs and no triangle (2026-10-18): the min over the pairs is
                     % subdivided pair by pair and the subdivisions overlaid -- envelopeSubdivisionAlg's
                     % minOverlay (2026-10-31); two irrational faces of different pairs are ordered by a
-                    % tie row, AlgCrv's table 2. A triangle face's corners are degree-4 irrationals no
-                    % subdivision type holds yet: that case stays unsubdivided.
+                    % tie row, AlgCrv's table 2. With triangle faces: the branch below.
                     try
                         envs = cellfun(@envelopePrune, h.pairs, 'UniformOutput', false);
-                        h = assembleAlgCrv(envelopeSubdivisionAlg(envs, hullRows(obj)));
+                        h = assembleAlgCrv(envelopeSubdivisionAlg(envs, hullRows(obj), zeros(0,3), opts));
+                    catch ME
+                        if ~isDeclined(ME), rethrow(ME), end
+                    end
+                else
+                    % TRIANGLE FACES (2026-11-01, TODO item 1 step d): the pairs' minimum subdivided
+                    % and overlaid as above, then each contact triangle CUT IN after the arrangement
+                    % (cutTriangles decides or splits every face against its lines): inside T its
+                    % plane is co f, outside the pairs are. A named s0's triangle is AlgCrv's
+                    % table 3. Erratum Example 2 passes the overlay's default budget (11567 pieces
+                    % against 4000, hours) and stays the EnvelopeMin unless opts lifts it.
+                    try
+                        envs = cellfun(@envelopePrune, h.pairs, 'UniformOutput', false);
+                        tfs = arrayfun(@triangleFace, h.tris);
+                        if numel(envs) == 1, envs = envs{1}; end
+                        sub = envelopeSubdivisionAlg(envs, hullRows(obj), zeros(0,3), opts);
+                        h = assembleAlgCrv(cutTriangles(sub, tfs));
                     catch ME
                         if ~isDeclined(ME), rethrow(ME), end
                     end
@@ -464,7 +482,8 @@ end
 
 function tf = isDeclined(ME)
 % The assembly and subdivision machinery's own refusals: a route that declined, not a defect.
-    tf = any(startsWith(ME.identifier, {'envelope', 'bridgeFace', 'bridgeArcCut', 'cornerFace'}));
+    tf = any(startsWith(ME.identifier, {'envelope', 'bridgeFace', 'bridgeArcCut', 'cornerFace', ...
+                                        'triangleFace', 'cutTriangles'}));
 end
 
 function h = unsubdivided(env)

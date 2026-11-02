@@ -9,10 +9,17 @@ function [subdivision, cuts] = cutTriangles(subdivision, tfs, mode)
 %   and inside T a pair piece is above the plane.
 %
 % Two calls, around envelopeSubdivisionAlg:
-%   cuts = cutTriangles([], tfs, 'lines')    the RATIONAL lines the arrangement must contain
+%   cuts = cutTriangles([], tfs, 'lines')    the RATIONAL lines the arrangement may contain
 %   sub  = cutTriangles(sub, tfs)            the subdivision with the triangles cut in
 %
-% [input]  subdivision : envelopeSubdivisionAlg's output, built WITH `cuts` among its curves
+% AFTER THE ARRANGEMENT (2026-11-01). The lines need not be among the arrangement's curves: a face
+% without a row for one has its side DECIDED -- its straight rows' polygon in doubles when clear of
+% the line by a margin, else cellInterior on its conic rows with the line added on each side -- and
+% a face the line provably crosses is SPLIT along it, into the pieces covering its part outside T.
+% Erratum Example 2's pairs are subdivided apart and overlaid (envelopeSubdivisionAlg's minOverlay),
+% and 7 global lines in each pair's arrangement were cells no face needed (TODO item 1 step d).
+%
+% [input]  subdivision : envelopeSubdivisionAlg's output, with or without `cuts` among its curves
 %          tfs  : struct array from triangleFace
 % [output] subdivision : the same faces, each with two more fields --
 %                  .tri  k x 3 rows [t e side]: side * s_e(x) >= 0, s_e the e-th side of triangle t
@@ -42,9 +49,12 @@ function [subdivision, cuts] = cutTriangles(subdivision, tfs, mode)
     for k = 1:numel(subdivision)
         subdivision(k).tri = zeros(0,3);  subdivision(k).tf = [];  subdivision(k).tfs = tfs;
     end
-    keep = true(1, numel(subdivision));
-    out = subdivision([]);
+    % EACH TRIANGLE SEES THE PIECES THE EARLIER ONES LEFT (2026-11-01): until then a face split for
+    % T1 was never looked at for T2, so a piece of it inside T2 kept a pair value above T2's plane.
+    triF = subdivision([]);
     for t = 1:numel(tfs)
+        keep = true(1, numel(subdivision));
+        out = subdivision([]);
         L = triangleLines(tfs(t));
         keys = arrayfun(@(i) ratQ.conic([0 0 0 L(i,:)]), 1:size(L,1), 'UniformOutput', false);
         flip = cellfun(@(c, i) sign(c(find(c, 1))) * sign(L(i, find(L(i,:), 1))), keys, ...
@@ -52,19 +62,25 @@ function [subdivision, cuts] = cutTriangles(subdivision, tfs, mode)
         for k = find(keep)
             sd = zeros(1, size(L,1));
             for i = 1:size(L,1)
-                r = find(all(subdivision(k).con(:,1:6) == keys{i}, 2), 1);
-                if isempty(r)
-                    error('cutTriangles:missingCut', ['face %d has no row for cut line %s: the ' ...
-                          'subdivision was not built with the cut lines among its curves.'], ...
-                          k, mat2str(L(i,:)));
-                end
-                sd(i) = subdivision(k).con(r,7) * flip(i);
+                sd(i) = sideOf(subdivision(k).con, keys{i}, flip(i), L(i,:));
+                if sd(i) < 0, break, end                          % outside one line: T misses it
             end
+            if any(sd < 0), continue, end                         % outside T, or outside its box
             if strcmp(tfs(t).kind, 'rational')
-                if all(sd > 0), keep(k) = false; end              % inside T: the plane owns it
+                keep(k) = false;
+                if all(sd > 0), continue, end                     % inside T: the plane owns it
+                % CROSSED by some edge: the pieces { L_1..L_{e-1} >= 0, L_e <= 0 } cover the face
+                % outside T; a piece whose L_e the face is known to be inside of is empty.
+                base = subdivision(k);
+                for e = 1:3
+                    if sd(e) > 0, continue, end
+                    p = base;
+                    add = [cell2mat(keys(1:e).'), [flip(1:e-1).'; -flip(e)], zeros(e,1)];
+                    p.con = [p.con; add(:, 1:size(p.con,2))];
+                    out(end+1) = p; %#ok<AGROW>
+                end
                 continue
             end
-            if any(sd < 0), continue, end                         % outside the box: T misses it
             keep(k) = false;
             base = subdivision(k);
             for e = 1:3
@@ -73,9 +89,56 @@ function [subdivision, cuts] = cutTriangles(subdivision, tfs, mode)
                 out(end+1) = p; %#ok<AGROW>
             end
         end
-        out(end+1) = triangleItself(tfs(t), t, L, keys, flip, tfs, subdivision); %#ok<AGROW>
+        triF(end+1) = triangleItself(tfs(t), t, L, keys, flip, tfs, subdivision); %#ok<AGROW>
+        subdivision = [subdivision(keep), out];
     end
-    subdivision = [subdivision(keep), out];
+    subdivision = [subdivision, triF];
+end
+
+function sd = sideOf(con, key, flip, line)
+% The face's side of a cut line: +1 inside (toward T), -1 outside, 0 when the line provably or
+% possibly crosses it -- a 0 only costs a split. Read off the face's own row when it has one; else
+% its straight rows' polygon (a superset of the face) clear of the line by a margin; else exactly.
+    r = find(all(con(:,1:6) == key, 2) & (size(con,2) < 8 | con(:, min(8, end)) == 0), 1);
+    if ~isempty(r), sd = con(r,7) * flip; return, end
+    sd = 0;
+    V = polygonOf(con);
+    if ~isempty(V)
+        v = V * line(1:2).' + line(3);
+        m = 1e-9 * max(1, norm(line)) * max(1, max(abs(V(:))));
+        if all(v > m), sd = 1; return, end
+        if all(v < -m), sd = -1; return, end
+    end
+    % EXACTLY: the face with the line added on one side has no interior -> it lies on the other
+    keep = ~all(con(:,1:5) == 0, 2);
+    C = [con(keep, 1:6), branchCol(con(keep,:))];
+    rows = [(1:nnz(keep)).', con(keep, 7)];
+    C(end+1,:) = [key, 0];
+    j = size(C,1);
+    if ~cellInterior(C, [rows; j, -flip]), sd = 1; return, end
+    if ~cellInterior(C, [rows; j, flip]), sd = -1; return, end
+end
+
+function b = branchCol(con)
+    if size(con,2) >= 8, b = con(:,8); else, b = zeros(size(con,1), 1); end
+end
+
+function V = polygonOf(con)
+% The vertices of the face's straight, non-branch rows' polygon, within |x|, |y| <= 1e6; [] if empty
+% to rounding (then the exact test decides).
+    br = branchCol(con);
+    st = all(con(:,1:3) == 0, 2) & br == 0 & any(con(:,4:5) ~= 0, 2);
+    H = con(st, 7) .* con(st, 4:6);
+    H = [H; 1 0 1e6; -1 0 1e6; 0 1 1e6; 0 -1 1e6];
+    V = zeros(0,2);
+    for i = 1:size(H,1)
+        for j = i+1:size(H,1)
+            M = H([i j], 1:2);
+            if abs(det(M)) < 1e-12 * max(1, norm(M(:)))^2, continue, end
+            x = (M \ -H([i j], 3)).';
+            if all(H(:,1:2) * x.' + H(:,3) >= -1e-9 * max(1, norm(x)) * max(1, max(abs(H(:))))), V(end+1,:) = x; end %#ok<AGROW>
+        end
+    end
 end
 
 function L = triangleLines(tf)

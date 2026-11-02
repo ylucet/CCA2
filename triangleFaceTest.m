@@ -144,12 +144,40 @@ classdef triangleFaceTest < matlab.unittest.TestCase
             end
         end
 
-        function aSUBDIVISIONBuiltWithoutTheCutLinesIsRefused(t)
-        % cutTriangles reads each face's side of every cut line off its rows; a face without them
-        % was built without the lines, and guessing its side would put a pair piece inside T.
-            f = struct('kind', 'quad', 'num', zeros(1,10), 'den', 1, 'FP', [], 'FB', 0, ...
-                       'con', zeros(0,8), 'alg', []);
-            t.verifyError(@() cutTriangles(f, t.faces), 'cutTriangles:missingCut');
+        function aSUBDIVISIONBuiltWithoutTheCutLinesIsCutAfterwards(t)
+        % 2026-11-01: the cut lines need not be among the subdivision's curves. A face without a row
+        % for one has its side decided (a polygon clear of the line, else exactly), and a face the
+        % line crosses is split. Faces here: the two sides of a vertical line through BOTH
+        % triangles, and one far away -- valued far above the planes. Both triangles are cut in
+        % one call, so the pieces T1 leaves must still be cut by T2.
+            T = [t.faces.T];  T = reshape(T, 3, 2, []);
+            allT = [t.faces(1).T; t.faces(2).T];
+            c = round(mean(allT(:,1)));
+            mk = @(con) struct('kind', 'quad', 'num', [zeros(1,9) 1e6], 'den', 1, 'FP', [], 'FB', 0, ...
+                               'con', con, 'alg', []);
+            line = [0 0 0 1 0 -c];                           % x - c
+            sub = [mk([line, 1, 0]), mk([line, -1, 0]), mk([0 0 0 1 0 1e4, -1, 0])];
+            cut = cutTriangles(sub, t.faces);
+            rng(53);
+            lo = min(allT) - 2;  hi = max(allT) + 2;  nIn = [0 0];
+            for r = 1:800
+                x = lo + rand(1,2) .* (hi - lo);
+                want = 1e6;
+                for k = 1:2
+                    Tk = T(:,:,k);  lam = [Tk.' ; 1 1 1] \ [x(:); 1];
+                    if min(abs(lam)) < 1e-6, want = NaN; break, end
+                    if all(lam > 0), want = x * t.faces(k).s - t.faces(k).c;  nIn(k) = nIn(k) + 1; end
+                end
+                if isnan(want) || abs(x(1) - c) < 1e-6, continue, end
+                t.verifyEqual(subdivisionAlgEval(cut, x), want, 'RelTol', 1e-12, sprintf('at %s', mat2str(x)));
+            end
+            t.verifyGreaterThan(nIn, [20 20]);
+            t.verifyEqual(subdivisionAlgEval(cut, [-2e4 0]), 1e6, 'the far face is kept whole');
+            % the typed object reads the same: table 3 rows and the 'triangle' face (AlgCrv.FT)
+            g = assembleAlgCrv(cut);
+            X = lo + rand(400, 2) .* (hi - lo);
+            t.verifyEqual(g.eval(X), subdivisionAlgEval(cut, X), 'RelTol', 1e-12);
+            t.verifyEqual(nnz(g.FT), 1, 'the named triangle is a face of its own; the rational one is affine');
         end
     end
 end

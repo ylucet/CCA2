@@ -3,6 +3,7 @@ function g = assembleAlgCrv(subdivision)
 %   for an input whose pieces meet along a CURVED tie.
 %
 % [input]  subdivision : as `envelopeSubdivisionAlg` returns it -- .kind, .num/.den or .FP/.FB, .con, .alg
+%                 -- or as cutTriangles returns it: .tri rows become table 3, a 'triangle' face FT
 % [output] g    : AlgCrv
 %
 % DEDUPLICATION IS BITWISE for the conic edges, which is the whole reason those rows are canonical
@@ -30,6 +31,13 @@ function g = assembleAlgCrv(subdivision)
     fD  = ones(numel(subdivision), 1);
     FP  = cell(numel(subdivision), 1);
     FB  = zeros(numel(subdivision), 1);
+    FT  = zeros(numel(subdivision), 1);
+    % THE TRIANGLE TABLE (table 3, 2026-11-01): cutTriangles stamps every face with the same list
+    % .tfs, which its .tri rows and a 'triangle' face's index read
+    Tri = struct('kind', {}, 's', {}, 'c', {}, 'T', {});
+    if isfield(subdivision, 'tfs') && ~isempty(subdivision) && ~isempty(subdivision(1).tfs)
+        Tri = subdivision(1).tfs;
+    end
 
     for k = 1:numel(subdivision)
         f = subdivision(k);
@@ -63,9 +71,15 @@ function g = assembleAlgCrv(subdivision)
                 rows(end+1,:) = [hit, 1, 0, 2]; %#ok<AGROW>
             end
         end
+        if isfield(f, 'tri') && ~isempty(f.tri)
+            rows = [rows; f.tri(:,1:3), 3 * ones(size(f.tri,1), 1)]; %#ok<AGROW>
+        end
         FC{k} = rows;
 
-        if strcmp(f.kind, 'bridge')
+        if strcmp(f.kind, 'triangle')
+            FP{k} = [];  FB(k) = 0;
+            FT(k) = find(arrayfun(@(u) isequal(u.T, f.tf.T) && isequal(u.s, f.tf.s), Tri), 1);
+        elseif strcmp(f.kind, 'bridge')
             FP{k} = f.FP;  FB(k) = f.FB;
         else
             FP{k} = [];    FB(k) = 0;
@@ -73,7 +87,7 @@ function g = assembleAlgCrv(subdivision)
         end
     end
 
-    g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, fN, fD, zeros(0,2), FC, FP, FB, EcA, EcI);
+    g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, fN, fD, zeros(0,2), FC, FP, FB, EcA, EcI, Tri, FT);
 end
 
 function g = withVertices(g)  %#ok<DEFNU>

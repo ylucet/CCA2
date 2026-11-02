@@ -5,8 +5,9 @@ classdef EnvelopeMin
 %
 % This is NOT a node of the AlgCon lattice: it is not subdivided into one subdivision. It answers
 % `eval`, which is what every consumer of biconjQ's result used. Since 2026-10-16 it holds only the
-% ACTIVE pairs and triangles (biconjAtoms' activeAtomPairs). Where that leaves ONE pair and no
-% triangle biconjQ subdivides it instead (2026-10-17); a minimum over several pairs stays this.
+% ACTIVE pairs and triangles (biconjAtoms' activeAtomPairs). biconjQ subdivides one pair
+% (2026-10-17), several (2026-10-31) and pairs with triangles (2026-11-01) instead; this is what is
+% left where a route declines -- erratum Example 2's overlay past its piece budget.
 
     properties
         pairs   % cell array of envelopeAssemble results

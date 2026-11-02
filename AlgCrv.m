@@ -40,13 +40,23 @@ classdef AlgCrv < AlgCon & Crv
    % the row names the two branches. It lives here and not on AlgCon because only this type has it;
    % `algCrvVertices` and `algCrvIncidence` refuse it by name, since a tie row has no polynomial
    % they could intersect.
+   %
+   % TABLE 3 IS `Tri`, THE BICONJUGATE'S TRIANGLE FACES (2026-11-01). A row [t e side 3] says
+   % side * s_e(x) >= 0, s_e the e-th side of triangle Tri(t) oriented +1 toward the opposite corner
+   % -- triangleFace's struct, whose corners are affine in a NAMED dual point s0 (triangleFaceSide
+   % decides a side exactly at a rational point; eval reads the corner cache in doubles). A face
+   % with FT(k) = t > 0 IS triangle t: its value is <s0, x> - g(s0), read from the cache. Erratum
+   % Example 2's degree-4 triangle needs both; a triangle with a rational s0 is an ordinary affine
+   % face on three lines and uses neither.
 
    properties
       EcI (:,1) struct = struct('FP1', {}, 'FB1', {}, 'FP2', {}, 'FB2', {})   % table 2: value_1 >= value_2
+      Tri (:,1) struct = struct('kind', {}, 's', {}, 'c', {}, 'T', {})        % table 3: triangleFace structs
+      FT  (:,1) double = zeros(0,1)                                            % face k is triangle FT(k), 0 if not
    end
 
    methods
-      function obj = AlgCrv(Vname, E, EcQ, fN, fD, F, FC, FP, FB, EcA, EcI)
+      function obj = AlgCrv(Vname, E, EcQ, fN, fD, F, FC, FP, FB, EcA, EcI, Tri, FT)
       % objective: the subdivision, exactly as AlgCon takes it, plus the algebraic edge table.
       % [input]  as RatCon's constructor, then FP/FB (the implicit faces), EcA (the new edges) and EcI
       %          (the tie rows, table 2)
@@ -65,6 +75,8 @@ classdef AlgCrv < AlgCon & Crv
          obj.FP = FP;  obj.FB = FB;
          obj.EcA = EcA;
          if nargin >= 11, obj.EcI = EcI; end
+         if nargin >= 12 && ~isempty(Tri), obj.Tri = Tri(:); end
+         if nargin >= 13, obj.FT = FT(:); else, obj.FT = zeros(numel(FC), 1); end
          obj = obj.setPinnedDefaults();
       end
 
@@ -104,7 +116,14 @@ classdef AlgCrv < AlgCon & Crv
          for t = 1:size(rows,1)
             tbl = 0;
             if size(rows,2) >= 4, tbl = rows(t,4); end
-            if tbl == 2
+            if tbl == 3
+               T = obj.Tri(rows(t,1)).T;  i = rows(t,2);  j = mod(i,3) + 1;  o = 6 - i - j;
+               e = T(j,:) - T(i,:);
+               cr = @(p) e(1)*(p(2) - T(i,2)) - e(2)*(p(1) - T(i,1));
+               if rows(t,3) * cr(x) * sign(cr(T(o,:))) < -1e-9 * max(1, norm(e)) * max(1, norm(x))
+                  tf = false; return
+               end
+            elseif tbl == 2
                r = obj.EcI(rows(t,1));
                v1 = algBranch(r.FP1, x, r.FB1);  v2 = algBranch(r.FP2, x, r.FB2);
                if ~isfinite(v1) || ~isfinite(v2) || rows(t,2) * (v1 - v2) < -1e-9
@@ -137,7 +156,9 @@ classdef AlgCrv < AlgCon & Crv
 
       function v = faceValue(obj, k, x)
       % FP/FB when face k carries no formula, fN/fD when it does -- AlgCon's own rule.
-         if ~isempty(obj.FP) && numel(obj.FP) >= k && ~isempty(obj.FP{k})
+         if numel(obj.FT) >= k && obj.FT(k) > 0
+            v = x * obj.Tri(obj.FT(k)).s(:) - obj.Tri(obj.FT(k)).c;
+         elseif ~isempty(obj.FP) && numel(obj.FP) >= k && ~isempty(obj.FP{k})
             v = algBranch(obj.FP{k}, x, obj.FB(k));
          else
             v = ratQ.evalFace(obj.fN(k,:), obj.fD(k), x);

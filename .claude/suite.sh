@@ -112,7 +112,7 @@ NORMAL_SUITES=(erratumBiconjTest conjDefinitionAuditTest envelopeAssembleTest en
 SHARD_SUITES=(testcPLQ testMaxMultiRegion)
 SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest algCrvSubdivisionTest kinkSubdivisionTest erratumBiconjEx2Test minSubdivisionTest envelopeSubdivisionSlowTest)  # algCrvSubdivisionTest: closed form but ~11 min of fixture, too long for normal
 # Individual tests here run for many minutes; see the VERYLONG note above.
-VERYLONG_SUITES=(testcPLQ testMaxMultiRegion)
+VERYLONG_SUITES=(testcPLQ testMaxMultiRegion erratumBiconjEx2SubdivisionTest)  # Ex2Subdivision: the overlay is hours; run it with CCA2_TEST_TIMEOUT=0 or a long one
 
 run_job () {
     # $1 = job name ("suite" or "suite/test"), $2 = index. Writes ONE result file and prints

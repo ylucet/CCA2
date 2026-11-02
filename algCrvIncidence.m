@@ -57,9 +57,10 @@ function [E, F, info] = algCrvIncidence(g, Vname, X)
     if ~isa(g, 'AlgCrv')
         error('algCrvIncidence:type', 'expects an AlgCrv; got a %s.', class(g));
     end
-    if any(cellfun(@(r) size(r,2) >= 4 && any(r(:,4) == 2), g.FC))
-        error('algCrvIncidence:tieRow', ['a face has a TIE row (table 2, two implicit values) -- the ' ...
-              'curve where they tie is never formed, so there is nothing to intersect.']);
+    if any(cellfun(@(r) size(r,2) >= 4 && any(r(:,4) >= 2), g.FC))
+        error('algCrvIncidence:tieRow', ['a face has a TIE row (table 2, two implicit values) or a TRIANGLE ' ...
+              'side row (table 3, an edge of a named triangle) -- neither curve is formed, so ' ...
+              'there is nothing to intersect.']);
     end
     if ~isempty(Vname) && size(Vname,2) ~= 5
         error('algCrvIncidence:shape', ...
