@@ -29,7 +29,8 @@
            2026-10-31 (second)). LEFT for Example 2: the overlay multiplies each pair's faces per cell
            (302 tuples). NOT tangent quadratics as first written: OVERLAPPING IRRATIONAL faces, 6-11 a
            cell, one of them ever the max. Certified dominance + exact duplicates dropped 2026-11-02:
-           98/283/113 -> 42/134/62 faces (DECISIONS 2026-11-02). Next: measure the overlay on those.
+           98/283/113 -> 42/134/62 faces (DECISIONS 2026-11-02). Overlay now ~50 s and ~40 faces a
+           tuple (~4 h, ~12000 faces): cut the face count (most pieces unwitnessed: tie rows unproved).
         d. the AlgCrv type and evaluators carry the new face/row kind; biconjQ subdivides Example 2;
            test: equal to the EnvelopeMin on 4000 points + the definition check (slow).
 - [x] **2. Make the arrangement scale** -- DONE 2026-10-17: the kink is subdivided in 256 s (clipped to

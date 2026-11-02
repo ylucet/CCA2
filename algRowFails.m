@@ -87,6 +87,7 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
     for c = 1:size(corners, 1)
         p = corners(c,:);
         if p(1) < box(1) || p(1) > box(2) || p(2) < box(3) || p(2) > box(4), continue, end
+        if ~anyVanishes(rows, p), continue, end      % nothing to blow up: G(0, t) = P(p), as plain
         for e = W ./ 2.^(2:8)
             if cornerOK(rows, p, e, factors), sq(end+1,:) = [p, e]; break, end %#ok<AGROW>
         end
@@ -199,7 +200,9 @@ end
 
 function tf = boxRec(rows, b, inBox, depth, sq)
 % sq: k x 3, squares [px py e] proved (cornerOK) to fail some row everywhere but at p.
-    if ~inBox(b), tf = true; return, end             % misses the region: nothing to prove here
+% The row tests come BEFORE inBox (2026-11-02): a box they decide is decided whatever inBox says, and
+% inBox -- every region factor's sign on the box -- was 75 of 100 s of algRowFails on an Example 2
+% overlay tuple, most of it on chart boxes the rows decide at once.
     for c = 1:size(sq, 1)
         if b(1) >= sq(c,1) - sq(c,3) && b(2) <= sq(c,1) + sq(c,3) && ...
            b(3) >= sq(c,2) - sq(c,3) && b(4) <= sq(c,2) + sq(c,3)
@@ -214,12 +217,32 @@ function tf = boxRec(rows, b, inBox, depth, sq)
         end
         if rows{t}.test(s), tf = true; return, end
     end
+    if ~inBox(b), tf = true; return, end             % misses the region: nothing to prove here
     if depth == 0, tf = false; return, end
     xm = (b(1) + b(2)) / 2;  ym = (b(3) + b(4)) / 2;
     tf = boxRec(rows, [b(1) xm b(3) ym], inBox, depth-1, sq) && ...
          boxRec(rows, [xm b(2) b(3) ym], inBox, depth-1, sq) && ...
          boxRec(rows, [b(1) xm ym b(4)], inBox, depth-1, sq) && ...
          boxRec(rows, [xm b(2) ym b(4)], inBox, depth-1, sq);
+end
+
+function tf = anyVanishes(rows, p)
+% Does some polynomial of some row vanish at p (to rounding)? Only then can a blow-up at p decide
+% what the plain subdivision did not: otherwise every chart's lowest order is P(p) itself, a
+% nonzero constant, which a small enough plain box reads as well (2026-11-02: the region's
+% vertices are many on an overlay tuple, and the charts were tried at every one).
+    tf = false;
+    for t = 1:numel(rows)
+        for k = 1:numel(rows{t}.P)
+            if vanishesAt(rows{t}.P{k}, p), tf = true; return, end
+        end
+    end
+end
+
+function tf = vanishesAt(P, p)
+% P(p) = 0 to rounding (a dense polyN in x, y).
+    T = P .* (p(1) .^ (0:size(P,1)-1).') .* (p(2) .^ (0:size(P,2)-1));
+    tf = abs(sum(T(:))) <= 1e-9 * max(sum(abs(T(:))), realmin);
 end
 
 function ok = cornerOK(rows, p, e, factors)
@@ -239,6 +262,10 @@ function ok = cornerOK(rows, p, e, factors)
             end
             facC = cell(1, numel(factors));
             for k = 1:numel(factors)
+                % only the region's rows THROUGH p: one positive at p rejects nothing near it, and
+                % leaving a factor out only keeps more chart boxes -- safe. On an Example 2 overlay
+                % tuple the charts tested ~60 factors per box and that was 49 of their 53 s.
+                if ~vanishesAt(factors{k}, p), continue, end
                 facC{k} = blowUp(factors{k}, p, sg, major);
             end
             facC = facC(~cellfun(@isempty, facC));

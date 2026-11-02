@@ -335,7 +335,7 @@ function tf = algEmpty(C, rows, conRows, algRows, Q)
     nFail = zeros(numel(algRows), 1);
     for t = 1:numel(algRows)
         a = algRows(t);
-        z = algBranch(a.FP, Qk, a.FB);  q = ratQ.evalFace(a.num, a.den, Qk);
+        z = algBranch(ratQ.bigToDouble(a.FP), Qk, a.FB);  q = ratQ.evalFace(a.num, a.den, Qk);   % doubles: see branchAt
         ok = isfinite(z) & a.side * (q - z) > 1e-9 * max(1, abs(z));
         holds = holds & ok;
         nFail(t) = sum(~ok);
@@ -838,13 +838,14 @@ function tf = witnessed(con, alg, ii, PP)
 end
 
 function z = branchAt(PP, FP, FB, M)
-% algBranch(FP, X(M,:), FB), each point computed at most once per tuple.
-    try
-        w = double(FP(:));
-        key = sprintf('%d|%d|%.17g|%.17g', FB, numel(w), sum(w), sum(w .* (1:numel(w)).'));
-    catch
-        z = algBranch(FP, PP.X(M,:), FB);  return    % an FP doubles cannot key: not cached
-    end
+% algBranch(FP, X(M,:), FB), each point computed at most once per tuple -- IN DOUBLES, from the
+% nearest-double FP (2026-11-02). A witness only KEEPS a piece, so a value off by rounding can at
+% worst keep a piece of no area, never change a value; and the exact fibre a big FP took was 10 ms
+% a point. (Until then a big FP also missed the cache: double() of ratQ's big form raises, and the
+% fallback recomputed every point exactly -- 10344 exact fibres on one Example 2 tuple.)
+    FP = ratQ.bigToDouble(FP);
+    w = FP(:);
+    key = sprintf('%d|%d|%.17g|%.17g', FB, numel(w), sum(w), sum(w .* (1:numel(w)).'));
     if isKey(PP.Z, key)
         e = PP.Z(key);
         if ~isequal(e.FP, FP), z = algBranch(FP, PP.X(M,:), FB); return, end

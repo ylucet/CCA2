@@ -8920,3 +8920,14 @@ difference, 0 domain mismatches):
 
 Pairs 98/283/113 -> 42/134/62 faces (one run each, shared machine: 95/139/224 s).
 
+## 2026-11-02 (second) — the overlay's cost per Example 2 tuple: exact witnesses and corner charts
+
+One tuple (11 combos, 21 faces), profiled, shared machine: 283 s -> 112 s, faces unchanged. (a) The
+witness took exact BigDecimal fibres: branchAt's cache keyed on double(FP), which RAISES for ratQ's
+big form, so every point was recomputed exactly (10344 fibres). A witness only KEEPS a piece, so it
+now reads the nearest-double FP (also algEmpty's). (b) algRowFails' corner charts were 75 of 100 s,
+and decided nothing on that tuple (same per-row results with corners off): boxRec now tries the
+rows before inBox, a corner is blown up only where some row polynomial vanishes, and a chart tests
+only the region factors through the corner. Full overlay, measured to tuple 21: ~50 s and ~40 faces
+per tuple -- ~4 h and ~12000 faces for 302 tuples. The face COUNT is the next problem, not the time.
+
