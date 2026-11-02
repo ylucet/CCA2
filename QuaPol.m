@@ -816,8 +816,10 @@ classdef QuaPol < RatPol & QuaPar
        % [input]  engine: 'exact' (default) | 'cplq' | 'symbolic' (alias of 'cplq')
        % [output] h: 'cplq' returns a RatPar -- QuaPol (Case A), RatPol (Case B) or QuaParCPLQ
        %             (Case C); call kind() to learn which. 'exact' returns a QuaCon, an AlgCrv
-       %             where a bridge face carries the value, or an EnvelopeMin where several atom
-       %             pairs are active (eval only). See biconjCPLQ.m, biconjQ.m and RETURN_TYPE.md.
+       %             where a bridge face, a tie between atom pairs or a named contact triangle
+       %             carries the value, or an EnvelopeMin (eval only) where that subdivision is
+       %             declined -- erratum Example 2 past the overlay's piece budget (biconjQ's opts).
+       %             See biconjCPLQ.m, biconjQ.m and RETURN_TYPE.md.
        %
        % NEITHER ENGINE CONJUGATES TWICE, and for the same reason in both. For 'cplq': for a
        % single bounded triangle f* lives on an unbounded multi-face domain that conjCPLQ cannot
@@ -828,7 +830,7 @@ classdef QuaPol < RatPol & QuaPar
        %
        % THE DEFAULT IS 'exact' since 2026-10-18 (Yves's call; `conj` switched on 2026-10-11). It
        % answers every input 'cplq' answers that the suites cover, and the poly2 kinks where 'cplq'
-       % runs past 4 h; a minimum over several atom pairs comes back as an EnvelopeMin.
+       % runs past 4 h.
             if nargin < 2, engine = 'exact'; end
             if strcmpi(engine, 'exact')
                 h = biconjQ(obj);

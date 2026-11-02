@@ -8989,3 +8989,9 @@ Measured on two tangent pairs of pair 1: the "t - m_k" half (E1, degree 12) fits
 content (4e8); the tangency lives in the "F_k(t)" half, E2 = 16 A_w^2 Res_z(F_k, F_w), degree 20 with
 coefficients 2e21-2e23 and content far too small to help. So the route needs an exact big-integer
 square-free part of E2 (or G found otherwise and G^2 | E2 checked by a bigZ division).
+
+**The whole Example 2 overlay, measured (2026-11-02, fa541f1)**: all 302 tuples, 3299 faces (1429
+unwitnessed), 2134 pick combinations, 1247 s -- one run on a shared machine. Projected on 2026-11-02
+(second) from the first 21 tuples: ~12000 faces and ~4 h. The first tuples are the heavy ones, so
+the 30-tuple extrapolation (~8600) overstated it too. The budget's bound (11567) is a loose upper
+bound: it counts every pick combination, most of which the overlay prunes.
