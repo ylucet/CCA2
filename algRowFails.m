@@ -369,10 +369,37 @@ function S = divideOut(S, factors)
         try
             g = ratQ.contentFree(ratQ.trimN(g));
             if numel(g) <= 1, continue, end
+            if ~mayDivide(S, g), continue, end
             for it = 1:4
                 S = ratQ.trimN(ratQ.polyDivExact(S, g, 2));
             end
         catch
+        end
+    end
+end
+
+function tf = mayDivide(S, g)
+% false only when g PLAINLY does not divide S: S is clearly nonzero at a point of g = 0 (complex
+% points too -- divisibility holds there as well). A filter in doubles before the exact division
+% (2026-11-01): on an erratum Example 2 overlay tuple 1.1 million exact divisions, nearly all
+% failing, were 60% of the time. Wrong only toward "may", which costs the division, never a sign.
+    tf = true;
+    if isa(S, 'bigZ') || ~isnumeric(S), return, end
+    T = S;  T(1) = 0;
+    if ~any(T(:)), tf = (S(1) == 0); return, end     % a constant: only 0 has a non-constant divisor
+    swap = size(g,2) < 2;                            % g has no y: solve for x instead
+    if swap, g = g.';  S = S.'; end
+    if size(g,2) < 2, return, end
+    xs = [0.6180339887; -1.3247179572; 2.7182818285];
+    for i = 1:numel(xs)
+        x = xs(i);
+        cy = (x .^ (0:size(g,1)-1)) * g;             % g(x, y) as a polynomial in y, ascending
+        cy = cy(1:find(cy ~= 0, 1, 'last'));
+        if numel(cy) < 2, continue, end
+        ys = roots(fliplr(cy));
+        for y = ys(:).'
+            T = S .* (x .^ (0:size(S,1)-1)).' .* (y .^ (0:size(S,2)-1));
+            if abs(sum(T(:))) > 1e-6 * max(sum(abs(T(:))), realmin), tf = false; return, end
         end
     end
 end

@@ -1,4 +1,4 @@
-function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
+function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
 % envelopeSubdivisionAlg  The envelope as a subdivision whose EDGES may be algebraic -- the arrangement that
 %   `envelopeSubdivision` refuses when a bridge face competes.
 %
@@ -12,6 +12,8 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
 %          dom  : (optional) rows [a b c], a x + b y + c >= 0, the subdivision is clipped to
 %          cuts : (optional) integer lines [a b c] added to the arrangement as curves, so that every
 %                 face lies on one side of each and records it -- cutTriangles' rational lines
+%          opts : (optional) struct; .overlayBudget (default 4000, Inf lifts it) bounds the pieces
+%                 the overlay of several pairs may visit -- see minOverlay
 % [output] subdivision : struct array, one entry per face, with
 %                   .kind  'quad' | 'bridge'
 %                   .num, .den   the value, when kind is 'quad'
@@ -47,11 +49,13 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
 % `envelopeSubdivisionAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
 % Q(sqrt 6), and 18 of its cells overlap.
 
-    if nargin < 1 || nargin > 3
-        error('envelopeSubdivisionAlg:nargin', 'expects (env), (env, dom) or (env, dom, cuts).');
+    if nargin < 1 || nargin > 4
+        error('envelopeSubdivisionAlg:nargin', 'expects (env), (env, dom), (env, dom, cuts) or (env, dom, cuts, opts).');
     end
     if nargin < 2, dom = zeros(0,3); end
     if nargin < 3, cuts = zeros(0,3); end
+    if nargin < 4 || isempty(opts), opts = struct(); end
+    if ~isfield(opts, 'overlayBudget'), opts.overlayBudget = 4000; end
     % SEVERAL PAIRS: a cell array of pair envelopes is the MINIMUM over them -- an EnvelopeMin with no
     % triangle face. Each pair is subdivided ALONE and the subdivisions are OVERLAID (minOverlay,
     % 2026-10-31). Until then all the pairs' curves went into one arrangement resolved per cell as a
@@ -68,7 +72,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts)
         for g = 1:numel(envs)
             [subs{g}, infos{g}] = envelopeSubdivisionAlg(envs{g}, dom, cuts);
         end
-        [subdivision, info] = minOverlay(subs, infos);
+        [subdivision, info] = minOverlay(subs, infos, opts.overlayBudget);
         return
     end
     env = combinePairs(envs);
@@ -580,6 +584,19 @@ function [irr, nDrop] = dropBelow(irr, C, rows, P)
             end
         end
     end
+    % BELOW THE MAX OF THE OTHERS, and below no single one (2026-11-01): a face that is the maximum
+    % at no sample is tried against every face still kept, box by box. Pointwise z_i <= max_j z_j on
+    % the cell, and the z_j attaining it owns x whenever z_i does (same quadratics), so the max is
+    % unchanged. Faces winning nowhere are tried fewest-near-the-top first.
+    wins = accumarray(top, 1, [n 1]).';
+    for i = find(keep & wins == 0)
+        others = find(keep & (1:n) ~= i);
+        if isempty(others), break, end
+        hi = cellfun(@(f) struct('FP', {f.FP}, 'FB', f.FB), irr(others), 'UniformOutput', false);  hi = [hi{:}];
+        if algFaceBelow(struct('FP', {irr{i}.FP}, 'FB', irr{i}.FB), hi, box, inBox, 5, factors, corners)
+            keep(i) = false;  nDrop = nDrop + 1;
+        end
+    end
     irr = irr(keep);
 end
 
@@ -643,7 +660,7 @@ function n = pairStride()
 end
 
 
-function [out, info] = minOverlay(subs, infos)
+function [out, info] = minOverlay(subs, infos, budget)
 % THE MINIMUM OVER PAIRS, from each pair's own subdivision (2026-10-31). Every pair's cells partition
 % the domain; a cell either carries faces (the pair is finite there, its value the max over them) or
 % none (the pair is +infinity there). The overlay visits every TUPLE of cells, one per pair, that
@@ -691,9 +708,26 @@ function [out, info] = minOverlay(subs, infos)
         tup = nt;  trow = nr;
     end
 
+    % ---- A BUDGET on the pieces (2026-11-01) ------------------------------------------------------
+    % Each tuple visits up to (faces per covered pair, multiplied) x (covered pairs) pieces, each with
+    % exact tests. Erratum Example 2 bounds at 11567 (14563 before that day's pair pruning) and ran
+    % for hours (DECISIONS 2026-11-01); a
+    % caller with no time for that gets a refusal by name, and biconjQ the EnvelopeMin, which answers
+    % eval. Inf lifts it.
+    bound = 0;
+    for t = 1:numel(tup)
+        G = find(arrayfun(@(g) covered{g}(tup{t}(g)), 1:nP));
+        bound = bound + prod(arrayfun(@(g) numel(facesOf{g}{tup{t}(g)}), G)) * numel(G);
+    end
+    if bound > budget
+        error('envelopeSubdivisionAlg:overlaySize', ['the overlay of %d pairs would visit up to %d ' ...
+              'pieces over %d tuples, past the budget of %d; envelopeEval answers for the minimum.'], ...
+              nP, bound, numel(tup), budget);
+    end
+
     % ---- the pieces of each tuple --------------------------------------------------------------
     out = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {}, 'ii', {});
-    nUnsure = 0;  nII = 0;  nHole = 0;  nCombo = 0;
+    nUnsure = 0;  nII = 0;  nHole = 0;  nCombo = 0;  nTie = 0;
     for t = 1:numel(tup)
         G = find(arrayfun(@(g) covered{g}(tup{t}(g)), 1:nP));
         if isempty(G), nHole = nHole + 1; continue, end
@@ -713,7 +747,7 @@ function [out, info] = minOverlay(subs, infos)
                     fk = subs{G(i)}(k);
                     con = unique([combos{c}.con; fk.con(:, 1:8)], 'rows', 'stable');
                     alg = [combos{c}.alg, fk.alg];
-                    if ~overlayLive(keys, trow{t}, con, alg, emptyII(), P, false), continue, end
+                    if ~overlayLive(keys, trow{t}, con, alg, emptyII(), P), continue, end
                     nc{end+1} = struct('pick', {[combos{c}.pick, {fk}]}, 'con', con, 'alg', alg); %#ok<AGROW>
                 end
             end
@@ -730,10 +764,13 @@ function [out, info] = minOverlay(subs, infos)
                     [con, alg, ii] = leRows(f, pick{i}, con, alg, ii);
                 end
                 con = unique(con, 'rows', 'stable');
-                if ~overlayLive(keys, trow{t}, con, alg, ii, P, true)
+                if ~overlayLive(keys, trow{t}, con, alg, ii, P)
                     continue
                 end
-                if ~witnessed(con, alg, ii, P), nUnsure = nUnsure + 1; end
+                if ~witnessed(con, alg, ii, P)
+                    if tieEmpty(keys, trow{t}, con, ii, P), nTie = nTie + 1; continue, end
+                    nUnsure = nUnsure + 1;
+                end
                 nII = nII + numel(ii);
                 out(end+1) = struct('kind', f.kind, 'num', f.num, 'den', f.den, 'FP', f.FP, ...
                                     'FB', f.FB, 'con', con, 'alg', alg, 'ii', ii); %#ok<AGROW>
@@ -741,8 +778,8 @@ function [out, info] = minOverlay(subs, infos)
         end
     end
     nAlg = sum(arrayfun(@(f) numel(f.alg), out));
-    info = struct('cells', numel(tup), 'faces', numel(out), 'algRows', nAlg, 'iiRows', nII, ...
-                  'refused', nHole, 'unsure', nUnsure, 'combos', nCombo, ...
+    info = struct('cells', numel(tup), 'faces', numel(out), 'algRows', nAlg, 'iiRows', nII, 'bound', bound, ...
+                  'refused', nHole, 'unsure', nUnsure, 'tieEmpty', nTie, 'combos', nCombo, ...
                   'pairCells', cellfun(@(x) x.cells, infos), 'pairFaces', cellfun(@(x) x.faces, infos), ...
                   'skipped', sum(cellfun(@(x) x.skipped, infos)));
 end
@@ -786,21 +823,57 @@ function ii = emptyII()
     ii = struct('FP1', {}, 'FB1', {}, 'FP2', {}, 'FB2', {});
 end
 
-function tf = overlayLive(keys, rows, con, alg, ii, P, final)
+function tf = overlayLive(keys, rows, con, alg, ii, P)
 % A witness among the tuple's sample points spares the exact tests. Otherwise the conic rows decide,
 % then algEmpty certifies the algebraic ones on the conic part -- on the rows without a branch,
-% a larger region, so an emptiness proved there holds on the piece. Tie rows are not certified: a
-% piece only they empty is kept, at no cost to a value. On the FINAL pieces (`final`) algEmpty is
-% skipped: the picks were already certified, and measured on the same triangle it removed 2 faces
-% of 240 (single runs on a shared machine, no speed claim).
+% a larger region, so an emptiness proved there holds on the piece. Tie rows are tieEmpty's.
+% The FINAL pieces get algEmpty too since 2026-11-01: skipping it removed 2 faces of 240 on the
+% 3-convex-edge triangle, but on erratum Example 2's tuple 7 it removes 25 of 124 -- the final
+% pieces add "pick_w <= pick_i" rows, which the picks' own certificate never saw.
     if witnessed(con, alg, ii, P), tf = true; return, end
     k0 = all(con(:,1:5) == 0, 2);
     if any(con(k0,7) .* con(k0,6) < 0), tf = false; return, end
     [K, r] = keyRows(keys, con(~k0,:));
     tf = liveCell(K, unique([rows; r], 'rows'));
-    if ~tf || isempty(alg) || final, return, end
+    if ~tf || isempty(alg), return, end
     plain = ~k0 & con(:,8) == 0;
     tf = ~algEmpty(keys, rows, con(plain, 1:7), alg, P.X);
+end
+
+function tf = tieEmpty(keys, rows, con, ii, PP)
+% Is the piece PROVABLY of no area because one of its TIE rows, value_1 >= value_2, fails on it --
+% value_1 <= value_2 certified on the piece's conic part, strictly off a finite union of curves
+% (algFaceBelow)? overlayLive leaves tie rows uncertified, and on erratum Example 2's first tuple 13
+% of 21 pieces had no witness (DECISIONS 2026-11-02 (second)). A piece so emptied is a curve at
+% most, where the closures of the pieces around it carry the value. A sample point of the conic
+% part with value_1 > value_2 rules the row out before any certificate is tried.
+    tf = false;
+    if isempty(ii), return, end
+    k0 = all(con(:,1:5) == 0, 2);
+    K = con(~k0, :);
+    X = PP.X;  M = true(size(X,1), 1);
+    for r = 1:size(K,1)
+        if K(r,8) ~= 0, v = ratQ.pairLineEval(K(r,1:6), K(r,8), X); else, v = QuaPar.evalConic(K(r,1:6), X); end
+        M = M & K(r,7) * v >= -1e-9 * max(1, max(abs(K(r,1:6))));
+    end
+    box = [];
+    for t = 1:numel(ii)
+        if any(M)
+            z1 = branchAt(PP, ii(t).FP1, ii(t).FB1, M);  z2 = branchAt(PP, ii(t).FP2, ii(t).FB2, M);
+            if any(isfinite(z1) & isfinite(z2) & z1 > z2), continue, end
+        end
+        if isempty(box)
+            [box, inBox, factors, corners] = regionBox(keys, rows, K);
+            if isempty(box), return, end
+        end
+        lo = struct('FP', ii(t).FP1, 'FB', ii(t).FB1);  hi = struct('FP', ii(t).FP2, 'FB', ii(t).FB2);
+        try
+            tf = algFaceBelow(lo, hi, box, inBox, 5, factors, corners);
+        catch
+            tf = false;
+        end
+        if tf, return, end
+    end
 end
 
 function tf = witnessed(con, alg, ii, PP)
