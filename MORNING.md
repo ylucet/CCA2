@@ -16,12 +16,16 @@ biconjQ subdivides Example 2, slow test against EnvelopeMin on 4000 points.
   split for one triangle was never checked against the next.
 - A piece budget on the overlay: Example 2 (11567 pieces > 4000) is declined by name, so
   biconjQ still returns the EnvelopeMin by default; a new verylong test lifts the budget.
+- VERIFIED: with the budget lifted, Example 2's biconjugate comes back SUBDIVIDED (AlgCrv, the
+  degree-4 triangle as its own face), equal to the EnvelopeMin on 4000 points and passing the
+  definition check -- erratumBiconjEx2SubdivisionTest 3/0 in 54 min (shared machine).
+- AlgCrv.eval runs face by face over all points (f4ecf2f), needed for thousands of faces.
 - Speed (fa541f1): two heavy Example 2 tuples 780 s -> 147 s, same faces (single runs, shared
   machine): quadratic fibres solved vectorised, line pairs and row polynomials remembered.
 - Example 2's WHOLE overlay now: 3299 faces in ~21 min (one run, shared machine). Yesterday's
   projection was ~12000 faces and ~4 h.
-- Tests: fast 814/0, normal 32/0 on fa541f1; subdivision slow suites 15/0 and the slow
-  Example 2 suite 4/0 on b856958.
+- Tests on this branch: fast 814/0, normal 32/0, slow 97/0 (+2 known-incomplete legacy tests),
+  subdivision slow suites and slow Example 2 suite 19/0, verylong Example 2 subdivision 3/0.
 
 ## What is broken
 Nothing known.
@@ -34,6 +38,7 @@ Nothing known.
   subdivisions spent before the refusal.
 
 ## Where I stopped
-Running the verylong Example 2 subdivision test (budget lifted) from a snapshot of fa541f1, plus
-a full 302-tuple overlay count. Left for item 1: faces TANGENT to the winner (most of what remains);
-the exact certificate is derived in DECISIONS 2026-11-01 but needs big-integer bivariate gcds.
+Both items done; the run is finished. Left for item 1: faces TANGENT to the winner (most of what
+Example 2's pair cells still keep). The exact certificate is derived in DECISIONS 2026-11-01 but
+needs a big-integer square-free part of a degree-20 polynomial -- not started. Branch not merged
+or pushed.
