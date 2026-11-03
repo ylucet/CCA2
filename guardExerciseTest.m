@@ -295,6 +295,7 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'biconjAtoms:subdivision',                         'internal'; ... % a face that is not a simple polygon: QuaPol's constructor cannot build one
                 'biconjAtoms:uncovered',                    'internal'; ... % a tie whose forms no atom holds: every form is built from an atom's own vertex, edge or piece
                 'biconjAtoms:vertexIndex',                  'internal'; ... % an atom endpoint that is not a vertex of f: every one is read off f.V
+                'algRowFails:yun',                          'loop-safety'; ... % Yun's loop: each pass strictly lowers the degree of W
                 'cutTriangles:box',                         'loop-safety'; ... % the box widens to the triangle's own size, which always holds it
                 'isolatedRootSign:noConverge',              'loop-safety'; ... % bisection after the exact zero test: separation is positive
                 'triangleFace:flat',                        'internal'; ... % tripleFaces drops a contact triangle of (near) zero area first
@@ -331,7 +332,6 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'envelopeEval:faceKind',                    'internal'; ...
                 'envelopeSubdivision:arrangementSize',             'todo'; ... % fired by the poly2 kink at c = -2 (85 curves) inside biconjQ, which catches it; a direct exercise needs the 130 s assembly
                 'envelopeSubdivisionAlg:arrangementSize',          'todo'; ... % the same budget, reached by the same kink through subdividePair
-                'envelopeSubdivisionAlg:overlaySize',              'todo'; ... % fired by erratum Example 2 inside biconjQ, which catches it; a direct exercise needs the ~2 min pair subdivisions
                 'cellInterior:embed',                       'internal'; ...
                 'envelopeSubdivisionAlg:faceKind',                 'internal'; ...
                 'exactQ:internal',                          'internal'; ...

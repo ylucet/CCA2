@@ -84,6 +84,14 @@ classdef envelopeSubdivisionAlgTest < matlab.unittest.TestCase
             t.verifyEqual(max(abs(got(both) - ref(both))), 0, 'AbsTol', 1e-9, 'and on the VALUE');
         end
 
+        function anOVERLAYPastItsBudgetIsRefusedByName(t)
+        % The overlay's piece budget (opts.overlayBudget): erratum Example 2 reaches it inside biconjQ
+        % (which catches it and returns the EnvelopeMin); a budget of 0 reaches it on any two pairs.
+            e1 = fixture(0);  e2 = fixture(1);
+            t.verifyError(@() envelopeSubdivisionAlg({e1, e2}, zeros(0,3), zeros(0,3), ...
+                struct('overlayBudget', 0)), 'envelopeSubdivisionAlg:overlaySize');
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() envelopeSubdivisionAlg(), 'envelopeSubdivisionAlg:nargin');
             t.verifyError(@() envelopeSubdivisionAlg(struct('a', 1)), 'envelopeSubdivisionAlg:shape');

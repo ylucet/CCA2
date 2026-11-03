@@ -79,6 +79,19 @@ function tf = rec(lo, hi, loD, hiD, b, ctx, depth)
             tf = true;  return
         end
     end
+    % FACE AGAINST FACE (2026-11-02), when no separator did: the row z_lo > z_hi(j) itself,
+    % certified false with z_hi's square root carried exactly (algRowFails' face row). This is what
+    % decides two faces TOUCHING along a curve no quadratic follows -- erratum Example 2's pair
+    % cells keep such faces beside their winner. Only for an hi(j) above lo at every grid point
+    % where both exist: a face row costs an exact square-free reduction, once per pair.
+    for j = order
+        zh = ZH(:,j);  both = isfinite(zl) & isfinite(zh);
+        if sum(both) < 6 || any(zl(both) > zh(both) + 1e-9 * max(1, abs(zh(both)))), continue, end
+        fr = struct('FP', lo.FP, 'FB', lo.FB, 'W', struct('FP', hi(j).FP, 'FB', hi(j).FB));
+        if algRowFails(fr, b, ctx.inBox, inner, ctx.factors, ctx.corners)
+            tf = true;  return
+        end
+    end
     if depth == 0, tf = false; return, end
     xm = (b(1) + b(2)) / 2;  ym = (b(3) + b(4)) / 2;
     tf = rec(lo, hi, loD, hiD, [b(1) xm b(3) ym], ctx, depth-1) && ...

@@ -36,6 +36,25 @@ classdef algFaceBelowTest < matlab.unittest.TestCase
             t.verifyTrue(algFaceBelow(face(x2, 1), face(hi, 1), [-2 2 -1 1], inBox), 'clear of the crossing');
         end
 
+        function facesTOUCHINGAlongACurveNoQuadraticFollows(t)
+        % z_k = sqrt(x^2 + y^2 + 1) - (x - y)^2 <= z_w = sqrt(x^2 + y^2 + 1), equal on x = y, where
+        % z_w = sqrt(2 x^2 + 1) is no quadratic -- so no separator passes between them; the face row
+        % (z_w's root carried exactly, the tangency's squared factor divided out) decides it. And a
+        % face CROSSING z_w on the same line, z_w + (x - y), is refused.
+            W  = face(fp([1 1 1]), -1);
+            s  = zeros(3,3);  s(3,1) = 1;  s(2,2) = -2;  s(1,3) = 1;          % (x - y)^2
+            FK = zeros(5,5,3);  FK(1,1,3) = 1;  FK(1:3,1:3,2) = 2*s;  FK(:,:,1) = conv2(s, s);
+            FK(3,1,1) = FK(3,1,1) - 1;  FK(1,3,1) = FK(1,3,1) - 1;  FK(1,1,1) = FK(1,1,1) - 1;
+            K  = face(FK, -1);
+            t.verifyTrue(algFaceBelow(K, W, [-1 1 -1 1], @(~) true), 'tangent along x = y');
+            t.verifyTrue(algFaceBelow(K, W, [0.1 0.9 -0.2 0.6], @(~) true), 'an off-centre box');
+            t.verifyFalse(algFaceBelow(W, K, [-1 1 -1 1], @(~) true), 'reversed');
+            FC = zeros(3,3,3);  FC(1,1,3) = 1;  FC(2,1,2) = -2;  FC(1,2,2) = 2;  FC(2,2,1) = -2;  FC(1,1,1) = -1;
+            t.verifyFalse(algFaceBelow(face(FC, -1), W, [-1 1 -1 1], @(~) true), 'crossing along x = y');
+            t.verifyTrue(algFaceBelow(face(FC, -1), W, [-1 1 -1 1], @(b) b(1) < b(4) - 0.1), ...
+                         'on x <= y - 0.1 only, clear of the crossing');
+        end
+
         function aBIGIntegerFaceAsItsDoubleTwin(t)
             K = 2^30 + 1;
             F = fp([1 1 1]);

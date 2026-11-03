@@ -579,7 +579,7 @@ function [irr, nDrop] = dropBelow(irr, C, rows, P)
     for i = 1:n
         for j = above
             if j == i || ~keep(j), continue, end
-            if all(V(:,i) <= V(:,j)) && algFaceBelow(irr{i}, irr{j}, box, inBox, 5, factors, corners)
+            if all(V(:,i) <= V(:,j) + 1e-9 * max(1, abs(V(:,j)))) && algFaceBelow(irr{i}, irr{j}, box, inBox, 5, factors, corners)
                 keep(i) = false;  nDrop = nDrop + 1;  break
             end
         end

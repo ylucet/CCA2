@@ -67,6 +67,20 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
 % excepted, a point), the region's factors blown up the same way rejecting chart boxes; a box inside
 % the square is then decided. The substitution is exact or refused (dyadic p, bounded integers), and only exactly
 % zero lowest orders are divided out, so any p is sound -- a wrong p only fails to certify.
+%
+% FACE AGAINST FACE (2026-11-02). A row may instead carry .W = struct('FP', 'FB'), another implicit
+% face, quadratic in z like a's: the row is z_k > z_w (z_k = a's branch), and failing everywhere
+% means z_k <= z_w wherever both exist. algFaceBelow uses it where no fitted quadratic separates
+% the two -- they TOUCH along a curve no quadratic follows (erratum Example 2's pair cells). With
+% t = z_w = (-B_w + e sqrt D_w) / (2 A_w), e = sign A_w for the upper root and -sign A_w for the
+% lower, the quadOK disjunctions above need sign(t - m_k) and sign(F_k(t) / A_k), and
+%       t - m_k  = (P1 + e A_k sqrt D_w) / (2 A_w A_k),     P1 = A_w B_k - A_k B_w
+%       F_k(t)   = (P2 + e P1  sqrt D_w) / (2 A_w^2),       P2 = 2 A_w (A_w C_k - A_k C_w) - P1 B_w
+% (A_w t^2 = -B_w t - C_w reduces F_k(t) to degree 1 in t). sign(P + Q sqrt D) is sign P when P, Q
+% agree or E = P^2 - Q^2 D > 0, sign Q when E < 0. Where the faces touch, F_k(t) has a double zero
+% and E2 = P2^2 - P1^2 D_w carries it SQUARED -- divided out by squareFreeSign, or, past 2^53 (on
+% Example 2 E2 is degree ~20 with coefficients ~1e23), by an exact factorisation
+% (symSquareFreeSign). A branch missing on a box (D < 0 there) fails the row by itself.
     if nargin < 4 || isempty(depth), depth = 6; end
     if nargin < 5, factors = {}; end
     if nargin < 6, corners = zeros(0,2); end
@@ -99,6 +113,7 @@ function r = rowPolys(a, factors)
 % The polynomials whose signs decide row a on a box, and the test reading them; [] if the row
 % cannot be certified at all (shape, branch index, non-finite coefficients).
     r = [];
+    if isfield(a, 'W') && ~isempty(a.W), r = faceRowPolys(a, factors); return, end
     FP = a.FP;
     num = double(a.num(:).');
     if numel(num) ~= 10 || any(num(1:4) ~= 0) || ~(a.den > 0), return, end
@@ -355,6 +370,150 @@ function S = shiftTo(P, x0)
     end
 end
 
+function r = faceRowPolys(a, factors)
+% A FACE ROW: z_k > z_w, z_k = a's branch, z_w = a.W's, both quadratic in z. See FACE AGAINST FACE.
+    r = [];
+    Fk = a.FP;  Fw = a.W.FP;
+    if nzOf(Fk) ~= 3 || nzOf(Fw) ~= 3, return, end
+    hiK = any(a.FB == [-1 2]);  hiW = any(a.W.FB == [-1 2]);
+    if ~hiK && ~any(a.FB == [1 -2]), return, end
+    if ~hiW && ~any(a.W.FB == [1 -2]), return, end
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+    k1 = rowKey(Fk, 0, 1);  k2 = rowKey(Fw, 0, 1);
+    key = '';
+    if ~isempty(k1) && ~isempty(k2), key = ['face|', k1, '#', k2]; end
+    if ~isempty(key) && isKey(memo, key)
+        P = memo(key);
+    else
+        P = faceSignPolys(Fk, Fw);
+        if isempty(P), return, end
+        if ~isempty(key)
+            if memo.Count > 2000, memo.remove(memo.keys()); end
+            memo(key) = P;
+        end
+    end
+    P = cellfun(@(p) divideOut(p, factors), P, 'UniformOutput', false);
+    r = struct('P', {P}, 'test', @(s) faceOK(s, hiK, hiW));
+end
+
+function n = nzOf(FP)
+    if ratQ.isBigPoly(FP), sz = FP.sz; else, sz = size(FP); end
+    sz(end+1:3) = 1;  n = sz(3);
+end
+
+function P = faceSignPolys(Fk, Fw)
+% {A_w, A_k, D_w, D_k, P1, E1, P2, E2} with their squared factors divided out; {} on failure.
+% Exactly in doubles when every partial sum is bounded by 2^53, else in bigZ; the square-free
+% reduction of a polynomial past 2^53 is then SYMBOLIC (symSquareFreeSign) -- the tangency's G^2
+% is a factor of E2, and on erratum Example 2 E2 has degree ~20 and coefficients ~1e23.
+    big = ratQ.isBigPoly(Fk) || ratQ.isBigPoly(Fw);
+    if ~big
+        bound = faceRaw(abs(Fk), abs(Fw), 1);
+        big = any(cellfun(@(p) any(p(:) >= 2^53), bound));
+    end
+    try
+        if big
+            Z = faceRaw(toZ(Fk), toZ(Fw), -1);
+            P = cell(size(Z));
+            for i = 1:numel(Z)
+                Z{i} = contentFree(Z{i});
+                try
+                    P{i} = exactDouble(Z{i}, 'face row polynomial');
+                    P{i} = squareFreeSign(P{i});
+                catch
+                    P{i} = symSquareFreeSign(Z{i});
+                end
+            end
+        else
+            P = faceRaw(Fk, Fw, -1);
+            P = cellfun(@squareFreeSign, P, 'UniformOutput', false);
+        end
+    catch
+        P = {};  return
+    end
+    if any(cellfun(@(p) isempty(p) || ~all(isfinite(p(:))), P)), P = {}; end
+end
+
+function P = faceRaw(Fk, Fw, sg)
+% The raw polynomials; sg = -1 for the true ones, +1 (with |inputs|) for a bound on every partial sum.
+    Ak = Fk(:,:,3);  Bk = Fk(:,:,2);  Ck = Fk(:,:,1);
+    Aw = Fw(:,:,3);  Bw = Fw(:,:,2);  Cw = Fw(:,:,1);
+    Dw = padAdd(conv2g(Bw, Bw), 4*sg * conv2g(Aw, Cw));
+    Dk = padAdd(conv2g(Bk, Bk), 4*sg * conv2g(Ak, Ck));
+    P1 = padAdd(conv2g(Aw, Bk), sg * conv2g(Ak, Bw));
+    E1 = padAdd(conv2g(P1, P1), sg * conv2g(conv2g(Ak, Ak), Dw));
+    P2 = padAdd(sg * conv2g(P1, Bw), 2 * conv2g(Aw, padAdd(conv2g(Aw, Ck), sg * conv2g(Ak, Cw))));
+    E2 = padAdd(conv2g(P2, P2), sg * conv2g(conv2g(P1, P1), Dw));
+    P = {Aw, Ak, Dw, Dk, P1, E1, P2, E2};
+end
+
+function S = symSquareFreeSign(Z)
+% An integer polynomial past 2^53 (bigZ) with every factor of EVEN multiplicity removed and every
+% odd one kept once, by an exact factorisation (Symbolic Math Toolbox `factor`): the original's
+% sign off the removed factors' zero sets. Back in doubles, rounded when past 2^53 (sound for
+% polySignOn, see BIG INTEGERS). Any failure returns the polynomial unreduced -- sign-correct,
+% only less decisive. The sign is checked against the original at a point (relSign).
+    S = double(Z);
+    try
+        x = sym('x');  y = sym('y');
+        [n1, n2] = size(Z);
+        C = sym(zeros(n1, n2));
+        for i = 1:n1
+            for j = 1:n2
+                v = Z.c{i,j};
+                if v.signum() ~= 0, C(i,j) = str2sym(char(v.toString())); end
+            end
+        end
+        p = (x.^(0:n1-1)) * C * (y.^(0:n2-1)).';
+        F = factor(p);                               % irreducible factors, repeated by multiplicity
+        keys = cell(1, numel(F));
+        for i = 1:numel(F), keys{i} = char(F(i)); end
+        [u, first, j] = unique(keys);
+        m = accumarray(j(:), 1);
+        q = sym(1);
+        for i = 1:numel(u)
+            f = F(first(i));
+            if isempty(symvar(f)), continue, end    % constants: the sign is fixed by relSign
+            if mod(m(i), 2) == 1, q = q * f; end
+        end
+        q = expand(q);
+        if isempty(symvar(q)), S = 1; return, end
+        [cf, t] = coeffs(q, [x y]);
+        R = zeros(1, 1);
+        for i = 1:numel(t)
+            dx = double(polynomialDegree(t(i), x));  dy = double(polynomialDegree(t(i), y));
+            R(dx+1, dy+1) = double(cf(i));
+        end
+        sg = relSign(S, R);
+        if sg ~= 0, S = sg * R; end
+    catch
+    end
+end
+
+function ok = faceOK(s, hiK, hiW)
+% s = signs of {A_w, A_k, D_w, D_k, P1, E1, P2, E2} on the box (0 where not certified). True when
+% z_k <= z_w at every point of the box where both branches exist (off the removed curves).
+    ok = false;
+    if s(3) == -1 || s(4) == -1, ok = true; return, end          % a branch exists nowhere here
+    if s(1) == 0 || s(2) == 0, return, end
+    e = s(1);  if ~hiW, e = -e; end                              % z_w = (-B_w + e sqrt D_w) / (2 A_w)
+    u = s(1) * s(2) * sqSign(s(5), e * s(2), s(6));              % sign(z_w - m_k)
+    v = s(2) * sqSign(s(7), e * s(5), s(8));                     % sign(F_k(z_w) / A_k)
+    if hiK, ok = u == 1 && v == 1;                               % z_w >= the upper root
+    else,   ok = u == 1 || v == -1;                              % z_w >= the lower root
+    end
+end
+
+function r = sqSign(sP, sQ, sE)
+% sign(P + Q sqrt(D)) from sign P, sign Q and sign E = P^2 - Q^2 D; 0 when they do not decide it.
+    r = 0;
+    if sP ~= 0 && sP == sQ, r = sP;
+    elseif sE == 1 && sP ~= 0, r = sP;
+    elseif sE == -1 && sQ ~= 0, r = sQ;
+    end
+end
+
 function ok = quadOK(s, hi, want)
 % s = signs of [a, Dn(2aq + b), Dn^2 F(q), D] on the box, 0 where not certified.
     if s(1) == 0, ok = false; return, end
@@ -376,7 +535,22 @@ function S = squareFreeSign(R)
 % R with the squares of its repeated factors divided out: a polynomial of R's sign at every point
 % off the zero set of what was removed. Exact integer arithmetic (ratQ); on any refusal (overflow,
 % a gcd whose square does not divide) the reduction so far is kept, which is always sign-correct.
+%
+% THE ODD PART FIRST (2026-11-02): Yun's square-free decomposition, R = c prod Z_i^i, and the
+% product of the Z_i of ODD i -- R's sign times sign c off the Z_i's zeros. The plain "divide by
+% gcd(R, R')^2" below cannot reduce a factor of multiplicity 3 or more (gcd^2 then has too much of
+% it), and two faces TOUCHING along a curve give exactly that: (x - y)^4 on the synthetic pair of
+% algFaceBelowTest. The plain loop stays as the fallback when Yun's steps refuse.
     S = R;
+    try
+        S0 = ratQ.contentFree(ratQ.trimN(R));
+        if numel(S0) <= 1, S = S0; return, end
+        O = oddPart(S0, 1, 0);
+        O = ratQ.contentFree(ratQ.trimN(O));
+        sg = relSign(S0, O);
+        if sg ~= 0, S = sg * O; return, end
+    catch
+    end
     try
         S = ratQ.contentFree(ratQ.trimN(R));
         for it = 1:4
@@ -391,6 +565,50 @@ function S = squareFreeSign(R)
         end
     catch
     end
+end
+
+function O = oddPart(S, d, lvl)
+% The product of the odd-multiplicity square-free factors of S, up to a constant: Yun's algorithm
+% with the derivative in x (d = 1); what is left free of x is then decomposed in y (d = 2).
+    O = 1;
+    S = ratQ.trimN(S);
+    if numel(S) <= 1 || lvl > 2, return, end
+    Sd = diffPoly(S, d);
+    if ~any(Sd(:))
+        if d == 1, O = oddPart(S, 2, lvl + 1); end
+        return
+    end
+    C = ratQ.trimN(ratQ.polyGcdBiv(S, Sd));
+    W = ratQ.trimN(ratQ.polyDivExact(S, C, 2));
+    i = 1;
+    while numel(W) > 1
+        if i > 60, error('algRowFails:yun', 'square-free decomposition did not end'); end
+        Y = ratQ.trimN(ratQ.polyGcdBiv(W, C));
+        Z = ratQ.trimN(ratQ.polyDivExact(W, Y, 2));
+        if mod(i, 2) == 1, O = ratQ.trimN(ratQ.polyMulN(O, Z)); end
+        C = ratQ.trimN(ratQ.polyDivExact(C, Y, 2));
+        W = Y;  i = i + 1;
+    end
+    if d == 1 && numel(C) > 1, O = ratQ.trimN(ratQ.polyMulN(O, oddPart(C, 2, lvl + 1))); end
+end
+
+function sg = relSign(S, O)
+% sign(S / O), constant off their zeros (S / O = c times a square); read at a point where both are
+% clearly nonzero, 0 when no such point is found among the fixed ones.
+    sg = 0;
+    pts = [0.6180339887 0.3247179572; -0.7182818285 0.4142135624; 0.2360679775 -0.8660254038; ...
+           1.7320508076 1.4142135624; -1.2599210499 -0.5772156649; 3.1415926536 -2.7182818285];
+    for k = 1:size(pts, 1)
+        [vs, ms] = evalAt(S, pts(k,:));  [vo, mo] = evalAt(O, pts(k,:));
+        if abs(vs) > 1e-6 * ms && abs(vo) > 1e-6 * mo
+            sg = sign(vs) * sign(vo);  return
+        end
+    end
+end
+
+function [v, m] = evalAt(P, p)
+    T = P .* (p(1) .^ (0:size(P,1)-1)).' .* (p(2) .^ (0:size(P,2)-1));
+    v = sum(T(:));  m = max(sum(abs(T(:))), realmin);
 end
 
 function S = divideOut(S, factors)
