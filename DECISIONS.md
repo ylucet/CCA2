@@ -9000,3 +9000,37 @@ bound: it counts every pick combination, most of which the overlay prunes.
 (`overlayBudget` 4000 against a bound of 11567) and returns the EnvelopeMin; `overlayBudget = Inf`
 subdivides it (~30 min on the shared machine, `erratumBiconjEx2SubdivisionTest`, verylong).
 Revisit once the tangent faces are cut.
+
+
+## 2026-11-02 (third) — Touching faces: a face-against-face certificate; what is left are cell corners
+
+The 2026-11-01 entry's "LEFT: TANGENT faces" route, built and measured on erratum Example 2's three
+pruned pairs (single runs on a shared machine -- counts, not times).
+
+- **The face row** (algRowFails, rows with `.W`): z_k > z_w certified false with z_w's root carried
+  exactly -- sign(z_w - m_k) and sign F_k(z_w) are each sign(P + Q sqrt D_w), read from sign P,
+  sign Q and sign(P^2 - Q^2 D_w). algFaceBelow tries it where no fitted separator works, for an
+  upper face above the lower one at every grid point of the box.
+- **squareFreeSign could not reduce a 4th power**: dividing by gcd(R, R')^2 needs multiplicity <= 2,
+  and a tangency gives (x - y)^4 on the synthetic pair (algFaceBelowTest). Now Yun's square-free
+  decomposition and the product of the ODD-multiplicity parts, the sign fixed at a point; the old
+  loop stays as the fallback. Past 2^53 (Example 2's E2: degree 20, coefficients ~1e23) the odd part
+  comes from Symbolic Math Toolbox `factor` (~1 s a pair, memoised): every one came back of degree
+  <= 8 with integer coefficients -- the G^2 the 2026-11-01 entry predicted, removed. NOTE: run any
+  probe through `.claude/suite.sh`'s path fix -- outside it `sym` is the Maple toolbox (no
+  polynomialDegree, `factor` returns a product).
+- Pairs 42/98/59 -> 36/96/51.
+- **A face is compared only where it OWNS** (dropBelow passes winnerFaces' rows z_i >= q_j): a box
+  where one is certified false is outside face i's piece. -> 33/91/48; overlay bound 11567 -> 7551.
+- **What is left: the faces meet at the cells' CORNERS.** With algFaceBelow at depth 8 every
+  remaining failure shrinks onto a point: (37.5, 10), (35, -5), (47.5, 2.5), (25, 2.5), (60, 10) --
+  dyadic vertices of the cells' straight rows. There the blow-up was REFUSED (partial sums past 2^52).
+  Tried and REVERTED: (a) the blow-up shift in BigInteger -- no face more, pair 1 31 s -> 74 s: the
+  charts then fail at every e, because in the chart the face row's s^0 coefficients vanish to
+  ORDER TWO at t = 0, the edge's own direction (the contact curve leaves the corner along y = -5);
+  (b) blowing up again at the chart's corner (0, t0) -- one face more on pair 1, 31 s -> 246 s.
+  Next if it matters: the contact curve at a corner is tangent to a domain edge, so a certificate
+  along the EDGE (the face row restricted to y = -5, a univariate sign) plus a wedge argument, rather
+  than more blow-ups.
+- Also found on the way (item 2 of the night): addQuaPar:degenerateConic never fired -- see that
+  commit.

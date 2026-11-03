@@ -36,6 +36,12 @@
            bridges TOUCHING the winner along a curve (most of what a pair cell keeps) -- no fitted
            separator certifies those; needs a touching-aware certificate. DECISIONS 2026-11-01.
            WHOLE overlay measured 2026-11-02 (fa541f1): 3299 faces, 1247 s (was projected ~12000, ~4 h).
+           2026-11-02 (second overnight): TOUCHING faces certified face against face (algRowFails face
+           row, z_w's root carried exactly; Yun odd part; past 2^53 an exact Symbolic factorisation),
+           and a face compared only where it owns. Pairs 42/98/59 -> 33/91/48, overlay bound 11567 ->
+           7551. LEFT: the touching faces meet the winner AT THE CELLS' CORNERS ((37.5, 10), (35, -5),
+           (47.5, 2.5) ...) along the edge's direction; an exact corner blow-up and a second-level one
+           were tried and reverted (no gain / +1 face at 4x time). DECISIONS 2026-11-02 (third).
         d. DONE 2026-11-02, long run included (erratumBiconjEx2SubdivisionTest 3/0, 54 min): triangles cut AFTER the overlay (cutTriangles decides/
            splits), AlgCrv table 3 + FT, biconjQ subdivides pairs + triangles. Example 2 is past the
            overlay's piece budget (11567 > 4000) so biconjQ still returns the EnvelopeMin by default;
