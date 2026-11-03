@@ -202,12 +202,12 @@ function [z, info] = algBranch(P, X, b, opts)
             % aNEARDoubleRootIsNOTCollapsedToTheMean), so those get the stable quadratic formula.
             % Within rounding (16 eps of the terms) it IS the double root and the mean is exact --
             % splitting a true D = 0 by sqrt(rounding) put erratum Example 1's edge y = 2x 2e-8 high.
-            if abs(dq) <= 16 * eps * T
-                rr = [1; 1] * (-cz(2) / (2*cz(3)));
-            elseif abs(dq) <= 1e-12 * T
-                if dq > 0
-                    qq = -(cz(2) + sign(cz(2) + (cz(2) == 0)) * sqrt(dq)) / 2;
-                    rr = sort([qq / cz(3); cz(1) / qq]);
+            % EXACT inside the window (2026-11-03): see WITHIN THE WINDOW, EXACTLY in fibreLow.
+            if abs(dq) <= 1e-12 * T
+                [cx, dx] = exactQuad(P, Pbig, X(t,:), nx, ny);
+                if dx > 0
+                    qq = -(cx(2) + sign(cx(2) + (cx(2) == 0)) * sqrt(dx)) / 2;
+                    rr = sort([qq / cx(3); cx(1) / qq]);
                 else
                     rr = [1; 1] * (-cz(2) / (2*cz(3)));
                 end
@@ -266,7 +266,25 @@ function z = fibreLow(P, Pbig, X, b, opts, nx, ny, nz)
     T = ca(Q,2).^2 + 4*ca(Q,3).*ca(Q,1);
     lo = nan(size(a));  hi = lo;
     mean2 = -bb ./ (2*a);
-    dbl = abs(dq) <= 16 * eps * T | (abs(dq) <= 1e-12 * T & dq <= 0);
+    % WITHIN THE WINDOW, EXACTLY (2026-11-03). Where |dq| is within 1e-12 of its terms the doubles
+    % cannot say whether the two roots are equal: on the 3-convex-edge triangle a face's fibre has
+    % D ~ (k d)^2 at distance d from the hypotenuse -- two branches CROSSING there -- and up to
+    % d ~ 3e-7 the rounded dq read as 0, so the evaluator returned their mean, ~1e-7 off either
+    % root, and a point 1e-8 inside the domain fell out of every face. The point's coordinates and
+    % P's coefficients are doubles, so the fibre's coefficients and D are EXACT in BigDecimal: D > 0
+    % splits (stable formula on the exactly rounded coefficients), D <= 0 keeps the mean as before.
+    win = abs(dq) <= 1e-12 * T;
+    if any(win)
+        iq = find(Q);  w = find(win).';
+        for u = w
+            [cx, dx] = exactQuad(P, Pbig, X(iq(u),:), nx, ny);
+            if dx > 0, a(u) = cx(3);  bb(u) = cx(2);  c0(u) = cx(1);  dq(u) = dx;
+            else,      dq(u) = 0;
+            end
+        end
+        mean2 = -bb ./ (2*a);
+    end
+    dbl = win & dq <= 0;
     lo(dbl) = mean2(dbl);  hi(dbl) = mean2(dbl);
     two = ~dbl & dq > 0;
     qq = -(bb(two) + sign(bb(two) + (bb(two) == 0)) .* sqrt(dq(two))) / 2;
@@ -282,6 +300,38 @@ function z = fibreLow(P, Pbig, X, b, opts, nx, ny, nz)
     if b == 1 || b == -2, v = lo; elseif b == 2 || b == -1, v = hi; end
     zq = nan(nnz(Q), 1);  zq(:) = v;
     z(Q) = zq;
+end
+
+function [c, D] = exactQuad(P, Pbig, x, nx, ny)
+% A quadratic fibre's coefficients c (z^0, z^1, z^2) and discriminant D, computed EXACTLY in
+% BigDecimal from the double point x and P (double or big), then each rounded to a double: D's
+% sign is exact.
+    X = java.math.BigDecimal(x(1));  Y = java.math.BigDecimal(x(2));
+    xp = cell(1, nx);  yp = cell(1, ny);
+    xp{1} = java.math.BigDecimal.ONE;  yp{1} = java.math.BigDecimal.ONE;
+    for i = 2:nx, xp{i} = xp{i-1}.multiply(X); end
+    for j = 2:ny, yp{j} = yp{j-1}.multiply(Y); end
+    acc = repmat({java.math.BigDecimal.ZERO}, 1, 3);
+    for k = 1:3
+        for i = 1:nx
+            for j = 1:ny
+                if isempty(Pbig)
+                    v = P(i,j,k);
+                    if v == 0, continue, end
+                    v = java.math.BigDecimal(v);
+                else
+                    v = Pbig.c{sub2ind(Pbig.sz, i, j, k)};
+                    if isempty(v), continue, end
+                    v = java.math.BigDecimal(v);
+                end
+                acc{k} = acc{k}.add(v.multiply(xp{i}).multiply(yp{j}));
+            end
+        end
+    end
+    Dx = acc{2}.multiply(acc{2}).subtract(java.math.BigDecimal(4).multiply(acc{3}).multiply(acc{1}));
+    c = cellfun(@(a) a.doubleValue(), acc);
+    D = Dx.doubleValue();
+    if D == 0 && Dx.signum() ~= 0, D = Dx.signum() * realmin; end
 end
 
 function [c, isZero] = exactFibre(B, x, nx, ny, nz)

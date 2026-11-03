@@ -132,6 +132,27 @@ classdef algBranchTest < matlab.unittest.TestCase
             end
         end
 
+        function CROSSINGBranchesAreSplitEXACTLYInsideTheRoundingWindow(testCase)
+        % z^2 = (x + y - 1)^2: the branches +-(x + y - 1) CROSS on the line x + y = 1, and at distance
+        % 1e-8 from it D = 4e-16 is within rounding of its terms (~16), so the doubles returned the
+        % mean 0 for both. On the 3-convex-edge triangle that put a face's branch ~1e-7 off within
+        % 3e-7 of the hypotenuse, and points there fell out of every face (2026-11-03). D is exact
+        % in BigDecimal at a double point: here > 0, so the branches split -- for both paths.
+            P = zeros(3,3,3);
+            P(1,1,3) = 1;                                              % z^2
+            P(3,1,1) = -1;  P(2,2,1) = -2;  P(1,3,1) = -1;             % - (x + y - 1)^2
+            P(2,1,1) = 2;   P(1,2,1) = 2;   P(1,1,1) = -1;
+            for d = [1e-8 1e-10 1e-13]
+                X = [0.5, 0.5 - d];  s = abs((X(1) - 0.5) + (X(2) - 0.5));   % exact (Sterbenz)
+                testCase.verifyEqual(algBranch(P, X, -1), s, 'RelTol', 1e-12, sprintf('upper, d = %g', d));
+                testCase.verifyEqual(algBranch(P, X, 1), -s, 'RelTol', 1e-12, sprintf('lower, d = %g', d));
+                [z, info] = algBranch(P, X, -1);                       % the pointwise path
+                testCase.verifyEqual(z, s, 'RelTol', 1e-12, sprintf('pointwise upper, d = %g', d));
+                testCase.verifyEqual(info.nreal, 2);
+            end
+            testCase.verifyEqual(algBranch(P, [0.5 0.5], -1), 0, 'ON the line: the double root');
+        end
+
         function aTRUEDoubleRootIsNotSPLITByRounding(testCase)
         % (z - (x + y))^2: D = 0 exactly, computed as a rounding-size number of either sign. Split
         % by the formula, the branches sit ~sqrt(eps) apart -- erratum Example 1's edge y = 2x

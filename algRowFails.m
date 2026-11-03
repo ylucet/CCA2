@@ -103,7 +103,12 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
         if p(1) < box(1) || p(1) > box(2) || p(2) < box(3) || p(2) > box(4), continue, end
         if ~anyVanishes(rows, p), continue, end      % nothing to blow up: G(0, t) = P(p), as plain
         for e = W ./ 2.^(2:8)
-            if cornerOK(rows, p, e, factors), sq(end+1,:) = [p, e]; break, end %#ok<AGROW>
+            if cornerOK(rows, p, e, factors)
+                % around an IRRATIONAL corner the square is certified about the exact point, which
+                % the double p misses by ~1e-16: record it a hair smaller
+                if ~isDyadic(p), e = e * (1 - 1e-9); end
+                sq(end+1,:) = [p, e]; break %#ok<AGROW>
+            end
         end
     end
     if ~isempty(sq), tf = boxRec(rows, box, inBox, depth, sq); end
@@ -265,8 +270,7 @@ function tf = boxRec(rows, b, inBox, depth, sq)
     for t = 1:numel(rows)
         P = rows{t}.P;  s = zeros(1, numel(P));
         for k = 1:numel(P)
-            v = polySignOn(P{k}, b, @(~) true, 0);
-            if ~isnan(v), s(k) = v; end
+            s(k) = polySign(P{k}, b);
         end
         if rows{t}.test(s), tf = true; return, end
     end
@@ -322,7 +326,7 @@ function ok = cornerOK(rows, p, e, factors)
                 facC{k} = blowUp(factors{k}, p, sg, major);
             end
             facC = facC(~cellfun(@isempty, facC));
-            inC = @(cb) ~any(cellfun(@(G) polySignOn(G, cb, @(~) true, 0) == -1, facC));
+            inC = @(cb) ~any(cellfun(@(G) polySign(G, cb) == -1, facC));
             if ~boxRec(rowsC, [0 e -1 1], inC, 6, zeros(0,3)), return, end
         end
     end
@@ -337,9 +341,10 @@ function G = blowUp(P, p, sg, major)
         if all(P(:) == round(P(:))), break, end
         P = 2 * P;
     end
+    if any(P(:) ~= round(P(:))), return, end
+    if ~isDyadic(p), G = blowUpSurd(P, p, sg, major); return, end
     sc = 1;                                          % p's denominator, a power of 2 up to 2^8
     while any(p * sc ~= round(p * sc)) && sc < 2^8, sc = 2 * sc; end
-    if any(p * sc ~= round(p * sc)) || any(P(:) ~= round(P(:))), return, end
     [n1, n2] = size(P);
     deg = n1 + n2 - 2;
     bound = sum(abs(P(:))) * (abs(p(1)) + 1)^(n1-1) * (abs(p(2)) + 1)^(n2-1) * 2^deg * sc^deg;
@@ -357,6 +362,117 @@ function G = blowUp(P, p, sg, major)
     k = find(any(G ~= 0, 2), 1);
     if isempty(k), G = 0; return, end
     G = G(k:end, :);
+end
+
+function tf = isDyadic(p)
+    tf = all(p * 2^8 == round(p * 2^8));
+end
+
+function v = polySign(P, b)
+% The certified sign of P on box b (0 when undecided): P a dense polyN, or a blown-up polynomial
+% over Q(sqrt d) (blowUpSurd's struct, U + sqrt(d) V).
+    if isnumeric(P)
+        v = polySignOn(P, b, @(~) true, 0);
+        if isnan(v), v = 0; end
+        return
+    end
+    % U + sqrt(d) V lies between U + r V at the two doubles r bracketing sqrt(d), pointwise
+    lo = polySignOn(P.Lo, b, @(~) true, 0);
+    if lo ~= 0 && ~isnan(lo) && polySignOn(P.Hi, b, @(~) true, 0) == lo, v = lo; return, end
+    v = 0;
+    if isempty(P.E), return, end
+    sU = polySignOn(P.U, b, @(~) true, 0);  sV = polySignOn(P.V, b, @(~) true, 0);
+    sE = polySignOn(P.E, b, @(~) true, 0);
+    v = sqSign(sU, sV, sE);
+end
+
+function r = surdOf(p)
+% p = ([a1 a2] + [b1 b2] sqrt(d)) / q with small integers, recognised from the doubles: r =
+% [a1 b1 a2 b2 q d], or [] when none fits. A WRONG guess is sound: the blow-up is exact about the
+% point guessed, so it only fails to certify (the corner left undecided).
+    r = [];
+    D = [2 3 5 6 7 10 11 13 14 15 17 19 21 22 23 26 29 30 31 33 34 35 37 38 39 41 42 43 46 47];
+    bs = -64:64;
+    for q = 1:64
+        for d = D
+            ab = zeros(2,2);  ok = true;
+            for c = 1:2
+                a = round(q * p(c) - bs * sqrt(d));
+                err = abs(q * p(c) - bs * sqrt(d) - a);
+                k = find(err < 1e-11 * q * max(1, abs(p(c))));
+                if isempty(k), ok = false; break, end
+                [~, j] = min(abs(bs(k)));  k = k(j);
+                ab(c,:) = [a(k), bs(k)];
+            end
+            if ok && any(ab(:,2) ~= 0)
+                r = [ab(1,:), ab(2,:), q, d];  return
+            end
+        end
+    end
+end
+
+function G = blowUpSurd(P, p, sg, major)
+% blowUp at a corner in Q(sqrt d)^2 (2026-11-03): the triangle's (1/sqrt5, 1 - 1/sqrt5). With
+% p = (A, B) / q, A, B in Z[sqrt d], q^deg P(p + sg s (1, t)) = U + sqrt(d) V exactly, U, V integer
+% polyN in (s, t), the powers of s that divide both exactly divided out; q^deg > 0 keeps the sign.
+% [] when p is not recognised or a coefficient could pass 2^52.
+    G = [];
+    r = surdOf(p);
+    if isempty(r), return, end
+    A = r(1:2);  B = r(3:4);  q = r(5);  d = r(6);
+    [n1, n2] = size(P);
+    deg = n1 + n2 - 2;
+    NA = abs(A(1)) + sqrt(d) * abs(A(2));  NB = abs(B(1)) + sqrt(d) * abs(B(2));
+    bound = 0;
+    for i = 0:n1-1
+        for j = 0:n2-1
+            bound = bound + abs(P(i+1,j+1)) * (NA + q)^i * (NB + q)^j * q^(deg-i-j);
+        end
+    end
+    if bound >= 2^52, return, end                    % each component of every partial sum is below
+    pA = surdPow(A, n1 - 1, d);  pB = surdPow(B, n2 - 1, d);
+    Su = zeros(n1, n2);  Sv = zeros(n1, n2);          % coefficient of u^k v^l, u = x - px, v = y - py
+    for k = 0:n1-1
+        for l = 0:n2-1
+            acc = [0 0];
+            for i = k:n1-1
+                for j = l:n2-1
+                    if P(i+1,j+1) == 0, continue, end
+                    m = surdMul(pA(i-k+1,:), pB(j-l+1,:), d);
+                    acc = acc + P(i+1,j+1) * nchoosek(i,k) * nchoosek(j,l) * q^(k+l+deg-i-j) * m;
+                end
+            end
+            Su(k+1,l+1) = acc(1);  Sv(k+1,l+1) = acc(2);
+        end
+    end
+    U = zeros(n1 + n2 - 1, max(n1, n2));  V = U;
+    for k = 0:n1-1
+        for l = 0:n2-1
+            f = sg^(k+l);
+            if major == 1, U(k+l+1, l+1) = U(k+l+1, l+1) + f * Su(k+1,l+1);  V(k+l+1, l+1) = V(k+l+1, l+1) + f * Sv(k+1,l+1);
+            else,          U(k+l+1, k+1) = U(k+l+1, k+1) + f * Su(k+1,l+1);  V(k+l+1, k+1) = V(k+l+1, k+1) + f * Sv(k+1,l+1);
+            end
+        end
+    end
+    k = find(any(U ~= 0, 2) | any(V ~= 0, 2), 1);
+    if isempty(k), G = 0; return, end
+    U = U(k:end, :);  V = V(k:end, :);
+    E = [];                                          % U^2 - d V^2, when it is exact in doubles
+    if max(max(conv2(abs(U), abs(U)) + d * conv2(abs(V), abs(V)))) < 2^53
+        E = conv2(U, U) - d * conv2(V, V);
+    end
+    rd = sqrt(d);
+    G = struct('U', U, 'V', V, 'E', E, 'Lo', U + rd * (1 - 4*eps) * V, 'Hi', U + rd * (1 + 4*eps) * V);
+end
+
+function M = surdPow(A, n, d)
+% Rows: A^0 .. A^n in Z[sqrt d], as [rational part, sqrt(d) part].
+    M = zeros(n + 1, 2);  M(1,:) = [1 0];
+    for k = 1:n, M(k+1,:) = surdMul(M(k,:), A, d); end
+end
+
+function m = surdMul(x, y, d)
+    m = [x(1)*y(1) + d*x(2)*y(2), x(1)*y(2) + x(2)*y(1)];
 end
 
 function S = shiftTo(P, x0)
