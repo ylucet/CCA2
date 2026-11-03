@@ -800,10 +800,10 @@ it is bookkeeping rather than new mathematics.
     `AlgCon`'s exact conic storage (`Vname`, `EcQ`, `FC`) still lives on `QuaCon` — it lifts when
     the assembly needs it, so its shape is driven by a real caller rather than guessed.
 - [x] **The rest of the guard exercises** -- DONE 2026-11-02 overnight: 10 `todo` ones exercised or
-  classified, the `symbolic-input` ones in a new SLOW file (guardExerciseSymbolicTest, 13 guards) or
-  classified shadowed/internal with the reason. Three guards that could NEVER fire were fixed on
-  the way (addQuaPar:degenerateConic compared a NaN; conjConvexOverPiece on an empty piece and the
-  overlay/arrangement budgets were unreachable without options). Left `todo`, no fixture yet:
+  classified, the `symbolic-input` ones in a new SLOW file (guardExerciseSymbolicTest, 12 guards) or
+  classified shadowed/internal with the reason. Two guards that could NEVER fire were fixed on the
+  way (addQuaPar:degenerateConic compared a NaN; conjConvexOverPiece on an empty piece raised
+  MATLAB:NonScalarInput); the arrangement budgets became options so a test can reach them. Left `todo`, no fixture yet:
   bridgeFaceAlg bigZContent / branchOverflow / witnessOverflow, envelopeAssemble:irrationalStraightFacet.
   Was: in the order the harness's own reason classes give:
   the 5 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a

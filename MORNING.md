@@ -15,11 +15,12 @@ winner); (2) guard exercises -- the `todo` ones, then the `symbolic-input` ones 
   so Example 2 is still declined by default, as decided).
 - Item 1, what is left (a92887d, DECISIONS): the remaining extra faces touch the winner exactly at
   cell corners. Two corner fixes were tried and reverted (no gain, or +1 face at 4x the time).
-- Item 2 DONE: 19 more error checks now have a test that triggers them, plus 1 more
-  test-only option (13 fast/normal, 13 in a new slow file), and the 7 that cannot be triggered are
-  labelled with the reason. Two checks that could never fire were FIXED: a curved edge with no
-  quadratic part crashed on a NaN, and an empty region crashed the convex-piece conjugate before
-  its own message. 4 remain untested (need big fixtures that don't exist yet).
+- Item 2 DONE: 20 more error checks now have a test that triggers them (8 in the fast/normal
+  suites, 12 in a new slow file), and 6 that no valid input can reach are labelled with the
+  reason. Two checks that could never fire were FIXED: a curved edge with no quadratic part
+  crashed on a NaN, and an empty region crashed the convex-piece conjugate before its own message.
+  4 remain untested (they need big fixtures that don't exist yet).
+
 ## What is broken
 ## Needs a decision
 ## Where I stopped
