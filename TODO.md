@@ -799,7 +799,13 @@ it is bookkeeping rather than new mathematics.
   - **What is NOT built, and is task 2's job:** the PRODUCER. Nothing fills `FP`/`FB` yet, and
     `AlgCon`'s exact conic storage (`Vname`, `EcQ`, `FC`) still lives on `QuaCon` — it lifts when
     the assembly needs it, so its shape is driven by a real caller rather than guessed.
-- [ ] **The rest of the guard exercises**, in the order the harness's own reason classes give:
+- [x] **The rest of the guard exercises** -- DONE 2026-11-02 overnight: 10 `todo` ones exercised or
+  classified, the `symbolic-input` ones in a new SLOW file (guardExerciseSymbolicTest, 13 guards) or
+  classified shadowed/internal with the reason. Three guards that could NEVER fire were fixed on
+  the way (addQuaPar:degenerateConic compared a NaN; conjConvexOverPiece on an empty piece and the
+  overlay/arrangement budgets were unreachable without options). Left `todo`, no fixture yet:
+  bridgeFaceAlg bigZContent / branchOverflow / witnessOverflow, envelopeAssemble:irrationalStraightFacet.
+  Was: in the order the harness's own reason classes give:
   the 5 `todo` ones (constructible, just not yet built), then the 17 `symbolic-input` ones as a
   SLOW-bucket file (they need a symbolic `region`/`plq_1p`, so they do not belong in the fast one).
   The `internal` and `loop-safety` classes are a deliberate stop, not a backlog: firing them needs
