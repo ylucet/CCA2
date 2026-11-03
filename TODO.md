@@ -55,7 +55,10 @@
       triangle 2172 -> 1760 -> 1162 -> 620 -> 492 -> 384 -> 298 -> 158 -> 138 faces, 2026-10-30; 134 own a point).
       2026-11-03: the 4 faces at the IRRATIONAL corner (1/sqrt5, 1 - 1/sqrt5) no longer arise (per-pair
       subdivision + overlay); the Q(sqrt d) blow-up was built, had no effect, and was reverted.
-      Left: 140 faces, 92 own a point strictly; 12 own none even at 1e-6 slack. DECISIONS 2026-11-03.
+      Same day (second): those 12 were mostly at (1/(2 sqrt5), ...) corners on BRANCH lines; corners
+      added, algBranch's double-root window made exact (it caused holes once they dropped): 140 -> 134
+      faces. Left: 4 faces held only by a tie row between two irrational faces (algFaceBelow does not
+      blow up at corners). DECISIONS 2026-11-03 (second).
       Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeSubdivisionAlg proves emptiness from CONIC rows only (pieceLive) and

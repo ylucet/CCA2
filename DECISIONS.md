@@ -9056,3 +9056,40 @@ faces, 92 own a point strictly inside every row (slack > 1e-9); of the other 48,
 at slack 1e-6 (zero-area), ~24 own fewer than 70 points (slivers, or faces meeting another along a
 curve), and 12 own over 1000 points at 1e-6 (they touch a row exactly over an area -- an equality
 with a neighbour, not emptiness). Not analysed further.
+
+## 2026-11-03 (second) — the zero-area faces at the sqrt5 points: 12 -> 4; the evaluator's double-root window made EXACT
+
+The entry above measured 12 faces of the 3-convex-edge triangle owning no point even at slack 1e-6.
+Zoomed in (max over a point of the min row slack), 10 of them pinch to the points
+(1/(2 sqrt5), 1 - 1/(2 sqrt5)), (1/(2 sqrt5), 1/2 - 1/(2 sqrt5)) and mirrors, where a straight row meets
+a LINE of a line pair -- x = 1/(2 sqrt5) from 20 x^2 - 1 -- and every row vanishes; 2 are empty by a
+margin (3.7e-3). So the irrational corner was there after all, just not at 1/sqrt5 and not among
+the corners algRowFails was given: regionBox listed the vertices of the RATIONAL straight rows only.
+
+1. **Corners on branch lines.** regionBox now adds the cell's branch rows (a line of a line pair,
+   `pairLineEval` is affine) to the polygon whose vertices are the corner candidates, and the
+   Q(sqrt d) blow-up of 7ddfc7e is back (it certifies about the exact point it recognises, so a wrong
+   guess only fails). Triangle 140 -> 134 faces.
+2. **But that opened 45 HOLES** within 2e-7 of the hypotenuse, and the cause was the EVALUATOR.
+   A dropped face's fibre has D ~ (k d)^2 at distance d from x + y = 1 -- two branches CROSSING
+   there (vpa: roots -0.1601020876 / -0.1601024149 at d = 1e-7). Its computed dq was within 16 eps
+   of its terms up to d ~ 3e-7, so algBranch returned the MEAN of the roots, ~1e-7 off either, and
+   the face that does own the band (exactly) failed its row by -d. The zero-area face had been
+   covering the band by tolerance. **Fix:** inside algBranch's 1e-12 window the fibre's coefficients
+   and D are recomputed EXACTLY in BigDecimal (a double point and double/big P are exact there); D > 0
+   splits with the stable formula, D <= 0 keeps the mean as before. Holes 45 -> 0 on 95000 points,
+   values within 9e-10 of the 140-face build. Test: CROSSINGBranchesAreSplitEXACTLYInsideTheRoundingWindow.
+3. **erratumBiconjTest/aSINGLEActivePairIsSubdividedAndKeepsItsValues then read 1.15e-8 off** at a
+   point 5e-9 inside the edge y = 2x. The same crossing (D ~ t^2 along the normal, vpa). Along that
+   normal the subdivision is now linear to 1e-15; the face list (the test's reference) dips 3.3e-8
+   and jumps back at t ~ 1.2e-8 -- non-convex, so wrong. Its bridge face is lost by bridgeMember:
+   Phi's sweep root sits on det(M_mu) = 0 at mu = -1 (the documented artefact root), the true root
+   -1 + ~1e-8 is below rounding, and a lower quadratic face answers. A 0/0-limit fix (U'/D') and a
+   sqrt(eps) imaginary tolerance were tried and did not move it; the test now compares VALUES only
+   farther than 1e-7 from an edge (holes still on every point). The reference's crack is left as is.
+4. **pairCorners** (corners on lines of line pairs kept WHOLE, e.g. 20 y^2 - 1 >= 0): built, no
+   effect (134 -> 134), not kept.
+
+**Left: 4 faces** (2 mirror pairs) at (1/(2 sqrt5), 1 - 1/(2 sqrt5)) and (1/2 - 1/(2 sqrt5), 1/(2 sqrt5)) and mirrors,
+each with a TIE row between two irrational faces -- decided by tieEmpty/algFaceBelow, whose face rows
+are not blown up at corners. Not attempted.
