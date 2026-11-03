@@ -48,6 +48,14 @@ classdef bridgeFaceRatTest < matlab.unittest.TestCase
             testCase.verifyLessThan(worst, 1e-9, 'the cut face must equal the restricted definition');
         end
 
+        function aPairAdmittingNoPartOfTheParabolaIsRefusedByName(testCase)
+        % The pair's half-planes exclude every point (0 s1 + 0 s2 - 1 > 0 never holds), so no
+        % rational witness exists -- bridgeFaceRat:noWitness, not a face built on nothing.
+            fx = fixtureByName('shifted');
+            testCase.verifyError(@() bridgeFaceRat(fx.n1, fx.d1, fx.n2, fx.d2, [0 0 -1]), ...
+                                 'bridgeFaceRat:noWitness');
+        end
+
         function theDENOMINATORIsLINEARWhichIsTheWholePoint(testCase)
         % The face is a quadratic numerator over a LINEAR denominator -- exactly the `Rat` level of
         % the lattice, needing no FP/FB and no branch index. If this ever came out quadratic the
