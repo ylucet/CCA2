@@ -85,6 +85,11 @@ function cj = conjConvexOverPiece(r, Q, L, c, dualVars)
     end
     Q = (Q + Q')/2;
 
+    % AN EMPTY PIECE has no dual cell (2026-11-02): region() returns a 0x0 array for an infeasible
+    % system, and linearForm then raised MATLAB:NonScalarInput -- the refusal below never spoke.
+    if isempty(r)
+        error('conjConvexOverPiece:noCell', 'the piece is empty, so no dual cell is produced.');
+    end
     [A, b, lin] = r.linearForm;
     if ~all(lin)
         error('conjConvexOverPiece:nonAffineFacet', ...
