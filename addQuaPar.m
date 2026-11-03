@@ -191,7 +191,10 @@ function [Xc, Yc, p, q] = parabolaParam(Ec)
         s = sign(c); q = sqrt(s*c); p = b/(2*s*q);
     end
     nrm = p^2 + q^2;
-    if nrm < 1e-12
+    % NOT "nrm < 1e-12": an Ec with no quadratic part (a = b = c = 0 -- QuaPar accepts it, since
+    % b^2 - 4ac = 0) makes s = 0 and q = 0/0 = NaN, and NaN < 1e-12 is false, so the refusal never
+    % fired and `roots` raised on the NaN downstream (guardExerciseTest, 2026-11-02).
+    if ~(nrm >= 1e-12)
         error('addQuaPar:degenerateConic', 'parabolaParam: Ec is degenerate (p=q=0).');
     end
     Alin = (d*p+e*q)/nrm; Blin = (-d*q+e*p)/nrm; Clin = f;

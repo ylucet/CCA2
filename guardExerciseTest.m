@@ -33,6 +33,28 @@ classdef guardExerciseTest < matlab.unittest.TestCase
     methods (Test)
 
         % ---- argument and type validation, all reachable from a legal call ------------------------
+        function exactQZeroDenominator(t)                                    % reachable
+            t.verifyError(@() exactQ(1, 0), 'exactQ:zeroDenominator');
+            t.verifyError(@() exactQ(1, 1, 0), 'exactQ:zeroDenominator');
+        end
+
+        function addQuaParTwoCurvedEdgesInOneFace(t)                         % reachable
+            % Two parabolic edges on one triangle: a legal QuaPar, outside what addQuaPar builds.
+            V = [0 0; 1 0; 0 1];  E = [1 2 1; 2 3 1; 3 1 1];
+            Ec = zeros(3,6);  Ec(1,:) = [1 0 0 0 -1 0];  Ec(3,:) = [0 0 1 -1 0 0];
+            q  = QuaPar(V, E, Ec, [0 0 0 0, 2, 0, 2, 0, 0, 0], repmat([1 0], 3, 1));
+            t.verifyError(@() addQuaPar(q, triangleQuaPar()), 'addQuaPar:notImplemented');
+        end
+
+        function addQuaParCurvedEdgeWithNoQuadraticPart(t)                   % reachable
+            % Ec = [0 0 0 0 -1 0] passes QuaPar's parabolic-edge check (b^2 - 4ac = 0) but is a
+            % line. Until 2026-11-02 the refusal compared a NaN and never fired; roots raised.
+            V = [0 0; 1 0; 0 1];  E = [1 2 1; 2 3 1; 3 1 1];
+            Ec = zeros(3,6);  Ec(1,:) = [0 0 0 0 -1 0];
+            q  = QuaPar(V, E, Ec, [0 0 0 0, 2, 0, 2, 0, 0, 0], repmat([1 0], 3, 1));
+            t.verifyError(@() addQuaPar(q, triangleQuaPar()), 'addQuaPar:degenerateConic');
+        end
+
         function quaParNargin(t)                                             % reachable
             t.verifyError(@() QuaPar(1, 2, 3), 'QuaPar:nargin');
         end
@@ -288,9 +310,7 @@ classdef guardExerciseTest < matlab.unittest.TestCase
         % The count is not the point; the NAMES are, so the failure message can say which guard
         % arrived without an exercise.
             remainder = { ...
-                'addQuaPar:degenerateConic',                'todo'; ...
                 'addQuaPar:internal',                       'internal'; ...
-                'addQuaPar:notImplemented',                 'todo'; ...
                 'addQuaPol:internal',                       'internal'; ...
                 'biconjAtoms:subdivision',                         'internal'; ... % a face that is not a simple polygon: QuaPol's constructor cannot build one
                 'biconjAtoms:uncovered',                    'internal'; ... % a tie whose forms no atom holds: every form is built from an atom's own vertex, edge or piece
@@ -335,7 +355,6 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'cellInterior:embed',                       'internal'; ...
                 'envelopeSubdivisionAlg:faceKind',                 'internal'; ...
                 'exactQ:internal',                          'internal'; ...
-                'exactQ:zeroDenominator',                   'todo'; ...
                 'fanUnboundedFace:baseVertex',              'symbolic-input'; ...
                 'fanUnboundedFace:noVertex',                'symbolic-input'; ...
                 'fanUnboundedFace:nonAffineFacet',          'symbolic-input'; ...
