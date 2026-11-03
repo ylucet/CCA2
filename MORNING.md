@@ -24,6 +24,13 @@ winner); (2) guard exercises -- the `todo` ones, then the `symbolic-input` ones 
   4 remain untested (they need big fixtures that don't exist yet).
 
 ## What is broken
+Nothing known. Tests on this branch: fast 821/0, normal 34/0, slow 122/0 (+2 known-incomplete),
+Example 2 long check (limit lifted) 3/0.
+
 ## Needs a decision
+None.
+
 ## Where I stopped
-Both items done. Long Example 2 check (budget lifted) still running at the time of writing.
+Both items done; the run is finished. Branch not merged or pushed. What could come next on item 1:
+the extra faces touch the winner exactly at cell corners, along the cell's edge (DECISIONS
+2026-11-02 (third)); a certificate along the edge itself is the idea not yet tried.
