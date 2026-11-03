@@ -31,7 +31,9 @@ biconjQ subdivides Example 2, slow test against EnvelopeMin on 4000 points.
 Nothing known.
 
 ## Needs a decision
-- Example 2 by default: subdivide (~30 min in biconjQ now) or decline (current)? I kept DECLINE
+None. DECIDED 2026-11-02 by Yves: keep declining Example 2 by default (option a); branch merged to main.
+
+- (resolved) Example 2 by default: subdivide (~30 min in biconjQ now) or decline (current)? I kept DECLINE
   with a piece budget, reversible by one number. Options: (a) keep declining [my pick until the
   tangent faces are cut]; (b) raise the default budget so biconjQ subdivides it (the slow
   Example 2 suite would take ~30 min more); (c) opt-in only, skipping the ~3 min of pair

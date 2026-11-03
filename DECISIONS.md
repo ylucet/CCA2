@@ -8995,3 +8995,8 @@ unwitnessed), 2134 pick combinations, 1247 s -- one run on a shared machine. Pro
 (second) from the first 21 tuples: ~12000 faces and ~4 h. The first tuples are the heavy ones, so
 the 30-tuple extrapolation (~8600) overstated it too. The budget's bound (11567) is a loose upper
 bound: it counts every pick combination, most of which the overlay prunes.
+
+**Decided 2026-11-02 (Yves):** biconjQ keeps DECLINING Example 2's overlay by default
+(`overlayBudget` 4000 against a bound of 11567) and returns the EnvelopeMin; `overlayBudget = Inf`
+subdivides it (~30 min on the shared machine, `erratumBiconjEx2SubdivisionTest`, verylong).
+Revisit once the tangent faces are cut.
