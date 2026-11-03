@@ -57,8 +57,8 @@
       subdivision + overlay); the Q(sqrt d) blow-up was built, had no effect, and was reverted.
       Same day (second): those 12 were mostly at (1/(2 sqrt5), ...) corners on BRANCH lines; corners
       added, algBranch's double-root window made exact (it caused holes once they dropped): 140 -> 134
-      faces. Left: 4 faces held only by a tie row between two irrational faces (algFaceBelow does not
-      blow up at corners). DECISIONS 2026-11-03 (second).
+      faces. Then the face row against a RATIONAL face: 134 -> 84, zero-area 4 -> 2 (a mirror pair at
+      (1/(2 sqrt5), 1 - 1/(2 sqrt5))). DECISIONS 2026-11-03 (second), (third).
       Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeSubdivisionAlg proves emptiness from CONIC rows only (pieceLive) and

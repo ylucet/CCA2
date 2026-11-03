@@ -9093,3 +9093,20 @@ the corners algRowFails was given: regionBox listed the vertices of the RATIONAL
 **Left: 4 faces** (2 mirror pairs) at (1/(2 sqrt5), 1 - 1/(2 sqrt5)) and (1/2 - 1/(2 sqrt5), 1/(2 sqrt5)) and mirrors,
 each with a TIE row between two irrational faces -- decided by tieEmpty/algFaceBelow, whose face rows
 are not blown up at corners. Not attempted.
+
+## 2026-11-03 (third) — a face row against a RATIONAL face: the triangle 134 -> 84 faces, zero-area 4 -> 2
+
+The 4 zero-area faces left by (second) are cut off by TIE rows. Captured the failing tieEmpty calls
+and matched them to the faces: algFaceBelow's face-against-face fallback was reached, but
+`faceRowPolys` returned [] -- one of the two faces is RATIONAL (z = -C/B, degree 1 in z) and the
+face row required both quadratic, so the row was silently dropped. Added modes 'ql'/'lq': with
+q = z_lin the row is exactly quadOK's question, the polynomials {A, B_lin, B B_lin - 2 A C_lin,
+A C_lin^2 - B C_lin B_lin + C B_lin^2, D} (scaled by B_lin, sign carried, and B_lin^2). Plus the
+face-row GATE (lo <= hi at every grid point where both exist) now counts only grid points in the
+piece: inBox on the point, and the own rows.
+
+**Measured** (3-convex-edge triangle): 134 -> 88 faces (rational face row) -> 84 (gate); holes 0
+on 215000 points, max |value - 140-face build| 1e-9. Zero-area faces 4 -> 2: the mirror pair at
+(1/(2 sqrt5), 1 - 1/(2 sqrt5)), not analysed further. Tried and not kept, each no effect:
+corner candidates on lines of line pairs kept whole (pairCorners); line pairs of branch rows as
+divisors (pairFactors); the piece's algebraic rows passed into tieEmpty as `own` (also 4x slower).
