@@ -1,4 +1,4 @@
-function [g, info] = envelopeSubdivision(env)
+function [g, info] = envelopeSubdivision(env, opts)
 % envelopeSubdivision  Turn an assembled envelope's FACE LIST into one subdivision, by building the ARRANGEMENT of
 %   its regions once rather than folding the faces together.
 %
@@ -9,6 +9,8 @@ function [g, info] = envelopeSubdivision(env)
 %   that only the full max deletes. An arrangement never forms a partial max at all.
 %
 % [input]  env : as `envelopeAssemble` returns it, ideally after `envelopePrune`
+%          opts : (optional) struct; .maxCurves (default 40) is the arrangement's curve budget, past
+%                which envelopeSubdivision:arrangementSize refuses -- see that refusal below
 % [output] g   : QuaCon -- the envelope, where every face of it is quadratic
 %          info : .curves, .cells, .refined, .faces
 %
@@ -56,9 +58,11 @@ function [g, info] = envelopeSubdivision(env)
 % (DECISIONS.md 2026-09-17). `envelopeSubdivision:bridgeFaces` names that, and `envelopeEval` answers for
 % such an envelope.
 
-    if nargin ~= 1
-        error('envelopeSubdivision:nargin', 'expects (env).');
+    if nargin < 1 || nargin > 2
+        error('envelopeSubdivision:nargin', 'expects (env) or (env, opts).');
     end
+    if nargin < 2 || isempty(opts), opts = struct(); end
+    if ~isfield(opts, 'maxCurves'), opts.maxCurves = 40; end
     if ~isstruct(env) || ~all(isfield(env, {'quad', 'bridge'}))
         error('envelopeSubdivision:shape', 'env must be what envelopeAssemble returns.');
     end
@@ -109,7 +113,7 @@ function [g, info] = envelopeSubdivision(env)
     % poly2 kink at c = -2 (2026-10-11): 23 curves subdivision in minutes; 85 curves passed 370 cells at
     % curve 30 and did not finish in 90 minutes. Refuse by name past the budget -- the face list
     % is still the envelope, and envelopeEval answers for it.
-    maxCurves = 40;
+    maxCurves = opts.maxCurves;
     if size(C,1) > maxCurves
         error('envelopeSubdivision:arrangementSize', ...
             ['the arrangement has %d curves (budget %d), and a global arrangement of that size ' ...

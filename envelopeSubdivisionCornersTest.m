@@ -13,6 +13,14 @@ classdef envelopeSubdivisionCornersTest < matlab.unittest.TestCase
 % verified against the definition, and the subdivision is a re-arrangement of the same faces.
 
     methods (Test)
+        function anARRANGEMENTPastItsCurveBudgetIsRefusedByName(t)
+        % The curve budget (opts.maxCurves, default 40): the poly2 kink at c = -2 reaches it inside
+        % biconjQ (85 curves, caught there); a budget of 0 reaches it on this fixture.
+            env = fixture();
+            t.verifyError(@() envelopeSubdivision(env, struct('maxCurves', 0)), ...
+                          'envelopeSubdivision:arrangementSize');
+        end
+
         function theDOMAINEndsWhereTheCornersWEDGEDoes(t)
             [env, corner] = fixture();
             [g, info] = envelopeSubdivision(env);

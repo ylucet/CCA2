@@ -14,6 +14,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
 %                 face lies on one side of each and records it -- cutTriangles' rational lines
 %          opts : (optional) struct; .overlayBudget (default 4000, Inf lifts it) bounds the pieces
 %                 the overlay of several pairs may visit -- see minOverlay
+%                 .maxCells (default 3000) bounds the arrangement's cells -- arrangementSize
 % [output] subdivision : struct array, one entry per face, with
 %                   .kind  'quad' | 'bridge'
 %                   .num, .den   the value, when kind is 'quad'
@@ -56,6 +57,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
     if nargin < 3, cuts = zeros(0,3); end
     if nargin < 4 || isempty(opts), opts = struct(); end
     if ~isfield(opts, 'overlayBudget'), opts.overlayBudget = 4000; end
+    if ~isfield(opts, 'maxCells'), opts.maxCells = 3000; end
     % SEVERAL PAIRS: a cell array of pair envelopes is the MINIMUM over them -- an EnvelopeMin with no
     % triangle face. Each pair is subdivided ALONE and the subdivisions are OVERLAID (minOverlay,
     % 2026-10-31). Until then all the pairs' curves went into one arrangement resolved per cell as a
@@ -70,7 +72,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
     if numel(envs) > 1
         subs = cell(1, numel(envs));  infos = cell(1, numel(envs));
         for g = 1:numel(envs)
-            [subs{g}, infos{g}] = envelopeSubdivisionAlg(envs{g}, dom, cuts);
+            [subs{g}, infos{g}] = envelopeSubdivisionAlg(envs{g}, dom, cuts, opts);
         end
         [subdivision, info] = minOverlay(subs, infos, opts.overlayBudget);
         return
@@ -120,7 +122,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
     % Example 2's three pairs passed 60000 cells globally (DECISIONS 2026-10-30 (seventh)).
     skips = {zeros(1,0)};
     nSkip = 0;
-    maxCells = 3000;
+    maxCells = opts.maxCells;
     for j = 1:size(C,1)
         next = {};  nextSk = {};
         for k = 1:numel(cells)

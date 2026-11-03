@@ -92,6 +92,13 @@ classdef envelopeSubdivisionAlgTest < matlab.unittest.TestCase
                 struct('overlayBudget', 0)), 'envelopeSubdivisionAlg:overlaySize');
         end
 
+        function anARRANGEMENTPastItsCellBudgetIsRefusedByName(t)
+        % The cell budget (opts.maxCells, default 3000): the poly2 kink reaches it through biconjQ's
+        % subdividePair; a budget of 0 reaches it on any fixture with a curve.
+            t.verifyError(@() envelopeSubdivisionAlg(fixture(0), zeros(0,3), zeros(0,3), ...
+                struct('maxCells', 0)), 'envelopeSubdivisionAlg:arrangementSize');
+        end
+
         function theARGUMENTSAreChecked(t)
             t.verifyError(@() envelopeSubdivisionAlg(), 'envelopeSubdivisionAlg:nargin');
             t.verifyError(@() envelopeSubdivisionAlg(struct('a', 1)), 'envelopeSubdivisionAlg:shape');
