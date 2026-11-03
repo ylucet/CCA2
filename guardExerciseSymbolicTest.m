@@ -36,6 +36,20 @@ classdef guardExerciseSymbolicTest < matlab.unittest.TestCase
             t.verifyError(@() convEnvUnbounded(r, x^2 - y^2, [x y]), 'convEnvUnbounded:notPointed');
         end
 
+        function convEnvUnboundedWedgeWithTwoVertices(t)                     % contract: fanUnboundedFace emits single-apex wedges
+            % The first quadrant cut by x + y >= 1: recession cone a wedge, two finite vertices.
+            syms x y
+            r = region([-x, -y, 1-x-y], [x y]);
+            t.verifyError(@() convEnvUnbounded(r, x*y, [x y]), 'convEnvUnbounded:notWedge');
+        end
+
+        function convEnvUnboundedHalfStripWithThreeVertices(t)               % contract: fanUnboundedFace emits two-vertex half-strips
+            % 0 <= x <= 2, y >= 0, y >= x - 1: parallel rays, three finite vertices.
+            syms x y
+            r = region([-x, x-2, -y, x-1-y], [x y]);
+            t.verifyError(@() convEnvUnbounded(r, x*y, [x y]), 'convEnvUnbounded:notHalfStrip');
+        end
+
         function conjConvexOverPieceNotConvex(t)                             % reachable
             syms x y s1 s2
             r = region([-x, -y, x+y-2], [x y]);
