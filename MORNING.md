@@ -13,6 +13,8 @@ winner); (2) guard exercises -- the `todo` ones, then the `symbolic-input` ones 
 - Item 1, step 2 (c0d5064): a face is only compared where it actually carries the value.
   Example 2 pairs -> 33/91/48 faces; the overlay's size bound 11567 -> 7551 (default limit 4000,
   so Example 2 is still declined by default, as decided).
+- Item 1, measured end to end: Example 2 fully subdivided (limit lifted) has 6109 faces on this
+  branch against 7949 on main, 23% fewer (one run each, shared machine: 1537 s vs 1794 s).
 - Item 1, what is left (a92887d, DECISIONS): the remaining extra faces touch the winner exactly at
   cell corners. Two corner fixes were tried and reverted (no gain, or +1 face at 4x the time).
 - Item 2 DONE: 20 more error checks now have a test that triggers them (8 in the fast/normal
