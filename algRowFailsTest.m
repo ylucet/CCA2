@@ -139,6 +139,72 @@ classdef algRowFailsTest < matlab.unittest.TestCase
             t.verifyFalse(algRowFails(a, [-1 1 -1 1], inBox, 4, {W}, [0 0]), 'mirrored');
         end
 
+        function aRowZEROAtAnIRRATIONALCorner(t)
+        % The 3-convex-edge triangle's last 4 faces (2026-10-30 (third)) meet at (1/sqrt5, 1 - 1/sqrt5),
+        % where x + y = 1 meets 5 x^2 = 1. Here c = 5 x^2 + x + y - 2 is < 0 on the region
+        % {x + y <= 1, 5 x^2 <= 1} near that corner except AT it, and every box containing it holds
+        % points outside where c > 0: the row c >= 0 fails on the region only via a blow-up, which
+        % at an irrational corner must be done over Q(sqrt5).
+            FP = zeros(3,2,2);  FP(1,1,2) = -1;                         % -z + c = 0: z = c
+            FP(3,1,1) = 5;  FP(2,1,1) = 1;  FP(1,2,1) = 1;  FP(1,1,1) = -2;
+            a = struct('FP', FP, 'FB', 1, 'num', zeros(1,10), 'den', 1, 'side', -1);  % c >= 0
+            fac = {[1 -1; -1 0], [1; 0; -5]};                          % 1 - x - y, 1 - 5 x^2
+            inBox = @(b) ~any(cellfun(@(P) polySignOn(P, b, @(~) true, 0) == -1, fac));
+            p = [1/sqrt(5), 1 - 1/sqrt(5)];
+            box = [p(1) - 0.1, p(1) + 0.1, p(2) - 0.1, p(2) + 0.1];
+            t.verifyFalse(algRowFails(a, box, inBox, 6, fac), 'without the corner: undecided');
+            t.verifyTrue(algRowFails(a, box, inBox, 6, fac, p), 'blown up over Q(sqrt5)');
+            t.verifyFalse(algRowFails(a, box, inBox, 6, fac, p + [1e-6 0]), 'a corner beside it');
+            % the row holding instead: -c >= 0 is TRUE on the region, never certified as failing
+            a.side = 1;
+            t.verifyFalse(algRowFails(a, box, inBox, 6, fac, p), 'a row that holds');
+            % the definition, sampled: c < 0 on the region in the box, the corner excepted
+            rng(7);  X = [box(1) + 0.2*rand(20000,1), box(3) + 0.2*rand(20000,1); p + 1e-5*randn(2000,2)];
+            X = X(X(:,1) + X(:,2) <= 1 & 5*X(:,1).^2 <= 1, :);
+            t.verifyLessThan(max(5*X(:,1).^2 + X(:,1) + X(:,2) - 2), 0);
+        end
+
+        function aCERTIFIEDRowAtAnIRRATIONALCornerFailsRandomInputs(t)
+        % The oracle for the Q(sqrt d) charts: rows vanishing at p = (a + b sqrt d) / q, the region
+        % the wedge of two lines through p with coefficients in Q (both a multiple of one surd line
+        % b2 = -b1, so x + y = (a1 + a2) / q is rational) and the quadratic (x - p1)(x - p1').
+        % Wherever algRowFails with the corner says true, no sample of the region holds every row.
+            rng(33);  nCert = 0;  nNeed = 0;
+            for trial = 1:400
+                d = randsample([2 3 5 7], 1);  qd = randi(4);
+                ab = randi([-3 3], 2, 2);  ab(:,2) = ab(1,2) * [1; -1];  if ab(1,2) == 0, ab(:,2) = [1; -1]; end
+                p = ((ab(:,1) + ab(:,2) * sqrt(d)) / qd).';
+                % (x - p1)(x - p1') qd^2 = qd^2 x^2 - 2 a1 qd x + a1^2 - d b1^2
+                s1 = 2*randi(2) - 3;  s2 = 2*randi(2) - 3;
+                L1 = s1 * [-(ab(1,1) + ab(2,1)) qd; qd 0];
+                L2 = zeros(3,1);  L2(3) = qd^2;  L2(2) = -2*ab(1,1)*qd;  L2(1) = ab(1,1)^2 - d*ab(1,2)^2;  L2 = s2 * L2;
+                fac = {L1, L2};
+                rows = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}, 'side', {});
+                for r = 1:2
+                    c = randi([-3 3]) * [L1; 0 0] + randi([-3 3]) * [L2, zeros(3,1)];  % zero at p
+                    FP = zeros(3,2,2);  FP(1,1,2) = 2*randi(2) - 3;  FP(:,:,1) = -FP(1,1,2) * c;
+                    rows(r) = struct('FP', FP, 'FB', 1, 'num', zeros(1,10), 'den', 1, 'side', 2*randi(2) - 3);
+                end
+                h = 0.25 + rand / 2;
+                box = [p(1) - h, p(1) + h, p(2) - h, p(2) + h];
+                inBox = @(b) ~any(cellfun(@(P) polySignOn(P, b, @(~) true, 0) == -1, fac));
+                if ~algRowFails(rows, box, inBox, 4, fac, p), continue, end
+                nCert = nCert + 1;
+                X = [box(1) + 2*h * rand(3000,1), box(3) + 2*h * rand(3000,1); p + 1e-4 * randn(500, 2)];
+                ev = @(P, X) polyval2(P, X);
+                X = X(ev(L1, X) >= 0 & ev(L2, X) >= 0 & any(abs(X - p) > 1e-12, 2), :);
+                holds = true(size(X,1), 1);
+                for r = 1:2
+                    z = algBranch(rows(r).FP, X, rows(r).FB);
+                    holds = holds & rows(r).side * (0 - z) >= 0;
+                end
+                t.verifyFalse(any(holds), sprintf('trial %d: every row holds at a sample of the region', trial));
+                if ~algRowFails(rows, box, inBox, 4, fac), nNeed = nNeed + 1; end
+            end
+            t.verifyGreaterThan(nCert, 20, 'too few certified trials to mean anything');
+            t.verifyGreaterThan(nNeed, 5, 'too few certified trials needed the corner');
+        end
+
         function aCERTIFIEDRowAtACornerFailsOnTheWedgeRandomInputs(t)
         % The definition at a corner: rows vanishing at a random dyadic corner p, the region a random
         % wedge at p (two lines through p as factors); wherever algRowFails with the corner says
@@ -329,4 +395,14 @@ function a = randRow()
     br = [-2 -1 1 2];
     a = struct('FP', FP, 'FB', br(randi(4)), 'num', [0 0 0 0, randi([-3 3], 1, 6)], ...
                'den', randi(3), 'side', 2*randi(2) - 3);
+end
+
+function v = polyval2(P, X)
+% A dense polyN at the rows of X.
+    v = zeros(size(X,1), 1);
+    for i = 1:size(P,1)
+        for j = 1:size(P,2)
+            v = v + P(i,j) * X(:,1).^(i-1) .* X(:,2).^(j-1);
+        end
+    end
 end
