@@ -490,19 +490,31 @@ function r = faceRowPolys(a, factors)
 % A FACE ROW: z_k > z_w, z_k = a's branch, z_w = a.W's, both quadratic in z. See FACE AGAINST FACE.
     r = [];
     Fk = a.FP;  Fw = a.W.FP;
-    if nzOf(Fk) ~= 3 || nzOf(Fw) ~= 3, return, end
-    hiK = any(a.FB == [-1 2]);  hiW = any(a.W.FB == [-1 2]);
-    if ~hiK && ~any(a.FB == [1 -2]), return, end
-    if ~hiW && ~any(a.W.FB == [1 -2]), return, end
+    nk = nzOf(Fk);  nw = nzOf(Fw);
+    % ONE FACE RATIONAL (2026-11-03): z = -C/B, degree 1 in z. The 3-convex-edge triangle's last
+    % zero-area faces are cut off by a tie between a quadratic-fibre face and such a face, and this
+    % returned [] for it -- the row was dropped and the tie never certified.
+    if nk == 3 && nw == 2, mode = 'ql'; elseif nk == 2 && nw == 3, mode = 'lq';
+    elseif nk == 3 && nw == 3, mode = 'qq'; else, return
+    end
+    hiK = false;  hiW = false;
+    if nk == 3
+        hiK = any(a.FB == [-1 2]);  if ~hiK && ~any(a.FB == [1 -2]), return, end
+    elseif ~any(a.FB == [1 -1]), return
+    end
+    if nw == 3
+        hiW = any(a.W.FB == [-1 2]);  if ~hiW && ~any(a.W.FB == [1 -2]), return, end
+    elseif ~any(a.W.FB == [1 -1]), return
+    end
     persistent memo
     if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
     k1 = rowKey(Fk, 0, 1);  k2 = rowKey(Fw, 0, 1);
     key = '';
-    if ~isempty(k1) && ~isempty(k2), key = ['face|', k1, '#', k2]; end
+    if ~isempty(k1) && ~isempty(k2), key = ['face|', mode, '|', k1, '#', k2]; end
     if ~isempty(key) && isKey(memo, key)
         P = memo(key);
     else
-        P = faceSignPolys(Fk, Fw);
+        P = faceSignPolys(Fk, Fw, mode);
         if isempty(P), return, end
         if ~isempty(key)
             if memo.Count > 2000, memo.remove(memo.keys()); end
@@ -510,7 +522,12 @@ function r = faceRowPolys(a, factors)
         end
     end
     P = cellfun(@(p) divideOut(p, factors), P, 'UniformOutput', false);
-    r = struct('P', {P}, 'test', @(s) faceOK(s, hiK, hiW));
+    switch mode
+        case 'qq', test = @(s) faceOK(s, hiK, hiW);
+        case 'ql', test = @(s) s(2) ~= 0 && quadOK([s(1), s(2) * s(3), s(4), s(5)], hiK, 1);    % z_w >= z_k
+        case 'lq', test = @(s) s(2) ~= 0 && quadOK([s(1), s(2) * s(3), s(4), s(5)], hiW, -1);   % z_k <= z_w
+    end
+    r = struct('P', {P}, 'test', test);
 end
 
 function n = nzOf(FP)
@@ -518,19 +535,20 @@ function n = nzOf(FP)
     sz(end+1:3) = 1;  n = sz(3);
 end
 
-function P = faceSignPolys(Fk, Fw)
+function P = faceSignPolys(Fk, Fw, mode)
 % {A_w, A_k, D_w, D_k, P1, E1, P2, E2} with their squared factors divided out; {} on failure.
 % Exactly in doubles when every partial sum is bounded by 2^53, else in bigZ; the square-free
 % reduction of a polynomial past 2^53 is then SYMBOLIC (symSquareFreeSign) -- the tangency's G^2
 % is a factor of E2, and on erratum Example 2 E2 has degree ~20 and coefficients ~1e23.
+    if nargin < 3, mode = 'qq'; end
     big = ratQ.isBigPoly(Fk) || ratQ.isBigPoly(Fw);
     if ~big
-        bound = faceRaw(abs(Fk), abs(Fw), 1);
+        bound = faceRaw(abs(Fk), abs(Fw), 1, mode);
         big = any(cellfun(@(p) any(p(:) >= 2^53), bound));
     end
     try
         if big
-            Z = faceRaw(toZ(Fk), toZ(Fw), -1);
+            Z = faceRaw(toZ(Fk), toZ(Fw), -1, mode);
             P = cell(size(Z));
             for i = 1:numel(Z)
                 Z{i} = contentFree(Z{i});
@@ -542,7 +560,7 @@ function P = faceSignPolys(Fk, Fw)
                 end
             end
         else
-            P = faceRaw(Fk, Fw, -1);
+            P = faceRaw(Fk, Fw, -1, mode);
             P = cellfun(@squareFreeSign, P, 'UniformOutput', false);
         end
     catch
@@ -551,8 +569,21 @@ function P = faceSignPolys(Fk, Fw)
     if any(cellfun(@(p) isempty(p) || ~all(isfinite(p(:))), P)), P = {}; end
 end
 
-function P = faceRaw(Fk, Fw, sg)
+function P = faceRaw(Fk, Fw, sg, mode)
 % The raw polynomials; sg = -1 for the true ones, +1 (with |inputs|) for a bound on every partial sum.
+% mode 'ql' (w rational, z_w = -C_w/B_w) / 'lq' (k rational): {A, B_lin, B B_lin - 2 A C_lin,
+% A C_lin^2 - B C_lin B_lin + C B_lin^2, D} of the quadratic one -- q = z_lin in quadOK, scaled by
+% B_lin (the second, sign carried by B_lin) and B_lin^2 (the third, positive).
+    if nargin < 4, mode = 'qq'; end
+    if ~strcmp(mode, 'qq')
+        if strcmp(mode, 'ql'), Q = Fk; L = Fw; else, Q = Fw; L = Fk; end
+        A = Q(:,:,3);  B = Q(:,:,2);  C = Q(:,:,1);  Bl = L(:,:,2);  Cl = L(:,:,1);
+        G = padAdd(conv2g(B, Bl), 2*sg * conv2g(A, Cl));
+        H = padAdd(padAdd(conv2g(A, conv2g(Cl, Cl)), sg * conv2g(B, conv2g(Cl, Bl))), conv2g(C, conv2g(Bl, Bl)));
+        D = padAdd(conv2g(B, B), 4*sg * conv2g(A, C));
+        P = {A, Bl, G, H, D};
+        return
+    end
     Ak = Fk(:,:,3);  Bk = Fk(:,:,2);  Ck = Fk(:,:,1);
     Aw = Fw(:,:,3);  Bw = Fw(:,:,2);  Cw = Fw(:,:,1);
     Dw = padAdd(conv2g(Bw, Bw), 4*sg * conv2g(Aw, Cw));

@@ -95,9 +95,20 @@ function tf = rec(lo, hi, loD, hiD, b, ctx, depth)
     % decides two faces TOUCHING along a curve no quadratic follows -- erratum Example 2's pair
     % cells keep such faces beside their winner. Only for an hi(j) above lo at every grid point
     % where both exist: a face row costs an exact square-free reduction, once per pair.
+    % Only grid points IN THE PIECE veto (2026-11-03): outside the region (a point box inBox
+    % rejects) or where an own row fails, the faces' order says nothing about the piece. The gate
+    % only chooses which certificate to try; the certificate decides. 3-convex-edge triangle: 88 -> 84.
+    inPiece = arrayfun(@(i) ctx.inBox([X(i,1) X(i,1) X(i,2) X(i,2)]), (1:size(X,1))');
+    for t = 1:numel(ctx.own)
+        if ~any(inPiece), break, end
+        zo = algBranch(ratQ.bigToDouble(ctx.own(t).FP), X, ctx.own(t).FB);
+        qo = ratQ.evalFace(ctx.own(t).num, ctx.own(t).den, X);
+        inPiece = inPiece & isfinite(zo) & ctx.own(t).side * (qo - zo) >= -1e-9;
+    end
     for j = order
         zh = ZH(:,j);  both = isfinite(zl) & isfinite(zh);
-        if sum(both) < 6 || any(zl(both) > zh(both) + 1e-9 * max(1, abs(zh(both)))), continue, end
+        bad = both & inPiece & zl > zh + 1e-9 * max(1, abs(zh));
+        if sum(both) < 6 || any(bad), continue, end
         fr = struct('FP', lo.FP, 'FB', lo.FB, 'num', [], 'den', [], 'side', [], ...
                     'W', struct('FP', hi(j).FP, 'FB', hi(j).FB));
         if algRowFails([fr, ctx.own], b, ctx.inBox, inner, ctx.factors, ctx.corners)

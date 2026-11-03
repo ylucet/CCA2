@@ -356,6 +356,51 @@ classdef algRowFailsTest < matlab.unittest.TestCase
             t.verifyGreaterThan(nFin, 200 * nCert, 'most samples must have the branch, or this tests nothing');
         end
 
+        function aFACERowAgainstaRATIONALFace(t)
+        % z_q = sqrt(1 + x^2 + y^2) (z^2 - x^2 - y^2 - 1 = 0, upper) and the RATIONAL face
+        % z_l = 1 + (x^2 + y^2)/2 (2z - 2 - x^2 - y^2 = 0): z_q <= z_l, TOUCHING at the origin.
+        % Until 2026-11-03 a face row needed both fibres quadratic and dropped this one (the
+        % 3-convex-edge triangle's tie rows between a bridge and a rational face).
+            Fq = zeros(3,3,3);  Fq(1,1,3) = 1;  Fq(1,1,1) = -1;  Fq(3,1,1) = -1;  Fq(1,3,1) = -1;
+            Fl = zeros(3,3,2);  Fl(1,1,2) = 2;  Fl(1,1,1) = -2;  Fl(3,1,1) = -1;  Fl(1,3,1) = -1;
+            Fz = zeros(1,1,2);  Fz(1,1,2) = 1;                         % z = 0
+            fr = @(Fk, bk, Fw, bw) struct('FP', Fk, 'FB', bk, 'num', [], 'den', [], 'side', [], ...
+                                          'W', struct('FP', Fw, 'FB', bw));
+            all1 = @(~) true;  box = [-1 1 -1 1];
+            t.verifyTrue(algRowFails(fr(Fq, -1, Fl, 1), box, all1, 6), 'z_q > z_l fails (touching at 0)');
+            t.verifyFalse(algRowFails(fr(Fl, 1, Fq, -1), box, all1, 6), 'z_l > z_q HOLDS off the origin');
+            t.verifyTrue(algRowFails(fr(Fz, 1, Fq, -1), box, all1, 6), '0 > z_q fails');
+            t.verifyFalse(algRowFails(fr(Fz, 1, Fq, 1), box, all1, 6), '0 > -z_q holds');
+            t.verifyTrue(algRowFails(fr(Fq, 1, Fz, 1), box, all1, 6), '-z_q > 0 fails');
+        end
+
+        function aCERTIFIEDRationalFaceRowNeverHoldsRandomInputs(t)
+        % The oracle: random quadratic and rational fibres, both orders; wherever the face row is
+        % certified false, no sample of the box has both branches with z_k > z_w.
+            rng(41);  nCert = 0;
+            for trial = 1:600
+                Fq = zeros(3,3,3);  Fq(1,1,3) = randi([1 3]) * (2*randi(2) - 3);
+                Fq(:,:,2) = triu(fliplr(randi([-2 2], 3, 3))) .* fliplr(eye(3) + triu(ones(3), 1)) .* (rand(3) < 0.5);
+                Fq(:,:,1) = fliplr(triu(fliplr(randi([-3 3], 3, 3))));
+                Fl = zeros(3,3,2);  Fl(1,1,2) = randi([1 3]) * (2*randi(2) - 3);
+                Fl(:,:,1) = fliplr(triu(fliplr(randi([-3 3], 3, 3))));
+                bq = randsample([-1 1], 1);  bl = 1;
+                if rand < 0.5, k = struct('FP', Fq, 'FB', bq); w = struct('FP', Fl, 'FB', bl);
+                else,          k = struct('FP', Fl, 'FB', bl); w = struct('FP', Fq, 'FB', bq);
+                end
+                a = struct('FP', k.FP, 'FB', k.FB, 'num', [], 'den', [], 'side', [], 'W', w);
+                box = [-1 1 -1 1] * (0.25 + rand);
+                if ~algRowFails(a, box, @(~) true, 5), continue, end
+                nCert = nCert + 1;
+                X = [box(1) + (box(2) - box(1)) * rand(3000,1), box(3) + (box(4) - box(3)) * rand(3000,1)];
+                zk = algBranch(k.FP, X, k.FB);  zw = algBranch(w.FP, X, w.FB);
+                both = isfinite(zk) & isfinite(zw);
+                t.verifyFalse(any(zk(both) > zw(both) + 1e-9 * max(1, abs(zw(both)))), ...
+                              sprintf('trial %d: z_k > z_w at a sample', trial));
+            end
+            t.verifyGreaterThan(nCert, 30, 'too few certified trials to mean anything');
+        end
+
         function aBIGIntegerFibreIsCertifiedAsItsDoubleTwin(t)
         % Erratum Example 2's bridges carry FP past 2^53 (ratQ's big form). rowPolys called
         % ratQ.fromBig, which raises there, and envelopeSubdivisionAlg's caller turned the raise into
