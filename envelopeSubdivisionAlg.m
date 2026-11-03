@@ -190,7 +190,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
         end
         if isempty(quadApp) && isempty(irr), nUncovered = nUncovered + 1; continue, end
         if numel(irr) > 1
-            [irr, nDrop] = dropBelow(irr, C, rows, Pw);
+            [irr, nDrop] = dropBelow(irr, C, rows, Pw, env.quad, quadApp);
             nBelow = nBelow + nDrop;
         end
         if numel(irr) > 1 && ~dominantIrrational(irr, C, rows, pt, env.quad, quadApp)
@@ -543,7 +543,7 @@ function [fc, ok] = cornerValueFace(c, pt)
     ok = true;
 end
 
-function [irr, nDrop] = dropBelow(irr, C, rows, P)
+function [irr, nDrop] = dropBelow(irr, C, rows, P, quad, quadApp)
 % The irrational faces CERTIFIED below another one on the whole cell (algFaceBelow), dropped
 % (2026-11-02). Each is cut against the same quadratics, so a face below another owns a subset of
 % what that one owns and the max is unchanged. On erratum Example 2 a pair's cell carried 6-11
@@ -575,11 +575,24 @@ function [irr, nDrop] = dropBelow(irr, C, rows, P)
     above = order(1:min(2, n)).';
     [box, inBox, factors, corners] = regionBox(C, rows, zeros(0,8));
     if isempty(box), return, end
+    % EACH FACE'S OWN ROWS (2026-11-02): face i owns x only where z_i beats every applicable
+    % quadratic (winnerFaces' rows), so z_i <= max z_j is needed there only -- and the z_j above it
+    % then beats them too, so owns x. On erratum Example 2 the faces a cell keeps beside its winner
+    % meet it ON the cell's edge, where a box straddling the edge was never decided.
+    own = cell(1, n);
+    for i = 1:n
+        own{i} = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}, 'side', {});
+        if nargin < 6, continue, end
+        for j = quadApp(:).'
+            own{i}(end+1) = struct('FP', irr{i}.FP, 'FB', irr{i}.FB, 'num', quad(j).num, ...
+                                   'den', quad(j).den, 'side', -1);
+        end
+    end
     keep = true(1, n);
     for i = 1:n
         for j = above
             if j == i || ~keep(j), continue, end
-            if all(V(:,i) <= V(:,j) + 1e-9 * max(1, abs(V(:,j)))) && algFaceBelow(irr{i}, irr{j}, box, inBox, 5, factors, corners)
+            if all(V(:,i) <= V(:,j) + 1e-9 * max(1, abs(V(:,j)))) && algFaceBelow(irr{i}, irr{j}, box, inBox, 5, factors, corners, own{i})
                 keep(i) = false;  nDrop = nDrop + 1;  break
             end
         end
@@ -593,7 +606,7 @@ function [irr, nDrop] = dropBelow(irr, C, rows, P)
         others = find(keep & (1:n) ~= i);
         if isempty(others), break, end
         hi = cellfun(@(f) struct('FP', {f.FP}, 'FB', f.FB), irr(others), 'UniformOutput', false);  hi = [hi{:}];
-        if algFaceBelow(struct('FP', {irr{i}.FP}, 'FB', irr{i}.FB), hi, box, inBox, 5, factors, corners)
+        if algFaceBelow(struct('FP', {irr{i}.FP}, 'FB', irr{i}.FB), hi, box, inBox, 5, factors, corners, own{i})
             keep(i) = false;  nDrop = nDrop + 1;
         end
     end

@@ -1,4 +1,4 @@
-function tf = algFaceBelow(lo, hi, box, inBox, depth, factors, corners)
+function tf = algFaceBelow(lo, hi, box, inBox, depth, factors, corners, own)
 % algFaceBelow  Is one implicit face BELOW another on a region, CERTIFIED: true only when
 %   z_lo(x) <= z_hi(x) was shown at every point of the region in box WHERE BOTH BRANCHES EXIST --
 %   strictly, except on a finite union of curves -- and false otherwise.
@@ -15,6 +15,10 @@ function tf = algFaceBelow(lo, hi, box, inBox, depth, factors, corners)
 %                   >= 0 on it, and its vertices. A face often ENDS on the region's edge (its
 %                   discriminant vanishes there), and only with the edge divided out does a box
 %                   on that edge get a sign (measured on Example 2: y = 5/2 left every such box open)
+%          own    : optional, algRowFails rows (.FP .FB .num .den .side) true wherever lo is VALUED --
+%                   the claim is then needed only where they all hold, and a box where one is
+%                   certified false is decided (2026-11-02: erratum Example 2's faces meet the
+%                   cell's winner on the cell's edge, which leaves boxes straddling it undecided)
 % [output] tf     : true when certified. "Except on curves" is algRowFails' own reading (a squared
 %                   factor of a row divided out); continuity then gives <= on them, which is all
 %                   that dropping the lower face needs. "Where both exist" is algRowFails' reading
@@ -39,7 +43,14 @@ function tf = algFaceBelow(lo, hi, box, inBox, depth, factors, corners)
     if nargin < 5 || isempty(depth), depth = 6; end
     if nargin < 6, factors = {}; end
     if nargin < 7, corners = zeros(0,2); end
-    ctx = struct('inBox', inBox, 'factors', {factors}, 'corners', corners);
+    if nargin < 8 || isempty(own)
+        own = struct('FP', {}, 'FB', {}, 'num', {}, 'den', {}, 'side', {}, 'W', {});
+    else
+        own = rmfield(own, setdiff(fieldnames(own), {'FP', 'FB', 'num', 'den', 'side'}));
+        own = orderfields(own, {'FP', 'FB', 'num', 'den', 'side'});
+        [own.W] = deal([]);
+    end
+    ctx = struct('inBox', inBox, 'factors', {factors}, 'corners', corners, 'own', {own});
     loD = struct('FP', ratQ.bigToDouble(lo.FP), 'FB', lo.FB);
     hiD = arrayfun(@(h) struct('FP', ratQ.bigToDouble(h.FP), 'FB', h.FB), hi, 'UniformOutput', false);  hiD = [hiD{:}];
     tf = rec(lo, hi, loD, hiD, box, ctx, depth);
@@ -67,15 +78,15 @@ function tf = rec(lo, hi, loD, hiD, b, ctx, depth)
         if sum(ok) < 6, break, end
         num = separator(X(ok,:), zl(ok), zh(ok));
         if isempty(num), continue, end
-        rl = struct('FP', lo.FP, 'FB', lo.FB, 'num', num(1:10), 'den', num(11), 'side', -1);
-        rh = struct('FP', hi(j).FP, 'FB', hi(j).FB, 'num', num(1:10), 'den', num(11), 'side', 1);
+        rl = struct('FP', lo.FP, 'FB', lo.FB, 'num', num(1:10), 'den', num(11), 'side', -1, 'W', []);
+        rh = struct('FP', hi(j).FP, 'FB', hi(j).FB, 'num', num(1:10), 'den', num(11), 'side', 1, 'W', []);
         % A LEAF BOX gets 6 levels of row certificate, not 3 (2026-11-01). Near a face's
         % discriminant edge "q < z" for the upper root is "q below the roots' mean OR between the
         % roots", a disjunction a box reads only where one side holds throughout, and the curve
         % where q crosses the mean runs through the box; erratum Example 2's faces kept beside the
         % winner of a pair's cell failed only there. Only leaves pay for it.
-        if algRowFails(rl, b, ctx.inBox, inner, ctx.factors, ctx.corners) && ...
-           algRowFails(rh, b, ctx.inBox, inner, ctx.factors, ctx.corners)
+        if algRowFails([rl, ctx.own], b, ctx.inBox, inner, ctx.factors, ctx.corners) && ...
+           algRowFails([rh, ctx.own], b, ctx.inBox, inner, ctx.factors, ctx.corners)
             tf = true;  return
         end
     end
@@ -87,8 +98,9 @@ function tf = rec(lo, hi, loD, hiD, b, ctx, depth)
     for j = order
         zh = ZH(:,j);  both = isfinite(zl) & isfinite(zh);
         if sum(both) < 6 || any(zl(both) > zh(both) + 1e-9 * max(1, abs(zh(both)))), continue, end
-        fr = struct('FP', lo.FP, 'FB', lo.FB, 'W', struct('FP', hi(j).FP, 'FB', hi(j).FB));
-        if algRowFails(fr, b, ctx.inBox, inner, ctx.factors, ctx.corners)
+        fr = struct('FP', lo.FP, 'FB', lo.FB, 'num', [], 'den', [], 'side', [], ...
+                    'W', struct('FP', hi(j).FP, 'FB', hi(j).FB));
+        if algRowFails([fr, ctx.own], b, ctx.inBox, inner, ctx.factors, ctx.corners)
             tf = true;  return
         end
     end
