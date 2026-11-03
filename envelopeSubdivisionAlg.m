@@ -394,6 +394,7 @@ function [box, inBox, rowPolys, V] = regionBox(C, rows, K)
 % straight rows' polygon vertices, the corners algRowFails blows up at (exact ones only certify).
     H = straightRows(C, rows);
     A = [H; 1 0 1e3; -1 0 1e3; 0 1 1e3; 0 -1 1e3];
+    A = [A; branchLines(C, rows, K)];
     V = zeros(0,2);
     for i = 1:size(A,1)
         for j = i+1:size(A,1)
@@ -426,6 +427,28 @@ function [box, inBox, rowPolys, V] = regionBox(C, rows, K)
     if size(K,2) >= 8, lines = [lines; K(K(:,8) ~= 0, 1:8)]; end
     inBox = @(b) ~any(cellfun(@(P) polySignOn(P, b, @(~) true, 0) == -1, rowPolys)) && ...
                  ~lineMisses(lines, b);
+end
+
+function L = branchLines(C, rows, K)
+% The cell's BRANCH rows (one line of a line pair, irrational when the pair is) as half-planes
+% [a b c] >= 0 in doubles, for the vertex list only: their vertices are the corners algRowFails may
+% blow up at (2026-11-03), where it recognises the exact point. pairLineEval is affine in x.
+    L = zeros(0,3);
+    E = [0 0; 1 0; 0 1];
+    for t = 1:size(rows,1)
+        br = C(rows(t,1), 7);
+        if br == 0, continue, end
+        v = rows(t,2) * ratQ.pairLineEval(C(rows(t,1), 1:6), br, E);
+        L(end+1,:) = [v(2) - v(1), v(3) - v(1), v(1)]; %#ok<AGROW>
+    end
+    if size(K,2) >= 8
+        for r = find(K(:,8) ~= 0).'
+            v = K(r,7) * ratQ.pairLineEval(K(r,1:6), K(r,8), E);
+            L(end+1,:) = [v(2) - v(1), v(3) - v(1), v(1)]; %#ok<AGROW>
+        end
+    end
+    L = L(all(isfinite(L), 2), :);
+    nr = hypot(L(:,1), L(:,2));  L = L(nr > 0, :) ./ nr(nr > 0);
 end
 
 function tf = lineMisses(lines, b)
