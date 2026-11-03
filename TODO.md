@@ -52,9 +52,10 @@
       Detail under "The global arrangement does not scale" below.
 - [~] **3. Detect zero-area faces at assembly** -- PARTLY DONE 2026-10-20/30: a pointwise certified
       test (algRowFails) drops a piece one of whose algebraic rows fails everywhere on it (the
-      triangle 2172 -> 1760 -> 1162 -> 620 -> 492 -> 384 -> 298 -> 158 -> 138 faces, 2026-10-30; 134 own a point). Left: 4 faces at
-      the IRRATIONAL corner (1/sqrt5, 1 - 1/sqrt5) -- the blow-up there needs the substitution over
-      Q(sqrt5). DECISIONS 2026-10-29/30 (third).
+      triangle 2172 -> 1760 -> 1162 -> 620 -> 492 -> 384 -> 298 -> 158 -> 138 faces, 2026-10-30; 134 own a point).
+      2026-11-03: the 4 faces at the IRRATIONAL corner (1/sqrt5, 1 - 1/sqrt5) no longer arise (per-pair
+      subdivision + overlay); the Q(sqrt d) blow-up was built, had no effect, and was reverted.
+      Left: 140 faces, 92 own a point strictly; 12 own none even at 1e-6 slack. DECISIONS 2026-11-03.
       Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeSubdivisionAlg proves emptiness from CONIC rows only (pieceLive) and

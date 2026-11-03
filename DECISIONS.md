@@ -9034,3 +9034,25 @@ pruned pairs (single runs on a shared machine -- counts, not times).
   than more blow-ups.
 - Also found on the way (item 2 of the night): addQuaPar:degenerateConic never fired -- see that
   commit.
+
+## 2026-11-03 — the irrational corner (1/sqrt5, 1 - 1/sqrt5) is GONE; the Q(sqrt d) blow-up built, measured, reverted
+
+TODO item 3's last named remainder (2026-10-30 (third)): 4 faces of the 3-convex-edge triangle at
+(1/sqrt5, 1 - 1/sqrt5), needing the corner blow-up over Q(sqrt5). **Built** (7ddfc7e): the corner
+recognised from its doubles as (A, B)/q, A, B in Z[sqrt d] (a wrong guess only fails to certify, the
+substitution being exact about the point guessed), q^deg P(p + s(1, t)) = U + sqrt(d) V exactly in
+integers below 2^52, signs by bracketing sqrt(d) between two doubles or from sign(U, V, U^2 - d V^2).
+Red-first unit test plus a 400-trial random oracle, all green.
+
+**Measured: no effect.** minSubdivisionTest's fixture through biconjQ gives 140 faces with and without
+it (both runs on this commit's parent, same probe). Every algEmpty call that failed (36) was
+captured: their regionBox vertices are ALL dyadic -- no failed emptiness check meets an irrational
+corner. The 2026-10-30 count (138, 4 at that corner) predates the per-pair subdivision + overlay
+(2026-10-31), after which those faces no longer arise. **Reverted** (1f184a4) -- no measured gain,
+~190 lines; one `git revert 1f184a4` brings it back if an irrational corner reappears.
+
+**What is left on that fixture instead** (sampling, 120000 points, clustered at the corners): 140
+faces, 92 own a point strictly inside every row (slack > 1e-9); of the other 48, 12 own no point even
+at slack 1e-6 (zero-area), ~24 own fewer than 70 points (slivers, or faces meeting another along a
+curve), and 12 own over 1000 points at 1e-6 (they touch a row exactly over an area -- an equality
+with a neighbour, not emptiness). Not analysed further.
