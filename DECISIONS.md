@@ -9124,3 +9124,25 @@ Tried and not kept: an imaginary-part tolerance of 4 sqrt(eps); the U'/D' limit 
 **Measured:** the reference equals the subdivision exactly along the normal from P0; the near-edge
 exclusion is removed (fin = isfinite(want) again) and a test checks the second differences along the
 normal (below 1e-13). Suites: fast 826/0, normal 35/0, slow 122/0 (+2 known), Ex2Subdivision 3/0.
+
+## 2026-11-03 (fifth) -- a SURD face row: Example 2's corner touches certified, pairs 29/91/47 -> 20/79/35
+
+The pair-cell faces left by (2026-11-02 third) touch the winner at cell corners along the edge. Every
+such face has discriminant D = c S^2 with c = 55 x square and S in Z[x,y], so on its cell it is
+z = (a0 + eta tau sqrt(c) S)/den over Q(sqrt 55). The old face row's E2 is (z_w - z_k) times the
+OTHER root's version, and that factor vanishes along the cell edge: lowest form -c(3u - 5v)^2,
+degenerate there, so no corner blow-up could certify it. New (algRowFails surdFaceRow): when both
+faces live over one field Q(sqrt k), compare k den_k den_w (z_w - z_k) = U + sqrt(k) V directly, four
+(tau_k, tau_w) variants, row fails where sign(T) sign(den_k den_w) = +1; the sign of U + sqrt(k) V
+from sign U, sign V and the norm E = U^2 - k V^2, each reduced to its odd-multiplicity part (faces
+touching along a curve make T = H^2 M). Yun in doubles overflows on the degree-8 norms (192/200), so
+oddPartZ falls back to the exact Symbolic factorisation. Blow-ups of the surd struct are exact in
+BigInteger. Two enabling changes in cornerOK: a corner within 1e-9 of a dyadic point is snapped to it
+(47.4999... refused every blow-up), and a row whose blow-up refuses is DROPPED from that corner
+(sound: fewer rows only fails less) instead of failing the corner.
+
+**Measured:** pairs 29/91/47 -> 20/79/35 faces (two builds), faces that win
+on 20000 points unchanged 15/32/15. Real Example 2 fixture: old row 0, surd row certifies (test).
+Suites: fast 826/0, normal 35/0, slow 125/0 (+2 known), with algRowFailsSurdTest new in slow; Ex2Subdivision 3/0 (78 min, shared machine; past the default 3600 s timeout).
+LEFT: pair 2 compares against a degree-6 face whose discriminant is not a square -- no common field.
+

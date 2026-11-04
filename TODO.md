@@ -42,6 +42,10 @@
            7551. LEFT: the touching faces meet the winner AT THE CELLS' CORNERS ((37.5, 10), (35, -5),
            (47.5, 2.5) ...) along the edge's direction; an exact corner blow-up and a second-level one
            were tried and reverted (no gain / +1 face at 4x time). DECISIONS 2026-11-02 (third).
+           2026-11-04: a SURD face row (both faces over Q(sqrt 55), compared as U + sqrt(k) V; corners
+           snapped to dyadic; un-blowable rows dropped from a corner): pairs 29/91/47 -> 20/79/35, winners
+           unchanged 15/32/15. LEFT: pair 2's comparisons against a degree-6 face whose discriminant is
+           NOT a square (no common field). DECISIONS 2026-11-03 (fifth).
         d. DONE 2026-11-02, long run included (erratumBiconjEx2SubdivisionTest 3/0, 54 min): triangles cut AFTER the overlay (cutTriangles decides/
            splits), AlgCrv table 3 + FT, biconjQ subdivides pairs + triangles. Example 2 is past the
            overlay's piece budget (11567 > 4000) so biconjQ still returns the EnvelopeMin by default;
