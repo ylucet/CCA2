@@ -110,7 +110,7 @@ NORMAL_SUITES=(erratumBiconjTest conjDefinitionAuditTest envelopeAssembleTest en
 # Split PER TEST when running in parallel: with tests this long, one job per SUITE floors the
 # wall clock at the suite's whole runtime.
 SHARD_SUITES=(testcPLQ testMaxMultiRegion)
-SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest guardExerciseSymbolicTest algCrvSubdivisionTest kinkSubdivisionTest erratumBiconjEx2Test minSubdivisionTest envelopeSubdivisionSlowTest)  # algCrvSubdivisionTest: closed form but ~11 min of fixture, too long for normal
+SLOW_SUITES=(biconjCPLQTest biconjugateTest conjCPLQTest testRegion unboundedFaceTest guardExerciseSymbolicTest algRowFailsSurdTest algCrvSubdivisionTest kinkSubdivisionTest erratumBiconjEx2Test minSubdivisionTest envelopeSubdivisionSlowTest)  # algCrvSubdivisionTest: closed form but ~11 min of fixture, too long for normal
 # Individual tests here run for many minutes; see the VERYLONG note above.
 VERYLONG_SUITES=(testcPLQ testMaxMultiRegion erratumBiconjEx2SubdivisionTest)  # Ex2Subdivision: the overlay is hours; run it with CCA2_TEST_TIMEOUT=0 or a long one
 
