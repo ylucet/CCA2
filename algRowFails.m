@@ -100,6 +100,11 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
     sq = zeros(0,3);
     for c = 1:size(corners, 1)
         p = corners(c,:);
+        % A vertex computed in doubles lands a few ulps off its dyadic value (erratum Example 2:
+        % 47.5 stored as 47.49999999999999, and every blow-up was then refused as not dyadic).
+        % Snapped: the certificate is exact about the snapped point, so a wrong snap only fails.
+        q = round(p * 2^8) / 2^8;
+        if all(abs(q - p) <= 1e-9 * max(1, abs(p))), p = q; end
         if p(1) < box(1) || p(1) > box(2) || p(2) < box(3) || p(2) > box(4), continue, end
         if ~anyVanishes(rows, p), continue, end      % nothing to blow up: G(0, t) = P(p), as plain
         for e = W ./ 2.^(2:8)
@@ -297,7 +302,9 @@ function tf = anyVanishes(rows, p)
 end
 
 function tf = vanishesAt(P, p)
-% P(p) = 0 to rounding (a dense polyN in x, y).
+% P(p) = 0 to rounding (a dense polyN in x, y). A polynomial over Q(sqrt k), U + sqrt(k) V (a
+% SURD FACE ROW's), vanishes at a rational p only where U and V both do.
+    if isstruct(P), tf = vanishesAt(P.U, p) && vanishesAt(P.V, p); return, end
     T = P .* (p(1) .^ (0:size(P,1)-1).') .* (p(2) .^ (0:size(P,2)-1));
     tf = abs(sum(T(:))) <= 1e-9 * max(sum(abs(T(:))), realmin);
 end
@@ -309,14 +316,20 @@ function ok = cornerOK(rows, p, e, factors)
     if ~(e > 0), return, end
     for major = 1:2
         for sg = [1 -1]
-            rowsC = rows;
+            % A row some polynomial of which cannot be blown up is LEFT OUT of the charts (2026-11-03),
+            % not the corner: every point needs only SOME row to fail, so fewer rows is a stronger
+            % claim -- sound. On erratum Example 2 the cell's own rows have big coefficients and
+            % refused at every dyadic corner, which refused the corner whatever the face row did.
+            rowsC = rows;  keep = true(1, numel(rows));
             for t = 1:numel(rows)
                 for k = 1:numel(rows{t}.P)
                     G = blowUp(rows{t}.P{k}, p, sg, major);
-                    if isempty(G), return, end
+                    if isempty(G), keep(t) = false; break, end
                     rowsC{t}.P{k} = G;
                 end
             end
+            rowsC = rowsC(keep);
+            if isempty(rowsC), return, end
             facC = cell(1, numel(factors));
             for k = 1:numel(factors)
                 % only the region's rows THROUGH p: one positive at p rejects nothing near it, and
@@ -337,6 +350,7 @@ function G = blowUp(P, p, sg, major)
 % P(p + sg s (1, t)) (major 1) or P(p + sg s (t, 1)) (major 2) divided by the largest power of s that
 % divides it EXACTLY, as a polyN in (s, t); [] when the shift could not be done exactly in doubles.
     G = [];
+    if isstruct(P), G = blowUpPair(P, p, sg, major); return, end
     for it = 1:30                                    % a dyadic P scaled to integers (sign kept)
         if all(P(:) == round(P(:))), break, end
         P = 2 * P;
@@ -364,6 +378,231 @@ function G = blowUp(P, p, sg, major)
     G = G(k:end, :);
 end
 
+function G = blowUpPair(P, p, sg, major)
+% blowUp of a SURD FACE ROW's U + sqrt(k) V at a DYADIC p, exactly (BigInteger): U and V shifted with
+% the same positive scale and the power of s dividing BOTH divided out (one of them alone would
+% change their ratio); the reduced norm and the reduced U, V (read for their signs only) each with
+% their own power of s out. [] at a non-dyadic p or without the exact parts.
+    G = [];
+    if ~isfield(P, 'EZ') || ~isDyadic(p), return, end
+    try
+        GU = chartZ(P.UZ, p, sg, major);  GV = chartZ(P.VZ, p, sg, major);
+        n = max(size(GU), size(GV));
+        GU = padZ(GU, n);  GV = padZ(GV, n);
+        k = 0;
+        for i = 1:n(1)
+            if ~(rowZero(GU, i) && rowZero(GV, i)), k = i; break, end
+        end
+        if k == 0, G = 0; return, end
+        GE = trimS(chartZ(P.EZ, p, sg, major));
+        GUs = trimS(chartZ(P.UsZ, p, sg, major));  GVs = trimS(chartZ(P.VsZ, p, sg, major));
+        G = makeSurd(zNorm(GU(k:end, :)), zNorm(GV(k:end, :)), P.k, GE, GUs, GVs);
+    catch
+        G = [];
+    end
+end
+
+function Z = trimS(Z)
+% The largest power of s dividing a chart polynomial (rows = powers of s) divided out, the content
+% too (both positive); 0 for the zero polynomial (its sign, 0, decides nothing).
+    for i = 1:size(Z, 1)
+        if ~rowZero(Z, i), Z = zNorm(contentFree(Z(i:end, :))); return, end
+    end
+    Z = 0;
+end
+
+function tf = rowZero(Z, i)
+    tf = true;
+    for j = 1:size(Z, 2)
+        v = Z(i, j);
+        if v.c{1}.signum() ~= 0, tf = false; return, end
+    end
+end
+
+function Z = padZ(Z, n)
+    if all(size(Z) == n), return, end
+    W = bigZ(zeros(n));  W(1:size(Z,1), 1:size(Z,2)) = Z;  Z = W;
+end
+
+function G = chartZ(Z, p, sg, major)
+% sc^deg Z(p + sg s (1, t)) (major 1) or (t, 1) (major 2), exactly, as a bigZ polyN in (s, t) --
+% p = a / sc dyadic, the positive scale sc^deg keeping the sign. Not trimmed. Z exact (double or bigZ).
+    Z = bigZ(Z);
+    sc = 1;
+    while any(p * sc ~= round(p * sc)) && sc < 2^8, sc = 2 * sc; end
+    a = round(p * sc);
+    [n1, n2] = size(Z);  deg = n1 + n2 - 2;
+    Ps = bigZ(zeros(n1, n2));                        % coefficient of u^k v^l, u = x - px, v = y - py
+    for k = 0:n1-1
+        for l = 0:n2-1
+            acc = bigZ(0);
+            for i = k:n1-1
+                for j = l:n2-1
+                    zij = Z(i+1, j+1);
+                    if zij.c{1}.signum() == 0, continue, end
+                    m = bigZ(nchoosek(i, k) * nchoosek(j, l)) .* bigZ(a(1))^(i-k) .* bigZ(a(2))^(j-l) ...
+                        .* bigZ(sc)^(k + l + deg - i - j);
+                    acc = acc + zij .* m;
+                end
+            end
+            Ps(k+1, l+1) = acc;
+        end
+    end
+    G = bigZ(zeros(n1 + n2 - 1, max(n1, n2)));
+    for k = 0:n1-1
+        for l = 0:n2-1
+            c = Ps(k+1, l+1);
+            if sg^(k+l) < 0, c = -c; end
+            if major == 1, G(k+l+1, l+1) = G(k+l+1, l+1) + c;
+            else,          G(k+l+1, k+1) = G(k+l+1, k+1) + c;
+            end
+        end
+    end
+end
+
+function S = surdPoly(U, V, k)
+% U + sqrt(k) V for polySign, from EXACT integer polyN U, V (doubles within 2^53, or bigZ), a joint
+% positive content divided out. Its norm E = U^2 - k V^2 and U, V themselves are also kept with their
+% EVEN-multiplicity factors removed (oddPartZ), for their signs: where the faces TOUCH along a
+% curve, U + sqrt(k) V = H^2 M, and E carries norm(H)^2 (U and V carry H^2 when H is rational) --
+% only the reduced ones have a sign beside that curve.
+    n = max(size(U), size(V));
+    U = zPad(U, n);  V = zPad(V, n);
+    g = zGcd(zGcd(0, U), V);
+    if g > 1, U = zDivScalar(U, g);  V = zDivScalar(V, g); end
+    E = zLin(1, zMul(U, U), -k, zMul(V, V));
+    S = makeSurd(U, V, k, oddPartZ(E), oddPartZ(U), oddPartZ(V));
+end
+
+function S = makeSurd(UZ, VZ, k, EZ, UsZ, VsZ)
+% The struct polySign and blowUpPair read: exact parts (*Z), their doubles (rounded past 2^53, see
+% BIG INTEGERS), and Lo, Hi = U + r V at the two doubles r bracketing sqrt(k).
+    U = double(UZ);  V = double(VZ);  E = fromZ(EZ);
+    if ~any(E(:)), E = []; end                       % U = -sqrt(k) V is impossible unless both vanish
+    rd = sqrt(k);
+    S = struct('U', U, 'V', V, 'E', E, 'Us', fromZ(UsZ), 'Vs', fromZ(VsZ), ...
+               'Lo', U + rd * (1 - 4*eps) * V, 'Hi', U + rd * (1 + 4*eps) * V, ...
+               'UZ', UZ, 'VZ', VZ, 'EZ', EZ, 'UsZ', UsZ, 'VsZ', VsZ, 'k', k);
+end
+
+function O = oddPartZ(Z)
+% sign(c) times the product of the ODD-multiplicity factors of Z = c prod f_i^m_i -- Z's sign off the
+% removed factors' zeros -- exact: Yun in doubles (oddPart) within 2^53, an exact factorisation
+% (Symbolic Math Toolbox) past it. Z itself on any failure (sign-correct, only less decisive).
+    O = Z;
+    if isnumeric(Z)
+        try
+            D = ratQ.trimN(Z);
+            if numel(D) <= 1, O = sign(D); return, end
+            R = ratQ.contentFree(ratQ.trimN(oddPart(D, 1, 0)));
+            sg = relSign(D, R);
+            if sg ~= 0, O = sg * R; return, end
+        catch
+        end
+        Z = bigZ(Z);                                 % Yun's gcds left 2^53: factor exactly instead
+    end
+    try
+        x = sym('x');  y = sym('y');
+        [n1, n2] = size(Z);
+        C = sym(zeros(n1, n2));
+        for i = 1:n1
+            for j = 1:n2
+                v = Z(i, j);  v = v.c{1};
+                if v.signum() ~= 0, C(i,j) = str2sym(char(v.toString())); end
+            end
+        end
+        p = (x.^(0:n1-1)) * C * (y.^(0:n2-1)).';
+        if p == 0, return, end
+        F = factor(p);
+        keys = arrayfun(@char, F, 'UniformOutput', false);
+        [~, first, j] = unique(keys);
+        m = accumarray(j(:), 1);
+        q = sym(1);  cst = sym(1);
+        for i = 1:numel(first)
+            f = F(first(i));
+            if isempty(symvar(f)), cst = cst * f^m(i); continue, end
+            if mod(m(i), 2) == 1, q = q * f; end
+        end
+        q = expand(sign(cst) * q);
+        R = zNorm(symToZ(q, x, y));
+        % the identity Z = (unit) O * square is factor's; checked at a point as relSign does
+        if relSign(double(Z), double(R)) == 1, O = R; end
+    catch
+    end
+    O = zNorm(O);
+end
+
+% ---- exact integer polyN: doubles while every partial sum is within 2^53, bigZ past it ----------
+
+function Z = zNorm(Z)
+% bigZ back to doubles when every entry fits exactly.
+    if ~isa(Z, 'bigZ'), return, end
+    c = Z.c;
+    for i = 1:numel(c)
+        if c{i}.abs().bitLength() > 52, return, end
+    end
+    Z = double(Z);
+end
+
+function C = zMul(A, B)
+    if isnumeric(A) && isnumeric(B) && max(max(conv2(abs(A), abs(B)))) < 2^53, C = conv2(A, B); return, end
+    C = zNorm(conv2g(bigZ(A), bigZ(B)));
+end
+
+function C = zLin(a, A, b, B)
+% a A + b B, scalars a, b exact doubles or BigInteger, padded to the larger size.
+    if isa(a, 'java.math.BigInteger'), a = zScalar(a); end
+    if isa(b, 'java.math.BigInteger'), b = zScalar(b); end
+    n = max(size(A), size(B));
+    if isnumeric(A) && isnumeric(B) && isnumeric(a) && isnumeric(b)
+        Ap = zPad(A, n);  Bp = zPad(B, n);
+        if max(max(abs(a) * abs(Ap) + abs(b) * abs(Bp))) < 2^53, C = a * Ap + b * Bp; return, end
+    end
+    C = zNorm(zPad(bigZ(a) .* bigZ(A), n) + zPad(bigZ(b) .* bigZ(B), n));
+end
+
+function s = zScalar(v)
+% a BigInteger as an exact double when it fits, else as a 1x1 bigZ.
+    if v.abs().bitLength() <= 52, s = v.doubleValue(); else, s = bigZ({v}); end
+end
+
+function Z = zPad(Z, n)
+    if isa(Z, 'bigZ'), Z = padZ(Z, n); return, end
+    if all(size(Z) == n), return, end
+    W = zeros(n);  W(1:size(Z,1), 1:size(Z,2)) = Z;  Z = W;
+end
+
+function g = zGcd(g, Z)
+% gcd of g (a double) and every entry of Z; -1 when Z is bigZ (then nothing is divided).
+    if ~isnumeric(Z) || g < 0, g = -1; return, end
+    for v = abs(Z(:)).'
+        g = gcd(g, v);
+    end
+end
+
+function Z = zDivScalar(Z, g)
+    Z = Z / g;
+end
+
+function Z = symToZ(q, x, y)
+% An integer sym polynomial in x, y as a bigZ polyN.
+    if isempty(symvar(q))
+        Z = bigZ({java.math.BigInteger(char(q))});  return
+    end
+    [cf, t] = coeffs(q, [x y]);
+    Z = bigZ(zeros(1, 1));
+    for i = 1:numel(t)
+        dx = double(polynomialDegree(t(i), x));  dy = double(polynomialDegree(t(i), y));
+        Z(dx+1, dy+1) = bigZ({java.math.BigInteger(char(cf(i)))});
+    end
+end
+
+function Z = divZ(Z, g)
+    c = Z.c;  gg = g;
+    for i = 1:numel(c), c{i} = c{i}.divide(gg); end
+    Z = bigZ(c);
+end
+
 function tf = isDyadic(p)
     tf = all(p * 2^8 == round(p * 2^8));
 end
@@ -381,7 +620,11 @@ function v = polySign(P, b)
     if lo ~= 0 && ~isnan(lo) && polySignOn(P.Hi, b, @(~) true, 0) == lo, v = lo; return, end
     v = 0;
     if isempty(P.E), return, end
-    sU = polySignOn(P.U, b, @(~) true, 0);  sV = polySignOn(P.V, b, @(~) true, 0);
+    if isfield(P, 'Us')                              % a surd face row's: reduced, for their signs
+        sU = polySignOn(P.Us, b, @(~) true, 0);  sV = polySignOn(P.Vs, b, @(~) true, 0);
+    else
+        sU = polySignOn(P.U, b, @(~) true, 0);  sV = polySignOn(P.V, b, @(~) true, 0);
+    end
     sE = polySignOn(P.E, b, @(~) true, 0);
     v = sqSign(sU, sV, sE);
 end
@@ -506,6 +749,8 @@ function r = faceRowPolys(a, factors)
         hiW = any(a.W.FB == [-1 2]);  if ~hiW && ~any(a.W.FB == [1 -2]), return, end
     elseif ~any(a.W.FB == [1 -1]), return
     end
+    r = surdFaceRow(Fk, Fw, nk, nw, hiK, hiW, factors);
+    if ~isempty(r), return, end
     persistent memo
     if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
     k1 = rowKey(Fk, 0, 1);  k2 = rowKey(Fw, 0, 1);
@@ -528,6 +773,195 @@ function r = faceRowPolys(a, factors)
         case 'lq', test = @(s) s(2) ~= 0 && quadOK([s(1), s(2) * s(3), s(4), s(5)], hiW, -1);   % z_k <= z_w
     end
     r = struct('P', {P}, 'test', test);
+end
+
+function r = surdFaceRow(Fk, Fw, nk, nw, hiK, hiW, factors)
+% A SURD FACE ROW (2026-11-03): z_k > z_w when each face is a polynomial over ONE quadratic field --
+% its discriminant D = c S^2, S in Z[x, y], c > 0 not a square -- or rational (degree 1 in z).
+% Erratum Example 2's pair cells are made of such faces (every D = 55 times a square), and the
+% general face row could not decide them at the corner where two touch: its E2 = P2^2 - P1^2 D_w is
+% the product of z_w - z_k with its CONJUGATE, and the conjugate vanishes along the cell's edge,
+% which leaves E2's lowest form at the corner -c L^2, degenerate along the edge L = 0 -- no chart
+% decides the direction of the edge. z_w - z_k itself vanishes there only to order two, with a
+% DEFINITE lowest form, so it is read directly: with z = (a0 + eta tau sqrt(c) S) / den
+% (den = 2A, a0 = -B, eta = +1 for the upper root, tau = sign(A) sign(S) -- constant on a box where
+% both are certified, the region's factors divided out of S first), and kappa the field's
+% square-free part, sqrt(c) = (mu / kappa) sqrt(kappa) with mu = sqrt(c kappa) an integer:
+%       kappa den_k den_w (z_w - z_k) = U + sqrt(kappa) V,
+%       U = kappa (den_k a0_w - den_w a0_k),  V = tau_w eta_w mu_w den_k S_w - tau_k eta_k mu_k den_w S_k
+% (mu = 0 for a rational face), one (U, V) per (tau_k, tau_w). The row fails where
+% sign(U + sqrt(kappa) V) sign(den_k den_w) = +1. [] when the faces are not of this kind.
+    r = [];
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+    key = ['surd|', rowKey(Fk, 0, 1), '#', rowKey(Fw, 0, 1), sprintf('|%d%d', hiK, hiW)];
+    if isKey(memo, key)
+        P = memo(key);
+        if isempty(P), return, end
+        P(1:4) = cellfun(@(p) divideOut(p, factors), P(1:4), 'UniformOutput', false);
+        r = struct('P', {P}, 'test', @surdOK);
+        return
+    end
+    if memo.Count > 2000, memo.remove(memo.keys()); end
+    memo(key) = {};
+    try
+        fk = surdFace(Fk, nk, hiK);  fw = surdFace(Fw, nw, hiW);
+        if isempty(fk) || isempty(fw) || (fk.lin && fw.lin), return, end
+        if ~fw.lin, kap = squareFreeInt(fw.c); else, kap = squareFreeInt(fk.c); end
+        if kap.bitLength() > 52, return, end
+        muK = fieldMu(fk, kap);  muW = fieldMu(fw, kap);
+        if isempty(muK) || isempty(muW), return, end
+        k = kap.doubleValue();
+        U = zLin(k, zLin(1, zMul(fk.den, fw.a0), -1, zMul(fw.den, fk.a0)), 0, 0);
+        Wk = zMul(fw.den, fk.S);  Ww = zMul(fk.den, fw.S);         % den_w S_k, den_k S_w
+        T = cell(1, 4);
+        for tk = [1 -1]
+            for tw = [1 -1]
+                V = zLin(scaleBy(muW, tw * fw.eta), Ww, scaleBy(muK, -tk * fk.eta), Wk);
+                T{(tk < 0) * 2 + (tw < 0) + 1} = surdPoly(U, V, k);
+            end
+        end
+        cf = @(p) fromZ(bigZ(p));                      % content divided out (positive), as doubles
+        P = [{cf(fk.den), cf(fw.den), cf(fk.S), cf(fw.S)}, T];
+        memo(key) = P;
+        P(1:4) = cellfun(@(p) divideOut(p, factors), P(1:4), 'UniformOutput', false);
+        r = struct('P', {P}, 'test', @surdOK);
+    catch
+        r = [];
+    end
+end
+
+function v = scaleBy(mu, sg)
+% sg * mu for a BigInteger mu (sg = +-1).
+    if sg < 0, v = mu.negate(); else, v = mu; end
+end
+
+function ok = surdOK(s)
+% s = signs of {den_k, den_w, S_k, S_w, T(++), T(+-), T(-+), T(--)}: z_k <= z_w on the box.
+    ok = false;
+    if any(s(1:4) == 0), return, end
+    tk = s(1) * s(3);  tw = s(2) * s(4);
+    t = s(4 + (tk < 0) * 2 + (tw < 0) + 1);
+    ok = t ~= 0 && t * s(1) * s(2) == 1;
+end
+
+function f = surdFace(F, n, hi)
+% A face as z = (a0 + eta tau sqrt(c) S) / den (see surdFaceRow): exact den, a0, S, BigInteger c,
+% eta; a rational face has S = 1, c = 0. [] when D is not c S^2 (memoised per face).
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+    key = [rowKey(F, 0, 1), sprintf('|%d', hi)];
+    if isKey(memo, key), f = memo(key); return, end
+    f = [];
+    if ratQ.isBigPoly(F) || max(abs(F(:))) >= 2^53, Z = toZ(F); else, Z = F; end
+    sl = @(i) zNorm(Z(:,:,i));
+    if n == 2
+        f = struct('lin', true, 'den', sl(2), 'a0', zLin(-1, sl(1), 0, 0), 'S', 1, ...
+                   'c', java.math.BigInteger.ZERO, 'eta', 1);
+    else
+        A = sl(3);  B = sl(2);  C = sl(1);
+        D = zLin(1, zMul(B, B), -4, zMul(A, C));
+        g = zGcd(0, D);
+        if g > 0
+            c = java.math.BigInteger.valueOf(g);  Dp = D / g;
+        else
+            [Dp, c] = contentFree(bigZ(D));  Dp = zNorm(Dp);
+        end
+        S = zSqrt(Dp);
+        if ~isempty(S) && c.signum() > 0
+            f = struct('lin', false, 'den', zLin(2, A, 0, 0), 'a0', zLin(-1, B, 0, 0), 'S', S, 'c', c, ...
+                       'eta', 2 * hi - 1);
+        end
+    end
+    if memo.Count > 2000, memo.remove(memo.keys()); end
+    memo(key) = f;
+end
+
+function mu = fieldMu(f, kap)
+% sqrt(c kappa), an integer when c is in kappa's square class; 0 for a rational face; [] otherwise.
+    if f.lin, mu = java.math.BigInteger.ZERO; return, end
+    mu = bigIsqrt(f.c.multiply(kap));
+end
+
+function s = bigIsqrt(n)
+% The exact integer square root of a BigInteger, [] when n is not a perfect square.
+    s = [];
+    if n.signum() < 0, return, end
+    if n.signum() == 0, s = n; return, end
+    x = java.math.BigInteger.ONE.shiftLeft(floor(n.bitLength() / 2) + 1);
+    while true
+        y = x.add(n.divide(x)).shiftRight(1);
+        if y.compareTo(x) >= 0, break, end
+        x = y;
+    end
+    if x.multiply(x).equals(n), s = x; end
+end
+
+function k = squareFreeInt(c)
+% The square-free part of a positive BigInteger: trial division by small primes, then the rest
+% kept whole unless it is a perfect square. A non-minimal k is still a valid field generator (c k
+% stays a square for every c of the field only when k IS minimal up to squares -- so a k left
+% with a square factor makes fieldMu refuse, which only refuses the row).
+    k = java.math.BigInteger.ONE;  r = c;
+    for p = primes(5000)
+        P = java.math.BigInteger.valueOf(p);
+        e = 0;
+        while r.mod(P).signum() == 0, r = r.divide(P); e = e + 1; end
+        if mod(e, 2) == 1, k = k.multiply(P); end
+        if r.equals(java.math.BigInteger.ONE), return, end
+    end
+    if isempty(bigIsqrt(r)), k = k.multiply(r); end
+end
+
+function S = zSqrt(Dp)
+% S in Z[x, y], content-free, with S^2 = Dp exactly (Dp a content-free polyN in doubles), or []: Yun's
+% square-free decomposition (yunParts, exact in doubles), every part of EVEN multiplicity, and
+% S^2 = Dp checked. Refused past 2^53 (bigZ) -- only refuses the surd row.
+    S = [];
+    if ~isnumeric(Dp), return, end
+    try
+        P = ratQ.trimN(Dp);
+        if numel(P) <= 1
+            if P > 0 && sqrt(P) == round(sqrt(P)), S = sqrt(P); end
+            return
+        end
+        L = yunParts(P, 1, 0);
+        Q = 1;
+        for i = 1:size(L, 1)
+            if mod(L{i,2}, 2) == 1, return, end
+            for k = 1:L{i,2} / 2, Q = ratQ.trimN(ratQ.polyMulN(Q, L{i,1})); end
+        end
+        Q = ratQ.contentFree(ratQ.trimN(Q));
+        Q2 = ratQ.trimN(ratQ.polyMulN(Q, Q));
+        if isequal(size(Q2), size(P)) && all(Q2(:) == P(:)), S = Q; end
+    catch
+        S = [];
+    end
+end
+
+function L = yunParts(S, d, lvl)
+% Yun's square-free decomposition, S = c prod Z_i^i: rows {Z_i, i} of the non-constant parts, in x
+% (d = 1), then what is left free of x in y (d = 2) -- as oddPart, keeping every part.
+    L = cell(0, 2);
+    S = ratQ.trimN(S);
+    if numel(S) <= 1 || lvl > 2, return, end
+    Sd = diffPoly(S, d);
+    if ~any(Sd(:))
+        if d == 1, L = yunParts(S, 2, lvl + 1); end
+        return
+    end
+    C = ratQ.trimN(ratQ.polyGcdBiv(S, Sd));
+    W = ratQ.trimN(ratQ.polyDivExact(S, C, 2));
+    i = 1;
+    while numel(W) > 1
+        if i > 60, error('algRowFails:yun', 'square-free decomposition did not end'); end
+        Y = ratQ.trimN(ratQ.polyGcdBiv(W, C));
+        Z = ratQ.trimN(ratQ.polyDivExact(W, Y, 2));
+        if numel(Z) > 1, L(end+1, :) = {Z, i}; end %#ok<AGROW>
+        C = ratQ.trimN(ratQ.polyDivExact(C, Y, 2));
+        W = Y;  i = i + 1;
+    end
+    if d == 1 && numel(C) > 1, L = [L; yunParts(C, 2, lvl + 1)]; end
 end
 
 function n = nzOf(FP)
