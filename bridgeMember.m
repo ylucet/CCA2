@@ -113,8 +113,45 @@ function [tf, info] = bridgeMember(pr, X)
             tf(i) = true;  mus(i) = mu;  base(i,:) = s.';
             break
         end
+        if tf(i) || ~any(abs(r + 1) <= 1e-6) || polyval(fliplr(Dt), -1) ~= 0, continue, end
+        [ok, mu, s] = nearArtefact(pr, X(i,:));
+        if ok, tf(i) = true;  mus(i) = mu;  base(i,:) = s.'; end
     end
     if nargout > 1
         info = struct('mu', mus, 'base', base);
+    end
+end
+
+function [ok, mu, s] = nearArtefact(pr, x)
+% A ROOT BESIDE THE ARTEFACT AT mu = -1 (2026-11-03). Where det(M_mu) vanishes at -1, a point close
+% to the curve where U(-1) = 0 has its true roots at mu = -1 + O(delta), delta its distance: Phi's
+% coefficients in mu are O(1), its value there O(delta^2), and below delta ~ 1e-8 the doubles return
+% -1 itself, which the artefact test above skips -- erratum Example 1 lost its bridge face 5e-9
+% inside the edge y = 2x and a lower face answered, 1.2e-8 low. The same Phi, written about -1
+% (nu = mu + 1: the pair's data re-based, N1' = N2, N2' = 2 N2 - N1, m likewise, so bridgePhi is
+% still the one definition), has its O(delta) and O(delta^2) coefficients computed as small numbers
+% to relative precision, and its small roots and the base point U/D are then accurate.
+    ok = false;  mu = NaN;  s = [NaN; NaN];
+    N1 = pr.N2;  N2 = 2*pr.N2 - pr.N1;  m1 = pr.m2;  m2 = 2*pr.m2 - pr.m1;
+    [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, pr.Dl, pr.dl, pr.kp, pr.d, x(:), 1, false);
+    p = fliplr(Phi);
+    nz = find(p ~= 0, 1);
+    if isempty(nz), return, end
+    p = p(nz:end);
+    if numel(p) < 2, return, end
+    r = roots(p);
+    r = real(r(abs(imag(r)) <= 1e-9*max(1e-12, abs(r))));
+    r = r(r >= -1e-12 & r <= 1 + 1e-12 & abs(r) <= 1e-6);    % nu in [0, 1] is mu in [-1, 0]; near -1 only
+    for j = 1:numel(r)
+        D = polyval(fliplr(Dt), r(j));
+        if D == 0, continue, end
+        sj = [polyval(fliplr(U1), r(j)); polyval(fliplr(U2), r(j))] / D;
+        if ~all(isfinite(sj)), continue, end
+        if ~isempty(pr.P)
+            slack = pr.P(:,1:2)*sj + pr.P(:,3);
+            if any(slack < -1e-9 * max(1, max(abs(sj)))), continue, end
+        end
+        ok = true;  mu = r(j) - 1;  s = sj;
+        return
     end
 end
