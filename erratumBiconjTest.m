@@ -81,6 +81,19 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function theFACELISTKeepsItsBridgeBesideTheEDGE(testCase)
+        % 2026-11-03: 5e-9 inside the edge y = 2x the face list lost its bridge face -- the sweep root
+        % sat at -1 + ~1e-8, beside det(M_mu)'s artefact root -1, below rounding -- and a lower
+        % quadratic face answered, 1.2e-8 low and NON-CONVEX along the normal. Along that normal
+        % the values must be affine (f** there is one face), to rounding.
+            V = [0 0; 3 0; 1 2];
+            f = QuaPol(V, [1 2 1; 2 3 1; 3 1 1], [0 0 0 0 2 1 -1 0 1 0], [1 0; 1 0; 1 0]);
+            P0 = [0.95906804566609283, 1.9181360792980466];  n = [2 -1] / sqrt(5);
+            t = (0:40).' * 2.5e-9;
+            w = biconjAtoms(f).eval(P0 + t * n);
+            testCase.verifyLessThan(max(abs(diff(w, 2))), 1e-13, 'the face list jumps beside the edge');
+        end
+
         function aSINGLEActivePairIsSubdividedAndKeepsItsValues(testCase)
         % Two atoms leave one pair; with no triangle needing three atoms the minimum IS that pair's
         % envelope, so biconjQ subdivides it (2026-10-17). Four defects stood in the way, each red here
@@ -98,14 +111,7 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             want = biconjAtoms(f).eval(X);
             got = h.eval(X);
             testCase.verifyEqual(isinf(got), isinf(want), 'the subdivision has a hole where the face list is finite');
-            % VALUES not within 1e-7 of an edge (2026-11-03): along y = 2x the face list has the
-            % hairline crack envelopeEval's header describes -- the bridge face's sweep root sits
-            % on det(M_mu) = 0 at mu = -1, bridgeMember skips it, and a lower quadratic face
-            % answers: 1.2e-8 low at a point 5e-9 inside, non-convex along the normal, while the
-            % subdivision's value is linear there to 1e-15 (algBranch now splits the crossing
-            % branches exactly). The holes check above still covers every point.
-            dEdge = min(abs([X(:,2), 2*X(:,1) - X(:,2), 2*X(:,1) + 2*X(:,2) - 6]) ./ [1, sqrt(5), sqrt(8)], [], 2);
-            fin = isfinite(want) & dEdge > 1e-7;
+            fin = isfinite(want);
             testCase.verifyEqual(got(fin), want(fin), 'RelTol', 1e-9, 'AbsTol', 1e-9, ...
                 'the subdivision must carry the face list''s values, near the vertices too');
         end
