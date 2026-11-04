@@ -9110,3 +9110,17 @@ on 215000 points, max |value - 140-face build| 1e-9. Zero-area faces 4 -> 2: the
 (1/(2 sqrt5), 1 - 1/(2 sqrt5)), not analysed further. Tried and not kept, each no effect:
 corner candidates on lines of line pairs kept whole (pairCorners); line pairs of branch rows as
 divisors (pairFactors); the piece's algebraic rows passed into tieEmpty as `own` (also 4x slower).
+
+## 2026-11-03 (fourth) -- the reference's crack beside the edge FIXED: a sweep root next to det(M_mu)'s artefact
+
+(second) left erratumBiconjTest skipping points within 1e-7 of an edge, because the REFERENCE
+(biconjAtoms' face list via bridgeMember) lost its bridge face there. Cause: on that segment the
+sweep root of Phi sits within 1e-6 of mu = -1, where det(M_mu) has its artefact root, so the root was
+discarded. Fix: only when a root is that close and Dt(-1) == 0, re-base the pair data about mu = -1
+(N1' = N2, N2' = 2 N2 - N1, m1' = m2, m2' = 2 m2 - m1; bridgePhi stays the single definition), solve
+in nu = mu + 1, keep a root with Dt(nu) ~= 0, slack-test s = U/D against P, return mu = nu - 1.
+Tried and not kept: an imaginary-part tolerance of 4 sqrt(eps); the U'/D' limit at the artefact.
+
+**Measured:** the reference equals the subdivision exactly along the normal from P0; the near-edge
+exclusion is removed (fin = isfinite(want) again) and a test checks the second differences along the
+normal (below 1e-13). Suites: fast 826/0, normal 35/0, slow 122/0 (+2 known), Ex2Subdivision 3/0.
