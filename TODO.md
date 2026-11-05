@@ -1,5 +1,23 @@
 # TODO
 
+## Open now -- index (cleaned 2026-11-05; the dated sections below keep the history)
+
+Exact engine (the default for `conj` and `biconj`):
+- Bridge producer's 2^53 refusals are reachable on small pairs -- BigInteger / modular route (SUPPORT_MATRIX 3.2).
+- Two zero-area faces in the c = -2 AlgCrv (own no point; harmless) -- see "Faces of ZERO AREA" below.
+- Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
+- Two BRIDGE faces owning one cell -- refused by name, never observed.
+
+Legacy symbolic engine (`'cplq'`, no longer the default):
+- `biconjCPLQ` on the poly2 kinks runs > 4 h (tests switched off); `conjCPLQ`'s eig tolerance can
+  return +Inf for a strictly convex quadratic (`conjQ` is right); G1 / G4 / G10 / G11, T3-T6,
+  Row 7, STEP 3 scaling, `splitTwoArcLens`, `ratQ.hullQ`, the `QuaParCPLQ` data residual.
+
+Release / paper:
+- MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
+
+Decided, not to do: Example 2 pair 2's non-winning faces (leave them, 2026-11-05).
+
 ## Next up — 2026-11-04 overnight run
 
 - [x] **B. Example 2 pair 2's remaining extra faces -- DECIDED 2026-11-05: leave them.** They are
