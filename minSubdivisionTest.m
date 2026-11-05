@@ -30,6 +30,18 @@ classdef minSubdivisionTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function itHasNoDUPLICATEOrZEROAREAFace(testCase)
+        % 2026-11-04: of 56 faces, 18 were exact copies of another (assembleAlgCrv now keeps one) and
+        % 2 owned no point -- a quadratic face below a bridge that TOUCHES it at the corner (0, 0),
+        % certified once the boxes beside the corner square get two more levels. 36 faces, every
+        % one owning points of a 100000-point sample (each piece's smallest share was 0.17%).
+            [h, ~, V] = minSubdivisionTest.cached();
+            testCase.verifyLessThanOrEqual(h.nf, 36, 'faces of the 3-convex-edge triangle');
+            rng(9);  W = rand(100000,3);  X = (W ./ sum(W,2)) * V;
+            [~, idx] = h.eval(X);
+            testCase.verifyEqual(numel(unique(idx(idx > 0))), h.nf, 'a face that is the maximum nowhere');
+        end
+
         function aPointBesideTheEDGEIsNotPlusInfinity(testCase)
         % Found 2026-10-16 when the prune dropped a redundant pair: on the 3-convex-edge triangle a
         % pair's bridge face and its quadratic face both missed a band ~1e-8 wide along x1 = 0

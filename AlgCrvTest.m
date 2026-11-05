@@ -85,6 +85,10 @@ classdef AlgCrvTest < matlab.unittest.TestCase
             t.verifyEqual(numel(g.EcI), 1, 'the same tie row twice is one edge');
             t.verifyTrue(isinf(g.eval([1 0.1])));
             t.verifyEqual(g.eval([0.1 1]), hypot(0.1, 1), 'AbsTol', 1e-12);
+            t.verifyEqual(g.nf, 1, 'the same face on the same rows twice is one face (2026-11-04)');
+            f2 = f;  f2.FB = 1;  f2.ii = [f.ii, f.ii];
+            g = assembleAlgCrv([f, f2, f]);
+            t.verifyEqual(g.nf, 2, 'another branch is another face; a repeated row changes nothing');
         end
 
         function theARGUMENTSAreChecked(t)

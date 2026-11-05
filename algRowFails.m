@@ -116,7 +116,14 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
             end
         end
     end
-    if ~isempty(sq), tf = boxRec(rows, box, inBox, depth, sq); end
+    if isempty(sq), return, end
+    tf = boxRec(rows, box, inBox, depth, sq);
+    % TWO MORE LEVELS once a corner square is certified (2026-11-04). Just outside the square the
+    % row's margin is still ~ the distance to p times its lowest form, small where the region runs
+    % close to that form's zero direction, and those boxes needed 8 levels: the 3-convex-edge
+    % triangle's last 2 zero-area faces, at its corner (0, 0). boxRec recurses only into undecided
+    % boxes, so the extra levels cost only where the plain pass failed.
+    if ~tf, tf = boxRec(rows, box, inBox, depth + 2, sq); end
 end
 
 function r = rowPolys(a, factors)

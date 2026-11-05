@@ -87,6 +87,28 @@ function g = assembleAlgCrv(subdivision)
         end
     end
 
+    % IDENTICAL FACES ARE KEPT ONCE (2026-11-04). The 3-convex-edge triangle came out with 18 of its 56
+    % faces exact copies of another, and the c = -2 kink with 18 of 22 -- the same value (FP/FB,
+    % fN/fD or triangle) on the same SET of rows. One copy is the same function on the same region,
+    % so dropping the others changes nothing eval can see (it keeps the first face on a tie). A
+    % row repeated inside one FC is compared as a set but KEPT: algCrvIncidence reads FC by
+    % position, and uniquing it broke a boundary of the kink (algCrvSubdivisionTest).
+    keep = true(1, numel(FC));
+    keys = cell(1, numel(FC));
+    for k = 1:numel(FC)
+        keys{k} = mat2str(unique(FC{k}, 'rows'));
+    end
+    [~, ~, grp] = unique(keys);
+    for k = 2:numel(FC)
+        for j = find(grp(1:k-1).' == grp(k) & keep(1:k-1))
+            if FT(j) == FT(k) && FB(j) == FB(k) && isequal(FP{j}, FP{k}) && ...
+                    isequal(fN(j,:), fN(k,:)) && fD(j) == fD(k)
+                keep(k) = false;  break
+            end
+        end
+    end
+    FC = FC(keep);  fN = fN(keep,:);  fD = fD(keep);  FP = FP(keep);  FB = FB(keep);  FT = FT(keep);
+
     g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, fN, fD, zeros(0,2), FC, FP, FB, EcA, EcI, Tri, FT);
 end
 
