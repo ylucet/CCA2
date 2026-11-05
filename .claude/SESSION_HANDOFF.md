@@ -25,14 +25,18 @@ Nothing.
   Example 2 pair 2's extra faces -- decided, leave them; the four todo guards: 3 exercised, 1 shadowed,
   and the bridge producer's overflow refusals are REACHABLE on small pairs (SUPPORT_MATRIX 3.2);
   TODO.md has an 'Open now' index. Tests: fast 827/0, normal 35/0, slow 128/0 (+2 known), guards 36/0
+- 2026-11-05 (latest, on main, 973efcf): the bridge producer's three overflow refusals (witnessOverflow,
+  branchOverflow, bigZContent) answered in BigInteger; 0 hits in 2220 searched pairs, now 'shadowed'.
+  polynomialOverflow at large data (~1e5 entries) remains -- TODO 'Open now'. DECISIONS 2026-11-05 (fourth).
+  Tests: fast 830/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0
 - Known reds: none
 
 ## Next
 1. (done) Branch merged to main 2026-11-03.
 2. (decided 2026-11-05) Example 2 pair 2's non-winning faces: leave them.
 3. (done 2026-11-05) Triangle 36 faces, every one the maximum somewhere.
-4. (done 2026-11-05) todo guards. Next candidate: the BigInteger route for the bridge producer's
-   reachable overflow refusals (TODO.md 'Open now').
+4. (done 2026-11-05) todo guards; the bridge producer's overflow refusals answered in BigInteger.
+   Next candidate: polynomialOverflow at large data (TODO.md 'Open now').
 
 ## Files
 - `algRowFails.m` -- topRowPolys / topFaceRow (top-root rows, no corner blow-up), divideOutSurd
