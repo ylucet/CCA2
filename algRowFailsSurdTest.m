@@ -94,9 +94,85 @@ classdef algRowFailsSurdTest < matlab.unittest.TestCase
             t.verifyGreaterThan(nCert, 40, 'too few certified trials to mean anything');
         end
 
+
+        function aCERTIFIEDTopRootFaceRowNeverHoldsRandomInputs(t)
+        % The top-root face row (z_w the largest real root of a QUARTIC in z): random z_k as in the
+        % test above (or rational), z_w the top root of prod_i (z - R_i) + h (R_i linear, h a small
+        % integer) times +-1 or 2; wherever the row is certified false, no sample of the box has
+        % both branches with z_k > z_w.
+            rng(44);  nCert = 0;
+            for trial = 1:300
+                kap = 2 + (rand < 0.5);
+                P0 = zeros(3,3);  P0(1,1) = randi([-3 3]);  P0(2,1) = randi([-2 2]);  P0(1,2) = randi([-2 2]);
+                P0(3,1) = randi([-1 1]);  P0(2,2) = randi([-1 1]);  P0(1,3) = randi([-1 1]);
+                if rand < 0.25
+                    Fk = cat(3, -P0, [1 0 0; 0 0 0; 0 0 0]);  Bk = 1;
+                else
+                    S = zeros(2,2);  S(1,1) = randi([-2 2]);  S(2,1) = randi([-2 2]);  S(1,2) = randi([-2 2]);
+                    c = randi([1 2]);
+                    C = conv2(P0, P0) - c^2 * kap * padTo(conv2(S, S), 5);
+                    Fk = zeros(5,5,3);  Fk(:,:,1) = C;  Fk(1:3,1:3,2) = -2 * P0;  Fk(1,1,3) = 1;
+                    Bk = 2 * randi(2) - 3;
+                end
+                G = randomQuartic(P0);
+                a = struct('FP', Fk, 'FB', Bk, 'num', [], 'den', [], 'side', [], 'W', struct('FP', G, 'FB', -1));
+                box = [-1 1 -1 1] * (0.25 + rand);
+                if ~algRowFails(a, box, @(~) true, 5), continue, end
+                nCert = nCert + 1;
+                X = [box(1) + (box(2) - box(1)) * rand(3000,1), box(3) + (box(4) - box(3)) * rand(3000,1)];
+                zk = algBranch(Fk, X, Bk);  zw = algBranch(G, X, -1);
+                both = isfinite(zk) & isfinite(zw);
+                t.verifyFalse(any(zk(both) > zw(both) + 1e-9 * max(1, abs(zw(both)))), ...
+                              sprintf('trial %d: z_k > z_w at a sample', trial));
+            end
+            t.verifyGreaterThan(nCert, 40, 'too few certified trials to mean anything');
+        end
+
+        function aCERTIFIEDTopRootRowNeverHoldsRandomInputs(t)
+        % A quadratic row q against the top root of a random quartic (as above), either side:
+        % wherever certified false, no sample has the branch with side * (q - z_top) > 0.
+            rng(45);  nCert = 0;
+            for trial = 1:2000
+                num = zeros(1, 10);  num(5:10) = randi([-3 3], 1, 6);  den = 2^randi([0 2]);
+                Q = [2*num(10) 2*num(9) num(7); 2*num(8) 2*num(6) 0; num(5) 0 0] / (2 * den);
+                if rand < 0.5, G = randomQuartic(); else, G = randomQuartic(round(Q)); end
+                side = 2 * randi(2) - 3;
+                a = struct('FP', G, 'FB', -1, 'num', num, 'den', den, 'side', side, 'W', []);
+                box = [-1 1 -1 1] * (0.25 + rand);
+                if ~algRowFails(a, box, @(~) true, 5), continue, end
+                nCert = nCert + 1;
+                X = [box(1) + (box(2) - box(1)) * rand(3000,1), box(3) + (box(4) - box(3)) * rand(3000,1)];
+                z = algBranch(G, X, -1);  q = ratQ.evalFace(num, den, X);  f = isfinite(z);
+                t.verifyFalse(any(side * (q(f) - z(f)) > 1e-9 * max(1, abs(z(f)))), ...
+                              sprintf('trial %d: the row holds at a sample', trial));
+            end
+            t.verifyGreaterThan(nCert, 40, 'too few certified trials to mean anything');
+        end
     end
 end
 
 function Q = padTo(P, n)
     Q = zeros(n, n);  Q(1:size(P,1), 1:size(P,2)) = P;
+end
+
+function G = randomQuartic(P0)
+% Without P0: (prod_{i<=4} (z - R_i) + h) * m, R_i random linear, h a small integer, m in {1, -1, 2}.
+% With P0 (a quadratic in x, y): ((z - P0 - M) ((z - P0)^2 + K) (z - P0 + L) + h) * m, M in [-2, 8],
+% K in [1, 4], L in [12, 24] -- one root near a face z = P0 + ..., above it or not, a complex pair,
+% one root far below: the cases the top-root row is for, certified and tight both.
+    one = ones(3,3) .* [1 0 0; 0 0 0; 0 0 0];
+    lin = @(R) cat(3, -R, one);                          % z - R
+    if nargin == 0
+        G = 1;
+        for i = 1:4
+            R = zeros(3,3);  R(1,1) = randi([-3 3]);  R(2,1) = randi([-1 1]);  R(1,2) = randi([-1 1]);
+            G = convn(G, lin(R));
+        end
+    else
+        Q2 = convn(lin(P0), lin(P0));  Q2(1,1,1) = Q2(1,1,1) + randi([1 4]);      % (z - P0)^2 + K
+        G = convn(convn(lin(P0 + randi([-2 8]) * one), Q2), lin(P0 - randi([12 24]) * one));
+    end
+    G(1,1,1) = G(1,1,1) + randi([-3 3]);
+    m = [1 -1 2];  G = G * m(randi(3));
+    G = ratQ.trimN(G);
 end

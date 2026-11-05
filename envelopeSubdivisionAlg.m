@@ -12,7 +12,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
 %          dom  : (optional) rows [a b c], a x + b y + c >= 0, the subdivision is clipped to
 %          cuts : (optional) integer lines [a b c] added to the arrangement as curves, so that every
 %                 face lies on one side of each and records it -- cutTriangles' rational lines
-%          opts : (optional) struct; .overlayBudget (default 4000, Inf lifts it) bounds the pieces
+%          opts : (optional) struct; .overlayBudget (default 3000, Inf lifts it) bounds the pieces
 %                 the overlay of several pairs may visit -- see minOverlay
 %                 .maxCells (default 3000) bounds the arrangement's cells -- arrangementSize
 % [output] subdivision : struct array, one entry per face, with
@@ -56,7 +56,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
     if nargin < 2, dom = zeros(0,3); end
     if nargin < 3, cuts = zeros(0,3); end
     if nargin < 4 || isempty(opts), opts = struct(); end
-    if ~isfield(opts, 'overlayBudget'), opts.overlayBudget = 4000; end
+    if ~isfield(opts, 'overlayBudget'), opts.overlayBudget = 3000; end
     if ~isfield(opts, 'maxCells'), opts.maxCells = 3000; end
     % SEVERAL PAIRS: a cell array of pair envelopes is the MINIMUM over them -- an EnvelopeMin with no
     % triangle face. Each pair is subdivided ALONE and the subdivisions are OVERLAID (minOverlay,
@@ -749,7 +749,9 @@ function [out, info] = minOverlay(subs, infos, budget)
     % ---- A BUDGET on the pieces (2026-11-01) ------------------------------------------------------
     % Each tuple visits up to (faces per covered pair, multiplied) x (covered pairs) pieces, each with
     % exact tests. Erratum Example 2 bounds at 11567 (14563 before that day's pair pruning) and ran
-    % for hours (DECISIONS 2026-11-01); a
+    % for hours (DECISIONS 2026-11-01); at 3736 after the top-root rows (2026-11-04) its default
+    % biconjQ subdivided it, and the slow suite's Example 2 file ran ~55 min, not 8-25 (shared
+    % machine), so the default went 4000 -> 3000 to keep declining it; a
     % caller with no time for that gets a refusal by name, and biconjQ the EnvelopeMin, which answers
     % eval. Inf lifts it.
     bound = 0;

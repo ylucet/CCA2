@@ -8,7 +8,7 @@ function h = biconjQ(obj, opts)
 %                QuaPol.assertExact for why computing exactly on inexact data is worse than not
 %                computing at all).
 %          opts : (optional) struct; .overlayBudget is passed to envelopeSubdivisionAlg (default
-%                 there 4000; Inf subdivides erratum Example 2, ~hours -- DECISIONS 2026-11-01)
+%                 there 3000; Inf subdivides erratum Example 2, ~hours -- DECISIONS 2026-11-01)
 % [output] h   : QuaCon.
 %
 % ------------------------------------------------------------------------------------------------
@@ -351,8 +351,8 @@ function h = biconjQ(obj, opts)
                     % and overlaid as above, then each contact triangle CUT IN after the arrangement
                     % (cutTriangles decides or splits every face against its lines): inside T its
                     % plane is co f, outside the pairs are. A named s0's triangle is AlgCrv's
-                    % table 3. Erratum Example 2 passes the overlay's default budget (11567 pieces
-                    % against 4000, hours) and stays the EnvelopeMin unless opts lifts it.
+                    % table 3. Erratum Example 2 passes the overlay's default budget (3736 pieces
+                    % against 3000 since 2026-11-04; ~1 h lifted, shared machine) and stays the EnvelopeMin unless opts lifts it.
                     try
                         envs = cellfun(@envelopePrune, h.pairs, 'UniformOutput', false);
                         tfs = arrayfun(@triangleFace, h.tris);

@@ -123,6 +123,7 @@ function r = rowPolys(a, factors)
 % The polynomials whose signs decide row a on a box, and the test reading them; [] if the row
 % cannot be certified at all (shape, branch index, non-finite coefficients).
     r = [];
+    persistent tmemo
     if isfield(a, 'W') && ~isempty(a.W), r = faceRowPolys(a, factors); return, end
     FP = a.FP;
     num = double(a.num(:).');
@@ -134,6 +135,30 @@ function r = rowPolys(a, factors)
     Dn = 2 * double(a.den);
     want = -a.side;                                  % the sign q - z must have for the row to fail
     if ratQ.isBigPoly(FP), nz = FP.sz(3); else, nz = size(FP, 3); end
+    if nz - 1 >= 3
+        % THE TOP ROOT OF A POLYNOMIAL OF DEGREE n >= 3 in z (2026-11-04): erratum Example 2's
+        % pair 2 has a bridge face quartic in z, and no row of it was ever formed -- a quadratic
+        % below it was never shown empty. Sufficient conditions, by Taylor at q (G_n = lead in z):
+        % q < z_top when sign(G_n) G(q) < 0 (a root above q); q > z_top when sign(G_n) G^(j)(q) > 0
+        % for every j < n (G has no root at or above q). Each Dn^(n-j) G^(j)(Q / Dn), exact.
+        if ~isequal(a.FB, -1) || Dn ~= round(Dn), return, end
+        if isempty(tmemo), tmemo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+        key = rowKey(FP, num, a.den);
+        if ~isempty(key), key = sprintf('top%d|%s', want, key); end
+        if ~isempty(key) && isKey(tmemo, key)
+            P = tmemo(key);
+        else
+            P = topRowPolys(FP, Q, Dn, nz - 1, want);
+            if ~isempty(key)
+                if tmemo.Count > 5000, tmemo.remove(tmemo.keys()); end
+                tmemo(key) = P;
+            end
+        end
+        if isempty(P), return, end
+        P = cellfun(@(p) divideOut(p, factors), P, 'UniformOutput', false);
+        r = struct('P', {P}, 'test', @(s) s(1) ~= 0 && all(s(1) * s(2:end) == want));
+        return
+    end
     switch nz - 1
         case 2
             hi = any(a.FB == [-1 2]);
@@ -195,6 +220,33 @@ function P = squareFreePolys(FP, Q, Dn, nz)
     end
     if any(cellfun(@(p) ~all(isfinite(p(:))), P)), P = {}; return, end
     P = cellfun(@squareFreeSign, P, 'UniformOutput', false);
+end
+
+function P = topRowPolys(FP, Q, Dn, n, want)
+% {G_n, H_0} (want -1) or {G_n, H_0, ..., H_(n-1)} (want +1), H_j = Dn^(n-j) G^(j)(Q / Dn) by Horner,
+% exact (zMul/zLin), back in doubles as fromZ does, squared factors divided out; {} on failure.
+    P = {};
+    try
+        if ratQ.isBigPoly(FP) || max(abs(FP(:))) >= 2^53, Z = toZ(FP); else, Z = FP; end
+        G = cell(1, n+1);
+        for i = 0:n, G{i+1} = zNorm(Z(:,:,i+1)); end
+        D = java.math.BigInteger.valueOf(Dn);
+        nj = 0;  if want == 1, nj = n - 1; end
+        P = cell(1, nj + 2);
+        P{1} = fromZ(bigZ(G{n+1}));
+        for j = 0:nj
+            c = @(i) factorial(i) / factorial(i - j);
+            R = zLin(c(n), G{n+1}, 0, 0);
+            for i = n-1:-1:j
+                R = zLin(1, zMul(R, Q), c(i), zLin(D.pow(n - i), G{i+1}, 0, 0));
+            end
+            R = fromZ(bigZ(R));
+            if ~all(isfinite(R(:))), P = {}; return, end
+            P{j+2} = squareFreeSign(R);
+        end
+    catch
+        P = {};
+    end
 end
 
 function key = rowKey(FP, num, den)
@@ -322,6 +374,7 @@ function ok = cornerOK(rows, p, e, factors)
             % refused at every dyadic corner, which refused the corner whatever the face row did.
             rowsC = rows;  keep = true(1, numel(rows));
             for t = 1:numel(rows)
+                if isfield(rows{t}, 'corner') && ~rows{t}.corner, keep(t) = false; continue, end
                 for k = 1:numel(rows{t}.P)
                     G = blowUp(rows{t}.P{k}, p, sg, major);
                     if isempty(G), keep(t) = false; break, end
@@ -734,6 +787,18 @@ function r = faceRowPolys(a, factors)
     r = [];
     Fk = a.FP;  Fw = a.W.FP;
     nk = nzOf(Fk);  nw = nzOf(Fw);
+    % z_w THE TOP ROOT OF A POLYNOMIAL OF DEGREE >= 3 in z (2026-11-04): erratum Example 2's pair 2
+    % compares every face it keeps with one bridge face quartic in z, and no row of either kind
+    % below was built for it -- every one of those 89 comparisons failed by construction.
+    if nw >= 4 && any(nk == [2 3]) && isequal(a.W.FB, -1)
+        hiK = false;
+        if nk == 3
+            hiK = any(a.FB == [-1 2]);  if ~hiK && ~any(a.FB == [1 -2]), return, end
+        elseif ~any(a.FB == [1 -1]), return
+        end
+        r = topFaceRow(Fk, Fw, nk, hiK, factors);
+        return
+    end
     % ONE FACE RATIONAL (2026-11-03): z = -C/B, degree 1 in z. The 3-convex-edge triangle's last
     % zero-area faces are cut off by a tie between a quadratic-fibre face and such a face, and this
     % returned [] for it -- the row was dropped and the tie never certified.
@@ -829,6 +894,76 @@ function r = surdFaceRow(Fk, Fw, nk, nw, hiK, hiW, factors)
     catch
         r = [];
     end
+end
+
+function r = topFaceRow(Fk, Fw, nk, hiK, factors)
+% A FACE ROW AGAINST A TOP ROOT (2026-11-04): z_k > z_w with z_w the LARGEST real root of G = Fw, of
+% degree n >= 3 in z, and z_k a face over one quadratic field (surdFace) or rational. Sufficient,
+% not equivalent: sign(G_n) G(z_k) < 0 puts a real root of G above z_k (G -> sign(G_n) inf), so
+% z_k < z_w; the row fails there. With z_k = N / M, N = kappa a0 + eta tau mu S sqrt(kappa) = X + Y
+% sqrt(kappa), M = kappa den (see surdFaceRow),
+%       M^n G(N / M) = sum_i G_i N^i M^(n-i) = U + sqrt(kappa) V,
+% by Horner over Z[sqrt kappa]: no conjugate of z_k enters, so where the two faces touch only
+% z_w - z_k vanishes. One (U, V) per tau_k; the row fails where sign(G_n) sign(den)^n sign(T) = -1.
+% Where z_k lies below two further roots of G the test reads +1 and only fails to certify.
+    r = [];
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+    key = ['top|', rowKey(Fk, 0, 1), '#', rowKey(Fw, 0, 1), sprintf('|%d', hiK)];
+    if isKey(memo, key)
+        P = memo(key);
+    else
+        if memo.Count > 2000, memo.remove(memo.keys()); end
+        memo(key) = {};  P = {};
+        try
+            fk = surdFace(Fk, nk, hiK);
+            if ~isempty(fk)
+                if fk.lin, kap = java.math.BigInteger.ONE; else, kap = squareFreeInt(fk.c); end
+                mu = fieldMu(fk, kap);
+                if kap.bitLength() <= 52 && ~isempty(mu)
+                    k = kap.doubleValue();
+                    if ratQ.isBigPoly(Fw) || max(abs(Fw(:))) >= 2^53, Z = toZ(Fw); else, Z = Fw; end
+                    n = nzOf(Fw) - 1;
+                    G = cell(1, n+1);
+                    for i = 0:n, G{i+1} = zNorm(Z(:,:,i+1)); end
+                    X = zLin(k, fk.a0, 0, 0);  M = zLin(k, fk.den, 0, 0);
+                    T = cell(1, 2);
+                    for tk = [1 -1]
+                        Y = zLin(scaleBy(mu, tk * fk.eta), fk.S, 0, 0);
+                        U = G{n+1};  V = 0;  Mp = 1;
+                        for i = n-1:-1:0
+                            Mp = zMul(Mp, M);
+                            Un = zLin(1, zMul(U, X), k, zMul(V, Y));
+                            V = zLin(1, zMul(U, Y), 1, zMul(V, X));
+                            U = zLin(1, Un, 1, zMul(G{i+1}, Mp));
+                        end
+                        T{(tk < 0) + 1} = surdPoly(U, V, k);
+                    end
+                    cf = @(p) fromZ(bigZ(p));
+                    P = [{cf(fk.den), cf(fk.S), cf(G{n+1})}, T, {mod(n, 2)}];
+                    memo(key) = P;
+                end
+            end
+        catch
+            P = {};
+        end
+    end
+    if isempty(P), return, end
+    odd = P{end};  P = P(1:end-1);
+    P(1:3) = cellfun(@(p) divideOut(p, factors), P(1:3), 'UniformOutput', false);
+    % NOT blown up at corners (cornerOK leaves it out): its U, V are the quartic's Horner images, of
+    % high degree with big coefficients, and the exact BigInteger charts of them ran for hours
+    % on the poly2 kink (kinkSubdivisionTest, 2026-11-04). Leaving a row out is sound, as there.
+    r = struct('P', {P}, 'test', @(s) topOK(s, odd), 'corner', false);
+end
+
+function ok = topOK(s, odd)
+% s = signs of {den_k, S_k, G_n, T(+), T(-)}: z_k < z_w (the top root) on the box.
+    ok = false;
+    if any(s(1:3) == 0), return, end
+    t = s(4 + (s(1) * s(2) < 0));
+    dn = 1;  if odd, dn = s(1); end
+    ok = t * s(3) * dn == -1;
 end
 
 function v = scaleBy(mu, sg)
