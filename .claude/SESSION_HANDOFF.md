@@ -21,15 +21,18 @@ Nothing.
   faces kept once; two more levels beside a certified corner square); exact corner chart ~50x faster.
   Example 2 pairs 20/62/34. Tests on the branch: fast 826/0, normal 35/0, slow 128/0 (+2 known),
   Ex2Subdivision 3/0. See MORNING.md.
+- 2026-11-05 (later, on main): every biconj result is an AlgCon (EnvelopeMin < AlgCon, no subdivision);
+  Example 2 pair 2's extra faces -- decided, leave them; the four todo guards: 3 exercised, 1 shadowed,
+  and the bridge producer's overflow refusals are REACHABLE on small pairs (SUPPORT_MATRIX 3.2);
+  TODO.md has an 'Open now' index. Tests: fast 827/0, normal 35/0, slow 128/0 (+2 known), guards 36/0
 - Known reds: none
 
 ## Next
 1. (done) Branch merged to main 2026-11-03.
-2. Example 2 pair 2's 30 non-winning faces: tangent touches at cell corners; a certificate (patch in
-   .claude/proto/) drops 2 at ~4x cost -- NEEDS A DECISION (MORNING.md, DECISIONS 2026-11-05 second).
+2. (decided 2026-11-05) Example 2 pair 2's non-winning faces: leave them.
 3. (done 2026-11-05) Triangle 36 faces, every one the maximum somewhere.
-4. Guards still `todo`: bridgeFaceAlg bigZContent/branchOverflow/witnessOverflow,
-   envelopeAssemble:irrationalStraightFacet (no fixtures).
+4. (done 2026-11-05) todo guards. Next candidate: the BigInteger route for the bridge producer's
+   reachable overflow refusals (TODO.md 'Open now').
 
 ## Files
 - `algRowFails.m` -- topRowPolys / topFaceRow (top-root rows, no corner blow-up), divideOutSurd
