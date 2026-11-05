@@ -864,6 +864,7 @@ function r = surdFaceRow(Fk, Fw, nk, nw, hiK, hiW, factors)
         P = memo(key);
         if isempty(P), return, end
         P(1:4) = cellfun(@(p) divideOut(p, factors), P(1:4), 'UniformOutput', false);
+        P(5:8) = cellfun(@(T) divideOutSurd(T, factors), P(5:8), 'UniformOutput', false);
         r = struct('P', {P}, 'test', @surdOK);
         return
     end
@@ -890,6 +891,7 @@ function r = surdFaceRow(Fk, Fw, nk, nw, hiK, hiW, factors)
         P = [{cf(fk.den), cf(fw.den), cf(fk.S), cf(fw.S)}, T];
         memo(key) = P;
         P(1:4) = cellfun(@(p) divideOut(p, factors), P(1:4), 'UniformOutput', false);
+        P(5:8) = cellfun(@(T) divideOutSurd(T, factors), P(5:8), 'UniformOutput', false);
         r = struct('P', {P}, 'test', @surdOK);
     catch
         r = [];
@@ -951,6 +953,7 @@ function r = topFaceRow(Fk, Fw, nk, hiK, factors)
     if isempty(P), return, end
     odd = P{end};  P = P(1:end-1);
     P(1:3) = cellfun(@(p) divideOut(p, factors), P(1:3), 'UniformOutput', false);
+    P(4:5) = cellfun(@(T) divideOutSurd(T, factors), P(4:5), 'UniformOutput', false);
     % NOT blown up at corners (cornerOK leaves it out): its U, V are the quartic's Horner images, of
     % high degree with big coefficients, and the exact BigInteger charts of them ran for hours
     % on the poly2 kink (kinkSubdivisionTest, 2026-11-04). Leaving a row out is sound, as there.
@@ -1348,6 +1351,42 @@ function S = divideOut(S, factors)
         catch
         end
     end
+end
+
+function T = divideOutSurd(T, factors)
+% divideOut for U + sqrt(k) V (makeSurd's struct, 2026-11-04): U and V JOINTLY by each region factor
+% as often as it divides both exactly (their ratio, which the bracket Lo/Hi reads, is kept), and the
+% norm and the reduced U, V -- read for their signs only -- each on its own. Two faces TOUCHING ALONG
+% THE REGION'S EDGE (the 3-convex-edge triangle's hypotenuse) leave U + sqrt(k) V = g^m M with g the
+% edge's row; undivided, no chart box beside the edge had a sign. Exact doubles only; otherwise kept.
+    if ~isnumeric(T.UZ) || ~isnumeric(T.VZ), return, end
+    U = T.UZ;  V = T.VZ;  ch = false;
+    for k = 1:numel(factors)
+        g = factors{k};
+        for sc = 1:30
+            if all(g(:) == round(g(:))), break, end
+            g = 2 * g;
+        end
+        if numel(g) <= 1 || any(g(:) ~= round(g(:))), continue, end
+        try
+            g = ratQ.contentFree(ratQ.trimN(g));
+            if numel(g) <= 1, continue, end
+            for it = 1:4
+                if ~mayDivide(U, g) || (any(V(:)) && ~mayDivide(V, g)), break, end
+                U2 = ratQ.trimN(ratQ.polyDivExact(U, g, 2));
+                if any(V(:)), V2 = ratQ.trimN(ratQ.polyDivExact(V, g, 2)); else, V2 = 0; end
+                U = U2;  V = V2;  ch = true;
+            end
+        catch
+        end
+    end
+    E = T.EZ;  Us = T.UsZ;  Vs = T.VsZ;
+    if isnumeric(E), E2 = divideOut(E, factors); ch = ch || ~isequal(E2, E); E = E2; end
+    if isnumeric(Us), U3 = divideOut(Us, factors); ch = ch || ~isequal(U3, Us); Us = U3; end
+    if isnumeric(Vs) && any(Vs(:)), V3 = divideOut(Vs, factors); ch = ch || ~isequal(V3, Vs); Vs = V3; end
+    if ~ch, return, end
+    n = max(size(U), size(V));
+    T = makeSurd(zPad(U, n), zPad(V, n), T.k, E, Us, Vs);
 end
 
 function tf = mayDivide(S, g)
