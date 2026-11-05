@@ -28,6 +28,8 @@ classdef AlgCon < Alg & Conic
    %
    %       QuaCon      quadratic on a CONIC subdivision            < RatCon & Qua
    %       QuaParCPLQ  a QuaPar still in cPLQ's own symbolic form  < RatPar & Qua
+   %       AlgCrv      algebraic on a curved (algebraic-edge) subdivision  < AlgCon & Crv
+   %       EnvelopeMin co f as a minimum of upper bounds, NOT subdivided   < AlgCon
    %
    % WHY THIS ROOT IS CONCRETE, where RatCon was abstract. The concrete cells are named
    % <Function><Subdivision> -- QuaPol, RatPol, QuaPar, QuaCon -- and at (Alg, Conic) the root of
@@ -359,7 +361,8 @@ classdef AlgCon < Alg & Conic
        function k = kind(obj)
        % objective: which concrete type this RatPar actually is -- the "type flag" callers switch
        %            on after receiving a statically-typed RatPar from conj/biconj/convEnv/...
-       % [output] k : one of 'QuaPol' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ'
+       % [output] k : one of 'QuaPol' | 'RatPol' | 'QuaPar' | 'QuaParCPLQ' | 'QuaCon' | 'AlgCon' |
+       %              'AlgCrv' | 'EnvelopeMin'
        %
        % Derived from the object's real class rather than stored, so it can never disagree with
        % what the object IS -- see this class's header. Prefer kind() over class() in user code:
@@ -373,7 +376,8 @@ classdef AlgCon < Alg & Conic
        %            and QuaPar) or is still held in cPLQ's symbolic form with the subdivision not yet
        %            reconstructed (false for QuaParCPLQ, whose inherited subdivision properties are empty
        %            precisely because reconstructing V/E/Ec/F/P from it is still open -- see
-       %            QuaParCPLQ.m and DESIGN.md II.5.1).
+       %            QuaParCPLQ.m and DESIGN.md II.5.1). Also false for EnvelopeMin, biconj's
+       %            eval-only minimum where the subdivision is declined (EnvelopeMin.m).
        % [output] tf : logical
             tf = ~isempty(obj.f);
        end

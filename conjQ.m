@@ -39,8 +39,9 @@ function [g, dom] = conjQ(obj)
 %     curvature, that edge's clamped one-dimensional maximum. The concave case falls out of this
 %     with no qualifying edge, so it is one branch rather than two.
 %   * A MULTI-FACE input is the fold of the above over its pieces, via maxQ.
-%   * What is still refused by name: an UNBOUNDED piece (a wedge or half-strip -- the sup can be
-%     +inf, so dom f* stops being the whole plane) and a domain of dimension < 2.
+%   * UNBOUNDED pieces (dom f* then returned as half-planes in `dom`, [0 0 -1] when empty) and
+%     domains of dimension < 2 are answered too (see below). What is still refused by name is a
+%     NON-CONVEX unbounded face (PLQ:conjQ:nonConvexPiece).
 %
 % The order the remaining cases should land in is the plan's Phase 2a: the per-piece closed forms
 % (convEnvCPLQ, conjPieceCPLQ, conjConvexOverPiece, conjConvexPolygon, conjAffinePLQ) are ALREADY

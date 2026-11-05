@@ -1,10 +1,13 @@
-classdef EnvelopeMin
+classdef EnvelopeMin < AlgCon
 % EnvelopeMin  A convex envelope held as a MINIMUM of upper bounds, each attained somewhere: the
 %   atoms' pairwise envelopes (envelopeAssemble face lists) and their triple tangent planes on the
 %   contact triangles. `biconjAtoms` builds it; its header says why the minimum IS co f.
 %
-% This is NOT a node of the AlgCon lattice: it is not subdivided into one subdivision. It answers
-% `eval`, which is what every consumer of biconjQ's result used. Since 2026-10-16 it holds only the
+% A LEAF OF THE AlgCon LATTICE WITH NO SUBDIVISION (2026-11-05), so that every `biconj` result is an
+% AlgCon -- QuaCon, AlgCrv or this -- and a caller needs no class dispatch to receive one. It is
+% the QuaParCPLQ precedent: the inherited V/E/F/f properties stay EMPTY, `isSubdivided()` is false
+% and `kind()` says 'EnvelopeMin'. It answers `eval`, which is what every consumer of biconjQ's
+% result used. Since 2026-10-16 it holds only the
 % ACTIVE pairs and triangles (biconjAtoms' activeAtomPairs). biconjQ subdivides one pair
 % (2026-10-17), several (2026-10-31) and pairs with triangles (2026-11-01) instead; this is what is
 % left where a route declines -- erratum Example 2's overlay past its piece budget.
@@ -20,6 +23,7 @@ classdef EnvelopeMin
 
     methods
         function obj = EnvelopeMin(pairs, tris, atoms)
+            if nargin == 0, return; end        % AlgCon's constructor protocol: blank, writes nothing
             obj.pairs = pairs;  obj.tris = tris;  obj.atoms = atoms;
         end
 

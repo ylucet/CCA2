@@ -28,6 +28,22 @@ classdef AlgConTest < matlab.unittest.TestCase
             testCase.verifyEqual(q.kind(), 'QuaPol', 'kind() still names the concrete class');
         end
 
+        function everyBiconjResultTypeIsAnAlgCon(testCase)
+        % biconj returns a QuaCon, an AlgCrv, or -- where the subdivision is declined -- an
+        % EnvelopeMin. Since 2026-11-05 all three are AlgCon, so a caller needs no class dispatch;
+        % the EnvelopeMin is the eval-only leaf (QuaParCPLQ's precedent): no subdivision, kind()
+        % names it, and its eval still answers.
+            e = EnvelopeMin();
+            testCase.verifyTrue(isa(e,'AlgCon'));
+            testCase.verifyEqual(e.kind(), 'EnvelopeMin');
+            testCase.verifyFalse(e.isSubdivided());
+            t = struct('T', [0 0; 1 0; 0 1], 's', [1 2], 'c', 1);
+            e = EnvelopeMin({}, t, {});
+            testCase.verifyTrue(isa(e,'AlgCon'));
+            testCase.verifyEqual(e.eval([0.25 0.25; 2 2]), [-0.25; Inf]);
+            testCase.verifyTrue(isa(QuaCon(), 'AlgCon') && isa(AlgCrv(), 'AlgCon'));
+        end
+
         function theTwoAxesStayINDEPENDENTLYQueryable(testCase)
         % The whole purpose of the markers: ask about ONE axis without enumerating combinations.
         % An AlgCon is at the TOP of the function axis, so it is Alg and NOT Rat -- the single

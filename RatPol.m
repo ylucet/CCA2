@@ -7,7 +7,9 @@ classdef RatPol < RatPar & Pol
    %   [COAP] Karmarkar & Lucet, Comput. Optim. Appl. 94 (2026) 747-780 (Step 4) and
    %   [JOGO] Karmarkar & Lucet, J. Glob. Optim. 94 (2026) 3-34 (Prop. 1),
    % conv f is piecewise linear / quadratic / rational (quadratic over linear) on a polyhedral
-   % subdivision (the more general fractional form with a square root is proven not to occur).
+   % subdivision for ONE piece (the fractional form with a square root is proven not to occur
+   % there). For several pieces a bridge face is affine plus a NORM, which no RatPol holds: that
+   % is AlgCon's Alg level (Alg.m, RETURN_TYPE.md).
    %
    % In the design hierarchy (DESIGN.md): RatPar > RatPol, QuaPar > QuaPol.
    % RatPol generalizes QuaPol's FUNCTION representation by adding a per-face linear

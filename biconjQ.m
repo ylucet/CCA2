@@ -9,7 +9,8 @@ function h = biconjQ(obj, opts)
 %                computing at all).
 %          opts : (optional) struct; .overlayBudget is passed to envelopeSubdivisionAlg (default
 %                 there 3000; Inf subdivides erratum Example 2, ~hours -- DECISIONS 2026-11-01)
-% [output] h   : QuaCon.
+% [output] h   : an AlgCon -- a QuaCon (rational faces), an AlgCrv (a bridge or tie face), or an
+%                EnvelopeMin (eval only) where the subdivision is declined. kind() says which.
 %
 % ------------------------------------------------------------------------------------------------
 % DIRECT, NOT conj(conj(f)). ALGORITHM.md states the principle and the measurement behind it:

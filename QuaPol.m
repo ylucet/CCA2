@@ -815,7 +815,7 @@ classdef QuaPol < RatPol & QuaPar
        % objective: biconjugate f** = conj(conj(f)); equals the closed convex envelope of f
        % [input]  engine: 'exact' (default) | 'cplq' | 'symbolic' (alias of 'cplq')
        % [output] h: 'cplq' returns a RatPar -- QuaPol (Case A), RatPol (Case B) or QuaParCPLQ
-       %             (Case C); call kind() to learn which. 'exact' returns a QuaCon, an AlgCrv
+       %             (Case C); call kind() to learn which. 'exact' returns an AlgCon: a QuaCon, an AlgCrv
        %             where a bridge face, a tie between atom pairs or a named contact triangle
        %             carries the value, or an EnvelopeMin (eval only) where that subdivision is
        %             declined -- erratum Example 2 past the overlay's piece budget (biconjQ's opts).
