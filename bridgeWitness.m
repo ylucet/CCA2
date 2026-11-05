@@ -237,7 +237,10 @@ function [inR, n] = memberExactArc(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, P)
 % outside the arc's sweep would have the cut describe a region the face does not occupy -- measured,
 % a witness rounded to the nearest integer landed outside a narrow strip and both cut rows then came
 % back as the SAME side, leaving an unbounded region where the face is a parallelogram.
-    [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
+    [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, 'big');
+    if ratQ.isBigPoly(Phi)
+        [inR, n] = memberExactArcBig(Phi, Dt, U1, U2, xd, P);  return
+    end
     Ph = ratQ.polyTrim(fliplr(Phi));
     if numel(Ph) <= 1, inR = false;  n = 0;  return, end
     I = ratQ.isolateRoots(Ph);
@@ -276,12 +279,50 @@ function [inR, n] = memberExact(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd)
 %       Phi(mu) = U' Dl U + 2 xd det(M_mu) dl'U + 2 kp xd^2 det(M_mu)^2 ,
 %
 % a quartic in mu with integer coefficients, and the question is whether it has a root in [-1,0].
-    [Phi, ~] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
+    [Phi, ~] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, 'big');
+    if ratQ.isBigPoly(Phi)
+        % past 2^53 (2026-11-05): the same count in BigInteger; [-1, 0] closed, as below
+        Pb = fliplr(Phi.c(:).');
+        n = ratQ.countRootsInHalfOpenBig(Pb, -1, 0);
+        inR = n > 0 || rootAtMinusOne(Pb);
+        return
+    end
     Ph = fliplr(Phi);                                 % ratQ's univariate convention: highest first
     Ph = ratQ.polyTrim(Ph);
     if numel(Ph) <= 1, inR = false;  n = 0;  return, end
     n = ratQ.countRootsIn(Ph, -1, 0);                 % half-open (-1, 0]
     inR = n > 0 || polyval(Ph, -1) == 0;
+end
+
+% --------------------------------------------------------------------------------------------------
+function tf = rootAtMinusOne(Pb)
+    m1 = java.math.BigInteger.valueOf(-1);
+    tf = ratQ.bigEvalRow(ratQ.bigRow(Pb), m1, java.math.BigInteger.ONE).signum() == 0;
+end
+
+function [inR, n] = memberExactArcBig(Phi, Dt, U1, U2, xd, P)
+% memberExactArc with Phi past 2^53: the same questions, through ratQ's BigInteger Sturm routines.
+% Intervals are HALF-OPEN (lo, hi] here, so "a root in [-1, 0]" is a root in (-1, 0] or one AT -1.
+    Pb = fliplr(Phi.c(:).');
+    I = ratQ.isolateRootsBig(Pb);
+    n = 0;  inR = false;
+    for r = 1:size(I,1)
+        lo = I(r,1);  hi = I(r,2);
+        if hi < -1 || lo >= 0, continue, end         % (lo, hi] misses [-1, 0] entirely ...
+        inRange = ratQ.countRootsInHalfOpenBig(Pb, max(lo, -1), min(hi, 0)) == 1 || ...
+                  (lo < -1 && hi >= -1 && rootAtMinusOne(Pb));   % ... or its root is -1 itself
+        if ~inRange, continue, end
+        n = n + 1;
+        iv = [lo hi];
+        sD = ratQ.signAtBig(fliplr(Dt), Pb, iv);
+        if sD == 0, continue, end
+        ok = true;
+        for i = 1:size(P,1)
+            q = vadd(vadd(P(i,1)*U1, P(i,2)*U2), P(i,3)*xd*Dt);
+            if ratQ.signAtBig(fliplr(q), Pb, iv) * sD <= 0, ok = false; break, end
+        end
+        if ok, inR = true; return, end
+    end
 end
 
 % --------------------------------------------------------------------------------------------------

@@ -144,8 +144,8 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     %
     % WHICH FACE IS "g1" DOES NOT MATTER: on the tie the two agree, so the value is the same either
     % way, and the affine one is passed first because that is the form the closed form is written in.
-    r1 = ratQ.detExact(N1) == 0 && any(N1(:) ~= 0);
-    r2 = ratQ.detExact(N2) == 0 && any(N2(:) ~= 0);
+    r1 = isSingular(N1) && any(N1(:) ~= 0);
+    r2 = isSingular(N2) && any(N2(:) ~= 0);
     if all(N1(:) == 0) && r2
         [face, info] = bridgeFaceRat(n1, d1, n2, d2, P);  return
     elseif all(N2(:) == 0) && r1
@@ -184,7 +184,7 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     % merely IN the region: the branch certification substitutes it into FP and clears xd to the
     % sixth power, which can exceed 2^53 where the membership test did not. A candidate that cannot
     % certify is passed over rather than trusted, and only an empty list is a refusal.
-    FB = [];  lastErr = [];
+    FB = [];  lastErr = [];  anyOverflow = false;
     for w = 1:size(W,1)
         xn = W(w,1:2).';  xd = W(w,3);
         try
@@ -196,8 +196,16 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
             if ~any(strcmp(ME.identifier, {'ratQ:overflow', 'bridgeFaceAlg:branchUndecided', 'ratQ:sturmEndpointIsRoot'}))
                 rethrow(ME)
             end
-            lastErr = ME;  FB = [];
+            lastErr = ME;  FB = [];  anyOverflow = anyOverflow || strcmp(ME.identifier, 'ratQ:overflow');
         end
+    end
+    if isempty(FB) && ~anyOverflow
+        % NOT an overflow: every witness's count disagreed with its value (or met an endpoint
+        % root). Measured 2026-11-05 only on out-of-contract pairs -- an INDEFINITE face, which a
+        % convex conjugate never has -- and named for what it is rather than as an overflow.
+        error('bridgeFaceAlg:branchUndecided', ...
+            'none of the %d verified witnesses could certify the branch index; the last one reported "%s".', ...
+            size(W,1), lastErr.message);
     end
     if isempty(FB)
         error('bridgeFaceAlg:branchOverflow', ...
@@ -412,7 +420,10 @@ function [b, info] = branchIndex(FP, d, N1, m1, q1, N2, m2, q2, Dl, dl, kp, xn, 
 % pairs the value is the largest real root every time, while its ascending index takes both 2 and 4
 % WITHIN ONE FACE, because a pair of lower roots leaves the real line in the face's interior.
 % algBranch.m and DECISIONS.md 2026-09-17.
-    [PhiA, Dt] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
+    [PhiA, Dt] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, 'big');
+    % Past 2^53 the multipliers are only PROPOSED from rounded coefficients; nothing below trusts
+    % them -- the value is certified against FP's fibre by exact counts.
+    if ratQ.isBigPoly(PhiA), PhiA = ratQ.bigToDouble(PhiA); PhiA = PhiA(:).'; end
     Phi = ratQ.polyTrim(fliplr(PhiA));
     x = xn(:) / xd;
     mus = roots(Phi);
@@ -699,16 +710,65 @@ function [p, info] = bigTail(p, muDegree)
             ['the eliminated polynomial has degree 0 in z, so it states a condition on x alone ' ...
              'and names no value. That is a producer defect, not an input one.']);
     end
-    lead = p.c((sz(3)-1)*sz(1)*sz(2) + (1:sz(1)*sz(2)));
-    if nnz(~cellfun(@isempty, lead)) ~= 1 || isempty(lead{1})
-        error('bridgeFaceAlg:bigZContent', ...
-            ['the implicit polynomial is past 2^53 and its leading z-coefficient is not a ' ...
-             'constant, so its z-content cannot be removed without exact bivariate division in ' ...
-             'BigInteger, which is not built. Refused rather than kept with an extraneous factor.']);
+    nxy  = sz(1)*sz(2);
+    lead = p.c((sz(3)-1)*nxy + (1:nxy));
+    removed = false;
+    if ~(nnz(~cellfun(@isempty, lead)) == 1 && ~isempty(lead{1}))
+        % A NON-CONSTANT leading z-coefficient: its primitive part is the candidate z-content, as in
+        % the double path, and bigDivExact VERIFIES it on every z-slice (2026-11-05; this was the
+        % refusal bridgeFaceAlg:bigZContent, reachable on proportional Hessians -- DECISIONS
+        % 2026-11-05 (third)). A candidate that does not divide every slice is still refused: an
+        % unremoved content is an extraneous component, i.e. a wrong face.
+        g = ratQ.bigContentFree(struct('sz', sz(1:2), 'c', {lead(:)}));
+        Q = cell(1, sz(3));
+        try
+            for k = 1:sz(3)
+                slice = struct('sz', sz(1:2), 'c', {p.c((k-1)*nxy + (1:nxy))});
+                if ratQ.bigIsZero(slice), Q{k} = []; continue, end
+                Q{k} = ratQ.bigDivExact(slice, g, 2);
+            end
+        catch ME
+            if ~any(strcmp(ME.identifier, {'ratQ:notDivisible', 'ratQ:divideNoConverge'})), rethrow(ME), end
+            error('bridgeFaceAlg:bigZContent', ...
+                ['the implicit polynomial is past 2^53 and its leading z-coefficient is not a ' ...
+                 'constant, and that coefficient''s primitive part does not divide every ' ...
+                 'z-coefficient exactly, so the z-content is a proper factor of it -- which needs a ' ...
+                 'bivariate gcd in BigInteger, not built. Refused rather than kept with an ' ...
+                 'extraneous factor.']);
+        end
+        p = trimBig(ratQ.bigContentFree(bigFromZSlices(Q, sz(3))));
+        removed = true;
+        sz = p.sz;  sz(end+1:3) = 1;
+        if sz(3) < 2
+            error('bridgeFaceAlg:noZ', ...
+                'removing the z-content left degree 0 in z, so the polynomial names no value.');
+        end
     end
     A = ratQ.bigToDouble(p);
     info = struct('degrees', sz - 1, 'maxCoeff', max(abs(A(:))), 'muDegree', muDegree, ...
-                  'zContentRemoved', false);
+                  'zContentRemoved', removed);
+    p = ratQ.fromBigOrKeep(p);
+end
+
+function p = bigFromZSlices(Q, nz)
+% Stack bivariate big quotients (one per z-power, ascending) into one big polyN in (x, y, z),
+% padded to the largest slice.
+    nx = 1;  ny = 1;
+    for k = 1:nz
+        if ~isempty(Q{k}), s = Q{k}.sz; s(end+1:2) = 1; nx = max(nx, s(1)); ny = max(ny, s(2)); end
+    end
+    c = cell(nx*ny*nz, 1);
+    for k = 1:nz
+        if isempty(Q{k}), continue, end
+        s = Q{k}.sz;  s(end+1:2) = 1;
+        for t = 1:numel(Q{k}.c)
+            v = Q{k}.c{t};
+            if isempty(v) || v.signum() == 0, continue, end
+            [i, j] = ind2sub(s(1:2), t);
+            c{(k-1)*nx*ny + (j-1)*nx + i} = v;
+        end
+    end
+    p = struct('sz', [nx ny nz], 'c', {c});
 end
 
 function p = trimBig(p)
@@ -788,3 +848,13 @@ function [b, info] = certifyTopBig(Pz, zStar)
     info = struct('value', zStar, 'nRealZ', numel(rr), 'bracket', [lo hi], 'above', above);
 end
 
+function tf = isSingular(N)
+% det N == 0, exactly. A determinant too large to return is certainly not zero, so an overflow
+% answers the question rather than escaping as a raw ratQ:overflow (2026-11-05, found by search).
+    try
+        tf = ratQ.detExact(N) == 0;
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        tf = false;
+    end
+end

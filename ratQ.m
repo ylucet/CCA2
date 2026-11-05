@@ -1664,8 +1664,166 @@ classdef ratQ
         % Sturm's theorem, applied to the chain above. A repeated root counts ONCE, because the
         % chain is built from the squarefree part -- which is what the callers want: two coincident
         % intersections of two conics are one vertex, not two.
-            chain = ratQ.sturmChain(p);
-            n = ratQ.sturmV(chain, a) - ratQ.sturmV(chain, b);
+            % PAST 2^53 THE SAME COUNT IS TAKEN IN BigInteger (2026-11-05). The double chain squares
+            % its leading coefficient at every step, so a quartic with small entries can still
+            % overflow it; that used to surface as bridgeFaceAlg:witnessOverflow / branchOverflow on
+            % ordinary pairs (DECISIONS 2026-11-05 (third)). The answer is the same exact count.
+            try
+                chain = ratQ.sturmChain(p);
+                n = ratQ.sturmV(chain, a) - ratQ.sturmV(chain, b);
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+                n = ratQ.countRootsInHalfOpenBig(p, a, b);
+            end
+        end
+
+        function n = countRootsInHalfOpenBig(p, a, b)
+        % objective: the number of DISTINCT real roots of p in (a, b], in BigInteger, with the
+        %            endpoints allowed to be roots and to be infinite -- countRootsIn's exact contract.
+        % [input]  p : double row or big form, highest degree first; a < b doubles (finite ones are
+        %              dyadic, as every double is), -Inf / +Inf allowed
+        % [output] n : a nonnegative integer
+        %
+        % An endpoint that is a root is DIVIDED OUT first -- (d t - n) with n/d in lowest terms
+        % divides p exactly over the integers (Gauss) -- so that the general Sturm count below,
+        % which needs neither endpoint to be a root, applies to the rest; a root at b then adds one.
+        % Dividing out a factor changes no other root, so "distinct" is preserved.
+            P = ratQ.bigRow(p);
+            if numel(P) <= 1, n = 0; return, end
+            bRoot = false;
+            for e = [a, b]
+                if ~isfinite(e), continue, end
+                [en, ed] = ratQ.dyadicParts(e);
+                g = en.gcd(ed);
+                if g.compareTo(java.math.BigInteger.ONE) > 0, en = en.divide(g); ed = ed.divide(g); end
+                while numel(P) > 1 && ratQ.bigEvalRow(P, en, ed).signum() == 0
+                    P = ratQ.bigDivLinear(P, en, ed);
+                    if e == b, bRoot = true; end
+                end
+            end
+            if numel(P) <= 1
+                n = double(bRoot);  return
+            end
+            chain = {P, ratQ.bigDeriv(P)};
+            while numel(chain{end}) > 1
+                r = ratQ.bigPrem(chain{end-1}, chain{end});
+                if isempty(r), break, end
+                chain{end+1} = ratQ.bigPrimitive(cellfun(@(c) c.negate(), r, 'UniformOutput', false)); %#ok<AGROW>
+            end
+            n = ratQ.sturmVBigInf(chain, a) - ratQ.sturmVBigInf(chain, b) + double(bRoot);
+        end
+
+        function I = isolateRootsBig(p)
+        % objective: isolateRoots for a polynomial past 2^53 -- one HALF-OPEN interval (lo, hi]
+        %            per distinct real root, ascending, decided in BigInteger (2026-11-05).
+        % [input]  p : big form, cell row of BigInteger, or double row; highest degree first
+        % [output] I : k x 2 dyadic endpoints; each (I(j,1), I(j,2)] holds exactly one root
+        %
+        % Bisection driven by countRootsInHalfOpenBig, from Cauchy's bound on the ROUNDED
+        % coefficients doubled plus one (each is within a relative 2^-52 of the exact one).
+            P = ratQ.bigRow(p);
+            if numel(P) <= 1, I = zeros(0,2); return, end
+            A = cellfun(@(c) c.doubleValue(), P);
+            M = 2*ceil(1 + max(abs(A(2:end)))/abs(A(1))) + 1;
+            I = zeros(0,2);
+            stack = [-M, M];
+            guard = 0;
+            while ~isempty(stack)
+                guard = guard + 1;
+                if guard > 100000
+                    error('ratQ:noConverge', 'isolateRootsBig did not separate the roots.');
+                end
+                lo = stack(end,1);  hi = stack(end,2);  stack(end,:) = [];
+                n = ratQ.countRootsInHalfOpenBig(P, lo, hi);
+                if n == 0, continue, end
+                if n == 1, I(end+1,:) = [lo hi]; continue, end %#ok<AGROW>
+                mid = (lo + hi)/2;
+                stack = [stack; lo mid; mid hi]; %#ok<AGROW>
+            end
+            if ~isempty(I), I = sortrows(I); end
+        end
+
+        function s = signAtBig(q, p, iv)
+        % objective: signAt in BigInteger -- the EXACT sign of q at the one root of p in the
+        %            half-open interval iv = (lo, hi] (from isolateRootsBig).
+        % [input]  q, p : big form, cell row or double row, highest degree first
+        % [output] s : -1, 0 or +1
+        %
+        % The same two steps as signAt: q(alpha) = 0 exactly when gcd(p, q) has a root in iv; and
+        % otherwise iv is halved, keeping alpha, until q has no root in it, when q's sign at hi
+        % (not a root of q) is its sign at alpha.
+            P = ratQ.bigRow(p);  Q = ratQ.bigRow(q);
+            if isempty(Q), s = 0; return, end
+            lo = iv(1);  hi = iv(2);
+            g = ratQ.bigGcdRow(P, Q);
+            if numel(g) > 1 && ratQ.countRootsInHalfOpenBig(g, lo, hi) > 0
+                s = 0;  return
+            end
+            for it = 1:400
+                if ratQ.countRootsInHalfOpenBig(Q, lo, hi) == 0
+                    [hn, hd] = ratQ.dyadicParts(hi);
+                    s = ratQ.bigEvalRow(Q, hn, hd).signum();
+                    return
+                end
+                mid = (lo + hi)/2;
+                if ratQ.countRootsInHalfOpenBig(P, lo, mid) == 1, hi = mid; else, lo = mid; end
+            end
+            error('ratQ:noConverge', 'signAtBig did not separate the root from q''s roots.');
+        end
+
+        function g = bigGcdRow(P, Q)
+        % the PRIMITIVE gcd of two BigInteger rows (highest first), by Euclid on pseudo-remainders
+            a = ratQ.bigPrimitive(ratQ.bigRow(P));  b = ratQ.bigPrimitive(ratQ.bigRow(Q));
+            if numel(a) < numel(b), [a, b] = deal(b, a); end
+            while ~isempty(b)
+                r = ratQ.bigPrimitive(ratQ.bigPrem(a, b));
+                a = b;  b = r;
+            end
+            g = a;
+        end
+
+        function v = sturmVBigInf(chain, x)
+        % sturmVBig, plus x = +-Inf, where each member's sign is its leading coefficient's times
+        % (-1)^degree on the left.
+            if isfinite(x), v = ratQ.sturmVBig(chain, x); return, end
+            v = 0;  last = 0;
+            for i = 1:numel(chain)
+                c = chain{i};
+                if isempty(c), continue, end
+                s = c{1}.signum();
+                if x < 0 && mod(numel(c) - 1, 2) == 1, s = -s; end
+                if s == 0, continue, end
+                if last ~= 0 && s ~= last, v = v + 1; end
+                last = s;
+            end
+        end
+
+        function v = bigEvalRow(P, xn, xd)
+        % d^deg * P(n/d) for a BigInteger row P (highest first): an integer with P(n/d)'s sign.
+            k = numel(P) - 1;
+            v = java.math.BigInteger.ZERO;
+            for j = 1:numel(P)
+                v = v.add(P{j}.multiply(xn.pow(k-j+1)).multiply(xd.pow(j-1)));
+            end
+        end
+
+        function Q = bigDivLinear(P, xn, xd)
+        % P / (xd t - xn), exactly, for a root xn/xd of P in lowest terms (highest first).
+            k = numel(P) - 1;
+            Q = cell(1, k);
+            acc = java.math.BigInteger.ZERO;
+            for j = 1:k
+                num = P{j}.add(acc);                    % P_j + xn * Q_{j-1}
+                qr = num.divideAndRemainder(xd);
+                if qr(2).signum() ~= 0
+                    error('ratQ:internal', 'a rational root did not divide its polynomial exactly.');
+                end
+                Q{j} = qr(1);
+                acc = xn.multiply(Q{j});
+            end
+            if ~P{end}.add(acc).equals(java.math.BigInteger.ZERO)
+                error('ratQ:internal', 'a rational root left a nonzero remainder.');
+            end
         end
 
         function n = countRootsInBig(p, a, b)
@@ -1725,7 +1883,9 @@ classdef ratQ
 
         function P = bigRow(p)
         % a coefficient row (highest first) as a cell of BigInteger, leading zeros dropped
-            if ratQ.isBigPoly(p), c = p.c(:).'; else, c = num2cell(p(:).'); end
+            if iscell(p), c = p(:).';
+            elseif ratQ.isBigPoly(p), c = p.c(:).';
+            else, c = num2cell(p(:).'); end
             P = cell(1, numel(c));
             for i = 1:numel(c)
                 v = c{i};

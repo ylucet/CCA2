@@ -386,6 +386,65 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
                 'the top branch of the big polynomial is the closed-form value at the witness');
         end
 
+        function theFormerOVERFLOWRefusalsNowBuildTheFace(testCase)
+        % Three small pairs that were refused by name until 2026-11-05 -- witnessOverflow,
+        % branchOverflow and bigZContent (DECISIONS 2026-11-05 (third) and (fourth)). The Sturm
+        % counts now finish in BigInteger and the big z-content is divided out exactly, so each
+        % must come back as a face: the top branch, agreeing with the multiplier's closed form at
+        % the witness, and with THE DEFINITION wherever the oracle can parameterise the tie.
+            C = {mk('wasWitnessOverflow', [0 0 0 0 163 36 11 3 4 0], 3, [0 0 0 0 150 58 137 -10 -3 0], 2), ...
+                 mk('wasBranchOverflow',  [0 0 0 0 81 -28 83 -10 -4 9], 3, [0 0 0 0 81 -28 89 -7 3 -1], 2), ...
+                 mk('wasBigZContent',     [0 0 0 0 5 0 5 -25 -92 40], 22, [0 0 0 0 10 0 10 -44 75 -16], 49)};
+            for i = 1:numel(C)
+                fx = C{i};
+                [face, info] = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                testCase.verifyEqual(face.FB, -1, [fx.name ': the top branch']);
+                w = face.wit;
+                testCase.verifyEqual(algBranch(face.FP, w(1:2)/w(3), face.FB), info.value, ...
+                    'RelTol', 1e-9, [fx.name ': FP''s top root is the closed-form value']);
+                try
+                    ellipseFrame(fx);
+                catch ME
+                    if strcmp(ME.identifier, 'bridgeFaceAlgTest:notAnEllipse'), continue, end
+                    rethrow(ME)
+                end
+                [worst, n] = valueAgreement(fx, face);
+                testCase.verifyGreaterThan(n, 20, [fx.name ': too few region points to conclude']);
+                testCase.verifyLessThan(worst, 1e-9, [fx.name ': the face against the definition']);
+            end
+            testCase.verifyTrue(info.zContentRemoved, 'the proportional pair''s z-content was divided out');
+            testCase.verifyEqual(info.degrees(3), 2, 'and it is the isotropic quadric, degree 2 in z');
+        end
+
+        function aWITNESSQuarticThatStaysPast2to53IsReadInBigIntegerCutOrNot(testCase)
+        % The pair below was bridgeFaceAlg:witnessOverflow until 2026-11-05: at EVERY candidate the
+        % reduced quartic Phi still needs 64-72 bits. Phi is now kept big and membership is counted
+        % in BigInteger (bridgeWitness memberExact / memberExactArcBig). Uncut AND cut by a half-plane
+        % through the tie's centre, the face must match the definition -- restricted to the pair
+        % when cut -- and its witness must really have needed the big quartic.
+            fx = mk('bigPhi', [0 0 0 0 4374 3376 7830 12 -98 -86], 3, [0 0 0 0 4396 3376 7902 94 14 -60], 8);
+            c0 = tieCentre(fx);
+            for Pc = {zeros(0,3), [1 0 -round(c0(1))]}
+                P = Pc{1};
+                if isempty(P)
+                    [face, info] = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                else
+                    [face, info] = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2, P);
+                end
+                w = face.wit;
+                d = lcm(fx.d1, fx.d2);
+                N1 = [fx.n1(5) fx.n1(6); fx.n1(6) fx.n1(7)]*(d/fx.d1);  m1 = fx.n1(8:9).'*(d/fx.d1);
+                N2 = [fx.n2(5) fx.n2(6); fx.n2(6) fx.n2(7)]*(d/fx.d2);  m2 = fx.n2(8:9).'*(d/fx.d2);
+                q1 = fx.n1(10)*(d/fx.d1);  q2 = fx.n2(10)*(d/fx.d2);
+                Phi = bridgePhi(N1, m1, N2, m2, N1 - N2, m1 - m2, q1 - q2, d, w(1:2).', w(3), 'big');
+                testCase.verifyTrue(ratQ.isBigPoly(Phi), 'the witness must have needed the big quartic');
+                testCase.verifyEqual(algBranch(face.FP, w(1:2)/w(3), face.FB), info.value, 'RelTol', 1e-9);
+                [worst, nv] = restrictedAgreementAny(fx, face, P);
+                testCase.verifyGreaterThan(nv, 15, sprintf('%d cut rows: too few region points', size(P,1)));
+                testCase.verifyLessThan(worst, 1e-9, sprintf('%d cut rows: against the definition', size(P,1)));
+            end
+        end
+
         function aWITNESSQuarticPast2to53IsReducedInBigInteger(testCase)
         % The pair erratum Example 2 stopped on (2026-10-11): at every witness candidate the raw
         % membership quartic Phi passed 2^53 (69-76 bits), so the search reported witnessOverflow,

@@ -297,33 +297,6 @@ classdef guardExerciseTest < matlab.unittest.TestCase
             t.verifyError(@() ratPolToPlq(RatPol(V, E, cubic, F)), 'PLQ:op:unsupportedType');
         end
 
-        % ---- the bridge producer's 2^53 refusals, found by search 2026-11-05 -------------------
-        % Each input came out of a random search over small integer face pairs (scratch, not kept);
-        % all three are ordinary conjugate faces, so all three are REACHABLE and none was a fixture
-        % before. The search's tallies are in DECISIONS 2026-11-05 (third).
-        function bridgeFaceAlgBigZContent(t)                                 % reachable
-            % PROPORTIONAL Hessians (N2 = 2 N1, isotropic) make det(N1 + mu Dl) a perfect square in
-            % mu, which cancels the constant top z-coefficient: the leading one is then a
-            % polynomial in (x, y), and the big path cannot divide it out.
-            t.verifyError(@() bridgeFaceAlg([0 0 0 0 5 0 5 -25 -92 40], 22, ...
-                                            [0 0 0 0 10 0 10 -44 75 -16], 49), ...
-                          'bridgeFaceAlg:bigZContent');
-        end
-
-        function bridgeFaceAlgWitnessOverflow(t)                             % reachable
-            t.verifyError(@() bridgeFaceAlg([0 0 0 0 163 36 11 3 4 0], 3, ...
-                                            [0 0 0 0 150 58 137 -10 -3 0], 2), ...
-                          'bridgeFaceAlg:witnessOverflow');
-        end
-
-        function bridgeFaceAlgBranchOverflow(t)                              % reachable
-            % A tie that is a PARALLEL LINE PAIR (Dl = [0 0; 0 -6] rank 1): the witnesses verify,
-            % the branch certification at each of them overflows.
-            t.verifyError(@() bridgeFaceAlg([0 0 0 0 81 -28 83 -10 -4 9], 3, ...
-                                            [0 0 0 0 81 -28 89 -7 3 -1], 2), ...
-                          'bridgeFaceAlg:branchOverflow');
-        end
-
     end
 
     methods (Test)
@@ -371,6 +344,9 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'convEnvCPLQ:internal',                     'internal'; ...
                 'convEnvUnbounded:degenerate',              'shadowed'; ... % a collinear triangle has no interior: notTriangle fires first (measured 2026-11-02, 1 vertex); parallel wedge rays make kind 'ray', not 'wedge'
                 'convEnvUnbounded:noVertex',                'internal'; ... % reached only past the shape switch, whose wedge/half-strip branches demand 1 / 2 finite vertices
+                'bridgeFaceAlg:bigZContent',                'shadowed'; ... % 2026-11-05: the big z-content is divided out exactly; only a candidate that fails to divide refuses -- 0 hits in 2220 searched pairs (DECISIONS 2026-11-05 fourth)
+                'bridgeFaceAlg:branchOverflow',             'shadowed'; ... % 2026-11-05: counts finish in BigInteger; 0 hits in 2220 searched pairs, and at large data polynomialOverflow refuses first
+                'bridgeFaceAlg:witnessOverflow',            'shadowed'; ... % 2026-11-05: Phi kept big, membership counted in BigInteger; 0 hits in 2220 searched pairs, and at large data polynomialOverflow refuses first
                 'envelopeAssemble:irrationalStraightFacet', 'shadowed'; ... % measured 2026-11-05: a parallel tie reaches it only via straightTie (curving face => double line, 19 of 19) or noSeparateFace (affine x rank-1: no curvature along the tie, provably); irrational curving pairs go to the curved producer
                 'envelopeEval:faceKind',                    'internal'; ...
                 'cellInterior:embed',                       'internal'; ...
@@ -384,6 +360,8 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'maxQuaPar:pieceInvariant',                 'internal'; ...
                 'quaPolToPlq:cubic',                        'shadowed'; ...
                 'ratPolToPlq:cubic',                        'shadowed'; ...
+                'ratQ:internal',                            'internal'; ... % bigDivLinear: a root the Sturm count certified leaves a remainder (Gauss's lemma says it cannot)
+                'ratQ:noConverge',                          'loop-safety'; ... % isolateRootsBig/signAtBig bisection: the roots of a square-free row are separated
                 'ratQ:divideNoConverge',                    'loop-safety'; ...
                 'ratQ:gcdNoConverge',                       'loop-safety'; ...
                 'ratQ:isolateNoConverge',                   'loop-safety'; ...

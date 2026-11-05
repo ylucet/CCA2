@@ -509,18 +509,18 @@ The last row is the only one worth revisiting: it is a genuine branch, exercised
 
 ---
 
-### 3.2 The bridge producer's 2^53 refusals -- `bridgeFaceAlg` (measured 2026-11-05)
+### 3.2 The bridge producer's 2^53 refusals -- `bridgeFaceAlg` (measured 2026-11-05, fixed the same day)
 
 | Guard | Status | Evidence |
 |---|---|---|
-| `bridgeFaceAlg:bigZContent` | **GAP, reachable** | fires on PROPORTIONAL Hessians (N2 = c N1) with small data, 11 of 120 scaled proportional pairs, 0.1 s; needs exact bivariate division in BigInteger. `guardExerciseTest` |
-| `bridgeFaceAlg:witnessOverflow` | **GAP, reachable** | the commonest refusal on random small pairs (dozens of hits over 400 pairs, coefficients 10-10^4). `guardExerciseTest` |
-| `bridgeFaceAlg:branchOverflow` | **GAP, reachable** | frequent when the tie is a parallel LINE PAIR (217 of 1500 such pairs). `guardExerciseTest` |
-| `bridgeFaceAlg:noWitness` | **GAP, reachable** | 492 of 1500 line-pair ties: irrational lines carry no rational witness |
-| `envelopeAssemble:irrationalStraightFacet` | **shadowed** | reached only via `straightTie` (a curving face there was a DOUBLE line, 19 of 19) or `noSeparateFace` (affine x rank-1: no curvature along the tie, provably). Irrational curving pairs go to the curved producer instead |
+| `bridgeFaceAlg:witnessOverflow` | **OK** (shadowed) | membership counted in BigInteger, Phi kept big; 0 hits in 2220 searched pairs |
+| `bridgeFaceAlg:branchOverflow` | **OK** (shadowed) | `countRootsIn` falls back to BigInteger; 0 hits in 2220 pairs |
+| `bridgeFaceAlg:bigZContent` | **OK** (shadowed) | big z-content divided out exactly; refuses only if the candidate fails to divide; 0 hits |
+| `bridgeFaceAlg:polynomialOverflow` | **GAP, reachable at large data** | 151 of 300 pairs with entries up to ~1e8; 0 with entries <= 1e4 |
+| `bridgeFaceAlg:noWitness` | **GAP / by design** | 71 of 300 small pairs: the tie has no usable rational point |
+| `envelopeAssemble:irrationalStraightFacet` | **shadowed** | reached only via `straightTie` (a curving face there was a DOUBLE line, 19 of 19) or `noSeparateFace` (affine x rank-1: no curvature along the tie, provably) |
 
-All four GAP rows are named refusals, never wrong answers; the general fix for the first three is
-the modular / BigInteger route DECISIONS.md records for ratQ. None fires on the suites' fixtures.
+DECISIONS 2026-11-05 (third) has the searches that found the overflows; (fourth) the fix.
 
 ## 4. Pointwise max of conjugates — `maxQuaPar` (Step 3)
 

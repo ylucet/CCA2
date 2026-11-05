@@ -3,7 +3,7 @@
 ## Open now -- index (cleaned 2026-11-05; the dated sections below keep the history)
 
 Exact engine (the default for `conj` and `biconj`):
-- Bridge producer's 2^53 refusals are reachable on small pairs -- BigInteger / modular route (SUPPORT_MATRIX 3.2).
+- Bridge producer: polynomialOverflow at large data (entries ~1e5+); noWitness when a tie has no usable rational point (SUPPORT_MATRIX 3.2).
 - Two zero-area faces in the c = -2 AlgCrv (own no point; harmless) -- see "Faces of ZERO AREA" below.
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
 - Two BRIDGE faces owning one cell -- refused by name, never observed.
@@ -26,9 +26,11 @@ Decided, not to do: Example 2 pair 2's non-winning faces (leave them, 2026-11-05
 
 - [x] **The four `todo` guards (2026-11-05):** bigZContent, witnessOverflow and branchOverflow now
       have fast exercises; irrationalStraightFacet is shadowed (measured). DECISIONS 2026-11-05 (third).
-- [ ] **The bridge producer's overflow refusals are REACHABLE on small pairs** (SUPPORT_MATRIX 3.2):
-      witnessOverflow, branchOverflow, bigZContent, and noWitness on irrational line-pair ties. All
-      named refusals; the fix is the BigInteger / modular route. Not started.
+- [x] **DONE 2026-11-05: the bridge producer's overflow refusals on small pairs** -- witnessOverflow,
+      branchOverflow, bigZContent now answer in BigInteger (0 hits in 2220 searched pairs).
+      DECISIONS 2026-11-05 (fourth).
+- [ ] **polynomialOverflow at large data** (entries ~1e5+): the implicit polynomial's elimination is
+      still in doubles before the big tail. Same BigInteger route (bigZ / exactFormula on Psi).
 
 ## 2026-10-14 — biconjugate: what is left, in order
 

@@ -32,7 +32,23 @@ function [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, ex
 % ASCENDING integer vectors in mu. U is what lets a CALLER ask where the base point is: the row
 % a's + c has the sign of (a'U + c xd det M) times the sign of det M, both polynomials in mu, so
 % "is the base point inside the pair" is a sign at a root and `ratQ.signAt` decides it.
-    if nargin < 11 || exact
+    if nargin >= 11 && ischar(exact) && strcmp(exact, 'big')
+        % KEPT BIG WHERE IT DOES NOT FIT (2026-11-05): the reduced quartic itself can need 64-72 bits
+        % on ordinary pairs, which was bridgeFaceAlg:witnessOverflow. A caller that passes 'big'
+        % reads Phi through the BigInteger Sturm routines, so it gets Phi as a big form (struct
+        % sz/c, ascending like the double one) when the reduced double does not exist.
+        [~, Dt, U1, U2] = phiRaw(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
+        ratQ.chk([U1, U2, Dt], 'U and det(M_mu)');
+        try
+            Phi = ratQ.exactFormula(@phiRaw, 'Phi', N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
+        catch ME
+            if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+            r = phiRaw(bigZ(N1), bigZ(m1), bigZ(N2), bigZ(m2), bigZ(Dl), bigZ(dl), bigZ(kp), ...
+                       bigZ(d), bigZ(xn), bigZ(xd));
+            r = contentFree(bigZ(r));
+            Phi = struct('sz', size(r.c), 'c', {r.c(:)});
+        end
+    elseif nargin < 11 || exact
         % DOUBLES FIRST, BIG ONLY WHERE THEY RUN OUT (2026-10-11). Phi carries d, xd and the pair's
         % data to the fourth power, so its raw coefficients pass 2^53 on erratum Example 2 (69-76
         % bits) while the reduced quartic needs 18-22. ratQ.exactFormula re-runs this same formula

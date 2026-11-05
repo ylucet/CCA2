@@ -552,6 +552,27 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyEqual(ratQ.countRootsIn([1 -2 1], -5, 5), 1);
         end
 
+        function theBIGRootCountAgreesWithTheDoubleOneEndpointsIncluded(testCase)
+        % countRootsIn falls back to countRootsInHalfOpenBig when its double chain overflows
+        % (2026-11-05). Differential: on polynomials the double path decides, the big path must give
+        % the same (a, b] count -- with ROOTS AS ENDPOINTS (divided out first) and infinite ends.
+            % (2t - 1)^2 (t + 3) (t^2 - 2) (t - 4): roots 1/2 (double), -3, +-sqrt 2, 4
+            p = conv(conv(conv([2 -1], [2 -1]), [1 3]), conv([1 0 -2], [1 -4]));
+            E = [-Inf -5 -3 -2 0 0.5 1 4 7 Inf];
+            for i = 1:numel(E)
+                for j = i+1:numel(E)
+                    a = E(i);  b = E(j);
+                    if isinf(a) && isinf(b) && a == b, continue, end
+                    testCase.verifyEqual(ratQ.countRootsInHalfOpenBig(p, a, b), ...
+                        ratQ.countRootsIn(p, a, b), sprintf('(%g, %g]', a, b));
+                end
+            end
+            testCase.verifyEqual(ratQ.countRootsInHalfOpenBig(p, -Inf, Inf), 5, 'five distinct roots');
+            testCase.verifyEqual(ratQ.countRootsInHalfOpenBig(p, 0.5, 4), 2, '(1/2, 4] holds sqrt 2 and 4');
+            testCase.verifyEqual(ratQ.countRootsInHalfOpenBig(p, -3, 0.5), 2, '(-3, 1/2] holds -sqrt 2 and 1/2');
+            testCase.verifyEqual(ratQ.countRootsInHalfOpenBig(ratQ.toBig(p), -Inf, Inf), 5, 'a big form too');
+        end
+
         function isolateRootsSeparatesEveryRealRoot(testCase)
         % Each returned interval must contain exactly one root, and together they must account for
         % all of them. Both halves are checked with countRootsIn, which is independent of how the

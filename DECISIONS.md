@@ -9255,3 +9255,34 @@ face pairs, so any new fixture with a curved bridge may stop on one -- by name, 
 fix is the BigInteger / modular route already recorded for ratQ; not started. guardExerciseTest pins
 one input per guard (36/0). SUPPORT_MATRIX 3.2.
 
+## 2026-11-05 (fourth) -- the bridge producer's overflow refusals: BigInteger route, none left on small pairs
+
+Where each one came from (instrumented copies, scratch):
+- witnessOverflow on SMALL pairs and branchOverflow: the DOUBLE Sturm chain in `ratQ.countRootsIn`
+  (pseudo-remainders past 2^53), not the polynomials themselves.
+- witnessOverflow on larger pairs (entries ~1e4): the REDUCED quartic Phi itself, 64-72 bits.
+- bigZContent: a big implicit polynomial whose leading z-coefficient is not constant -- on
+  PROPORTIONAL Hessians det(N1 + mu Dl) is a square, so the constant top coefficient cancels.
+
+What changed:
+- `ratQ.countRootsIn` falls back on overflow to `countRootsInHalfOpenBig`: the same (a, b] count in
+  BigInteger; an endpoint that is a root is divided out exactly first ((d t - n), Gauss), and
+  infinite endpoints are allowed. New `isolateRootsBig`, `signAtBig`, `bigGcdRow` (half-open
+  intervals throughout).
+- `bridgePhi(..., 'big')` returns Phi as a big form when the reduced double does not exist;
+  `bridgeWitness` memberExact / memberExactArcBig count and take signs in BigInteger;
+  `branchIndex` proposes multipliers from Phi's rounded coefficients (certification unchanged).
+- `bigTail` divides the big z-content out with `ratQ.bigDivExact`, verified on every z-slice; a
+  candidate that does not divide still refuses (bigZContent).
+- Two labels corrected: a raw ratQ:overflow from detExact on huge N (det past 2^53 is nonzero, so it
+  answers the singularity question); and branchOverflow raised when no witness OVERFLOWED is now
+  branchUndecided -- seen only on out-of-contract INDEFINITE faces.
+
+Measured after (searches over 2220 pairs): witnessOverflow 0, branchOverflow 0, bigZContent 0, raw
+ratQ:overflow 0. Small pairs (entries <= 1e4): 229 faces, 71 noWitness (pairs whose tie has no
+usable rational point), nothing else. Larger pairs still stop at polynomialOverflow (the implicit
+polynomial's elimination in doubles, before bigTail) -- not attempted here.
+Every formerly refused input checked builds a face whose top FP root equals the multiplier's
+closed-form value (rel <= 1e-15), and, where the oracle can sweep the tie, the face equals the
+definition (bridgeFaceAlgTest, uncut and cut).
+
