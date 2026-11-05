@@ -27,5 +27,5 @@ Nothing known. Start: main 58331a4, fast 826/0, normal 35/0, slow 127/0 (+2 know
   overlay builds only; (c) research a separator through the touching point (exact value and
   gradient at dyadic corners). Patch: .claude/proto/2026-11-05-top-row-corners.patch.
 ## Where I stopped
-Run finished: A done, B diagnosed and parked on the decision above. Tree green on 8 commits since
+Run finished: A done, B diagnosed and parked on the decision above. Tree green on 5 commits since
 main: fast 826/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0.
