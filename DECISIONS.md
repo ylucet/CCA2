@@ -9179,3 +9179,25 @@ change was tried alongside and is NOT needed. **Measured:** triangle 60 -> 56 fa
 Suites after both: fast 826/0, normal 35/0, slow 127/0 (+2 known), Ex2Subdivision 3/0 (76 min).
 LEFT: pair 2's open calls are corner touches with gaps 1e-6..1e-12, places where the quartic's top
 root does not exist, and z_k below several of its roots.
+
+## 2026-11-05 -- the triangle's faces that own no point: 18 COPIES and 2 corner touches; 56 -> 36
+
+Measured on the 56-face 3-convex-edge triangle (400000 samples, each face's own evaluator): 20 faces
+were the maximum nowhere. 18 owned exactly the points of another face with the same value -- the
+same FP/FB (or fN/fD) on the same SET of FC rows, a row sometimes repeated inside FC -- i.e. the
+same face emitted twice (the overlay's tuples). The other 2 were a quadratic face -(x + y)/4 whose
+row "q >= bridge" fails on its whole conic region but with margin -> 0 at the corner (0, 0), where
+q - z is O(r) with its zero direction just outside the region.
+
+**Done.** (1) assembleAlgCrv keeps one of identical faces (value and row set equal); eval keeps the
+first face on a tie, so nothing it reads changes. Uniquing the rows INSIDE a face was tried first
+and broke algCrvSubdivisionTest's boundary check (algCrvIncidence reads FC by position), so rows
+are compared as a set but kept. The c = -2 kink's AlgCrv also lost copies: 22 -> 4 faces.
+(2) algRowFails: once a corner square is certified and the plain pass still fails, boxRec again
+with depth + 2 -- the boxes just outside the square needed 8 levels (the margin there is ~ the
+distance to p times the lowest form, small near its zero direction). Recurses only into
+undecided boxes.
+
+**Measured:** triangle 36 faces, each the maximum somewhere; values identical to the 56-face build
+on 400000+ points with the edges; no +inf. Example 2 pairs 20/62/35 -> 20/62/34. Suites: fast
+826/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0.

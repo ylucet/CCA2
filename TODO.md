@@ -2,9 +2,6 @@
 
 ## Next up — 2026-11-04 overnight run
 
-- [ ] **A. The triangle's faces that own no point.** The 3-convex-edge triangle is 56 faces; ~20 own
-      no point of 400000 samples. Find why each is kept and drop the empty ones SOUNDLY (no holes,
-      values unchanged; minSubdivisionTest + a 400000-point check).
 - [ ] **B. Example 2 pair 2's remaining extra faces.** 62 faces, 32 win somewhere. Left kinds
       (DECISIONS 2026-11-04): corner touches (gaps 1e-6..1e-12), no top root of the quartic, z_k below
       several of its roots. Certify more of them; pairs/winners/suites as the check.
@@ -167,6 +164,10 @@ DOES carry the value and cannot be reduced the same way.
       minimum (envelopePrune/envelopeSubdivision take one pair's faces today).
 
 ### Done recently
+
+- [x] **A. The triangle's faces that own no point** -- DONE 2026-11-05 (overnight): 18 were exact
+      copies (assembleAlgCrv keeps one), 2 touched a bridge at the corner (0,0) (algRowFails: two more
+      levels beside a certified corner square). 56 -> 36 faces, values identical. DECISIONS 2026-11-05.
 
 - [x] **conj: a piece containing a LINE without curvature had f* = +inf everywhere** -- FIXED
       2026-10-11. Its dom f* is a line or a point (f = 0 on a half-plane; y^2 + x on one), which
