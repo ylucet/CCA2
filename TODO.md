@@ -8,8 +8,9 @@
 
 ## 2026-10-14 — biconjugate: what is left, in order
 
-`conj` defaults to the exact engine since 2026-10-11; `biconj` still defaults to `'cplq'` because
-`biconjQ` returns an unsubdivided EnvelopeMin on some inputs, not an AlgCon (`QuaPol.m:828`). Measured
+`conj` defaults to the exact engine since 2026-10-11 and `biconj` since 2026-10-18. UPDATED
+2026-11-05: the EnvelopeMin is now an AlgCon too (a leaf with no subdivision), so every `biconj`
+result is an AlgCon -- QuaCon, AlgCrv or EnvelopeMin. Measured
 2026-10-14 on `c299801`: `--fast` 765/0 over 60 suites in 616 s, `--normal` 34/0 over 8 suites in
 1948 s; `--slow` not run (stopped for low memory, to be run on another machine).
 
@@ -105,7 +106,7 @@ DOES carry the value and cannot be reduced the same way.
 
 ### Next up
 
-- [ ] **`biconjCPLQ` on the `poly2` kinks: the CRASHES are fixed, what is left is SCALING.** Three
+- [ ] **(Same item as 4 above; detail kept.)** **`biconjCPLQ` on the `poly2` kinks: the CRASHES are fixed, what is left is SCALING.** Three
       unnamed crashes, each found by printing the stack or capturing the input, each fixed red
       first where a fast test could reach it: `conjugateOfPiecePoly` read the chord's variables off
       the FUNCTION (one symbol when a piece depends on s_1 alone, c = -2) and ran an `if` on an
@@ -115,7 +116,7 @@ DOES carry the value and cannot be reduced the same way.
       15, 21, 23, 32 ... 51 by fold 16, 750-1500 s a fold -- the "STEP 3 ... DOES NOT SCALE" entry
       below. Both tests in `biconjCPLQTest` are QUARANTINED by name (assumeFail) until then.
 
-- [ ] **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
+- [ ] **STILL TRUE, re-measured 2026-11-05: the AlgCrv has 4 faces, faces 2 and 4 own none of 100000 interior + 8000 edge samples, no +inf; the 2026-11-05 triangle fix did not reach them.** **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
       parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area
       owns it too, and their value never exceeds it (max excess 1.1e-16 over 82 points), so dropping
       them changes no value. What is open is DETECTING zero area at assembly -- the regions are
@@ -139,7 +140,7 @@ DOES carry the value and cannot be reduced the same way.
       bits (`bridgeFaceAlg:polynomialOverflow`). Needs FP stored wider than double (int64 is not
       enough past 63 bits; BigInteger or the modular route DECISIONS.md records for ratQ).
 
-- [ ] **erratumBiconjTest takes ~30 min since Example 2 runs** (biconjQ ~26 min, one shared-machine
+- [x] **DONE 2026-10-17 (Example 2 split into erratumBiconjEx2Test, slow).** **erratumBiconjTest takes ~30 min since Example 2 runs** (biconjQ ~26 min, one shared-machine
       run). Over the normal budget: split Example 2 into its own suite in the slow bucket, or cache
       its EnvelopeMin per plqStage.
 - [x] **FIXED 2026-10-11 (QuaPolEvalTest): needle, rays read through their second vertex, non-convex faces by a first-hit shot.** **`QuaPol.eval` returns +inf at points IN the domain** (found 2026-10-11 checking conjQ
@@ -148,7 +149,7 @@ DOES carry the value and cannot be reduced the same way.
       examplesNonconvex{1} (a notched polygon) at the vertices (0,0), (2,1) and the edge point
       (0.5,0.5); on the needle examples2{1}, eval at the needle itself. Any oracle built on eval
       under-reports on these domains.
-- [ ] **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
+- [x] **DONE (per-pair arrangement, envelopeSubdivisionAlg; checked 2026-11-05: kinkSubdivisionTest asserts the kink comes back an AlgCrv, 3/0).** **The global arrangement does not scale: the poly2 kink at c = -2 has 85 curves.** Its two
       row-less corners now have rows (2026-10-11: the wedge edge was a rational line times an
       irrational scalar; `cornerWedgeRows` spells it), and with them the kink reaches the subdivision,
       whose single global arrangement passed 370 cells at curve 30 of 85 and did not finish in
@@ -2093,14 +2094,14 @@ input (`PLQ:QuaPol:notExact`, refused deliberately).
       points, convexity, and the largest-convex-minorant property -- over 38 random polygons, 0
       failures on all three (`.claude/envelope-sweep.m`).
 
-- [ ] **`AlgAlg` is still not built, and its trigger is now precise: the INDEFINITE piece.** Both
+- [x] **SUPERSEDED 2026-09-13: the `Alg` function level and `AlgCon` hold these faces (implicit p(x,y,z) plus a branch index); no `AlgAlg` is needed. RETURN_TYPE.md.** **`AlgAlg` is still not built, and its trigger is now precise: the INDEFINITE piece.** Both
       implemented envelope cases have RATIONAL faces (f itself, or affine functions interpolating
       rational vertex values), so nothing yet produces a face that must NAME a dual vertex. The
       indefinite envelope is where the first one appears -- an affine cell of a general `f**` is
       `<p,x> - f*(p)` with `p` of degree up to 4. Build `AlgAlg` when that case is built, not
       before, or the type is speculative.
 
-- [ ] **What is left of the DOMAIN gap**: an unbounded piece whose `q` is NOT concave/affine (the
+- [x] **SUPERSEDED (checked 2026-11-05 against conjQ.m): unbounded pieces and dimension < 2 are answered, and an empty dom f* comes back as the row [0 0 -1]; the one refusal left here is a NON-CONVEX unbounded face (PLQ:conjQ:nonConvexPiece).** **What is left of the DOMAIN gap**: an unbounded piece whose `q` is NOT concave/affine (the
       finiteness test becomes a quadratic form on the recession CONE rather than a linear one --
       `PLQ:conjQ:unbounded`), a piece whose sup diverges everywhere so `dom f*` is EMPTY (correct
       answer, nowhere to put it, since a `QuaCon` carries at least one face --
@@ -2809,7 +2810,7 @@ present top, so nothing existing changes behaviour:
       item here, and the elliptical edge already forces it. `QuaPar` becomes a real specialization
       instead of a type that cannot hold the values `conj` produces.
 
-- [ ] **`QuaCon` = the return of `conj`.** Rational faces `f` and edge conics `Ec` as int64
+- [x] **DONE: conjQ returns a QuaCon (Vname vertices, EcQ conics), the default since 2026-10-11.** **`QuaCon` = the return of `conj`.** Rational faces `f` and edge conics `Ec` as int64
       `[a b c d e f | den]`, primitive and sign-normalized so equality is bitwise (the
       `4 - 2 sqrt 2`-as-two-doubles failure is what canonical integers prevent). Vertices become
       NAMES: `Vname(nv,3) = [edgeA edgeB rootIdx]`, the point where two edge conics meet, `rootIdx`
@@ -2818,7 +2819,7 @@ present top, so nothing existing changes behaviour:
       item, because `V`, `eval`, `createP`, `orderEdges`, plotting and every vertex-naming test read
       coordinates today. Do it on `QuaCon` alone; the four legacy types keep coordinate `V`.
 
-- [ ] **`AlgCon` = the return of `biconj`, stored as a DECORATION of the `QuaCon`, not standalone.**
+- [x] **DONE, differently: AlgCon is the lattice root (2026-09-13) with FP/FB per face and `src`/`FR` as provenance; every biconj result is an AlgCon since 2026-11-05.** **`AlgCon` = the return of `biconj`, stored as a DECORATION of the `QuaCon`, not standalone.**
       Forced, not stylistic: an affine cell is `<p,x> - f*(p)` with `p` a dual vertex of degree <= 4,
       so its coefficients are irrational unless the cell NAMES the dual vertex. Payload:
       `src` (the `QuaCon`), `fkind` in {QUAD, RAT, RULED, AFFINE}, `fref` (dual cell pointer plus
@@ -2826,7 +2827,7 @@ present top, so nothing existing changes behaviour:
       because the extreme rulings join two degree-<=4 points and their supporting line is rational
       only over `Q(p)`. `f`/`den` stay as caches for the QUAD and RAT faces.
 
-- [ ] **`RatPol.m`'s header is now wrong** — "quadratic over linear on a polyhedral subdivision,
+- [x] **FIXED 2026-11-05 (comment scoped to one piece, pointing at AlgCon).** **`RatPol.m`'s header is now wrong** — "quadratic over linear on a polyhedral subdivision,
       proven not to need a square root" holds for ONE piece. Fix the comment when `AlgCon` lands;
       `RatPol` becomes `fkind = RAT, fdeg = 1`.
 

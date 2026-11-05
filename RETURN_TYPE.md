@@ -214,3 +214,13 @@ SUBDIVISION at all.
 `biconjCPLQTest/matchesIndependentBiconjugate` used to assert `kind() == 'RatPol'` for every row.
 It now asserts `isa(b, 'RatPar')` and keeps every VALUE check unchanged -- the type was pinning an
 implementation detail of Step 1, not a property of the answer.
+
+## 2026-11-05 — every `biconj` result is an `AlgCon`
+
+The exact engine is the default for `conj` (2026-10-11) and `biconj` (2026-10-18). `conj` returns a
+`QuaCon`; `biconj` returned a `QuaCon`, an `AlgCrv`, or -- where the subdivision is declined
+(erratum Example 2 past the overlay budget) -- an `EnvelopeMin`, which was outside the lattice.
+`EnvelopeMin < AlgCon` now, on `QuaParCPLQ`'s precedent: the inherited subdivision stays empty,
+`isSubdivided()` is false, `kind()` says `'EnvelopeMin'`, and `eval` is unchanged. So the static
+return type of `conj` is `RatCon` and of `biconj` is `AlgCon`, with `kind()` naming the leaf.
+The `QuaParCPLQ` data residual above concerns the legacy `'cplq'` engine only.
