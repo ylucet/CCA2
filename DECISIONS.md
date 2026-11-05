@@ -9234,3 +9234,24 @@ degenerate direction; the latter was tried once on 2026-11-02 (+1 face at 4x tim
 DECIDED 2026-11-05 (Yves): option (a), LEAVE THEM. The 30 non-winning faces never own a point, so
 they change no value; their only cost is overlay size, and the overlay is declined by default. The
 patch stays in .claude/proto/ for reference, not for adoption.
+
+## 2026-11-05 (third) -- the four `todo` guards: three exercised, one shadowed; the overflows are REACHABLE
+
+Random searches over integer face pairs fed straight to `bridgeFaceAlg` (scratch scripts, not kept):
+- general pairs, coefficients 10..10^7, 400 pairs: `witnessOverflow` dozens of times, `branchOverflow` once.
+- PARALLEL-LINE ties (Dl = a u u', dl along u), 1500 pairs: OK 377, noWitness 492, branchOverflow 217,
+  noSeparateFace 313 (always with zero curvature along the tie), straightTie 54, noStationary 17.
+- PROPORTIONAL Hessians (N2 = c N1), 120 pairs: polynomialOverflow 109, bigZContent 11. Why: then
+  det(N1 + mu Dl) is a perfect square in mu, the constant top z-coefficient of Disc_mu(Psi) cancels,
+  and the leading one is a polynomial in (x, y).
+
+`envelopeAssemble:irrationalStraightFacet` is SHADOWED, not todo: of the two routes to it,
+`noSeparateFace` (g1 affine, g2 = a u u') has w'N2w = 0 along the tie w, so no face curves; and every
+`straightTie` hit with a curving face had discriminant 0 (a double line, which the guard skips by
+design), 19 of 19. An irrational parallel pair with a curving face is sent to the curved producer.
+
+Consequence worth knowing: the three overflow refusals are not exotic. They fire on small, ordinary
+face pairs, so any new fixture with a curved bridge may stop on one -- by name, never wrongly. The
+fix is the BigInteger / modular route already recorded for ratQ; not started. guardExerciseTest pins
+one input per guard (36/0). SUPPORT_MATRIX 3.2.
+

@@ -509,6 +509,19 @@ The last row is the only one worth revisiting: it is a genuine branch, exercised
 
 ---
 
+### 3.2 The bridge producer's 2^53 refusals -- `bridgeFaceAlg` (measured 2026-11-05)
+
+| Guard | Status | Evidence |
+|---|---|---|
+| `bridgeFaceAlg:bigZContent` | **GAP, reachable** | fires on PROPORTIONAL Hessians (N2 = c N1) with small data, 11 of 120 scaled proportional pairs, 0.1 s; needs exact bivariate division in BigInteger. `guardExerciseTest` |
+| `bridgeFaceAlg:witnessOverflow` | **GAP, reachable** | the commonest refusal on random small pairs (dozens of hits over 400 pairs, coefficients 10-10^4). `guardExerciseTest` |
+| `bridgeFaceAlg:branchOverflow` | **GAP, reachable** | frequent when the tie is a parallel LINE PAIR (217 of 1500 such pairs). `guardExerciseTest` |
+| `bridgeFaceAlg:noWitness` | **GAP, reachable** | 492 of 1500 line-pair ties: irrational lines carry no rational witness |
+| `envelopeAssemble:irrationalStraightFacet` | **shadowed** | reached only via `straightTie` (a curving face there was a DOUBLE line, 19 of 19) or `noSeparateFace` (affine x rank-1: no curvature along the tie, provably). Irrational curving pairs go to the curved producer instead |
+
+All four GAP rows are named refusals, never wrong answers; the general fix for the first three is
+the modular / BigInteger route DECISIONS.md records for ratQ. None fires on the suites' fixtures.
+
 ## 4. Pointwise max of conjugates — `maxQuaPar` (Step 3)
 
 Line numbers below were re-derived from the source on 2026-08-14; the ones this table carried

@@ -6,6 +6,12 @@
       tangent touches at cell corners and never own a point, so no value changes; the corner
       certificate (62 -> 60 at ~4x) stays parked in .claude/proto/. DECISIONS 2026-11-05 (second).
 
+- [x] **The four `todo` guards (2026-11-05):** bigZContent, witnessOverflow and branchOverflow now
+      have fast exercises; irrationalStraightFacet is shadowed (measured). DECISIONS 2026-11-05 (third).
+- [ ] **The bridge producer's overflow refusals are REACHABLE on small pairs** (SUPPORT_MATRIX 3.2):
+      witnessOverflow, branchOverflow, bigZContent, and noWitness on irrational line-pair ties. All
+      named refusals; the fix is the BigInteger / modular route. Not started.
+
 ## 2026-10-14 — biconjugate: what is left, in order
 
 `conj` defaults to the exact engine since 2026-10-11 and `biconj` since 2026-10-18. UPDATED
