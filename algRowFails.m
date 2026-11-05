@@ -472,10 +472,10 @@ function Z = trimS(Z)
 end
 
 function tf = rowZero(Z, i)
+    c = Z.c;
     tf = true;
-    for j = 1:size(Z, 2)
-        v = Z(i, j);
-        if v.c{1}.signum() ~= 0, tf = false; return, end
+    for j = 1:size(c, 2)
+        if c{i, j}.signum() ~= 0, tf = false; return, end
     end
 end
 
@@ -487,37 +487,50 @@ end
 function G = chartZ(Z, p, sg, major)
 % sc^deg Z(p + sg s (1, t)) (major 1) or (t, 1) (major 2), exactly, as a bigZ polyN in (s, t) --
 % p = a / sc dyadic, the positive scale sc^deg keeping the sign. Not trimmed. Z exact (double or bigZ).
-    Z = bigZ(Z);
+% On raw BigInteger cells, by two Horner Taylor shifts (2026-11-05): the bigZ element-by-element
+% form was O(n^4) through subsref and took ~700 s of a 770 s corner certificate on erratum Example 2.
+%   sc^deg Z(a/sc + u) = sum_kl sc^(k+l) [W(a + .)]_kl u^k v^l,  W_ij = Z_ij sc^(deg-i-j).
+    Z = bigZ(Z);  C = Z.c;
     sc = 1;
     while any(p * sc ~= round(p * sc)) && sc < 2^8, sc = 2 * sc; end
     a = round(p * sc);
-    [n1, n2] = size(Z);  deg = n1 + n2 - 2;
-    Ps = bigZ(zeros(n1, n2));                        % coefficient of u^k v^l, u = x - px, v = y - py
-    for k = 0:n1-1
-        for l = 0:n2-1
-            acc = bigZ(0);
-            for i = k:n1-1
-                for j = l:n2-1
-                    zij = Z(i+1, j+1);
-                    if zij.c{1}.signum() == 0, continue, end
-                    m = bigZ(nchoosek(i, k) * nchoosek(j, l)) .* bigZ(a(1))^(i-k) .* bigZ(a(2))^(j-l) ...
-                        .* bigZ(sc)^(k + l + deg - i - j);
-                    acc = acc + zij .* m;
-                end
-            end
-            Ps(k+1, l+1) = acc;
+    [n1, n2] = size(C);  deg = n1 + n2 - 2;
+    B = @(v) java.math.BigInteger.valueOf(int64(v));
+    S = B(sc);  A1 = B(a(1));  A2 = B(a(2));
+    for i = 0:n1-1
+        for j = 0:n2-1
+            e = deg - i - j;
+            if e > 0, C{i+1, j+1} = C{i+1, j+1}.multiply(S.pow(e)); end
         end
     end
-    G = bigZ(zeros(n1 + n2 - 1, max(n1, n2)));
-    for k = 0:n1-1
-        for l = 0:n2-1
-            c = Ps(k+1, l+1);
-            if sg^(k+l) < 0, c = -c; end
-            if major == 1, G(k+l+1, l+1) = G(k+l+1, l+1) + c;
-            else,          G(k+l+1, k+1) = G(k+l+1, k+1) + c;
+    for j = 1:n2                                     % shift in x, column by column
+        for i = 0:n1-2
+            for k = n1-2:-1:i
+                C{k+1, j} = C{k+1, j}.add(A1.multiply(C{k+2, j}));
             end
         end
     end
+    for i = 1:n1                                     % shift in y, row by row
+        for j = 0:n2-2
+            for k = n2-2:-1:j
+                C{i, k+1} = C{i, k+1}.add(A2.multiply(C{i, k+2}));
+            end
+        end
+    end
+    Z0 = java.math.BigInteger.ZERO;
+    G = repmat({Z0}, n1 + n2 - 1, max(n1, n2));
+    for k = 0:n1-1
+        for l = 0:n2-1
+            c = C{k+1, l+1};
+            if c.signum() == 0, continue, end
+            if k + l > 0, c = c.multiply(S.pow(k + l)); end
+            if sg^(k+l) < 0, c = c.negate(); end
+            if major == 1, G{k+l+1, l+1} = G{k+l+1, l+1}.add(c);
+            else,          G{k+l+1, k+1} = G{k+l+1, k+1}.add(c);
+            end
+        end
+    end
+    G = bigZ(G);
 end
 
 function S = surdPoly(U, V, k)
