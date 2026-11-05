@@ -46,6 +46,10 @@
            snapped to dyadic; un-blowable rows dropped from a corner): pairs 29/91/47 -> 20/79/35, winners
            unchanged 15/32/15. LEFT: pair 2's comparisons against a degree-6 face whose discriminant is
            NOT a square (no common field). DECISIONS 2026-11-03 (fifth).
+           2026-11-04: rows against the TOP ROOT of a degree >= 3 face (pair 2's quartic bridge):
+           pairs 20/79/35 -> 20/62/35, winners unchanged; overlay bound 3736, so the default budget
+           went 4000 -> 3000 to keep biconjQ's default answer fast. LEFT in pair 2: corner touches
+           (gaps 1e-6..1e-12), no top root, z_k below several roots. DECISIONS 2026-11-04.
         d. DONE 2026-11-02, long run included (erratumBiconjEx2SubdivisionTest 3/0, 54 min): triangles cut AFTER the overlay (cutTriangles decides/
            splits), AlgCrv table 3 + FT, biconjQ subdivides pairs + triangles. Example 2 is past the
            overlay's piece budget (11567 > 4000) so biconjQ still returns the EnvelopeMin by default;
@@ -63,6 +67,8 @@
       added, algBranch's double-root window made exact (it caused holes once they dropped): 140 -> 134
       faces. Then the face row against a RATIONAL face: 134 -> 84, zero-area 4 -> 2 (a mirror pair at
       (1/(2 sqrt5), 1 - 1/(2 sqrt5))). DECISIONS 2026-11-03 (second), (third).
+      2026-11-04: top-root rows 84 -> 60; surd rows divided by the region's edge factors (faces
+      touching ALONG x + y = 1) 60 -> 56, no holes. DECISIONS 2026-11-04.
       Earlier note: Was MEASURED 2026-10-17, deferred: on the c = -2
       AlgCrv 30 of 32 pieces own no point (4000 samples) -- quadratic pieces the bridge beats
       everywhere, kept because envelopeSubdivisionAlg proves emptiness from CONIC rows only (pieceLive) and

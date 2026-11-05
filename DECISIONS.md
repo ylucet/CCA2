@@ -9146,3 +9146,36 @@ on 20000 points unchanged 15/32/15. Real Example 2 fixture: old row 0, surd row 
 Suites: fast 826/0, normal 35/0, slow 125/0 (+2 known), with algRowFailsSurdTest new in slow; Ex2Subdivision 3/0 (78 min, shared machine; past the default 3600 s timeout).
 LEFT: pair 2 compares against a degree-6 face whose discriminant is not a square -- no common field.
 
+## 2026-11-04 -- rows against a TOP ROOT (pair 2 79 -> 62 faces); surd rows divided by the region's edges (triangle 60 -> 56); overlay budget 4000 -> 3000
+
+**Top root.** Example 2's pair 2 left 89 open calls, all a face over Q(sqrt 55) against a bridge
+face QUARTIC in z (algBranch FB = -1, the largest real root, constant positive leading coefficient).
+No row of a degree >= 3 face was ever formed. Two sufficient conditions by Taylor at the candidate
+value q, G_n the leading coefficient in z: z_top > q when sign(G_n) G(q) < 0; z_top < q when
+sign(G_n) G^(j)(q) > 0 for every j < n. Built twice: rowPolys (a rational face; exact
+Dn^(n-j) G^(j)(Q/Dn)) and topFaceRow (a surd face; Horner over Z[sqrt k], read through the surd
+struct). Not equivalent -- a z_k below several roots of G is not certified -- but sound; two
+random-input tests in algRowFailsSurdTest (a certified row never holds at sampled points).
+**Measured:** pairs 20/79/35 -> 20/62/35, winners on 20000 points unchanged 15/32/15; the
+triangle 84 -> 60 faces as a side effect.
+
+**Two consequences, both fixed before commit.** (1) kinkSubdivisionTest hung (>3 h; was ~10 min):
+the corner step blew up the top face row's U, V exactly in BigInteger, high degree with huge
+coefficients. Top face rows are now left out of corner charts -- sound, as for any un-blowable row.
+(2) Example 2's overlay bound fell 11567 -> 3736, UNDER the 4000 default budget, so default biconjQ
+subdivided it and erratumBiconjEx2Test ran ~55 min (shared machine) -- near the 3600 s timeout --
+and two tests expecting the EnvelopeMin failed. The values were right (AlgCrv, FT = 1 triangle
+face). Default budget lowered to 3000 so the default keeps declining; Inf still subdivides.
+Option not taken: let the default subdivide and update the tests -- an hour-long default call.
+
+**Edge factors.** The triangle's 4 remaining failed tie calls were a quadratic surd face against a
+rational face touching along the region's edge x + y = 1: U + sqrt(k) V = g^m M, g the edge row, so
+no box beside the edge had a sign (the factor -s(1 + t) of the blown-up region rejects nothing
+touching it). divideOutSurd divides U, V jointly by each region factor as often as it divides both
+exactly (their ratio kept), the norm and sign parts each on their own. A big-integer blow-up bound
+change was tried alongside and is NOT needed. **Measured:** triangle 60 -> 56 faces, no +inf on
+400000 samples or 2001 points beside the edge; Example 2 pairs unchanged.
+
+Suites after both: fast 826/0, normal 35/0, slow 127/0 (+2 known), Ex2Subdivision 3/0 (76 min).
+LEFT: pair 2's open calls are corner touches with gaps 1e-6..1e-12, places where the quartic's top
+root does not exist, and z_k below several of its roots.
