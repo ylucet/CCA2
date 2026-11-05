@@ -1,6 +1,6 @@
 # Session Handoff
 
-_2026-11-04_
+_2026-11-05_
 
 ## Blocked
 Nothing.
@@ -17,13 +17,17 @@ Nothing.
   divided by the region's edge factors (triangle 84 -> 60 -> 56, no holes); overlay default budget
   4000 -> 3000 (Example 2's bound fell to 3736; keeps the default fast). DECISIONS 2026-11-04.
   Tests on main (53b0bb3): fast 826/0, normal 35/0, slow 127/0 (+2 known), Ex2Subdivision 3/0
+- 2026-11-05 overnight (branch overnight/2026-11-04, not merged): triangle 56 -> 36 faces (identical
+  faces kept once; two more levels beside a certified corner square); exact corner chart ~50x faster.
+  Example 2 pairs 20/62/34. Tests on the branch: fast 826/0, normal 35/0, slow 128/0 (+2 known),
+  Ex2Subdivision 3/0. See MORNING.md.
 - Known reds: none
 
 ## Next
 1. (done) Branch merged to main 2026-11-03.
-2. Example 2 faces left: pairs 20/62/35 (winners 15/32/15). Pair 2's open calls: corner touches
-   (gaps 1e-6..1e-12), places with no top root, z_k below several roots (DECISIONS 2026-11-04).
-3. Triangle at 56 faces; ~20 own no point of 400000 samples (small or zero-area) -- not analysed.
+2. Example 2 pair 2's 30 non-winning faces: tangent touches at cell corners; a certificate (patch in
+   .claude/proto/) drops 2 at ~4x cost -- NEEDS A DECISION (MORNING.md, DECISIONS 2026-11-05 second).
+3. (done 2026-11-05) Triangle 36 faces, every one the maximum somewhere.
 4. Guards still `todo`: bridgeFaceAlg bigZContent/branchOverflow/witnessOverflow,
    envelopeAssemble:irrationalStraightFacet (no fixtures).
 

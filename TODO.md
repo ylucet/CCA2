@@ -2,9 +2,11 @@
 
 ## Next up — 2026-11-04 overnight run
 
-- [ ] **B. Example 2 pair 2's remaining extra faces.** 62 faces, 32 win somewhere. Left kinds
-      (DECISIONS 2026-11-04): corner touches (gaps 1e-6..1e-12), no top root of the quartic, z_k below
-      several of its roots. Certify more of them; pairs/winners/suites as the check.
+- [ ] **B. Example 2 pair 2's remaining extra faces -- NEEDS A DECISION (2026-11-05).** All 34 open
+      calls are tangent touches at the cells' corners (not "no top root" or "below several roots" --
+      those do not occur in the regions). A corner certificate gets 62 -> 60 faces at ~4x the
+      pair-2 build and 2x the kink suite; not adopted, patch in .claude/proto/. Options in
+      DECISIONS 2026-11-05 (second) and MORNING.md.
 
 ## 2026-10-14 — biconjugate: what is left, in order
 

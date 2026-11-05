@@ -1,0 +1,258 @@
+--- algRowFails.m	2026-11-05 02:29:06.782577457 -0700
++++ /tmp/claude-1019730/-home-ylucet-AI-CCA2/0331aa39-c494-4af6-ab36-b4d010306e9d/scratchpad/dbgH/algRowFails.m	2026-11-05 02:57:13.230948241 -0700
+@@ -107,8 +107,10 @@
+         if all(abs(q - p) <= 1e-9 * max(1, abs(p))), p = q; end
+         if p(1) < box(1) || p(1) > box(2) || p(2) < box(3) || p(2) > box(4), continue, end
+         if ~anyVanishes(rows, p), continue, end      % nothing to blow up: G(0, t) = P(p), as plain
++        ch = cornerCharts(rows, p, factors);
++        if isempty(ch), continue, end
+         for e = W ./ 2.^(2:8)
+-            if cornerOK(rows, p, e, factors)
++            if cornerOK(ch, e)
+                 % around an IRRATIONAL corner the square is certified about the exact point, which
+                 % the double p misses by ~1e-16: record it a hair smaller
+                 if ~isDyadic(p), e = e * (1 - 1e-9); end
+@@ -368,11 +370,12 @@
+     tf = abs(sum(T(:))) <= 1e-9 * max(sum(abs(T(:))), realmin);
+ end
+ 
+-function ok = cornerOK(rows, p, e, factors)
+-% Every point of the square of half-width e around p (p excepted) fails some row: the four blown-up
+-% charts, each certified by boxRec on [0, e] x [-1, 1]. See A ROW ZERO AT A CORNER.
+-    ok = false;
+-    if ~(e > 0), return, end
++function ch = cornerCharts(rows, p, factors)
++% The four blown-up charts at p (major 1, 2 x sg +1, -1): each chart's rows and its region test,
++% computed ONCE per corner -- they do not depend on the square's size, and recomputing them for each
++% of the seven sizes was ~6/7 of the corner step's time (2026-11-05, erratum Example 2 pair 2).
++% [] when some chart keeps no row (that corner can certify nothing).
++    ch = struct('rows', {}, 'inC', {});
+     for major = 1:2
+         for sg = [1 -1]
+             % A row some polynomial of which cannot be blown up is LEFT OUT of the charts (2026-11-03),
+@@ -389,7 +392,7 @@
+                 end
+             end
+             rowsC = rowsC(keep);
+-            if isempty(rowsC), return, end
++            if isempty(rowsC), ch = struct('rows', {}, 'inC', {}); return, end
+             facC = cell(1, numel(factors));
+             for k = 1:numel(factors)
+                 % only the region's rows THROUGH p: one positive at p rejects nothing near it, and
+@@ -399,10 +402,19 @@
+                 facC{k} = blowUp(factors{k}, p, sg, major);
+             end
+             facC = facC(~cellfun(@isempty, facC));
+-            inC = @(cb) ~any(cellfun(@(G) polySign(G, cb) == -1, facC));
+-            if ~boxRec(rowsC, [0 e -1 1], inC, 6, zeros(0,3)), return, end
++            ch(end+1) = struct('rows', {rowsC}, 'inC', @(cb) ~any(cellfun(@(G) polySign(G, cb) == -1, facC))); %#ok<AGROW>
+         end
+     end
++end
++
++function ok = cornerOK(ch, e)
++% Every point of the square of half-width e around p (p excepted) fails some row: the four blown-up
++% charts (cornerCharts), each certified by boxRec on [0, e] x [-1, 1]. See A ROW ZERO AT A CORNER.
++    ok = false;
++    if ~(e > 0) || numel(ch) < 4, return, end
++    for c = 1:4
++        if ~boxRec(ch(c).rows, [0 e -1 1], ch(c).inC, 6, zeros(0,3)), return, end
++    end
+     ok = true;
+ end
+ 
+@@ -422,7 +434,21 @@
+     [n1, n2] = size(P);
+     deg = n1 + n2 - 2;
+     bound = sum(abs(P(:))) * (abs(p(1)) + 1)^(n1-1) * (abs(p(2)) + 1)^(n2-1) * 2^deg * sc^deg;
+-    if bound >= 2^52, return, end                    % every partial sum an integer multiple of sc^-deg
++    if bound >= 2^52
++        % Past the doubles' bound, EXACTLY in BigInteger (2026-11-04) -- but only for a P that is
++        % itself exact: every entry below 2^53 (fromZ rounds only past it). A rounded P blown up at a
++        % point where the true one vanishes could read rounding as a lowest order. The 3-convex-edge
++        % triangle's tie rows refused at every corner on the hypotenuse here.
++        if max(abs(P(:))) >= 2^53, return, end
++        try
++            G = trimS(chartZ(P, p, sg, major));
++            G = fromZ(G);
++            if ~all(isfinite(G(:))), G = []; end
++        catch
++            G = [];
++        end
++        return
++    end
+     Ps = shiftTo(shiftTo(P, p(1)).', p(2)).';        % Ps(i+1, j+1): coefficient of u^i v^j
+     G = zeros(n1 + n2 - 1, max(n1, n2));
+     for i = 0:n1-1
+@@ -977,7 +1003,7 @@
+     % NOT blown up at corners (cornerOK leaves it out): its U, V are the quartic's Horner images, of
+     % high degree with big coefficients, and the exact BigInteger charts of them ran for hours
+     % on the poly2 kink (kinkSubdivisionTest, 2026-11-04). Leaving a row out is sound, as there.
+-    r = struct('P', {P}, 'test', @(s) topOK(s, odd), 'corner', false);
++    r = struct('P', {P}, 'test', @(s) topOK(s, odd), 'corner', true);
+ end
+ 
+ function ok = topOK(s, odd)
+@@ -1378,37 +1404,142 @@
+ % as often as it divides both exactly (their ratio, which the bracket Lo/Hi reads, is kept), and the
+ % norm and the reduced U, V -- read for their signs only -- each on its own. Two faces TOUCHING ALONG
+ % THE REGION'S EDGE (the 3-convex-edge triangle's hypotenuse) leave U + sqrt(k) V = g^m M with g the
+-% edge's row; undivided, no chart box beside the edge had a sign. Exact doubles only; otherwise kept.
+-    if ~isnumeric(T.UZ) || ~isnumeric(T.VZ), return, end
++% edge's row; undivided, no chart box beside the edge had a sign. BIG INTEGERS too (2026-11-05):
++% erratum Example 2's top face rows past 2^53 change sign on the cell's edge y = 10 the same way;
++% zDivExact divides them exactly.
+     U = T.UZ;  V = T.VZ;  ch = false;
+     for k = 1:numel(factors)
+-        g = factors{k};
+-        for sc = 1:30
+-            if all(g(:) == round(g(:))), break, end
+-            g = 2 * g;
+-        end
+-        if numel(g) <= 1 || any(g(:) ~= round(g(:))), continue, end
+-        try
+-            g = ratQ.contentFree(ratQ.trimN(g));
+-            if numel(g) <= 1, continue, end
+-            for it = 1:4
+-                if ~mayDivide(U, g) || (any(V(:)) && ~mayDivide(V, g)), break, end
+-                U2 = ratQ.trimN(ratQ.polyDivExact(U, g, 2));
+-                if any(V(:)), V2 = ratQ.trimN(ratQ.polyDivExact(V, g, 2)); else, V2 = 0; end
+-                U = U2;  V = V2;  ch = true;
++        g = intFactor(factors{k});
++        if isempty(g), continue, end
++        for it = 1:4
++            if ~mayDivide(U, g) || (zAny(V) && ~mayDivide(V, g)), break, end
++            U2 = zDivExact(U, g);
++            if isempty(U2), break, end
++            if zAny(V)
++                V2 = zDivExact(V, g);
++                if isempty(V2), break, end
++            else
++                V2 = 0;
+             end
+-        catch
++            U = U2;  V = V2;  ch = true;
+         end
+     end
+     E = T.EZ;  Us = T.UsZ;  Vs = T.VsZ;
+-    if isnumeric(E), E2 = divideOut(E, factors); ch = ch || ~isequal(E2, E); E = E2; end
+-    if isnumeric(Us), U3 = divideOut(Us, factors); ch = ch || ~isequal(U3, Us); Us = U3; end
+-    if isnumeric(Vs) && any(Vs(:)), V3 = divideOut(Vs, factors); ch = ch || ~isequal(V3, Vs); Vs = V3; end
++    [E, c1] = zDivideOut(E, factors);
++    [Us, c2] = zDivideOut(Us, factors);
++    c3 = false;  if zAny(Vs), [Vs, c3] = zDivideOut(Vs, factors); end
++    ch = ch || c1 || c2 || c3;
+     if ~ch, return, end
+     n = max(size(U), size(V));
+     T = makeSurd(zPad(U, n), zPad(V, n), T.k, E, Us, Vs);
+ end
+ 
++function [Z, ch] = zDivideOut(Z, factors)
++% divideOut for an exact polynomial, doubles or bigZ: each region factor (>= 0 on the region) out as
++% often as it divides exactly, up to 4 times -- the sign on the region is kept.
++    ch = false;
++    if isnumeric(Z)
++        Z2 = divideOut(Z, factors);  ch = ~isequal(Z2, Z);  Z = Z2;
++        return
++    end
++    if ~isa(Z, 'bigZ'), return, end
++    for k = 1:numel(factors)
++        g = intFactor(factors{k});
++        if isempty(g), continue, end
++        for it = 1:4
++            Z2 = zDivExact(Z, g);
++            if isempty(Z2), break, end
++            Z = Z2;  ch = true;
++        end
++    end
++end
++
++function g = intFactor(g)
++% A region factor as a content-free integer polyN, [] when it is constant or not dyadic.
++    for sc = 1:30
++        if all(g(:) == round(g(:))), break, end
++        g = 2 * g;
++    end
++    if numel(g) <= 1 || any(g(:) ~= round(g(:))), g = []; return, end
++    try
++        g = ratQ.contentFree(ratQ.trimN(g));
++    catch
++        g = []; return
++    end
++    if numel(g) <= 1, g = []; end
++end
++
++function tf = zAny(Z)
++    if isnumeric(Z), tf = any(Z(:)); return, end
++    tf = any(cellfun(@(c) c.signum() ~= 0, Z.c(:)));
++end
++
++function Q = zDivExact(Z, g)
++% Z / g EXACTLY, Z an integer polyN (doubles or bigZ), g a small integer polyN whose leading
++% coefficient in x (or else in y) is a constant: long division in that variable over Z[other],
++% every step an exact BigInteger division. [] when g does not divide Z.
++    Q = [];
++    if isnumeric(Z) && all(abs(Z(:)) < 2^53)
++        try
++            Q = ratQ.trimN(ratQ.polyDivExact(Z, g, 2));
++        catch
++            Q = [];
++        end
++        return
++    end
++    try
++        Q = zDivBig(Z, g);
++    catch
++        Q = [];
++    end
++end
++
++function Q = zDivBig(Z, g)
++    Q = [];
++    C = bigZ(Z);  C = C.c;
++    [d, ok] = leadConst(g);
++    tr = false;
++    if ~ok
++        [d, ok] = leadConst(g.');
++        if ~ok, return, end
++        g = g.';  C = C.';  tr = true;
++    end
++    [m, n] = size(C);  [~, ng] = size(g);
++    if m - 1 < d, return, end
++    W = n + ng - 1;
++    Z0 = java.math.BigInteger.ZERO;
++    R = repmat({Z0}, m, W);  R(:, 1:n) = C;
++    q = repmat({Z0}, m - d, n);
++    c = java.math.BigInteger.valueOf(int64(g(d+1, 1)));
++    G = cell(size(g));
++    for a = 1:numel(g), G{a} = java.math.BigInteger.valueOf(int64(g(a))); end
++    for i = m-1:-1:d
++        for jj = 1:W
++            if R{i+1, jj}.signum() == 0, continue, end
++            qr = R{i+1, jj}.divideAndRemainder(c);
++            if qr(2).signum() ~= 0, return, end
++            if jj > n, return, end
++            qv = qr(1);  q{i-d+1, jj} = qv;
++            for a = 0:d
++                for b = 0:ng-1
++                    if G{a+1, b+1}.signum() == 0, continue, end
++                    R{i-d+a+1, jj+b} = R{i-d+a+1, jj+b}.subtract(qv.multiply(G{a+1, b+1}));
++                end
++            end
++        end
++    end
++    if any(cellfun(@(x) x.signum() ~= 0, R(:))), return, end
++    Q = bigZ(q);
++    if tr, Q = Q.'; end
++    Q = zNorm(Q);
++end
++
++function [d, ok] = leadConst(g)
++% The degree in x of g and whether its leading coefficient (a polynomial in y) is a nonzero constant.
++    d = find(any(g ~= 0, 2), 1, 'last') - 1;
++    ok = ~isempty(d) && g(d+1, 1) ~= 0 && ~any(g(d+1, 2:end));
++end
++
+ function tf = mayDivide(S, g)
+ % false only when g PLAINLY does not divide S: S is clearly nonzero at a point of g = 0 (complex
+ % points too -- divisibility holds there as well). A filter in doubles before the exact division

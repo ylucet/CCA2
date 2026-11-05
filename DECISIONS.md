@@ -9201,3 +9201,33 @@ undecided boxes.
 **Measured:** triangle 36 faces, each the maximum somewhere; values identical to the 56-face build
 on 400000+ points with the edges; no +inf. Example 2 pairs 20/62/35 -> 20/62/34. Suites: fast
 826/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0.
+
+## 2026-11-05 (second) -- Example 2 pair 2's last open calls: TANGENT touches at cell corners; a corner certificate measured and NOT adopted
+
+Pair 2 (62 faces, 32 winning) left 34 failed algFaceBelow calls, all a quadratic surd face below the
+quartic bridge face. Sampled, every in-region point has exactly ONE root of the quartic above z_k
+(the top-root condition holds pointwise) and the gap is >= 1e-12..0.07. The calls fail at the
+cells' CORNERS, (60,10), (37.5,10), (22.5,-10), (15,10) and irrational ones, where the two faces
+touch TANGENTIALLY: gap ~ C(theta) r^2 with C(theta) having a double zero at a direction just
+outside the region. No rounded quadratic separator passes through such a point.
+
+Tried, in order (scratch, measured on the 34 captured calls):
+1. Separator fitted between the quartic's TOP TWO roots (so sign(G_n) G(q) < 0 can hold where z_k
+   dips below the second root outside the region): 0 of 34.
+2. Corner blow-ups for the top face rows (left out since 2026-11-04 for the kink): 0 -- every
+   blow-up refused, the shifted doubles past 2^52.
+3. + the exact BigInteger blow-up past 2^52, + exact division of the region's edge factors out of
+   BIG-INTEGER surd rows (zDivExact: long division over Z[y] when the factor's leading coefficient
+   is a constant; 299/299 random products divided, every non-multiple refused): 2 of 34, the
+   (60, 10) corner. At (22.5, -10) the surd polynomials' zero curve is TANGENT to the region's edge
+   at the corner (not along it), so no division applies there.
+4. The chart computed once per corner instead of per square size.
+
+**Measured with 3 + 4:** pair 2 62 -> 60 faces, winners unchanged 32; build 824 s against 217-226 s
+(1452 s before 4); the kink suite 1525 s against ~680 (with 3 alone). NOT adopted: 2 non-winning
+faces for ~4x the pair-2 build and a 2x slower kink. The patch is kept in
+.claude/proto/2026-11-05-top-row-corners.patch. Kept and committed: chartZ on raw BigInteger
+(~50x, identical; d4506cd). Item 4 alone changes nothing measurable on the current code.
+LEFT: a tangent touch at a corner needs either an exact separator through the touching point
+(value and gradient there, rational only at dyadic corners) or a second blow-up along the
+degenerate direction; the latter was tried once on 2026-11-02 (+1 face at 4x time) and reverted.
