@@ -1,5 +1,14 @@
 # TODO
 
+## Next up — 2026-11-04 overnight run
+
+- [ ] **A. The triangle's faces that own no point.** The 3-convex-edge triangle is 56 faces; ~20 own
+      no point of 400000 samples. Find why each is kept and drop the empty ones SOUNDLY (no holes,
+      values unchanged; minSubdivisionTest + a 400000-point check).
+- [ ] **B. Example 2 pair 2's remaining extra faces.** 62 faces, 32 win somewhere. Left kinds
+      (DECISIONS 2026-11-04): corner touches (gaps 1e-6..1e-12), no top root of the quartic, z_k below
+      several of its roots. Certify more of them; pairs/winners/suites as the check.
+
 ## 2026-10-14 — biconjugate: what is left, in order
 
 `conj` defaults to the exact engine since 2026-10-11; `biconj` still defaults to `'cplq'` because
