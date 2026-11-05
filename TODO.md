@@ -2,11 +2,9 @@
 
 ## Next up — 2026-11-04 overnight run
 
-- [ ] **B. Example 2 pair 2's remaining extra faces -- NEEDS A DECISION (2026-11-05).** All 34 open
-      calls are tangent touches at the cells' corners (not "no top root" or "below several roots" --
-      those do not occur in the regions). A corner certificate gets 62 -> 60 faces at ~4x the
-      pair-2 build and 2x the kink suite; not adopted, patch in .claude/proto/. Options in
-      DECISIONS 2026-11-05 (second) and MORNING.md.
+- [x] **B. Example 2 pair 2's remaining extra faces -- DECIDED 2026-11-05: leave them.** They are
+      tangent touches at cell corners and never own a point, so no value changes; the corner
+      certificate (62 -> 60 at ~4x) stays parked in .claude/proto/. DECISIONS 2026-11-05 (second).
 
 ## 2026-10-14 — biconjugate: what is left, in order
 

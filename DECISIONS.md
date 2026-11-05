@@ -9231,3 +9231,6 @@ faces for ~4x the pair-2 build and a 2x slower kink. The patch is kept in
 LEFT: a tangent touch at a corner needs either an exact separator through the touching point
 (value and gradient there, rational only at dyadic corners) or a second blow-up along the
 degenerate direction; the latter was tried once on 2026-11-02 (+1 face at 4x time) and reverted.
+DECIDED 2026-11-05 (Yves): option (a), LEAVE THEM. The 30 non-winning faces never own a point, so
+they change no value; their only cost is overlay size, and the overlay is declined by default. The
+patch stays in .claude/proto/ for reference, not for adoption.

@@ -20,7 +20,7 @@ extra faces. TODO.md "Next up — 2026-11-04 overnight run".
 ## What is broken
 Nothing known. Start: main 58331a4, fast 826/0, normal 35/0, slow 127/0 (+2 known), Ex2Subdivision 3/0.
 ## Needs a decision
-- **B: adopt the corner certificate for Example 2 pair 2?** It drops 62 -> 60 faces (the 30
+- **DECIDED 2026-11-05: (a), leave them.** ~~B: adopt the corner certificate for Example 2 pair 2?~~ It drops 62 -> 60 faces (the 30
   non-winning faces are harmless: values identical), but pair 2 builds in ~820 s instead of ~220 s
   and the kink suite runs ~2x longer. Options: (a) leave it (recommended -- the faces cost only
   overlay size, and the overlay is already declined by default); (b) adopt it as an opt-in for
