@@ -17,7 +17,7 @@ Nothing.
   divided by the region's edge factors (triangle 84 -> 60 -> 56, no holes); overlay default budget
   4000 -> 3000 (Example 2's bound fell to 3736; keeps the default fast). DECISIONS 2026-11-04.
   Tests on main (53b0bb3): fast 826/0, normal 35/0, slow 127/0 (+2 known), Ex2Subdivision 3/0
-- 2026-11-05 overnight (branch overnight/2026-11-04, not merged): triangle 56 -> 36 faces (identical
+- 2026-11-05 overnight (branch overnight/2026-11-04, merged to main 2026-11-05, fast-forward, not pushed): triangle 56 -> 36 faces (identical
   faces kept once; two more levels beside a certified corner square); exact corner chart ~50x faster.
   Example 2 pairs 20/62/34. Tests on the branch: fast 826/0, normal 35/0, slow 128/0 (+2 known),
   Ex2Subdivision 3/0. See MORNING.md.
