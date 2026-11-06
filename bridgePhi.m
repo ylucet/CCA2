@@ -37,9 +37,17 @@ function [Phi, Dt, U1, U2] = bridgePhi(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd, ex
         % on ordinary pairs, which was bridgeFaceAlg:witnessOverflow. A caller that passes 'big'
         % reads Phi through the BigInteger Sturm routines, so it gets Phi as a big form (struct
         % sz/c, ascending like the double one) when the reduced double does not exist.
+        % U AND det(M_mu) TOO (2026-11-05): at data entries ~1e5 they pass 2^53 themselves, and then
+        % they come back as bigZ rows (ascending, like the doubles) and Phi in the big form. Both are
+        % used unreduced, so there is no content to divide out -- only the width was missing.
         [~, Dt, U1, U2] = phiRaw(N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
-        ratQ.chk([U1, U2, Dt], 'U and det(M_mu)');
+        wide = any(abs([U1, U2, Dt]) >= 2^53);
+        if wide
+            [~, Dt, U1, U2] = phiRaw(bigZ(N1), bigZ(m1), bigZ(N2), bigZ(m2), bigZ(Dl), bigZ(dl), ...
+                                     bigZ(kp), bigZ(d), bigZ(xn), bigZ(xd));
+        end
         try
+            if wide, error('ratQ:overflow', 'U or det(M_mu) past 2^53'); end
             Phi = ratQ.exactFormula(@phiRaw, 'Phi', N1, m1, N2, m2, Dl, dl, kp, d, xn, xd);
         catch ME
             if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end

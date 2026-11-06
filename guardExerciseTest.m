@@ -345,8 +345,8 @@ classdef guardExerciseTest < matlab.unittest.TestCase
                 'convEnvUnbounded:degenerate',              'shadowed'; ... % a collinear triangle has no interior: notTriangle fires first (measured 2026-11-02, 1 vertex); parallel wedge rays make kind 'ray', not 'wedge'
                 'convEnvUnbounded:noVertex',                'internal'; ... % reached only past the shape switch, whose wedge/half-strip branches demand 1 / 2 finite vertices
                 'bridgeFaceAlg:bigZContent',                'shadowed'; ... % 2026-11-05: the big z-content is divided out exactly; only a candidate that fails to divide refuses -- 0 hits in 2220 searched pairs (DECISIONS 2026-11-05 fourth)
-                'bridgeFaceAlg:branchOverflow',             'shadowed'; ... % 2026-11-05: counts finish in BigInteger; 0 hits in 2220 searched pairs, and at large data polynomialOverflow refuses first
-                'bridgeFaceAlg:witnessOverflow',            'shadowed'; ... % 2026-11-05: Phi kept big, membership counted in BigInteger; 0 hits in 2220 searched pairs, and at large data polynomialOverflow refuses first
+                'bridgeFaceAlg:branchOverflow',             'shadowed'; ... % 2026-11-05: counts finish in BigInteger; 0 hits in 2220 searched pairs; still 0 at entries 1e3..1e6 (2026-11-05 (fifth))
+                'bridgeFaceAlg:witnessOverflow',            'shadowed'; ... % 2026-11-05: Phi kept big, membership counted in BigInteger; 0 hits in 2220 searched pairs; still 0 at entries 1e3..1e6 (2026-11-05 (fifth))
                 'envelopeAssemble:irrationalStraightFacet', 'shadowed'; ... % measured 2026-11-05: a parallel tie reaches it only via straightTie (curving face => double line, 19 of 19) or noSeparateFace (affine x rank-1: no curvature along the tie, provably); irrational curving pairs go to the curved producer
                 'envelopeEval:faceKind',                    'internal'; ...
                 'cellInterior:embed',                       'internal'; ...

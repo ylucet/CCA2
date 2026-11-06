@@ -9286,3 +9286,34 @@ Every formerly refused input checked builds a face whose top FP root equals the 
 closed-form value (rel <= 1e-15), and, where the oracle can sweep the tie, the face equals the
 definition (bridgeFaceAlgTest, uncut and cut).
 
+## 2026-11-05 (fifth) -- polynomialOverflow at large data: Psi in BigInteger; the refusal is gone
+
+Where it came from (search, entries 1e3..1e6, 60 pairs: 52 refusals): `det(M_mu)` -- the FIRST
+product in building Psi, before any discriminant (which already had `discBig`). Once Psi was
+built, the next overflows on the same pairs were (a) `detExact(Nk)` in `imageConic` and
+`detExact(Dl)` in the witness's window, and (b) U and det(M_mu) in `bridgePhi`, which the 'big'
+mode still required to fit.
+
+What changed:
+- `implicitPoly` runs the double elimination (`implicitPolyDouble`) and on ratQ:overflow re-runs it
+  as `implicitPolyBig`: the same Psi term for term on ratQ big polyN structs, then the discriminant
+  (`discBigRaw`, shared with `discBig`) and `bigTail` (content, z-content).
+- `imageConic`: a singular test via `isSingular`, and an overflow anywhere in the image map omits the
+  row (the row is an outer bound; same rule as 2026-10-11). `bridgeWitness`: `detNonzero` (a
+  determinant past 2^53 is nonzero).
+- `bridgePhi(..., 'big')`: U and det(M_mu) past 2^53 come back as bigZ rows and Phi in the big form;
+  `ratQ.bigRow` reads bigZ; `branchIndex` reads det(M_mu) in doubles (a proposal filter only).
+- The refusal `bridgeFaceAlg:polynomialOverflow` is REMOVED: nothing after it can raise ratQ:overflow
+  from the elimination any more. Example 2's dead quarantine branch on it in erratumBiconjTest went
+  with it.
+
+Measured after: the 52 former refusals -> 41 faces + 11 noWitness (empty tie: 0 tie points). Fresh
+searches, entries 1e3..1e6, 160 pairs: 140 faces, 20 noWitness, nothing else. Entries 1e7..1e9
+(Hessians A'A ~1e18): 55 of 80 raise ratQ:overflow on the INPUT itself (n1 is not an exact double)
+-- out of contract, not a producer limit.
+Correctness: all 41 faces' top root = closed form at the witness (rel <= 2e-13). Against the
+definition: 34 agree <= 1e-12 with the test oracle; the other 7 disagreed by 0.2-54 -- every time
+because the oracle's tie sweep is s1 in [-25, 25] while those ties are centred at |c0| ~ 250-3500.
+With the sweep scaled to the data (c0 +- 1e6) all 7 agree <= 2.3e-13. New fast test:
+LARGEDataBuildsTheFaceWherePsiItselfPasses2to53 (three pairs, entries up to 1.7e12).
+

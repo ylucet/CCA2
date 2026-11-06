@@ -156,21 +156,10 @@ function [face, info] = bridgeFaceAlg(n1, d1, n2, d2, P)
     tie = ratQ.diffConic(n1, d1, n2, d2);             % the tie conic, canonically spelled
 
     % ---- 1. the implicit polynomial -----------------------------------------------------------
-    try
-        [FP, ipInfo] = implicitPoly(d, N1, m1, q1, N2, m2, q2);
-    catch ME
-        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
-        % THE FACE'S OWN POLYNOMIAL DOES NOT FIT IN A DOUBLE, which is the answer being large
-        % rather than an intermediate being clumsy: the discriminant of a cubic multiplies four of
-        % its coefficients together, and those already carry the two faces' denominators to the
-        % third power. A named refusal, because "this input is past the exact arithmetic's ceiling"
-        % and "this routine is wrong" must not look the same from outside.
-        error('bridgeFaceAlg:polynomialOverflow', ...
-            ['the implicit polynomial exceeds 2^53 for this pair (%s). That is the ANSWER being ' ...
-             'large: the discriminant multiplies four coefficients that already carry both ' ...
-             'denominators cubed. The general fix is the modular route DECISIONS.md records for ' ...
-             'ratQ, not a rearrangement of this elimination.'], ME.message);
-    end
+    % No overflow refusal here since 2026-11-05: Psi, its discriminant and the z-content all have
+    % a BigInteger path (implicitPolyBig, discBig, bigTail), so a large answer is kept big. The
+    % refusal bridgeFaceAlg:polynomialOverflow that stood here is gone (DECISIONS 2026-11-05 (fifth)).
+    [FP, ipInfo] = implicitPoly(d, N1, m1, q1, N2, m2, q2);
 
     % ---- 2. the two boundary conics -----------------------------------------------------------
     C1 = imageConic(tie, N1, m1, d, 'first');
@@ -260,6 +249,73 @@ function [p, info] = implicitPoly(d, N1, m1, q1, N2, m2, q2)
 % Psi is held as a cell array over powers of mu, ASCENDING, whose entries are polyN arrays in
 % (x,y,z). M_mu, c_mu and k_mu carry no x, so they stay plain integer vectors in mu and only the
 % two components of (d x - c_mu) ever become polynomials. That is what keeps the arithmetic small.
+    try
+        [p, info] = implicitPolyDouble(d, N1, m1, q1, N2, m2, q2);
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        % PSI ITSELF IS PAST 2^53 (2026-11-05): at data entries ~1e5 already det M_mu overflows,
+        % before any discriminant. The same elimination, every product in BigInteger; the
+        % discriminant and the z-content then run in bigTail as before.
+        [p, info] = implicitPolyBig(d, N1, m1, q1, N2, m2, q2);
+    end
+end
+
+function [p, info] = implicitPolyBig(d, N1, m1, q1, N2, m2, q2)
+% implicitPolyDouble's Psi, transcribed term for term into ratQ's big polyN form: a mu-polynomial
+% is a cell row (ascending) of big structs over (x, y, z). Inputs are integers below 2^53, so
+% promoting them is exact; only the products needed the width.
+    K  = @(v) ratQ.toBig(v);
+    X  = K(ratQ.monoN([1 0 0], 1, 3));  Y = K(ratQ.monoN([0 1 0], 1, 3));
+    Z  = K(ratQ.monoN([0 0 1], 1, 3));  U = K(ratQ.monoN([0 0 0], 1, 3));
+    sc = @(k, A) ratQ.bigMul(K(k), A);
+    Dl  = N1 - N2;
+    e11 = {sc(N1(1,1), U), sc(Dl(1,1), U)};  e12 = {sc(N1(1,2), U), sc(Dl(1,2), U)};
+    e22 = {sc(N1(2,2), U), sc(Dl(2,2), U)};
+    Dt  = bmuAdd(bmuMul(e11, e22), bmuScale(bmuMul(e12, e12), -1));
+    a11 = e22;  a12 = bmuScale(e12, -1);  a22 = e11;
+    W1 = {ratQ.bigAdd(sc(d, X), sc(-m1(1), U)), sc(-(m1(1)-m2(1)), U)};
+    W2 = {ratQ.bigAdd(sc(d, Y), sc(-m1(2), U)), sc(-(m1(2)-m2(2)), U)};
+    term1 = bmuScale(bmuMul({ratQ.bigAdd(sc(d, Z), sc(q1, U)), sc(q1-q2, U)}, Dt), 2);
+    term2 = bmuAdd(bmuAdd(bmuMul(a11, bmuMul(W1, W1)), ...
+                          bmuScale(bmuMul(a12, bmuMul(W1, W2)), 2)), ...
+                   bmuMul(a22, bmuMul(W2, W2)));
+    Psi = bmuAdd(term1, bmuScale(term2, -1));
+    last = 0;
+    for i = 1:numel(Psi), if ~ratQ.bigIsZero(Psi{i}), last = i; end, end
+    Psi = Psi(1:max(last, 1));
+    if ~any(numel(Psi) - 1 == [2 3])
+        error('bridgeFaceAlg:straightTie', ...
+            ['Psi has degree %d in the multiplier: the tie is STRAIGHT, an ordinary facet of each ' ...
+             'side polygon, which envelopeCellRegions handles (see implicitPolyDouble).'], numel(Psi) - 1);
+    end
+    muDegree = numel(Psi) - 1;
+    p = discBigRaw(Psi);
+    [p, info] = bigTail(trimBig(ratQ.bigContentFree(p)), muDegree);
+end
+
+function c = bmuMul(a, b)
+    c = cell(1, numel(a) + numel(b) - 1);
+    for i = 1:numel(a)
+        for j = 1:numel(b)
+            t = ratQ.bigMul(a{i}, b{j});
+            if isempty(c{i+j-1}), c{i+j-1} = t; else, c{i+j-1} = ratQ.bigAdd(c{i+j-1}, t); end
+        end
+    end
+end
+function c = bmuAdd(a, b)
+    n = max(numel(a), numel(b));  c = cell(1, n);
+    for i = 1:n
+        if i <= numel(a) && i <= numel(b), c{i} = ratQ.bigAdd(a{i}, b{i});
+        elseif i <= numel(a), c{i} = a{i};
+        else, c{i} = b{i}; end
+    end
+end
+function c = bmuScale(a, k)
+    c = a;
+    for i = 1:numel(a), c{i} = ratQ.bigMul(ratQ.toBig(k), a{i}); end
+end
+
+function [p, info] = implicitPolyDouble(d, N1, m1, q1, N2, m2, q2)
     X = ratQ.monoN([1 0 0], 1, 3);  Y = ratQ.monoN([0 1 0], 1, 3);
     Z = ratQ.monoN([0 0 1], 1, 3);  U = ratQ.monoN([0 0 0], 1, 3);
 
@@ -379,17 +435,17 @@ function C = imageConic(tie, Nk, mk, d, which) %#ok<INUSD>
 % Those two cell kinds are not exotic: a conjugate of a quadratic on a polygon has ONE full-rank
 % cell, one rank-1 cell per EDGE and one affine cell per VERTEX, so they are most of any overlay
 % (DECISIONS.md 2026-09-17, the census).
-    if ratQ.detExact(Nk) == 0
+    if isSingular(Nk)
         C = [];  return
     end
-    adjN = [Nk(2,2), -Nk(1,2); -Nk(2,1), Nk(1,1)];
-    Mn = ratQ.chk(d * adjN,  'image map');
-    tn = ratQ.chkB(-adjN*mk, abs(adjN)*abs(mk),  'image translation');
-    md = ratQ.detExact(Nk);
     % AN OVERFLOW OMITS THE ROW, as a singular Nk does (2026-10-11): the row is an outer bound and
     % never the face, and membership is decided from the pair's own data -- so a conic past 2^53
-    % costs a weaker bound, not a refusal.
+    % costs a weaker bound, not a refusal. That includes det Nk itself past 2^53 (2026-11-05).
     try
+        adjN = [Nk(2,2), -Nk(1,2); -Nk(2,1), Nk(1,1)];
+        Mn = ratQ.chk(d * adjN,  'image map');
+        tn = ratQ.chkB(-adjN*mk, abs(adjN)*abs(mk),  'image translation');
+        md = ratQ.detExact(Nk);
         [n2, ~] = ratQ.substAffine(faceOfConic(tie), 1, Mn, tn, md);
     catch ME
         if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
@@ -424,6 +480,7 @@ function [b, info] = branchIndex(FP, d, N1, m1, q1, N2, m2, q2, Dl, dl, kp, xn, 
     % Past 2^53 the multipliers are only PROPOSED from rounded coefficients; nothing below trusts
     % them -- the value is certified against FP's fibre by exact counts.
     if ratQ.isBigPoly(PhiA), PhiA = ratQ.bigToDouble(PhiA); PhiA = PhiA(:).'; end
+    if isa(Dt, 'bigZ'), Dt = double(Dt); end      % read only as a proposal filter, in doubles
     Phi = ratQ.polyTrim(fliplr(PhiA));
     x = xn(:) / xd;
     mus = roots(Phi);
@@ -672,6 +729,14 @@ function p = discBig(cf)
 % double path's intermediates pass 2^53 on the poly2 kink (biconjQ, 2026-09-25) while the reduced
 % polynomial may not; ratQ.fromBig still raises ratQ:overflow if it does, which is the honest case.
     b = cellfun(@(c) ratQ.toBig(c), cf, 'UniformOutput', false);
+    % KEPT BIG WHEN IT DOES NOT FIT (2026-10-11): the reduced polynomial is the ANSWER, and an
+    % answer past 2^53 is stored in ratQ's big form rather than refused. Its readers accept that
+    % form -- algBranch rounds it (a cache), the exact ones read it exactly.
+    p = ratQ.fromBigOrKeep(ratQ.bigContentFree(discBigRaw(b)));
+end
+
+function q = discBigRaw(b)
+% the discriminant in mu of sum_k b{k} mu^(k-1), b{k} big polyN; quadratic or cubic
     K = @(v) ratQ.toBig(v);
     if numel(b) == 4
         E = b{1};  C = b{2};  B = b{3};  A = b{4};
@@ -684,10 +749,6 @@ function p = discBig(cf)
         E = b{1};  C = b{2};  B = b{3};
         q = ratQ.bigAdd(mulAll(C, C), ratQ.bigMul(K(-4), mulAll(B, E)));
     end
-    % KEPT BIG WHEN IT DOES NOT FIT (2026-10-11): the reduced polynomial is the ANSWER, and an
-    % answer past 2^53 is stored in ratQ's big form rather than refused. Its readers accept that
-    % form -- algBranch rounds it (a cache), the exact ones read it exactly.
-    p = ratQ.fromBigOrKeep(ratQ.bigContentFree(q));
 end
 
 function r = mulAll(varargin)

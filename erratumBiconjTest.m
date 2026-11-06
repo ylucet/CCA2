@@ -9,7 +9,8 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
 % triangle is ~100 s.
 %
 % QUARANTINES: none since 2026-10-11. Example 2 was quarantined on
-%   bridgeFaceAlg:polynomialOverflow (a bridge polynomial needs 59 bits); the polynomial is now kept
+%   bridgeFaceAlg:polynomialOverflow (a bridge polynomial needs 59 bits; that refusal is gone since
+%   2026-11-05); the polynomial is now kept
 %   in BigInteger and the intermediates that overflowed after it are reduced by their content
 %   (ratQ.exactFormula / bigZ). biconjQ on Example 2 takes ~26 min on the shared machine (one run),
 %   computed once per run by biconjCached. Example 3 was quarantined until 2026-10-11 too.
@@ -140,10 +141,6 @@ classdef erratumBiconjTest < matlab.unittest.TestCase
             end
             ME = cache{which}.err;
             if isempty(ME), h = cache{which}.h; return, end
-            if which == 2 && strcmp(ME.identifier, 'bridgeFaceAlg:polynomialOverflow')
-                testCase.assumeFail(['QUARANTINED: Example 2 overflows the exact integer range ' ...
-                    '(TODO: integer width -- an implicit bridge polynomial needs 59 bits). ' ME.message]);
-            end
             rethrow(ME)
         end
     end

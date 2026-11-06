@@ -1884,6 +1884,7 @@ classdef ratQ
         function P = bigRow(p)
         % a coefficient row (highest first) as a cell of BigInteger, leading zeros dropped
             if iscell(p), c = p(:).';
+            elseif isa(p, 'bigZ'), c = p.c;  c = c(:).';
             elseif ratQ.isBigPoly(p), c = p.c(:).';
             else, c = num2cell(p(:).'); end
             P = cell(1, numel(c));

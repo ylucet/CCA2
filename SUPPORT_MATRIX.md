@@ -516,11 +516,11 @@ The last row is the only one worth revisiting: it is a genuine branch, exercised
 | `bridgeFaceAlg:witnessOverflow` | **OK** (shadowed) | membership counted in BigInteger, Phi kept big; 0 hits in 2220 searched pairs |
 | `bridgeFaceAlg:branchOverflow` | **OK** (shadowed) | `countRootsIn` falls back to BigInteger; 0 hits in 2220 pairs |
 | `bridgeFaceAlg:bigZContent` | **OK** (shadowed) | big z-content divided out exactly; refuses only if the candidate fails to divide; 0 hits |
-| `bridgeFaceAlg:polynomialOverflow` | **GAP, reachable at large data** | 151 of 300 pairs with entries up to ~1e8; 0 with entries <= 1e4 |
+| `bridgeFaceAlg:polynomialOverflow` | **REMOVED 2026-11-05** | Psi built in BigInteger; 0 failures in 160 pairs with entries 1e3..1e6 (past ~1e8 the INPUT is not an exact double) |
 | `bridgeFaceAlg:noWitness` | **GAP / by design** | 71 of 300 small pairs: the tie has no usable rational point |
 | `envelopeAssemble:irrationalStraightFacet` | **shadowed** | reached only via `straightTie` (a curving face there was a DOUBLE line, 19 of 19) or `noSeparateFace` (affine x rank-1: no curvature along the tie, provably) |
 
-DECISIONS 2026-11-05 (third) has the searches that found the overflows; (fourth) the fix.
+DECISIONS 2026-11-05 (third) has the searches that found the overflows; (fourth) the fix; (fifth) large data.
 
 ## 4. Pointwise max of conjugates — `maxQuaPar` (Step 3)
 

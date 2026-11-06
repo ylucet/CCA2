@@ -133,7 +133,7 @@ function S = tieSample(Dl, dl, kp, P)
         return
     end
 
-    if ratQ.detExact(Dl) ~= 0
+    if detNonzero(Dl)
         c0 = -Dl \ dl;
         v0 = (c0.'*Dl*c0)/2 + dl.'*c0 + kp;
         ev = max(abs(eig(Dl)));
@@ -336,4 +336,16 @@ function s = signAtRational(C, xn, xd)
     v = C(1)*xn(1)^2 + C(2)*xn(1)*xn(2) + C(3)*xn(2)^2 + ...
         C(4)*xn(1)*xd + C(5)*xn(2)*xd + C(6)*xd^2;
     s = sign(ratQ.chk(v, 'conic value at the witness'));
+end
+
+% --------------------------------------------------------------------------------------------------
+function tf = detNonzero(A)
+% det A ~= 0, decided exactly: a determinant whose VALUE is past 2^53 is certainly not zero
+% (2026-11-05, data entries ~1e5); only the window's scale is read from it, in doubles.
+    try
+        tf = ratQ.detExact(A) ~= 0;
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME), end
+        tf = true;
+    end
 end

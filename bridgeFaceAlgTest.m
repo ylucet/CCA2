@@ -416,6 +416,34 @@ classdef bridgeFaceAlgTest < matlab.unittest.TestCase
             testCase.verifyEqual(info.degrees(3), 2, 'and it is the isotropic quadric, degree 2 in z');
         end
 
+        function LARGEDataBuildsTheFaceWherePsiItselfPasses2to53(testCase)
+        % Data entries 1e3..1e12 were bridgeFaceAlg:polynomialOverflow until 2026-11-05: det M_mu,
+        % hence Psi, passed 2^53 before any discriminant, and then U and det M_mu in the witness's
+        % Phi did too. Psi is now built in BigInteger (implicitPolyBig) and those rows come back as
+        % bigZ (DECISIONS 2026-11-05 (fifth)). Each pair must build its top-branch face, agreeing
+        % with the closed form at the witness and with THE DEFINITION near it. (These three have
+        % their tie near the origin, inside the oracle's sweep window; a search over 160 more pairs
+        % agreed to 2e-13 against a window scaled to the data.)
+            C = {mk('large1', [0 0 0 0 119381654 53210592 65548342 -1616 3705 -5911], 42, ...
+                              [0 0 0 0 105863342 38145581 13806147 7563 -9453 3410], 56), ...
+                 mk('large9', [0 0 0 0 1092405 690382 915971 -738 619 -311], 28, ...
+                              [0 0 0 0 1231842 -1293560 1360805 881 164 758], 29), ...
+                 mk('large8', [0 0 0 0 1691373540435 -686033302849 336803060426 -219985 -28019 208621], 395, ...
+                              [0 0 0 0 1617098793699 850137645287 703753301006 99096 852363 837467], 964)};
+            for i = 1:numel(C)
+                fx = C{i};
+                [face, info] = bridgeFaceAlg(fx.n1, fx.d1, fx.n2, fx.d2);
+                testCase.verifyEqual(face.FB, -1, [fx.name ': the top branch']);
+                testCase.verifyTrue(ratQ.isBigPoly(face.FP), [fx.name ': the face polynomial is past 2^53']);
+                w = face.wit;
+                testCase.verifyEqual(algBranch(face.FP, w(1:2)/w(3), face.FB), info.value, ...
+                    'RelTol', 1e-9, [fx.name ': FP''s top root is the closed-form value']);
+                [worst, n] = restrictedAgreementAny(fx, face, zeros(0,3));
+                testCase.verifyGreaterThan(n, 20, [fx.name ': too few region points to conclude']);
+                testCase.verifyLessThan(worst, 1e-9, [fx.name ': the face against the definition']);
+            end
+        end
+
         function aWITNESSQuarticThatStaysPast2to53IsReadInBigIntegerCutOrNot(testCase)
         % The pair below was bridgeFaceAlg:witnessOverflow until 2026-11-05: at EVERY candidate the
         % reduced quartic Phi still needs 64-72 bits. Phi is now kept big and membership is counted
