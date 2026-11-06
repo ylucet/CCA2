@@ -1,48 +1,41 @@
 # Session Handoff
 
-_2026-11-05_
+_Last updated: 2026-11-05T18:53-07:00_
 
-## Blocked
-Nothing.
+## What happened this session
+The overnight branch was merged to main. Every biconj result is now an AlgCon (EnvelopeMin joined
+as a no-subdivision leaf). The bridge producer's 2^53 overflow refusals are gone: the
+witnessOverflow, branchOverflow and bigZContent refusals now finish in BigInteger (0 hits in 2220
+pairs), and polynomialOverflow was removed after Psi got a BigInteger path. Large data (entries
+1e3..1e6) now builds faces that match the definition to <= 2.3e-13. DECISIONS 2026-11-05 (third) to (fifth).
 
-## State
-- `overnight/2026-11-02` merged to main 2026-11-03 (fast-forward, not pushed) -- see `MORNING.md`
-- Tests on main (e45e39e): fast 826/0, normal 35/0, slow 122/0 (+2 known-incomplete), verylong Ex2Subdivision 3/0
-- 2026-11-03: triangle 140 -> 84 faces, zero-area 12 -> 2 (mirror pair at (1/(2 sqrt5), 1 - 1/(2 sqrt5)));
-  algBranch double-root window exact; face row vs a rational face; bridgeMember fixed beside the
-  edge so erratumBiconjTest checks every point again (DECISIONS 2026-11-03 (second)-(fourth))
-- 2026-11-04: surd face row (faces over Q(sqrt 55) compared directly): Example 2 pairs 29/91/47 -> 20/79/35;
-  fast 826/0, normal 35/0, slow 125/0 (+2 known), Ex2Subdivision 3/0
-- 2026-11-04 (later): rows against a quartic face's TOP root (pairs 20/79/35 -> 20/62/35) and surd rows
-  divided by the region's edge factors (triangle 84 -> 60 -> 56, no holes); overlay default budget
-  4000 -> 3000 (Example 2's bound fell to 3736; keeps the default fast). DECISIONS 2026-11-04.
-  Tests on main (53b0bb3): fast 826/0, normal 35/0, slow 127/0 (+2 known), Ex2Subdivision 3/0
-- 2026-11-05 overnight (branch overnight/2026-11-04, merged to main 2026-11-05, fast-forward, not pushed): triangle 56 -> 36 faces (identical
-  faces kept once; two more levels beside a certified corner square); exact corner chart ~50x faster.
-  Example 2 pairs 20/62/34. Tests on the branch: fast 826/0, normal 35/0, slow 128/0 (+2 known),
-  Ex2Subdivision 3/0. See MORNING.md.
-- 2026-11-05 (later, on main): every biconj result is an AlgCon (EnvelopeMin < AlgCon, no subdivision);
-  Example 2 pair 2's extra faces -- decided, leave them; the four todo guards: 3 exercised, 1 shadowed,
-  and the bridge producer's overflow refusals are REACHABLE on small pairs (SUPPORT_MATRIX 3.2);
-  TODO.md has an 'Open now' index. Tests: fast 827/0, normal 35/0, slow 128/0 (+2 known), guards 36/0
-- 2026-11-05 (latest, on main, 973efcf): the bridge producer's three overflow refusals (witnessOverflow,
-  branchOverflow, bigZContent) answered in BigInteger; 0 hits in 2220 searched pairs, now 'shadowed'.
-  polynomialOverflow at large data (~1e5 entries) remains -- TODO 'Open now'. DECISIONS 2026-11-05 (fourth).
-  Tests: fast 830/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0
-- 2026-11-05 (fifth): polynomialOverflow at large data fixed (Psi in BigInteger) and the refusal removed;
-  0 failures at entries 1e3..1e6. Tests: fast 831/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0
-- Known reds: none
+## Where things stand
+- Branch: `main` @ `ccf7282` -- "handoff: polynomialOverflow at large data fixed"
+  (work commit 5b99d37, before that 973efcf)
+- Pushed: no (main is ahead of origin/main; never pushed this session)
+- Tests: fast 831/0, normal 35/0, slow 128/0 (+2 known-incomplete), verylong Ex2Subdivision 3/0, guards 33/0
+- Known reds: none. Blocked: nothing.
 
-## Next
-1. (done) Branch merged to main 2026-11-03.
-2. (decided 2026-11-05) Example 2 pair 2's non-winning faces: leave them.
-3. (done 2026-11-05) Triangle 36 faces, every one the maximum somewhere.
-4. (done 2026-11-05) todo guards; the bridge producer's overflow refusals answered in BigInteger.
-   polynomialOverflow at large data fixed too (2026-11-05 fifth). Next: see TODO.md 'Open now'.
+## Next steps (proposed to the user, in this order; not yet chosen)
+1. Test oracle: `tieMax`/`tiePoints` in bridgeFaceAlgTest.m sweep s1 in [-25,25] and keep |S| < 1e4,
+   so they miss ties centred at |c0| ~ 1e3 (7 false disagreements at large data). Scale the window to
+   the tie centre and size. A data-scaled version (`tieMaxW`) is in the scratch probe
+   (scratchpad po/or/pocheck.m, may be gone).
+2. Release/paper: state the MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
+3. Example 2 is an EnvelopeMin by default (overlay budget 3000); a full subdivision takes ~hours. Decide
+   whether a faster subdivision is worth the effort.
+4. Low value: two zero-area faces in the c = -2 AlgCrv; "two bridge faces owning one cell" refusal
+   (never observed); the legacy 'cplq' engine's issues (parked).
+- Still open but by design: bridgeFaceAlg:noWitness (the tie has no usable rational point).
+- Decided: leave Example 2 pair 2's non-winning faces.
 
-## Files
-- `algRowFails.m` -- topRowPolys / topFaceRow (top-root rows, no corner blow-up), divideOutSurd
-- `algRowFails.m` -- surdFaceRow / surdPoly / oddPartZ (exact BigInteger blow-ups); `algRowFailsSurdTest.m` (slow, new)
-- `algRowFails.m` -- face rows (.W), Yun odd part, symbolic square-free past 2^53
-- `algFaceBelow.m` -- face-row fallback, `own` rows; `envelopeSubdivisionAlg.m` dropBelow passes them
-- `guardExerciseSymbolicTest.m` (slow, new); `addQuaPar.m`, `conjConvexOverPiece.m` guard fixes
+## Relevant files
+- `bridgeFaceAlg.m` -- implicitPoly -> implicitPolyDouble / implicitPolyBig, discBigRaw, bigTail
+  (big z-content division), imageConic overflow -> row omitted, isSingular
+- `bridgePhi.m` -- 'big' mode: Phi big form; U and det(M_mu) as bigZ when past 2^53
+- `bridgeWitness.m` -- memberExact / memberExactArcBig (BigInteger Sturm), detNonzero
+- `ratQ.m` -- countRootsInHalfOpenBig, isolateRootsBig, signAtBig, bigGcdRow, bigDivLinear; bigRow reads bigZ
+- `bridgeFaceAlgTest.m` -- theFormerOVERFLOWRefusalsNowBuildTheFace, aWITNESSQuartic...,
+  LARGEDataBuildsTheFaceWherePsiItselfPasses2to53; oracle helpers at the bottom (tieMax etc.)
+- `guardExerciseTest.m` -- guard inventory (remainder list)
+- `DECISIONS.md` 2026-11-05 (third)-(fifth); `SUPPORT_MATRIX.md` 3.2; `TODO.md` 'Open now'
