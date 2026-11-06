@@ -29,6 +29,8 @@ Nothing.
   branchOverflow, bigZContent) answered in BigInteger; 0 hits in 2220 searched pairs, now 'shadowed'.
   polynomialOverflow at large data (~1e5 entries) remains -- TODO 'Open now'. DECISIONS 2026-11-05 (fourth).
   Tests: fast 830/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0
+- 2026-11-05 (fifth): polynomialOverflow at large data fixed (Psi in BigInteger) and the refusal removed;
+  0 failures at entries 1e3..1e6. Tests: fast 831/0, normal 35/0, slow 128/0 (+2 known), Ex2Subdivision 3/0
 - Known reds: none
 
 ## Next
@@ -36,7 +38,7 @@ Nothing.
 2. (decided 2026-11-05) Example 2 pair 2's non-winning faces: leave them.
 3. (done 2026-11-05) Triangle 36 faces, every one the maximum somewhere.
 4. (done 2026-11-05) todo guards; the bridge producer's overflow refusals answered in BigInteger.
-   Next candidate: polynomialOverflow at large data (TODO.md 'Open now').
+   polynomialOverflow at large data fixed too (2026-11-05 fifth). Next: see TODO.md 'Open now'.
 
 ## Files
 - `algRowFails.m` -- topRowPolys / topFaceRow (top-root rows, no corner blow-up), divideOutSurd
