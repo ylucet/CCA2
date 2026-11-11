@@ -26,7 +26,7 @@ Scope: `QuaPol.conj` -> `conjQ` and `QuaPol.biconj` -> `biconjQ` only; the legac
 - [x] **P0. DONE 2026-11-10. Measure the real surface and freeze the oracle** -- coverage of the exact suites ->
       `python/PORT_SCOPE.md`; `python/tools/export_golden.m` -> `python/golden/*.json`.
 - [ ] **P1. Exact arithmetic kernel** -- `exact_q`, `rat_q` (one int path, no int64 wall), sign helpers; tests ported.
-- [ ] **P1b. Definition oracle** -- `plqCheck.m` -> `cca2/check.py` (MATLAB-free).
+- [x] **P1b. DONE 2026-11-11 (184/184 fixtures satisfy the definition). Definition oracle** -- `plqCheck.m` -> `cca2/check.py` (MATLAB-free).
 - [ ] **P2. Data types** -- domain, Conic, RatCon, QuaCon, AlgCon, AlgCrv, EnvelopeMin, QuaPol (exact subset), `io_matlab`.
 - [x] **P3. DONE 2026-11-10 (120/120 golden parity). Conjugate** -- `conj_q` + maxQ, conicMeet, cell*, assembleQuaConCells; conj goldens match exactly.
 - [x] **P4. DONE 2026-11-10 (51 golden records identical; 6 wait on P5-P7). Biconjugate, direct cases** -- convex short-circuit, edge-concave lower hull, recession rays.

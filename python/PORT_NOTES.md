@@ -51,3 +51,29 @@ seeded 400-point probe: MATLAB `rng(20260905); rand(400,2)` is reproduced by
 `numpy.random.RandomState(20260905)`, column-major) and `cellInterior`'s margin LP are
 double-precision in both. `numpy.roots` and MATLAB `roots` agree to rounding, not bitwise; every
 decision taken from them is behind a tolerance (1e-9 .. 1e-7).
+
+## 5. What is not ported yet (and what happens instead)
+
+| MATLAB | status in Python | behaviour today |
+|---|---|---|
+| `envelopeSubdivisionAlg/minOverlay` (several atom pairs) | not ported | named refusal `envelopeSubdivisionAlg:overlayNotPorted`; `biconjQ` answers with the `EnvelopeMin` (same function, evaluable, not subdivided) |
+| `triangleFace`, `cutTriangles`, `dualPoint` (contact triangles) | not ported | `ModuleNotFoundError` on the third branch of `biconjQ` -- to be turned into the same decline |
+| `algRowFails`: `topRowPolys` / `topFaceRow` (rows against a face of degree >= 3 in z) | not ported | "no proof" (sound: the face is kept) |
+| `algCrvVertices`, `algCrvIncidence` (naming an AlgCrv's vertices) | not ported | an `AlgCrv` has no `Vname` (as MATLAB's default result) |
+| legacy `'cplq'` engine, `partialConj`, `moreau`, `proxAverage`, `infConv`, `lasryLions` | out of scope | `PLQ:conj:engine` names MATLAB |
+
+## 6. A MATLAB result the port deliberately does not reproduce
+
+`envelopeSubdivisionAlg` keeps a cell whose sample point lies exactly on a boundary line (rounding
+gives a positive slack on both sides of it), and emits bridge faces for that zero-width cell.
+Python finds no interior point and drops it. `tests/test_trace_subdivision.py` accepts the
+difference only after proving each extra MATLAB face lies in such a cell.
+
+## 7. How the port is verified
+
+1. **Golden parity** (`tests/test_golden_*.py`): every `conjQ` / `biconjQ` call the MATLAB suites
+   make, replayed (`python/tools/export_golden.sh` records them through a shadow wrapper).
+2. **Trace parity** (`tests/test_trace_*.py`): every recorded call of 25 intermediate MATLAB
+   functions, replayed against its Python twin (`python/tools/export_trace.sh`).
+3. **Definition oracle** (`tests/test_definition.py`, `cca2/check.py`): MATLAB-free.
+4. **CAS-free lint** (`tests/test_no_cas.py`): no module of `cca2` imports a CAS.
