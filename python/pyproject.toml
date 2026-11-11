@@ -18,6 +18,7 @@ include = ["cca2*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow and not verylong'"
 markers = [
     "slow: minutes-long case (not in the fast bucket)",
     "verylong: hours-long endurance case",
