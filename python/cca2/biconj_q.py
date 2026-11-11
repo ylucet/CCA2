@@ -194,7 +194,7 @@ def assembledEnvelope(obj):
     pieces = splitPieces(obj)
     gA, _ = conjQ(pieces[0])
     gB, _ = conjQ(pieces[1])
-    return subdividePair(envelopePrune(envelopeAssemble(gA, gB)), hullRows(obj))
+    return subdividePair(envelopePrune(envelopeAssemble(gA, gB)[0]), hullRows(obj))
 
 
 def subdividePair(env, dom):

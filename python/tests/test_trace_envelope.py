@@ -147,3 +147,29 @@ def test_biconjAtoms(i):
     for t, w in zip(h.tris, tris):
         assert io_matlab._floatClose(t['T'], w['T']) and io_matlab._floatClose(t['s'], w['s'])
         assert abs(t['c'] - sc(w['c'])) <= 1e-9 * max(1.0, abs(t['c']))
+
+
+# ---- the conic subdivision --------------------------------------------------------------------
+from cca2.envelope_subdivision import envelopeSubdivision      # noqa: E402
+
+SUB = _load('envelopeSubdivision')
+
+
+def _quaConDict(d):
+    return {'nv': sc(d['nv']), 'ne': sc(d['ne']), 'nf': sc(d['nf']), 'Vname': d['Vname'] or [],
+            'E': d['E'] or [], 'EcQ': d['EcQ'] or [], 'fN': d['fN'] or [], 'fD': [vec(d['fD'])],
+            'F': d['F'] or [], 'FC': [c or [] for c in d['FC']]}
+
+
+@pytest.mark.parametrize('i', range(len(SUB)))
+def test_envelopeSubdivision(i):
+    rec = SUB[i]
+    a = dec(rec['in'])
+    env = io_matlab.envFromTrace(a[0])
+    if rec['err']:
+        with pytest.raises(CCA2Error) as e:
+            envelopeSubdivision(env)
+        assert e.value.identifier == rec['err']
+        return
+    g, info = envelopeSubdivision(env)
+    assert io_matlab.quaConMismatch(g, _quaConDict(dec(rec['out'])[0])) == ''
