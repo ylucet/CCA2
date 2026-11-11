@@ -241,3 +241,122 @@ def polyFromTrace(x, nv):
             m, n = len(x), len(x[0])
             return poly_n.fromND([m, n], [x[i][j] for j in range(n) for i in range(m)], nv)
     raise ValueError('unrecognised polynomial in trace: %r' % (x,))
+
+
+def _aslist(x):
+    if x is None or x == []:
+        return []
+    return x if isinstance(x, list) else [x]
+
+
+def pairFromTrace(pr):
+    """A bridge face's `pair` (algebraic or rational) from its traced struct."""
+    if pr.get('kind') == 'rational':
+        d = {k: sc(pr[k]) for k in ('nu', 'rq', 'rl', 'rc', 'rd', 'scale')}
+        d.update(kind='rational', u=vec(pr['u']), w=vec(pr['w']), B=vec(pr['B']), C=vec(pr['C']),
+                 P=pr['P'] or [])
+        return d
+    return {'d': sc(pr['d']), 'N1': pr['N1'], 'm1': vec(pr['m1']), 'N2': pr['N2'],
+            'm2': vec(pr['m2']), 'Dl': pr['Dl'], 'dl': vec(pr['dl']), 'kp': sc(pr['kp']),
+            'P': pr['P'] or []}
+
+
+def faceFromTrace(w):
+    """A bridge / corner face dict from its traced struct."""
+    f = {'kind': w['kind']}
+    if 'FP' in w and w['FP'] not in (None, []):
+        f['FP'] = polyFromTrace(w['FP'], 3)
+    if 'FB' in w and w['FB'] not in (None, []):
+        f['FB'] = sc(w['FB'])
+    if 'pairIndex' in w:
+        f['pairIndex'] = sc(w['pairIndex'])
+    if w['kind'] == 'corner':
+        sg = w['sigma']
+        f['s'] = vec(w['s'])
+        f['sigma'] = {'quad': vec(sg['quad']), 'root': sc(sg['root']), 'facet': sc(sg['facet']),
+                      's0n': vec(sg['s0n']), 'w': vec(sg['w']), 'na': sc(sg['na'])}
+        f['M'] = w['M']
+        f['p'] = vec(w['p'])
+        f['src'] = {'n': vec(w['src']['n']), 'd': sc(w['src']['d']), 'tie': vec(w['src']['tie']),
+                    'side': sc(w['src']['side'])}
+        f['con'] = w['con'] or []
+    else:
+        f['cells'] = [c or [] for c in _aslist(w.get('cells'))]
+        f['pair'] = pairFromTrace(w['pair'])
+        f['wit'] = vec(w['wit'])
+        if w['kind'] == 'rational':
+            f['fN'] = vec(w['fN'])
+            f['fD'] = sc(w['fD'])
+            f['den'] = vec(w['den'])
+    return f
+
+
+def envFromTrace(e):
+    """An assembled envelope {'quad', 'bridge'} from its traced struct."""
+    quad = []
+    for q in _aslist(e['quad']):
+        pr = vec(q['pair'])
+        quad.append({'num': vec(q['num']), 'den': sc(q['den']), 'con': q['con'] or [],
+                     'pair': pr[0] if len(pr) == 1 else pr})
+    return {'quad': quad, 'bridge': [faceFromTrace(f) for f in _aslist(e['bridge'])]}
+
+
+def _floatClose(a, b, tol=1e-9):
+    fa = [float(x) for x in _flat(a)]
+    fb = [float(x) for x in _flat(b)]
+    return len(fa) == len(fb) and all(abs(x - y) <= tol * max(1.0, abs(x), abs(y))
+                                      for x, y in zip(fa, fb))
+
+
+def _flat(v):
+    if isinstance(v, (list, tuple)):
+        for x in v:
+            yield from _flat(x)
+    else:
+        yield v
+
+
+def faceMismatch(f, w):
+    """'' when the face dict f equals the reference face w (exact data exactly, doubles to
+    1e-9), else the first field that differs."""
+    if f['kind'] != w['kind']:
+        return 'kind %s vs %s' % (f['kind'], w['kind'])
+    for k in ('FP', 'FB', 'pairIndex'):
+        if (k in w) and f.get(k) != w.get(k):
+            return k
+    if f['kind'] == 'corner':
+        if f['sigma'] != w['sigma']:
+            return 'sigma'
+        if f['con'] != w['con']:
+            return 'con'
+        if f['src'] != w['src']:
+            return 'src'
+        for k in ('s', 'p', 'M'):
+            if not _floatClose(f[k], w[k]):
+                return k
+    else:
+        for k in ('cells', 'pair', 'wit'):
+            if f[k] != w[k]:
+                return k
+        if f['kind'] == 'rational' and (f['fN'], f['fD'], f['den']) != (w['fN'], w['fD'], w['den']):
+            return 'rational face'
+    return ''
+
+
+def envMismatch(env, want):
+    """'' when the envelope equals the reference one (from envFromTrace)."""
+    if len(env['quad']) != len(want['quad']):
+        return 'quad count %d vs %d' % (len(env['quad']), len(want['quad']))
+    for i, (q, w) in enumerate(zip(env['quad'], want['quad'])):
+        for k in ('num', 'den', 'con'):
+            if q[k] != w[k]:
+                return 'quad %d %s: %r vs %r' % (i + 1, k, _short(q[k]), _short(w[k]))
+        if _aslist(q['pair']) != _aslist(w['pair']):
+            return 'quad %d pair' % (i + 1)
+    if len(env['bridge']) != len(want['bridge']):
+        return 'bridge count %d vs %d' % (len(env['bridge']), len(want['bridge']))
+    for i, (f, w) in enumerate(zip(env['bridge'], want['bridge'])):
+        why = faceMismatch(f, w)
+        if why:
+            return 'bridge %d: %s' % (i + 1, why)
+    return ''
