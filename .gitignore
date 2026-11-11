@@ -37,3 +37,8 @@ slprj/
 .claude/*.tmp
 .claude/overnight-slow.log
 .claude/notDegenerate-*/
+
+# Python port: local virtualenv and caches
+python/.pydeps/
+python/**/__pycache__/
+python/.pytest_cache/
