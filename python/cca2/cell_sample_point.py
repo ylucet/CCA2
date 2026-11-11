@@ -8,6 +8,8 @@ cell (capped). Doubles -- a witness search, nothing is decided from it exactly.
 """
 import math
 
+import numpy as np
+
 from . import rat_q
 from .conic_meet import _solve2
 from .numeric import linspace, roundHalfAway
@@ -57,22 +59,27 @@ def cellSamplePoint(C, rows, H, R, dense=False):
 
 
 def _slack(C, rows, X):
-    s = [math.inf] * len(X)
-    nx = [max(1.0, math.sqrt(x[0] * x[0] + x[1] * x[1])) for x in X]
+    """min over the rows of side * value / scale, at every point (vectorised; the same
+    arithmetic, in the same order, as the scalar formula)."""
+    if not X:
+        return []
+    A = np.asarray(X, dtype=float)
+    x = A[:, 0]
+    y = A[:, 1]
+    nx = np.maximum(1.0, np.sqrt(x * x + y * y))
+    s = np.full(len(X), np.inf)
     for r in rows:
         c = C[r[0] - 1][0:6]
         br = C[r[0] - 1][6]
         sd = r[1]
         if br != 0:
-            v = rat_q.pairLineEval(c, br, X)
+            v = np.asarray(rat_q.pairLineEval(c, br, X), dtype=float)
             sc = nx
         else:
-            v = [c[0] * x[0] ** 2 + c[1] * x[0] * x[1] + c[2] * x[1] ** 2
-                 + c[3] * x[0] + c[4] * x[1] + c[5] for x in X]
-            m = max(abs(t) for t in c)
-            sc = [m * t * t for t in nx]
-        s = [min(a, sd * b / d) for a, b, d in zip(s, v, sc)]
-    return s
+            v = c[0] * (x * x) + c[1] * (x * y) + c[2] * (y * y) + c[3] * x + c[4] * y + c[5]
+            sc = max(abs(t) for t in c) * (nx * nx)
+        s = np.minimum(s, sd * v / sc)
+    return s.tolist()
 
 
 def _polygonVertices(H, R):

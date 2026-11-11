@@ -63,15 +63,21 @@ def _binom(n1):
     return Cb
 
 
+_expCache = {}
+
+
 def _shiftMat(n1, x0, h):
-    Cb = _binom(n1)
-    S = np.zeros((n1, n1))
-    for k in range(n1):
-        for i in range(n1):
-            e = i - k
-            X = float(x0) ** e if e >= 0 else 0.0
-            S[k, i] = Cb[i, k] * X * float(h) ** k
-    return S
+    """S[k, i] = C(i, k) x0^(i-k) h^k: the change of variable x = x0 + h u on coefficients."""
+    e = _expCache.get(n1)
+    if e is None:
+        i = np.arange(n1)
+        k = np.arange(n1)[:, None]
+        E = i - k
+        e = (np.maximum(E, 0), E >= 0, _binom(n1).T.copy(), np.arange(n1)[:, None])
+        _expCache[n1] = e
+    Epos, mask, CbT, kcol = e
+    X = np.where(mask, np.power(float(x0), Epos), 0.0)
+    return CbT * X * np.power(float(h), kcol)
 
 
 def _convMat(n1):

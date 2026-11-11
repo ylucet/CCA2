@@ -114,6 +114,7 @@ _memoSF = {}
 _memoFace = {}
 _memoSurd = {}
 _memoSurdFace = {}
+_memoFactorBU = {}
 
 
 def _rowPolys(a, factors):
@@ -268,9 +269,13 @@ def _cornerOK(rows, p, e, factors):
                 return False
             facC = []
             for g in factors:
-                if not _vanishesAt(_num(g), p):
-                    continue
-                G = _blowUp(_num(g), p, sg, major)
+                fk = (_matKey(g), p[0], p[1], sg, major)
+                if fk not in _memoFactorBU:
+                    if len(_memoFactorBU) > 20000:
+                        _memoFactorBU.clear()
+                    gn = _num(g)
+                    _memoFactorBU[fk] = _blowUpRaw(gn, p, sg, major) if _vanishesAt(gn, p) else None
+                G = _memoFactorBU[fk]
                 if G is not None:
                     facC.append(G)
 
@@ -299,7 +304,16 @@ def _toIntegers(M):
 
 def _blowUp(P, p, sg, major):
     """The polynomial in the chart at corner p, divided by the power of r it vanishes to; None
-    when it cannot be formed exactly (MATLAB's double-precision guard)."""
+    when it cannot be formed exactly (MATLAB's double-precision guard). Memoised on the row
+    polynomial itself: the same blow-up is asked for at every trial size of the corner square."""
+    memo = P.setdefault('_bu', {})
+    key = (p[0], p[1], sg, major)
+    if key not in memo:
+        memo[key] = _blowUpRaw(P, p, sg, major)
+    return memo[key]
+
+
+def _blowUpRaw(P, p, sg, major):
     if P['t'] != 'num':
         return _blowUpPair(P, p, sg, major)
     M = _toIntegers(P['M'])
