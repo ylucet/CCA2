@@ -5,6 +5,8 @@
 Exact engine (the default for `conj` and `biconj`):
 - Bridge producer: noWitness when a tie has no usable rational point (SUPPORT_MATRIX 3.2; by design). The overflow refusals are gone (2026-11-05).
 - Two zero-area faces in the c = -2 AlgCrv (own no point; harmless) -- see "Faces of ZERO AREA" below.
+  2026-11-11: one mechanism behind zero-area faces fixed (cellSamplePoint accepted a sample ON a
+  boundary line; DECISIONS 2026-11-11 item 2). Whether it removes these two was NOT re-measured.
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
 - Two BRIDGE faces owning one cell -- refused by name, never observed.
 

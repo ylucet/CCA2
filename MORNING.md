@@ -57,13 +57,9 @@ from MATLAB to Python. TODO.md "Next up — 2026-11-10 overnight run", items P0.
   open list. Python finds no interior point and drops the cell.
 
 ## Needs a decision
-- **Fix the Sturm sign bug in MATLAB `ratQ.m`?** Options: (a) fix it now in `polyPseudoRemDouble`
-  and `polyPseudoRemBig` (scale by |lc|^(gap+1), as `bigPrem` already does) and rerun the suites
-  -- recommended, it is a wrong root COUNT, silent; (b) leave MATLAB as is since the port
-  supersedes it. Not done: it changes the MATLAB engine, which was not the task.
-- **`conjQ/linealityConj` builds the cross-section from `fN` and drops `fD`** (python/PORT_NOTES.md
-  3.2). Looks wrong whenever fD ~= 1; the port uses fN/fD. Not confirmed by a MATLAB run yet:
-  (a) confirm with one fixture and fix MATLAB -- recommended; (b) leave.
+- RESOLVED 2026-11-11 (Yves: "fix the two MATLAB bugs"): the Sturm sign bug, the zero-width cells,
+  and a third one found on the way (`linealityConj` dropped fD) are fixed in MATLAB with tests;
+  DECISIONS.md 2026-11-11. MATLAB fast 833/0, normal 35/0, 8 exact slow suites green.
 - **Speed.** The port is correct but slow on algebraic subdivisions: pure-Python Bernstein tests
   and cell sampling dominate (kink fixture: ~25 min before two cheap fixes, shared machine, one
   run -- not a benchmark). Options: (a) accept for now, it is the reference port for the Rust/C
