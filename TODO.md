@@ -10,6 +10,14 @@ Exact engine (the default for `conj` and `biconj`):
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
 - Two BRIDGE faces owning one cell -- refused by name, never observed.
 
+Python port (`python/`, merged to main 2026-11-11):
+- Slow bucket 22/1. The one red: the big kink biconjugate (kinkSubdivisionTest's 4-piece fixture)
+  gives an AlgCrv of 334 faces in Python against MATLAB's 317. Values agree at every golden sample
+  point (evalMismatch passes); only the face count differs. Re-recorded with the FIXED MATLAB on
+  2026-11-11: still 317, so it is not a stale golden. Present before the three MATLAB fixes too.
+  Next: diff the two subdivisions face by face (trace export, as done for the six traced
+  subdivisions that now match), most likely a merge step (mergeSameQuadFaces / mergeAdjacentCells).
+
 Legacy symbolic engine (`'cplq'`, no longer the default):
 - `biconjCPLQ` on the poly2 kinks runs > 4 h (tests switched off); `conjCPLQ`'s eig tolerance can
   return +Inf for a strictly convex quadratic (`conjQ` is right); G1 / G4 / G10 / G11, T3-T6,
