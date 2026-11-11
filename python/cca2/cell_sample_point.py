@@ -60,7 +60,12 @@ def cellSamplePoint(C, rows, H, R, dense=False):
 
 def _slack(C, rows, X):
     """min over the rows of side * value / scale, at every point (vectorised; the same
-    arithmetic, in the same order, as the scalar formula)."""
+    arithmetic, in the same order, as MATLAB's).
+
+    A value within its own rounding is not a margin: a row counts as satisfied only when its
+    value clears 32 eps times the sum of its terms' magnitudes; below that it contributes a slack
+    of 0. Otherwise a sample lying exactly ON a line can "strictly" satisfy two rows that
+    contradict each other there, and a zero-width cell is kept (cellSamplePoint.m, 2026-11-11)."""
     if not X:
         return []
     A = np.asarray(X, dtype=float)
@@ -68,17 +73,24 @@ def _slack(C, rows, X):
     y = A[:, 1]
     nx = np.maximum(1.0, np.sqrt(x * x + y * y))
     s = np.full(len(X), np.inf)
+    eps32 = 32 * 2.0 ** -52
     for r in rows:
         c = C[r[0] - 1][0:6]
         br = C[r[0] - 1][6]
         sd = r[1]
         if br != 0:
-            v = np.asarray(rat_q.pairLineEval(c, br, X), dtype=float)
+            v, m = rat_q.pairLineEvalM(c, br, X)
+            v = np.asarray(v, dtype=float)
+            m = np.asarray(m, dtype=float)
             sc = nx
         else:
             v = c[0] * (x * x) + c[1] * (x * y) + c[2] * (y * y) + c[3] * x + c[4] * y + c[5]
+            m = (abs(c[0]) * (x * x) + np.abs(c[1] * (x * y)) + abs(c[2]) * (y * y)
+                 + np.abs(c[3] * x) + np.abs(c[4] * y) + abs(c[5]))
             sc = max(abs(t) for t in c) * (nx * nx)
-        s = np.minimum(s, sd * v / sc)
+        w = sd * v
+        w = np.where((w > 0) & (w <= eps32 * m), 0.0, w)
+        s = np.minimum(s, w / sc)
     return s.tolist()
 
 

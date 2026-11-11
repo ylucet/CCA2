@@ -373,6 +373,20 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
+        function aTHINConjugateKeepsTheFaceDENOMINATOR(testCase)
+        % f = x^2/3 on the half-plane x >= 0 has no curvature along y, so dom f* is the line
+        % s2 = 0 and there f*(s1) = sup_{x >= 0} s1 x - x^2/3 = (3/4) s1^2 for s1 >= 0, 0 below.
+        % linealityConj built the cross-section from the NUMERATOR row and so conjugated 3f:
+        % it returned s1^2/4 -- 1 at s = (2,0) instead of 3. Red before 2026-11-11.
+            f = QuaPol([0 0; 0 1; 0 -1], [1 2 0; 1 3 0], [0 0 0 0 2/3 0 0 0 0 0], [0 1; 1 0]);
+            g = conjQ(f);
+            testCase.verifyEqual(g.eval([2 0; 1 0; -1 0]).', [3 0.75 0], 'AbsTol', 1e-12);
+            testCase.verifyEqual(g.eval([2 0.5]), inf, 'off the line the sup diverges');
+            % the same function written with denominator 1 was always right: x^2 on x >= 0
+            f1 = QuaPol([0 0; 0 1; 0 -1], [1 2 0; 1 3 0], [0 0 0 0 2 0 0 0 0 0], [0 1; 1 0]);
+            testCase.verifyEqual(conjQ(f1).eval([2 0; 1 0]).', [1 0.25], 'AbsTol', 1e-12);
+        end
+
         function aHALFPLANEPieceConjugatesCorrectly(testCase)
         % UN-QUARANTINED 2026-09-04. This was an assumeFail: QuaPol.examples{11} and {12} -- the
         % plane cut by a line into two HALF-PLANES -- produced cells that OVERLAPPED with different

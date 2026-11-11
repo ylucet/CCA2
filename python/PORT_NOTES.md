@@ -31,18 +31,17 @@ path behind most kernels. The port has ONE path on unbounded ints:
 - Isolating intervals and bisection midpoints are `Fraction`s (dyadic), so the Sturm bisection is
   exact at any depth instead of stalling at double precision.
 
-## 3. Suspected MATLAB defects found while porting (port does the correct thing)
+## 3. MATLAB defects found while porting -- all three FIXED in MATLAB on 2026-11-11
 
-1. **`ratQ.sturmChain` sign.** `polyPseudoRemDouble` scales by `lc(b)^(gap+1)` WITH its sign, so
-   a negative leading coefficient with an even degree gap (gap+1 odd) flips the remainder and
-   breaks the Sturm property. Its BigInteger twin (`bigPrem`) uses `|lc|`. Triggered e.g. by
-   `p = x^4 + x - 1` (chain element `-(3x - 4)`, then a degree gap of 2). The port restores the
-   sign in `rat_q.sturmChain`. TO CONFIRM in MATLAB: `ratQ.countRootsIn([1 0 0 1 -1], -2, 2)`
-   should be 2.
-2. **`conjQ/linealityConj` drops the face denominator.** The cross-section function is built
-   from `row = fN` (the numerator), which is the function only when `fD = 1`. The port passes
-   `fN/fD`. TO CONFIRM in MATLAB with a half-plane piece whose function has `fD ~= 1`
-   (e.g. `f = y^2/3 + x` on `x >= 0`... any `fD > 1` with `H d = 0`).
+DECISIONS.md 2026-11-11 has the measurements. The port had the correct behaviour from the start.
+
+1. **`ratQ.sturmChain` sign** (wrong root count when a chain element has a negative leading
+   coefficient and the degree drops by two). MATLAB now scales by `|lc|^(gap+1)`.
+2. **`conjQ/linealityConj` dropped the face denominator** (conjugated fD*f). MATLAB now passes
+   `fN / fD`.
+3. **`cellSamplePoint` accepted a sample on a boundary line** (zero-width cells kept as faces).
+   MATLAB and Python now both require a row's value to clear its own rounding
+   (32 eps times the sum of its terms' magnitudes) -- see section 6.
 
 ## 4. Float screens kept as in MATLAB
 
@@ -62,12 +61,14 @@ decision taken from them is behind a tolerance (1e-9 .. 1e-7).
 | `algCrvVertices`, `algCrvIncidence` (naming an AlgCrv's vertices) | not ported | an `AlgCrv` has no `Vname` (as MATLAB's default result) |
 | legacy `'cplq'` engine, `partialConj`, `moreau`, `proxAverage`, `infConv`, `lasryLions` | out of scope | `PLQ:conj:engine` names MATLAB |
 
-## 6. A MATLAB result the port deliberately does not reproduce
+## 6. Zero-width cells (resolved 2026-11-11)
 
-`envelopeSubdivisionAlg` keeps a cell whose sample point lies exactly on a boundary line (rounding
-gives a positive slack on both sides of it), and emits bridge faces for that zero-width cell.
-Python finds no interior point and drops it. `tests/test_trace_subdivision.py` accepts the
-difference only after proving each extra MATLAB face lies in such a cell.
+Until 2026-11-11 MATLAB kept a cell whose sample point lay exactly on a boundary line (rounding gave
+a positive slack on both sides of it) and emitted bridge faces for that zero-width cell; the port,
+whose rounding fell the other way, did not. `cellSamplePoint` now discards a slack that does not
+clear the row's own rounding, in both code bases, and the goldens were re-recorded.
+`tests/test_trace_subdivision.py` still accepts an extra MATLAB face only after proving it lies in
+such a cell -- with the fixed MATLAB that branch is no longer taken.
 
 ## 7. How the port is verified
 

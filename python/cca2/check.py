@@ -236,6 +236,27 @@ def supAt(f, s):
             x = np.linalg.solve(Hm, np.array([s[0] - L[0], s[1] - L[1]]))
             if _inFace(f, k, [float(x[0]), float(x[1])]):
                 best = max(best, s[0] * x[0] + s[1] * x[1] - _q(H, L, c, x))
+        elif ev[0] > -1e-12 * max(1.0, abs(ev[1])) and ev[1] > 1e-12:
+            # H is PSD and SINGULAR: the stationary points, if any, form a LINE x0 + t n on
+            # which the objective is constant; any point of that line inside the face attains it.
+            r = np.array([s[0] - L[0], s[1] - L[1]])
+            x0, *_ = np.linalg.lstsq(Hm, r, rcond=None)
+            if np.linalg.norm(Hm @ x0 - r) <= 1e-9 * max(1.0, np.linalg.norm(r)):
+                w, Vv = np.linalg.eigh(Hm)
+                nvec = Vv[:, 0]
+                ts = [0.0]
+                for a, b, isRay in edges:
+                    d = np.array([b[0] - a[0], b[1] - a[1]])
+                    M = np.array([[nvec[0], -d[0]], [nvec[1], -d[1]]])
+                    if abs(np.linalg.det(M)) > 1e-12:
+                        ts.append(float(np.linalg.solve(M, np.array([a[0] - x0[0], a[1] - x0[1]]))[0]))
+                ts = sorted(ts)
+                cand = [ts[0] - 1.0] + [(u + v) / 2 for u, v in zip(ts[:-1], ts[1:])] + [ts[-1] + 1.0] + ts
+                for t in cand:
+                    x = x0 + t * nvec
+                    if _inFace(f, k, [float(x[0]), float(x[1])]):
+                        best = max(best, s[0] * x[0] + s[1] * x[1] - _q(H, L, c, x))
+                        break
     return float(best)
 
 

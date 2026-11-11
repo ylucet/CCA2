@@ -9317,3 +9317,41 @@ because the oracle's tie sweep is s1 in [-25, 25] while those ties are centred a
 With the sweep scaled to the data (c0 +- 1e6) all 7 agree <= 2.3e-13. New fast test:
 LARGEDataBuildsTheFaceWherePsiItselfPasses2to53 (three pairs, entries up to 1.7e12).
 
+
+## 2026-11-11 -- three MATLAB defects found by the Python port, fixed; the Python twin follows
+
+The exact engine was ported to Python (`python/`, plan `python/PORT_PLAN.md`) and every recorded
+MATLAB call replayed against the port. Three places where the two disagreed were MATLAB's fault.
+
+**1. `ratQ.sturmChain` lost the Sturm property (a wrong root COUNT, silent).** `polyPseudoRemDouble`
+and `polyPseudoRemBig` scaled the dividend by `lc(b)^(gap+1)` WITH its sign. A negative leading
+coefficient with an even degree gap makes that power negative, the remainder changes sign, and the
+chain element built from it has the wrong sign. Measured: `ratQ.countRootsIn([1 0 0 1 -1], -2, 2)`
+returned 0; x^4 + x - 1 has two real roots there (chain: p, 4x^3 + 1, -(3x - 4), then a gap of 2).
+Fix: scale by `|lc(b)|^(gap+1)`, which is what `bigPrem` always did. Test:
+`ratQTest/sturmKeepsItsSignWhenTheDegreeDropsByTwo` (double and BigInteger paths, a family of 12
+quartics). Generic chains drop one degree per step, which is why no suite had reached it.
+
+**2. `cellSamplePoint` accepted a sample lying ON a boundary line, so a cell of ZERO WIDTH was live.**
+On the kink fixture a cell is cut by the conic (2x-y)^2 >= 4 together with 2x-y >= 0 and, on the
+other side of a split, by that pair's own upper line 2x-y <= 2: the two contradict each other
+everywhere but on the line. The sample (1.5026.., 1.0052..) lies exactly on it and rounding gave
+BOTH rows a positive slack, so `liveCell` kept the cell and the subdivider emitted three bridge faces
+for it (29 faces; they own no point). This is one mechanism behind the "zero-area faces" item in
+TODO.md -- not necessarily the c = -2 pair, which was not re-measured here.
+Fix: a row counts as satisfied only when its value clears the rounding of its own evaluation
+(32 eps times the sum of its terms' magnitudes; `ratQ.pairLineEval` returns that sum as a second
+output); below that it contributes slack 0. A point that clears every row keeps exactly the slack it
+had, so no other decision moves. Red first: `cellInteriorTest/aSampleONABoundaryLineIsNotAnInteriorPoint`
+fails against the old file (run with the old `cellSamplePoint.m` shadowing the new one) and passes now.
+
+**3. `conjQ/linealityConj` conjugated fD*f instead of f (a wrong VALUE, silent).** The cross-section
+of a piece with a line of zero curvature was built from `row = fN`, the numerator, which is the
+function only when fD = 1. Measured: f = x^2/3 on the half-plane x >= 0 gave f*(2,0) = 1; the sup is
+3. Fix: `row = fN / fD`. Test: `conjQTest/aTHINConjugateKeepsTheFaceDENOMINATOR`.
+
+**Measured after the three fixes** (Frances, 2026-11-11): fast 833/0, normal 35/0; slow exact suites
+kinkSubdivisionTest 3/0, minSubdivisionTest 4/0, erratumBiconjEx2Test 4/0, algCrvSubdivisionTest 3/0,
+envelopeSubdivisionSlowTest 1/0, algRowFailsSurdTest 5/0, unboundedFaceTest 19/0,
+guardExerciseSymbolicTest 11/0. Not rerun: the legacy symbolic slow suites and verylong (they do not
+reach the changed code paths except through `ratQ`'s Sturm chain).

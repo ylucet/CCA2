@@ -137,3 +137,16 @@ def test_squareFreeSign_keeps_the_sign(seed):
     # and no squared factor is left
     fac = sp.factor_list(sp.expand(eS))[1]
     assert all(m == 1 for _, m in fac)
+
+
+def test_thin_conjugate_keeps_the_face_denominator():
+    # f = x^2/3 on x >= 0: dom f* is the line s2 = 0, f*(s1) = (3/4) s1^2 for s1 >= 0.
+    # MATLAB returned s1^2/4 until 2026-11-11 (linealityConj dropped fD); see conjQTest.
+    from cca2.check import supAt
+    from cca2.qua_pol import QuaPol
+    f = QuaPol([[0, 0], [0, 1], [0, -1]], [[1, 2, 0], [1, 3, 0]],
+               [[0, 0, 0, 0, Fraction(2, 3), 0, 0, 0, 0, 0]], [[0, 1], [1, 0]])
+    g = f.conj()
+    S = [[2, 0], [1, 0], [-1, 0], [2, 0.5]]
+    assert g.eval(S)[0] == [3.0, 0.75, 0.0, float('inf')]
+    assert [supAt(f, s) for s in S] == pytest.approx([3.0, 0.75, 0.0, float('inf')])

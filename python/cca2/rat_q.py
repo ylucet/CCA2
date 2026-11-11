@@ -1088,8 +1088,10 @@ def _sortedRealRoots2(quad_):
     return sorted([r1, r2])
 
 
-def pairLineEval(c, b, X):
-    """Double-precision value of branch b of the line pair c at the points X (eval's cache)."""
+def pairLineEvalM(c, b, X):
+    """(v, m): the double-precision value of branch b of the line pair c at the points X (eval's
+    cache), and the sum of the MAGNITUDES of the terms each value is built from -- what a caller
+    needs to tell a value from its own rounding (cell_sample_point)."""
     key = tuple(c[0:6])
     info = _pairLineMemo.get(key)
     if info is None:
@@ -1098,16 +1100,24 @@ def pairLineEval(c, b, X):
             _pairLineMemo.clear()
         _pairLineMemo[key] = info
     if info['kind'] == 'parallel':
-        r = _sortedRealRoots2(info['quad'])
-        return [info['form'][0] * p[0] + info['form'][1] * p[1] - r[b - 1] for p in X]
+        r = _sortedRealRoots2(info['quad'])[b - 1]
+        f1, f2 = info['form']
+        return ([f1 * p[0] + f2 * p[1] - r for p in X],
+                [abs(f1 * p[0]) + abs(f2 * p[1]) + abs(r) for p in X])
     p0 = (info['apex'][0] / info['apex'][2], info['apex'][1] / info['apex'][2])
     if info['vertical'] and b == 2:
-        return [p[0] - p0[0] for p in X]
+        return [p[0] - p0[0] for p in X], [abs(p[0]) + abs(p0[0]) for p in X]
     if info['vertical']:
         t = -info['quad'][1] / info['quad'][0]
     else:
         t = _sortedRealRoots2(info['quad'])[b - 1]
-    return [(p[1] - p0[1]) - t * (p[0] - p0[0]) for p in X]
+    return ([(p[1] - p0[1]) - t * (p[0] - p0[0]) for p in X],
+            [abs(p[1]) + abs(p0[1]) + abs(t) * (abs(p[0]) + abs(p0[0])) for p in X])
+
+
+def pairLineEval(c, b, X):
+    """Double-precision value of branch b of the line pair c at the points X (eval's cache)."""
+    return pairLineEvalM(c, b, X)[0]
 
 
 # --------------------------------------------------------------------------------------------
