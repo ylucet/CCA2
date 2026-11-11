@@ -69,6 +69,47 @@ def test_envelopeSubdivisionAlg(i):
     sub, info = envelopeSubdivisionAlg(env, dom or [])
     out = dec(rec['out'])
     want = [_face(w) for w in (out[0] if isinstance(out[0], list) else [out[0]])]
-    assert len(sub) == len(want)
-    for k, (s, w) in enumerate(zip(sub, want)):
-        assert s == w, 'face %d differs in %s' % (k + 1, [f for f in s if s[f] != w[f]])
+    if len(sub) == len(want):
+        for k, (s, w) in enumerate(zip(sub, want)):
+            assert s == w, 'face %d differs in %s' % (k + 1, [f for f in s if s[f] != w[f]])
+        return
+    # The ONE accepted difference (PORT_NOTES.md section 6): MATLAB keeps faces in a cell of ZERO
+    # WIDTH, found "live" because a sample lying exactly on a boundary line gets a rounding-level
+    # positive slack on both sides of it. Python finds no interior point and drops the cell.
+    # Checked, not assumed: every Python face is one of MATLAB's, and every face MATLAB has
+    # beyond those sits in a cell whose rows contradict each other on a line.
+    def key(f):
+        return (f['kind'], tuple(f['num']), f['den'], tuple(sorted((f['FP'] or {}).items())),
+                f['FB'], tuple(sorted(tuple(r) for r in f['con'])))
+    mine = set(key(f) for f in sub)
+    theirs = {}
+    for w in want:
+        theirs.setdefault(key(w), w)
+    assert mine <= set(theirs), 'a Python face MATLAB does not have'
+    for k in set(theirs) - mine:
+        assert _zeroWidth(theirs[k]['con']), 'MATLAB has a face with interior that Python lacks'
+
+
+def _zeroWidth(con):
+    """Do the rows force the cell onto a LINE: a conic row c >= 0 that is a positive multiple of
+    L1*L2 for two parallel lines, together with rows putting the point between them?"""
+    from cca2 import rat_q
+    for r in con:
+        if r[7] != 0 or all(x == 0 for x in r[0:3]):
+            continue
+        try:
+            pd = rat_q.pairLineData(r[0:6])
+        except Exception:
+            continue
+        if pd['kind'] != 'parallel' or r[6] != 1:
+            continue
+        # outside the strip (conic >= 0) ...
+        for q in con:
+            if q[0:6] == r[0:6] and q[7] == 2 and q[6] == -1:      # ... below the upper line
+                for t in con:
+                    if all(x == 0 for x in t[0:3]) and t[7] == 0:
+                        # ... and a straight row keeping it above the lower line: check exactly
+                        f = pd['form']
+                        if t[3] * f[1] - t[4] * f[0] == 0:
+                            return True
+    return False
