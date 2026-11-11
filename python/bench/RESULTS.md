@@ -60,12 +60,14 @@ Totals over all 200 fixtures (best times): **MATLAB 1131 s, Python 939 s**.
   kink (one run each for the big ones). The time on both sides is the float screens (Bernstein
   sign tests, cell sampling) and the certificate's box recursion, not exact arithmetic.
 - **Erratum Example 2 (EnvelopeMin) is 2x faster in Python** (265 s vs 562 s, one run each).
-  MATLAB's time there includes its BigInteger round trips through Java; Python's ints have none.
+  Why was not profiled on the MATLAB side; a plausible cause is MATLAB's BigInteger round trips
+  through Java, which Python's ints do not need -- unverified.
 - **Python's times are steadier**: worst/best over repetitions median 1.02 (MATLAB 1.26, max 15
   -- MATLAB's first calls after a cache flush).
 
-**Libraries that would NOT help, measured by cProfile:** python-flint (FLINT) / cypari2 (PARI)
-accelerate polynomial arithmetic, which is under 10% of the profile; the hot spots are
-`poly_sign_on` (numpy, 3x3 to 5x5 matrices, call overhead) and `cell_sample_point`. What would
+**Libraries that are unlikely to help, from one cProfile of one algebraic subdivision (9.6 s):**
+python-flint (FLINT) / cypari2 (PARI) accelerate exact polynomial arithmetic, which is not where
+that profile spends its time; the top entries are `cell_sample_point` and `poly_sign_on` (numpy on
+3x3 to 5x5 matrices, i.e. call overhead). What would
 help: batching the Bernstein tests into one numpy call per box level, or a compiled kernel
 (the Rust/C core of DECISION.md).
