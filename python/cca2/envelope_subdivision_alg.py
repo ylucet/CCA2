@@ -13,10 +13,9 @@ Returns (subdivision, info): subdivision is a list of faces
     {'kind': 'quad' | 'bridge', 'num', 'den', 'FP', 'FB', 'con', 'alg'}
 that assembleAlgCrv turns into an AlgCrv.
 
-PORT STATUS: the single-envelope path is ported. The OVERLAY of several atom pairs (MATLAB's
-minOverlay) is not: it is refused by the named error envelopeSubdivisionAlg:overlayNotPorted,
-which biconjQ treats like MATLAB's own overlay-budget refusal and answers with the EnvelopeMin
-(the same function, evaluable, not subdivided). PORT_NOTES.md section 5.
+Several atom pairs (a list of envelopes) are subdivided one by one and OVERLAID: co f is the MIN
+over pairs, so in each overlay cell every choice of one face per pair is compared, the smallest
+winning; ties between two implicit faces become rows of table 2 ("value_1 >= value_2").
 """
 import math
 
@@ -54,9 +53,13 @@ def envelopeSubdivisionAlg(env, dom=None, cuts=None, opts=None):
         if not isinstance(e, dict) or 'quad' not in e or 'bridge' not in e:
             error('envelopeSubdivisionAlg:shape', 'env must be what envelopeAssemble returns.')
     if len(envs) > 1:
-        error('envelopeSubdivisionAlg:overlayNotPorted',
-              'the overlay of %d atom pairs (min of maxes) is not ported to Python yet; '
-              'envelopeEval answers for the minimum.' % len(envs))
+        subs = []
+        infos = []
+        for e in envs:
+            sb, inf = envelopeSubdivisionAlg(e, dom, cuts, opts)
+            subs.append(sb)
+            infos.append(inf)
+        return _minOverlay(subs, infos, opts['overlayBudget'])
 
     env = _combinePairs(envs)
     corners, bridges = _splitBridge(env['bridge'])
@@ -860,3 +863,254 @@ def _interiorPoint(C, rows):
             if not found:
                 return [0.0, 0.0], False
     return [0.0, 0.0], False
+
+
+# ---- the overlay of several pairs: a MIN of maxes ------------------------------------------------
+def _keyRows(keys, con):
+    rows = []
+    for r in con:
+        rows.append([_addKey(keys, list(r[0:6]) + [r[7]]), r[6]])
+    return rows
+
+
+def _mergeRows(a, b):
+    side = {}
+    for r in a:
+        side.setdefault(r[0], r[1])
+    out = [list(r) for r in a]
+    for t in b:
+        s = side.get(t[0])
+        if s is None:
+            out.append(list(t))
+        elif s != t[1]:
+            return None
+    return out
+
+
+def _uniqueStable(rows):
+    seen = set()
+    out = []
+    for r in rows:
+        k = tuple(r)
+        if k not in seen:
+            seen.add(k)
+            out.append(list(r))
+    return out
+
+
+class _Samples:
+    """Sample points of one overlay cell, with each face's branch values computed once."""
+
+    def __init__(self, X):
+        self.X = X
+        self.Z = {}
+
+    def branch(self, FP, FB, idx):
+        key = (_polyKey(FP), FB)
+        e = self.Z.setdefault(key, {})
+        need = [i for i in idx if i not in e]
+        if need:
+            for i, v in zip(need, algBranch(FP, [self.X[i] for i in need], FB)):
+                e[i] = v
+        return [e[i] for i in idx]
+
+
+def _conVal(r, X):
+    if r[7] != 0:
+        return rat_q.pairLineEval(r[0:6], r[7], X)
+    return rat_q.evalConic(r[0:6], X)
+
+
+def _witnessed(con, alg, ii, PP):
+    """Is there a sample point strictly inside every row of the piece?"""
+    X = PP.X
+    if not X:
+        return False
+    idx = list(range(len(X)))
+    for r in con:
+        v = _conVal(r, [X[i] for i in idx])
+        lim = 1e-9 * max(1, max(abs(x) for x in r[0:6]))
+        idx = [i for i, vi in zip(idx, v) if r[6] * vi > lim]
+        if not idx:
+            return False
+    K = 96
+    if len(idx) > K:
+        pick = [roundHalfAway(t) for t in linspace(1, len(idx), K)]
+        idx = sorted(set(idx[p - 1] for p in pick))
+    for a in alg:
+        z = PP.branch(a['FP'], a['FB'], idx)
+        q = rat_q.evalFace(a['num'], a['den'], [X[i] for i in idx])
+        idx = [i for i, zi, qi in zip(idx, z, q)
+               if math.isfinite(zi) and a['side'] * (qi - zi) > 1e-9]
+        if not idx:
+            return False
+    for t in ii:
+        z1 = PP.branch(t['FP1'], t['FB1'], idx)
+        z2 = PP.branch(t['FP2'], t['FB2'], idx)
+        idx = [i for i, a1, a2 in zip(idx, z1, z2)
+               if math.isfinite(a1) and math.isfinite(a2) and a1 - a2 > 1e-9]
+        if not idx:
+            return False
+    return bool(idx)
+
+
+def _overlayLive(keys, rows, con, alg, ii, PP):
+    if _witnessed(con, alg, ii, PP):
+        return True
+    k0 = [all(x == 0 for x in r[0:5]) for r in con]
+    if any(r[6] * r[5] < 0 for r, z in zip(con, k0) if z):
+        return False
+    K = [list(k) for k in keys]
+    r = _keyRows(K, [c for c, z in zip(con, k0) if not z])
+    allRows = [list(t) for t in sorted(set(tuple(t) for t in rows + r))]
+    if not _liveCell(K, allRows):
+        return False
+    if not alg:
+        return True
+    plain = [c[0:7] + [0] for c, z in zip(con, k0) if not z and c[7] == 0]
+    return not _algEmpty(keys, rows, plain, alg, PP.X)
+
+
+def _tieEmpty(keys, rows, con, ii, PP):
+    """Does some tie row 'value_1 >= value_2' hold NOWHERE in the piece (so the piece is empty)?"""
+    if not ii:
+        return False
+    K = [r for r in con if not all(x == 0 for x in r[0:5])]
+    X = PP.X
+    idx = list(range(len(X)))
+    for r in K:
+        v = _conVal(r, [X[i] for i in idx])
+        lim = -1e-9 * max(1, max(abs(x) for x in r[0:6]))
+        idx = [i for i, vi in zip(idx, v) if r[6] * vi >= lim]
+    box = None
+    for t in ii:
+        if idx:
+            z1 = PP.branch(t['FP1'], t['FB1'], idx)
+            z2 = PP.branch(t['FP2'], t['FB2'], idx)
+            if any(math.isfinite(a) and math.isfinite(b) and a > b for a, b in zip(z1, z2)):
+                continue
+        if box is None:
+            box, inBox, factors, corners = _regionBox(keys, rows, K)
+            if box is None:
+                return False
+        lo = {'FP': t['FP1'], 'FB': t['FB1']}
+        hi = {'FP': t['FP2'], 'FB': t['FB2']}
+        try:
+            tf = algFaceBelow(lo, hi, box, inBox, 5, factors, corners)
+        except CCA2Error:
+            tf = False
+        if tf:
+            return True
+    return False
+
+
+def _leRows(f, o, con, alg, ii):
+    """Append the rows saying 'face f is at most face o'."""
+    if f['kind'] == 'quad' and o['kind'] == 'quad':
+        c, sgn = _diffConic(o, f)                  # o >= f
+        if c is not None:
+            con = con + [c + [sgn, 0]]
+    elif f['kind'] == 'quad':                      # quad f <= irrational o
+        alg = alg + [{'FP': o['FP'], 'FB': o['FB'], 'num': f['num'], 'den': f['den'], 'side': -1}]
+    elif o['kind'] == 'quad':                      # irrational f <= quad o
+        alg = alg + [{'FP': f['FP'], 'FB': f['FB'], 'num': o['num'], 'den': o['den'], 'side': 1}]
+    elif not (f['FP'] == o['FP'] and f['FB'] == o['FB']):
+        ii = ii + [{'FP1': o['FP'], 'FB1': o['FB'], 'FP2': f['FP'], 'FB2': f['FB']}]
+    return con, alg, ii
+
+
+def _minOverlay(subs, infos, budget):
+    nP = len(subs)
+    keys = []
+    cellRows = []
+    covered = []
+    facesOf = []
+    for g in range(nP):
+        cc = infos[g]['cellCon']
+        cellRows.append([_keyRows(keys, c) for c in cc])
+        fo = [[i for i, fc in enumerate(infos[g]['faceCell']) if fc == k + 1]
+              for k in range(len(cc))]
+        facesOf.append(fo)
+        covered.append([bool(x) for x in fo])
+
+    # ---- overlay the cells, one pair at a time ------------------------------------------------
+    tup = [[k] for k in range(len(cellRows[0]))]
+    trow = [list(r) for r in cellRows[0]]
+    for g in range(1, nP):
+        nt = []
+        nr = []
+        for a in range(len(trow)):
+            for k in range(len(cellRows[g])):
+                r = _mergeRows(trow[a], cellRows[g][k])
+                if r is None or not _liveCell(keys, r):
+                    continue
+                nt.append(tup[a] + [k])
+                nr.append(r)
+        tup = nt
+        trow = nr
+
+    bound = 0
+    for t in tup:
+        G = [g for g in range(nP) if covered[g][t[g]]]
+        pr = 1
+        for g in G:
+            pr *= len(facesOf[g][t[g]])
+        bound += pr * len(G)
+    if bound > budget:
+        error('envelopeSubdivisionAlg:overlaySize',
+              'the overlay of %d pairs would visit up to %d pieces over %d tuples, past the '
+              'budget of %d; envelopeEval answers for the minimum.' % (nP, bound, len(tup), budget))
+
+    out = []
+    nUnsure = nII = nHole = nCombo = nTie = 0
+    for t, rows in zip(tup, trow):
+        G = [g for g in range(nP) if covered[g][t[g]]]
+        if not G:
+            nHole += 1
+            continue
+        base = []                                  # every pair's cell, holes included
+        for g in range(nP):
+            base += infos[g]['cellCon'][t[g]]
+        _, _, PX = cellSamplePoint(keys, rows, _straightRows(keys, rows), 1e3, True)
+        PP = _Samples(PX)
+        combos = [{'pick': [], 'con': base, 'alg': []}]
+        for g in G:
+            nc = []
+            for cb in combos:
+                for k in facesOf[g][t[g]]:
+                    fk = subs[g][k]
+                    con = _uniqueStable(cb['con'] + [list(r[0:8]) for r in fk['con']])
+                    alg = cb['alg'] + fk['alg']
+                    if not _overlayLive(keys, rows, con, alg, [], PP):
+                        continue
+                    nc.append({'pick': cb['pick'] + [fk], 'con': con, 'alg': alg})
+            combos = nc
+        nCombo += len(combos)
+        for cb in combos:
+            pick = cb['pick']
+            for w in range(len(G)):
+                f = pick[w]
+                con = cb['con']
+                alg = cb['alg']
+                ii = []
+                for i in range(len(G)):
+                    if i == w:
+                        continue
+                    con, alg, ii = _leRows(f, pick[i], con, alg, ii)
+                con = _uniqueStable(con)
+                if not _overlayLive(keys, rows, con, alg, ii, PP):
+                    continue
+                if not _witnessed(con, alg, ii, PP):
+                    if _tieEmpty(keys, rows, con, ii, PP):
+                        nTie += 1
+                        continue
+                    nUnsure += 1
+                nII += len(ii)
+                out.append({'kind': f['kind'], 'num': f['num'], 'den': f['den'], 'FP': f['FP'],
+                            'FB': f['FB'], 'con': con, 'alg': alg, 'ii': ii})
+    info = {'cells': len(tup), 'faces': len(out), 'algRows': sum(len(f['alg']) for f in out),
+            'iiRows': nII, 'bound': bound, 'refused': nHole, 'unsure': nUnsure, 'tieEmpty': nTie,
+            'combos': nCombo, 'pairCells': [x['cells'] for x in infos],
+            'pairFaces': [x['faces'] for x in infos],
+            'skipped': sum(x['skipped'] for x in infos)}
+    return out, info

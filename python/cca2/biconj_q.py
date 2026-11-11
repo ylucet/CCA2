@@ -174,20 +174,14 @@ def _atomsRoute(obj, opts):
         try:
             from .envelope_subdivision_alg import envelopeSubdivisionAlg
             from .assemble_alg_crv import assembleAlgCrv
-            try:
-                from .triangle_face import triangleFace
-                from .cut_triangles import cutTriangles
-            except ModuleNotFoundError:
-                # PORT_NOTES.md section 5: contact triangles are not subdivided yet; the
-                # EnvelopeMin (which evaluates them) is the answer, as when MATLAB declines.
-                error('triangleFace:notPorted',
-                      'the subdivision of contact triangles is not ported to Python yet.')
+            from .triangle_face import triangleFace
+            from .cut_triangles import cutTriangles
             envs = [envelopePrune(p) for p in h.pairs]
             tfs = [triangleFace(t) for t in h.tris]
             if len(envs) == 1:
                 envs = envs[0]
             sub = envelopeSubdivisionAlg(envs, hullRows(obj), [], opts)[0]
-            h = assembleAlgCrv(cutTriangles(sub, tfs))
+            h = assembleAlgCrv(cutTriangles(sub, tfs)[0])
         except CCA2Error as ME:
             if not isDeclined(ME):
                 raise
