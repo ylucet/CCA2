@@ -1248,3 +1248,71 @@ def qs2Sign(u, Q1, iv1, Q2, iv2):
 def toRational(x):
     f = Fraction(x)
     return f.numerator, f.denominator
+
+
+# --------------------------------------------------------------------------------------------
+# change of variables in a face
+# --------------------------------------------------------------------------------------------
+def substAffine(n, d, Mn, tn, md=1):
+    """The face g(x) = n/d composed with x = (Mn*u + tn)/md, exactly: returns (n2, d2), canonical.
+
+    n is a 10-wide weighted cubic row. A SINGULAR map is refused (ratQ:singular): it collapses the
+    plane onto a line, which is a different function, not a reparametrisation.
+    """
+    chk(n, 'face')
+    chk(d, 'face denominator')
+    chk(Mn, 'map matrix')
+    chk(tn, 'map translation')
+    chk(md, 'map denominator')
+    if len(Mn) != 2 or len(Mn[0]) != 2 or len(tn) != 2:
+        error('ratQ:badMap', 'substAffine needs a 2x2 M and a 2x1 t.')
+    if md == 0:
+        error('ratQ:badDenominator', 'the map denominator must be a nonzero scalar.')
+    if detExact(Mn) == 0:
+        error('ratQ:singular',
+              'the change of variables is singular: M collapses the plane onto a line, so '
+              'g(M*u+t) is a different function on a lower-dimensional domain, not a '
+              'reparametrisation. Handle the degenerate map at the call site.')
+    if md < 0:
+        Mn = [[-x for x in r] for r in Mn]
+        tn = [-x for x in tn]
+        md = -md
+    # plain coefficients of x^i y^j, times 6
+    P = {(3, 0): n[0], (2, 1): 3 * n[1], (1, 2): 3 * n[2], (0, 3): n[3],
+         (2, 0): 3 * n[4], (1, 1): 6 * n[5], (0, 2): 3 * n[6],
+         (1, 0): 6 * n[7], (0, 1): 6 * n[8], (0, 0): 6 * n[9]}
+    X = {(1, 0): Mn[0][0], (0, 1): Mn[0][1], (0, 0): tn[0]}
+    Y = {(1, 0): Mn[1][0], (0, 1): Mn[1][1], (0, 0): tn[1]}
+
+    def pmul(a, b):
+        out = {}
+        for ea, ca in a.items():
+            if ca == 0:
+                continue
+            for eb, cb in b.items():
+                if cb == 0:
+                    continue
+                e = (ea[0] + eb[0], ea[1] + eb[1])
+                out[e] = out.get(e, 0) + ca * cb
+        return out
+
+    def ppow(a, k):
+        r = {(0, 0): 1}
+        for _ in range(k):
+            r = pmul(r, a)
+        return r
+    R = {}
+    for (i, j), cij in P.items():
+        if cij == 0:
+            continue
+        term = pmul(ppow(X, i), ppow(Y, j))
+        lift = md ** (3 - i - j)
+        for e, c in term.items():
+            R[e] = R.get(e, 0) + cij * lift * c
+
+    def r(i, j):
+        return R.get((i, j), 0)
+    den = 6 * d * md ** 3
+    n2 = [6 * r(3, 0), 2 * r(2, 1), 2 * r(1, 2), 6 * r(0, 3),
+          2 * r(2, 0), r(1, 1), 2 * r(0, 2), r(1, 0), r(0, 1), r(0, 0)]
+    return canon(n2, den)

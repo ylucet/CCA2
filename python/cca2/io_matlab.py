@@ -220,3 +220,24 @@ def quaPolFromTrace(d):
     if d.get('fIsConvex'):
         P.fIsConvex = bool(sc(d['fIsConvex']))
     return P
+
+
+def polyFromTrace(x, nv):
+    """A traced MATLAB polynomial (N-D array, 2-D array, bigZ, or ratQ's {sz, c} struct) as a
+    poly_n dict in nv variables."""
+    from . import poly_n
+    if isinstance(x, dict) and 'nd' in x:
+        return poly_n.fromND(x['nd'], x['v'], nv)
+    if isinstance(x, dict) and 'sz' in x and 'c' in x:          # ratQ.isBigPoly
+        sz = vec(x['sz'])
+        v = [0 if (c is None or c == []) else int(c) for c in x['c']]
+        return poly_n.fromND(sz, v, nv)
+    if isinstance(x, dict) and x.get('cls') == 'bigZ':
+        return polyFromTrace(x['c'], nv)
+    if isinstance(x, list):
+        if not x:
+            return {}
+        if x and isinstance(x[0], list):
+            m, n = len(x), len(x[0])
+            return poly_n.fromND([m, n], [x[i][j] for j in range(n) for i in range(m)], nv)
+    raise ValueError('unrecognised polynomial in trace: %r' % (x,))
