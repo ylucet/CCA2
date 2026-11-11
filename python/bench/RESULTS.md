@@ -14,7 +14,7 @@ single measurements, and a ratio near 1 there is a tie, not a ranking.
 | exact integers | doubles to 2^53, then `java.math.BigInteger` (bigZ, ratQ big paths) | built-in `int` (unbounded), `fractions.Fraction` |
 | floating point | MATLAB built-ins (`roots`, `\`, `eig`) | numpy 2.2.6 (`roots`, `linalg.solve/eigh/lstsq`, `RandomState`), BLAS = scipy-openblas 0.3.29, 1 thread |
 | CAS | Symbolic Math Toolbox: only in `algRowFails` fallbacks when Yun overflows 2^53 (not reached here) | none (sympy is test-only; a lint test keeps it out of `cca2/`) |
-| other | -- | stdlib only (`math`, `json`, `os`); python-flint / cypari2 NOT used |
+| other | -- | stdlib only (`math`, `json`, `os`); python-flint / numba NOT used in this table (see the addendum) |
 
 Fixtures: the 200 distinct exact inputs the MATLAB suites pass to `conjQ` / `biconjQ`
 (`bench/fixtures.json`, from the goldens). Scripts: `bench/bench_matlab.m`, `bench/bench_python.py`,
@@ -65,9 +65,27 @@ Totals over all 200 fixtures (best times): **MATLAB 1131 s, Python 939 s**.
 - **Python's times are steadier**: worst/best over repetitions median 1.02 (MATLAB 1.26, max 15
   -- MATLAB's first calls after a cache flush).
 
-**Libraries that are unlikely to help, from one cProfile of one algebraic subdivision (9.6 s):**
-python-flint (FLINT) / cypari2 (PARI) accelerate exact polynomial arithmetic, which is not where
-that profile spends its time; the top entries are `cell_sample_point` and `poly_sign_on` (numpy on
-3x3 to 5x5 matrices, i.e. call overhead). What would
-help: batching the Bernstein tests into one numpy call per box level, or a compiled kernel
-(the Rust/C core of DECISION.md).
+**Libraries (as of this table):** the one cProfile of a small algebraic subdivision (9.6 s) put
+the time in `cell_sample_point` and `poly_sign_on` (numpy on 3x3 to 5x5 matrices, i.e. call
+overhead), not in exact polynomial arithmetic. That changed the same day -- see the addendum.
+
+## Addendum (later on 2026-11-11): the kink after the port fix, with optional accelerators
+
+The table above predates two changes: the port gained `algRowFails`' rows against a face cubic in z
+(topRowPolys / topFaceRow; the kink is now 317 faces as in MATLAB, not 334), and those rows made
+Yun's square-free decomposition hot (pure-Python PRS gcds; erratum Example 2 ran > 30 min). A
+cProfile of the kink (1090 s profiled) then read: Yun / PRS gcds ~220 s, the brute-force surd-corner
+search 319 s (5503 calls, mostly repeated corners), Bernstein box tests 196 s (8.5M calls), cell
+interiors 164 s. Three changes, all optional and with the pure-Python / numpy path as reference:
+
+| config | what | kink biconjQ, best of 2 (s) | the 2 runs |
+|---|---|---|---|
+| A | before (commit d64cb06) | 627 | 627, 629 |
+| B | + python-flint 0.9.0 `factor_squarefree` for Yun (`cca2/_poly.py`), surd corners remembered | 310 | 312, 310 |
+| C | B + numba 0.62.1 Bernstein box test (`cca2/_poly_sign_nb.py`) | 179 | 179, 187 |
+
+A, B, C ran CONCURRENTLY (one process each, same load, average 1.0-2.1) on the shared machine; all
+returned the 317-face AlgCrv. C against A: 3.5x. The slow bucket (23/0) took 219 s for erratum
+Example 2 under C (265 s in the table above, before the port fix; one run each). For reference only
+-- not measured side by side: MATLAB took 539 s on the kink in the table's run. Switch off with
+CCA2_FLINT=0 / CCA2_NUMBA=0; the fast bucket is 2733/0 either way.
