@@ -12,6 +12,8 @@ dependencies = ["numpy"]
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-xdist", "sympy"]
+# accelerators, both optional (pure-Python/numpy twins are the reference; CCA2_FLINT=0 / CCA2_NUMBA=0)
+fast = ["python-flint>=0.9", "numba>=0.60"]
 
 [tool.setuptools.packages.find]
 include = ["cca2*"]

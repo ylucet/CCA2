@@ -7,20 +7,34 @@ sub-box that meets the region, 0 when undecided at the given depth, and None (MA
 no sub-box meets the region. Doubles, with a relative tolerance.
 """
 import math
+import os
 
 import numpy as np
 
 _binomCache = {}
 _convCache = {}
 
+# The per-box Bernstein test is millions of calls on 2x2 .. 8x8 matrices, where numpy's per-call
+# overhead dominates the arithmetic: numba compiles it (CCA2_NUMBA=0 turns it off, and it is off
+# when numba is not installed -- the numpy path below is the reference).
+_kernel = None
+if os.environ.get('CCA2_NUMBA', '1') != '0':
+    try:
+        from ._poly_sign_nb import bernSign as _kernel
+    except ImportError:                             # numba absent: the numpy path
+        _kernel = None
+
 
 def polySignOn(P, box, inBox, depth=6):
     return _signRec(np.array(P, dtype=float), list(box), inBox, depth)
 
 
-def _signRec(P, b, inBox, depth):
-    if not inBox(b):
-        return None                                 # misses the region: no constraint from here
+def _boxSign(P, b):
+    """+1 / -1 when every Bernstein coefficient of P on box b clears the margin, else 0."""
+    if _kernel is not None:
+        n1, n2 = P.shape
+        return _kernel(P, float(b[0]), float(b[1]), float(b[2]), float(b[3]),
+                       _binom(max(n1, n2)), _convMat(n1), _convMat(n2))
     B = _bernstein(P, b)
     m = float(np.max(np.abs(B)))
     tol = 1e-10 * max(m, 2.0 ** -52)
@@ -28,6 +42,15 @@ def _signRec(P, b, inBox, depth):
         return 1
     if np.all(B < -tol):
         return -1
+    return 0
+
+
+def _signRec(P, b, inBox, depth):
+    if not inBox(b):
+        return None                                 # misses the region: no constraint from here
+    s = _boxSign(P, b)
+    if s != 0:
+        return s
     if depth == 0:
         return 0
     xm = (b[0] + b[1]) / 2

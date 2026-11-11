@@ -21,6 +21,7 @@ without them the port could not prove what MATLAB proves there (334 faces agains
 """
 import math
 
+from . import _poly
 from . import biv
 from . import rat_q
 from .errors import CCA2Error
@@ -520,8 +521,23 @@ def _oddPartZ(Z):
     return Z
 
 
+_memoSurdOf = {}
+
+
 def _surdOf(p):
-    """p = ((a1 + b1 sqrt(d))/q, (a2 + b2 sqrt(d))/q) recognised from doubles, or None."""
+    """p = ((a1 + b1 sqrt(d))/q, (a2 + b2 sqrt(d))/q) recognised from doubles, or None.
+    A pure function of the corner, searched by brute force (~5e5 trials when it fails), and the
+    same corners come back box after box: remembered."""
+    key = (float(p[0]), float(p[1]))
+    if key not in _memoSurdOf:
+        if len(_memoSurdOf) > 20000:
+            _memoSurdOf.clear()
+        _memoSurdOf[key] = _surdOfSearch(p)
+    r = _memoSurdOf[key]
+    return None if r is None else list(r)
+
+
+def _surdOfSearch(p):
     D = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37,
          38, 39, 41, 42, 43, 46, 47]
     bs = list(range(-64, 65))
@@ -1027,7 +1043,12 @@ def _squareFreeSign(R):
 
 
 def _oddPart(S, d, lvl):
-    """The product of the square-free factors of ODD multiplicity (Yun)."""
+    """The product of the square-free factors of ODD multiplicity (Yun); through FLINT when
+    python-flint is installed (cca2/_poly.py), which gives the same polynomial up to sign."""
+    if lvl == 0 and d == 1 and _poly.available():
+        O = _poly.oddPart(biv.trimN(S))
+        if O is not None:
+            return O
     O = [[1]]
     S = biv.trimN(S)
     if biv.isConst(S) or lvl > 2:
