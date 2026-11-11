@@ -114,3 +114,109 @@ def evalMismatch(g, j, tol=1e-9):
         elif abs(a - b) > tol * max(1.0, abs(b)):
             return 'eval at %r: python %r vs MATLAB %r' % (X[i], a, b)
     return ''
+
+
+# ------------------------------------------------------------------------------------------------
+# generic traces (python/tools/export_trace.sh): arguments and results of intermediate functions
+# ------------------------------------------------------------------------------------------------
+def dec(x):
+    """Decode one serialised MATLAB value, STRICTLY by shape:
+      numeric m x n      -> list of m rows (ints where MATLAB's value was integral); 0 x k -> []
+      numeric N-D        -> {'nd': size, 'v': column-major values}
+      cell               -> flat list (vector) or list of rows
+      struct 1x1         -> dict;  struct array -> list of dicts
+      object             -> dict of its properties plus 'cls'
+      bigZ               -> like numeric, with Python ints;  BigInteger -> int
+    Use sc / vec below to squeeze a 1x1 or a vector."""
+    if isinstance(x, list):
+        return [dec(v) for v in x]
+    if not isinstance(x, dict):
+        return x
+    t = x.get('t')
+    if t in ('n', 'z'):
+        sz = x['sz']
+        v = [int(a) if t == 'z' else _num(a) for a in x['v']]
+        if len(sz) > 2:
+            return {'nd': sz, 'v': v}
+        m, n = sz
+        if m == 0 or n == 0:
+            return []
+        return [[v[j * m + i] for j in range(n)] for i in range(m)]
+    if t == 'j':
+        return int(x['v'])
+    if t == 'c':
+        sz = x['sz']
+        v = [dec(a) for a in x['v']]
+        if len(sz) == 2 and sz[0] > 1 and sz[1] > 1:
+            m, n = sz
+            return [[v[j * m + i] for j in range(n)] for i in range(m)]
+        return v
+    if t == 's':
+        v = [{k: dec(a) for k, a in e.items()} for e in x['v']]
+        if x['sz'] == [1, 1]:
+            return v[0]
+        return v
+    if t == 'o':
+        d = {k: dec(a) for k, a in x['p'].items()}
+        d['cls'] = x['cls']
+        return d
+    if t == 'f':
+        return x['v']
+    return x
+
+
+def sc(M):
+    """The scalar of a 1x1 matrix (or the value itself)."""
+    while isinstance(M, list):
+        if not M:
+            return None
+        M = M[0]
+    return M
+
+
+def vec(M):
+    """A row or column matrix as a flat list."""
+    if not M:
+        return []
+    if not isinstance(M[0], list):
+        return list(M)
+    if len(M) == 1:
+        return list(M[0])
+    return [r[0] for r in M]
+
+
+def loadTrace(path, fn=None):
+    out = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if fn is not None and rec.get('fn') != fn:
+                continue
+            if 'serr' in rec:
+                continue
+            out.append(rec)
+    return out
+
+
+def quaConFromTrace(d):
+    """A QuaCon from its traced property dict."""
+    from .qua_con import QuaCon
+    FC = [[list(r) for r in (c or [])] for c in d['FC']]
+    return QuaCon(d['Vname'] or [], d['E'] or [], d['EcQ'] or [], d['fN'] or [], vec(d['fD']),
+                  d['F'] or [], FC)
+
+
+def quaPolFromTrace(d):
+    f = d['f']
+    if d['nv'] == [[0]] or not d['V']:
+        P = QuaPol(f[0] if len(f) == 1 else f)
+    else:
+        P = QuaPol(d['V'], d['E'] or [], f, d['F'] or [])
+    if not d.get('fN'):
+        P.fN = P.fD = P.VN = P.VD = None
+    if d.get('fIsConvex'):
+        P.fIsConvex = bool(sc(d['fIsConvex']))
+    return P
