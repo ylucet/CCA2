@@ -166,7 +166,7 @@ def _atomsRoute(obj, opts):
             from .envelope_subdivision_alg import envelopeSubdivisionAlg
             from .assemble_alg_crv import assembleAlgCrv
             envs = [envelopePrune(p) for p in h.pairs]
-            h = assembleAlgCrv(envelopeSubdivisionAlg(envs, hullRows(obj), [], opts))
+            h = assembleAlgCrv(envelopeSubdivisionAlg(envs, hullRows(obj), [], opts)[0])
         except CCA2Error as ME:
             if not isDeclined(ME):
                 raise
@@ -180,7 +180,7 @@ def _atomsRoute(obj, opts):
             tfs = [triangleFace(t) for t in h.tris]
             if len(envs) == 1:
                 envs = envs[0]
-            sub = envelopeSubdivisionAlg(envs, hullRows(obj), [], opts)
+            sub = envelopeSubdivisionAlg(envs, hullRows(obj), [], opts)[0]
             h = assembleAlgCrv(cutTriangles(sub, tfs))
         except CCA2Error as ME:
             if not isDeclined(ME):
@@ -203,7 +203,7 @@ def subdividePair(env, dom):
     from .assemble_alg_crv import assembleAlgCrv
     if hasIrrationalFace(env):
         try:
-            m = envelopeSubdivisionAlg(env, dom)
+            m, _ = envelopeSubdivisionAlg(env, dom)
             if any(x['kind'] == 'bridge' for x in m):
                 return assembleAlgCrv(m)
         except CCA2Error as ME:
@@ -212,11 +212,11 @@ def subdividePair(env, dom):
                 raise
             return unsubdivided(env)
     try:
-        return envelopeSubdivision(env)
+        return envelopeSubdivision(env)[0]
     except CCA2Error as ME:
         if ME.identifier == 'envelopeSubdivision:bridgeCompetes':
             try:
-                return assembleAlgCrv(envelopeSubdivisionAlg(env))
+                return assembleAlgCrv(envelopeSubdivisionAlg(env)[0])
             except CCA2Error as ME2:
                 if ME2.identifier != 'envelopeSubdivisionAlg:faceKind':
                     raise

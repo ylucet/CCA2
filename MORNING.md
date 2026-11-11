@@ -18,6 +18,15 @@ from MATLAB to Python. TODO.md "Next up — 2026-11-10 overnight run", items P0.
   an EMPTY cell; proved by emulating the wall (`rat_q.EMULATE_2P53`), after which it is identical.
 - P4 DONE: biconjugate direct cases (convex -> f, edge-concave lower hull incl. recession rays, thin
   domains, chains) in Python; all refusals carry MATLAB's identifiers.
+- P5 + P7 DONE: atoms, envelope assembly/prune/eval, bridge faces (algebraic and rational), corner
+  faces. Validated function by function against MATLAB: `python/tools/export_trace.sh` records the
+  arguments and results of any top-level MATLAB function while suites run (1583 calls of 25
+  functions); the Python twin must reproduce each call. ~1500 such calls are green (implicit
+  polynomials FP, branch indices, witnesses, cells, wedge rows identical; doubles to 1e-9).
+- P6 (most of it): envelopeSubdivision, envelopeSubdivisionAlg (single-pair path), assembleAlgCrv,
+  AlgCrv, algBranch, algFaceBelow. `biconj` is END-TO-END in Python: all 61 recorded biconjQ calls
+  reproduce MATLAB (43 QuaCon identical field for field, 5 AlgCrv by kind + sampled values, 13
+  refusals by identifier).
 
 ## What is broken
 - MATLAB (not Python): `ratQ.sturmChain` loses the Sturm property when a chain element has a
@@ -35,4 +44,4 @@ from MATLAB to Python. TODO.md "Next up — 2026-11-10 overnight run", items P0.
   3.2). Looks wrong whenever fD ~= 1; the port uses fN/fD. Not yet confirmed by a MATLAB run.
 
 ## Where I stopped
-P0, P3, P4 done; starting P5 (biconjAtoms, envelope*).
+P0, P3, P4, P5, P7 done and P6 mostly; remaining: algRowFails (stand-in), the multi-pair overlay, triangle faces, definition oracle, unit tests.
