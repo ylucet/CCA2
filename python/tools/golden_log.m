@@ -111,6 +111,8 @@ function t = enc(s)
             else, w = ['"' strrep(v, '"', '\"') '"']; end
         elseif islogical(v)
             if v, w = 'true'; else, w = 'false'; end
+        elseif isempty(v)
+            w = 'null';                 % e.g. EnvelopeMin.nf, which is []
         else
             w = sprintf('%.17g', v);
         end

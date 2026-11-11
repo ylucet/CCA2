@@ -35,7 +35,12 @@ from MATLAB to Python. TODO.md "Next up — 2026-11-10 overnight run", items P0.
   pointwise from KKT candidates (shares nothing with conjQ). On all 184 fixtures: the Python
   conjugate equals that sup at 49 dual points each, and the Python biconjugate is a convex minorant
   of f equal to <s,x> - f*(s) at its own gradient.
-- Whole Python suite: `cd python && PYTHONPATH=.pydeps python3 -m pytest -q -n 32` -> 1525 passed.
+- P6 DONE: contact triangles (`dualPoint`, `triangleFace`, `cutTriangles`: 1025 recorded MATLAB calls
+  reproduced) and the multi-pair overlay (`minOverlay`): the min-of-maxes fixture of
+  minSubdivisionTest comes back as an AlgCrv with 36 faces, MATLAB's count, same values.
+- Kernel tests against a sympy oracle (186; sympy is test-only, a lint test keeps it out of `cca2/`).
+- Whole Python suite, fast bucket: `cd python && PYTHONPATH=.pydeps python3 -m pytest -q -n 32`
+  -> 2730 passed, 1 skipped. Slow bucket (`-m slow`): see Where I stopped.
 
 ## What is broken
 - MATLAB (not Python): `ratQ.sturmChain` loses the Sturm property when a chain element has a
@@ -55,9 +60,27 @@ from MATLAB to Python. TODO.md "Next up — 2026-11-10 overnight run", items P0.
 - **Fix the Sturm sign bug in MATLAB `ratQ.m`?** Options: (a) fix it now in `polyPseudoRemDouble`
   and `polyPseudoRemBig` (scale by |lc|^(gap+1), as `bigPrem` already does) and rerun the suites
   -- recommended, it is a wrong root COUNT, silent; (b) leave MATLAB as is since the port
-  supersedes it. Not done tonight: it changes the MATLAB engine, which was not the task.
+  supersedes it. Not done: it changes the MATLAB engine, which was not the task.
 - **`conjQ/linealityConj` builds the cross-section from `fN` and drops `fD`** (python/PORT_NOTES.md
-  3.2). Looks wrong whenever fD ~= 1; the port uses fN/fD. Not yet confirmed by a MATLAB run.
+  3.2). Looks wrong whenever fD ~= 1; the port uses fN/fD. Not confirmed by a MATLAB run yet:
+  (a) confirm with one fixture and fix MATLAB -- recommended; (b) leave.
+- **Speed.** The port is correct but slow on algebraic subdivisions: pure-Python Bernstein tests
+  and cell sampling dominate (kink fixture: ~25 min before two cheap fixes, shared machine, one
+  run -- not a benchmark). Options: (a) accept for now, it is the reference port for the Rust/C
+  core -- recommended; (b) vectorise `poly_sign_on` / `cell_interior` with numpy; (c) python-flint
+  for the polynomial kernels (they are NOT the hot spot, measured by cProfile).
+- **Merge.** The work is on `overnight/2026-11-10` (your rule is commit on main; the overnight
+  skill isolates the run on a branch). Merge to main when you have looked at it.
 
 ## Where I stopped
-P0-P5, P7, P1b done; P6 done except the multi-pair overlay (minOverlay), triangle faces (triangleFace / cutTriangles) and rows against faces of degree >= 3 in z -- all three decline to an EnvelopeMin / "no proof" today, so values are right and only the subdivision is missing.
+Run resumed 2026-11-11 09:28 after an interruption and finished the engine. Port status:
+conj and biconj are complete end to end for everything the fast, normal and slow MATLAB suites
+exercise. Not ported (python/PORT_NOTES.md section 5): `algRowFails` rows against faces of degree
+>= 3 in z ("no proof", sound), `algCrvVertices`/`algCrvIncidence`, the MATLAB unit suites one to
+one, `guardExerciseTest`, and the out-of-scope legacy engine and derived operators.
+Slow bucket: launched last (`pytest -m slow`); the kink and min-of-maxes fixtures were run by hand
+and match MATLAB; erratum Example 2 through `biconjQ` (MATLAB: EnvelopeMin after the overlay
+budget) had NOT finished in Python when this was written -- UNVERIFIED end to end, its pieces
+are covered by the trace tests.
+TODO.md: P0, P1b, P2-P7 ticked; P1 and P8 partial (what is left is listed there).
+`test.txt` in the repo root is the empty file from the model-switch test; untracked, delete at will.

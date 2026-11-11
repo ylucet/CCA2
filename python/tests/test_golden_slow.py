@@ -37,6 +37,6 @@ def test_slow_suite_call_matches_matlab(i):
     h = biconjQ(P)
     assert h.kind() == out['kind']
     assert io_matlab.evalMismatch(h, out) == ''
-    if 'nf' in out and getattr(h, 'nf', None) is not None:
+    if out.get('nf') is not None and getattr(h, 'nf', None) is not None:
         assert h.nf == out['nf']
     assert checkBiconj(P, h) == []
