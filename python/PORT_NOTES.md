@@ -51,15 +51,29 @@ seeded 400-point probe: MATLAB `rng(20260905); rand(400,2)` is reproduced by
 double-precision in both. `numpy.roots` and MATLAB `roots` agree to rounding, not bitwise; every
 decision taken from them is behind a tolerance (1e-9 .. 1e-7).
 
+**One deliberate difference: double roots in `algBranch` (2026-11-11).** Where a face TOUCHES its
+neighbour, the fibre has a double root, and rounding splits it either along the real axis (two
+close reals) or off it (a conjugate pair with imaginary part ~sqrt(eps)), as the LAPACK in use
+happens to round. On the poly2 kink, at the box corner (1 - 1 ulp, 2 + 1 ulp) MATLAB got two reals
+and numpy a pair, so Python's top branch jumped from 1 to -10.08; `algFaceBelow` then saw the lower
+face "above" and skipped the direct comparison MATLAB proves. Python now counts a pair whose
+imaginary part is within 8 sqrt(eps sum|c_k t^k| / |p''(t)/2|) as the real double root it is
+(exactly, the three roots there are real). The value is only a screen: every conclusion drawn
+from it is certified exactly afterwards. MATLAB keeps the plain 1e-10 imaginary test.
+
 ## 5. What is not ported yet (and what happens instead)
 
 | MATLAB | status in Python | behaviour today |
 |---|---|---|
 | `envelopeSubdivisionAlg/minOverlay` (several atom pairs) | not ported | named refusal `envelopeSubdivisionAlg:overlayNotPorted`; `biconjQ` answers with the `EnvelopeMin` (same function, evaluable, not subdivided) |
 | `triangleFace`, `cutTriangles`, `dualPoint` (contact triangles) | not ported | `ModuleNotFoundError` on the third branch of `biconjQ` -- to be turned into the same decline |
-| `algRowFails`: `topRowPolys` / `topFaceRow` (rows against a face of degree >= 3 in z) | not ported | "no proof" (sound: the face is kept) |
 | `algCrvVertices`, `algCrvIncidence` (naming an AlgCrv's vertices) | not ported | an `AlgCrv` has no `Vname` (as MATLAB's default result) |
 | legacy `'cplq'` engine, `partialConj`, `moreau`, `proxAverage`, `infConv`, `lasryLions` | out of scope | `PLQ:conj:engine` names MATLAB |
+
+Ported on 2026-11-11: `algRowFails`'s `topRowPolys` / `topFaceRow` (rows against the TOP root of a
+face of degree >= 3 in z). They were left out as "unexercised", but the poly2 kink's bridge faces
+are cubic in z: without them `algFaceBelow` could not prove what MATLAB proves, and the port kept
+17 faces MATLAB drops (AlgCrv of 334 faces against 317). Tests: `tests/test_top_rows.py`.
 
 ## 6. Zero-width cells (resolved 2026-11-11)
 

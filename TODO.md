@@ -11,12 +11,11 @@ Exact engine (the default for `conj` and `biconj`):
 - Two BRIDGE faces owning one cell -- refused by name, never observed.
 
 Python port (`python/`, merged to main 2026-11-11):
-- Slow bucket 22/1. The one red: the big kink biconjugate (kinkSubdivisionTest's 4-piece fixture)
-  gives an AlgCrv of 334 faces in Python against MATLAB's 317. Values agree at every golden sample
-  point (evalMismatch passes); only the face count differs. Re-recorded with the FIXED MATLAB on
-  2026-11-11: still 317, so it is not a stale golden. Present before the three MATLAB fixes too.
-  Next: diff the two subdivisions face by face (trace export, as done for the six traced
-  subdivisions that now match), most likely a merge step (mergeSameQuadFaces / mergeAdjacentCells).
+- FIXED 2026-11-11: the big kink AlgCrv was 334 faces in Python against MATLAB's 317. Cause: the
+  port had left out algRowFails' rows against the TOP root of a face cubic in z (topRowPolys /
+  topFaceRow, noted "unexercised"), and numpy split a double root (where two faces touch) into a
+  complex pair where MATLAB's LAPACK gave two reals. Both fixed in the port (PORT_NOTES 4 and 5);
+  the subdivision is now identical to MATLAB's face for face, in order.
 
 Legacy symbolic engine (`'cplq'`, no longer the default):
 - `biconjCPLQ` on the poly2 kinks runs > 4 h (tests switched off); `conjCPLQ`'s eig tolerance can

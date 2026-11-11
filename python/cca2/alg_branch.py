@@ -84,6 +84,20 @@ def _exactQuad(lay, x, y):
     return c, D
 
 
+def _doubleRootNoise(cz, v):
+    """Is the complex root v a REAL DOUBLE root split by rounding? Rounding the fibre's
+    coefficients by eps moves a double root t by about sqrt(eps * sum|c_k t^k| / |p''(t)/2|), in
+    either direction: along the real axis (two close reals) or off it (a conjugate pair), as the
+    LAPACK in use happens to round. A pair whose imaginary part is within that size is counted as
+    the double root it is, so the branch numbering does not depend on the library."""
+    t = v.real
+    cabs = sum(abs(c) * abs(t) ** k for k, c in enumerate(cz))
+    p2 = sum(k * (k - 1) / 2 * c * t ** (k - 2) for k, c in enumerate(cz) if k >= 2)
+    if p2 == 0 or cabs == 0:
+        return False
+    return abs(v.imag) <= 8.0 * math.sqrt(2.220446049250313e-16 * cabs / abs(p2))
+
+
 def _sgnz(v):
     """sign(v + (v == 0)): +1 at zero."""
     return 1.0 if v >= 0 else -1.0
@@ -126,7 +140,8 @@ def algBranch(P, X, b, opts=None, wantInfo=False):
         cz = c[:keep + 1]
         if scale != 0 and len(cz) >= 2:
             r = roots(cz[::-1])                     # `roots` wants highest power first
-            rr = sorted(v.real for v in r if abs(v.imag) <= imagTol * max(1.0, abs(v)))
+            rr = sorted(v.real for v in r
+                        if abs(v.imag) <= imagTol * max(1.0, abs(v)) or _doubleRootNoise(cz, v))
             if len(cz) == 3:
                 ca = _absFibre(lay[:3], x, y)
                 dq = cz[1] ** 2 - 4 * cz[2] * cz[0]

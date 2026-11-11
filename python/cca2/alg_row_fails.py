@@ -15,8 +15,9 @@ True is a proof that the rows hold nowhere; False means "not proved" (never "hol
 PORT NOTES. One exact path on unbounded ints replaces MATLAB's double / BigInteger / symbolic
 ladder (the Symbolic-Toolbox `factor` fallback is never needed: Yun's decomposition cannot
 overflow here). The guards MATLAB places on its DOUBLE blow-up (bound < 2^52) are kept, so the
-port proves what MATLAB proves. NOT PORTED: the rows against a face of degree >= 3 in z
-(topRowPolys / topFaceRow, unexercised by the suites) -- they answer "no proof", which is sound.
+port proves what MATLAB proves. The rows against the TOP root of a face of degree >= 3 in z
+(topRowPolys / topFaceRow) are ported too: the poly2 kink's bridge faces are cubic in z, and
+without them the port could not prove what MATLAB proves there (334 faces against 317).
 """
 import math
 
@@ -132,7 +133,25 @@ def _rowPolys(a, factors):
     nz = max(e[2] for e in FP) + 1
     FB = a['FB']
     if nz - 1 >= 3:
-        return None                                 # topRowPolys: not ported (no proof)
+        # THE TOP ROOT OF A POLYNOMIAL OF DEGREE n >= 3 in z (MATLAB 2026-11-04). Sufficient
+        # conditions, by Taylor at q (G_n = lead in z): q < z_top when sign(G_n) G(q) < 0 (a root
+        # above q); q > z_top when sign(G_n) G^(j)(q) > 0 for every j < n (no root at or above q).
+        if FB != -1:
+            return None
+        key = ('top', want, _polyKey(FP), tuple(num), a['den'])
+        P = _memoSF.get(key)
+        if P is None:
+            P = _topRowPolys(FP, Q, Dn, nz - 1, want)
+            if len(_memoSF) > 5000:
+                _memoSF.clear()
+            _memoSF[key] = P
+        if not P:
+            return None
+        P = [_num(_divideOut(p, factors)) for p in P]
+
+        def test(s, want=want):
+            return s[0] != 0 and all(s[0] * v == want for v in s[1:])
+        return {'P': P, 'test': test}
     if nz - 1 == 2:
         hi = FB in (-1, 2)
         if not hi and FB not in (1, -2):
@@ -170,6 +189,25 @@ def _signPolys(S, Q, Dn, deg):
                 pa(c2(B, B), biv.scal(c2(A, C0), -4))]                   # D
     A, C0 = S[1], S[0]
     return [A, pa(c2(A, Q), biv.scal(C0, Dn))]                           # b, Dn (b q + c)
+
+
+def _topRowPolys(FP, Q, Dn, n, want):
+    """[G_n, H_0] (want -1) or [G_n, H_0, ..., H_(n-1)] (want +1), H_j = Dn^(n-j) G^(j)(Q / Dn) by
+    Horner, exact, content and squared factors divided out; [] on failure (topRowPolys)."""
+    try:
+        G = _slices(FP)
+        nj = n - 1 if want == 1 else 0
+        P = [biv.contentFree(G[n])]
+        for j in range(nj + 1):
+            def c(i, j=j):
+                return math.factorial(i) // math.factorial(i - j)
+            R = biv.scal(G[n], c(n))
+            for i in range(n - 1, j - 1, -1):
+                R = biv.padAdd(biv.conv2(R, Q), biv.scal(G[i], c(i) * Dn ** (n - i)))
+            P.append(_squareFreeSign(biv.contentFree(biv.trimN(R))))
+        return P
+    except CCA2Error:
+        return []
 
 
 # ---- the box recursion ---------------------------------------------------------------------------
@@ -599,7 +637,16 @@ def _faceRowPolys(a, factors):
     FBk = a['FB']
     FBw = a['W']['FB']
     if nw >= 4:
-        return None                                 # topFaceRow: not ported (no proof)
+        if nk not in (2, 3) or FBw != -1:
+            return None
+        hiK = False
+        if nk == 3:
+            hiK = FBk in (-1, 2)
+            if not hiK and FBk not in (1, -2):
+                return None
+        elif FBk not in (1, -1):
+            return None
+        return _topFaceRow(Fk, Fw, nk, hiK, factors)
     if nk == 3 and nw == 2:
         mode = 'ql'
     elif nk == 2 and nw == 3:
@@ -714,6 +761,72 @@ def _surdFaceRow(Fk, Fw, nk, nw, hiK, hiW, factors):
     Pn = [_num(_divideOut(p, factors)) for p in P[0:4]] + \
          [_divideOutSurd(T, factors) for T in P[4:8]]
     return {'P': Pn, 'test': _surdOK}
+
+
+_memoTop = {}
+
+
+def _topFaceRow(Fk, Fw, nk, hiK, factors):
+    """A FACE ROW AGAINST A TOP ROOT (topFaceRow): z_k > z_w with z_w the LARGEST real root of
+    G = Fw, of degree n >= 3 in z, and z_k a face over one quadratic field (surdFace) or rational.
+    sign(G_n) G(z_k) < 0 puts a real root of G above z_k, so z_k < z_w and the row fails. With
+    z_k = N / M, N = kappa a0 + eta tau mu S sqrt(kappa) = X + Y sqrt(kappa), M = kappa den,
+          M^n G(N / M) = sum_i G_i N^i M^(n-i) = U + sqrt(kappa) V,
+    by Horner over Z[sqrt kappa]; one (U, V) per tau_k. Sufficient, not equivalent."""
+    key = (_polyKey(Fk), _polyKey(Fw), hiK)
+    if key in _memoTop:
+        P = _memoTop[key]
+    else:
+        if len(_memoTop) > 2000:
+            _memoTop.clear()
+        _memoTop[key] = None
+        P = None
+        try:
+            fk = _surdFace(Fk, nk, hiK)
+            if fk is not None:
+                kap = 1 if fk['lin'] else _squareFreeInt(fk['c'])
+                mu = _fieldMu(fk, kap)
+                if kap.bit_length() <= 52 and mu is not None:
+                    k = kap
+                    G = _slices(Fw)
+                    n = len(G) - 1
+                    c2 = biv.conv2
+                    X = biv.scal(fk['a0'], k)
+                    M = biv.scal(fk['den'], k)
+                    T = [None, None]
+                    for tk in (1, -1):
+                        Y = biv.scal(fk['S'], mu * tk * fk['eta'])
+                        U = G[n]
+                        V = [[0]]
+                        Mp = [[1]]
+                        for i in range(n - 1, -1, -1):
+                            Mp = c2(Mp, M)
+                            Un = biv.padAdd(c2(U, X), biv.scal(c2(V, Y), k))
+                            V = biv.padAdd(c2(U, Y), c2(V, X))
+                            U = biv.padAdd(Un, c2(G[i], Mp))
+                        T[0 if tk > 0 else 1] = _surdPoly(biv.trimN(U), biv.trimN(V), k)
+                    cf = biv.contentFree
+                    P = [cf(fk['den']), cf(fk['S']), cf(G[n])] + T + [n % 2]
+                    _memoTop[key] = P
+        except CCA2Error:
+            P = None
+    if P is None:
+        return None
+    odd = P[-1]
+    Pn = [_num(_divideOut(p, factors)) for p in P[0:3]] + \
+         [_divideOutSurd(T, factors) for T in P[3:5]]
+    # NOT blown up at corners (as MATLAB): the Horner images are of high degree with big
+    # coefficients. Leaving a row out of a corner chart is sound.
+    return {'P': Pn, 'test': (lambda s, odd=odd: _topOK(s, odd)), 'corner': False}
+
+
+def _topOK(s, odd):
+    """s = signs of [den_k, S_k, G_n, T(+), T(-)]: z_k < z_w (the top root) on the box."""
+    if any(v == 0 for v in s[0:3]):
+        return False
+    t = s[3 + (1 if s[0] * s[1] < 0 else 0)]
+    dn = s[0] if odd else 1
+    return t * s[2] * dn == -1
 
 
 def _surdOK(s):
