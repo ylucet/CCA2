@@ -529,6 +529,25 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyError(@() ratQ.countRootsInBig([1 -3 2], 1, 3), 'ratQ:sturmEndpointIsRoot');
         end
 
+        function sturmKeepsItsSignWhenTheDegreeDropsByTwo(testCase)
+        % The pseudo-remainder must be scaled by a POSITIVE power, |lc(b)|^(gap+1). x^4 + x - 1
+        % has the chain p, 4x^3 + 1, -(3x - 4), and then a degree gap of 2 against a NEGATIVE
+        % leading coefficient: the signed power flipped the last remainder and the count in
+        % (-2, 2] came out 0 instead of 2 (roots near -1.2207 and 0.7245). Red before 2026-11-11.
+            p = [1 0 0 1 -1];
+            testCase.verifyEqual(ratQ.countRootsIn(p, -2, 2), 2);
+            testCase.verifyEqual(ratQ.countRootsIn(p, 0, 2), 1);
+            testCase.verifyEqual(ratQ.countRootsIn(p, -2, 0), 1);
+            testCase.verifyEqual(size(ratQ.isolateRoots(p), 1), 2);
+            % the same through the BigInteger path, scaled past 2^53
+            testCase.verifyEqual(ratQ.countRootsInHalfOpenBig(bigZ(p) .* bigZ(2)^60, -2, 2), 2);
+            % and a family: x^4 + a x - 1 for several a, each with exactly two real roots
+            for a = [1 2 3 5 7 11]
+                testCase.verifyEqual(ratQ.countRootsIn([1 0 0 a -1], -20, 20), 2, sprintf('a = %d', a));
+                testCase.verifyEqual(ratQ.countRootsIn([1 0 0 -a -1], -20, 20), 2, sprintf('a = -%d', a));
+            end
+        end
+
         function sturmCountsRootsExactly(testCase)
         % Sturm's theorem: the number of DISTINCT real roots of p in (a,b] is V(a) - V(b), where V
         % counts sign changes in the Sturm chain. Checked against polynomials whose roots are known

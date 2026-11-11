@@ -5,6 +5,8 @@
 Exact engine (the default for `conj` and `biconj`):
 - Bridge producer: noWitness when a tie has no usable rational point (SUPPORT_MATRIX 3.2; by design). The overflow refusals are gone (2026-11-05).
 - Two zero-area faces in the c = -2 AlgCrv (own no point; harmless) -- see "Faces of ZERO AREA" below.
+  2026-11-11: one mechanism behind zero-area faces fixed (cellSamplePoint accepted a sample ON a
+  boundary line; DECISIONS 2026-11-11 item 2). Whether it removes these two was NOT re-measured.
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
 - Two BRIDGE faces owning one cell -- refused by name, never observed.
 
@@ -17,6 +19,29 @@ Release / paper:
 - MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
 
 Decided, not to do: Example 2 pair 2's non-winning faces (leave them, 2026-11-05).
+
+## Next up — 2026-11-10 overnight run: Python port of the exact engine
+
+Plan: `python/PORT_PLAN.md` (decision: `DECISION/DECISION.md`, Python over Julia, closed 2026-11-09).
+Scope: `QuaPol.conj` -> `conjQ` and `QuaPol.biconj` -> `biconjQ` only; the legacy 'cplq' engine stays MATLAB.
+
+- [x] **P0. DONE 2026-11-10. Measure the real surface and freeze the oracle** -- coverage of the exact suites ->
+      `python/PORT_SCOPE.md`; `python/tools/export_golden.m` -> `python/golden/*.json`.
+- [~] **P1. Exact arithmetic kernel** -- DONE 2026-11-11: `rat_q`, `biv`, `poly_n`, sign helpers (one int path),
+      checked against a sympy oracle (186 tests) and by trace replay. LEFT: the MATLAB unit suites
+      (ratQTest, exactQTest, bigZTest) are not ported one to one; `exact_q` is not needed by the exact engine
+      (not on its measured path) and stays the probe in `PORT/`.
+- [x] **P1b. DONE 2026-11-11 (184/184 fixtures satisfy the definition). Definition oracle** -- `plqCheck.m` -> `cca2/check.py` (MATLAB-free).
+- [x] **P2. DONE 2026-11-11. Data types** -- domain, Conic, RatCon, QuaCon, AlgCon, AlgCrv, EnvelopeMin, QuaPol (exact subset), `io_matlab`.
+- [x] **P3. DONE 2026-11-10 (120/120 golden parity). Conjugate** -- `conj_q` + maxQ, conicMeet, cell*, assembleQuaConCells; conj goldens match exactly.
+- [x] **P4. DONE 2026-11-10 (51 golden records identical; 6 wait on P5-P7). Biconjugate, direct cases** -- convex short-circuit, edge-concave lower hull, recession rays.
+- [x] **P5. DONE 2026-11-10 (traced calls identical). Biconjugate, coupled pieces** -- biconjAtoms, envelope*.
+- [x] **P6. DONE 2026-11-11 (subdivisions identical to MATLAB face for face, bar one zero-width MATLAB cell;
+      left out: rows against faces of degree >= 3 in z, algCrvVertices). Subdivision and algebraic faces** -- envelopeSubdivision(Alg), alg*, corner*, triangleFace, dualPoint, clipArc*.
+- [x] **P7. DONE 2026-11-10 (367 traced calls identical). Bridge faces** -- bridgeFaceAlg/Rat, bridgePhi, bridgeWitness, bridgeMember, cuts.
+- [~] **P8. End-to-end parity** -- DONE 2026-11-11: golden parity over every recorded fixture (fast + slow buckets),
+      refusals by identifier, definition oracle. LEFT: port guardExerciseTest; widen the goldens to the
+      remaining MATLAB suites (unboundedFaceTest, guardExercise*, verylong); speed (see MORNING.md).
 
 ## Next up — 2026-11-04 overnight run
 

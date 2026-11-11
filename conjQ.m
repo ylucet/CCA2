@@ -1239,7 +1239,11 @@ function [g, isThin] = linealityConj(obj, k, sh, Hn, fN, fD, Vi, vd)
         coef = a*p.';  rhs = -(a*v.' + c);               % coef * t >= rhs
         if coef > 0, lo = max(lo, rhs/coef); else, hi = min(hi, rhs/coef); end
     end
-    row = fN;
+    % fN / fD, NOT fN: the cross-section must carry the FUNCTION, and the numerator alone is the
+    % function only when fD = 1. With fD = 3 (f = x^2/3 on x >= 0) this conjugated 3f and returned
+    % f*(2,0) = 1 where the sup is 3 (measured 2026-11-11; found by the Python port). The exact
+    % reading of row is recovered by QuaPol.readExactly, as for any caller's data.
+    row = fN / fD;
     if isfinite(lo) && isfinite(hi)
         if lo == hi, Pp = QuaPol(v + lo*p, zeros(0,3), row, zeros(0,2));
         else, Pp = QuaPol([v + lo*p; v + hi*p], [1 2 1], row, [0 0]); end

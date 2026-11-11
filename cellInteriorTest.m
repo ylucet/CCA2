@@ -135,5 +135,22 @@ classdef cellInteriorTest < matlab.unittest.TestCase
             t.verifyError(@() ratQ.qs2Red([1 2 3 4]), 'ratQ:qs2Shape');
             t.verifyError(@() ratQ.qs2Red([1 2 3 4 0]), 'ratQ:qs2ZeroDen');
         end
+
+        function aSampleONABoundaryLineIsNotAnInteriorPoint(t)
+        % The zero-width cell of the kink fixture (2026-11-11). Inside the triangle y >= 1,
+        % x + y <= 3, 2x - y >= 0, the conic row (2x - y)^2 >= 4 leaves 2x - y >= 2, and the row
+        % "below the pair's upper line", 2x - y <= 2, contradicts it everywhere but ON that line.
+        % cellSamplePoint used to answer ok: its sample (1.5026.., 1.0052..) lies exactly on the
+        % line and rounding gave both rows a positive slack. The other side is a real cell.
+            C = [0 0 0 2 -1 0 0; 0 0 0 0 1 -1 0; 0 0 0 0 1 0 0; 0 0 0 1 1 -3 0; ...
+                 4 -4 1 0 0 -4 0; 4 -4 1 0 0 -4 2];
+            cell0 = [3 1; 4 -1; 1 1; 2 1; 5 1];
+            H = [0 1 0; -1 -1 3] ./ [1; sqrt(2)];
+            H = [H; [2 -1 0] / sqrt(5); 0 1 -1];
+            [~, okIn]  = cellSamplePoint(C, [cell0; 6  1], H, 1e3);
+            [~, okOut] = cellSamplePoint(C, [cell0; 6 -1], H, 1e3);
+            t.verifyTrue(okIn, 'above the upper line the cell has interior');
+            t.verifyFalse(okOut, 'between the line and itself there is no interior point');
+        end
     end
 end

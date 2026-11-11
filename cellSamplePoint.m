@@ -58,18 +58,34 @@ end
 
 function s = slack(C, rows, X)
 % The smallest relative margin by which each point satisfies the cell's rows (<= 0: not inside).
+%
+% A VALUE WITHIN ITS OWN ROUNDING IS NOT A MARGIN (2026-11-11). A sample lying exactly ON a row's
+% curve evaluates to a few ulps either side of zero, and two rows that contradict each other on a
+% line -- the conic (2x-y)^2 >= 4 with 2x-y >= 0 and its own branch line 2x-y <= 2 -- were BOTH
+% satisfied "strictly" at such a sample: (1.5026.., 1.0052..) sits on 2x-y = 2 and got a positive
+% slack from each. liveCell then kept a cell of ZERO WIDTH and the subdivider emitted three bridge
+% faces for it, which own no point (measured: 29 faces, 26 without them; found by the Python port,
+% whose rounding happened to fall the other way). So a row counts as satisfied only when its value
+% clears the rounding of its own evaluation, 32 eps times the sum of its terms' magnitudes; below
+% that the row contributes a slack of 0, i.e. "not inside". A point that clears every row keeps
+% exactly the slack it had, so nothing else changes.
     s = inf(size(X,1), 1);
     nx = max(1, sqrt(sum(X.^2, 2)));
+    x = X(:,1);  y = X(:,2);
     for t = 1:size(rows,1)
         c = C(rows(t,1), 1:6);  br = C(rows(t,1), 7);  sd = rows(t,2);
         if br ~= 0
-            v = ratQ.pairLineEval(c, br, X);
+            [v, m] = ratQ.pairLineEval(c, br, X);
             sc = nx;
         else
-            v = c(1)*X(:,1).^2 + c(2)*X(:,1).*X(:,2) + c(3)*X(:,2).^2 + c(4)*X(:,1) + c(5)*X(:,2) + c(6);
+            v = c(1)*x.^2 + c(2)*x.*y + c(3)*y.^2 + c(4)*x + c(5)*y + c(6);
+            m = abs(c(1))*x.^2 + abs(c(2)*x.*y) + abs(c(3))*y.^2 + abs(c(4)*x) + abs(c(5)*y) + abs(c(6));
             sc = max(abs(c)) * nx.^2;
         end
-        s = min(s, sd * v(:) ./ sc);
+        w = sd * v(:);
+        noise = w > 0 & w <= 32 * eps * m(:);
+        w(noise) = 0;
+        s = min(s, w ./ sc);
     end
 end
 

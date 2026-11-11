@@ -1,0 +1,60 @@
+{
+  "_doc": "Shared input trace for the Python-vs-Julia exact-arithmetic / CAS benchmark. Both bench_py.py and bench_jl.jl read THIS file so they measure the EXACT same objects -- that is what makes the cross-language comparison fair. All values derive from CCA2's own documentation (DECISIONS.md, CONJ_FIELD_PROOF.md) so the benchmark exercises CCA2's actual hard inputs, not synthetic ones.",
+  "primes": [2, 3, 5],
+
+  "axisB_multiquadratic": {
+    "_doc": "Axis B = the CCA2 `exactQ` hot op (sign/zero/add/mul over Q(sqrt p1...pk)). Elements are dicts {squarefree_part: [ratnum, ratden]} with part 1 = rational part.",
+    "sign_cases": [
+      {"parts": {"1": [2, 1], "2": [-1, 1]},        "expect_sign":  1, "note": "2 - sqrt(2)  > 0"},
+      {"parts": {"1": [1, 1], "2": [-1, 1]},        "expect_sign": -1, "note": "1 - sqrt(2)  < 0"},
+      {"parts": {"1": [5, 4], "30": [1, 12], "15": [-1, 6]}, "expect_sign": 1, "note": "A.5 split vertex (DECISIONS): sqrt(30)/12 - sqrt(15)/6 + 5/4  > 0, over Q(sqrt15,sqrt30)"},
+      {"parts": {"1": [3, 2], "6": [-5, 6], "2": [1, 4]},    "expect_sign": -1, "note": "near-zero stress: 3/2 - 5 sqrt(6)/6 + sqrt(2)/4 = -0.1877 < 0 (certified-sign path)"},
+      {"parts": {"1": [7, 5], "30": [-1, 1], "15": [1, 3], "10": [1, 2]}, "expect_sign": -1, "note": "mixed 4-part over Q(sqrt2,sqrt3,sqrt5); sign via the exact recursive test"}
+    ],
+    "zero_cases": [
+      {"a": {"2": [2, 1]}, "b": {"2": [2, 1]},                     "note": "2 sqrt(2) - 2 sqrt(2) = 0  (zero-test)"},
+      {"a": {"10": [1, 1], "6": [1, 1]}, "b": {"15": [2, 1]},       "note": "sqrt(10)*sqrt(6) - 2 sqrt(15) = 0  (cross-cancel: 10*6=60=2^2*15)"},
+      {"a": {"15": [15, 6], "30": [15, 10]}, "b": {"15": [5, 2], "30": [3, 2]}, "note": "scaled multiquadratic self-equality"}
+    ],
+    "depths": [1, 2, 3, 4, 5, 6],
+    "_doc_B_sizes": "Benchmark each op at element depths k=1..6 distinct squarefree parts (k=6 over {2,3,5,7,11,13}) to show the growth of the exact sign test and the mul/zero cost across the multiquadratic family."
+  },
+
+  "axisA_cas_escape": {
+    "_doc": "Axis A = the deep-CAS ops CCA2's `region`/legacy engine calls (the 12 functions counted from the .m files: solve, simplify, isAlways, subs, sym/syms, factor, roots, collect, expand, numden, coeffs). We benchmark the EXACT ops CCA2 uses, on CCA2's REAL hard inputs, to test: does the host COVER it, and at what cost? The S4/degree-4 inputs are from CONJ_FIELD_PROOF.md and DECISIONS.md so they are genuinely CCA2, not synthetic.",
+
+    "quartic_degree4": {
+      "_doc": "p_x minimal polynomial of the S4 vertex (DECISIONS.md 2026-08-20; CONJ_FIELD_PROOF.md sec 4.2). Irreducible over Q, resolvent cubic irreducible, discriminant not a square -> Galois group S4, degree 4 with NO square-root tower.",
+      "poly": [278339044, -4292927872, 49300591700, -92964619904, -198299511119],
+      "real_root_bracket": ["-2", "5"],
+      "ops": ["factor", "roots", "nroots", "discriminant", "spoly_mul", "sign_at_real_root"]
+    },
+    "resolvent_cubic": {
+      "_doc": "the resolvent cubic of that quartic (CONJ_FIELD_PROOF.md): irreducible over Q -> the S4 certificate. CCA2's `region.isconvex`/merge gates factor this to decide 2-group-ness.",
+      "poly": [9, -30, -2688, -11008],
+      "ops": ["factor", "discriminant", "roots", "spoly_mul"]
+    },
+    "conic_conic_system": {
+      "_doc": "conic x conic `solve` (the `region.getVertices` conic-conic op that CCA2 measures -- the LAST `solve()` site that survives, 700 calls/fold). Two quadratic equations in s1,s2. This is the single op that forces a quartic.",
+      "eq1": {"s1s1": 93, "s1s2": 38, "s2s2": 39, "s1": -6, "s2": -482, "c": -1003},
+      "eq2": {"s1s1": -202, "s1s2": 74, "s2s2": 171, "s1": 56, "s2": 128, "c": 3041},
+      "ops": ["solve_system", "eliminate_quartic", "real_roots"]
+    },
+    "rational_algebra": {
+      "_doc": "the symbolic-fraction normalization stack (`simplify`/`expand`/`collect`/`numden`/`coeffs`/`simplifyFraction`) -- 205+140+28+9 callsites in production.",
+      "expr": "(s1 + s2)^3 - (s1 - s2)*(s1^2 + s2^2 + 3) + 7/(s1 + 2*s2)",
+      "ops": ["expand", "collect", "simplify", "numden", "coeffs", "factor_num"]
+    },
+    "isalways_region_sign": {
+      "_doc": "the `isAlways`/`certifiesNonPositive` op: sign of a quadratic over a rational interval (the `region.ptFeasible`/`splitmax3` oracle, 147 callsites + 11793 per fold).",
+      "quad": [1, -2, -1],
+      "interval": ["-3", "5"],
+      "ops": ["sign_on_interval", "isAlways_nonneg", "real_roots", "sturm_sign"]
+    }
+  },
+
+  "axisF_migration": {
+    "_doc": "Axis F = LLM-migration cost from MATLAB. Not runnable as a fixed benchmark (it IS the act of porting); measured as: how many glue lines + API steps a host needs to express `exactQ.sign` + one `region` op. Recorded per-language in the bench output (glue_lines, api_calls, iterations_to_green where captured).",
+    "f_targets": ["exactQ.sign (recursive radical sign test)", "exactQ.zero (canonical zero-test)", "region.isAlways on a quadratic over an interval"]
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "g_gate": {
+    "python": {
+      "verdict": "PASS (conditional)",
+      "note": "bound PARI (GPL-2) or FLINT (LGPL); REJECT full Sage (AGPL) for a published lib"
+    },
+    "julia": {
+      "verdict": "PASS (conditional, artifact unverified here)",
+      "note": "Nemo is MIT + PARI (GPL-2); license-composition clean"
+    }
+  },
+  "a_verdict": {
+    "python": "PASS -- covers every measured CCA2 CAS op (incl. the last conic x conic solve)",
+    "julia": "FAIL on required ops: ['A.rational_numden', 'A.rational_collect']"
+  },
+  "b_wash": {
+    "python": true,
+    "julia": true,
+    "note": "expect wash (conj is CAS-free; exact core native in both)"
+  },
+  "cross_check_identical_answers": {
+    "rows": [
+      {
+        "op": "A.quartic_real_root_numeric",
+        "python": 3.907779,
+        "julia": [
+          3.907778936001628,
+          -1.2331376073144127
+        ],
+        "facts": [
+          [
+            3.9078
+          ],
+          [
+            -1.2331,
+            3.9078
+          ]
+        ],
+        "identical": true,
+        "note": "python p_x root is a member of julia's real-root set (values agree)"
+      },
+      {
+        "op": "A.quartic_discriminant_square_test",
+        "python": {
+          "not_square": true
+        },
+        "julia": {
+          "not_square": true
+        },
+        "facts": [
+          true,
+          true
+        ],
+        "identical": true
+      },
+      {
+        "op": "A.resolvent_cubic_S4_certificate",
+        "python": true,
+        "julia": true,
+        "facts": [
+          true,
+          true
+        ],
+        "identical": true
+      },
+      {
+        "op": "A.conic_conic_solve_system",
+        "python": {
+          "solutions": 4,
+          "real": 2
+        },
+        "julia": {
+          "n_real": 2,
+          "real_s1": [
+            -3.7242269379605286,
+            -6.816323424450976
+          ]
+        },
+        "facts": [
+          2,
+          2
+        ],
+        "identical": true
+      },
+      {
+        "op": "A.region_isAlways_sign_on_interval",
+        "python": {
+          "segments": [
+            1,
+            -1,
+            1
+          ]
+        },
+        "julia": {
+          "segments": [
+            1,
+            -1,
+            1
+          ]
+        },
+        "facts": [
+          [
+            1,
+            -1,
+            1
+          ],
+          [
+            1,
+            -1,
+            1
+          ]
+        ],
+        "identical": true
+      }
+    ],
+    "all_decisive_answers_identical": true
+  },
+  "profiles": {
+    "python": {
+      "name": "python",
+      "status": "RUN",
+      "coverage": "14/14",
+      "trace_ms": 9127.73,
+      "max_friction": 2,
+      "slowest_op": "A.conic_conic_solve_system",
+      "missing": []
+    },
+    "julia": {
+      "name": "julia",
+      "status": "RUN (julia + Nemo available)",
+      "coverage": "11/13",
+      "trace_ms": 0.65,
+      "max_friction": 4,
+      "slowest_op": "A.conic_conic_solve_system",
+      "missing": [
+        "A.rational_numden",
+        "A.rational_collect"
+      ]
+    }
+  },
+  "verdict": "DECIDED (both verified; no longer provisional). CORRECTNESS: both hosts return IDENTICAL answers on every decisive CCA2 input (cross_check=True; conic solve s1=[-3.724,-6.816], S4 quartic real root 3.907779, region signs [1,-1,1], all axis-B radical signs agree). COVERAGE: python 14/14 (full, incl rational numden/collect); julia 11/13 (gap only in rational normalization: ['A.rational_numden', 'A.rational_collect']). COST: python 9127.73 ms vs julia 0.65 ms -- Julia is ~14,043x CHEAPER (Nemo->FLINT C-core vs pure-Python sympy; the decisive A.conic_conic_solve_system is ~9 s on sympy but ~0.16 ms on Nemo). GLUE/friction: python max 2, julia max 4 (Nemo has no one-call system solve / no easy multivariate ratfun, yet covers it via eliminate->univariate->roots). RECOMMENDATION (leaning, not absolute): **Julia/Nemo** -- correct on every decisive input AND ~14,043x cheaper build-time CAS (axis-A cost dominates once the legacy exactQ oracle, ~62% of CCA2 CAS usage, is factored in), with one clean C-backed CAS-in-language. The runtime exact/eval core (Rust->C) and the license-clean C-lib CAS are IDENTICAL either way, so the choice is purely the build-time language. Python remains the low-risk fallback if the axis-F tiebreak (LLM-migration throughput for exactQ) or the two normalization ops dominate. FINAL GATES (user inputs): (a) how much of the biconjugate to port for a full D-slice integration bench; (b) LLM-migration throughput expectation for exactQ (the F tiebreak)."
+}

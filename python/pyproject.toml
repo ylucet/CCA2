@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cca2"
+version = "0.0.1"
+description = "Exact conjugates and convex envelopes of bivariate piecewise linear-quadratic functions (Python port of CCA2's exact engine)"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.10"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-xdist", "sympy"]
+
+[tool.setuptools.packages.find]
+include = ["cca2*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not slow and not verylong'"
+markers = [
+    "slow: minutes-long case (not in the fast bucket)",
+    "verylong: hours-long endurance case",
+]

@@ -1,0 +1,246 @@
+{
+  "host": "python",
+  "backends": {
+    "python": "3.10.12",
+    "sympy": "1.13.1",
+    "mpmath": "1.3.0",
+    "gmpy2": null,
+    "flint": null,
+    "sage": null,
+    "pari": null
+  },
+  "A_cas_surface": {
+    "A.quartic_irreducible_over_Q": {
+      "covered": true,
+      "ms_min": 0.004,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": true,
+      "note": "S4 vertex test: quartic irreducible over Q"
+    },
+    "A.quartic_discriminant_square_test": {
+      "covered": true,
+      "ms_min": 0.003,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": {
+        "not_square": true
+      },
+      "note": "S4 cert: discrim not a rational square => not a quad-tower"
+    },
+    "A.quartic_real_root_numeric": {
+      "covered": true,
+      "ms_min": 3.155,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": 3.907779,
+      "note": "real vertex coord (CONJ_FIELD_PROOF p_x ~ 3.9078)"
+    },
+    "A.quartic_roots_symbolic_exact": {
+      "covered": true,
+      "ms_min": 13.471,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": 4,
+      "note": "EXACT symbolic roots over an extension (PARI/Nemo vs sympy differ here)"
+    },
+    "A.resolvent_cubic_S4_certificate": {
+      "covered": true,
+      "ms_min": 0.007,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": true,
+      "note": "factor(resolvent cubic); irreducible => Galois group S4"
+    },
+    "A.conic_conic_solve_system": {
+      "covered": true,
+      "ms_min": 9076.314,
+      "status": "ok",
+      "friction_calls": 2,
+      "check": {
+        "solutions": 4,
+        "real": 2
+      },
+      "note": "solve the 2-conic system (the op that forces the quartic)"
+    },
+    "A.conic_conic_eliminate_bezout": {
+      "covered": true,
+      "ms_min": 0.006,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": 4,
+      "note": "eliminate one var -> univariate quartic (Bezout; degree==4)"
+    },
+    "A.rational_expand": {
+      "covered": true,
+      "ms_min": 0.007,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": null,
+      "note": "expand(expr) on a rational bivariate"
+    },
+    "A.rational_collect": {
+      "covered": true,
+      "ms_min": 0.006,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": null,
+      "note": "collect(expr) on a rational bivariate"
+    },
+    "A.rational_simplify": {
+      "covered": true,
+      "ms_min": 33.868,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": null,
+      "note": "simplify(expr) on a rational bivariate"
+    },
+    "A.rational_numden": {
+      "covered": true,
+      "ms_min": 0.007,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": null,
+      "note": "numden(expr) on a rational bivariate"
+    },
+    "A.rational_coeffs": {
+      "covered": true,
+      "ms_min": 0.865,
+      "status": "ok",
+      "friction_calls": 2,
+      "check": null,
+      "note": "coeffs(expr) on a rational bivariate  [[4, 10, -3, 6]...]"
+    },
+    "A.region_quad_real_roots": {
+      "covered": true,
+      "ms_min": 0.007,
+      "status": "ok",
+      "friction_calls": 1,
+      "check": {
+        "1 - sqrt(2)": 1,
+        "1 + sqrt(2)": 1
+      },
+      "note": "real roots of the region quad (signEverywhere/ptFeasible)"
+    },
+    "A.region_isAlways_sign_on_interval": {
+      "covered": true,
+      "ms_min": 0.007,
+      "status": "ok",
+      "friction_calls": 2,
+      "check": {
+        "segments": [
+          1,
+          -1,
+          1
+        ]
+      },
+      "note": "isAlways/certifiesNonPositive: sign of quad over interval (certified, high-precision)"
+    }
+  },
+  "B_exact_core": {
+    "B.sign_exact_10^0": {
+      "ns_per_op": 28.517,
+      "covered": true
+    },
+    "B.sign_exact_10^1": {
+      "ns_per_op": 11.957,
+      "covered": true
+    },
+    "B.sign_exact_10^2": {
+      "ns_per_op": 7.916,
+      "covered": true
+    },
+    "B.sign_exact_10^6": {
+      "ns_per_op": 7.343,
+      "covered": true
+    },
+    "B.sign_exact_10^12": {
+      "ns_per_op": 6.937,
+      "covered": true
+    },
+    "B.sign_exact_10^24": {
+      "ns_per_op": 7.056,
+      "covered": true
+    },
+    "B.sign_exact_10^48": {
+      "ns_per_op": 7.23,
+      "covered": true
+    },
+    "B.multiradical_sign_certified": {
+      "covered": true,
+      "detail": [
+        {
+          "note": "2 - sqrt(2)  > 0",
+          "computed_sign": 1,
+          "oracle_sign": 1,
+          "agrees": true,
+          "value": "0.58578643762690495119831127579030192143032812462305192682332"
+        },
+        {
+          "note": "1 - sqrt(2)  < 0",
+          "computed_sign": -1,
+          "oracle_sign": -1,
+          "agrees": true,
+          "value": "-0.41421356237309504880168872420969807856967187537694807317668"
+        },
+        {
+          "note": "A.5 split vertex (DECISIONS): sqrt(30)/12 - sqrt(15)/6 + 5/4  > 0, over Q(sqrt15,sqrt30)",
+          "computed_sign": 1,
+          "oracle_sign": 1,
+          "agrees": true,
+          "value": "1.06093824021973561368426391903693517648846696161638757409115"
+        },
+        {
+          "note": "near-zero stress: 3/2 - 5 sqrt(6)/6 + sqrt(2)/4 = -0.1877 < 0 (certified-sign path)",
+          "computed_sign": -1,
+          "oracle_sign": -1,
+          "agrees": true,
+          "value": "-0.187688061726041319630647881202484973662538265036321422066407"
+        },
+        {
+          "note": "mixed 4-part over Q(sqrt2,sqrt3,sqrt5); sign via the exact recursive test",
+          "computed_sign": -1,
+          "oracle_sign": -1,
+          "agrees": true,
+          "value": "-1.20509229623166584017716258919752886905669547855336051997767"
+        }
+      ]
+    },
+    "covered": true,
+    "note": "exactQ single-radical sign is EXACT in plain Python (no CAS, no float). Confirms axis B (conj core) is hostable natively and cheap -- a wash across hosts."
+  },
+  "F_friction": {
+    "matlab_baseline": {
+      "exactQ.m_lines": 483,
+      "distinct_own_type_method_calls": 12,
+      "distinct_self_method_calls": 0,
+      "symbolic_toolbox_calls": 8
+    },
+    "python": {
+      "api_objects_per_target": {
+        "exactQ.sign": [
+          "Fraction"
+        ],
+        "exactQ.zero": [
+          "Fraction"
+        ],
+        "region.isAlways": [
+          "Poly",
+          "roots",
+          "sqrt"
+        ]
+      },
+      "distinct_api_objects": 4,
+      "cas_toolbox_needed": false
+    }
+  },
+  "summary": {
+    "A_ops_total": 14,
+    "A_ops_covered": 14,
+    "A_ops_timeout_or_error": 0,
+    "A_total_ms": 9127.73,
+    "A_max_friction": 2,
+    "B_covered": true,
+    "F_python_cas_needed": false
+  }
+}

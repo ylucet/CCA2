@@ -1,0 +1,236 @@
+{
+"B_exact_core": {
+"B.sign_exact_10^6": {
+"covered": true,
+"acc": 0,
+"ns_per_op": 7.055
+    },
+"B.sign_exact_10^0": {
+"covered": true,
+"acc": 0,
+"ns_per_op": 6.698
+    },
+"covered": true,
+"note": "axis B is a NATIVE STRENGTH in Nemo: exact real algebraic sign via FLINT qqbar (sqrt + sign_real), zero CAS.",
+"B.sign_exact_10^12": {
+"covered": true,
+"acc": 0,
+"ns_per_op": 7.617
+    },
+"B.sign_exact_10^1": {
+"covered": true,
+"acc": 0,
+"ns_per_op": 6.991
+    },
+"B.multiradical_sign_exact": {
+"covered": true,
+"detail": [
+{
+"agrees": true,
+"computed": 1,
+"expect": 1
+        },
+{
+"agrees": true,
+"computed": -1,
+"expect": -1
+        },
+{
+"agrees": true,
+"computed": 1,
+"expect": 1
+        },
+{
+"agrees": true,
+"computed": -1,
+"expect": -1
+        },
+{
+"agrees": true,
+"computed": -1,
+"expect": -1
+        }
+      ]
+    },
+"B.sign_exact_10^2": {
+"covered": true,
+"acc": 0,
+"ns_per_op": 6.843
+    },
+"B.sign_exact_10^24": {
+"covered": true,
+"acc": 0,
+"ns_per_op": 7.591
+    }
+  },
+"summary": {
+"A_ops_total": 13,
+"B_covered": true,
+"A_ops_covered": 11,
+"F_cas_toolbox_needed": false,
+"A_total_ms": 0.65,
+"A_max_friction": 4
+  },
+"status": "RUN (julia + Nemo available)",
+"F_friction": {
+"julia": {
+"note": "one language, exact core native (FLINT qqbar); friction is the missing one-call system solve + rational-function field",
+"cas_toolbox_needed": false,
+"api_objects_per_target": {
+"exactQ.zero": [
+"==",
+"iszero"
+        ],
+"region.isAlways": [
+"roots",
+"isreal",
+"sign_real",
+"<"
+        ],
+"exactQ.sign": [
+"algebraic_closure",
+"sqrt",
+"sign_real"
+        ]
+      }
+    },
+"matlab_reference": "same exactQ.m as bench.py (483 lines, 12 own-type method calls)"
+  },
+"A_cas_surface": {
+"A.conic_conic_eliminate_bezout": {
+"ms_min": 0.011,
+"covered": true,
+"note": "eliminate one var -> univariate quartic (resultant; degree == 4)",
+"check": 4,
+"status": "ok",
+"friction_calls": 1
+    },
+"A.region_isAlways_sign_on_interval": {
+"ms_min": 0.112,
+"covered": true,
+"note": "isAlways: sign of quad over interval via exact algebraic comparison",
+"check": {
+"segments": [
+1,
+-1,
+1
+        ]
+      },
+"status": "ok",
+"friction_calls": 2
+    },
+"A.rational_coeffs": {
+"ms_min": 0.0,
+"covered": true,
+"note": "coeff(expr, s1*s2^2) -- native monomial query",
+"check": null,
+"status": "ok",
+"friction_calls": 1
+    },
+"A.quartic_real_root_numeric": {
+"ms_min": 0.145,
+"covered": true,
+"note": "real vertex coords (expect one ~ 3.9078)",
+"check": [
+3.907778936001628,
+-1.2331376073144127
+      ],
+"status": "ok",
+"friction_calls": 1
+    },
+"A.quartic_discriminant_square_test": {
+"ms_min": 0.003,
+"covered": true,
+"note": "S4 cert: discrim NOT a square",
+"check": {
+"not_square": true
+      },
+"status": "ok",
+"friction_calls": 1
+    },
+"A.rational_numden": {
+"ms_min": null,
+"covered": false,
+"note": "Nemo 0.57 has no easy multivariate rational-function field (// does not coerce to a ratfun); numerator/denominator of a rational bivariate is higher-friction than sympy's together().as_numer_denom()",
+"check": null,
+"status": "pending-api",
+"friction_calls": 3
+    },
+"A.conic_conic_solve_system": {
+"ms_min": 0.187,
+"covered": true,
+"note": "Nemo: no one-call system solve; eliminate -> univariate -> exact real roots (higher friction than sympy's single solve); same 2 real solution as Python",
+"check": {
+"n_real": 2,
+"real_s1": [
+-3.7242269379605286,
+-6.816323424450976
+        ]
+      },
+"status": "ok",
+"friction_calls": 4
+    },
+"A.rational_expand": {
+"ms_min": 0.0,
+"covered": true,
+"note": "Nemo: multivariate ring already holds an expanded (sparse) form; no separate expand step required",
+"check": null,
+"status": "ok",
+"friction_calls": 1
+    },
+"A.rational_collect": {
+"ms_min": null,
+"covered": false,
+"note": "Nemo: no sympy-style collect(poly,var); Base.collect is for iterators, not 'gather like terms by a variable'",
+"check": null,
+"status": "pending-api",
+"friction_calls": 3
+    },
+"A.resolvent_cubic_S4_certificate": {
+"ms_min": 0.001,
+"covered": true,
+"note": "factor(resolvent); irreducible => S4",
+"check": true,
+"status": "ok",
+"friction_calls": 1
+    },
+"A.quartic_roots_symbolic_exact": {
+"ms_min": 0.145,
+"covered": true,
+"note": "EXACT roots via FLINT qqbar (native real-algebraic);  isreal() selects the real ones",
+"check": {
+"real": 2,
+"total": 4
+      },
+"status": "ok",
+"friction_calls": 1
+    },
+"A.region_quad_real_roots": {
+"ms_min": 0.03,
+"covered": true,
+"note": "roots of u^2-2u-1 (expect 1±sqrt2)",
+"check": {
+"real": [
+2.414213562373095,
+-0.41421356237309503
+        ]
+      },
+"status": "ok",
+"friction_calls": 1
+    },
+"A.quartic_irreducible_over_Q": {
+"ms_min": 0.012,
+"covered": true,
+"note": "S4 vertex test: irreducible over Q",
+"check": true,
+"status": "ok",
+"friction_calls": 1
+    }
+  },
+"backends": {
+"julia": "1.13.3",
+"nemo": "v\"0.57.2\"",
+"cas": "FLINT (via Nemo)"
+  },
+"host": "julia"
+}

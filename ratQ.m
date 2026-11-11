@@ -2104,7 +2104,7 @@ classdef ratQ
             A  = ratQ.bigVec(a);
             Bv = ratQ.bigVec(b);
             lc = Bv{1};
-            f  = lc.pow(da - db + 1);
+            f  = lc.abs().pow(da - db + 1);          % positive scaling: see polyPseudoRemDouble
             for i = 1:numel(A), A{i} = A{i}.multiply(f); end
 
             while true
@@ -2201,7 +2201,13 @@ classdef ratQ
         function r = polyPseudoRemDouble(a, b, da, db)
         % objective: the double-precision pseudo-remainder body, split out so its overflow can be
         %            caught as a whole rather than site by site. Assumes primitive, trimmed inputs.
-            r = a * b(1)^(da - db + 1);
+            % |lc(b)|, NOT lc(b): the scaling must be POSITIVE. With a negative leading coefficient
+            % and an odd exponent (a degree gap of 2, 4, ...) the signed power flips the remainder's
+            % sign, and sturmChain then negates the wrong thing: the chain stops being a Sturm chain
+            % and countRootsIn miscounts. Measured 2026-11-10: x^4 + x - 1 has two real roots in
+            % (-2, 2] and the count was 0 (chain element -(3x - 4), then a gap of 2). bigPrem always
+            % used |lc|. Found by the Python port (python/PORT_NOTES.md 3.1).
+            r = a * abs(b(1))^(da - db + 1);
             ratQ.chk(r, 'pseudo-remainder scaling');
             % THE SCALING IS WHAT MAKES EVERY STEP EXACT, and the loop must rely on that rather
             % than test for it. Multiplying by lc(b)^(da-db+1) is exactly enough that each
@@ -2804,11 +2810,13 @@ classdef ratQ
                           'vertical', false, 'form', [u v]);
         end
 
-        function v = pairLineEval(c, b, X)
+        function [v, m] = pairLineEval(c, b, X)
         % objective: the VALUE of one line of a degenerate conic at points X -- in doubles, as the
         %            cache that names the same line the exact branch index does.
         % [input]  c : the line pair; b : 1 or 2; X : n x 2
         % [output] v : n x 1
+        %          m : n x 1, the sum of the MAGNITUDES of the terms v is built from -- what a caller
+        %              needs to tell a value from its own rounding (cellSamplePoint, 2026-11-11)
         %
         % A CACHE, in exactly the sense QuaCon.Vx is a cache of the vertex Vname names: the decision
         % is `ratQ.pairLineSign`, this is what `eval` uses at a point where a tolerance is already
@@ -2829,12 +2837,17 @@ classdef ratQ
             if strcmp(info.kind, 'parallel')
                 r = sort(roots(info.quad));
                 v = info.form(1)*X(:,1) + info.form(2)*X(:,2) - r(b);
+                if nargout > 1
+                    m = abs(info.form(1)*X(:,1)) + abs(info.form(2)*X(:,2)) + abs(r(b));
+                end
                 return
             end
             p = info.apex(1:2) / info.apex(3);
             ux = X(:,1) - p(1);   uy = X(:,2) - p(2);
             if info.vertical && b == 2
-                v = ux;  return
+                v = ux;
+                if nargout > 1, m = abs(X(:,1)) + abs(p(1)); end
+                return
             end
             if info.vertical
                 t = -info.quad(2) / info.quad(1);
@@ -2843,6 +2856,9 @@ classdef ratQ
                 t = r(b);
             end
             v = uy - t*ux;
+            if nargout > 1
+                m = abs(X(:,2)) + abs(p(2)) + abs(t) * (abs(X(:,1)) + abs(p(1)));
+            end
         end
 
         function tf = conicDefinite(c)
