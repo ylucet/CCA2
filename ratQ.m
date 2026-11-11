@@ -2104,7 +2104,7 @@ classdef ratQ
             A  = ratQ.bigVec(a);
             Bv = ratQ.bigVec(b);
             lc = Bv{1};
-            f  = lc.pow(da - db + 1);
+            f  = lc.abs().pow(da - db + 1);          % positive scaling: see polyPseudoRemDouble
             for i = 1:numel(A), A{i} = A{i}.multiply(f); end
 
             while true
@@ -2201,7 +2201,13 @@ classdef ratQ
         function r = polyPseudoRemDouble(a, b, da, db)
         % objective: the double-precision pseudo-remainder body, split out so its overflow can be
         %            caught as a whole rather than site by site. Assumes primitive, trimmed inputs.
-            r = a * b(1)^(da - db + 1);
+            % |lc(b)|, NOT lc(b): the scaling must be POSITIVE. With a negative leading coefficient
+            % and an odd exponent (a degree gap of 2, 4, ...) the signed power flips the remainder's
+            % sign, and sturmChain then negates the wrong thing: the chain stops being a Sturm chain
+            % and countRootsIn miscounts. Measured 2026-11-10: x^4 + x - 1 has two real roots in
+            % (-2, 2] and the count was 0 (chain element -(3x - 4), then a gap of 2). bigPrem always
+            % used |lc|. Found by the Python port (python/PORT_NOTES.md 3.1).
+            r = a * abs(b(1))^(da - db + 1);
             ratQ.chk(r, 'pseudo-remainder scaling');
             % THE SCALING IS WHAT MAKES EVERY STEP EXACT, and the loop must rely on that rather
             % than test for it. Multiplying by lc(b)^(da-db+1) is exactly enough that each
