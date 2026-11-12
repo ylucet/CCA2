@@ -553,9 +553,43 @@ def _surdOf(p):
     return None if r is None else list(r)
 
 
+_SURD_D = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37,
+           38, 39, 41, 42, 43, 46, 47]
+_SURD_SD = np.array([math.sqrt(d) for d in _SURD_D])
+_SURD_B = np.arange(-64, 65, dtype=float)
+_SURD_ABSB = np.abs(_SURD_B)
+
+
 def _surdOfSearch(p):
-    D = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23, 26, 29, 30, 31, 33, 34, 35, 37,
-         38, 39, 41, 42, 43, 46, 47]
+    """_surdOfSearchRef with each q's 30 x 129 trials as numpy arrays: the same double operations
+    (q*p - b*sqrt(d), MATLAB round, the tolerance) elementwise, and the same choice -- the
+    smallest |b|, the first in -64..64 on a tie -- so the answer is the reference's."""
+    if not (math.isfinite(p[0]) and math.isfinite(p[1])):
+        return _surdOfSearchRef(p)
+    S = _SURD_B[None, :] * _SURD_SD[:, None]        # b * sqrt(d), as Python's b * sd
+    for q in range(1, 65):
+        A = []
+        OK = []
+        for c in range(2):
+            V = q * p[c] - S
+            Ar = np.floor(np.abs(V) + 0.5) * np.where(V >= 0, 1.0, -1.0)
+            A.append(Ar)
+            OK.append(np.abs(V - Ar) < 1e-11 * q * max(1.0, abs(p[c])))
+        for k, d in enumerate(_SURD_D):
+            ab = []
+            for c in range(2):
+                ok = OK[c][k]
+                if not ok.any():
+                    break
+                i = int(np.argmin(np.where(ok, _SURD_ABSB, np.inf)))
+                ab.append((int(A[c][k, i]), int(_SURD_B[i])))
+            if len(ab) == 2 and any(x[1] != 0 for x in ab):
+                return [ab[0][0], ab[0][1], ab[1][0], ab[1][1], q, d]
+    return None
+
+
+def _surdOfSearchRef(p):
+    D = _SURD_D
     bs = list(range(-64, 65))
     for q in range(1, 65):
         for d in D:

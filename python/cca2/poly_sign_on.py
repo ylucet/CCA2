@@ -13,6 +13,7 @@ import numpy as np
 
 _binomCache = {}
 _convCache = {}
+_kernelTables = {}                                  # shape -> the kernel's (binomials, M1, M2)
 
 # The per-box Bernstein test is millions of calls on 2x2 .. 8x8 matrices, where numpy's per-call
 # overhead dominates the arithmetic: numba compiles it (CCA2_NUMBA=0 turns it off, and it is off
@@ -32,9 +33,12 @@ def polySignOn(P, box, inBox, depth=6):
 def _boxSign(P, b):
     """+1 / -1 when every Bernstein coefficient of P on box b clears the margin, else 0."""
     if _kernel is not None:
-        n1, n2 = P.shape
-        return _kernel(P, float(b[0]), float(b[1]), float(b[2]), float(b[3]),
-                       _binom(max(n1, n2)), _convMat(n1), _convMat(n2))
+        t = _kernelTables.get(P.shape)
+        if t is None:
+            n1, n2 = P.shape
+            t = (_binom(max(n1, n2)), _convMat(n1), _convMat(n2))
+            _kernelTables[P.shape] = t
+        return _kernel(P, float(b[0]), float(b[1]), float(b[2]), float(b[3]), t[0], t[1], t[2])
     B = _bernstein(P, b)
     m = float(np.max(np.abs(B)))
     tol = 1e-10 * max(m, 2.0 ** -52)

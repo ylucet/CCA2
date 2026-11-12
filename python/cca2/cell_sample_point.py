@@ -87,7 +87,11 @@ def _slackArr(C, rows, x, y):
     value clears 32 eps times the sum of its terms' magnitudes; below that it contributes a slack
     of 0. Otherwise a sample lying exactly ON a line can "strictly" satisfy two rows that
     contradict each other there, and a zero-width cell is kept (cellSamplePoint.m, 2026-11-11)."""
-    nx = np.maximum(1.0, np.sqrt(x * x + y * y))
+    xx = x * x                                      # the shared products, formed once (the same
+    xy = x * y                                      # doubles each row formed for itself)
+    yy = y * y
+    nx = np.maximum(1.0, np.sqrt(xx + yy))
+    nx2 = None
     s = np.full(len(x), np.inf)
     eps32 = 32 * 2.0 ** -52
     for r in rows:
@@ -98,10 +102,12 @@ def _slackArr(C, rows, x, y):
             v, m = rat_q.pairLineEvalMArr(c, br, x, y)
             sc = nx
         else:
-            v = c[0] * (x * x) + c[1] * (x * y) + c[2] * (y * y) + c[3] * x + c[4] * y + c[5]
-            m = (abs(c[0]) * (x * x) + np.abs(c[1] * (x * y)) + abs(c[2]) * (y * y)
+            v = c[0] * xx + c[1] * xy + c[2] * yy + c[3] * x + c[4] * y + c[5]
+            m = (abs(c[0]) * xx + np.abs(c[1] * xy) + abs(c[2]) * yy
                  + np.abs(c[3] * x) + np.abs(c[4] * y) + abs(c[5]))
-            sc = max(abs(t) for t in c) * (nx * nx)
+            if nx2 is None:
+                nx2 = nx * nx
+            sc = max(abs(t) for t in c) * nx2
         w = sd * v
         w = np.where((w > 0) & (w <= eps32 * m), 0.0, w)
         s = np.minimum(s, w / sc)

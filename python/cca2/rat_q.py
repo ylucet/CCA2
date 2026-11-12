@@ -772,6 +772,8 @@ def signAt(q, p, iv):
     chainQ = _sturmChainShared(q)
     qConst = len(chainQ[0]) <= 1
     # the variation counts at an endpoint that survives a step are carried, not recomputed
+    if _isDyadic(lo) and _isDyadic(hi):
+        return _signAtDyadic(q, chainP, chainQ, qConst, lo, hi)
     vQlo = 0 if qConst else sturmV(chainQ, lo)
     vQhi = 0 if qConst else sturmV(chainQ, hi)
     vPlo = sturmV(chainP, lo)
@@ -794,6 +796,63 @@ def signAt(q, p, iv):
             lo = mid
             vPlo = vPmid
             vQlo = vQmid
+    _signAtNoConverge()
+
+
+def _isDyadic(x):
+    return isinstance(x, Fraction) and x.denominator & (x.denominator - 1) == 0
+
+
+def _signDy(c, N, e):
+    """sign of c(N / 2^e): the homogeneous Horner sum c_i N^(k-i) 2^(e i), in integers."""
+    if not c:
+        return 0
+    v = c[0]
+    for i in range(1, len(c)):
+        v = v * N + (c[i] << (e * i))
+    return (v > 0) - (v < 0)
+
+
+def _varDy(chain, N, e):
+    return _variations(_signDy(c, N, e) for c in chain)
+
+
+def _signAtDyadic(q, chainP, chainQ, qConst, lo, hi):
+    """signAt's bisection with both endpoints N / 2^e for one shared e: the same steps and the
+    same decisions as on Fractions (a variation count does not depend on how the point is
+    written), with no Fraction built. The midpoint of L/2^e and H/2^e is (L + H) / 2^(e+1)."""
+    e = max(lo.denominator.bit_length(), hi.denominator.bit_length()) - 1
+    L = lo.numerator << (e - (lo.denominator.bit_length() - 1))
+    H = hi.numerator << (e - (hi.denominator.bit_length() - 1))
+    vQlo = 0 if qConst else _varDy(chainQ, L, e)
+    vQhi = 0 if qConst else _varDy(chainQ, H, e)
+    vPlo = _varDy(chainP, L, e)
+    for _ in range(400):
+        if qConst or vQlo - vQhi == 0:
+            s = _signDy(q, L + H, e + 1)
+            if s != 0:
+                return s
+            s = _signDy(q, H, e)
+            if s != 0:
+                return s
+            return _signDy(q, L, e)
+        M = L + H
+        e += 1
+        L <<= 1
+        H <<= 1
+        vPmid = _varDy(chainP, M, e)
+        vQmid = _varDy(chainQ, M, e)
+        if vPlo - vPmid == 1:
+            H = M
+            vQhi = vQmid
+        else:
+            L = M
+            vPlo = vPmid
+            vQlo = vQmid
+    _signAtNoConverge()
+
+
+def _signAtNoConverge():
     error('ratQ:signAtNoConverge',
           'bisection did not separate the root from q\'s zeros. The root and a zero of q are '
           'then closer than a dyadic rational of that depth, which for exact integer input '

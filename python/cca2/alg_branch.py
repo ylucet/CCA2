@@ -48,15 +48,25 @@ def _fibreDouble(lay, x, y, degTol):
 
 
 def _fibreExact(lay, x, y):
-    X = Fraction(x)
-    Y = Fraction(y)
+    """The fibre's coefficients at the double point (x, y), each computed EXACTLY and then
+    rounded once: x = a/dx and y = c/dy exactly (doubles are dyadic), so with
+    D = dx^(nx-1) dy^(ny-1) every layer's value times D is the integer
+    sum co a^i dx^(nx-1-i) c^j dy^(ny-1-j). float(num / D) is Python's correctly rounded integer
+    division -- the same double float(Fraction) gives -- and the value is zero iff num is."""
+    a, dx = float(x).as_integer_ratio()
+    cc, dy = float(y).as_integer_ratio()
+    nx = 1 + max((i for terms in lay for i, _, _ in terms), default=0)
+    ny = 1 + max((j for terms in lay for _, j, _ in terms), default=0)
+    A = [a ** i * dx ** (nx - 1 - i) for i in range(nx)]
+    C = [cc ** j * dy ** (ny - 1 - j) for j in range(ny)]
+    D = dx ** (nx - 1) * dy ** (ny - 1)
     c = []
     isZero = []
     for terms in lay:
-        v = Fraction(0)
+        v = 0
         for i, j, co in terms:
-            v += co * X ** i * Y ** j
-        c.append(float(v))
+            v += co * A[i] * C[j]
+        c.append(v / D)
         isZero.append(v == 0)
     return c, isZero
 
