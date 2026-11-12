@@ -106,9 +106,26 @@ def _probeInterior(EcQ, rows):
         ctr = [sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)]
         r = max(2.0, 2 * max(max(abs(p[0] - ctr[0]), abs(p[1] - ctr[1])) for p in pts))
     if _PROBE is None:
-        _PROBE = matlabRand(20260905, 400, 2)
-    for u in _PROBE:
-        x = [ctr[0] + (u[0] - 0.5) * 2 * r, ctr[1] + (u[1] - 0.5) * 2 * r]
-        if _satisfiesAll(EcQ, rows, x):
-            return True
-    return False
+        _PROBE = np.array(matlabRand(20260905, 400, 2), dtype=float)
+    X0 = ctr[0] + (_PROBE[:, 0] - 0.5) * 2 * r
+    X1 = ctr[1] + (_PROBE[:, 1] - 0.5) * 2 * r
+    return bool(_satisfiesAllMany(EcQ, rows, X0, X1).any())
+
+
+def _satisfiesAllMany(EcQ, rows, X0, X1):
+    """satisfiesAllDouble at every point (X0[i], X1[i]) at once: the same double operations in the
+    same order, elementwise, so each verdict is the one the scalar loop gives."""
+    ok = np.ones(X0.shape, dtype=bool)
+    m = np.maximum(1.0, np.maximum(np.abs(X0), np.abs(X1))) ** 2
+    for r in rows:
+        c = EcQ[r[0] - 1]
+        f = [float(t) for t in c[0:6]]
+        v = f[0] * X0 ** 2 + f[1] * X0 * X1 + f[2] * X1 ** 2 + f[3] * X0 + f[4] * X1 + f[5]
+        scale = np.maximum(1.0, float(max(abs(t) for t in c)) * m)
+        if r[1] == 0:
+            ok &= ~(np.abs(v) > 1e-9 * scale)
+        else:
+            ok &= ~(r[1] * v < -1e-9 * scale)
+        if not ok.any():
+            break
+    return ok

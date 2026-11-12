@@ -317,7 +317,12 @@ def _branchLine(c, b):
 
 
 def _marginLP(H):
-    """Largest t with H*[x;1] >= t inside a big box, by vertex enumeration (doubles)."""
+    """Largest t with H*[x;1] >= t inside a big box, by vertex enumeration (doubles).
+
+    All triples of rows are solved in ONE batched LAPACK call (same gesv / getrf per 3x3 system as
+    a loop of np.linalg.solve / det, so each vertex is bit-identical to the one-at-a-time version
+    and to MATLAB's loop); only the feasibility products M*z are batched differently, which moves
+    them by an ulp inside the 1e-9 slack. The answer is a max over vertices, so order is moot."""
     R = 1e4
     Hn = []
     for r in H:
@@ -326,17 +331,26 @@ def _marginLP(H):
     M = np.array([[r[0], r[1], -1.0] for r in Hn]
                  + [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]], dtype=float)
     b = np.array([-r[2] for r in Hn] + [-R, -R, -R, -R], dtype=float)
-    m = -math.inf
-    k = M.shape[0]
-    for i in range(k - 2):
-        for j in range(i + 1, k - 1):
-            for l in range(j + 1, k):
-                S = M[[i, j, l], :]
-                if abs(np.linalg.det(S)) < 1e-12:
-                    continue
-                z = np.linalg.solve(S, b[[i, j, l]])
-                if np.all(M @ z >= b - 1e-9) and z[2] > m:
-                    m = float(z[2])
-    if math.isinf(m):
-        m = -1.0                                    # no vertex satisfies all: empty
-    return m
+    T = _triples(M.shape[0])
+    S = M[T]                                        # (nT, 3, 3)
+    ok = np.abs(np.linalg.det(S)) >= 1e-12
+    if not ok.any():
+        return -1.0
+    T = T[ok]
+    Z = np.linalg.solve(S[ok], b[T][:, :, None])[:, :, 0]     # (nT', 3)
+    feas = np.all(Z @ M.T >= b - 1e-9, axis=1)
+    if not feas.any():
+        return -1.0                                 # no vertex satisfies all: empty
+    return float(Z[feas, 2].max())
+
+
+_triplesMemo = {}
+
+
+def _triples(k):
+    T = _triplesMemo.get(k)
+    if T is None:
+        T = np.array([(i, j, l) for i in range(k - 2) for j in range(i + 1, k - 1)
+                      for l in range(j + 1, k)], dtype=np.intp).reshape(-1, 3)
+        _triplesMemo[k] = T
+    return T

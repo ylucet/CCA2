@@ -9,9 +9,18 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
 from cca2 import CCA2Error  # noqa: E402
+from cca2 import alg_row_fails, conic_meet  # noqa: E402
 from cca2.biconj_q import biconjQ  # noqa: E402
 from cca2.conj_q import conjQ  # noqa: E402
 from cca2.qua_pol import QuaPol  # noqa: E402
+
+
+def coldPythonOnlyMemos():
+    """Empty the memos that MATLAB does NOT have (conicMeet's pair memo, the surd-corner memo)
+    before every timed call, so a repetition is not faster than MATLAB's for that reason alone.
+    algRowFails' other memos mirror MATLAB's `persistent` ones and stay warm on both sides."""
+    conic_meet.clearMemo()
+    alg_row_fails._memoSurdOf.clear()
 
 
 def build(x):
@@ -33,11 +42,13 @@ def main(fixFile, outFile, reps=3, slowCap=20.0, only=None):
             t = []
             err = ''
             try:
+                coldPythonOnlyMemos()
                 t0 = time.perf_counter()
                 call()
                 t.append(time.perf_counter() - t0)
                 if t[0] <= slowCap:
                     for _ in range(reps):
+                        coldPythonOnlyMemos()
                         t0 = time.perf_counter()
                         call()
                         t.append(time.perf_counter() - t0)

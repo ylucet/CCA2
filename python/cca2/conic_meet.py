@@ -15,13 +15,50 @@ from .errors import error, CCA2Error
 EPS = 2.0 ** -52
 
 
+_memo = {}
+
+
+def clearMemo():
+    _memo.clear()
+
+
 def conicMeet(A, B, opts=None):
-    """Returns (P, info): P a list of [x, y] doubles in canonical (sorted) order."""
+    """Returns (P, info): P a list of [x, y] doubles in canonical (sorted) order.
+
+    A pure function of (A, B, opts), and the arrangement code asks for the same pair many times
+    (conjQ on the benchmark: 79189 calls, 4358 distinct pairs), so results are remembered per
+    ordered pair (and rat_q.EMULATE_2P53, which changes what the elimination may compute) and
+    handed out as deep copies. Refusals are not remembered (they re-raise)."""
     opts = dict(opts or {})
     opts.setdefault('tol', 1e-9)
     opts.setdefault('polish', 8)
-    A = rat_q.conic(A)
-    B = rat_q.conic(B)
+    # the key is the RAW pair when both are plain-int sequences (so validation is skipped on a hit:
+    # a pair of ints that was accepted once is accepted again); anything else is validated first
+    raw = all(type(x) is int for x in A) and all(type(x) is int for x in B)
+    if not raw:
+        A = rat_q.conic(A)
+        B = rat_q.conic(B)
+    try:
+        key = (tuple(A), tuple(B), tuple(sorted(opts.items())), rat_q.EMULATE_2P53)
+        hit = _memo.get(key)
+    except TypeError:                               # an unhashable option: no memo
+        return _conicMeet(rat_q.conic(A), rat_q.conic(B), opts)
+    if hit is None:
+        hit = _conicMeet(rat_q.conic(A), rat_q.conic(B), opts)
+        if len(_memo) > 50000:
+            _memo.clear()
+        _memo[key] = hit
+    return _copy(hit)
+
+
+def _copy(hit):
+    """Copy of a remembered (P, info): P is a list of [x, y] floats and info's values are scalars
+    or flat lists of scalars, so a two-level copy is a deep copy."""
+    P, info = hit
+    return [p[:] for p in P], {k: (v[:] if type(v) is list else v) for k, v in info.items()}
+
+
+def _conicMeet(A, B, opts):
     info = {'quartic': [], 'shear': 0, 'resid': [], 'sep': math.inf, 'degenerate': False}
     if A == B:
         info['degenerate'] = True
