@@ -1,6 +1,10 @@
 """Compare bench/matlab.jsonl and bench/python.jsonl (same fixtures, same order) and print a
 markdown summary: per group the totals of the BEST time per fixture, the median and the range of
-the per-fixture ratio Python/MATLAB."""
+the per-fixture ratio Python/MATLAB.
+
+    python3 compare.py                                   # matlab.jsonl vs python.jsonl
+    python3 compare.py M1.jsonl,M2.jsonl P1.jsonl,P2.jsonl   # several passes each: per fixture the
+                                                         # best over all passes, n summed"""
 import json
 import os
 import statistics
@@ -9,18 +13,27 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def load(name):
+def load(names):
     out = {}
-    for line in open(os.path.join(HERE, name)):
-        r = json.loads(line)
-        out[r['id']] = r
+    for name in names.split(','):
+        for line in open(os.path.join(HERE, name)):
+            r = json.loads(line)
+            o = out.get(r['id'])
+            if o is None:
+                out[r['id']] = r
+                continue
+            o['err'] = o['err'] or r['err']
+            if r['n'] > 0:
+                o['best'] = r['best'] if o['n'] == 0 else min(o['best'], r['best'])
+                o['worst'] = max(o['worst'], r['worst'])
+                o['n'] += r['n']
     return out
 
 
-def main():
+def main(mFiles='matlab.jsonl', pFiles='python.jsonl'):
     F = {x['id']: x for x in json.load(open(os.path.join(HERE, 'fixtures.json')))}
-    M = load('matlab.jsonl')
-    P = load('python.jsonl')
+    M = load(mFiles)
+    P = load(pFiles)
     groups = {}
     for i, x in F.items():
         if i not in M or i not in P or M[i]['err'] or P[i]['err'] or M[i]['n'] == 0 or P[i]['n'] == 0:
@@ -48,6 +61,10 @@ def main():
             i, x['src'].replace('.jsonl', ''), x['fn'], x['kind'], M[i]['best'], P[i]['best'],
             P[i]['best'] / M[i]['best'], M[i]['n'], P[i]['n']))
     print()
+    allIds = [i for g in groups.values() for i in g]
+    print('Totals over the %d fixtures both engines finished (best times): MATLAB %.0f s, Python %.0f s.'
+          % (len(allIds), sum(M[i]['best'] for i in allIds), sum(P[i]['best'] for i in allIds)))
+    print()
     spread = [(M[i]['worst'] / M[i]['best'], P[i]['worst'] / P[i]['best'])
               for g in groups.values() for i in g if M[i]['n'] > 1 and P[i]['n'] > 1 and M[i]['best'] > 1e-3]
     if spread:
@@ -58,4 +75,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(*sys.argv[1:3])
