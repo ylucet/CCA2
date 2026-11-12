@@ -44,3 +44,12 @@ def oddPart(S):
     for (i, j), v in out.items():
         M[i][j] = v
     return M
+
+
+def gcdUni(a, b):
+    """gcd of two univariate integer polynomials (lists, highest degree first), up to sign and
+    content -- for callers that only count its roots. None when FLINT is not in use."""
+    if _ctx is None or not a or not b:
+        return None
+    g = _flint.fmpz_poly([int(x) for x in a[::-1]]).gcd(_flint.fmpz_poly([int(x) for x in b[::-1]]))
+    return [int(x) for x in g.coeffs()[::-1]]

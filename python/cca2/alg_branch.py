@@ -121,7 +121,9 @@ def algBranch(P, X, b, opts=None, wantInfo=False):
     big = max(abs(c) for c in P.values()) >= 2 ** 53
 
     if not wantInfo and nz <= 3:
-        return [_fibreLow(lay, float(p[0]), float(p[1]), b, imagTol, degTol, nz, big) for p in X]
+        layF = [[(i, j, float(co)) for i, j, co in terms] for terms in lay]
+        return [_fibreLow(lay, float(p[0]), float(p[1]), b, imagTol, degTol, nz, big, layF, nx, ny)
+                for p in X]
 
     z = []
     allReal = []
@@ -164,13 +166,32 @@ def algBranch(P, X, b, opts=None, wantInfo=False):
     return z
 
 
-def _fibreLow(lay, x, y, b, imagTol, degTol, nz, big):
-    """The fibre is at most quadratic in z: closed form, one point."""
-    ca = _absFibre(lay, x, y) + [0.0] * (3 - nz)
+def _fibreLow(lay, x, y, b, imagTol, degTol, nz, big, layF, nx, ny):
+    """The fibre is at most quadratic in z: closed form, one point.
+
+    The powers x**i, y**j (and of |x|, |y|) are computed once per point and each term is the same
+    product, in the same order, as _fibreDouble / _absFibre form it: bit-identical, fewer pow calls."""
+    xp = [x ** i for i in range(nx)]
+    yp = [y ** j for j in range(ny)]
+    ax = abs(x)
+    ay = abs(y)
+    axp = [ax ** i for i in range(nx)]
+    ayp = [ay ** j for j in range(ny)]
+    ca = [sum(abs(co) * axp[i] * ayp[j] for i, j, co in terms) for terms in layF] + [0.0] * (3 - nz)
     if big:
         c, isZero = _fibreExact(lay, x, y)
     else:
-        c, isZero, _ = _fibreDouble(lay, x, y, degTol)
+        c = []
+        isZero = []
+        for terms in layF:
+            v = 0.0
+            a = 0.0
+            for i, j, co in terms:
+                t = co * xp[i] * yp[j]
+                v += t
+                a += abs(t)
+            c.append(v)
+            isZero.append(abs(v) <= degTol * a)
     c = c + [0.0] * (3 - nz)
     isZero = isZero + [True] * (3 - nz)
     lead = 3 if not isZero[2] else (2 if not isZero[1] else 0)

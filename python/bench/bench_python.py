@@ -9,18 +9,25 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, '..'))
 from cca2 import CCA2Error  # noqa: E402
-from cca2 import alg_row_fails, conic_meet  # noqa: E402
+from cca2 import alg_row_fails, conic_meet, rat_q  # noqa: E402
 from cca2.biconj_q import biconjQ  # noqa: E402
 from cca2.conj_q import conjQ  # noqa: E402
 from cca2.qua_pol import QuaPol  # noqa: E402
 
 
 def coldPythonOnlyMemos():
-    """Empty the memos that MATLAB does NOT have (conicMeet's pair memo, the surd-corner memo)
-    before every timed call, so a repetition is not faster than MATLAB's for that reason alone.
-    algRowFails' other memos mirror MATLAB's `persistent` ones and stay warm on both sides."""
+    """Empty the memos that MATLAB does NOT have before every timed call, so a repetition is not
+    faster than MATLAB's for that reason alone: conicMeet's pairs, the surd corners, the Sturm
+    chains and square-free parts, the boundary factors and their screen points, and the float
+    arrays of the row matrices. algRowFails' other memos mirror MATLAB's `persistent` ones and
+    stay warm on both sides."""
     conic_meet.clearMemo()
     alg_row_fails._memoSurdOf.clear()
+    alg_row_fails._memoFactorInts.clear()
+    alg_row_fails._memoCurvePts.clear()
+    alg_row_fails._arrMemo.clear()
+    rat_q._chainMemo.clear()
+    rat_q._sqfMemo.clear()
 
 
 def build(x):

@@ -23,6 +23,7 @@ from fractions import Fraction
 from math import gcd, floor, isfinite, inf
 import math
 
+from . import _poly
 from .errors import error, CCA2Error
 
 LIMIT = 2 ** 53
@@ -564,7 +565,7 @@ def polyGcd(a, b):
             return [1]
 
 
-def polySquarefree(p):
+def _polySquarefreeBuild(p):
     """The squarefree part of p (same roots, each simple)."""
     p = polyTrim(p)
     if len(p) <= 2:
@@ -578,8 +579,23 @@ def polySquarefree(p):
     return polyTrim(q)
 
 
-def sturmChain(p):
-    """A Sturm chain of the squarefree part of p.
+_sqfMemo = {}
+
+
+def polySquarefree(p):
+    """The squarefree part of p (same roots, each simple); memoised (a pure function of p)."""
+    key = tuple(p)
+    r = _sqfMemo.get(key)
+    if r is None:
+        r = _polySquarefreeBuild(p)
+        if len(_sqfMemo) > 20000:
+            _sqfMemo.clear()
+        _sqfMemo[key] = r
+    return list(r)
+
+
+def _sturmChainBuild(p):
+    """A Sturm chain of the squarefree part of p (built; see sturmChain for the memo).
 
     PORT NOTE: MATLAB scales the pseudo-remainder by lc(b)^(gap+1) WITH its sign, so a negative
     leading coefficient with an even degree gap flips the remainder's sign and breaks the Sturm
@@ -603,6 +619,27 @@ def sturmChain(p):
     return chain
 
 
+_chainMemo = {}
+
+
+def _sturmChainShared(p):
+    """sturmChain(p) from a memo, as the SHARED object: callers must not mutate it. The chain is
+    a pure function of p, and the bridge witness asks for the same p thousands of times."""
+    key = tuple(p)
+    c = _chainMemo.get(key)
+    if c is None:
+        c = _sturmChainBuild(p)
+        if len(_chainMemo) > 20000:
+            _chainMemo.clear()
+        _chainMemo[key] = c
+    return c
+
+
+def sturmChain(p):
+    """A Sturm chain of the squarefree part of p (a fresh copy; memoised underneath)."""
+    return [list(c) for c in _sturmChainShared(p)]
+
+
 def _signAtInf(c, x):
     """Sign of the polynomial c (highest first) at x = +inf or -inf."""
     if not c:
@@ -614,14 +651,41 @@ def _signAtInf(c, x):
 
 
 def sturmV(chain, x):
-    """Number of sign variations of the chain at x (zeros skipped). x: int, Fraction or +-inf."""
+    """Number of sign variations of the chain at x (zeros skipped). x: int, Fraction or +-inf.
+
+    At a Fraction n/d (d > 0) the sign of c(n/d) is the sign of the integer
+    sum c_i n^(k-i) d^i, so no Fraction is ever built (exact, and the same signs)."""
+    if isinstance(x, float):
+        if not isfinite(x):
+            return _variations(_signAtInf(c, x) for c in chain)
+        x = Fraction(x)
+    if isinstance(x, Fraction):
+        n = x.numerator
+        d = x.denominator
+        if d != 1:
+            k = max(len(c) for c in chain)
+            dp = [1] * k
+            for i in range(1, k):
+                dp[i] = dp[i - 1] * d
+            return _variations(_signHom(c, n, dp) for c in chain)
+        x = n
+    return _variations(sign(polyval(c, x)) for c in chain)
+
+
+def _signHom(c, n, dp):
+    """sign of c(n/d) for d > 0, dp[i] = d^i: the homogeneous Horner sum in integers."""
+    if not c:
+        return 0
+    v = c[0]
+    for i in range(1, len(c)):
+        v = v * n + c[i] * dp[i]
+    return (v > 0) - (v < 0)
+
+
+def _variations(signs):
     v = 0
     last = 0
-    for c in chain:
-        if isinstance(x, float) and not isfinite(x):
-            s = _signAtInf(c, x)
-        else:
-            s = sign(polyval(c, x))
+    for s in signs:
         if s == 0:
             continue
         if last != 0 and s != last:
@@ -645,7 +709,7 @@ def toFrac(x):
 
 def countRootsIn(p, a, b):
     """Number of distinct real roots of p in the half-open interval (a, b]. Exact."""
-    chain = sturmChain(p)
+    chain = _sturmChainShared(polyTrim(p))
     if len(chain[0]) <= 1:
         return 0
     return sturmV(chain, toFrac(a)) - sturmV(chain, toFrac(b))
@@ -679,7 +743,7 @@ def isolateRoots(p):
         return []
     # MATLAB: M = ceil(1 + max(abs(p(2:end)))/abs(p(1))) -- the Cauchy bound
     M = 1 + -(-max(abs(x) for x in p[1:]) // abs(p[0]))
-    chain = sturmChain(p)
+    chain = _sturmChainShared(p)
     lo = Fraction(-M)
     hi = Fraction(M)
     I = _bisect(chain, lo, hi, sturmV(chain, lo) - sturmV(chain, hi), 0)
@@ -690,19 +754,29 @@ isolateRootsBig = isolateRoots
 
 
 def signAt(q, p, iv):
-    """The sign of q at the root of p isolated by iv = (lo, hi]. Exact."""
+    """The sign of q at the root of p isolated by iv = (lo, hi]. Exact.
+
+    Both Sturm chains are built once (from the memo), not once per bisection step."""
     p = polySquarefree(polyTrim(p))
     q = polyTrim(q)
     if not q:
         return 0
     lo = toFrac(iv[0])
     hi = toFrac(iv[1])
-    g = polyGcd(p, q)
+    g = _poly.gcdUni(p, q)                     # only its roots matter: sign and content are moot
+    if g is None:
+        g = polyGcd(p, q)
     if len(g) > 1 and countRootsIn(g, lo, hi) > 0:
         return 0                               # alpha is a common root: q(alpha) = 0 exactly
-    chainP = sturmChain(p)
+    chainP = _sturmChainShared(p)
+    chainQ = _sturmChainShared(q)
+    qConst = len(chainQ[0]) <= 1
+    # the variation counts at an endpoint that survives a step are carried, not recomputed
+    vQlo = 0 if qConst else sturmV(chainQ, lo)
+    vQhi = 0 if qConst else sturmV(chainQ, hi)
+    vPlo = sturmV(chainP, lo)
     for _ in range(400):
-        if countRootsIn(q, lo, hi) == 0:
+        if qConst or vQlo - vQhi == 0:
             v = polyval(q, (lo + hi) / 2)
             if v != 0:
                 return sign(v)
@@ -711,10 +785,15 @@ def signAt(q, p, iv):
                 return sign(v)
             return sign(polyval(q, lo))
         mid = (lo + hi) / 2
-        if sturmV(chainP, lo) - sturmV(chainP, mid) == 1:
+        vPmid = sturmV(chainP, mid)
+        vQmid = sturmV(chainQ, mid)
+        if vPlo - vPmid == 1:
             hi = mid
+            vQhi = vQmid
         else:
             lo = mid
+            vPlo = vPmid
+            vQlo = vQmid
     error('ratQ:signAtNoConverge',
           'bisection did not separate the root from q\'s zeros. The root and a zero of q are '
           'then closer than a dyadic rational of that depth, which for exact integer input '
@@ -1113,6 +1192,34 @@ def pairLineEvalM(c, b, X):
         t = _sortedRealRoots2(info['quad'])[b - 1]
     return ([(p[1] - p0[1]) - t * (p[0] - p0[0]) for p in X],
             [abs(p[1]) + abs(p0[1]) + abs(t) * (abs(p[0]) + abs(p0[0])) for p in X])
+
+
+def pairLineEvalMArr(c, b, x, y):
+    """pairLineEvalM at the points (x[i], y[i]) of two numpy arrays: the same double operations in
+    the same order, elementwise (the integer data are converted exactly as Python's int * float
+    does), so every value and magnitude is the one the list version gives."""
+    import numpy as np
+    key = tuple(c[0:6])
+    info = _pairLineMemo.get(key)
+    if info is None:
+        info = pairLineData(c)
+        if len(_pairLineMemo) > 20000:
+            _pairLineMemo.clear()
+        _pairLineMemo[key] = info
+    if info['kind'] == 'parallel':
+        r = _sortedRealRoots2(info['quad'])[b - 1]
+        f1, f2 = (float(t) for t in info['form'])
+        return (f1 * x + f2 * y - r,
+                np.abs(f1 * x) + np.abs(f2 * y) + abs(r))
+    p0 = (info['apex'][0] / info['apex'][2], info['apex'][1] / info['apex'][2])
+    if info['vertical'] and b == 2:
+        return x - p0[0], np.abs(x) + abs(p0[0])
+    if info['vertical']:
+        t = -info['quad'][1] / info['quad'][0]
+    else:
+        t = _sortedRealRoots2(info['quad'])[b - 1]
+    return ((y - p0[1]) - t * (x - p0[0]),
+            np.abs(y) + abs(p0[1]) + abs(t) * (np.abs(x) + abs(p0[0])))
 
 
 def pairLineEval(c, b, X):

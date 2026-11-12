@@ -26,30 +26,30 @@ def cellSamplePoint(C, rows, H, R, dense=False):
     V = sorted(V, key=lambda v: math.atan2(v[1] - c0[1], v[0] - c0[0]))
     for n in (12, 48, 192):
         # MATLAB: [I, J] = meshgrid(0:n, 0:n); keep = I + J < n & I > 0 & J > 0 (column-major)
-        B = [(i / n, j / n) for i in range(n + 1) for j in range(n + 1)
-             if i + j < n and i > 0 and j > 0]
-        Q = []
+        bi, bj = _barycentric(n)
+        qx = []
+        qy = []
         for e in range(len(V)):
             a = V[e]
             b = V[(e + 1) % len(V)]
-            for bi, bj in B:
-                Q.append([c0[0] + bi * (a[0] - c0[0]) + bj * (b[0] - c0[0]),
-                          c0[1] + bi * (a[1] - c0[1]) + bj * (b[1] - c0[1])])
-        s = _slack(C, rows, Q)
-        anyPos = any(v > 0 for v in s)
+            # the same expression, elementwise: c0 + bi*(a - c0) + bj*(b - c0)
+            qx.append(c0[0] + bi * (a[0] - c0[0]) + bj * (b[0] - c0[0]))
+            qy.append(c0[1] + bi * (a[1] - c0[1]) + bj * (b[1] - c0[1]))
+        Q = np.column_stack((np.concatenate(qx), np.concatenate(qy)))
+        s = _slackArr(C, rows, Q[:, 0], Q[:, 1])
+        pos = s > 0
+        anyPos = bool(pos.any())
         if dense and n < 192 and (n < 48 or not anyPos):
             if anyPos and not ok:
-                i = s.index(max(s))
-                pt = Q[i]
+                pt = Q[int(np.argmax(s))].tolist()
                 ok = True
-            P += [q for q, v in zip(Q, s) if v > 0]
+            P += Q[pos].tolist()
             continue
         if anyPos or ok:
             if not ok:
-                i = s.index(max(s))
-                pt = Q[i]
+                pt = Q[int(np.argmax(s))].tolist()
                 ok = True
-            P += [q for q, v in zip(Q, s) if v > 0]
+            P += Q[pos].tolist()
             cap = 4000 if dense else 400
             if len(P) > cap:
                 idx = [roundHalfAway(t) for t in linspace(1, len(P), cap)]
@@ -58,7 +58,28 @@ def cellSamplePoint(C, rows, H, R, dense=False):
     return pt, ok, P
 
 
+_baryMemo = {}
+
+
+def _barycentric(n):
+    """(i/n, j/n) for i, j = 1..n-1 with i + j < n, i outer and j inner (as the list version)."""
+    B = _baryMemo.get(n)
+    if B is None:
+        ij = [(i, j) for i in range(n + 1) for j in range(n + 1) if i + j < n and i > 0 and j > 0]
+        B = (np.array([i / n for i, _ in ij]), np.array([j / n for _, j in ij]))
+        _baryMemo[n] = B
+    return B
+
+
 def _slack(C, rows, X):
+    """_slackArr on a list of points, as a list (kept for callers that hold lists)."""
+    if len(X) == 0:
+        return []
+    A = np.asarray(X, dtype=float)
+    return _slackArr(C, rows, A[:, 0], A[:, 1]).tolist()
+
+
+def _slackArr(C, rows, x, y):
     """min over the rows of side * value / scale, at every point (vectorised; the same
     arithmetic, in the same order, as MATLAB's).
 
@@ -66,22 +87,15 @@ def _slack(C, rows, X):
     value clears 32 eps times the sum of its terms' magnitudes; below that it contributes a slack
     of 0. Otherwise a sample lying exactly ON a line can "strictly" satisfy two rows that
     contradict each other there, and a zero-width cell is kept (cellSamplePoint.m, 2026-11-11)."""
-    if not X:
-        return []
-    A = np.asarray(X, dtype=float)
-    x = A[:, 0]
-    y = A[:, 1]
     nx = np.maximum(1.0, np.sqrt(x * x + y * y))
-    s = np.full(len(X), np.inf)
+    s = np.full(len(x), np.inf)
     eps32 = 32 * 2.0 ** -52
     for r in rows:
         c = C[r[0] - 1][0:6]
         br = C[r[0] - 1][6]
         sd = r[1]
         if br != 0:
-            v, m = rat_q.pairLineEvalM(c, br, X)
-            v = np.asarray(v, dtype=float)
-            m = np.asarray(m, dtype=float)
+            v, m = rat_q.pairLineEvalMArr(c, br, x, y)
             sc = nx
         else:
             v = c[0] * (x * x) + c[1] * (x * y) + c[2] * (y * y) + c[3] * x + c[4] * y + c[5]
@@ -91,7 +105,7 @@ def _slack(C, rows, X):
         w = sd * v
         w = np.where((w > 0) & (w <= eps32 * m), 0.0, w)
         s = np.minimum(s, w / sc)
-    return s.tolist()
+    return s
 
 
 def _polygonVertices(H, R):

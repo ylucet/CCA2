@@ -21,12 +21,14 @@ without them the port could not prove what MATLAB proves there (334 faces agains
 """
 import math
 
+import numpy as np
+
 from . import _poly
 from . import biv
 from . import rat_q
 from .errors import CCA2Error
 from .numeric import roots
-from .poly_sign_on import polySignOn
+from .poly_sign_on import polySignOn, _boxSign
 from .rat_q import sign
 
 EPS = 2.0 ** -52
@@ -234,8 +236,22 @@ def _boxRec(rows, b, inBox, depth, sq):
 
 
 def _signM(M, b):
-    v = polySignOn(M, b, _ALWAYS, 0)
-    return 0 if v is None else v
+    """polySignOn(M, b, _ALWAYS, 0) -- at depth 0 with every box in the region that is exactly
+    the one-box Bernstein test. The row matrices are built once and never changed, so M's float
+    array is converted once and kept (by identity, holding M so its id cannot be reused): this is
+    called millions of times on a few hundred distinct matrices."""
+    e = _arrMemo.get(id(M))
+    if e is None or e[0] is not M:
+        a = np.array(M, dtype=float)
+        if len(_arrMemo) > 200000:
+            _arrMemo.clear()
+        _arrMemo[id(M)] = (M, a)
+    else:
+        a = e[1]
+    return _boxSign(a, b)
+
+
+_arrMemo = {}
 
 
 def _polySign(P, b):
@@ -1092,7 +1108,7 @@ def _relSign(S, O):
 
 
 # ---- dividing out the region's own boundary --------------------------------------------------------
-def _factorInts(g):
+def _factorIntsBuild(g):
     g = _toIntegers(g)
     if g is None or biv.isConst(g):
         return None
@@ -1100,6 +1116,28 @@ def _factorInts(g):
     if biv.isConst(g):
         return None
     return g
+
+
+_memoFactorInts = {}
+
+
+def _factorInts(g):
+    """_factorIntsBuild, remembered per factor (a pure function of its value; the same region
+    boundaries are divided out of thousands of rows). A fresh copy is returned."""
+    try:
+        key = tuple(tuple(r) for r in g)
+        hit = _memoFactorInts.get(key, _MISS)
+    except TypeError:
+        return _factorIntsBuild(g)
+    if hit is _MISS:
+        hit = _factorIntsBuild(g)
+        if len(_memoFactorInts) > 20000:
+            _memoFactorInts.clear()
+        _memoFactorInts[key] = hit
+    return None if hit is None else [list(r) for r in hit]
+
+
+_MISS = object()
 
 
 def _divideOut(S, factors):
@@ -1162,11 +1200,50 @@ def _mayDivide(S, g):
     clearly does not, so an exact division is not attempted.)"""
     if not any(x != 0 for i, r in enumerate(S) for j, x in enumerate(r) if (i, j) != (0, 0)):
         return S[0][0] == 0                         # a constant: only 0 has a non-constant divisor
+    tr, pts = _curvePoints(g)
+    if pts is None:
+        return True
+    if tr:
+        S = biv.transpose(S)
+    for x, ys in pts:
+        for y in ys:
+            v, m = _evalTerms(S, [x, y])
+            if abs(v) > 1e-6 * max(m, REALMIN):
+                return False
+    return True
+
+
+_memoCurvePts = {}
+
+
+def _curvePoints(g):
+    """The screen's points on g = 0, which depend on g alone: (transposed?, [(x, [y roots])]),
+    or (transposed?, None) when g has neither variable to solve for. Remembered per g; the roots
+    are the ones `roots` returns, so the screen is bit-identical to computing them each time."""
+    key = tuple(tuple(r) for r in g)
+    hit = _memoCurvePts.get(key)
+    if hit is not None:
+        return hit
+    tr = False
     if len(g[0]) < 2:                               # g has no y: solve for x instead
         g = biv.transpose(g)
-        S = biv.transpose(S)
+        tr = True
     if len(g[0]) < 2:
-        return True
+        hit = (tr, None)
+    else:
+        pts = []
+        for x in (0.6180339887, -1.3247179572, 2.7182818285):
+            cy = [sum(g[i][j] * x ** i for i in range(len(g))) for j in range(len(g[0]))]
+            while cy and cy[-1] == 0:
+                cy.pop()
+            if len(cy) < 2:
+                continue
+            pts.append((x, roots(cy[::-1])))
+        hit = (tr, pts)
+    if len(_memoCurvePts) > 20000:
+        _memoCurvePts.clear()
+    _memoCurvePts[key] = hit
+    return hit
     for x in (0.6180339887, -1.3247179572, 2.7182818285):
         cy = [sum(g[i][j] * x ** i for i in range(len(g))) for j in range(len(g[0]))]
         while cy and cy[-1] == 0:
