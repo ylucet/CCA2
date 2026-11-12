@@ -1,7 +1,7 @@
 # MATLAB vs Python: speed of the exact engine (2026-11-11)
 
-**Latest: the last section** ("After the conjQ speed-up"). The first table below is Python without
-the accelerators, before the kink fix; "Rerun with accelerators" is the step in between.
+**Latest: the last section** ("After the AlgCrv speed-up"). The first table below is Python
+without the accelerators, before the kink fix; the sections after it are the steps in between.
 
 **Read with care.** One machine (Frances, 64 cores), shared: another user was logged in and the
 load average was 0.8-2.9 during the run. MATLAB and Python ran CONCURRENTLY, each on one thread.
@@ -198,3 +198,57 @@ Python 18 / 19 -- so the "best" columns are not carried by warm memos.
   routines carry `biconjQ` returning a QuaCon: 0.08 s vs 0.14 s.
 - The kink also gained (182 -> 114 s), since its arrangement uses the same cell tests.
 - **Total over all 200: MATLAB 1149 s, Python 372 s** (3.1x).
+
+## After the AlgCrv speed-up (2026-11-11, 22:13-22:34)
+
+Code at 6a73234: exact root signs build each Sturm chain once (memoised; integer evaluation at
+dyadic points; FLINT gcd for the common-root test), cell sampling is numpy end to end, the
+quadratic fibre computes its powers once per point, and algRowFails remembers each boundary
+factor's integer form and screen points and each row matrix's float array. Every change was checked
+bit-for-bit (or exactly) against the code before it; the golden tests (kink: 317 faces, face for face)
+pass. `bench_python.py` empties ALL the Python-only memos before every timed call. Same protocol:
+two passes per engine, four concurrent processes on the shared machine (load 2.2-4.7), best over
+both passes; all 200 returned without error on both sides. Raw: `bench/run4/`.
+
+| bucket | call | result | fixtures | MATLAB total (s) | Python total (s) | Python/MATLAB total | median ratio | ratio range |
+|---|---|---|---|---|---|---|---|---|
+| fast | biconjQ | AlgCrv | 5 | 76.277 | 8.311 | 0.11 | 0.16 | 0.09 - 1.11 |
+| fast | biconjQ | QuaCon | 41 | 0.133 | 0.083 | 0.62 | 0.63 | 0.12 - 0.80 |
+| fast | conjQ | QuaCon | 140 | 9.940 | 2.700 | 0.27 | 0.51 | 0.01 - 0.83 |
+| slow | biconjQ | AlgCrv | 2 | 486.264 | 56.974 | 0.12 | 0.13 | 0.11 - 0.16 |
+| slow | biconjQ | EnvelopeMin | 1 | 562.384 | 44.569 | 0.08 | 0.08 | 0.08 - 0.08 |
+| slow | conjQ | QuaCon | 11 | 0.028 | 0.020 | 0.70 | 0.62 | 0.52 - 0.81 |
+
+Slowest fixtures (best time, seconds):
+| id | source | call | result | MATLAB | Python | ratio | reps M/P |
+|---|---|---|---|---|---|---|---|
+| 191 | slow_erratumBiconjEx2Test | biconjQ | EnvelopeMin | 562.38 | 44.57 | 0.08 | 2/2 |
+| 196 | slow_kinkSubdivisionTest | biconjQ | AlgCrv | 412.22 | 45.12 | 0.11 | 2/2 |
+| 200 | slow_minSubdivisionTest | biconjQ | AlgCrv | 74.04 | 11.85 | 0.16 | 2/8 |
+| 177 | biconj | biconjQ | AlgCrv | 35.64 | 3.15 | 0.09 | 2/8 |
+| 174 | biconj | biconjQ | AlgCrv | 20.43 | 3.20 | 0.16 | 2/8 |
+| 165 | biconj | biconjQ | AlgCrv | 20.10 | 1.84 | 0.09 | 2/8 |
+| 170 | biconj | conjQ | QuaCon | 3.46 | 0.57 | 0.17 | 8/8 |
+| 91 | conj | conjQ | QuaCon | 1.39 | 0.35 | 0.25 | 8/8 |
+| 98 | conj | conjQ | QuaCon | 1.08 | 0.36 | 0.33 | 8/8 |
+| 35 | conj | conjQ | QuaCon | 0.98 | 0.30 | 0.31 | 8/8 |
+| 80 | conj | conjQ | QuaCon | 0.43 | 0.12 | 0.29 | 8/8 |
+| 84 | conj | conjQ | QuaCon | 0.42 | 0.11 | 0.26 | 8/8 |
+
+Totals over the 200 fixtures both engines finished (best times): MATLAB 1135 s, Python 113 s.
+
+Spread worst/best over repetitions (fixtures above 1 ms): MATLAB median 1.36 max 19.08; Python median 1.06 max 2.06.
+
+First calls (s, pass 1 / pass 2) -- Python now repeats fixtures 165, 174, 177 and 200 (first call under
+20 s) while MATLAB does not, so these are the like-for-like numbers: Example 2 MATLAB 562 / 573,
+Python 44.6 / 44.7; kink MATLAB 412 / 420, Python 45.1 / 45.5; min-subdivision MATLAB 75 / 74, Python
+12.3 / 12.4; fixture 177 MATLAB 35.6 / 38.5, Python 3.3 / 3.3; 174 MATLAB 20.4 / 20.4, Python 3.3 / 3.3;
+165 MATLAB 21.4 / 20.1, Python 2.3 / 2.3.
+
+**Reading.**
+- **Algebraic answers are now 6-13x faster in Python**: Example 2 45 s vs 562 s, kink 45 s vs 412 s,
+  min-subdivision 12 s vs 74 s, the fast AlgCrv fixtures 2-3 s vs 20-36 s. The two tiny AlgCrv
+  fixtures (183, 186: 0.06 s each) are a tie.
+- Rational answers unchanged from the previous section (conjQ 2.7 s vs 9.9 s).
+- **Total over all 200: MATLAB 1135 s, Python 113 s** (10x). Python's own path: 939 s (no
+  accelerators) -> 495 s (accelerators) -> 372 s (conjQ) -> 113 s (AlgCrv).
