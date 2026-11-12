@@ -1,41 +1,47 @@
 # Session Handoff
 
-_Last updated: 2026-11-05T18:53-07:00_
+_Last updated: 2026-11-12T(evening)-07:00_
 
 ## What happened this session
-The overnight branch was merged to main. Every biconj result is now an AlgCon (EnvelopeMin joined
-as a no-subdivision leaf). The bridge producer's 2^53 overflow refusals are gone: the
-witnessOverflow, branchOverflow and bigZContent refusals now finish in BigInteger (0 hits in 2220
-pairs), and polynomialOverflow was removed after Psi got a BigInteger path. Large data (entries
-1e3..1e6) now builds faces that match the definition to <= 2.3e-13. DECISIONS 2026-11-05 (third) to (fifth).
+The Python port of the exact conj/biconj engine (`python/`, overnight/2026-11-10) was merged to
+main, the kink face-count mismatch was fixed (334 -> 317 faces, now identical to MATLAB), and the
+Python engine was sped up in four rounds, each bit-identical to the code before it (differential
+tests against the previous module plus the golden tests):
+1. Optional accelerators: python-flint (square-free parts, univariate gcd) and numba (Bernstein test).
+2. conjQ path: batched margin LP, conicMeet pair memo, vectorised interior probe.
+3. AlgCrv path: Sturm chains built once, vectorised cell sampling, memoised factor screens.
+4. EnvelopeMin path (erratum Example 2): integer exact fibres, integer dyadic bisection in signAt,
+   vectorised surd-corner search.
+
+Benchmark (python/bench/RESULTS.md, last section; best of 2 passes, MATLAB `-singleCompThread` and
+Python run concurrently on a SHARED machine -- ratios, not absolute claims):
+- all 200 fixtures: Python 89 s vs MATLAB 1126 s (Python's own path: 939 -> 495 -> 372 -> 113 -> 89 s)
+- Example 2 (EnvelopeMin) 27 s vs 566 s; kink AlgCrv 42 s vs 413 s; min-subdivision 10.5 s vs 73 s
+- conjQ: 2.7 s vs 10.0 s
 
 ## Where things stand
-- Branch: `main` @ `ccf7282` -- "handoff: polynomialOverflow at large data fixed"
-  (work commit 5b99d37, before that 973efcf)
-- Pushed: no (main is ahead of origin/main; never pushed this session)
-- Tests: fast 831/0, normal 35/0, slow 128/0 (+2 known-incomplete), verylong Ex2Subdivision 3/0, guards 33/0
+- Branch: `main` @ handoff commit after `8fd2b36` ("bench: rerun after the EnvelopeMin speed-up")
+- Pushed: yes, at the end of this session (on request)
+- Tests: Python fast 2733 passed / 1 skipped (~20 s, with and without FLINT/numba), Python slow
+  23/0 (~48 s). MATLAB last run: fast 833/0, normal 35/0, 8 exact slow suites green (2026-11-11).
 - Known reds: none. Blocked: nothing.
+- Running Python: `cd python && PYTHONPATH=.pydeps python3 -m pytest -q -n 32` (python-flint 0.9.0
+  lives in python/.pydeps; numba 0.62.1 in ~/.local). Both are optional; results are identical without.
+- Untracked and deliberately left alone: `RUST_PORT.md` (not created by Claude), `test.txt`.
 
-## Next steps (proposed to the user, in this order; not yet chosen)
-1. Test oracle: `tieMax`/`tiePoints` in bridgeFaceAlgTest.m sweep s1 in [-25,25] and keep |S| < 1e4,
-   so they miss ties centred at |c0| ~ 1e3 (7 false disagreements at large data). Scale the window to
-   the tie centre and size. A data-scaled version (`tieMaxW`) is in the scratch probe
-   (scratchpad po/or/pocheck.m, may be gone).
-2. Release/paper: state the MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
-3. Example 2 is an EnvelopeMin by default (overlay budget 3000); a full subdivision takes ~hours. Decide
-   whether a faster subdivision is worth the effort.
-4. Low value: two zero-area faces in the c = -2 AlgCrv; "two bridge faces owning one cell" refusal
-   (never observed); the legacy 'cplq' engine's issues (parked).
-- Still open but by design: bridgeFaceAlg:noWitness (the tie has no usable rational point).
-- Decided: leave Example 2 pair 2's non-winning faces.
+## Next steps (not yet chosen)
+1. Python profile on Example 2 is now flat (largest item: numpy slack evaluation in cell sampling,
+   ~12%); further speed-ups would be small. Stop here unless a new workload appears.
+2. Test oracle: `tieMax`/`tiePoints` in bridgeFaceAlgTest.m should scale their sweep window to the
+   tie centre (7 false disagreements at large data).
+3. Release/paper: state the MATLAB + Symbolic Math Toolbox dependency (and now the Python port);
+   cite `convexdb` by its Zenodo DOI.
+4. Example 2 with `overlayBudget=Inf` (full subdivision) -- now worth re-timing in Python.
 
 ## Relevant files
-- `bridgeFaceAlg.m` -- implicitPoly -> implicitPolyDouble / implicitPolyBig, discBigRaw, bigTail
-  (big z-content division), imageConic overflow -> row omitted, isSingular
-- `bridgePhi.m` -- 'big' mode: Phi big form; U and det(M_mu) as bigZ when past 2^53
-- `bridgeWitness.m` -- memberExact / memberExactArcBig (BigInteger Sturm), detNonzero
-- `ratQ.m` -- countRootsInHalfOpenBig, isolateRootsBig, signAtBig, bigGcdRow, bigDivLinear; bigRow reads bigZ
-- `bridgeFaceAlgTest.m` -- theFormerOVERFLOWRefusalsNowBuildTheFace, aWITNESSQuartic...,
-  LARGEDataBuildsTheFaceWherePsiItselfPasses2to53; oracle helpers at the bottom (tieMax etc.)
-- `guardExerciseTest.m` -- guard inventory (remainder list)
-- `DECISIONS.md` 2026-11-05 (third)-(fifth); `SUPPORT_MATRIX.md` 3.2; `TODO.md` 'Open now'
+- `python/cca2/rat_q.py` -- Sturm chain memo, dyadic signAt, square-free memo; `_poly.py` FLINT facade
+- `python/cca2/alg_row_fails.py`, `alg_branch.py`, `cell_sample_point.py`, `conic_meet.py`,
+  `cell_interior.py`, `cell_has_interior.py`, `poly_sign_on.py` -- the speed-ups
+- `python/bench/` -- bench_matlab.m, bench_python.py (clears Python-only memos per call), compare.py,
+  RESULTS.md, run2..run5 raw data
+- `TODO.md` 'Next up -- 2026-11-10'; `MORNING.md`; `DECISIONS.md` 2026-11-11
