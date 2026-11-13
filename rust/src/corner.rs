@@ -8,7 +8,7 @@ use crate::isolated_root_sign::isolated_root_sign;
 use crate::poly_n::{self as pn, PolyN};
 use crate::rat_q::*;
 use num_integer::Integer;
-use num_traits::{One, Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, Zero};
 use std::rc::Rc;
 
 pub fn corner_face_alg(n: &[Z], d: &Z, p: &[Vec<Z>], tie: &[Z], side: i64) -> R<Vec<BFace>> {
@@ -394,6 +394,3 @@ fn short_between(a: &Q, b: &Q) -> Q {
     (a + b) / qi(2)
 }
 
-pub fn _unused() -> Option<i64> {
-    zi(0).to_i64()
-}

@@ -12,7 +12,7 @@ use crate::cells::{cell_sample_point, side_i};
 use crate::conic_meet::solve2f;
 use crate::envelope::{envelope_rational_corners, BFace, Env, FaceKind, PairData, QuadC};
 use crate::envelope_subdivision::{add_key, chebyshev, eval_curve, straight_h};
-use crate::errors::{CErr, R};
+use crate::errors::R;
 use crate::numeric::{linspace, round_half_away};
 use crate::poly_n::PolyN;
 use crate::rat_q::*;
@@ -170,9 +170,6 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
         if irr.len() > 1 {
             irr = drop_below(irr, &c, rows, &pw, &env.quad, &quad_app)?;
         }
-        if irr.len() > 1 {
-            let _ = dominant_irrational(&irr, &c, rows, pt, &env.quad, &quad_app)?;
-        }
         let sub = winner_faces(&env.quad, &quad_app, &irr, rows, &c, &pw, &rows_out)?;
         for s in sub {
             subdivision.push(s);
@@ -313,8 +310,10 @@ fn alg_empty(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], alg_rows: &[AlgRow]
     Ok(false)
 }
 
+type RowFailsKey = (Vec<(Vec<Z>, i64)>, Vec<Vec<Z>>, Vec<(Vec<(Vec<u32>, Z)>, Vec<Z>, Z, i64, i64)>);
+
 thread_local! {
-    static ROW_FAILS_CACHE: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
+    static ROW_FAILS_CACHE: RefCell<HashMap<RowFailsKey, bool>> = RefCell::new(HashMap::new());
 }
 
 pub fn clear_memos() {
@@ -327,7 +326,7 @@ fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<
     let mut k2: Vec<Vec<Z>> = con_rows.to_vec();
     k2.sort();
     let k3: Vec<(Vec<(Vec<u32>, Z)>, Vec<Z>, Z, i64, i64)> = a.iter().map(|x| (x.fp.iter().map(|(e, c)| (e.clone(), c.clone())).collect(), x.num.clone(), x.den.clone(), x.fb, x.side)).collect();
-    let key = format!("{:?}|{:?}|{:?}", k1, k2, k3);
+    let key: RowFailsKey = (k1, k2, k3);
     if let Some(v) = ROW_FAILS_CACHE.with(|m| m.borrow().get(&key).cloned()) {
         return Ok(v);
     }
@@ -631,29 +630,6 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
         }
     }
     Ok(irr.into_iter().zip(keep).filter(|(_, k)| *k).map(|(f, _)| f).collect())
-}
-
-fn dominant_irrational(irr: &[Irr], c: &[Vec<Z>], rows: &Rows, pt: [f64; 2], quad: &[QuadC], quad_app: &[usize]) -> R<bool> {
-    let (_, ok_s, mut p) = cell_sample_point(c, rows, &straight_h(c, rows), 1e3, false)?;
-    if !ok_s {
-        p = vec![pt];
-    }
-    let mut q = vec![f64::NEG_INFINITY; p.len()];
-    for &j in quad_app {
-        for (t, x) in p.iter().enumerate() {
-            q[t] = q[t].max(eval_face(&quad[j - 1].num, &quad[j - 1].den, x[0], x[1]));
-        }
-    }
-    let mut above = vec![0; p.len()];
-    for f in irr {
-        let v = alg_branch(&f.fp, &p, f.fb)?;
-        for t in 0..p.len() {
-            if v[t].is_finite() && v[t] > q[t] + 1e-12 * 1f64.max(q[t].abs()) {
-                above[t] += 1;
-            }
-        }
-    }
-    Ok(!above.iter().any(|a| *a > 1))
 }
 
 fn combine_pairs(envs: &[Env]) -> R<Env> {
@@ -1312,4 +1288,3 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
     Ok(out)
 }
 
-pub fn _unused(_: CErr) {}

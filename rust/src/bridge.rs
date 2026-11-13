@@ -759,7 +759,7 @@ pub fn fibre(fp: &PolyN, xn: &[Z], xd: &Z) -> Vec<Z> {
 fn dyadic(x: f64, floor: bool) -> Q {
     let s = 2f64.powi(20);
     let v = if floor { (x * s).floor() } else { (x * s).ceil() };
-    Q::new(Z::from(v as i128), Z::from(1i64 << 20))
+    q_from_f64(v) / Q::from_integer(Z::from(1i64 << 20))
 }
 
 fn psi_value(mu: f64, pr: &AlgPair, q1: f64, q2: f64, x: [f64; 2]) -> f64 {
@@ -806,7 +806,7 @@ fn branch_index(fp: &PolyN, pr: &AlgPair, q1: &Z, q2: &Z, xn: &[Z], xd: &Z) -> R
     }
     let pzf: Vec<f64> = pz.iter().map(to_f64).collect();
     let mut rr: Vec<f64> = roots(&pzf).into_iter().filter(|z| z.im.abs() <= 1e-10 * 1f64.max(cabs(*z))).map(|z| z.re).collect();
-    rr.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    rr.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let scale = 1f64.max(zstar.abs());
     let gap = rr.iter().map(|r| (r - zstar).abs()).fold(f64::INFINITY, f64::min);
     if gap > 1e-6 * scale {
@@ -1031,7 +1031,7 @@ fn candidate_params(pr: &RatPair) -> Vec<f64> {
             }
         }
     }
-    rts.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    rts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let mut t = if rts.is_empty() {
         vec![0.0, 1.0, -1.0]
     } else {
@@ -1088,11 +1088,13 @@ fn witness_rat(pr: &RatPair) -> R<[Z; 3]> {
         };
         for e in 0..31 {
             let xd = 2f64.powi(e);
-            let xn = [round_half_away(x[0] * xd), round_half_away(x[1] * xd)];
-            if (xn[0].abs() as f64) >= 2f64.powi(52) || (xn[1].abs() as f64) >= 2f64.powi(52) {
+            // the rounding in doubles (exact below 2^53), compared BEFORE any integer conversion, so
+            // a huge or non-finite candidate ends the search as Python's bigint test does
+            let xr = [crate::rat_q::round_half_away(x[0] * xd), crate::rat_q::round_half_away(x[1] * xd)];
+            if !(xr[0].abs() < 2f64.powi(52)) || !(xr[1].abs() < 2f64.powi(52)) {
                 break;
             }
-            let xnz = [Z::from(xn[0]), Z::from(xn[1])];
+            let xnz = [Z::from(xr[0] as i64), Z::from(xr[1] as i64)];
             let xdz = Z::from(1i64 << e);
             if !member_rat_at(pr, &xnz, &xdz) {
                 continue;

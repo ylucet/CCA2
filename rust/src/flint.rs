@@ -52,7 +52,8 @@ mod imp {
     }
 
     pub fn available() -> bool {
-        std::env::var("CCA2_FLINT").map(|v| v != "0").unwrap_or(true)
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var("CCA2_FLINT").map(|v| v != "0").unwrap_or(true))
     }
 
     fn boxed() -> Box<Buf> {

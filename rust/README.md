@@ -43,7 +43,7 @@ Same 200 fixtures and protocol as `python/bench` (MATLAB and Python not re-measu
 |---|---|---|
 | MATLAB | 1126 s | 1x |
 | Python (numba + FLINT) | 88.5 s | 12.7x |
-| Rust (single thread, FLINT) | 16.1 s | 70x (5.5x over Python) |
+| Rust (single thread, FLINT) | 15.7 s | 72x (5.7x over Python) |
 
 Shared machine; the runs were on different days under different load -- the ratios are indicative.
 

@@ -3,7 +3,7 @@
 
 use crate::bail;
 use crate::conic_meet::{conic_meet, solve2f};
-use crate::errors::{CErr, R};
+use crate::errors::R;
 use crate::numeric::{det3, linspace, round_half_away, solve3};
 use crate::probe_data::{PROBE_X, PROBE_Y};
 use crate::qua_con::QuaCon;
@@ -1261,4 +1261,3 @@ fn build_incidence(ecq: &[Vec<Z>], fc: &[Vec<FcRow>], vname: &[[usize; 3]]) -> (
     (e, f)
 }
 
-pub fn _unused(_: CErr) {}

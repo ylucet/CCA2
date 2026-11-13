@@ -357,7 +357,7 @@ fn tie_arc(i: usize, j: usize, forms: &[Form], d: &[[f64; 3]]) -> bool {
         if let Par::Rat { dn, .. } = &par {
             bp.extend(real_roots(dn));
         }
-        bp.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        bp.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         bp.dedup();
         let samp: Vec<f64> = if bp.is_empty() {
             vec![0.0]
@@ -818,7 +818,7 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
             }
             let w = [u[0] + dv[0], u[1] + dv[1]];
             let mut pr = [u, w];
-            pr.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            pr.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             let key = [pr[0][0], pr[0][1], pr[1][0], pr[1][1]];
             if edge_at.iter().any(|r| r.iter().zip(key.iter()).all(|(a, b)| (a - b).abs() < 1e-12)) {
                 continue;
@@ -1181,6 +1181,3 @@ fn conic_meet_double(c1: &[f64; 6], c2: &[f64; 6]) -> Vec<[f64; 2]> {
     s
 }
 
-pub fn _unused() -> bool {
-    Zero::is_zero(&zi(0))
-}

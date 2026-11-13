@@ -1,15 +1,15 @@
 //! alg_row_fails -- a CERTIFICATE that a set of algebraic rows cannot all hold anywhere in the
 //! part of a box that lies in a region (port of alg_row_fails.py). True is a proof; false means
-//! "not proved". Pure integer square-free parts (Yun), no FLINT.
+//! "not proved". Square-free parts by Yun, through FLINT when available (src/flint.rs).
 
 use crate::biv::{self, M2};
-use crate::errors::{CErr, R};
+use crate::errors::R;
 use crate::numeric::{roots, Cx, EPS};
 use crate::poly_n::PolyN;
 use crate::poly_sign_on::{box_sign, comb, FMat};
 use crate::rat_q::*;
 use num_integer::Integer;
-use num_traits::{One, Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, Zero};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -140,6 +140,7 @@ thread_local! {
     static MEMO_SURDFACE: RefCell<HashMap<(PolyN, bool), Option<SurdFace>>> = RefCell::new(HashMap::new());
     static MEMO_SURDOF: RefCell<HashMap<(u64, u64), Option<[i64; 6]>>> = RefCell::new(HashMap::new());
     static MEMO_FACTOR_INTS: RefCell<HashMap<M2, Option<M2>>> = RefCell::new(HashMap::new());
+    static MEMO_FACTOR_BU: RefCell<HashMap<(M2, u64, u64, i64, u8), Option<SP>>> = RefCell::new(HashMap::new());
     static MEMO_CURVE_PTS: RefCell<HashMap<M2, Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)>>> = RefCell::new(HashMap::new());
 }
 
@@ -478,11 +479,25 @@ fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashM
             }
             let mut fac_c: Vec<SP> = vec![];
             for g in factors {
-                let gn = num_z(g.clone());
-                if vanishes_at(&gn, p) {
-                    if let Some(gg) = blow_up_raw(&gn, p, sg, major)? {
-                        fac_c.push(gg);
+                let key = (g.clone(), p[0].to_bits(), p[1].to_bits(), sg, major);
+                let hit = MEMO_FACTOR_BU.with(|m| m.borrow().get(&key).cloned());
+                let gg = match hit {
+                    Some(x) => x,
+                    None => {
+                        let gn = num_z(g.clone());
+                        let x = if vanishes_at(&gn, p) { blow_up_raw(&gn, p, sg, major)? } else { None };
+                        MEMO_FACTOR_BU.with(|m| {
+                            let mut m = m.borrow_mut();
+                            if m.len() > 20000 {
+                                m.clear();
+                            }
+                            m.insert(key, x.clone());
+                        });
+                        x
                     }
+                };
+                if let Some(gg) = gg {
+                    fac_c.push(gg);
                 }
             }
             let in_c = |cb: &[f64; 4]| !fac_c.iter().any(|g| poly_sign(g, cb) == -1);
@@ -1049,20 +1064,33 @@ fn field_mu(f: &SurdFace, kap: &Z) -> Option<Z> {
     }
 }
 
+fn primes() -> &'static [i64] {
+    static P: std::sync::OnceLock<Vec<i64>> = std::sync::OnceLock::new();
+    P.get_or_init(|| {
+        let mut sieve = vec![true; 5001];
+        let mut out = vec![];
+        for i in 2..5001usize {
+            if sieve[i] {
+                out.push(i as i64);
+                let mut j = i * i;
+                while j < 5001 {
+                    sieve[j] = false;
+                    j += i;
+                }
+            }
+        }
+        out
+    })
+}
+
 fn square_free_int(c: &Z) -> Z {
+    if c.is_zero() {
+        return Z::zero(); // callers pass a positive content; 0 would never leave the loop below
+    }
     let mut k = Z::one();
     let mut r = c.clone();
-    let mut sieve = vec![true; 5001];
-    for i in 2..5001usize {
-        if !sieve[i] {
-            continue;
-        }
-        let mut j = i * i;
-        while j < 5001 {
-            sieve[j] = false;
-            j += i;
-        }
-        let p = zi(i as i64);
+    for &i in primes() {
+        let p = zi(i);
         let mut e = 0;
         while (&r % &p).is_zero() {
             r = &r / &p;
@@ -1591,7 +1619,4 @@ fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
     hit
 }
 
-pub fn _unused(_: CErr) -> Option<i64> {
-    zi(0).to_i64()
-}
 
