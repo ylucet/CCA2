@@ -31,7 +31,10 @@
 set -u
 CCA2DIR="${CCA2DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 TIMEOUT="${CCA2_TEST_TIMEOUT:-3600}"
-cd "$CCA2DIR" || exit 1
+SELF="$CCA2DIR/.claude/$(basename "${BASH_SOURCE[0]}")"
+# The MATLAB sources live in MATLAB/ (moved from the repository root 2026-11-13); every MATLAB
+# this script starts runs there, so the suites and the code under test are on the path.
+cd "$CCA2DIR/MATLAB" || exit 1
 
 # MAPLE SHADOWS SYM (measured 2026-10-14, Linux R2024a). A Maple Toolbox for MATLAB is installed
 # under toolbox/maple, and its installer took toolbox/symbolic/symbolic OFF the default path, so
@@ -214,7 +217,7 @@ if [ "$ONEPROC" -eq 1 ]; then
     if [ "$COVERAGE" -eq 1 ]; then
         # Same suites, run through matlab.unittest.TestRunner instead of the plain `runtests`
         # convenience function, so a CodeCoveragePlugin can be attached. Coverage is measured over
-        # every .m file directly under the repo root (one level, not test files or .claude/) --
+        # every .m file directly under MATLAB/ (one level, not test files or .claude/) --
         # that is where the production code lives; test classes measuring their own coverage
         # would just show 100% and dilute the number that matters.
         mkdir -p "$CCA2DIR/.claude/coverage"
@@ -231,7 +234,7 @@ if [ "$ONEPROC" -eq 1 ]; then
                 runner = TestRunner.withTextOutput;
                 runner.addPlugin(CodeCoveragePlugin.forFolder(pwd, ...
                     'IncludingSubfolders', false, ...
-                    'Producing', CoberturaFormat(fullfile(pwd,'.claude','coverage','cobertura.xml'))));
+                    'Producing', CoberturaFormat(fullfile(fileparts(pwd),'.claude','coverage','cobertura.xml'))));
                 r = runner.run(suite);
                 fprintf('COUNTS %d %d %d\\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));
                 for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\\n', r(k).Name); end, end"
@@ -306,7 +309,7 @@ if [ "$JOBS" -gt 1 ]; then
         printf '%s	%s
 ' "$idx" "${JOBS_LIST[$idx]}"
     done | CCA2DIR="$CCA2DIR" CCA2_TEST_TIMEOUT="$TIMEOUT" CCA2_RESDIR="$RESDIR"            xargs -P "$JOBS" -d '
-' -I{} bash "$0" --run-one {}
+' -I{} bash "$SELF" --run-one {}
 else
     for idx in "${!JOBS_LIST[@]}"; do
         run_job "${JOBS_LIST[$idx]}" "$idx"

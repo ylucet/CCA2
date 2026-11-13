@@ -33,5 +33,5 @@ export CCA2_TRACE_FILE="$ROOT/python/golden/trace_$OUT.jsonl"
 rm -f "$CCA2_TRACE_FILE"
 list=$(printf "'%s'," "$@"); list="{${list%,}}"
 cd "$SH"
-matlab -batch "addpath('$ROOT'); addpath('$ROOT/python/tools'); p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filesep 'maple'])); if ~isempty(m), rmpath(m{:}); addpath(fullfile(matlabroot,'toolbox','symbolic','symbolic')); end; r = runtests($list); fprintf('COUNTS %d %d %d\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));" 2>&1 | tail -5
+matlab -batch "addpath('$ROOT/MATLAB'); addpath('$ROOT/python/tools'); p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filesep 'maple'])); if ~isempty(m), rmpath(m{:}); addpath(fullfile(matlabroot,'toolbox','symbolic','symbolic')); end; r = runtests($list); fprintf('COUNTS %d %d %d\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));" 2>&1 | tail -5
 wc -l "$CCA2_TRACE_FILE"

@@ -7,6 +7,7 @@ function bench_matlab(fixFile, outFile, reps, slowCap)
     if nargin < 4, slowCap = 20; end
     p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filesep 'maple']));
     if ~isempty(m), rmpath(m{:}); addpath(fullfile(matlabroot,'toolbox','symbolic','symbolic')); end
+    addpath(fullfile(fileparts(fileparts(fileparts(mfilename('fullpath')))), 'MATLAB'));   % CCA2/MATLAB
     F = jsondecode(fileread(fixFile));
     if isstruct(F), F = num2cell(F); end
     fid = fopen(outFile, 'w');

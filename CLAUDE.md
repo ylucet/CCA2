@@ -20,6 +20,9 @@ single-piece input comes back all-lines. `SUPPORT_MATRIX.md` section 0.)
 **MATLAB needs the UBC VPN** — the licence server is on campus. Without it
 nothing here runs; say so rather than reasoning about what a run would show.
 
+The MATLAB sources live in `MATLAB/` (moved from the root 2026-11-13); the suite
+driver runs MATLAB there. The Python port is `python/`, the Rust port `rust/`.
+
     bash .claude/suite.sh --fast       # 18 suites, one MATLAB, ~90 s
     bash .claude/suite.sh --normal     # 3 suites, ~215 s
     bash .claude/suite.sh --slow       # 5 symbolic suites, one MATLAB each

@@ -112,7 +112,7 @@ no dispatch benefit).
 ## Quick start
 
 ```matlab
-addpath('/path/to/CCA2');
+addpath('/path/to/CCA2/MATLAB');
 
 % f(x,y) = x*y over the triangle (0,0),(1,0),(0,1) — nonconvex on that domain
 V = [0 0; 1 0; 0 1];

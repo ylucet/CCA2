@@ -12,7 +12,7 @@ for op in conjCPLQ biconjCPLQ; do for shape in square2 poly2; do for c in -2 -0.
   echo "$shape $c $op" | grep -Eq -- "$ONLY" && jobs_list+=("$shape $c $op"); done; done; done
 run() { set -- $1; tag="$1_c$2_$3"
   export CCA2_GUARD_LOG="$(cygpath -w "$PWD/$OUT/$tag.guard.log" 2>/dev/null || echo "$PWD/$OUT/$tag.guard.log")"
-  timeout "$TO" matlab -batch "addpath('.claude'); notDegenerateProbe('$1', $2, '$3')" > "$OUT/$tag.txt" 2>&1
+  timeout "$TO" matlab -batch "addpath('MATLAB'); addpath('.claude'); notDegenerateProbe('$1', $2, '$3')" > "$OUT/$tag.txt" 2>&1
   rc=$?; [ $rc -eq 124 ] && echo "OUTCOME TIMEOUT $TO" >> "$OUT/$tag.txt"
   echo "$(date +%T) done $tag rc=$rc: $(grep -m1 OUTCOME "$OUT/$tag.txt")" >> "$OUT/progress.txt"; }
 export -f run; export OUT TO

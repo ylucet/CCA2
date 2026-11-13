@@ -24,7 +24,7 @@ classdef plqStage
 
     methods (Static)
         function d = cacheDir()
-            d = fullfile(fileparts(mfilename('fullpath')), '.claude', 'stagecache');
+            d = fullfile(fileparts(fileparts(mfilename('fullpath'))), '.claude', 'stagecache');   % CCA2/.claude, one level above MATLAB/
             if ~exist(d, 'dir'), mkdir(d); end
         end
 

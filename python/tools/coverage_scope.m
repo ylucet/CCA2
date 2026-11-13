@@ -8,11 +8,14 @@ function coverage_scope(suites, outName)
     import matlab.unittest.plugins.codecoverage.CoberturaFormat
     p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filesep 'maple']));
     if ~isempty(m), rmpath(m{:}); addpath(fullfile(matlabroot,'toolbox','symbolic','symbolic')); end
+    root = fileparts(fileparts(fileparts(mfilename('fullpath'))));   % CCA2
+    src = fullfile(root, 'MATLAB');                                    % the production .m files
+    addpath(src);
     s = [];
     for k = 1:numel(suites), s = [s, TestSuite.fromClass(meta.class.fromName(suites{k}))]; end %#ok<AGROW>
     runner = TestRunner.withTextOutput;
-    runner.addPlugin(CodeCoveragePlugin.forFolder(pwd, 'IncludingSubfolders', false, ...
-        'Producing', CoberturaFormat(fullfile(pwd, '.claude', 'coverage', outName))));
+    runner.addPlugin(CodeCoveragePlugin.forFolder(src, 'IncludingSubfolders', false, ...
+        'Producing', CoberturaFormat(fullfile(root, '.claude', 'coverage', outName))));
     r = runner.run(s);
     fprintf('COUNTS %d %d %d\n', sum([r.Passed]), sum([r.Failed]), sum([r.Incomplete]));
     for k = 1:numel(r), if r(k).Failed, fprintf('FAILED %s\n', r(k).Name); end, end
