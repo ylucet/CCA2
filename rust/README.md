@@ -1,0 +1,56 @@
+# rust/ -- Rust port of the CCA2 exact conjugate / biconjugate engine
+
+Status (2026-11-13): **complete for conjQ and biconjQ, at parity with the Python port.**
+
+The crate is a module-for-module port of `CCA2/python/cca2` (itself the port of the MATLAB
+reference). Module names follow the Python ones; index values stay 1-based in the data, 0 = none;
+exact data are `num-bigint` / `num-rational`; refusals carry the SAME identifier strings
+(`Err(CErr { id, msg })` in place of `CCA2Error`).
+
+## Verification
+
+`cargo test --release` (add `-- --include-ignored` for the slow suites, ~20 s in all) replays every
+`conjQ` / `biconjQ` call of the MATLAB golden traces (`python/golden`) and compares with what the
+Python port returns for the same call (`ref/*.py.jsonl`, written by `tools/py_ref.py`):
+
+| trace | records | match Python |
+|---|---|---|
+| conj.jsonl | 176 | 176 -- every QuaCon field (fN, fD, EcQ, FC, Vname, E, F), dom, sampled values |
+| biconj.jsonl | 114 | 114 -- refusals by identifier, kind, face count, sampled values |
+| slow suites (kink, Example 2, min-subdivision, ...) | 20 | 20 -- kink AlgCrv 317 faces, Example 2 EnvelopeMin |
+
+Both with and without FLINT (`CCA2_FLINT=0`).
+
+## Running
+
+    cargo build --release
+    ./target/release/golden <trace.jsonl>            # one JSON result per record
+    python3 tools/compare.py <trace> <rust.jsonl> <python.jsonl>
+    ./target/release/bench ../python/bench/fixtures.json out.jsonl
+    python3 tools/compare3.py                        # MATLAB / Python / Rust table
+
+FLINT: `build.rs` links the libflint shipped with python-flint (`../python/.pydeps`), the same
+accelerator the Python port uses, for exactly one kernel (the odd-multiplicity part of a bivariate
+polynomial, `src/flint.rs`). Without it (`CCA2_FLINT_BUILD=0` at build time, or `CCA2_FLINT=0` at
+run time) the pure-Rust Yun decomposition is used; the answers are identical, but erratum Example 2
+and the kink then take minutes (as the pure-Python path does).
+
+## Speed (bench/RESULTS.md)
+
+Same 200 fixtures and protocol as `python/bench` (MATLAB and Python not re-measured: run5):
+
+| | all 200 fixtures (best times) | vs MATLAB |
+|---|---|---|
+| MATLAB | 1126 s | 1x |
+| Python (numba + FLINT) | 88.5 s | 12.7x |
+| Rust (single thread, FLINT) | 16.1 s | 70x (5.5x over Python) |
+
+Shared machine; the runs were on different days under different load -- the ratios are indicative.
+
+## Not ported (Python-only)
+
+- `check.py` (the definition oracle `checkBiconj`) and the intermediate-function trace tests
+  (`trace_*.jsonl`); parity is checked end to end instead.
+- Whatever the Python port itself declines (see `CCA2/python/PORT_NOTES.md` section 5).
+
+The earlier, partial Rust attempt this replaces stays outside the repository (`AI/cca2-rs/legacy`).
