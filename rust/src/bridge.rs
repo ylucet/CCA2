@@ -4,7 +4,7 @@
 use crate::bail;
 use crate::envelope::{AlgPair, BFace, FaceKind, PairData, RatPair};
 use crate::errors::R;
-use crate::numeric::{linspace, roots, round_half_away, EPS};
+use crate::numeric::{convf, linspace, polyval_f, roots, round_half_away, EPS};
 use crate::poly_n::{self as pn, PolyN};
 use crate::rat_q::*;
 use num_traits::{One, Signed, Zero};
@@ -59,15 +59,6 @@ pub fn bridge_phi(pr: &AlgPair, xn: &[Z], xd: &Z) -> Phi {
     Phi { phi, dt, u1, u2 }
 }
 
-fn convf(a: &[f64], b: &[f64]) -> Vec<f64> {
-    let mut out = vec![0.0; a.len() + b.len() - 1];
-    for (i, x) in a.iter().enumerate() {
-        for (j, y) in b.iter().enumerate() {
-            out[i + j] += x * y;
-        }
-    }
-    out
-}
 fn vaddf(a: &[f64], b: &[f64]) -> Vec<f64> {
     let n = a.len().max(b.len());
     (0..n).map(|i| a.get(i).cloned().unwrap_or(0.0) + b.get(i).cloned().unwrap_or(0.0)).collect()
@@ -135,14 +126,6 @@ impl AlgPairF {
 // ==========================================================================================
 // bridge_member
 // ==========================================================================================
-fn polyval_f(p: &[f64], x: f64) -> f64 {
-    let mut v = 0.0;
-    for c in p {
-        v = v * x + c;
-    }
-    v
-}
-
 fn cabs(z: crate::numeric::Cx) -> f64 {
     z.re.hypot(z.im)
 }
@@ -1011,10 +994,6 @@ fn para_point(pr: &RatPair, t: f64) -> [f64; 2] {
     let r = (to_f64(&pr.rq) * t * t + to_f64(&pr.rl) * t + to_f64(&pr.rc)) / to_f64(&pr.rd);
     let nu = to_f64(&pr.nu);
     [(t * to_f64(&pr.u[0]) + r * to_f64(&pr.w[0])) / nu, (t * to_f64(&pr.u[1]) + r * to_f64(&pr.w[1])) / nu]
-}
-
-fn idiv(a: &Z, b: &Z) -> f64 {
-    q_to_f64(&Q::new(a.clone(), b.clone()))
 }
 
 fn candidate_params(pr: &RatPair) -> Vec<f64> {

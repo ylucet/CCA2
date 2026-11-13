@@ -1401,36 +1401,15 @@ fn odd_part(s: &M2, d: usize, lvl: usize) -> R<M2> {
             return Ok(o);
         }
     }
+    // Python's _oddPart runs the loop of _yunParts and multiplies the factors of odd multiplicity
+    // as it goes; here the decomposition is computed once and the product taken afterwards. The
+    // two differ only by constant factors, which every caller removes (content) or fixes
+    // (relative sign).
     let mut o = vec![vec![Z::one()]];
-    let s = biv::trim_n(s);
-    if biv::is_const(&s) || lvl > 2 {
-        return Ok(o);
-    }
-    let sd = biv::diff(&s, d);
-    if biv::is_zero(&sd) {
-        if d == 1 {
-            o = odd_part(&s, 2, lvl + 1)?;
+    for (fac, mult) in yun_parts(s, d, lvl)? {
+        if mult % 2 == 1 {
+            o = biv::trim_n(&biv::conv2(&o, &fac));
         }
-        return Ok(o);
-    }
-    let mut c = biv::trim_n(&biv::poly_gcd_biv(&s, &sd)?);
-    let mut w = biv::trim_n(&biv::poly_div_exact(&s, &c)?);
-    let mut i = 1;
-    while !biv::is_const(&w) {
-        if i > 60 {
-            return Err(crate::errors::cerr("algRowFails:yun", "square-free decomposition did not end"));
-        }
-        let y = biv::trim_n(&biv::poly_gcd_biv(&w, &c)?);
-        let zz = biv::trim_n(&biv::poly_div_exact(&w, &y)?);
-        if i % 2 == 1 {
-            o = biv::trim_n(&biv::conv2(&o, &zz));
-        }
-        c = biv::trim_n(&biv::poly_div_exact(&c, &y)?);
-        w = y;
-        i += 1;
-    }
-    if d == 1 && !biv::is_const(&c) {
-        o = biv::trim_n(&biv::conv2(&o, &odd_part(&c, 2, lvl + 1)?));
     }
     Ok(o)
 }

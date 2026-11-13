@@ -9,7 +9,7 @@ use crate::conj_q::conj_q;
 use crate::envelope::{envelope_assemble, envelope_prune, Env};
 use crate::envelope_subdivision_alg::{envelope_subdivision_alg, AlgOpts};
 use crate::errors::R;
-use crate::numeric::{roots, EPS};
+use crate::numeric::{convf, polyval_f, rcond2, roots, EPS};
 use crate::qua_con::QuaCon;
 use crate::qua_pol::QuaPol;
 use crate::rat_q::*;
@@ -132,10 +132,6 @@ struct Form {
 
 fn norm(v: [f64; 2]) -> f64 {
     v[0].hypot(v[1])
-}
-
-fn idiv(a: &Z, b: &Z) -> f64 {
-    q_to_f64(&Q::new(a.clone(), b.clone()))
 }
 
 // ==========================================================================================
@@ -626,16 +622,6 @@ fn real_point(a: [[f64; 2]; 2], g: [f64; 2], f0: f64) -> Option<[f64; 2]> {
     None
 }
 
-fn convf(a: &[f64], b: &[f64]) -> Vec<f64> {
-    let mut out = vec![0.0; a.len() + b.len() - 1];
-    for (i, x) in a.iter().enumerate() {
-        for (j, y) in b.iter().enumerate() {
-            out[i + j] += x * y;
-        }
-    }
-    out
-}
-
 fn padd(a: &[f64], b: &[f64]) -> Vec<f64> {
     let n = a.len().max(b.len());
     let mut out = vec![0.0; n];
@@ -685,24 +671,16 @@ fn real_roots(c: &[f64]) -> Vec<f64> {
     roots(&c).into_iter().filter(|z| z.im.abs() <= 1e-6 * 1f64.max(z.re.hypot(z.im))).map(|z| z.re).collect()
 }
 
-fn polyval_ff(p: &[f64], t: f64) -> f64 {
-    let mut v = 0.0;
-    for c in p {
-        v = v * t + c;
-    }
-    v
-}
-
 fn point_at(par: &Par, t: f64) -> ([f64; 2], bool) {
     match par {
         Par::Line { p, w } => ([p[0] + t * w[0], p[1] + t * w[1]], true),
         Par::Rat { s1, s2, dn } => {
-            let d = polyval_ff(dn, t);
+            let d = polyval_f(dn, t);
             let ok = d.abs() > 1e-12 * dn.iter().fold(1f64, |a, x| a.max(x.abs())) * 1f64.max(t * t);
             if d == 0.0 {
                 return ([f64::NAN, f64::NAN], false);
             }
-            ([polyval_ff(s1, t) / d, polyval_ff(s2, t) / d], ok)
+            ([polyval_f(s1, t) / d, polyval_f(s2, t) / d], ok)
         }
     }
 }
@@ -1065,20 +1043,6 @@ fn conic_grad(c: &[f64; 6], s: [f64; 2]) -> [f64; 2] {
     [2.0 * c[0] * s[0] + c[1] * s[1] + c[3], c[1] * s[0] + 2.0 * c[2] * s[1] + c[4]]
 }
 
-fn rcond2(j: &[[f64; 2]; 2]) -> f64 {
-    let (a, b, c, d) = (j[0][0], j[0][1], j[1][0], j[1][1]);
-    let det = a * d - b * c;
-    if det == 0.0 || !det.is_finite() {
-        return 0.0;
-    }
-    let n1 = (a.abs() + c.abs()).max(b.abs() + d.abs());
-    let ninv = (d.abs() + c.abs()).max(b.abs() + a.abs()) / det.abs();
-    if n1 == 0.0 || ninv == 0.0 {
-        return 0.0;
-    }
-    1.0 / (n1 * ninv)
-}
-
 fn common_ties(f3: &[&Form; 3]) -> Vec<[f64; 2]> {
     let c1 = conic_of(f3[0], f3[1]);
     let c2 = conic_of(f3[0], f3[2]);
@@ -1154,8 +1118,8 @@ fn conic_meet_double(c1: &[f64; 6], c2: &[f64; 6]) -> Vec<[f64; 2]> {
     let r: Vec<f64> = if rr.len() < 2 { vec![] } else { roots(&rr).into_iter().filter(|z| z.im.abs() <= 1e-7 * 1f64.max(z.re.hypot(z.im))).map(|z| z.re).collect() };
     for s1 in r {
         let a = a1;
-        let bb = polyval_ff(&b1, s1);
-        let cc = polyval_ff(&cc1, s1);
+        let bb = polyval_f(&b1, s1);
+        let cc = polyval_f(&cc1, s1);
         let mut s2c: Vec<crate::numeric::Cx> = if a.abs() > 0.0 {
             roots(&[a, bb, cc])
         } else if bb != 0.0 {
@@ -1163,8 +1127,8 @@ fn conic_meet_double(c1: &[f64; 6], c2: &[f64; 6]) -> Vec<[f64; 2]> {
         } else {
             vec![]
         };
-        let b2v = polyval_ff(&b2, s1);
-        let cc2v = polyval_ff(&cc2, s1);
+        let b2v = polyval_f(&b2, s1);
+        let cc2v = polyval_f(&cc2, s1);
         if s2c.is_empty() || (a.abs() == 0.0 && bb == 0.0) {
             if a2.abs() > 0.0 {
                 s2c = roots(&[a2, b2v, cc2v]);

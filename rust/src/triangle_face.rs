@@ -7,6 +7,7 @@ use crate::cells::{cell_interior, side_i};
 use crate::conic_meet::solve2f;
 use crate::errors::R;
 use crate::isolated_root_sign::isolated_root_sign;
+use crate::numeric::polyval_f;
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
@@ -145,14 +146,6 @@ fn in_v(c: &[Z], k: i64) -> (Z, Vec<Z>, Vec<Z>) {
     (a * &k * &k + b * &k + cc, vec![zi(2) * a * &k + b, d * &k + e], vec![a.clone(), d.clone(), f.clone()])
 }
 
-fn polyval_ff(p: &[f64], x: f64) -> f64 {
-    let mut v = 0.0;
-    for c in p {
-        v = v * x + c;
-    }
-    v
-}
-
 pub fn dual_point(c1: &[Z], c2: &[Z], s_approx: [f64; 2]) -> R<DualPoint> {
     let a = conic(c1)?;
     let b = conic(c2)?;
@@ -193,7 +186,7 @@ pub fn dual_point(c1: &[Z], c2: &[Z], s_approx: [f64; 2]) -> R<DualPoint> {
         let u0 = narrow(&r, &iv);
         let s0f: Vec<f64> = s0.iter().map(to_f64).collect();
         let s1f: Vec<f64> = s1.iter().map(to_f64).collect();
-        let v0 = -polyval_ff(&s0f, u0) / polyval_ff(&s1f, u0);
+        let v0 = -polyval_f(&s0f, u0) / polyval_f(&s1f, u0);
         let sp = [u0 + (k as f64) * v0, v0];
         if (sp[0] - s[0]).hypot(sp[1] - s[1]) > 1e-6 * 1f64.max(s[0].hypot(s[1])) {
             bail!("dualPoint:noMatch", "no common root lies near the approximation.");

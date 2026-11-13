@@ -128,6 +128,11 @@ pub fn gcd_list(v: &[&Z]) -> Z {
 pub fn to_f64(x: &Z) -> f64 {
     x.to_f64().unwrap_or(if x.is_negative() { f64::NEG_INFINITY } else { f64::INFINITY })
 }
+/// a / b as the correctly rounded double (Python's int / int).
+pub fn idiv(a: &Z, b: &Z) -> f64 {
+    q_to_f64(&Q::new(a.clone(), b.clone()))
+}
+
 pub fn q_to_f64(x: &Q) -> f64 {
     // Python float(Fraction): correctly rounded n/d.
     x.to_f64().unwrap_or_else(|| to_f64(x.numer()) / to_f64(x.denom()))

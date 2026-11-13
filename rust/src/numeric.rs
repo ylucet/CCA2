@@ -350,3 +350,38 @@ pub fn solve3(m: &[[f64; 3]; 3], b: [f64; 3]) -> Option<[f64; 3]> {
     }
     Some(y)
 }
+
+/// The reciprocal condition number of a 2x2 in the 1-norm (LAPACK dgecon's estimate, exact here).
+pub fn rcond2(j: &[[f64; 2]; 2]) -> f64 {
+    let (a, b, c, d) = (j[0][0], j[0][1], j[1][0], j[1][1]);
+    let det = a * d - b * c;
+    if det == 0.0 || !det.is_finite() {
+        return 0.0;
+    }
+    let n1 = (a.abs() + c.abs()).max(b.abs() + d.abs());
+    let ninv = (d.abs() + c.abs()).max(b.abs() + a.abs()) / det.abs();
+    if n1 == 0.0 || ninv == 0.0 {
+        return 0.0;
+    }
+    1.0 / (n1 * ninv)
+}
+
+/// Product of two polynomials with double coefficients (numpy.convolve).
+pub fn convf(a: &[f64], b: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0; a.len() + b.len() - 1];
+    for (i, x) in a.iter().enumerate() {
+        for (j, y) in b.iter().enumerate() {
+            out[i + j] += x * y;
+        }
+    }
+    out
+}
+
+/// Horner evaluation, highest degree first (numpy.polyval / MATLAB polyval).
+pub fn polyval_f(p: &[f64], x: f64) -> f64 {
+    let mut v = 0.0;
+    for c in p {
+        v = v * x + c;
+    }
+    v
+}

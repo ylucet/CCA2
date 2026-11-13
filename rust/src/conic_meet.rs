@@ -4,7 +4,7 @@
 
 use crate::bail;
 use crate::errors::R;
-use crate::numeric::{roots, EPS};
+use crate::numeric::{rcond2, roots, EPS};
 use crate::rat_q::*;
 use num_traits::{Signed, Zero};
 use std::cell::RefCell;
@@ -350,20 +350,6 @@ fn primitive_part(p: &[Z]) -> Vec<Z> {
         p = neg(&p);
     }
     p
-}
-
-fn rcond2(j: &[[f64; 2]; 2]) -> f64 {
-    let (a, b, c, d) = (j[0][0], j[0][1], j[1][0], j[1][1]);
-    let det = a * d - b * c;
-    if det == 0.0 || !det.is_finite() {
-        return 0.0;
-    }
-    let n1 = (a.abs() + c.abs()).max(b.abs() + d.abs());
-    let ninv = (d.abs() + c.abs()).max(b.abs() + a.abs()) / det.abs();
-    if n1 == 0.0 || ninv == 0.0 {
-        return 0.0;
-    }
-    1.0 / (n1 * ninv)
 }
 
 /// J \ r for a 2x2 system, by elimination with partial pivoting (as LAPACK does).
