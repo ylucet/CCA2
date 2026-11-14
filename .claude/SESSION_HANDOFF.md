@@ -1,6 +1,6 @@
 # Session Handoff
 
-_Last updated: 2026-11-13T(evening)-08:00_
+_Last updated: 2026-11-13T(late evening)-08:00_
 
 ## What happened this session
 The Rust port of the exact conj/biconj engine (`rust/`, moved there from `~/AI/cca2-rs`) was finished
@@ -16,8 +16,8 @@ Rust 15.7 s (5.7x over Python, 72x over MATLAB). The MATLAB and Python numbers a
 run5 and were not re-measured. The machine was SHARED, so read these as ratios, not absolute claims.
 
 ## Where things stand
-- Branch: `main` @ handoff commit after `6dce5b3` ("MATLAB sources moved from the repository root to MATLAB/")
-- Pushed: the work commits, yes (8d38340..6dce5b3 to github.com/ylucet/CCA2). The handoff commit is pending.
+- Branch: `main` @ `27e9464` ("chore: update session handoff"); a later bookkeeping commit added CURRENT_STATE.md
+- Pushed: everything up to 27e9464 is on origin/main; the CURRENT_STATE.md commit is pending confirmation.
 - Tests:
   - Rust: `cd rust && cargo test --release` covers parity. The slow suites are `#[ignore]`; run them with `-- --ignored`.
   - MATLAB: fast 834/0 (2026-11-13; ~574 s because the move invalidated the stage cache, ~90 s once it is warm).
