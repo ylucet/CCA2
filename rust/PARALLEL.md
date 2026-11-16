@@ -334,8 +334,8 @@ serial reference, `CCA2_REDUCE=tree`, `CCA2_SPECULATE=1`. `--features mimalloc` 
 
 1. **Tree vs fold.** A balanced tree gives a different face partition than the left fold (conj
    fixture 35: 67 faces instead of 71), so it would break "identical to serial". It is therefore
-   opt-in (`CCA2_REDUCE=tree`), and on the stress test below it was never faster than the fold (3.7 s
-   vs 1.85 s at n = 8 serially equal, 1.2 s vs 0.64 s at 32 threads): the cost of `max_q` grows with the
+   opt-in (`CCA2_REDUCE=tree`), and on the stress test below it was never faster than the fold (n = 8
+   at 32 threads: tree 1.2 s, fold 0.64 s): the cost of `max_q` grows with the
    face counts of both operands, so the last levels of the tree dominate and the depth gain is lost.
 2. **Where the time really is.** `conjstress` (star polygons, `f = (x^2+y^2)/2`, 2n vertices, 2n-2
    triangles; `src/bin/conjstress.rs`): at n = 8 the 14 triangle conjugates take 6 ms and the max
