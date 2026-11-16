@@ -46,6 +46,7 @@ fn call(fname: &str, p: &QuaPol) -> Result<Out, String> {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    eprintln!("{}", cca2::flint::status());
     let fix: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&a[1]).unwrap()).unwrap();
     let mut out = std::fs::File::create(&a[2]).unwrap();
     let reps: usize = a.get(3).map(|s| s.parse().unwrap()).unwrap_or(3);

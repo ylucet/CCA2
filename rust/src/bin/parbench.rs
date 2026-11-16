@@ -59,6 +59,7 @@ fn run(x: &Value) -> (f64, String, Option<usize>, String) {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    eprintln!("{}", cca2::flint::status());
     let fix: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&a[1]).unwrap()).unwrap();
     let threads: usize = a[3].parse().unwrap();
     let copies = a.get(4).map(|s| s == "copies").unwrap_or(false);

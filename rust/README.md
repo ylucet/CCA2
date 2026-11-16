@@ -35,6 +35,15 @@ polynomial, `src/flint.rs`). Without it (`CCA2_FLINT_BUILD=0` at build time, or 
 run time) the pure-Rust Yun decomposition is used; the answers are identical, but erratum Example 2
 and the kink then take minutes (as the pure-Python path does).
 
+Where `build.rs` looks, in order: `CCA2_FLINT_LIB_DIR`; `../python/.pydeps/python_flint.libs`; the
+same folder in the MAIN checkout of the repository (`.pydeps` is untracked, so a git worktree or a
+fresh clone has none of its own); the system library directories. Build-time switches:
+`CCA2_FLINT_BUILD=0` builds without FLINT on purpose; `CCA2_FLINT_BUILD=require` fails the build if
+FLINT is not found (use it for benchmark and suite builds); otherwise a missing FLINT gives a
+`cargo:warning=FLINT NOT FOUND` and the slow build. `bench`, `parbench` and `prof` print one line,
+`FLINT: linked, in use` or `FLINT: NOT linked`, on stderr at start; do not compare timings from a
+build that says NOT linked. Check an existing binary with `ldd target/release/bench | grep flint`.
+
 ## Speed (bench/RESULTS.md)
 
 Same 200 fixtures and protocol as `python/bench` (MATLAB and Python not re-measured: run5):

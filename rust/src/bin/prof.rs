@@ -67,6 +67,7 @@ fn build(x: &Value) -> QuaPol {
 }
 
 fn main() {
+    eprintln!("{}", cca2::flint::status());
     let a: Vec<String> = std::env::args().collect();
     let fix: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&a[1]).unwrap()).unwrap();
     let id: i64 = a[2].parse().unwrap();
