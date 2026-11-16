@@ -56,6 +56,14 @@ Same 200 fixtures and protocol as `python/bench` (MATLAB and Python not re-measu
 
 Shared machine; the runs were on different days under different load -- the ratios are indicative.
 
+## Parallelism (PARALLEL.md)
+
+The engine runs on a rayon pool: independent pieces / cells / pairs / corners run in parallel and the
+result is bit-identical to the serial engine (`tests/parallel.rs`). `CCA2_THREADS=n` sets the pool
+size (default all hardware threads), `CCA2_THREADS=1` or `CCA2_PAR=0` is the serial reference. On
+Frances (32 cores / 64 threads, shared) the 200-fixture benchmark goes from 14.8 s to 3.0 s (4.9x at
+16 threads); details and the reduction study in PARALLEL.md section 11.
+
 ## Not ported (Python-only)
 
 - `check.py` (the definition oracle `checkBiconj`) and the intermediate-function trace tests

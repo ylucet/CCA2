@@ -299,3 +299,96 @@ needed fixtures (a triangulated non-convex piece with dozens of triangles) would
 **Order of the work if it were done**: (1) swap the left fold for a tree serially and check the
 parity tests (is the result identical? `assemble_qua_con_cells` order may change face order, which
 parity compares); (2) only then parallelise the map and the levels.
+
+## 11. Implementation and measurements (2026-11-15)
+
+The parallelism of sections 4-7 was implemented (rayon work stealing, `src/par.rs`; shared memo tables,
+`src/memo.rs`). **Results are bit-identical to the serial engine**: `tests/parallel.rs` runs the
+digest tool (`src/bin/digest.rs`, a hash of the COMPLETE result of each of the 200 fixtures, every face
+and coefficient in order) at 1, 2, 8 and 32 threads and compares with the digests recorded from the
+serial engine before any change (`bench/parallel/digest_serial.tsv`); the 114 + 176 parity traces and
+the 20 slow golden records also pass (`cargo test --release -- --include-ignored`).
+
+### What runs in parallel
+
+| Region | Where |
+|---|---|
+| conjQ: one conjugate per piece / per triangle | `conj_q.rs` (`par::map`) |
+| conjQ: the max over them (reduction) | `conj_q.rs` -- left fold by default, see below |
+| max / assembly: liveness of every cell, shedding of implied rows | `cells.rs` (`assemble_qua_con_cells`, `compact_cells`) -- the inside of every `max_q` |
+| biconjQ atoms route: conjugates of the atoms, envelope of each pair, pruning, triangle faces | `biconj_atoms.rs` |
+| envelope assembly: one job per cell pair | `envelope.rs` |
+| `esa`: one subdivision per envelope; every cell against the next curve; the final per-cell loop (`drop_below`, `winner_faces`) | `envelope_subdivision_alg.rs` |
+| the min over several envelopes (`min_overlay`): the merge of tuples and the per-tuple resolution | `envelope_subdivision_alg.rs` |
+| corners of a region (each its own blow-up); the bridge witness samples (in chunks, stopping rule applied in order) | `alg_row_fails.rs`, `bridge.rs` |
+| quadtree recursions (S3) | implemented, **off** (`CCA2_SPECULATE`), measured slower |
+
+Every helper returns results in input order and, when several items fail, the error the serial loop
+would have met first. The 14 memo tables are sharded `RwLock` maps (pure caches, so sharing changes
+the time, never the result); `Rc` became `Arc`.
+
+Switches: `CCA2_THREADS=n` (default all 64 hardware threads), `CCA2_THREADS=1` or `CCA2_PAR=0` for the
+serial reference, `CCA2_REDUCE=tree`, `CCA2_SPECULATE=1`. `--features mimalloc` for the binaries.
+
+### The max / min reduction: the honest result
+
+1. **Tree vs fold.** A balanced tree gives a different face partition than the left fold (conj
+   fixture 35: 67 faces instead of 71), so it would break "identical to serial". It is therefore
+   opt-in (`CCA2_REDUCE=tree`), and on the stress test below it was never faster than the fold (3.7 s
+   vs 1.85 s at n = 8 serially equal, 1.2 s vs 0.64 s at 32 threads): the cost of `max_q` grows with the
+   face counts of both operands, so the last levels of the tree dominate and the depth gain is lost.
+2. **Where the time really is.** `conjstress` (star polygons, `f = (x^2+y^2)/2`, 2n vertices, 2n-2
+   triangles; `src/bin/conjstress.rs`): at n = 8 the 14 triangle conjugates take 6 ms and the max
+   reduction 1.85 s (99.7%). The reduction is not a small tail, it is the whole cost.
+3. **What worked: parallelism INSIDE each `max_q`** (liveness and implied-row loops of
+   `assemble_qua_con_cells` / `compact_cells`), which keeps the fold and the output bit-identical:
+
+| star n | triangles | faces | 1 thread (s) | 32 threads (s) | speed-up |
+|---|---|---|---|---|---|
+| 5 | 8 | 325 | 0.336 | 0.125 | 2.7x |
+| 6 | 10 | 731 | 0.994 | 0.358 | 2.8x |
+| 8 | 14 | 933 | 1.829 | 0.640 | 2.9x |
+
+   (min of 3, shared machine.) The remaining serial part is `merge_adjacent_cells` and the fold's
+   own dependency chain.
+4. **A pre-existing defect found by this test, NOT caused by the parallel work** (it reproduces with
+   `CCA2_PAR=0`, whose output is digest-identical to the pre-parallel engine): `conjQ` of the star
+   polygon with n = 6 returns wrong values at 111 of 625 sample points (fold) -- the face picked at
+   some points is far below the true maximum -- and for n = 8 the fold is wrong while the tree is
+   right. n = 4 and 5 agree with the definition to 1e-16. The check is in `conjstress` (the definition:
+   interior point `x = s` if inside the polygon, else the best boundary point). It needs its own
+   investigation (suspect: `max_q` / cell assembly with many faces).
+
+### Benchmark on Frances (200 fixtures, same protocol as bench/RESULTS.md)
+
+Method: `tools/par_sweep.sh` -- 3 sweeps; in each, every thread count runs the whole benchmark (first
+call + 3 repetitions, best per fixture, memos emptied before every call); the table takes the
+**minimum per fixture over the sweeps** and sums. SHARED MACHINE: other jobs kept the load average at
+3-8 during the runs, so read the figures as conservative; raw data `bench/parallel/runs/`, summary
+`bench/parallel/sweep_summary.txt`. FLINT linked. Kind, face count and refusal identifier of all 200
+fixtures are equal in all 21 runs.
+
+| threads | all 200 fixtures (s) | speed-up | #196 kink | #191 Example 2 | #200 | #177 | #174 | #165 |
+|---|---|---|---|---|---|---|---|---|
+| 1 (serial, `CCA2_PAR=0`) | 14.81 | 1.0x | 6.79 | 5.21 | 1.51 | 0.54 | 0.33 | 0.16 |
+| 2 | 8.42 | 1.8x | 3.96 | 2.74 | 0.79 | 0.30 | 0.24 | 0.11 |
+| 4 | 4.80 | 3.1x | 2.06 | 1.59 | 0.45 | 0.25 | 0.17 | 0.09 |
+| 8 | 3.44 | 4.3x | 1.47 | 1.22 | 0.32 | 0.15 | 0.12 | 0.05 |
+| 16 | 3.02 | **4.9x** | 1.38 | 0.94 | 0.31 | 0.14 | 0.10 | 0.03 |
+| 32 | 3.08 | 4.8x | 1.34 | 0.96 | 0.37 | 0.15 | 0.10 | 0.03 |
+| 64 | 3.32 | 4.5x | 1.37 | 1.01 | 0.38 | 0.17 | 0.12 | 0.05 |
+
+Per heavy call: kink 5.1x, Example 2 5.4x, #200 4.9x (best thread counts). Relative to MATLAB
+(1126 s) the whole benchmark is now about 370x (15.7 s -> ~3 s at 16 threads).
+
+### Against the estimate of section 6
+
+Section 6 predicted 5-9x for the heaviest call and 8-20x for the benchmark (plan on 10x). Measured:
+5x and 4.9x. The heaviest calls match the lower end; the benchmark misses because (a) the kink and
+Example 2 still have a ~1 s critical path inside a few cells (profiled: `drop_below` of cell 3
+0.9 s, `winner_faces` of cell 22 1.0 s, cell 8 0.6 s) whose loops are dependent (`keep[]` in
+`drop_below`) or have few items, (b) the quadtree speculation that would shorten them wastes more than
+it gains (measured both in `box_rec` and in `alg_face_below`), (c) 64 threads are 32 cores plus
+hyper-threading, and the machine is shared. The 20% allocator "thread tax" is only partly removed by
+mimalloc (a few percent). What would still help: restructure `drop_below` so its dependent loops can
+be speculated cheaply, and cache `row_polys` across the repeated `alg_row_fails_box` calls on one cell.
