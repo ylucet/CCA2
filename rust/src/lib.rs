@@ -4,6 +4,7 @@
 
 pub mod errors;
 pub mod memo;
+pub mod par;
 pub mod rat_q;
 pub mod numeric;
 pub mod probe_data;
