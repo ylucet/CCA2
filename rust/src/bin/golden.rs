@@ -1,6 +1,10 @@
 //! Replay a golden trace (JSON lines) through the Rust engine and print one JSON result per
 //! record: {"err": id} for a refusal, else the QuaCon fields (QuaCon) or {"kind"} plus "evalV"
 //! sampled at the record's evalX. Compared against the Python port by tools/compare.py.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use cca2::io::*;
 use serde_json::{json, Value};
 use std::io::BufRead;

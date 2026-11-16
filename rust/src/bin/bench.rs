@@ -5,6 +5,10 @@
 //! per fixture, in bench_python.py's format plus the result's kind and face count.
 //!
 //!     cargo run --release --bin bench -- fixtures.json out.jsonl [reps] [slowCap]
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use cca2::alg_con::AlgCon;
 use cca2::io::num;
 use cca2::qua_pol::QuaPol;

@@ -4,6 +4,10 @@
 //!
 //!     digest fixtures.json > out.tsv         columns: id, kind, nf, err, hash, bytes
 //!     CCA2_DIGEST_ONLY=191,196 digest ...    only these ids
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use cca2::io::num;

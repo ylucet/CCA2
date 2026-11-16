@@ -17,6 +17,10 @@
 //! thread: the heaviest fixture takes about 20% longer once a second thread exists.
 //!
 //! As in bench.rs, the memos MATLAB does not have are emptied before each call.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use cca2::io::num;
 use cca2::qua_pol::QuaPol;
 use serde_json::{json, Value};

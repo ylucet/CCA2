@@ -6,6 +6,10 @@
 //!     cargo run --release --bin prof -- ../python/bench/fixtures.json <id> out.stacks
 //!
 //! A development tool: the engine does not depend on it. Linux + glibc only.
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use cca2::io::num;
 use cca2::qua_pol::QuaPol;
 use serde_json::Value;
