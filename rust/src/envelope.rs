@@ -485,8 +485,10 @@ fn straight_tie_guard(na: &[Z], nb: &[Z], q: &[Z]) -> R<()> {
 
 pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())> {
     let pairs = envelope_cell_pairs(ga, gb, d)?;
-    let mut env = Env::default();
-    for (k0, pr) in pairs.iter().enumerate() {
+    // every cell pair yields its own faces independently; they are concatenated in pair order
+    let per_pair = crate::par::map_range(pairs.len(), |k0| -> R<Env> {
+        let pr = &pairs[k0];
+        let mut env = Env::default();
         let k = k0 + 1;
         let (na, da) = (&ga.fn_[pr.ij[0] - 1], &ga.fd[pr.ij[0] - 1]);
         let (nb, db) = (&gb.fn_[pr.ij[1] - 1], &gb.fd[pr.ij[1] - 1]);
@@ -498,13 +500,13 @@ pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())>
         if pr.poly {
             let cells = if pr.win == 'A' { cells_for(na, da, &pr.p)? } else { cells_for(nb, db, &pr.p)? };
             collect(cells, &mut env);
-            continue;
+            return Ok(env);
         }
         let (sgn, strict) = quad_sign_on_poly(&pr.q, &pr.p)?;
         if sgn != 0 && !strict {
             let cells = if sgn > 0 { cells_for(na, da, &pr.p)? } else { cells_for(nb, db, &pr.p)? };
             collect(cells, &mut env);
-            continue;
+            return Ok(env);
         }
         if all_zero(&pr.q[0..3]) {
             let mut pa = pr.p.clone();
@@ -513,7 +515,7 @@ pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())>
             let mut pb = pr.p.clone();
             pb.push(neg(&pr.q[3..6]));
             collect(cells_for(nb, db, &pb)?, &mut env);
-            continue;
+            return Ok(env);
         }
         let corners = |env: &mut Env| -> R<()> {
             let mut cf = corner_face_alg(na, da, &pr.p, &pr.q, 1)?;
@@ -530,14 +532,14 @@ pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())>
                     let s2 = side_winner(na, da, nb, db, &pr.p)?;
                     let cells = if s2 > 0 { cells_for(na, da, &pr.p)? } else { cells_for(nb, db, &pr.p)? };
                     collect(cells, &mut env);
-                    continue;
+                    return Ok(env);
                 }
                 if me.id == "bridgeFaceAlg:straightTie" || me.id == "bridgeFaceRat:noSeparateFace" {
                     collect(side_cells(na, da, &pr.p, &pr.q, 1)?, &mut env);
                     collect(side_cells(nb, db, &pr.p, &pr.q, -1)?, &mut env);
                     straight_tie_guard(na, nb, &pr.q)?;
                     corners(&mut env)?;
-                    continue;
+                    return Ok(env);
                 }
                 return Err(me);
             }
@@ -549,6 +551,12 @@ pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())>
                 corners(&mut env)?;
             }
         }
+        Ok(env)
+    })?;
+    let mut env = Env::default();
+    for e in per_pair {
+        env.quad.extend(e.quad);
+        env.bridge.extend(e.bridge);
     }
     Ok((env, ()))
 }

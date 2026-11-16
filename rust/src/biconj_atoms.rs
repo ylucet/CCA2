@@ -39,18 +39,12 @@ pub fn atoms_route(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
         };
     }
     let run = || -> R<AlgCon> {
-        let mut envs = vec![];
-        for p in &pairs {
-            envs.push(envelope_prune(p)?);
-        }
+        let envs = crate::par::map(&pairs, envelope_prune)?;
         if tris.is_empty() {
             let sub = envelope_subdivision_alg(&envs, &hull_rows(obj)?, &[], &aopts)?;
             return Ok(AlgCon::AlgCrv(assemble_alg_crv(&sub)?));
         }
-        let mut tfs = vec![];
-        for t in &tris {
-            tfs.push(Arc::new(triangle_face(t)?));
-        }
+        let tfs = crate::par::map(&tris, |t| Ok(Arc::new(triangle_face(t)?)))?;
         let sub = envelope_subdivision_alg(&envs, &hull_rows(obj)?, &[], &aopts)?;
         Ok(AlgCon::AlgCrv(assemble_alg_crv(&cut_triangles(sub, tfs)?)?))
     };
@@ -158,14 +152,11 @@ pub fn biconj_atoms(f: &QuaPol) -> R<(Vec<Env>, Vec<AtomTri>)> {
     }
     let tris = triple_faces(&forms, &df);
     let (ab, tris) = active_atom_pairs(&atoms, &forms, tris, &df)?;
-    let mut g: BTreeMap<usize, QuaCon> = BTreeMap::new();
-    for a in ab.iter().flatten().cloned().collect::<BTreeSet<_>>() {
-        g.insert(a, conj_q(&atoms[a - 1].q)?.0);
-    }
-    let mut pairs = vec![];
-    for r in &ab {
-        pairs.push(envelope_assemble(&g[&r[0]], &g[&r[1]], &d)?.0);
-    }
+    // the atoms' conjugates are independent, and so is the envelope of each pair of them
+    let ids: Vec<usize> = ab.iter().flatten().cloned().collect::<BTreeSet<_>>().into_iter().collect();
+    let gs = crate::par::map(&ids, |&a| Ok(conj_q(&atoms[a - 1].q)?.0))?;
+    let g: BTreeMap<usize, QuaCon> = ids.into_iter().zip(gs).collect();
+    let pairs = crate::par::map(&ab, |r| Ok(envelope_assemble(&g[&r[0]], &g[&r[1]], &d)?.0))?;
     Ok((pairs, tris))
 }
 
