@@ -56,10 +56,11 @@ pub fn envelope_subdivision_alg(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], o
 
 pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(Vec<SubFace>, SubInfo)> {
     if envs.len() > 1 {
+        // one subdivision per envelope: independent
+        let res = crate::par::map(envs, |e| esa(&[e.clone()], dom, cuts, opts))?;
         let mut subs = vec![];
         let mut infos = vec![];
-        for e in envs {
-            let (sb, inf) = esa(&[e.clone()], dom, cuts, opts)?;
+        for (sb, inf) in res {
             subs.push(sb);
             infos.push(inf);
         }
@@ -99,13 +100,12 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
     }
     let mut skips: Vec<Vec<usize>> = vec![vec![]];
     for j in 1..=c.len() {
-        let mut nxt = vec![];
-        let mut nxt_sk = vec![];
-        for (cell, sk) in cells.iter().zip(skips.iter()) {
+        // every cell is tested against curve j independently; the outcomes are assembled in cell order
+        let owners_j = &owners[j - 1];
+        let outcomes = crate::par::map_range(cells.len(), |ci| -> R<Vec<(Rows, Vec<usize>)>> {
+            let (cell, sk) = (&cells[ci], &skips[ci]);
             if cell.iter().any(|r| r.0 == j) {
-                nxt.push(cell.clone());
-                nxt_sk.push(sk.clone());
-                continue;
+                return Ok(vec![(cell.clone(), sk.clone())]);
             }
             let mut cp = cell.clone();
             cp.push((j, 1));
@@ -113,19 +113,24 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             cm.push((j, -1));
             let live_p = live_cell(&c, &cp)?;
             let live_m = live_cell(&c, &cm)?;
-            if live_p && live_m && !relevant_here(&c, &owners[j - 1], cell)? {
-                nxt.push(cell.clone());
+            if live_p && live_m && !relevant_here(&c, owners_j, cell)? {
                 let mut s2 = sk.clone();
                 s2.push(j);
-                nxt_sk.push(s2);
+                Ok(vec![(cell.clone(), s2)])
             } else if live_p && live_m {
-                nxt.push(cp);
-                nxt.push(cm);
-                nxt_sk.push(sk.clone());
-                nxt_sk.push(sk.clone());
+                Ok(vec![(cp, sk.clone()), (cm, sk.clone())])
             } else if live_p || live_m {
-                nxt.push(cell.clone());
-                nxt_sk.push(sk.clone());
+                Ok(vec![(cell.clone(), sk.clone())])
+            } else {
+                Ok(vec![])
+            }
+        })?;
+        let mut nxt = vec![];
+        let mut nxt_sk = vec![];
+        for o in outcomes {
+            for (r, k) in o {
+                nxt.push(r);
+                nxt_sk.push(k);
             }
         }
         cells = nxt;
@@ -134,15 +139,15 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             bail!("envelopeSubdivisionAlg:arrangementSize", "the arrangement passed {} cells at curve {} of {}.", opts.max_cells, j, c.len());
         }
     }
-    let mut subdivision = vec![];
-    let mut cell_con = vec![];
-    let mut face_cell = vec![];
-    for (rows, sk) in cells.iter().zip(skips.iter()) {
+    // the final loop: every cell gets its faces independently (this is where `drop_below` spends
+    // its time); a cell with no interior point is None, a cell that gets no faces is Some with none
+    let per_cell = crate::par::map_range(cells.len(), |ci| -> R<Option<(Vec<Vec<Z>>, Vec<SubFace>)>> {
+        let (rows, sk) = (&cells[ci], &skips[ci]);
         let (pt, ok_pt) = interior_point(&c, rows)?;
         if !ok_pt {
-            continue;
+            return Ok(None);
         }
-        cell_con.push(rows_to_con(&c, rows));
+        let con = rows_to_con(&c, rows);
         let app = applicable(&req, rows, &c, pt)?;
         let mut here: Vec<usize> = app.iter().flat_map(|&i| pair_of[i - 1].iter().cloned()).collect();
         let mut b_here = vec![];
@@ -156,7 +161,7 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             }
         }
         if !all_pairs.iter().all(|p| here.contains(p)) {
-            continue;
+            return Ok(Some((con, vec![])));
         }
         let quad_app: Vec<usize> = app.iter().cloned().filter(|&i| i <= n_quad).collect();
         let mut irr: Vec<Irr> = b_here.iter().map(|&b| Irr { fp: bridges[b].fp.clone(), fb: bridges[b].fb }).collect();
@@ -166,14 +171,21 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             }
         }
         if quad_app.is_empty() && irr.is_empty() {
-            continue;
+            return Ok(Some((con, vec![])));
         }
         if irr.len() > 1 {
             irr = drop_below(irr, &c, rows, &pw, &env.quad, &quad_app)?;
         }
         let sub = winner_faces(&env.quad, &quad_app, &irr, rows, &c, &pw, &rows_out)?;
-        for s in sub {
-            subdivision.push(s);
+        Ok(Some((con, sub)))
+    })?;
+    let mut subdivision = vec![];
+    let mut cell_con = vec![];
+    let mut face_cell = vec![];
+    for r in per_cell.into_iter().flatten() {
+        cell_con.push(r.0);
+        for sf in r.1 {
+            subdivision.push(sf);
             face_cell.push(cell_con.len());
         }
     }
