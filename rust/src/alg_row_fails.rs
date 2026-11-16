@@ -169,19 +169,20 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4])
         return Ok(tf);
     }
     let w = (bx[1] - bx[0]).max(bx[3] - bx[2]);
-    let mut sq: Vec<[f64; 3]> = vec![];
-    let mut bu_memo: HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>> = HashMap::new();
-    for p0 in corners {
+    // every corner is certified by its own blow-up, independently of the others
+    // (bu_memo is keyed on the corner itself, so one table per corner loses nothing)
+    let found = crate::par::map(corners, |p0| -> R<Option<[f64; 3]>> {
+        let mut bu_memo: HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>> = HashMap::new();
         let mut p = *p0;
         let q = [round(p[0] * 256.0) / 256.0, round(p[1] * 256.0) / 256.0];
         if q.iter().zip(p.iter()).all(|(qi, pi)| (qi - pi).abs() <= 1e-9 * 1f64.max(pi.abs())) {
             p = q;
         }
         if p[0] < bx[0] || p[0] > bx[1] || p[1] < bx[2] || p[1] > bx[3] {
-            continue;
+            return Ok(None);
         }
         if !any_vanishes(&rows, p) {
-            continue;
+            return Ok(None);
         }
         for k in 2..9 {
             let mut e = w / 2f64.powi(k);
@@ -189,11 +190,12 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4])
                 if !is_dyadic(p) {
                     e *= 1.0 - 1e-9;
                 }
-                sq.push([p[0], p[1], e]);
-                break;
+                return Ok(Some([p[0], p[1], e]));
             }
         }
-    }
+        Ok(None)
+    })?;
+    let sq: Vec<[f64; 3]> = found.into_iter().flatten().collect();
     if sq.is_empty() {
         return Ok(false);
     }

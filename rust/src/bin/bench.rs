@@ -56,6 +56,11 @@ fn main() {
     let _ = call("conjQ", &w);
     let _ = call("biconjQ", &w);
     for x in &fix {
+        if let Ok(ids) = std::env::var("CCA2_BENCH_IDS") {
+            if !ids.split(',').any(|i| i.parse::<i64>().ok() == x["id"].as_i64()) {
+                continue;
+            }
+        }
         if let Some(o) = &only {
             if x["bucket"].as_str() != Some(o.as_str()) {
                 continue;
