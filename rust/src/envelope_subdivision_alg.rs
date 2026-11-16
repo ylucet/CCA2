@@ -200,34 +200,37 @@ fn winner_faces(quad: &[QuadC], quad_app: &[usize], irr: &[Irr], rows: &Rows, c:
     let mut out = vec![];
     let base = rows_to_con(c, rows_out);
     if irr.is_empty() {
-        for &j in quad_app {
+        // every applicable quadratic is tested independently
+        let faces = crate::par::map(quad_app, |&j| -> R<Option<SubFace>> {
             let extra = quad_over(quad, quad_app, j)?;
             if !piece_live(c, rows, &extra, q)? {
-                continue;
+                return Ok(None);
             }
             let mut con = base.clone();
             con.extend(extra);
-            out.push(quad_face(&quad[j - 1], con, vec![]));
-        }
+            Ok(Some(quad_face(&quad[j - 1], con, vec![])))
+        })?;
+        out.extend(faces.into_iter().flatten());
         return Ok(out);
     }
     for f in irr {
         let alg: Vec<AlgRow> = quad_app.iter().map(|&j| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: -1 }).collect();
         out.push(SubFace { kind: SubKind::Bridge, num: vec![], den: zi(0), fp: Some(f.fp.clone()), fb: f.fb, con: base.clone(), alg, ii: vec![], tri: vec![], tf: None, tfs: vec![] });
     }
-    for &j in quad_app {
+    let faces = crate::par::map(quad_app, |&j| -> R<Option<SubFace>> {
         let extra = quad_over(quad, quad_app, j)?;
         if !piece_live(c, rows, &extra, q)? {
-            continue;
+            return Ok(None);
         }
         let alg: Vec<AlgRow> = irr.iter().map(|f| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: 1 }).collect();
         if alg_empty(c, rows_out, &extra, &alg, q)? {
-            continue;
+            return Ok(None);
         }
         let mut con = base.clone();
         con.extend(extra);
-        out.push(quad_face(&quad[j - 1], con, alg));
-    }
+        Ok(Some(quad_face(&quad[j - 1], con, alg)))
+    })?;
+    out.extend(faces.into_iter().flatten());
     Ok(out)
 }
 
