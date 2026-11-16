@@ -91,3 +91,30 @@ pub fn reduce<T: Send + Sync, F: Fn(T, T) -> R<T> + Sync + Send>(mut items: Vec<
     }
     Ok(items.pop().unwrap())
 }
+
+/// True when the quadtree recursions fork their sub-boxes speculatively (CCA2_SPECULATE=1).
+pub fn speculate() -> bool {
+    static T: OnceLock<bool> = OnceLock::new();
+    *T.get_or_init(|| std::env::var("CCA2_SPECULATE").map(|v| v == "1").unwrap_or(false))
+}
+
+/// `f(0) && f(1) && ... && f(n-1)` with the serial short-circuit and error semantics: the result is
+/// that of the first item, in order, that is Err or false. With `fork` the items run speculatively in
+/// parallel (the ones after a false are wasted work, never a different answer).
+pub fn all_of<E: Send, F: Fn(usize) -> Result<bool, E> + Sync + Send>(n: usize, fork: bool, f: F) -> Result<bool, E> {
+    if !fork || n < 2 || !enabled() || !speculate() {
+        for i in 0..n {
+            if !f(i)? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    let v: Vec<Result<bool, E>> = (0..n).into_par_iter().map(f).collect();
+    for r in v {
+        if !r? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}

@@ -154,7 +154,7 @@ pub fn alg_row_fails(a: &[RowSpec], reg: &Region, depth: usize) -> R<bool> {
     alg_row_fails_box(a, reg.bx, &|b: &[f64; 4]| reg.in_box(b), depth, &reg.factors, &reg.corners)
 }
 
-pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth: usize, factors: &[M2], corners: &[[f64; 2]]) -> R<bool> {
+pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, factors: &[M2], corners: &[[f64; 2]]) -> R<bool> {
     let mut rows = vec![];
     for at in a {
         if let Some(r) = row_polys(at, factors)? {
@@ -164,7 +164,7 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4])
     if rows.is_empty() {
         return Ok(false);
     }
-    let tf = box_rec(&rows, bx, in_box, depth, &[]);
+    let tf = box_rec(&rows, bx, in_box, depth, &[], 2);
     if tf || corners.is_empty() {
         return Ok(tf);
     }
@@ -199,9 +199,9 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4])
     if sq.is_empty() {
         return Ok(false);
     }
-    let mut tf = box_rec(&rows, bx, in_box, depth, &sq);
+    let mut tf = box_rec(&rows, bx, in_box, depth, &sq, 2);
     if !tf {
-        tf = box_rec(&rows, bx, in_box, depth + 2, &sq);
+        tf = box_rec(&rows, bx, in_box, depth + 2, &sq, 2);
     }
     Ok(tf)
 }
@@ -321,7 +321,8 @@ fn top_row_polys(fp: &PolyN, q: &M2, dn: &Z, n: usize, want: i32) -> Vec<M2> {
 }
 
 // ---- the box recursion ----------------------------------------------------------------------------
-fn box_rec(rows: &[Row], b: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth: usize, sq: &[[f64; 3]]) -> bool {
+/// `fork`: how many levels of the quadtree run their four sub-boxes in parallel (speculatively).
+fn box_rec(rows: &[Row], b: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, sq: &[[f64; 3]], fork: u32) -> bool {
     for c in sq {
         if b[0] >= c[0] - c[2] && b[1] <= c[0] + c[2] && b[2] >= c[1] - c[2] && b[3] <= c[1] + c[2] {
             return true;
@@ -341,10 +342,8 @@ fn box_rec(rows: &[Row], b: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth:
     }
     let xm = (b[0] + b[1]) / 2.0;
     let ym = (b[2] + b[3]) / 2.0;
-    box_rec(rows, [b[0], xm, b[2], ym], in_box, depth - 1, sq)
-        && box_rec(rows, [xm, b[1], b[2], ym], in_box, depth - 1, sq)
-        && box_rec(rows, [b[0], xm, ym, b[3]], in_box, depth - 1, sq)
-        && box_rec(rows, [xm, b[1], ym, b[3]], in_box, depth - 1, sq)
+    let sub = [[b[0], xm, b[2], ym], [xm, b[1], b[2], ym], [b[0], xm, ym, b[3]], [xm, b[1], ym, b[3]]];
+    crate::par::all_of::<(), _>(4, fork > 0, |i| Ok(box_rec(rows, sub[i], in_box, depth - 1, sq, fork.saturating_sub(1)))).unwrap()
 }
 
 fn poly_sign(p: &SP, b: &[f64; 4]) -> i32 {
@@ -490,7 +489,7 @@ fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashM
                 }
             }
             let in_c = |cb: &[f64; 4]| !fac_c.iter().any(|g| poly_sign(g, cb) == -1);
-            if !box_rec(&rows_c, [0.0, e, -1.0, 1.0], &in_c, 6, &[]) {
+            if !box_rec(&rows_c, [0.0, e, -1.0, 1.0], &in_c, 6, &[], 0) {
                 return Ok(false);
             }
         }
