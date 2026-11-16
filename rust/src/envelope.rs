@@ -14,7 +14,7 @@ use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
 use std::collections::BTreeSet;
-use std::rc::Rc;
+use std::sync::Arc;
 
 // ==========================================================================================
 // types
@@ -45,7 +45,7 @@ pub struct AlgPair {
     pub dl: Vec<Z>,
     pub kp: Z,
     pub p: Vec<Vec<Z>>,
-    pub fcache: std::cell::OnceCell<(Rc<crate::bridge::AlgPairF>, Rc<crate::bridge::AlgPairF>)>,
+    pub fcache: std::sync::OnceLock<(Arc<crate::bridge::AlgPairF>, Arc<crate::bridge::AlgPairF>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -90,11 +90,11 @@ pub struct Src {
 #[derive(Clone, Debug)]
 pub struct BFace {
     pub kind: FaceKind,
-    pub fp: Rc<PolyN>,
+    pub fp: Arc<PolyN>,
     pub fb: i64,
     // algebraic / rational
     pub cells: Vec<Vec<Vec<Z>>>,
-    pub pair: Option<Rc<PairData>>,
+    pub pair: Option<Arc<PairData>>,
     pub wit: Option<[Z; 3]>,
     pub rfn: Vec<Z>,
     pub rfd: Z,
@@ -113,7 +113,7 @@ impl BFace {
     pub fn blank(kind: FaceKind) -> BFace {
         BFace {
             kind,
-            fp: Rc::new(PolyN::new()),
+            fp: Arc::new(PolyN::new()),
             fb: 0,
             cells: vec![],
             pair: None,

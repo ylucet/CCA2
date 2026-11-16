@@ -51,6 +51,8 @@ fn main() {
                         Err(e) => (String::new(), String::new(), e.id.clone(), format!("{:?}", e.id)),
                     }
                 };
+                // OnceLock and OnceCell (before 2026-11-15) print under different names
+                let txt = txt.replace("OnceLock", "OnceCell");
                 let mut hs = DefaultHasher::new();
                 txt.hash(&mut hs);
                 println!("{}\t{}\t{}\t{}\t{:016x}\t{}", id, kind, nf, err, hs.finish(), txt.len());

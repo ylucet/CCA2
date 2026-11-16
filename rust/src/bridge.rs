@@ -9,7 +9,7 @@ use crate::poly_n::{self as pn, PolyN};
 use crate::rat_q::*;
 use num_traits::{One, Signed, Zero};
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 // ==========================================================================================
 // bridge_phi (ascending powers of mu)
@@ -130,21 +130,21 @@ fn cabs(z: crate::numeric::Cx) -> f64 {
     z.re.hypot(z.im)
 }
 
-fn pairf_of(a: &AlgPair) -> (Rc<AlgPairF>, Rc<AlgPairF>) {
+fn pairf_of(a: &AlgPair) -> (Arc<AlgPairF>, Arc<AlgPairF>) {
     a.fcache
         .get_or_init(|| {
-            let f = Rc::new(AlgPairF::new(a));
+            let f = Arc::new(AlgPairF::new(a));
             // the re-based family near mu = -1 (nearArtefact)
             let nn2: Vec<Vec<Z>> = a.n2.iter().zip(a.n1.iter()).map(|(ra, rb)| ra.iter().zip(rb.iter()).map(|(x, y)| zi(2) * x - y).collect()).collect();
             let mm2: Vec<Z> = a.m2.iter().zip(a.m1.iter()).map(|(x, y)| zi(2) * x - y).collect();
             let b = AlgPair { d: a.d.clone(), n1: a.n2.clone(), m1: a.m2.clone(), n2: nn2, m2: mm2, dlm: a.dlm.clone(), dl: a.dl.clone(), kp: a.kp.clone(), p: a.p.clone(), fcache: Default::default() };
-            (f, Rc::new(AlgPairF::new(&b)))
+            (f, Arc::new(AlgPairF::new(&b)))
         })
         .clone()
 }
 
 /// Is the (double) point in the bridge face's region? One verdict per point.
-pub fn bridge_member(pr: &Rc<PairData>, x: &[[f64; 2]]) -> R<Vec<bool>> {
+pub fn bridge_member(pr: &Arc<PairData>, x: &[[f64; 2]]) -> R<Vec<bool>> {
     match &**pr {
         PairData::Rat(p) => {
             let bf: Vec<f64> = p.b.iter().map(to_f64).collect();
@@ -912,10 +912,10 @@ pub fn bridge_face_alg(n1: &[Z], d1: &Z, n2: &[Z], d2: &Z, p: &[Vec<Z>]) -> R<BF
         }
     }
     let mut face = BFace::blank(FaceKind::Algebraic);
-    face.fp = Rc::new(fp);
+    face.fp = Arc::new(fp);
     face.fb = fb;
     face.cells = cells;
-    face.pair = Some(Rc::new(PairData::Alg(pr)));
+    face.pair = Some(Arc::new(PairData::Alg(pr)));
     face.wit = Some(wit);
     Ok(face)
 }
@@ -984,9 +984,9 @@ pub fn bridge_face_rat(n1: &[Z], d1: &Z, n2: &[Z], d2: &Z, p: &[Vec<Z>]) -> R<BF
     face.rden = den;
     face.wit = Some(wit);
     face.cells = cells;
-    face.fp = Rc::new(fp);
+    face.fp = Arc::new(fp);
     face.fb = -1;
-    face.pair = Some(Rc::new(PairData::Rat(pr)));
+    face.pair = Some(Arc::new(PairData::Rat(pr)));
     Ok(face)
 }
 

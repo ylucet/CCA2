@@ -1,6 +1,8 @@
 //! envelope_subdivision_alg -- subdivide an assembled envelope when a BRIDGE (or irrational
 //! corner) face competes with the quadratic faces (port of envelope_subdivision_alg.py).
 
+use crate::memo::Memo;
+use std::sync::LazyLock;
 use crate::alg_branch::{alg_branch, alg_branch_info};
 use crate::alg_con::{AlgRow, IiRow, SubFace, SubKind};
 use crate::alg_face_below::{alg_face_below, BelowFace};
@@ -18,9 +20,8 @@ use crate::poly_n::PolyN;
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub const PAIR_STRIDE: usize = 1_000_000;
 
@@ -45,7 +46,7 @@ type Rows = Vec<(usize, i64)>;
 
 #[derive(Clone)]
 struct Irr {
-    fp: Rc<PolyN>,
+    fp: Arc<PolyN>,
     fb: i64,
 }
 
@@ -312,12 +313,10 @@ fn alg_empty(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], alg_rows: &[AlgRow]
 
 type RowFailsKey = (Vec<(Vec<Z>, i64)>, Vec<Vec<Z>>, Vec<(Vec<(Vec<u32>, Z)>, Vec<Z>, Z, i64, i64)>);
 
-thread_local! {
-    static ROW_FAILS_CACHE: RefCell<HashMap<RowFailsKey, bool>> = RefCell::new(HashMap::new());
-}
+static ROW_FAILS_CACHE: LazyLock<Memo<RowFailsKey, bool>> = LazyLock::new(|| Memo::new(1000000));
 
 pub fn clear_memos() {
-    ROW_FAILS_CACHE.with(|m| m.borrow_mut().clear());
+    ROW_FAILS_CACHE.clear();
 }
 
 fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<bool> {
@@ -327,7 +326,7 @@ fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<
     k2.sort();
     let k3: Vec<(Vec<(Vec<u32>, Z)>, Vec<Z>, Z, i64, i64)> = a.iter().map(|x| (x.fp.iter().map(|(e, c)| (e.clone(), c.clone())).collect(), x.num.clone(), x.den.clone(), x.fb, x.side)).collect();
     let key: RowFailsKey = (k1, k2, k3);
-    if let Some(v) = ROW_FAILS_CACHE.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(v) = ROW_FAILS_CACHE.get(&key) {
         return Ok(v);
     }
     let mut ok = false;
@@ -335,9 +334,7 @@ fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<
         let specs: Vec<RowSpec> = a.iter().map(|x| RowSpec::Quad { fp: x.fp.clone(), fb: x.fb, num: x.num.clone(), den: x.den.clone(), side: x.side }).collect();
         ok = alg_row_fails(&specs, &reg, 6).unwrap_or(false);
     }
-    ROW_FAILS_CACHE.with(|m| {
-        m.borrow_mut().insert(key, ok);
-    });
+    ROW_FAILS_CACHE.insert(key, ok);
     Ok(ok)
 }
 
@@ -562,7 +559,7 @@ fn corner_value_face(cf: &BFace, pt: [f64; 2]) -> R<Option<Irr>> {
 }
 
 fn same_irr(a: &Irr, b: &Irr) -> bool {
-    a.fb == b.fb && (Rc::ptr_eq(&a.fp, &b.fp) || *a.fp == *b.fp)
+    a.fb == b.fb && (Arc::ptr_eq(&a.fp, &b.fp) || *a.fp == *b.fp)
 }
 
 fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[QuadC], quad_app: &[usize]) -> R<Vec<Irr>> {
@@ -1013,13 +1010,13 @@ fn unique_stable(rows: Vec<Vec<Z>>) -> Vec<Vec<Z>> {
 struct Samples {
     x: Vec<[f64; 2]>,
     z: HashMap<(*const PolyN, i64), HashMap<usize, f64>>,
-    keep: Vec<Rc<PolyN>>,
+    keep: Vec<Arc<PolyN>>,
 }
 
 impl Samples {
-    fn branch(&mut self, fp: &Rc<PolyN>, fb: i64, idx: &[usize]) -> R<Vec<f64>> {
-        let key = (Rc::as_ptr(fp), fb);
-        if !self.keep.iter().any(|k| Rc::ptr_eq(k, fp)) {
+    fn branch(&mut self, fp: &Arc<PolyN>, fb: i64, idx: &[usize]) -> R<Vec<f64>> {
+        let key = (Arc::as_ptr(fp), fb);
+        if !self.keep.iter().any(|k| Arc::ptr_eq(k, fp)) {
             self.keep.push(fp.clone());
         }
         let e = self.z.entry(key).or_default();
@@ -1171,7 +1168,7 @@ fn le_rows(f: &SubFace, o: &SubFace, con: &mut Vec<Vec<Z>>, alg: &mut Vec<AlgRow
         alg.push(AlgRow { fp: f.fp.clone().unwrap(), fb: f.fb, num: o.num.clone(), den: o.den.clone(), side: 1 });
     } else {
         let (ff, of) = (f.fp.clone().unwrap(), o.fp.clone().unwrap());
-        if !((Rc::ptr_eq(&ff, &of) || *ff == *of) && f.fb == o.fb) {
+        if !((Arc::ptr_eq(&ff, &of) || *ff == *of) && f.fb == o.fb) {
             ii.push(IiRow { fp1: of, fb1: o.fb, fp2: ff, fb2: f.fb });
         }
     }

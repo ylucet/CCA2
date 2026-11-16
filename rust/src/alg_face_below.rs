@@ -8,11 +8,11 @@ use crate::errors::R;
 use crate::numeric::{linspace, round_half_away};
 use crate::poly_n::PolyN;
 use crate::rat_q::*;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct BelowFace {
-    pub fp: Rc<PolyN>,
+    pub fp: Arc<PolyN>,
     pub fb: i64,
 }
 

@@ -2,6 +2,8 @@
 //! part of a box that lies in a region (port of alg_row_fails.py). True is a proof; false means
 //! "not proved". Square-free parts by Yun, through FLINT when available (src/flint.rs).
 
+use crate::memo::Memo;
+use std::sync::LazyLock;
 use crate::biv::{self, M2};
 use crate::errors::R;
 use crate::numeric::{roots, Cx, EPS};
@@ -10,17 +12,16 @@ use crate::poly_sign_on::{box_sign, comb, FMat};
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 const REALMIN: f64 = 2.2250738585072014e-308;
 
 /// A row: "side * (q - z) >= 0" (Quad) or "z_k <= z_w" (Face).
 #[derive(Clone, Debug)]
 pub enum RowSpec {
-    Quad { fp: Rc<PolyN>, fb: i64, num: Vec<Z>, den: Z, side: i64 },
-    Face { fp: Rc<PolyN>, fb: i64, wfp: Rc<PolyN>, wfb: i64 },
+    Quad { fp: Arc<PolyN>, fb: i64, num: Vec<Z>, den: Z, side: i64 },
+    Face { fp: Arc<PolyN>, fb: i64, wfp: Arc<PolyN>, wfb: i64 },
 }
 
 /// The region of a cell: its box, its row polynomials (also the factors), lines and corners.
@@ -132,22 +133,20 @@ fn run_test(t: &Test, s: &[i32]) -> bool {
 }
 
 // ---- memos ----------------------------------------------------------------------------------------
-thread_local! {
-    static MEMO_SF: RefCell<HashMap<(PolyN, Vec<Z>, Z, i32, bool), Option<Vec<M2>>>> = RefCell::new(HashMap::new());
-    static MEMO_FACE: RefCell<HashMap<(u8, PolyN, PolyN), Option<Vec<M2>>>> = RefCell::new(HashMap::new());
-    static MEMO_SURD: RefCell<HashMap<(PolyN, PolyN, bool, bool), Option<(Vec<M2>, Vec<Surd>)>>> = RefCell::new(HashMap::new());
-    static MEMO_TOP: RefCell<HashMap<(PolyN, PolyN, bool), Option<(Vec<M2>, Vec<Surd>, bool)>>> = RefCell::new(HashMap::new());
-    static MEMO_SURDFACE: RefCell<HashMap<(PolyN, bool), Option<SurdFace>>> = RefCell::new(HashMap::new());
-    static MEMO_SURDOF: RefCell<HashMap<(u64, u64), Option<[i64; 6]>>> = RefCell::new(HashMap::new());
-    static MEMO_FACTOR_INTS: RefCell<HashMap<M2, Option<M2>>> = RefCell::new(HashMap::new());
-    static MEMO_FACTOR_BU: RefCell<HashMap<(M2, u64, u64, i64, u8), Option<SP>>> = RefCell::new(HashMap::new());
-    static MEMO_CURVE_PTS: RefCell<HashMap<M2, Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)>>> = RefCell::new(HashMap::new());
-}
+static MEMO_SF: LazyLock<Memo<(PolyN, Vec<Z>, Z, i32, bool), Option<Vec<M2>>>> = LazyLock::new(|| Memo::new(5000));
+static MEMO_FACE: LazyLock<Memo<(u8, PolyN, PolyN), Option<Vec<M2>>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_SURD: LazyLock<Memo<(PolyN, PolyN, bool, bool), Option<(Vec<M2>, Vec<Surd>)>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_TOP: LazyLock<Memo<(PolyN, PolyN, bool), Option<(Vec<M2>, Vec<Surd>, bool)>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_SURDFACE: LazyLock<Memo<(PolyN, bool), Option<SurdFace>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_SURDOF: LazyLock<Memo<(u64, u64), Option<[i64; 6]>>> = LazyLock::new(|| Memo::new(20000));
+static MEMO_FACTOR_INTS: LazyLock<Memo<M2, Option<M2>>> = LazyLock::new(|| Memo::new(20000));
+static MEMO_FACTOR_BU: LazyLock<Memo<(M2, u64, u64, i64, u8), Option<SP>>> = LazyLock::new(|| Memo::new(20000));
+static MEMO_CURVE_PTS: LazyLock<Memo<M2, Arc<(bool, Option<Vec<(f64, Vec<Cx>)>>)>>> = LazyLock::new(|| Memo::new(20000));
 
 pub fn clear_memos() {
-    MEMO_SURDOF.with(|m| m.borrow_mut().clear());
-    MEMO_FACTOR_INTS.with(|m| m.borrow_mut().clear());
-    MEMO_CURVE_PTS.with(|m| m.borrow_mut().clear());
+    MEMO_SURDOF.clear();
+    MEMO_FACTOR_INTS.clear();
+    MEMO_CURVE_PTS.clear();
 }
 
 // ---- the entry point ------------------------------------------------------------------------------
@@ -256,7 +255,7 @@ fn row_polys(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
         return Ok(None);
     };
     let key = ((**fp).clone(), num.clone(), den.clone(), if top { want } else { 0 }, top);
-    let p = match MEMO_SF.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_SF.get(&key) {
         Some(p) => p,
         None => {
             let p = if top {
@@ -269,13 +268,7 @@ fn row_polys(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
             } else {
                 Some(sign_polys(&slices(fp), &q, &dn, nz - 1).iter().map(square_free_sign).collect())
             };
-            MEMO_SF.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 5000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_SF.insert(key, p.clone());
             p
         }
     };
@@ -480,19 +473,13 @@ fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashM
             let mut fac_c: Vec<SP> = vec![];
             for g in factors {
                 let key = (g.clone(), p[0].to_bits(), p[1].to_bits(), sg, major);
-                let hit = MEMO_FACTOR_BU.with(|m| m.borrow().get(&key).cloned());
+                let hit = MEMO_FACTOR_BU.get(&key);
                 let gg = match hit {
                     Some(x) => x,
                     None => {
                         let gn = num_z(g.clone());
                         let x = if vanishes_at(&gn, p) { blow_up_raw(&gn, p, sg, major)? } else { None };
-                        MEMO_FACTOR_BU.with(|m| {
-                            let mut m = m.borrow_mut();
-                            if m.len() > 20000 {
-                                m.clear();
-                            }
-                            m.insert(key, x.clone());
-                        });
+                        MEMO_FACTOR_BU.insert(key, x.clone());
                         x
                     }
                 };
@@ -780,17 +767,11 @@ const SURD_D: [i64; 30] = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23
 
 fn surd_of(p: [f64; 2]) -> Option<[i64; 6]> {
     let key = (p[0].to_bits(), p[1].to_bits());
-    if let Some(r) = MEMO_SURDOF.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(r) = MEMO_SURDOF.get(&key) {
         return r;
     }
     let r = surd_of_search(p);
-    MEMO_SURDOF.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(key, r);
-    });
+    MEMO_SURDOF.insert(key, r);
     r
 }
 
@@ -915,7 +896,7 @@ fn blow_up_surd(pm: &M2, p: [f64; 2], sg: i64, major: u8) -> Option<SP> {
 }
 
 // ---- rows comparing two faces ---------------------------------------------------------------------
-fn face_row_polys(fk: &Rc<PolyN>, fbk: i64, fw: &Rc<PolyN>, fbw: i64, factors: &[M2]) -> R<Option<Row>> {
+fn face_row_polys(fk: &Arc<PolyN>, fbk: i64, fw: &Arc<PolyN>, fbw: i64, factors: &[M2]) -> R<Option<Row>> {
     let nk = nz_of(fk);
     let nw = nz_of(fw);
     if nw >= 4 {
@@ -960,17 +941,11 @@ fn face_row_polys(fk: &Rc<PolyN>, fbk: i64, fw: &Rc<PolyN>, fbw: i64, factors: &
         return Ok(Some(r));
     }
     let key = (mode, (**fk).clone(), (**fw).clone());
-    let p = match MEMO_FACE.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_FACE.get(&key) {
         Some(p) => p,
         None => {
             let p = face_raw(&slices(fk), &slices(fw), -1, mode).map(|v| v.iter().map(square_free_sign).collect::<Vec<_>>()).ok();
-            MEMO_FACE.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 2000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_FACE.insert(key, p.clone());
             p
         }
     };
@@ -1023,7 +998,7 @@ struct SurdFace {
 
 fn surd_face(f: &PolyN, n: usize, hi: bool) -> Option<SurdFace> {
     let key = (f.clone(), hi);
-    if let Some(r) = MEMO_SURDFACE.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(r) = MEMO_SURDFACE.get(&key) {
         return r;
     }
     let s = slices(f);
@@ -1041,13 +1016,7 @@ fn surd_face(f: &PolyN, n: usize, hi: bool) -> Option<SurdFace> {
             }
         }
     }
-    MEMO_SURDFACE.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 2000 {
-            m.clear();
-        }
-        m.insert(key, out.clone());
-    });
+    MEMO_SURDFACE.insert(key, out.clone());
     out
 }
 
@@ -1110,9 +1079,9 @@ fn square_free_int(c: &Z) -> Z {
     k
 }
 
-fn surd_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, nw: usize, hik: bool, hiw: bool, factors: &[M2]) -> R<Option<Row>> {
+fn surd_face_row(fk: &Arc<PolyN>, fw: &Arc<PolyN>, nk: usize, nw: usize, hik: bool, hiw: bool, factors: &[M2]) -> R<Option<Row>> {
     let key = ((**fk).clone(), (**fw).clone(), hik, hiw);
-    let p = match MEMO_SURD.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_SURD.get(&key) {
         Some(p) => p,
         None => {
             let mut p = None;
@@ -1141,13 +1110,7 @@ fn surd_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, nw: usize, hik: bool
                     }
                 }
             }
-            MEMO_SURD.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 2000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_SURD.insert(key, p.clone());
             p
         }
     };
@@ -1162,9 +1125,9 @@ fn surd_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, nw: usize, hik: bool
     Ok(Some(Row { p: pn, test: Test::Surd, corner: true }))
 }
 
-fn top_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, hik: bool, factors: &[M2]) -> R<Option<Row>> {
+fn top_face_row(fk: &Arc<PolyN>, fw: &Arc<PolyN>, nk: usize, hik: bool, factors: &[M2]) -> R<Option<Row>> {
     let key = ((**fk).clone(), (**fw).clone(), hik);
-    let p = match MEMO_TOP.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_TOP.get(&key) {
         Some(p) => p,
         None => {
             let mut p = None;
@@ -1197,13 +1160,7 @@ fn top_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, hik: bool, factors: &
                     p = Some((vec![cf(&fk2.den), cf(&fk2.s), cf(&g[n])], t, n % 2 == 1));
                 }
             }
-            MEMO_TOP.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 2000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_TOP.insert(key, p.clone());
             p
         }
     };
@@ -1431,7 +1388,7 @@ fn rel_sign(s: &M2, o: &M2) -> i32 {
 
 // ---- dividing out the region's own boundary ----------------------------------------------------------
 fn factor_ints(g: &M2) -> Option<M2> {
-    if let Some(h) = MEMO_FACTOR_INTS.with(|m| m.borrow().get(g).cloned()) {
+    if let Some(h) = MEMO_FACTOR_INTS.get(g) {
         return h;
     }
     let h = if biv::is_const(g) {
@@ -1444,13 +1401,7 @@ fn factor_ints(g: &M2) -> Option<M2> {
             Some(g2)
         }
     };
-    MEMO_FACTOR_INTS.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(g.clone(), h.clone());
-    });
+    MEMO_FACTOR_INTS.insert(g.clone(), h.clone());
     h
 }
 
@@ -1553,8 +1504,8 @@ fn may_divide(s: &M2, g: &M2) -> bool {
     true
 }
 
-fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
-    if let Some(h) = MEMO_CURVE_PTS.with(|m| m.borrow().get(g).cloned()) {
+fn curve_points(g: &M2) -> Arc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
+    if let Some(h) = MEMO_CURVE_PTS.get(g) {
         return h;
     }
     let mut tr = false;
@@ -1564,7 +1515,7 @@ fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
         tr = true;
     }
     let hit = if gg[0].len() < 2 {
-        Rc::new((tr, None))
+        Arc::new((tr, None))
     } else {
         let mut pts = vec![];
         for x in [0.6180339887f64, -1.3247179572, 2.7182818285] {
@@ -1586,15 +1537,9 @@ fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
             let rev: Vec<f64> = cy.iter().rev().cloned().collect();
             pts.push((x, roots(&rev)));
         }
-        Rc::new((tr, Some(pts)))
+        Arc::new((tr, Some(pts)))
     };
-    MEMO_CURVE_PTS.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(g.clone(), hit.clone());
-    });
+    MEMO_CURVE_PTS.insert(g.clone(), hit.clone());
     hit
 }
 

@@ -3,6 +3,7 @@
 //! modules one for one; index values stay 1-based in the data, 0 = none, exactly as there.
 
 pub mod errors;
+pub mod memo;
 pub mod rat_q;
 pub mod numeric;
 pub mod probe_data;

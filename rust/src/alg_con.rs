@@ -9,7 +9,7 @@ use crate::qua_con::QuaCon;
 use crate::rat_q::*;
 use crate::triangle_face::TriFace;
 use num_traits::Zero;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum AlgCon {
@@ -47,7 +47,7 @@ impl AlgCon {
 // ==========================================================================================
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlgRow {
-    pub fp: Rc<PolyN>,
+    pub fp: Arc<PolyN>,
     pub fb: i64,
     pub num: Vec<Z>,
     pub den: Z,
@@ -56,9 +56,9 @@ pub struct AlgRow {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct IiRow {
-    pub fp1: Rc<PolyN>,
+    pub fp1: Arc<PolyN>,
     pub fb1: i64,
-    pub fp2: Rc<PolyN>,
+    pub fp2: Arc<PolyN>,
     pub fb2: i64,
 }
 
@@ -74,14 +74,14 @@ pub struct SubFace {
     pub kind: SubKind,
     pub num: Vec<Z>,
     pub den: Z,
-    pub fp: Option<Rc<PolyN>>,
+    pub fp: Option<Arc<PolyN>>,
     pub fb: i64,
     pub con: Vec<Vec<Z>>,
     pub alg: Vec<AlgRow>,
     pub ii: Vec<IiRow>,
     pub tri: Vec<[i64; 3]>,
-    pub tf: Option<Rc<TriFace>>,
-    pub tfs: Vec<Rc<TriFace>>,
+    pub tf: Option<Arc<TriFace>>,
+    pub tfs: Vec<Arc<TriFace>>,
 }
 
 // ==========================================================================================
@@ -89,7 +89,7 @@ pub struct SubFace {
 // ==========================================================================================
 #[derive(Clone, Debug)]
 pub struct EcA {
-    pub fp: Rc<PolyN>,
+    pub fp: Arc<PolyN>,
     pub fb: i64,
     pub num: Vec<Z>,
     pub den: Z,
@@ -102,11 +102,11 @@ pub struct AlgCrv {
     pub fn_: Vec<Vec<Z>>,
     pub fd: Vec<Z>,
     pub fc: Vec<Vec<[i64; 4]>>,
-    pub fp: Vec<Option<Rc<PolyN>>>,
+    pub fp: Vec<Option<Arc<PolyN>>>,
     pub fb: Vec<i64>,
     pub eca: Vec<EcA>,
     pub eci: Vec<IiRow>,
-    pub tri: Vec<Rc<TriFace>>,
+    pub tri: Vec<Arc<TriFace>>,
     pub ft: Vec<usize>,
 }
 
@@ -207,8 +207,8 @@ impl AlgCrv {
     }
 }
 
-fn rc_eq(a: &Rc<PolyN>, b: &Rc<PolyN>) -> bool {
-    Rc::ptr_eq(a, b) || **a == **b
+fn rc_eq(a: &Arc<PolyN>, b: &Arc<PolyN>) -> bool {
+    Arc::ptr_eq(a, b) || **a == **b
 }
 
 pub fn assemble_alg_crv(sub: &[SubFace]) -> R<AlgCrv> {
