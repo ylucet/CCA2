@@ -9,6 +9,7 @@
 //! (memo tables are caches, see memo.rs), so the output cannot depend on the schedule.
 use crate::errors::R;
 use rayon::prelude::*;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::OnceLock;
 
 /// Stack of a pool thread: the quadtree and arrangement recursions are deep (the main thread has 8 MB).
@@ -59,8 +60,17 @@ pub fn map_range<U: Send, F: Fn(usize) -> R<U> + Sync + Send>(n: usize, f: F) ->
 /// (measured: conj fixture 35 has 71 faces folded, 67 as a tree). The default keeps the output
 /// bit-identical to the serial engine.
 pub fn tree_reduce() -> bool {
-    static T: OnceLock<bool> = OnceLock::new();
-    *T.get_or_init(|| std::env::var("CCA2_REDUCE").map(|v| v == "tree").unwrap_or(false))
+    match TREE.load(Ordering::Relaxed) {
+        0 => std::env::var("CCA2_REDUCE").map(|v| v == "tree").unwrap_or(false),
+        v => v == 2,
+    }
+}
+
+static TREE: AtomicU8 = AtomicU8::new(0);
+
+/// Override CCA2_REDUCE for the rest of the process (benchmarks and the fold-vs-tree check).
+pub fn set_tree_reduce(on: bool) {
+    TREE.store(if on { 2 } else { 1 }, Ordering::Relaxed);
 }
 
 /// Reduction of `items` (non-empty) with the associative `f`. Left fold by default (identical to the
