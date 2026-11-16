@@ -1203,9 +1203,9 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
     let mut tup: Vec<Vec<usize>> = (0..cell_rows[0].len()).map(|k| vec![k]).collect();
     let mut trow: Vec<Rows> = cell_rows[0].clone();
     for g in 1..np {
-        let mut nt = vec![];
-        let mut nr = vec![];
-        for a in 0..trow.len() {
+        // every current tuple is merged with every cell of envelope g independently; results in order
+        let merged = crate::par::map_range(trow.len(), |a| -> R<Vec<(Vec<usize>, Rows)>> {
+            let mut o = vec![];
             for k in 0..cell_rows[g].len() {
                 let r = match merge_rows(&trow[a], &cell_rows[g][k]) {
                     None => continue,
@@ -1216,9 +1216,15 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
                 }
                 let mut t = tup[a].clone();
                 t.push(k);
-                nt.push(t);
-                nr.push(r);
+                o.push((t, r));
             }
+            Ok(o)
+        })?;
+        let mut nt = vec![];
+        let mut nr = vec![];
+        for (t, r) in merged.into_iter().flatten() {
+            nt.push(t);
+            nr.push(r);
         }
         tup = nt;
         trow = nr;
@@ -1235,11 +1241,13 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
     if bound > budget {
         bail!("envelopeSubdivisionAlg:overlaySize", "the overlay of {} pairs would visit up to {} pieces over {} tuples, past the budget of {}.", np, bound, tup.len(), budget);
     }
-    let mut out = vec![];
-    for (t, rows) in tup.iter().zip(trow.iter()) {
+    // every tuple of cells is resolved on its own; the faces are concatenated in tuple order
+    let per_tuple = crate::par::map_range(tup.len(), |ti| -> R<Vec<SubFace>> {
+        let (t, rows) = (&tup[ti], &trow[ti]);
+        let mut out = vec![];
         let gs: Vec<usize> = (0..np).filter(|&g| covered[g][t[g]]).collect();
         if gs.is_empty() {
-            continue;
+            return Ok(out);
         }
         let mut base: Vec<Vec<Z>> = vec![];
         for g in 0..np {
@@ -1293,7 +1301,9 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
                 out.push(SubFace { kind: f.kind.clone(), num: f.num.clone(), den: f.den.clone(), fp: f.fp.clone(), fb: f.fb, con, alg, ii, tri: vec![], tf: None, tfs: vec![] });
             }
         }
-    }
+        Ok(out)
+    })?;
+    let out: Vec<SubFace> = per_tuple.into_iter().flatten().collect();
     Ok(out)
 }
 
