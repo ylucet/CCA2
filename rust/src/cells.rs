@@ -799,8 +799,9 @@ pub fn compact_cells(fn_: Vec<Vec<Z>>, fd: Vec<Z>, fc: Vec<Vec<FcRow>>, ecq: &[V
     let (mut fn_, mut fd, mut fc) = (fn_, fd, fc);
     for _ in 0..8 {
         let mut drops = 0;
-        for k in 0..fc.len() {
-            let (r, d) = drop_implied(std::mem::take(&mut fc[k]), ecq)?;
+        // every cell sheds its implied rows independently
+        let res = crate::par::map_range(fc.len(), |k| drop_implied(fc[k].clone(), ecq))?;
+        for (k, (r, d)) in res.into_iter().enumerate() {
             fc[k] = r;
             drops += d;
         }
