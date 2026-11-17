@@ -391,4 +391,61 @@ Example 2 still have a ~1 s critical path inside a few cells (profiled: `drop_be
 it gains (measured both in `box_rec` and in `alg_face_below`), (c) 64 threads are 32 cores plus
 hyper-threading, and the machine is shared. The 20% allocator "thread tax" is only partly removed by
 mimalloc (a few percent). What would still help: restructure `drop_below` so its dependent loops can
-be speculated cheaply, and cache `row_polys` across the repeated `alg_row_fails_box` calls on one cell.
+be speculated cheaply, and cache `row_polys` across the repeated `alg_row_fails_box` calls on one cell
+-- both done, 2026-11-16, see below.
+
+### The remaining critical path: implemented (2026-11-16)
+
+Only `rust/` was touched. The 200-fixture digest stays identical to the serial engine at 1, 2, 8 and
+32 threads (and with `CCA2_SPECULATE=1`); the 114 + 176 parity traces and the 20 slow golden records
+pass.
+
+**1. The dependent `keep[]` loops of `drop_below` are now independent per face.** The old loops
+tested face i against the faces that were still kept at that moment, so the decisions were
+data-dependent and the loops ran in order. "lo is below hi" is a certificate of a pointwise order
+that is monotone in hi (adding faces only raises the max) and transitive (lo <= hi, hi <= hi'
+imply lo <= hi'), so testing each face against ALL the other candidates gives the same kept set
+for distinct faces -- and the two loops are now `par::map` over the faces, so the dependent chain
+inside the heavy cells is gone.
+
+**2. Row prep is cached across the repeated `alg_row_fails_box` calls on a cell.** A profile of the
+serial kink (SIGPROF, `prof`) showed where the repeated work actually is: not `row_polys` itself,
+but the exact corner blow-up -- `corner_ok` 49 % of the call, of which `blow_up_raw` 27 % -- whose
+memo used to die with each call, so every call a cell made re-blow-upped the same (row, corner)
+pairs (the Python reference keeps that sharing on the polynomial objects; the port had lost it).
+Now:
+- `RowCache` (per cell, created in `drop_below`, threaded through `alg_face_below`): the processed
+  `row_polys` of a row spec -- a pure function of the spec and the cell's factors -- computed once
+  per cell.
+- `MEMO_ROW_BU`: the corner blow-up of a row polynomial (a pure function of polynomial, corner,
+  sign and direction) kept globally, like `MEMO_FACTOR_BU` for the region's factors, which the
+  benchmark protocol does not clear.
+
+Both are pure caches: they change the time, never the result.
+
+**A/B on the two heaviest calls** (min of 3 repetitions, FLINT linked, shared machine at load 7-9):
+
+| fixture | 1 thread, s | 32 threads, s |
+|---|---|---|
+| #196 kink, before -> after | 6.92 -> 5.31 | 1.26 -> 0.86 |
+| #191 Example 2, before -> after | 5.29 -> 4.81 | 0.96 -> 0.76 |
+
+**Full sweep (same protocol as the table above; `bench/parallel/runs2`):** min per fixture over
+3 sweeps; the load average was 11-16 during the runs (higher than the 3-8 of the previous table,
+so read the absolute figures as conservative; the speed-ups are the point).
+
+| threads | all 200 fixtures (s) | speed-up | #196 kink | #191 Example 2 | #200 | #177 | #174 | #165 |
+|---|---|---|---|---|---|---|---|---|
+| 1 (serial, `CCA2_PAR=0`) | 12.88 | 1.0x | 5.42 | 4.78 | 1.45 | 0.50 | 0.33 | 0.15 |
+| 2 | 7.25 | 1.8x | 2.98 | 2.55 | 0.79 | 0.35 | 0.24 | 0.11 |
+| 4 | 4.17 | 3.1x | 1.62 | 1.45 | 0.47 | 0.22 | 0.16 | 0.08 |
+| 8 | 2.84 | 4.5x | 1.16 | 0.96 | 0.31 | 0.13 | 0.11 | 0.04 |
+| 16 | 2.28 | 5.6x | 0.84 | 0.75 | 0.30 | 0.14 | 0.10 | 0.03 |
+| 32 | **2.22** | **5.8x** | 0.81 | 0.73 | 0.29 | 0.14 | 0.10 | 0.03 |
+| 64 | 2.22 | 5.8x | 0.82 | 0.70 | 0.28 | 0.14 | 0.09 | 0.03 |
+
+Kind, face count and refusal identifier of all 200 fixtures are equal in all 21 runs.
+
+Against the 2026-11-15 table: the whole benchmark 3.02 s (16 threads) -> 2.22 s (32 threads),
+4.9x -> 5.8x; kink 1.38 -> 0.81 s, Example 2 0.94 -> 0.70 s. Relative to MATLAB (1126 s) the whole
+benchmark is now about 500x (15.7 s -> 2.2 s at 32 threads).
