@@ -85,6 +85,15 @@ function tf = algRowFails(a, box, inBox, depth, factors, corners)
     if nargin < 5, factors = {}; end
     if nargin < 6, corners = zeros(0,2); end
     tf = false;
+    % A PERFECT-SQUARE TANGENCY (2026-11-16): a quad-vs-bridge row whose bridge branch exceeds the
+    % quad by a perfect square, -side * (q - z) = S^2 (a positive constant times a square). The row
+    % side * (q - z) >= 0 then holds only where S = 0 -- a 1-D set -- so the face owns no area.
+    % diagonalKink c = -2, faces 2 & 4: the bridge's top branch exceeds the quad 2x - 1 by exactly
+    % (x + y - 1)^2, a double tie at the region's corners (0, 1) and (1, 0) that the box subdivision
+    % cannot read (both disjuncts vanish to first order there). Certified globally -- region-free.
+    for t = 1:numel(a)
+        if psTangency(a(t)), tf = true; return, end
+    end
     rows = cell(1, numel(a));
     for t = 1:numel(a)
         rows{t} = rowPolys(a(t), factors);
@@ -1095,6 +1104,93 @@ function S = zSqrt(Dp)
     catch
         S = [];
     end
+end
+
+function tf = psTangency(a)
+% A QUAD-vs-BRIDGE row whose bridge branch exceeds the quad by a PERFECT SQUARE (s-symmetric
+% certificate, 2026-11-16). The bridge must be RATIONAL: D = A1^2 - 4 A2 A0 = s^2 for a
+% polynomial s. The REAL sign of s is region-dependent (s is a polynomial whose value can be
+% negative in a region), so one branch of "q - z" cannot be certified from a single e = +-1.
+% Both branches are certified at once: with Q/Dn = q and Dn = 2 den,
+%     P+ = 2 A2 Q + Dn A1 - Dn s,     P- = 2 A2 Q + Dn A1 + Dn s,
+% the two roots are (A1 +- s)/(2 A2) and q - (A1 +- s)/(2 A2) = P^ /(2 A2 Dn) (A2 > 0, Dn > 0),
+% so sign(q - root) = sign(P^). The row side * (q - z) >= 0 (z the top root if FB in {-1, 2}, the
+% bottom root if FB in {1, -2}) holds only on a CURVE (a 1-D set; the face owns no area) when:
+%     upper, side > 0:  P+ OR  P- is a NEGATIVE square (<= 0, zero on a curve);
+%     upper, side < 0:  P+ AND P- are POSITIVE squares (>= 0);
+%     lower, side > 0:  P+ AND P- are NEGATIVE squares;
+%     lower, side < 0:  P+ OR  P- is a POSITIVE square.
+% A square is (non-zero constant) * S^2; "negative" means that constant is negative. diagonalKink
+% c = -2, top row: P+ = -4 (x + y - 1)^2 (a negative square), side > 0 -- certifies.
+    tf = false;
+    if isfield(a, 'W') && ~isempty(a.W), return, end      % a face-against-face row: not this
+    if ratQ.isBigPoly(a.FP), return, end                    % exact integer path only
+    FP = a.FP;
+    if size(FP, 3) ~= 3, return, end                        % degree 2 in z
+    num = double(a.num(:).');
+    if numel(num) ~= 10 || any(num(1:4) ~= 0), return, end  % q a polynomial in x, y (no z terms)
+    if ~(a.den > 0), return, end
+    A2 = ratQ.trimN(FP(:,:,3));
+    if ~isequal(size(A2), [1,1]) || A2(1) <= 0, return, end % A2 a positive constant
+    A2s = A2(1);
+    A1 = FP(:,:,2);  A0 = FP(:,:,1);
+    Dn = 2 * double(a.den);
+    if Dn ~= round(Dn), dbg(); return, end
+    try
+        Q = zeros(3,3);
+        Q(3,1) = num(5);  Q(2,2) = 2*num(6);  Q(1,3) = num(7);
+        Q(2,1) = 2*num(8);  Q(1,2) = 2*num(9);  Q(1,1) = 2*num(10);
+        Q = ratQ.trimN(Q);
+        % polyAddN, not +- : Q, A1 and s have DIFFERENT sizes and MATLAB's +- raises, which the
+        % catch below would swallow as a silent refusal (2026-11-16, the first draft of this test).
+        D = ratQ.trimN(ratQ.polyAddN(ratQ.polyMulN(A1, A1), -4 * A2s * A0));
+        [s, ok] = squarePoly(D);                            % D = s^2: the bridge is rational
+        if ~ok, return, end
+        hi = any(a.FB == [-1 2]);                            % the top root (FB in {-1, 2})?
+        Base = ratQ.trimN(ratQ.polyAddN(2 * A2s * Q, Dn * A1));
+        Pp = ratQ.trimN(ratQ.polyAddN(Base, -Dn * s));      % P+
+        Pm = ratQ.trimN(ratQ.polyAddN(Base, +Dn * s));      % P-
+        [posP, ~] = squarePos(Pp);  [posM, ~] = squarePos(Pm);   % P^ a positive square (>= 0)
+        [negP, ~] = squarePos(-Pp); [negM, ~] = squarePos(-Pm);  % P^ a negative square (<= 0)
+        if hi
+            if a.side > 0,  tf = negP || negM;
+            else,           tf = posP && posM;
+            end
+        else
+            if a.side > 0,  tf = negP && negM;
+            else,           tf = posP || posM;
+            end
+        end
+    catch
+    end
+end
+
+function [s, ok] = squarePoly(D)
+% s in Z[x,y] with s^2 = D exactly (D a perfect square, its content a square), or s = [] otherwise.
+    s = [];  ok = false;
+    D = ratQ.trimN(D);
+    if all(D(:) == 0), return, end
+    cont = ratQ.contentOf(D);
+    if cont <= 0, return, end
+    Dcf = ratQ.trimN(D / cont);
+    S0 = zSqrt(Dcf);
+    if isempty(S0), return, end
+    sc = sqrt(cont);
+    if sc ~= round(sc), return, end
+    s = sc * S0;  ok = true;
+end
+
+function [ok, S] = squarePos(P)
+% P = (positive constant) * S^2 (so P >= 0 at every point), or not of that form: S = [].
+    ok = false;  S = [];
+    P = ratQ.trimN(P);
+    if all(P(:) == 0), return, end
+    cont = ratQ.contentOf(P);
+    if cont <= 0, return, end
+    Pcf = ratQ.trimN(P / cont);
+    S0 = zSqrt(Pcf);
+    if isempty(S0), return, end
+    S = S0;  ok = true;
 end
 
 function L = yunParts(S, d, lvl)

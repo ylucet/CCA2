@@ -13,7 +13,7 @@ OUT="$1"; FNS="$2"; shift 2
 SH="$(mktemp -d)"
 trap 'rm -rf "$SH"' EXIT
 for fn in $FNS; do
-    sed -E "0,/^function/{/^function/{s/\\b$fn\\b *\\(/${fn}_real(/}}" "$ROOT/$fn.m" > "$SH/${fn}_real.m"
+    sed -E "0,/^function/{/^function/{s/\\b$fn\\b *\\(/${fn}_real(/}}" "$ROOT/MATLAB/$fn.m" > "$SH/${fn}_real.m"
     grep -q "^function.*${fn}_real(" "$SH/${fn}_real.m" || { echo "could not rename $fn"; exit 1; }
     cat > "$SH/$fn.m" <<M
 function varargout = $fn(varargin)

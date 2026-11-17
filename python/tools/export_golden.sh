@@ -14,8 +14,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$1"; shift
 SH="$(mktemp -d)"
 trap 'rm -rf "$SH"' EXIT
-sed '1s/conjQ(/conjQ_real(/' "$ROOT/conjQ.m" > "$SH/conjQ_real.m"
-sed '1s/biconjQ(/biconjQ_real(/' "$ROOT/biconjQ.m" > "$SH/biconjQ_real.m"
+sed '1s/conjQ(/conjQ_real(/' "$ROOT/MATLAB/conjQ.m" > "$SH/conjQ_real.m"
+sed '1s/biconjQ(/biconjQ_real(/' "$ROOT/MATLAB/biconjQ.m" > "$SH/biconjQ_real.m"
 cat > "$SH/conjQ.m" <<'M'
 function [g, dom] = conjQ(obj)
     try
