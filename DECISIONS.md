@@ -41,15 +41,26 @@ and otherwise converged to the wrong root, duplicated one root, or dropped the o
 returned x = 278.63, 278.647 (spurious) and missed x = -5.954. A missing intersection point is a
 missing witness, so `cellHasInterior`'s witness search (pairwise intersections + 400 probes) said "no
 interior" for a cell that has one; `_dropImplied` dropped a bounding row, the cell grew over a higher
-face, and eval picked the lower face. The first diagnosis (earlier today) blamed the witness search as
-"incomplete"; that is only the symptom -- with correct intersection points the search is enough, and
-a complete (CAD-style sample) feasibility test tried on top changed nothing (n=6..10 all correct
-without it), so it was NOT kept.
+face, and eval picked the lower face. The first diagnosis (earlier today) blamed only the witness search
+as "incomplete"; for n=6..14 that was the symptom (with correct intersection points the search finds its
+witness).
 
-**Fix.** One line in each engine: `t = t / scale` (`MATLAB/conicMeet.m`, `python/cca2/conic_meet.py`,
-`rust/src/conic_meet.rs`). Engines stay identical.
+**Second, independent hole (found at n=15).** `cellHasInterior`'s last resort is 400 random probes in a
+box of half-width max(2, 2*spread of the intersection points) around their centroid, and when the
+conics do not meet at all the box is [-4,4]^2 -- a cell far from the origin was declared empty.
+Concrete case: a line 29x+17y-1123 >= 0 and a parabola >= 0 that never meet, with a witness at
+(0.11, 70.73). Max-fold step 21 of the 28 triangles dropped a bounding row, and the 15-spike conjugate was
+-1640 where the definition says 2499.
 
-**Verified.** Rust `conjstress` (serial and parallel): n=6..13, fold == tree, error vs the definition
+**Fix (two parts, identical in MATLAB, Python, Rust).** (1) `t = t / scale` in the line-vs-conic branch
+(`MATLAB/conicMeet.m`, `python/cca2/conic_meet.py`, `rust/src/conic_meet.rs`). (2) A COMPLETE sample
+search `cadInterior` after the probes in `cellHasInterior` (`MATLAB/cellHasInterior.m`,
+`python/cca2/cell_has_interior.py`, `rust/src/cells.rs`): a 2-D cylindrical decomposition -- critical
+abscissae (conic discriminant roots, asymptotes, pairwise intersections), a point in each x-sector and
+y-sector (and past both ends) tested. It runs only when the cheaper tests said "no interior", skips cells
+with an equality row, and changed no recorded fixture (serial digest identical, goldens unchanged).
+
+**Verified.** Rust `conjstress` (serial and parallel): n=6..13 (n=14..20: see TODO), fold == tree, error vs the definition
 ~5e-16 (was up to 5e1). Regression tests against the DEFINITION (not another engine):
 `rust/tests/star.rs` (n=6..10 default, n=11..20 `--ignored`) and `python/tests/test_star_polygons.py`
 (n=4..7). MATLAB fast suite 834/0; Python suite 2741 pass; Rust `cargo test --release` all pass.
