@@ -117,6 +117,8 @@ function [P, q] = lineMeetsConic(L, C, opts)
          + scale*(C(4)*P0(1) + C(5)*P0(2)) + scale^2*C(6);
     q = ratQ.chk([q2 q1 q0], 'line-conic quadratic');
     t = realRootsExact(q);
+    % the quadratic's roots are t' = scale*t (it was multiplied through by scale^2)
+    t = t / scale;
     P = [P0(1)/scale + t*u(1), P0(2)/scale + t*u(2)];
     P = P(all(isfinite(P), 2), :);
     if size(P,1) == 2 && norm(P(1,:) - P(2,:)) <= opts.tol * max(1, norm(P(1,:)))

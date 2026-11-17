@@ -25,48 +25,49 @@ Newest entries at the top.
 
 ---
 
-## 2026-11-17 — the star-polygon conjugate is WRONG (too low); root cause is the incomplete cell-interior witness search
+## 2026-11-17 — the star-polygon conjugate was WRONG (too low): `conicMeet`'s line-vs-conic branch ignored the line's scale
 
-**Status: OPEN (diagnosed, not fixed).** Found by the task-#4 `conjstress` tool and re-confirmed
-2026-11-17. `conjQ` of a star polygon (2n vertices, f = (x²+y²)/2) returns a value that is TOO LOW at
-some dual points: the face that should dominate (the interior face, value |s|²/2) is dropped and a
-lower edge face is picked instead.
+**Status: FIXED (MATLAB, Python, Rust).** Found by the task-#4 `conjstress` tool. `conjQ` of a star
+polygon (2n vertices, f = (x²+y²)/2) returned values TOO LOW (even negative) at some dual points:
+Rust wrong at n=6 (111/625 grid points), n=7, n=8, n=9, n=10 (199/625, values like -9811 for a
+conjugate >= 0); Python wrong at n=7. fold and tree gave the same wrong values, so not the reduction.
 
-**Reproduced in two engines, and they DISAGREE (not at parity on this class):**
-- Rust: wrong at n=6 (111/625 grid points), n=7 (173/625), n=8 (3/625). fold and tree give the SAME
-  wrong values, so it is not the max-reduction order.
-- Python: wrong at n=7 (25/625). n=4,5,6,8 happen to be correct.
-- The two engines share 8 failing points (identical wrong values) but each has extra failing points
-  of its own — so it is a shared algorithmic defect PLUS per-engine differences (triangulation/fold
-  order and the witness-search miss interact).
+**Real cause.** `lineMeetsConic` multiplies the substituted quadratic through by scale^2 (scale = d
+or e, the line's pivot coefficient), so its roots are t' = scale*t, but the points were built as
+`P0/scale + t'*u` -- the division by `scale` was missing. Only |scale| = 1 was right. The returned
+points were then Newton-polished (8 steps), which masked it when the start landed near the right root
+and otherwise converged to the wrong root, duplicated one root, or dropped the other. Concrete case
+(n=10, step 18 of the max fold): the line 26x+9y+405 = 0 against the line pair 222x²-725xy-222y²-...
+returned x = 278.63, 278.647 (spurious) and missed x = -5.954. A missing intersection point is a
+missing witness, so `cellHasInterior`'s witness search (pairwise intersections + 400 probes) said "no
+interior" for a cell that has one; `_dropImplied` dropped a bounding row, the cell grew over a higher
+face, and eval picked the lower face. The first diagnosis (earlier today) blamed the witness search as
+"incomplete"; that is only the symptom -- with correct intersection points the search is enough, and
+a complete (CAD-style sample) feasibility test tried on top changed nothing (n=6..10 all correct
+without it), so it was NOT kept.
 
-**Root cause (localised to the exact mechanism).** The max of the per-triangle conjugates is
-assembled by `maxQ` → `assembleQuaConCells` → `compactCells` → `_dropImplied`. `_dropImplied` drops a
-row of a cell when, with that row FLIPPED, `cellInterior` reports NO interior. `cellInterior`
-delegates the curved case to `cellHasInterior`, whose decision is a WITNESS SEARCH: it tries the
-pairwise conic/line intersection points, then 400 fixed random probes in a box around their centroid.
-That search is INCOMPLETE: for a cell whose interior is a thin strip the probes miss it, so
-`cellHasInterior` returns False ("no interior") for a cell that DOES have interior. `_dropImplied`
-then drops a bounding row, enlarging the cell until it overlaps a higher face's cell; `QuaCon.eval`
-picks the face it is "most inside" (the lower one), giving the too-low value. Demonstrated on a
-concrete cell that provably holds a witness point but is reported as having no interior — see
-`python/star_defect_diagnosis.py` (run it; exit 0 = defect reproduced and root cause shown).
+**Fix.** One line in each engine: `t = t / scale` (`MATLAB/conicMeet.m`, `python/cca2/conic_meet.py`,
+`rust/src/conic_meet.rs`). Engines stay identical.
 
-**The screen is shared, so this is a SHARED algorithmic defect, not a port bug.** The source says the
-probe is "the same screen MATLAB uses", so MATLAB, Python and Rust all carry the incomplete witness
-search. (MATLAB could not be run to confirm — licence server needs the UBC VPN.)
+**Verified.** Rust `conjstress` (serial and parallel): n=6..13, fold == tree, error vs the definition
+~5e-16 (was up to 5e1). Regression tests against the DEFINITION (not another engine):
+`rust/tests/star.rs` (n=6..10 default, n=11..20 `--ignored`) and `python/tests/test_star_polygons.py`
+(n=4..7). MATLAB fast suite 834/0; Python suite 2741 pass; Rust `cargo test --release` all pass.
+**Side effects of the fix (all expected):** (1) the MATLAB goldens were re-recorded for the 12 records whose
+vertex NAMES (root index of a vertex) changed -- the old points were wrong so the order differed; 6 conj,
+7 biconj records in `python/golden`, recorded from the fixed MATLAB (fast + normal suites plus a direct
+replay of the 4 slow-suite conj records the Python replay flagged); the slow `slow_*.jsonl` goldens are
+unchanged and still pass. (2) `rust/ref` re-generated from Python; `rust/bench/parallel/digest_serial.tsv`
+re-baselined (10 of 200 fixtures changed hash, same face counts; old file kept as
+`digest_serial.pre-2026-11-17.tsv`); parallel == serial still holds at 1/2/8/32 threads.
+**Pre-existing gap found on the way (NOT caused by this fix):** the Rust port lacks the perfect-square
+tangency certificate (`psTangency`, task #11, MATLAB + Python only), so on 3 diagonal-kink biconj records
+(biconj.jsonl #69, #95, #110) Rust keeps zero-area faces (nf 4/19/19 vs 2/14/14; values identical). The
+stale `rust/ref` hid it. `rust/tests/parity.rs` skips only the `nf` comparison for those 3 records.
+`python/star_defect_diagnosis.py` is kept; it now reports the defect NOT reproduced.
 
-**Why a simple refusal does NOT work.** Refusing "a strictly convex quadratic on a bounded
-non-convex polygon" (the star-polygon class) also refuses CORRECT cases: golden conj record 36 (a
-6-vertex L-shape, f = (x²+y²)/2, 71 faces, no error) is a valid conjugate that such a refusal would
-break. The failing and the correct cases are the SAME class; only the completeness of the
-cell-interior test separates them. So do NOT add a class-based refusal.
-
-**The proper fix** is a COMPLETE test for "does this cell have interior" — decide the feasibility of
-the conic sign conditions exactly (the current witness search is a heuristic screen). That must be
-done in MATLAB, Python and Rust, keeping the engines identical face for face where they are, then
-re-verify the star polygons n=8..20 against the definition and re-check the L-shape (record 36) and
-the 200-fixture parity. Action item: `TODO.md` (Open now).
+**Not viable (recorded so nobody retries it):** a class-based refusal ("strictly convex quadratic on
+a bounded non-convex polygon") would also refuse correct cases such as golden conj record 36 (L-shape).
 
 ## 2026-08-23 — the BICONJUGATE's face type is NOT rational: degree 1, 2 or 4; and `f**` is NOT C1
 

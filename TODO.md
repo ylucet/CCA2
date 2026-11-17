@@ -3,19 +3,8 @@
 ## Open now -- index (cleaned 2026-11-05; the dated sections below keep the history)
 
 Exact engine (the default for `conj` and `biconj`):
-- **OPEN 2026-11-17: star-polygon conjugate is WRONG (too low) for some inputs.** `conjQ` of a star
-  polygon (2n vertices, f = (x^2+y^2)/2) returns a too-low value at some dual points: the winning
-  interior face is dropped and a lower edge face is picked. Rust: wrong at n=6 (111/625 grid pts),
-  n=7 (173/625), n=8 (3/625); Python: wrong at n=7 (25/625); the two engines DISAGREE with each
-  other and with the definition, and are NOT at parity on this class. n=4,5 are (luckily) correct.
-  ROOT CAUSE (localised, see `python/star_defect_diagnosis.py`): the cell-interior witness search
-  (`cellHasInterior` / `cellInterior`) is an incomplete heuristic (pairwise intersections + 400
-  random probes) that misses thin cell interiors, so `_dropImplied` drops a bounding row, the cell
-  grows into the winner's region, and eval picks the lower face. The screen is "the same MATLAB
-  uses", so it is a SHARED algorithmic defect, not a port bug. PROPER FIX: a COMPLETE feasibility
-  test for the conic sign conditions (MATLAB + Python + Rust), then re-verify the star polygons
-  n=8..20 against the definition and re-check the golden L-shape (conj record 36) still matches.
-  A class-based refusal is NOT viable (it refuses the correct L-shape, record 36).
+- **FIXED 2026-11-17: star-polygon conjugate was too low** -- `conicMeet`'s line-vs-conic branch used the roots t'=scale*t as t (missing `/scale`), dropping/misplacing intersection points, so cells were wrongly judged empty. Fixed in MATLAB, Python, Rust (DECISIONS 2026-11-17). Checked n=6..12 in Rust against the definition (`conjstress`), n=4..8 in `python/tests/test_star_polygons.py`. Rust `conjstress` checked n=6..13; n=14..20 (hours) via `cargo test --release --test star -- --ignored`.
+- **OPEN 2026-11-17: Rust lacks `psTangency`** (task #11's zero-area-face certificate, MATLAB + Python only): 3 diagonal-kink biconj records keep extra zero-area faces in Rust (nf 4/19/19 vs 2/14/14, values identical). `parity.rs` skips nf for biconj #69/#95/#110 until it is ported.
 - Bridge producer: noWitness when a tie has no usable rational point (SUPPORT_MATRIX 3.2; by design). The overflow refusals are gone (2026-11-05).
 - Two zero-area faces in the c = -2 AlgCrv (own no point; harmless) -- see "Faces of ZERO AREA" below.
   2026-11-11: one mechanism behind zero-area faces fixed (cellSamplePoint accepted a sample ON a

@@ -1,3 +1,7 @@
+"""NOTE 2026-11-17: the defect this script demonstrates is FIXED (conicMeet line-vs-conic scale bug,
+DECISIONS.md 2026-11-17); the script now reports it as not reproduced. The root-cause text below is
+the first diagnosis (the symptom), kept for the record.
+"""
 """Star-polygon conjugate defect -- reproduction and root-cause demonstration.
 
 DEFECT

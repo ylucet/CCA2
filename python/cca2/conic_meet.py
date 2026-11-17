@@ -114,7 +114,8 @@ def _lineMeetsConic(L, C, opts):
           + scale * (C[3] * P0[0] + C[4] * P0[1]) + scale ** 2 * C[5])
     q = rat_q.wall([q2, q1, q0], None, 'line-conic quadratic')
     t = _realRootsExact(q)
-    P = [[P0[0] / scale + ti * u[0], P0[1] / scale + ti * u[1]] for ti in t]
+    # the quadratic's roots are t' = scale * t (it was multiplied through by scale^2)
+    P = [[P0[0] / scale + ti / scale * u[0], P0[1] / scale + ti / scale * u[1]] for ti in t]
     P = [p for p in P if math.isfinite(p[0]) and math.isfinite(p[1])]
     if len(P) == 2 and math.hypot(P[0][0] - P[1][0], P[0][1] - P[1][1]) <= \
             opts['tol'] * max(1.0, math.hypot(P[0][0], P[0][1])):
