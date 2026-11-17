@@ -25,6 +25,49 @@ Newest entries at the top.
 
 ---
 
+## 2026-11-17 — the star-polygon conjugate is WRONG (too low); root cause is the incomplete cell-interior witness search
+
+**Status: OPEN (diagnosed, not fixed).** Found by the task-#4 `conjstress` tool and re-confirmed
+2026-11-17. `conjQ` of a star polygon (2n vertices, f = (x²+y²)/2) returns a value that is TOO LOW at
+some dual points: the face that should dominate (the interior face, value |s|²/2) is dropped and a
+lower edge face is picked instead.
+
+**Reproduced in two engines, and they DISAGREE (not at parity on this class):**
+- Rust: wrong at n=6 (111/625 grid points), n=7 (173/625), n=8 (3/625). fold and tree give the SAME
+  wrong values, so it is not the max-reduction order.
+- Python: wrong at n=7 (25/625). n=4,5,6,8 happen to be correct.
+- The two engines share 8 failing points (identical wrong values) but each has extra failing points
+  of its own — so it is a shared algorithmic defect PLUS per-engine differences (triangulation/fold
+  order and the witness-search miss interact).
+
+**Root cause (localised to the exact mechanism).** The max of the per-triangle conjugates is
+assembled by `maxQ` → `assembleQuaConCells` → `compactCells` → `_dropImplied`. `_dropImplied` drops a
+row of a cell when, with that row FLIPPED, `cellInterior` reports NO interior. `cellInterior`
+delegates the curved case to `cellHasInterior`, whose decision is a WITNESS SEARCH: it tries the
+pairwise conic/line intersection points, then 400 fixed random probes in a box around their centroid.
+That search is INCOMPLETE: for a cell whose interior is a thin strip the probes miss it, so
+`cellHasInterior` returns False ("no interior") for a cell that DOES have interior. `_dropImplied`
+then drops a bounding row, enlarging the cell until it overlaps a higher face's cell; `QuaCon.eval`
+picks the face it is "most inside" (the lower one), giving the too-low value. Demonstrated on a
+concrete cell that provably holds a witness point but is reported as having no interior — see
+`python/star_defect_diagnosis.py` (run it; exit 0 = defect reproduced and root cause shown).
+
+**The screen is shared, so this is a SHARED algorithmic defect, not a port bug.** The source says the
+probe is "the same screen MATLAB uses", so MATLAB, Python and Rust all carry the incomplete witness
+search. (MATLAB could not be run to confirm — licence server needs the UBC VPN.)
+
+**Why a simple refusal does NOT work.** Refusing "a strictly convex quadratic on a bounded
+non-convex polygon" (the star-polygon class) also refuses CORRECT cases: golden conj record 36 (a
+6-vertex L-shape, f = (x²+y²)/2, 71 faces, no error) is a valid conjugate that such a refusal would
+break. The failing and the correct cases are the SAME class; only the completeness of the
+cell-interior test separates them. So do NOT add a class-based refusal.
+
+**The proper fix** is a COMPLETE test for "does this cell have interior" — decide the feasibility of
+the conic sign conditions exactly (the current witness search is a heuristic screen). That must be
+done in MATLAB, Python and Rust, keeping the engines identical face for face where they are, then
+re-verify the star polygons n=8..20 against the definition and re-check the L-shape (record 36) and
+the 200-fixture parity. Action item: `TODO.md` (Open now).
+
 ## 2026-08-23 — the BICONJUGATE's face type is NOT rational: degree 1, 2 or 4; and `f**` is NOT C1
 
 Three questions closed on the envelope side. `CONJ_FIELD_PROOF.md` §5.1 had computed ONE degree-4
