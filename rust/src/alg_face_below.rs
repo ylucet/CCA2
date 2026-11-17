@@ -3,7 +3,7 @@
 
 use crate::alg_branch::alg_branch;
 use crate::alg_con::AlgRow;
-use crate::alg_row_fails::{alg_row_fails_box, Region, RowSpec};
+use crate::alg_row_fails::{alg_row_fails_box, Region, RowCache, RowSpec};
 use crate::errors::R;
 use crate::numeric::{linspace, round_half_away};
 use crate::poly_n::PolyN;
@@ -19,13 +19,16 @@ pub struct BelowFace {
 struct Ctx<'a> {
     reg: &'a Region,
     own: Vec<RowSpec>,
+    /// the per-cell cache of processed rows (the caller's), or None
+    rows: Option<&'a RowCache>,
     /// the depth the recursion started at: the two top levels fork their sub-boxes
     top: usize,
 }
 
-pub fn alg_face_below(lo: &BelowFace, hi: &[BelowFace], reg: &Region, depth: usize, own: &[AlgRow]) -> R<bool> {
+/// `rows`: the caller's per-cell RowCache (drop_below), or None.
+pub fn alg_face_below(lo: &BelowFace, hi: &[BelowFace], reg: &Region, depth: usize, own: &[AlgRow], rows: Option<&RowCache>) -> R<bool> {
     let own: Vec<RowSpec> = own.iter().map(|o| RowSpec::Quad { fp: o.fp.clone(), fb: o.fb, num: o.num.clone(), den: o.den.clone(), side: o.side }).collect();
-    let ctx = Ctx { reg, own, top: depth };
+    let ctx = Ctx { reg, own, rows, top: depth };
     rec(lo, hi, reg.bx, &ctx, depth)
 }
 
@@ -75,7 +78,7 @@ fn rec(lo: &BelowFace, hi: &[BelowFace], b: [f64; 4], ctx: &Ctx, depth: usize) -
         al.extend(ctx.own.iter().cloned());
         let mut ah = vec![rh];
         ah.extend(ctx.own.iter().cloned());
-        if alg_row_fails_box(&al, b, &in_box, inner, factors, corners)? && alg_row_fails_box(&ah, b, &in_box, inner, factors, corners)? {
+        if alg_row_fails_box(&al, b, &in_box, inner, factors, corners, ctx.rows)? && alg_row_fails_box(&ah, b, &in_box, inner, factors, corners, ctx.rows)? {
             return Ok(true);
         }
     }
@@ -102,7 +105,7 @@ fn rec(lo: &BelowFace, hi: &[BelowFace], b: [f64; 4], ctx: &Ctx, depth: usize) -
         let fr = RowSpec::Face { fp: lo.fp.clone(), fb: lo.fb, wfp: hi[j].fp.clone(), wfb: hi[j].fb };
         let mut al = vec![fr];
         al.extend(ctx.own.iter().cloned());
-        if alg_row_fails_box(&al, b, &in_box, inner, factors, corners)? {
+        if alg_row_fails_box(&al, b, &in_box, inner, factors, corners, ctx.rows)? {
             return Ok(true);
         }
     }

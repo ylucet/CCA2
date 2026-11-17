@@ -6,7 +6,7 @@ use std::sync::LazyLock;
 use crate::alg_branch::{alg_branch, alg_branch_info};
 use crate::alg_con::{AlgRow, IiRow, SubFace, SubKind};
 use crate::alg_face_below::{alg_face_below, BelowFace};
-use crate::alg_row_fails::{alg_row_fails, Region, RowSpec};
+use crate::alg_row_fails::{alg_row_fails, Region, RowCache, RowSpec};
 use crate::bail;
 use crate::biv::M2;
 use crate::bridge::bridge_member;
@@ -612,36 +612,41 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
         Some(r) => r,
     };
     let own: Vec<Vec<AlgRow>> = irr.iter().map(|f| quad_app.iter().map(|&j| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: -1 }).collect()).collect();
-    let mut keep = vec![true; n];
-    for i in 0..n {
+    // The drop decision of each face is taken against ALL the other candidates, not against the
+    // ones that were still kept at that moment as in the old ordered loops. "lo is below hi" is a
+    // certificate of a pointwise order that is monotone in hi (adding faces only raises the max)
+    // and transitive (lo <= hi and hi <= hi' imply lo <= hi'), so for distinct faces the kept set
+    // is the same as the old ordered tests gave (checked on the 200-fixture digest); and the
+    // decisions are now independent per face, so the two loops run in parallel and their dependent
+    // chain is gone.
+    let cache = RowCache::new();
+    let drop_top: Vec<bool> = crate::par::map_range(n, |i| {
         for &j in &above {
-            if j == i || !keep[j] {
+            if j == i {
                 continue;
             }
             if v[i].iter().zip(v[j].iter()).all(|(a, b)| *a <= b + 1e-9 * 1f64.max(b.abs())) {
                 let lo = BelowFace { fp: irr[i].fp.clone(), fb: irr[i].fb };
                 let hi = vec![BelowFace { fp: irr[j].fp.clone(), fb: irr[j].fb }];
-                if alg_face_below(&lo, &hi, &reg, 5, &own[i])? {
-                    keep[i] = false;
-                    break;
+                if alg_face_below(&lo, &hi, &reg, 5, &own[i], Some(&cache))? {
+                    return Ok(true);
                 }
             }
         }
+        Ok(false)
+    })?;
+    let kept: Vec<usize> = (0..n).filter(|&i| !drop_top[i]).collect();
+    if kept.len() < 2 {
+        return Ok(kept.into_iter().map(|i| irr[i].clone()).collect());
     }
-    for i in 0..n {
-        if !(keep[i] && wins[i] == 0) {
-            continue;
+    let drop_rest: Vec<bool> = crate::par::map_range(n, |i| {
+        if drop_top[i] || wins[i] != 0 {
+            return Ok(false);
         }
-        let others: Vec<usize> = (0..n).filter(|&j| keep[j] && j != i).collect();
-        if others.is_empty() {
-            break;
-        }
-        let hi: Vec<BelowFace> = others.iter().map(|&j| BelowFace { fp: irr[j].fp.clone(), fb: irr[j].fb }).collect();
-        if alg_face_below(&BelowFace { fp: irr[i].fp.clone(), fb: irr[i].fb }, &hi, &reg, 5, &own[i])? {
-            keep[i] = false;
-        }
-    }
-    Ok(irr.into_iter().zip(keep).filter(|(_, k)| *k).map(|(f, _)| f).collect())
+        let hi: Vec<BelowFace> = kept.iter().filter(|&&j| j != i).map(|&j| BelowFace { fp: irr[j].fp.clone(), fb: irr[j].fb }).collect();
+        alg_face_below(&BelowFace { fp: irr[i].fp.clone(), fb: irr[i].fb }, &hi, &reg, 5, &own[i], Some(&cache))
+    })?;
+    Ok(kept.into_iter().filter(|&i| !drop_rest[i]).map(|i| irr[i].clone()).collect())
 }
 
 fn combine_pairs(envs: &[Env]) -> R<Env> {
@@ -1161,7 +1166,7 @@ fn tie_empty(keys: &[Vec<Z>], rows: &Rows, con: &[Vec<Z>], ii: &[IiRow], pp: &mu
         };
         let lo = BelowFace { fp: t.fp1.clone(), fb: t.fb1 };
         let hi = vec![BelowFace { fp: t.fp2.clone(), fb: t.fb2 }];
-        let tf = alg_face_below(&lo, &hi, rg, 5, &[]).unwrap_or(false);
+        let tf = alg_face_below(&lo, &hi, rg, 5, &[], None).unwrap_or(false);
         if tf {
             return Ok(true);
         }

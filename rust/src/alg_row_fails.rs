@@ -12,7 +12,7 @@ use crate::poly_sign_on::{box_sign, comb, FMat};
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 const REALMIN: f64 = 2.2250738585072014e-308;
@@ -97,6 +97,121 @@ enum SP {
     Surd(Box<Surd>),
 }
 
+// ---- bit-exact comparison and hashing, for cache keys ------------------------------------------
+// The f64 parts of an SP are exact f64 values produced from the exact data; a cache key must
+// still distinguish 0.0 and -0.0 (equal under `==`), so compare and hash the BITS. (Consistent
+// with `f64`'s std Hash: equal bits hash equal.)
+fn fmat_eq(a: &FMat, b: &FMat) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(ra, rb)| ra.len() == rb.len() && ra.iter().zip(rb.iter()).all(|(x, y)| x.to_bits() == y.to_bits()))
+}
+
+fn fmat_hash<H: Hasher>(m: &FMat, h: &mut H) {
+    m.len().hash(h);
+    for r in m {
+        r.len().hash(h);
+        for x in r {
+            x.to_bits().hash(h);
+        }
+    }
+}
+
+impl PartialEq for SP {
+    fn eq(&self, o: &SP) -> bool {
+        match (self, o) {
+            (SP::Num { f: a, z: za }, SP::Num { f: b, z: zb }) => fmat_eq(a, b) && za == zb,
+            (SP::Surd(s), SP::Surd(t)) => s.eq_bits(t),
+            _ => false,
+        }
+    }
+}
+impl Eq for SP {}
+
+impl Hash for SP {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        match self {
+            SP::Num { f, z } => {
+                0u8.hash(h);
+                fmat_hash(f, h);
+                match z {
+                    None => 0u8.hash(h),
+                    Some(m) => {
+                        1u8.hash(h);
+                        m.hash(h);
+                    }
+                }
+            }
+            SP::Surd(s) => {
+                1u8.hash(h);
+                s.hash(h);
+            }
+        }
+    }
+}
+
+fn opt_fmat_eq(a: &Option<FMat>, b: &Option<FMat>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => fmat_eq(x, y),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn opt_fmat_hash<H: Hasher>(m: &Option<FMat>, h: &mut H) {
+    match m {
+        None => 0u8.hash(h),
+        Some(x) => {
+            1u8.hash(h);
+            fmat_hash(x, h);
+        }
+    }
+}
+
+impl Surd {
+    fn eq_bits(&self, o: &Surd) -> bool {
+        self.k == o.k
+            && self.u == o.u
+            && self.v == o.v
+            && self.e == o.e
+            && self.us == o.us
+            && self.vs == o.vs
+            && self.uz == o.uz
+            && self.vz == o.vz
+            && self.ez == o.ez
+            && self.usz == o.usz
+            && self.vsz == o.vsz
+            && opt_fmat_eq(&self.ef, &o.ef)
+            && opt_fmat_eq(&self.usf, &o.usf)
+            && opt_fmat_eq(&self.vsf, &o.vsf)
+            && fmat_eq(&self.uf, &o.uf)
+            && fmat_eq(&self.vf, &o.vf)
+            && fmat_eq(&self.lo, &o.lo)
+            && fmat_eq(&self.hi, &o.hi)
+    }
+}
+
+impl Hash for Surd {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.k.hash(h);
+        self.u.hash(h);
+        self.v.hash(h);
+        self.e.hash(h);
+        self.us.hash(h);
+        self.vs.hash(h);
+        self.uz.hash(h);
+        self.vz.hash(h);
+        self.ez.hash(h);
+        self.usz.hash(h);
+        self.vsz.hash(h);
+        opt_fmat_hash(&self.ef, h);
+        opt_fmat_hash(&self.usf, h);
+        opt_fmat_hash(&self.vsf, h);
+        fmat_hash(&self.uf, h);
+        fmat_hash(&self.vf, h);
+        fmat_hash(&self.lo, h);
+        fmat_hash(&self.hi, h);
+    }
+}
+
 fn num_z(m: M2) -> SP {
     SP::Num { f: fmat(&m), z: Some(m) }
 }
@@ -113,11 +228,57 @@ enum Test {
     TopFace { odd: bool },
 }
 
+#[derive(Clone)]
 struct Row {
     p: Vec<SP>,
     test: Test,
     corner: bool,
 }
+
+/// The processed form of a row spec: the sign polynomials after dividing out the cell's boundary
+/// factors. A pure function of the spec and the cell's factors, so a cache of it changes the time
+/// but never a result.
+#[derive(Hash, PartialEq, Eq, Clone)]
+enum RowKey {
+    Quad { fp: PolyN, fb: i64, num: Vec<Z>, den: Z, side: i64 },
+    Face { fp: PolyN, fb: i64, wfp: PolyN, wfb: i64 },
+}
+
+/// Per-cell cache of processed rows. drop_below calls alg_row_fails_box many times on ONE cell
+/// (per pair of faces, per box), always with the same `own` rows; without the cache the
+/// row_polys step of every call is redone. The factors are fixed for the life of the cache, so
+/// they are not part of the key.
+pub struct RowCache {
+    m: Memo<RowKey, Option<Row>>,
+}
+
+impl RowCache {
+    pub fn new() -> Self {
+        RowCache { m: Memo::new(1024) }
+    }
+
+    fn key(at: &RowSpec) -> RowKey {
+        match at {
+            RowSpec::Quad { fp, fb, num, den, side } => RowKey::Quad { fp: (**fp).clone(), fb: *fb, num: num.clone(), den: den.clone(), side: *side },
+            RowSpec::Face { fp, fb, wfp, wfb } => RowKey::Face { fp: (**fp).clone(), fb: *fb, wfp: (**wfp).clone(), wfb: *wfb },
+        }
+    }
+
+    fn get(&self, at: &RowSpec) -> Option<Option<Row>> {
+        self.m.get(&Self::key(at))
+    }
+
+    fn insert(&self, at: &RowSpec, r: Option<Row>) {
+        self.m.insert(Self::key(at), r);
+    }
+}
+
+/// The blow-up of a row polynomial at a corner is a pure function of (polynomial, corner, sign,
+/// direction). corner_ok used to memo it in a table that died with each alg_row_fails_box call, so
+/// the same (row, corner) was re-blow-upped by every call a cell makes (drop_below and
+/// winner_faces make many, with the same `own` rows). Kept like MEMO_FACTOR_BU for the region
+/// factors: pure cache, so sharing changes the time but never a result.
+static MEMO_ROW_BU: LazyLock<Memo<(SP, u64, u64, i64, u8), Option<SP>>> = LazyLock::new(|| Memo::new(20000));
 
 fn run_test(t: &Test, s: &[i32]) -> bool {
     match t {
@@ -151,13 +312,14 @@ pub fn clear_memos() {
 
 // ---- the entry point ------------------------------------------------------------------------------
 pub fn alg_row_fails(a: &[RowSpec], reg: &Region, depth: usize) -> R<bool> {
-    alg_row_fails_box(a, reg.bx, &|b: &[f64; 4]| reg.in_box(b), depth, &reg.factors, &reg.corners)
+    alg_row_fails_box(a, reg.bx, &|b: &[f64; 4]| reg.in_box(b), depth, &reg.factors, &reg.corners, None)
 }
 
-pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, factors: &[M2], corners: &[[f64; 2]]) -> R<bool> {
+/// `rows_cache`: the per-cell RowCache of the caller (drop_below), or None.
+pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, factors: &[M2], corners: &[[f64; 2]], rows_cache: Option<&RowCache>) -> R<bool> {
     let mut rows = vec![];
     for at in a {
-        if let Some(r) = row_polys(at, factors)? {
+        if let Some(r) = row_polys(at, factors, rows_cache)? {
             rows.push(r);
         }
     }
@@ -169,10 +331,9 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]
         return Ok(tf);
     }
     let w = (bx[1] - bx[0]).max(bx[3] - bx[2]);
-    // every corner is certified by its own blow-up, independently of the others
-    // (bu_memo is keyed on the corner itself, so one table per corner loses nothing)
+    // every corner is certified by its own blow-up, independently of the others; the blow-ups are
+    // kept in MEMO_ROW_BU, shared across the repeated alg_row_fails_box calls of one cell
     let found = crate::par::map(corners, |p0| -> R<Option<[f64; 3]>> {
-        let mut bu_memo: HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>> = HashMap::new();
         let mut p = *p0;
         let q = [round(p[0] * 256.0) / 256.0, round(p[1] * 256.0) / 256.0];
         if q.iter().zip(p.iter()).all(|(qi, pi)| (qi - pi).abs() <= 1e-9 * 1f64.max(pi.abs())) {
@@ -186,7 +347,7 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]
         }
         for k in 2..9 {
             let mut e = w / 2f64.powi(k);
-            if corner_ok(&rows, p, e, factors, &mut bu_memo)? {
+            if corner_ok(&rows, p, e, factors)? {
                 if !is_dyadic(p) {
                     e *= 1.0 - 1e-9;
                 }
@@ -225,7 +386,20 @@ fn nz_of(fp: &PolyN) -> usize {
     fp.keys().map(|e| e[2]).max().unwrap() as usize + 1
 }
 
-fn row_polys(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
+fn row_polys(a: &RowSpec, factors: &[M2], cache: Option<&RowCache>) -> R<Option<Row>> {
+    if let Some(c) = cache {
+        if let Some(r) = c.get(a) {
+            return Ok(r);
+        }
+    }
+    let r = row_polys_calc(a, factors)?;
+    if let Some(c) = cache {
+        c.insert(a, r.clone());
+    }
+    Ok(r)
+}
+
+fn row_polys_calc(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
     let (fp, fb, num, den, side) = match a {
         RowSpec::Face { fp, fb, wfp, wfb } => return face_row_polys(fp, *fb, wfp, *wfb, factors),
         RowSpec::Quad { fp, fb, num, den, side } => (fp, *fb, num, den, *side),
@@ -433,26 +607,26 @@ fn any_vanishes(rows: &[Row], p: [f64; 2]) -> bool {
 }
 
 // ---- corners --------------------------------------------------------------------------------------
-fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>>) -> R<bool> {
+fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2]) -> R<bool> {
     if !(e > 0.0) {
         return Ok(false);
     }
     for major in [1u8, 2] {
         for sg in [1i64, -1] {
             let mut rows_c = vec![];
-            for (ri, row) in rows.iter().enumerate() {
+            for row in rows.iter() {
                 if !row.corner {
                     continue;
                 }
                 let mut ps = vec![];
                 let mut ok = true;
-                for (pi, pp) in row.p.iter().enumerate() {
-                    let key = (ri, pi, p[0].to_bits(), p[1].to_bits(), sg, major);
-                    let g = match memo.get(&key) {
-                        Some(g) => g.clone(),
+                for pp in &row.p {
+                    let key = (pp.clone(), p[0].to_bits(), p[1].to_bits(), sg, major);
+                    let g = match MEMO_ROW_BU.get(&key) {
+                        Some(g) => g,
                         None => {
                             let g = blow_up_raw(pp, p, sg, major)?;
-                            memo.insert(key, g.clone());
+                            MEMO_ROW_BU.insert(key, g.clone());
                             g
                         }
                     };
