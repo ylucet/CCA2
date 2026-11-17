@@ -65,6 +65,12 @@ def _matKey(M):
 def algRowFails(a, box, inBox, depth=6, factors=None, corners=None):
     factors = [_asIntMatrix(f) for f in (factors or [])]
     corners = corners or []
+    # A PERFECT-SQUARE TANGENCY (MATLAB 2026-11-16): a quad-vs-bridge row whose bridge branch
+    # exceeds the quad by a perfect square holds only on the square's zero set -- a curve -- so
+    # the face owns no area. Certified globally; no box, no region, no subdivision.
+    for at in a:
+        if _psTangency(at):
+            return True
     rows = []
     for at in a:
         r = _rowPolys(at, factors)
@@ -990,6 +996,96 @@ def _zSqrt(Dp):
     except CCA2Error:
         pass
     return None
+
+
+def _squarePoly(D):
+    """s in Z[x, y] with s^2 = D exactly (D a perfect square, its content a square), or None
+    (MATLAB squarePoly, 2026-11-16)."""
+    D = biv.trimN(D)
+    if biv.isZero(D):
+        return None
+    cont = biv.content(D)
+    if cont <= 0:
+        return None
+    Dcf = biv.trimN([[x // cont for x in r] for r in D])
+    S0 = _zSqrt(Dcf)
+    if S0 is None:
+        return None
+    sc = math.isqrt(cont)
+    if sc * sc != cont:
+        return None
+    return biv.scal(S0, sc)
+
+
+def _squarePos(P):
+    """S with P = (positive constant) * S^2 (so P >= 0 at every point), or None when P is not of
+    that form (MATLAB squarePos, 2026-11-16)."""
+    P = biv.trimN(P)
+    if biv.isZero(P):
+        return None
+    cont = biv.content(P)
+    if cont <= 0:
+        return None
+    Pcf = biv.trimN([[x // cont for x in r] for r in P])
+    return _zSqrt(Pcf)
+
+
+def _psTangency(a):
+    """A QUAD-vs-BRIDGE row whose bridge branch exceeds the quad by a PERFECT SQUARE (MATLAB
+    psTangency, 2026-11-16, s-symmetric). The bridge must be RATIONAL: D = A1^2 - 4 A2 A0 = s^2
+    for a polynomial s. The REAL sign of s is region-dependent, so one branch of "q - z" cannot
+    be certified from a single e = +-1. Both branches are certified at once: with Q/Dn = q,
+    Dn = 2 den, P+ = 2 A2 Q + Dn A1 - Dn s and P- = 2 A2 Q + Dn A1 + Dn s, the two roots are
+    (A1 +- s)/(2 A2) and q - (A1 +- s)/(2 A2) = P^ /(2 A2 Dn) (A2 > 0, Dn > 0), so
+    sign(q - root) = sign(P^). The row side * (q - z) >= 0 (z the top root if FB in {-1, 2}, the
+    bottom root if FB in {1, -2}) holds only on a CURVE (a 1-D set; the face owns no area) when:
+        upper, side > 0:  P+ OR  P- is a NEGATIVE square (<= 0, zero on a curve);
+        upper, side < 0:  P+ AND P- are POSITIVE squares (>= 0);
+        lower, side > 0:  P+ AND P- are NEGATIVE squares;
+        lower, side < 0:  P+ OR  P- is a POSITIVE square.
+    A square is (non-zero constant) * S^2; "negative" means that constant is negative.
+    diagonalKink c = -2, top row: P+ = -4 (x + y - 1)^2 (a negative square), side > 0."""
+    if a.get('W'):
+        return False                                 # a face-against-face row: not this
+    FP = a['FP']
+    num = list(a['num'])
+    if len(num) != 10 or any(x != 0 for x in num[0:4]) or not (a['den'] > 0):
+        return False                                 # q a polynomial in x, y (no z terms)
+    S = _slices(FP)
+    if len(S) != 3:
+        return False                                 # degree 2 in z
+    A2 = biv.trimN(S[2])
+    if not biv.isConst(A2) or A2[0][0] <= 0:
+        return False                                 # A2 a positive constant
+    A2s = A2[0][0]
+    A1 = S[1]
+    A0 = S[0]
+    Dn = 2 * a['den']
+    if Dn != round(Dn):
+        return False
+    try:
+        Q = [[2 * num[9], 2 * num[8], num[6]],
+             [2 * num[7], 2 * num[5], 0],
+             [num[4], 0, 0]]
+        Q = biv.trimN(Q)
+        D = biv.trimN(biv.padAdd(biv.conv2(A1, A1), biv.scal(A0, -4 * A2s)))
+        s = _squarePoly(D)                           # D = s^2: the bridge is rational
+        if s is None:
+            return False
+        hi = a['FB'] in (-1, 2)                       # the top root (FB in {-1, 2})?
+        Base = biv.trimN(biv.padAdd(biv.scal(Q, 2 * A2s), biv.scal(A1, Dn)))
+        Pp = biv.trimN(biv.padAdd(Base, biv.scal(s, -Dn)))      # P+
+        Pm = biv.trimN(biv.padAdd(Base, biv.scal(s, Dn)))       # P-
+        posP = _squarePos(Pp) is not None            # P^ a positive square (>= 0)
+        posM = _squarePos(Pm) is not None
+        negP = _squarePos(biv.scal(Pp, -1)) is not None  # P^ a negative square (<= 0)
+        negM = _squarePos(biv.scal(Pm, -1)) is not None
+        if hi:
+            return (negP or negM) if a['side'] > 0 else (posP and posM)
+        else:
+            return (negP and negM) if a['side'] > 0 else (posP or posM)
+    except CCA2Error:
+        return False
 
 
 def _yunParts(S, d, lvl):

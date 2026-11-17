@@ -9355,3 +9355,38 @@ kinkSubdivisionTest 3/0, minSubdivisionTest 4/0, erratumBiconjEx2Test 4/0, algCr
 envelopeSubdivisionSlowTest 1/0, algRowFailsSurdTest 5/0, unboundedFaceTest 19/0,
 guardExerciseSymbolicTest 11/0. Not rerun: the legacy symbolic slow suites and verylong (they do not
 reach the changed code paths except through `ratQ`'s Sturm chain).
+
+## 2026-11-17 -- the c = -2 diagonal-kink zero-area faces, dropped: the perfect-square tangency, made s-symmetric
+
+The TODO "zero-area faces in the c = -2 AlgCrv" (faces 2 & 4 own no point of 108000 samples) is closed.
+The cause found 2026-09-24 stands -- each is a quadratic face the bridge beats on the whole interior and
+ties only on the domain edge -- and the place to drop them, where the envelope asks `algRowFails` whether a
+face's rows can all hold, is now answered for the tangency case.
+
+**The certificate (`psTangency`, top of `algRowFails`; MATLAB `algRowFails.m` + `python/cca2/alg_row_fails.py`).**
+A quad-vs-bridge row whose bridge is RATIONAL (D = A1^2 - 4 A2 A0 = s^2 for a polynomial s) and whose branch
+exceeds the quad by a perfect square. With Q/Dn = q and Dn = 2 den:
+    P+ = 2 A2 Q + Dn A1 - Dn s,     P- = 2 A2 Q + Dn A1 + Dn s,
+the two roots are (A1 +- s)/(2 A2) and q - (A1 +- s)/(2 A2) = P^/(2 A2 Dn) (A2 > 0, Dn > 0), so
+sign(q - root) = sign(P^). The row side*(q - z) >= 0 (z the top root, FB in {-1,2}; the bottom root, FB in
+{1,-2}) holds only on a CURVE -- the face owns no area -- when
+    upper, side > 0:  P+ OR  P- a NEGATIVE square (<= 0, zero on a curve);
+    upper, side < 0:  P+ AND P- POSITIVE squares (>= 0);
+    lower, side > 0:  P+ AND P- NEGATIVE squares;
+    lower, side < 0:  P+ OR  P- a POSITIVE square.
+The square root s = sqrt(D) is a polynomial whose REAL sign is region-dependent (s = x + y - 2 is negative
+where x + y <= 1), which is why one branch cannot be certified from a single e = +-1 -- the one-sign draft's
+error. A negative square is detected as a positive square of the negation (`squarePos(-P)`).
+
+**Why the one-sign draft was unsound (found by `algRowFailsTest/aRowVanishingOnTheREGIONSEdge`).** It read
+"Num = -side*(2 A2 Q + Dn A1 - Dn e s) a positive square" for a single e, i.e. one branch. On (z - (1-x-y))(z+1)
+against q = 0, D = (x + y - 2)^2 and the draft's Num = 4 (a positive square) -- but that row (q <= z_hi = 1-x-y)
+HOLDS inside the region x + y <= 1, on a 2-D set, so it must NOT be certified. The s-symmetric rule needs BOTH
+branches positive squares there; P- = 4(x + y - 1) is not a square, so it is refused.
+
+**Measured (Frances, 2026-11-17).** diagonalKink(-2): nf 4 -> 2, no +inf, the two surviving bridge faces
+bit-identical to the 2026-11-05 baseline (owned 54203 / 53797 of 108000, ties 46890, max excess 1.0) -- the
+drop is value-neutral. The certificate additionally takes 7 recorded `algRowFails` calls (upper/side>0, P+ a
+negative square: -4(x+y-1)^2, -4(1-x)^2, -4(1-2x)^2) that the box recursion left undecided; MATLAB and the
+port agree on all (`.claude/psCheck7.m`). `algRowFailsTest` 21/0; fast bucket 834/0 over 64 suites (the
+previously-failing test now passes, no new failures); `biconjQTest` pins the diagonalKink to nf == 2.

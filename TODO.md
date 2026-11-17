@@ -175,18 +175,7 @@ DOES carry the value and cannot be reduced the same way.
       15, 21, 23, 32 ... 51 by fold 16, 750-1500 s a fold -- the "STEP 3 ... DOES NOT SCALE" entry
       below. Both tests in `biconjCPLQTest` are QUARANTINED by name (assumeFail) until then.
 
-- [ ] **STILL TRUE, re-measured 2026-11-05: the AlgCrv has 4 faces, faces 2 and 4 own none of 100000 interior + 8000 edge samples, no +inf; the 2026-11-05 triangle fix did not reach them.** **Faces of ZERO AREA in the c = -2 AlgCrv -- REDUNDANT, measured.** Faces 2 and 4 own only
-      parts of the segments y = 1 and x = 0 (sampled). Wherever they own a point a face with area
-      owns it too, and their value never exceeds it (max excess 1.1e-16 over 82 points), so dropping
-      them changes no value. What is open is DETECTING zero area at assembly -- the regions are
-      algebraic, so it is an emptiness-of-interior test (`cellInterior` has one for cells) -- and
-      until then `algCrvIncidence` gives each one table row for a curve meeting no vertex.
-      **Cause, found 2026-09-24:** each is a QUADRATIC face the bridge beats on the whole interior
-      and ties only on the domain edge -- inside the square the one row excluding points just off
-      the segment is the algebraic row (EcA9 for face 2, EcA14 for face 4), i.e. q - bridge <= 0 on
-      both sides. Refuted as causes: a doubled-line row forcing the face onto a line (none), and
-      the straight rows alone (inscribed radius 0.29 in all four faces). So the place to drop them
-      is where the envelope decides a quadratic face owns a cell, not in the incidence.
+- [x] **DONE 2026-11-17: the c = -2 diagonal-kink zero-area faces are dropped (nf 4 -> 2, value-neutral; DECISIONS 2026-11-17).** The cause found 2026-09-24 stood -- each is a QUADRATIC face the bridge beats on the whole interior and ties only on the domain edge -- and they are now dropped where `algRowFails` decides a face's rows: a PERFECT-SQUARE TANGENCY certificate (`psTangency`, top of `algRowFails`, MATLAB + `python/cca2/alg_row_fails.py`) recognises a quad-vs-bridge row whose bridge branch exceeds the quad by a perfect square, which holds only on a curve, so the face owns no area. It is s-symmetric in the two branches P+ / P- (the square root's real sign is region-dependent), and its false-positive corner -- the one-sign draft's read of (z-(1-x-y))(z+1) against q=0 as a certified tangency -- is pinned by `algRowFailsTest/aRowVanishingOnTheREGIONSEdge`. The two surviving bridge faces are bit-identical to the 2026-11-05 baseline (owned 54203 / 53797 of 108000, ties 46890, max excess 1.0), so no value changes.
 
 - [ ] **Two BRIDGE faces owning one cell** -- `envelopeSubdivisionAlg:twoBridges`, refused by name and never
       observed. `envelopeSubdivision:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
