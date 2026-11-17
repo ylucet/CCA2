@@ -5,6 +5,10 @@
 //! per fixture, in bench_python.py's format plus the result's kind and face count.
 //!
 //!     cargo run --release --bin bench -- fixtures.json out.jsonl [reps] [slowCap]
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use cca2::alg_con::AlgCon;
 use cca2::io::num;
 use cca2::qua_pol::QuaPol;
@@ -46,6 +50,7 @@ fn call(fname: &str, p: &QuaPol) -> Result<Out, String> {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    eprintln!("{}", cca2::flint::status());
     let fix: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&a[1]).unwrap()).unwrap();
     let mut out = std::fs::File::create(&a[2]).unwrap();
     let reps: usize = a.get(3).map(|s| s.parse().unwrap()).unwrap_or(3);
@@ -55,6 +60,11 @@ fn main() {
     let _ = call("conjQ", &w);
     let _ = call("biconjQ", &w);
     for x in &fix {
+        if let Ok(ids) = std::env::var("CCA2_BENCH_IDS") {
+            if !ids.split(',').any(|i| i.parse::<i64>().ok() == x["id"].as_i64()) {
+                continue;
+            }
+        }
         if let Some(o) = &only {
             if x["bucket"].as_str() != Some(o.as_str()) {
                 continue;

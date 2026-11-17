@@ -2,14 +2,14 @@
 //! The elimination is exact (the resultant quartic is built in integers); the POINTS are doubles,
 //! returned in canonical (sorted) order, which is what makes "root r of conics i and j" a NAME.
 
+use crate::memo::Memo;
+use std::sync::LazyLock;
 use crate::bail;
 use crate::errors::R;
 use crate::numeric::{rcond2, roots, EPS};
 use crate::rat_q::*;
 use num_traits::{Signed, Zero};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Default)]
 pub struct MeetInfo {
@@ -21,28 +21,20 @@ pub struct MeetInfo {
 
 pub type Meet = (Vec<[f64; 2]>, MeetInfo);
 
-thread_local! {
-    static MEMO: RefCell<HashMap<(Vec<Z>, Vec<Z>), Rc<Meet>>> = RefCell::new(HashMap::new());
-}
+static MEMO: LazyLock<Memo<(Vec<Z>, Vec<Z>), Arc<Meet>>> = LazyLock::new(|| Memo::new(50000));
 
 pub fn clear_memo() {
-    MEMO.with(|m| m.borrow_mut().clear());
+    MEMO.clear();
 }
 
 /// Returns (P, info): P a list of [x, y] doubles in canonical (sorted) order. Memoised.
-pub fn conic_meet(a: &[Z], b: &[Z]) -> R<Rc<Meet>> {
+pub fn conic_meet(a: &[Z], b: &[Z]) -> R<Arc<Meet>> {
     let key = (a.to_vec(), b.to_vec());
-    if let Some(h) = MEMO.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(h) = MEMO.get(&key) {
         return Ok(h);
     }
-    let h = Rc::new(conic_meet_raw(&conic(a)?, &conic(b)?, 1e-9, 8)?);
-    MEMO.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 50000 {
-            m.clear();
-        }
-        m.insert(key, h.clone());
-    });
+    let h = Arc::new(conic_meet_raw(&conic(a)?, &conic(b)?, 1e-9, 8)?);
+    MEMO.insert(key, h.clone());
     Ok(h)
 }
 

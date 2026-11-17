@@ -45,12 +45,15 @@ pub fn conj_q(obj: &QuaPol) -> R<(QuaCon, Dom)> {
         }
         return Ok((g.unwrap(), dom));
     }
-    let (mut g, mut dom) = conj_piece_q(obj, 1)?;
-    for k in 2..=nf {
-        let (gk, dk) = conj_piece_q(obj, k)?;
-        g = max_q(&g, &gk)?;
-        dom.extend(dk);
+    // the pieces are independent (map), their conjugates are combined by a maximum (reduction)
+    let parts = crate::par::map_range(nf, |k| conj_piece_q(obj, k + 1))?;
+    let mut dom = vec![];
+    let mut gs = Vec::with_capacity(nf);
+    for (g, d) in parts {
+        gs.push(g);
+        dom.extend(d);
     }
+    let g = crate::par::reduce(gs, |a, b| max_q(&a, &b))?;
     Ok((g, dom))
 }
 
@@ -109,20 +112,17 @@ pub fn conj_piece_q(obj: &QuaPol, k: usize) -> R<(QuaCon, Dom)> {
             return conj_unbounded_non_convex(obj, k);
         }
         let tris = ear_clip(&vi, boundary_cycle(&sh, &vi)?)?;
-        let mut g: Option<QuaCon> = None;
-        for tri in tris {
-            let sht = triangle_shape(&vi, &vd, &tri)?;
-            let gt = if hn[0][0].is_positive() && d.is_positive() {
-                case_b_convex_on_piece(&fnk, &fdk, &vi, &vd, &sht, &[])?
+        // the triangles are independent (map), their conjugates are combined by a maximum (reduction)
+        let gts = crate::par::map(&tris, |tri| {
+            let sht = triangle_shape(&vi, &vd, tri)?;
+            if hn[0][0].is_positive() && d.is_positive() {
+                case_b_convex_on_piece(&fnk, &fdk, &vi, &vd, &sht, &[])
             } else {
-                case_d_boundary_max(&fnk, &fdk, &vi, &vd, &sht, &[])?
-            };
-            g = Some(match g {
-                None => gt,
-                Some(g0) => max_q(&g0, &gt)?,
-            });
-        }
-        return Ok((g.unwrap(), dom));
+                case_d_boundary_max(&fnk, &fdk, &vi, &vd, &sht, &[])
+            }
+        })?;
+        let g = crate::par::reduce(gts, |a, b| max_q(&a, &b))?;
+        return Ok((g, dom));
     }
     let (ok, dom, _why) = recession_conditions(&sh, &hn, &ln, &fdk, &vi, &vd)?;
     if !ok {
@@ -868,17 +868,15 @@ fn conj_unbounded_non_convex(obj: &QuaPol, k: usize) -> R<(QuaCon, Dom)> {
         let ip = [(&a[0] + &b[0]) * &half + &rq[0], (&a[1] + &b[1]) * &half + &rq[1]];
         parts.push(one_part(vec![a, b, ar], vec![[1, 2, 0], [1, 3, 0]], ip, &q)?);
     }
-    let mut g: Option<QuaCon> = None;
+    let cs = crate::par::map(&parts, |part| conj_piece_q(part, 1))?;
     let mut dom = vec![];
-    for part in &parts {
-        let (gi, di) = conj_piece_q(part, 1)?;
-        g = Some(match g {
-            None => gi,
-            Some(g0) => max_q(&g0, &gi)?,
-        });
-        dom.extend(di);
+    let mut gs = Vec::with_capacity(cs.len());
+    for (g, d) in cs {
+        gs.push(g);
+        dom.extend(d);
     }
-    Ok((g.unwrap(), dom))
+    let g = crate::par::reduce(gs, |a, b| max_q(&a, &b))?;
+    Ok((g, dom))
 }
 
 fn one_part(v: Vec<[Q; 2]>, e: Vec<[usize; 3]>, ip: [Q; 2], q: &[Q]) -> R<QuaPol> {

@@ -10,6 +10,16 @@ pub fn available() -> bool {
     imp::available()
 }
 
+/// One line for benchmark drivers: whether FLINT is compiled in and in use. A build without it
+/// is correct but slow (minutes on the heavy fixtures), so a timing run should say which it is.
+pub fn status() -> &'static str {
+    if cfg!(have_flint) {
+        if available() { "FLINT: linked, in use" } else { "FLINT: linked, switched off (CCA2_FLINT=0)" }
+    } else {
+        "FLINT: NOT linked -- slow pure-Rust path, timings are not comparable"
+    }
+}
+
 /// The product of the square-free factors of ODD multiplicity of S (dense, S[i][j] x^i y^j),
 /// primitive; sign left to the caller. None when FLINT is not in use.
 pub fn odd_part(s: &M2) -> Option<M2> {

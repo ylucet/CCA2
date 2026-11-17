@@ -2,6 +2,8 @@
 //! part of a box that lies in a region (port of alg_row_fails.py). True is a proof; false means
 //! "not proved". Square-free parts by Yun, through FLINT when available (src/flint.rs).
 
+use crate::memo::Memo;
+use std::sync::LazyLock;
 use crate::biv::{self, M2};
 use crate::errors::R;
 use crate::numeric::{roots, Cx, EPS};
@@ -10,17 +12,16 @@ use crate::poly_sign_on::{box_sign, comb, FMat};
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 const REALMIN: f64 = 2.2250738585072014e-308;
 
 /// A row: "side * (q - z) >= 0" (Quad) or "z_k <= z_w" (Face).
 #[derive(Clone, Debug)]
 pub enum RowSpec {
-    Quad { fp: Rc<PolyN>, fb: i64, num: Vec<Z>, den: Z, side: i64 },
-    Face { fp: Rc<PolyN>, fb: i64, wfp: Rc<PolyN>, wfb: i64 },
+    Quad { fp: Arc<PolyN>, fb: i64, num: Vec<Z>, den: Z, side: i64 },
+    Face { fp: Arc<PolyN>, fb: i64, wfp: Arc<PolyN>, wfb: i64 },
 }
 
 /// The region of a cell: its box, its row polynomials (also the factors), lines and corners.
@@ -96,6 +97,121 @@ enum SP {
     Surd(Box<Surd>),
 }
 
+// ---- bit-exact comparison and hashing, for cache keys ------------------------------------------
+// The f64 parts of an SP are exact f64 values produced from the exact data; a cache key must
+// still distinguish 0.0 and -0.0 (equal under `==`), so compare and hash the BITS. (Consistent
+// with `f64`'s std Hash: equal bits hash equal.)
+fn fmat_eq(a: &FMat, b: &FMat) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(ra, rb)| ra.len() == rb.len() && ra.iter().zip(rb.iter()).all(|(x, y)| x.to_bits() == y.to_bits()))
+}
+
+fn fmat_hash<H: Hasher>(m: &FMat, h: &mut H) {
+    m.len().hash(h);
+    for r in m {
+        r.len().hash(h);
+        for x in r {
+            x.to_bits().hash(h);
+        }
+    }
+}
+
+impl PartialEq for SP {
+    fn eq(&self, o: &SP) -> bool {
+        match (self, o) {
+            (SP::Num { f: a, z: za }, SP::Num { f: b, z: zb }) => fmat_eq(a, b) && za == zb,
+            (SP::Surd(s), SP::Surd(t)) => s.eq_bits(t),
+            _ => false,
+        }
+    }
+}
+impl Eq for SP {}
+
+impl Hash for SP {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        match self {
+            SP::Num { f, z } => {
+                0u8.hash(h);
+                fmat_hash(f, h);
+                match z {
+                    None => 0u8.hash(h),
+                    Some(m) => {
+                        1u8.hash(h);
+                        m.hash(h);
+                    }
+                }
+            }
+            SP::Surd(s) => {
+                1u8.hash(h);
+                s.hash(h);
+            }
+        }
+    }
+}
+
+fn opt_fmat_eq(a: &Option<FMat>, b: &Option<FMat>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => fmat_eq(x, y),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn opt_fmat_hash<H: Hasher>(m: &Option<FMat>, h: &mut H) {
+    match m {
+        None => 0u8.hash(h),
+        Some(x) => {
+            1u8.hash(h);
+            fmat_hash(x, h);
+        }
+    }
+}
+
+impl Surd {
+    fn eq_bits(&self, o: &Surd) -> bool {
+        self.k == o.k
+            && self.u == o.u
+            && self.v == o.v
+            && self.e == o.e
+            && self.us == o.us
+            && self.vs == o.vs
+            && self.uz == o.uz
+            && self.vz == o.vz
+            && self.ez == o.ez
+            && self.usz == o.usz
+            && self.vsz == o.vsz
+            && opt_fmat_eq(&self.ef, &o.ef)
+            && opt_fmat_eq(&self.usf, &o.usf)
+            && opt_fmat_eq(&self.vsf, &o.vsf)
+            && fmat_eq(&self.uf, &o.uf)
+            && fmat_eq(&self.vf, &o.vf)
+            && fmat_eq(&self.lo, &o.lo)
+            && fmat_eq(&self.hi, &o.hi)
+    }
+}
+
+impl Hash for Surd {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        self.k.hash(h);
+        self.u.hash(h);
+        self.v.hash(h);
+        self.e.hash(h);
+        self.us.hash(h);
+        self.vs.hash(h);
+        self.uz.hash(h);
+        self.vz.hash(h);
+        self.ez.hash(h);
+        self.usz.hash(h);
+        self.vsz.hash(h);
+        opt_fmat_hash(&self.ef, h);
+        opt_fmat_hash(&self.usf, h);
+        opt_fmat_hash(&self.vsf, h);
+        fmat_hash(&self.uf, h);
+        fmat_hash(&self.vf, h);
+        fmat_hash(&self.lo, h);
+        fmat_hash(&self.hi, h);
+    }
+}
+
 fn num_z(m: M2) -> SP {
     SP::Num { f: fmat(&m), z: Some(m) }
 }
@@ -112,11 +228,57 @@ enum Test {
     TopFace { odd: bool },
 }
 
+#[derive(Clone)]
 struct Row {
     p: Vec<SP>,
     test: Test,
     corner: bool,
 }
+
+/// The processed form of a row spec: the sign polynomials after dividing out the cell's boundary
+/// factors. A pure function of the spec and the cell's factors, so a cache of it changes the time
+/// but never a result.
+#[derive(Hash, PartialEq, Eq, Clone)]
+enum RowKey {
+    Quad { fp: PolyN, fb: i64, num: Vec<Z>, den: Z, side: i64 },
+    Face { fp: PolyN, fb: i64, wfp: PolyN, wfb: i64 },
+}
+
+/// Per-cell cache of processed rows. drop_below calls alg_row_fails_box many times on ONE cell
+/// (per pair of faces, per box), always with the same `own` rows; without the cache the
+/// row_polys step of every call is redone. The factors are fixed for the life of the cache, so
+/// they are not part of the key.
+pub struct RowCache {
+    m: Memo<RowKey, Option<Row>>,
+}
+
+impl RowCache {
+    pub fn new() -> Self {
+        RowCache { m: Memo::new(1024) }
+    }
+
+    fn key(at: &RowSpec) -> RowKey {
+        match at {
+            RowSpec::Quad { fp, fb, num, den, side } => RowKey::Quad { fp: (**fp).clone(), fb: *fb, num: num.clone(), den: den.clone(), side: *side },
+            RowSpec::Face { fp, fb, wfp, wfb } => RowKey::Face { fp: (**fp).clone(), fb: *fb, wfp: (**wfp).clone(), wfb: *wfb },
+        }
+    }
+
+    fn get(&self, at: &RowSpec) -> Option<Option<Row>> {
+        self.m.get(&Self::key(at))
+    }
+
+    fn insert(&self, at: &RowSpec, r: Option<Row>) {
+        self.m.insert(Self::key(at), r);
+    }
+}
+
+/// The blow-up of a row polynomial at a corner is a pure function of (polynomial, corner, sign,
+/// direction). corner_ok used to memo it in a table that died with each alg_row_fails_box call, so
+/// the same (row, corner) was re-blow-upped by every call a cell makes (drop_below and
+/// winner_faces make many, with the same `own` rows). Kept like MEMO_FACTOR_BU for the region
+/// factors: pure cache, so sharing changes the time but never a result.
+static MEMO_ROW_BU: LazyLock<Memo<(SP, u64, u64, i64, u8), Option<SP>>> = LazyLock::new(|| Memo::new(20000));
 
 fn run_test(t: &Test, s: &[i32]) -> bool {
     match t {
@@ -132,75 +294,75 @@ fn run_test(t: &Test, s: &[i32]) -> bool {
 }
 
 // ---- memos ----------------------------------------------------------------------------------------
-thread_local! {
-    static MEMO_SF: RefCell<HashMap<(PolyN, Vec<Z>, Z, i32, bool), Option<Vec<M2>>>> = RefCell::new(HashMap::new());
-    static MEMO_FACE: RefCell<HashMap<(u8, PolyN, PolyN), Option<Vec<M2>>>> = RefCell::new(HashMap::new());
-    static MEMO_SURD: RefCell<HashMap<(PolyN, PolyN, bool, bool), Option<(Vec<M2>, Vec<Surd>)>>> = RefCell::new(HashMap::new());
-    static MEMO_TOP: RefCell<HashMap<(PolyN, PolyN, bool), Option<(Vec<M2>, Vec<Surd>, bool)>>> = RefCell::new(HashMap::new());
-    static MEMO_SURDFACE: RefCell<HashMap<(PolyN, bool), Option<SurdFace>>> = RefCell::new(HashMap::new());
-    static MEMO_SURDOF: RefCell<HashMap<(u64, u64), Option<[i64; 6]>>> = RefCell::new(HashMap::new());
-    static MEMO_FACTOR_INTS: RefCell<HashMap<M2, Option<M2>>> = RefCell::new(HashMap::new());
-    static MEMO_FACTOR_BU: RefCell<HashMap<(M2, u64, u64, i64, u8), Option<SP>>> = RefCell::new(HashMap::new());
-    static MEMO_CURVE_PTS: RefCell<HashMap<M2, Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)>>> = RefCell::new(HashMap::new());
-}
+static MEMO_SF: LazyLock<Memo<(PolyN, Vec<Z>, Z, i32, bool), Option<Vec<M2>>>> = LazyLock::new(|| Memo::new(5000));
+static MEMO_FACE: LazyLock<Memo<(u8, PolyN, PolyN), Option<Vec<M2>>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_SURD: LazyLock<Memo<(PolyN, PolyN, bool, bool), Option<(Vec<M2>, Vec<Surd>)>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_TOP: LazyLock<Memo<(PolyN, PolyN, bool), Option<(Vec<M2>, Vec<Surd>, bool)>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_SURDFACE: LazyLock<Memo<(PolyN, bool), Option<SurdFace>>> = LazyLock::new(|| Memo::new(2000));
+static MEMO_SURDOF: LazyLock<Memo<(u64, u64), Option<[i64; 6]>>> = LazyLock::new(|| Memo::new(20000));
+static MEMO_FACTOR_INTS: LazyLock<Memo<M2, Option<M2>>> = LazyLock::new(|| Memo::new(20000));
+static MEMO_FACTOR_BU: LazyLock<Memo<(M2, u64, u64, i64, u8), Option<SP>>> = LazyLock::new(|| Memo::new(20000));
+static MEMO_CURVE_PTS: LazyLock<Memo<M2, Arc<(bool, Option<Vec<(f64, Vec<Cx>)>>)>>> = LazyLock::new(|| Memo::new(20000));
 
 pub fn clear_memos() {
-    MEMO_SURDOF.with(|m| m.borrow_mut().clear());
-    MEMO_FACTOR_INTS.with(|m| m.borrow_mut().clear());
-    MEMO_CURVE_PTS.with(|m| m.borrow_mut().clear());
+    MEMO_SURDOF.clear();
+    MEMO_FACTOR_INTS.clear();
+    MEMO_CURVE_PTS.clear();
 }
 
 // ---- the entry point ------------------------------------------------------------------------------
 pub fn alg_row_fails(a: &[RowSpec], reg: &Region, depth: usize) -> R<bool> {
-    alg_row_fails_box(a, reg.bx, &|b: &[f64; 4]| reg.in_box(b), depth, &reg.factors, &reg.corners)
+    alg_row_fails_box(a, reg.bx, &|b: &[f64; 4]| reg.in_box(b), depth, &reg.factors, &reg.corners, None)
 }
 
-pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth: usize, factors: &[M2], corners: &[[f64; 2]]) -> R<bool> {
+/// `rows_cache`: the per-cell RowCache of the caller (drop_below), or None.
+pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, factors: &[M2], corners: &[[f64; 2]], rows_cache: Option<&RowCache>) -> R<bool> {
     let mut rows = vec![];
     for at in a {
-        if let Some(r) = row_polys(at, factors)? {
+        if let Some(r) = row_polys(at, factors, rows_cache)? {
             rows.push(r);
         }
     }
     if rows.is_empty() {
         return Ok(false);
     }
-    let tf = box_rec(&rows, bx, in_box, depth, &[]);
+    let tf = box_rec(&rows, bx, in_box, depth, &[], 2);
     if tf || corners.is_empty() {
         return Ok(tf);
     }
     let w = (bx[1] - bx[0]).max(bx[3] - bx[2]);
-    let mut sq: Vec<[f64; 3]> = vec![];
-    let mut bu_memo: HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>> = HashMap::new();
-    for p0 in corners {
+    // every corner is certified by its own blow-up, independently of the others; the blow-ups are
+    // kept in MEMO_ROW_BU, shared across the repeated alg_row_fails_box calls of one cell
+    let found = crate::par::map(corners, |p0| -> R<Option<[f64; 3]>> {
         let mut p = *p0;
         let q = [round(p[0] * 256.0) / 256.0, round(p[1] * 256.0) / 256.0];
         if q.iter().zip(p.iter()).all(|(qi, pi)| (qi - pi).abs() <= 1e-9 * 1f64.max(pi.abs())) {
             p = q;
         }
         if p[0] < bx[0] || p[0] > bx[1] || p[1] < bx[2] || p[1] > bx[3] {
-            continue;
+            return Ok(None);
         }
         if !any_vanishes(&rows, p) {
-            continue;
+            return Ok(None);
         }
         for k in 2..9 {
             let mut e = w / 2f64.powi(k);
-            if corner_ok(&rows, p, e, factors, &mut bu_memo)? {
+            if corner_ok(&rows, p, e, factors)? {
                 if !is_dyadic(p) {
                     e *= 1.0 - 1e-9;
                 }
-                sq.push([p[0], p[1], e]);
-                break;
+                return Ok(Some([p[0], p[1], e]));
             }
         }
-    }
+        Ok(None)
+    })?;
+    let sq: Vec<[f64; 3]> = found.into_iter().flatten().collect();
     if sq.is_empty() {
         return Ok(false);
     }
-    let mut tf = box_rec(&rows, bx, in_box, depth, &sq);
+    let mut tf = box_rec(&rows, bx, in_box, depth, &sq, 2);
     if !tf {
-        tf = box_rec(&rows, bx, in_box, depth + 2, &sq);
+        tf = box_rec(&rows, bx, in_box, depth + 2, &sq, 2);
     }
     Ok(tf)
 }
@@ -224,7 +386,20 @@ fn nz_of(fp: &PolyN) -> usize {
     fp.keys().map(|e| e[2]).max().unwrap() as usize + 1
 }
 
-fn row_polys(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
+fn row_polys(a: &RowSpec, factors: &[M2], cache: Option<&RowCache>) -> R<Option<Row>> {
+    if let Some(c) = cache {
+        if let Some(r) = c.get(a) {
+            return Ok(r);
+        }
+    }
+    let r = row_polys_calc(a, factors)?;
+    if let Some(c) = cache {
+        c.insert(a, r.clone());
+    }
+    Ok(r)
+}
+
+fn row_polys_calc(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
     let (fp, fb, num, den, side) = match a {
         RowSpec::Face { fp, fb, wfp, wfb } => return face_row_polys(fp, *fb, wfp, *wfb, factors),
         RowSpec::Quad { fp, fb, num, den, side } => (fp, *fb, num, den, *side),
@@ -256,7 +431,7 @@ fn row_polys(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
         return Ok(None);
     };
     let key = ((**fp).clone(), num.clone(), den.clone(), if top { want } else { 0 }, top);
-    let p = match MEMO_SF.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_SF.get(&key) {
         Some(p) => p,
         None => {
             let p = if top {
@@ -269,13 +444,7 @@ fn row_polys(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
             } else {
                 Some(sign_polys(&slices(fp), &q, &dn, nz - 1).iter().map(square_free_sign).collect())
             };
-            MEMO_SF.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 5000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_SF.insert(key, p.clone());
             p
         }
     };
@@ -326,7 +495,8 @@ fn top_row_polys(fp: &PolyN, q: &M2, dn: &Z, n: usize, want: i32) -> Vec<M2> {
 }
 
 // ---- the box recursion ----------------------------------------------------------------------------
-fn box_rec(rows: &[Row], b: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth: usize, sq: &[[f64; 3]]) -> bool {
+/// `fork`: how many levels of the quadtree run their four sub-boxes in parallel (speculatively).
+fn box_rec(rows: &[Row], b: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, sq: &[[f64; 3]], fork: u32) -> bool {
     for c in sq {
         if b[0] >= c[0] - c[2] && b[1] <= c[0] + c[2] && b[2] >= c[1] - c[2] && b[3] <= c[1] + c[2] {
             return true;
@@ -346,10 +516,8 @@ fn box_rec(rows: &[Row], b: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth:
     }
     let xm = (b[0] + b[1]) / 2.0;
     let ym = (b[2] + b[3]) / 2.0;
-    box_rec(rows, [b[0], xm, b[2], ym], in_box, depth - 1, sq)
-        && box_rec(rows, [xm, b[1], b[2], ym], in_box, depth - 1, sq)
-        && box_rec(rows, [b[0], xm, ym, b[3]], in_box, depth - 1, sq)
-        && box_rec(rows, [xm, b[1], ym, b[3]], in_box, depth - 1, sq)
+    let sub = [[b[0], xm, b[2], ym], [xm, b[1], b[2], ym], [b[0], xm, ym, b[3]], [xm, b[1], ym, b[3]]];
+    crate::par::all_of::<(), _>(4, fork > 0, |i| Ok(box_rec(rows, sub[i], in_box, depth - 1, sq, fork.saturating_sub(1)))).unwrap()
 }
 
 fn poly_sign(p: &SP, b: &[f64; 4]) -> i32 {
@@ -439,26 +607,26 @@ fn any_vanishes(rows: &[Row], p: [f64; 2]) -> bool {
 }
 
 // ---- corners --------------------------------------------------------------------------------------
-fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>>) -> R<bool> {
+fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2]) -> R<bool> {
     if !(e > 0.0) {
         return Ok(false);
     }
     for major in [1u8, 2] {
         for sg in [1i64, -1] {
             let mut rows_c = vec![];
-            for (ri, row) in rows.iter().enumerate() {
+            for row in rows.iter() {
                 if !row.corner {
                     continue;
                 }
                 let mut ps = vec![];
                 let mut ok = true;
-                for (pi, pp) in row.p.iter().enumerate() {
-                    let key = (ri, pi, p[0].to_bits(), p[1].to_bits(), sg, major);
-                    let g = match memo.get(&key) {
-                        Some(g) => g.clone(),
+                for pp in &row.p {
+                    let key = (pp.clone(), p[0].to_bits(), p[1].to_bits(), sg, major);
+                    let g = match MEMO_ROW_BU.get(&key) {
+                        Some(g) => g,
                         None => {
                             let g = blow_up_raw(pp, p, sg, major)?;
-                            memo.insert(key, g.clone());
+                            MEMO_ROW_BU.insert(key, g.clone());
                             g
                         }
                     };
@@ -480,19 +648,13 @@ fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashM
             let mut fac_c: Vec<SP> = vec![];
             for g in factors {
                 let key = (g.clone(), p[0].to_bits(), p[1].to_bits(), sg, major);
-                let hit = MEMO_FACTOR_BU.with(|m| m.borrow().get(&key).cloned());
+                let hit = MEMO_FACTOR_BU.get(&key);
                 let gg = match hit {
                     Some(x) => x,
                     None => {
                         let gn = num_z(g.clone());
                         let x = if vanishes_at(&gn, p) { blow_up_raw(&gn, p, sg, major)? } else { None };
-                        MEMO_FACTOR_BU.with(|m| {
-                            let mut m = m.borrow_mut();
-                            if m.len() > 20000 {
-                                m.clear();
-                            }
-                            m.insert(key, x.clone());
-                        });
+                        MEMO_FACTOR_BU.insert(key, x.clone());
                         x
                     }
                 };
@@ -501,7 +663,7 @@ fn corner_ok(rows: &[Row], p: [f64; 2], e: f64, factors: &[M2], memo: &mut HashM
                 }
             }
             let in_c = |cb: &[f64; 4]| !fac_c.iter().any(|g| poly_sign(g, cb) == -1);
-            if !box_rec(&rows_c, [0.0, e, -1.0, 1.0], &in_c, 6, &[]) {
+            if !box_rec(&rows_c, [0.0, e, -1.0, 1.0], &in_c, 6, &[], 0) {
                 return Ok(false);
             }
         }
@@ -780,17 +942,11 @@ const SURD_D: [i64; 30] = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23
 
 fn surd_of(p: [f64; 2]) -> Option<[i64; 6]> {
     let key = (p[0].to_bits(), p[1].to_bits());
-    if let Some(r) = MEMO_SURDOF.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(r) = MEMO_SURDOF.get(&key) {
         return r;
     }
     let r = surd_of_search(p);
-    MEMO_SURDOF.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(key, r);
-    });
+    MEMO_SURDOF.insert(key, r);
     r
 }
 
@@ -915,7 +1071,7 @@ fn blow_up_surd(pm: &M2, p: [f64; 2], sg: i64, major: u8) -> Option<SP> {
 }
 
 // ---- rows comparing two faces ---------------------------------------------------------------------
-fn face_row_polys(fk: &Rc<PolyN>, fbk: i64, fw: &Rc<PolyN>, fbw: i64, factors: &[M2]) -> R<Option<Row>> {
+fn face_row_polys(fk: &Arc<PolyN>, fbk: i64, fw: &Arc<PolyN>, fbw: i64, factors: &[M2]) -> R<Option<Row>> {
     let nk = nz_of(fk);
     let nw = nz_of(fw);
     if nw >= 4 {
@@ -960,17 +1116,11 @@ fn face_row_polys(fk: &Rc<PolyN>, fbk: i64, fw: &Rc<PolyN>, fbw: i64, factors: &
         return Ok(Some(r));
     }
     let key = (mode, (**fk).clone(), (**fw).clone());
-    let p = match MEMO_FACE.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_FACE.get(&key) {
         Some(p) => p,
         None => {
             let p = face_raw(&slices(fk), &slices(fw), -1, mode).map(|v| v.iter().map(square_free_sign).collect::<Vec<_>>()).ok();
-            MEMO_FACE.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 2000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_FACE.insert(key, p.clone());
             p
         }
     };
@@ -1023,7 +1173,7 @@ struct SurdFace {
 
 fn surd_face(f: &PolyN, n: usize, hi: bool) -> Option<SurdFace> {
     let key = (f.clone(), hi);
-    if let Some(r) = MEMO_SURDFACE.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(r) = MEMO_SURDFACE.get(&key) {
         return r;
     }
     let s = slices(f);
@@ -1041,13 +1191,7 @@ fn surd_face(f: &PolyN, n: usize, hi: bool) -> Option<SurdFace> {
             }
         }
     }
-    MEMO_SURDFACE.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 2000 {
-            m.clear();
-        }
-        m.insert(key, out.clone());
-    });
+    MEMO_SURDFACE.insert(key, out.clone());
     out
 }
 
@@ -1110,9 +1254,9 @@ fn square_free_int(c: &Z) -> Z {
     k
 }
 
-fn surd_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, nw: usize, hik: bool, hiw: bool, factors: &[M2]) -> R<Option<Row>> {
+fn surd_face_row(fk: &Arc<PolyN>, fw: &Arc<PolyN>, nk: usize, nw: usize, hik: bool, hiw: bool, factors: &[M2]) -> R<Option<Row>> {
     let key = ((**fk).clone(), (**fw).clone(), hik, hiw);
-    let p = match MEMO_SURD.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_SURD.get(&key) {
         Some(p) => p,
         None => {
             let mut p = None;
@@ -1141,13 +1285,7 @@ fn surd_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, nw: usize, hik: bool
                     }
                 }
             }
-            MEMO_SURD.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 2000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_SURD.insert(key, p.clone());
             p
         }
     };
@@ -1162,9 +1300,9 @@ fn surd_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, nw: usize, hik: bool
     Ok(Some(Row { p: pn, test: Test::Surd, corner: true }))
 }
 
-fn top_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, hik: bool, factors: &[M2]) -> R<Option<Row>> {
+fn top_face_row(fk: &Arc<PolyN>, fw: &Arc<PolyN>, nk: usize, hik: bool, factors: &[M2]) -> R<Option<Row>> {
     let key = ((**fk).clone(), (**fw).clone(), hik);
-    let p = match MEMO_TOP.with(|m| m.borrow().get(&key).cloned()) {
+    let p = match MEMO_TOP.get(&key) {
         Some(p) => p,
         None => {
             let mut p = None;
@@ -1197,13 +1335,7 @@ fn top_face_row(fk: &Rc<PolyN>, fw: &Rc<PolyN>, nk: usize, hik: bool, factors: &
                     p = Some((vec![cf(&fk2.den), cf(&fk2.s), cf(&g[n])], t, n % 2 == 1));
                 }
             }
-            MEMO_TOP.with(|m| {
-                let mut m = m.borrow_mut();
-                if m.len() > 2000 {
-                    m.clear();
-                }
-                m.insert(key, p.clone());
-            });
+            MEMO_TOP.insert(key, p.clone());
             p
         }
     };
@@ -1431,7 +1563,7 @@ fn rel_sign(s: &M2, o: &M2) -> i32 {
 
 // ---- dividing out the region's own boundary ----------------------------------------------------------
 fn factor_ints(g: &M2) -> Option<M2> {
-    if let Some(h) = MEMO_FACTOR_INTS.with(|m| m.borrow().get(g).cloned()) {
+    if let Some(h) = MEMO_FACTOR_INTS.get(g) {
         return h;
     }
     let h = if biv::is_const(g) {
@@ -1444,13 +1576,7 @@ fn factor_ints(g: &M2) -> Option<M2> {
             Some(g2)
         }
     };
-    MEMO_FACTOR_INTS.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(g.clone(), h.clone());
-    });
+    MEMO_FACTOR_INTS.insert(g.clone(), h.clone());
     h
 }
 
@@ -1553,8 +1679,8 @@ fn may_divide(s: &M2, g: &M2) -> bool {
     true
 }
 
-fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
-    if let Some(h) = MEMO_CURVE_PTS.with(|m| m.borrow().get(g).cloned()) {
+fn curve_points(g: &M2) -> Arc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
+    if let Some(h) = MEMO_CURVE_PTS.get(g) {
         return h;
     }
     let mut tr = false;
@@ -1564,7 +1690,7 @@ fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
         tr = true;
     }
     let hit = if gg[0].len() < 2 {
-        Rc::new((tr, None))
+        Arc::new((tr, None))
     } else {
         let mut pts = vec![];
         for x in [0.6180339887f64, -1.3247179572, 2.7182818285] {
@@ -1586,15 +1712,9 @@ fn curve_points(g: &M2) -> Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
             let rev: Vec<f64> = cy.iter().rev().cloned().collect();
             pts.push((x, roots(&rev)));
         }
-        Rc::new((tr, Some(pts)))
+        Arc::new((tr, Some(pts)))
     };
-    MEMO_CURVE_PTS.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(g.clone(), hit.clone());
-    });
+    MEMO_CURVE_PTS.insert(g.clone(), hit.clone());
     hit
 }
 

@@ -9,7 +9,7 @@ use crate::poly_n::{self as pn, PolyN};
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub fn corner_face_alg(n: &[Z], d: &Z, p: &[Vec<Z>], tie: &[Z], side: i64) -> R<Vec<BFace>> {
     if n.len() != 10 || !all_zero(&n[0..4]) {
@@ -48,7 +48,7 @@ pub fn corner_face_alg(n: &[Z], d: &Z, p: &[Vec<Z>], tie: &[Z], side: i64) -> R<
             continue;
         }
         let (e0, e1, k) = value_form(&nn, &m, qq, d, &s0n, &w, &na, &al, &be, &ga);
-        let fp = Rc::new(implicit_value(&e0, &e1, &k, &al, &be, &dd));
+        let fp = Arc::new(implicit_value(&e0, &e1, &k, &al, &be, &dd));
         let (alf, bef, ddf, naf) = (to_f64(&al), to_f64(&be), to_f64(&dd), to_f64(&na));
         let s0f = [to_f64(&s0n[0]), to_f64(&s0n[1])];
         let wf = [to_f64(&w[0]), to_f64(&w[1])];
@@ -137,7 +137,7 @@ fn rational_corner(n: &[Z], d: &Z, nn: &[Vec<Z>], m: &[Z], qq: &Z, p: &[Vec<Z>],
     let sdf = to_f64(&sd);
     let pdf = to_f64(&pd);
     let mut face = BFace::blank(FaceKind::Corner);
-    face.fp = Rc::new(fp);
+    face.fp = Arc::new(fp);
     face.fb = -1;
     face.s = [q_to_f64(&Q::new(sn[0].clone(), sd.clone())), q_to_f64(&Q::new(sn[1].clone(), sd.clone()))];
     face.sigma = Some(Sigma { quad: [zi(0), be.clone(), ga.clone()], root: 0, facet: i, s0n: s0n.to_vec(), w: w.to_vec(), na: na.clone() });

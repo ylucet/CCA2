@@ -15,9 +15,9 @@ use crate::qua_pol::QuaPol;
 use crate::rat_q::*;
 use crate::triangle_face::{cut_triangles, triangle_face, AtomTri};
 use num_traits::{One, Zero};
-use std::cell::OnceCell;
+use std::sync::OnceLock;
 use std::collections::{BTreeMap, BTreeSet};
-use std::rc::Rc;
+use std::sync::Arc;
 
 // ==========================================================================================
 // the atoms route of biconjQ
@@ -39,18 +39,12 @@ pub fn atoms_route(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
         };
     }
     let run = || -> R<AlgCon> {
-        let mut envs = vec![];
-        for p in &pairs {
-            envs.push(envelope_prune(p)?);
-        }
+        let envs = crate::par::map(&pairs, envelope_prune)?;
         if tris.is_empty() {
             let sub = envelope_subdivision_alg(&envs, &hull_rows(obj)?, &[], &aopts)?;
             return Ok(AlgCon::AlgCrv(assemble_alg_crv(&sub)?));
         }
-        let mut tfs = vec![];
-        for t in &tris {
-            tfs.push(Rc::new(triangle_face(t)?));
-        }
+        let tfs = crate::par::map(&tris, |t| Ok(Arc::new(triangle_face(t)?)))?;
         let sub = envelope_subdivision_alg(&envs, &hull_rows(obj)?, &[], &aopts)?;
         Ok(AlgCon::AlgCrv(assemble_alg_crv(&cut_triangles(sub, tfs)?)?))
     };
@@ -127,7 +121,7 @@ struct Form {
     tmax: f64,
     gn: Vec<Z>,
     gd: Z,
-    dom: OnceCell<Vec<[f64; 3]>>,
+    dom: OnceLock<Vec<[f64; 3]>>,
 }
 
 fn norm(v: [f64; 2]) -> f64 {
@@ -158,14 +152,11 @@ pub fn biconj_atoms(f: &QuaPol) -> R<(Vec<Env>, Vec<AtomTri>)> {
     }
     let tris = triple_faces(&forms, &df);
     let (ab, tris) = active_atom_pairs(&atoms, &forms, tris, &df)?;
-    let mut g: BTreeMap<usize, QuaCon> = BTreeMap::new();
-    for a in ab.iter().flatten().cloned().collect::<BTreeSet<_>>() {
-        g.insert(a, conj_q(&atoms[a - 1].q)?.0);
-    }
-    let mut pairs = vec![];
-    for r in &ab {
-        pairs.push(envelope_assemble(&g[&r[0]], &g[&r[1]], &d)?.0);
-    }
+    // the atoms' conjugates are independent, and so is the envelope of each pair of them
+    let ids: Vec<usize> = ab.iter().flatten().cloned().collect::<BTreeSet<_>>().into_iter().collect();
+    let gs = crate::par::map(&ids, |&a| Ok(conj_q(&atoms[a - 1].q)?.0))?;
+    let g: BTreeMap<usize, QuaCon> = ids.into_iter().zip(gs).collect();
+    let pairs = crate::par::map(&ab, |r| Ok(envelope_assemble(&g[&r[0]], &g[&r[1]], &d)?.0))?;
     Ok((pairs, tris))
 }
 
@@ -749,7 +740,7 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
                 let hil = [hi[0][0] * l[0] + hi[0][1] * l[1], hi[1][0] * l[0] + hi[1][1] * l[1]];
                 let lhl = l[0] * (hi[0][0] * l[0] + hi[0][1] * l[1]) + l[1] * (hi[1][0] * l[0] + hi[1][1] * l[1]);
                 let (gn, gd) = form_q(FKind::Piece, f, k, 0, 0)?;
-                forms.push(Form { kind: FKind::Piece, a: hi, b: [-hil[0], -hil[1]], c: 0.5 * lhl - k0, u: [0.0; 2], d: [0.0; 2], al: 0.0, be: 0.0, h, l, poly: Some(poly.clone()), tmax: 1.0, gn, gd, dom: OnceCell::new() });
+                forms.push(Form { kind: FKind::Piece, a: hi, b: [-hil[0], -hil[1]], c: 0.5 * lhl - k0, u: [0.0; 2], d: [0.0; 2], al: 0.0, be: 0.0, h, l, poly: Some(poly.clone()), tmax: 1.0, gn, gd, dom: OnceLock::new() });
             }
         }
         for e in &ed {
@@ -777,7 +768,7 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
                 tmax: if e.ray { f64::INFINITY } else { 1.0 },
                 gn,
                 gd,
-                dom: OnceCell::new(),
+                dom: OnceLock::new(),
             };
             forms.push(fm);
             if is_cvx {
@@ -808,7 +799,7 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
     }
     for (p, val, face, iv) in &vtx {
         let (gn, gd) = form_q(FKind::Vertex, f, *face, *iv, 0)?;
-        forms.push(Form { kind: FKind::Vertex, a: [[0.0; 2]; 2], b: *p, c: -val, u: *p, d: [0.0; 2], al: 0.0, be: 0.0, h: [[0.0; 2]; 2], l: [0.0; 2], poly: None, tmax: 1.0, gn, gd, dom: OnceCell::new() });
+        forms.push(Form { kind: FKind::Vertex, a: [[0.0; 2]; 2], b: *p, c: -val, u: *p, d: [0.0; 2], al: 0.0, be: 0.0, h: [[0.0; 2]; 2], l: [0.0; 2], poly: None, tmax: 1.0, gn, gd, dom: OnceLock::new() });
         let mut covered = cvx.iter().any(|pp| in_piece(*p, pp));
         for r in &edge_at {
             covered = covered || norm([p[0] - r[0], p[1] - r[1]]) < 1e-12 || norm([p[0] - r[2], p[1] - r[3]]) < 1e-12;

@@ -1,0 +1,46 @@
+# Machine-scaling and batch measurements for PARALLEL.md. Frances (2 x Xeon Gold 6426Y, 32 cores,
+# 64 hardware threads, 2 NUMA nodes, 251 GB), 2026-11-14, SHARED machine (load 1-3 from other jobs
+# before each run). Wall-clock seconds; where several repetitions were made they are all listed.
+# Single timings on this machine scatter by up to 20% (two modes, e.g. 1.6 s and 1.9 s for fixture
+# 200), so read the minima and the ratios.
+
+## 1. One call of fixture 196 (kink, biconjQ -> AlgCrv, 317 faces), clean build
+main thread, process never had a second thread      7.896  7.910  8.283  7.929
+main thread, an idle second thread exists           9.444  9.687  10.715
+on a worker thread (parbench 1 copies 196)          9.400  9.828  9.406  9.738
+on a worker thread, MALLOC_ARENA_MAX=1              9.353  9.867  9.359  9.671
+on a worker thread, pinned to one core (taskset)    9.827  9.401  9.388
+-> the "thread tax": about +20% on this allocation-heavy call as soon as the process is
+   multi-threaded (glibc 2.35 malloc leaves its single-thread fast path). Fixture 200: not visible.
+
+## 2. N copies of fixture 196 at once (parbench N copies 196): wall time until all N are done
+#  N   threads in one process     one process per copy (main thread each)
+   1   9.40                       7.90
+   2   9.81  10.09                -
+   8   9.95   9.96                8.14   8.77
+  16  10.93  11.07                -
+  32  11.72  11.92                10.27  10.69
+  64  19.70  19.71                17.43  17.44
+-> throughput in units of "one undisturbed core" (N x 7.90 / wall):
+   threads:   8 -> 6.4    16 -> 11.6    32 -> 21.6    64 -> 25.7
+   processes: 8 -> 7.8                  32 -> 24.6    64 -> 29.0
+
+## 3. N copies of fixture 200 at once, threads, minimum of 3
+#  N    wall
+   1   1.655
+   2   1.676
+   4   1.892
+   8   1.929
+  16   2.024
+  32   2.097
+  64   3.647
+
+## 4. All 200 bench fixtures, one call each (parbench, heaviest first), clean build, 3 repetitions
+main thread only (THREADS = 0)   16.734  16.527  16.578     sum of the 200 calls
+ 1 worker thread                 18.997  18.682  19.163
+ 2 worker threads                 9.468  10.047   9.483
+ 4 worker threads                10.211   9.488  10.128
+ 8 worker threads                 9.452   9.433   9.532
+32 worker threads                 9.783   9.477   9.679
+-> the wall time is the longest call (fixture 196 on a worker thread), whatever the thread count.
+   kind / face count / refusal identifier of all 200 results equal bench/rust_p1.jsonl in every run.

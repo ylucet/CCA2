@@ -1,10 +1,12 @@
 //! envelope_subdivision_alg -- subdivide an assembled envelope when a BRIDGE (or irrational
 //! corner) face competes with the quadratic faces (port of envelope_subdivision_alg.py).
 
+use crate::memo::Memo;
+use std::sync::LazyLock;
 use crate::alg_branch::{alg_branch, alg_branch_info};
 use crate::alg_con::{AlgRow, IiRow, SubFace, SubKind};
 use crate::alg_face_below::{alg_face_below, BelowFace};
-use crate::alg_row_fails::{alg_row_fails, Region, RowSpec};
+use crate::alg_row_fails::{alg_row_fails, Region, RowCache, RowSpec};
 use crate::bail;
 use crate::biv::M2;
 use crate::bridge::bridge_member;
@@ -18,9 +20,8 @@ use crate::poly_n::PolyN;
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub const PAIR_STRIDE: usize = 1_000_000;
 
@@ -45,7 +46,7 @@ type Rows = Vec<(usize, i64)>;
 
 #[derive(Clone)]
 struct Irr {
-    fp: Rc<PolyN>,
+    fp: Arc<PolyN>,
     fb: i64,
 }
 
@@ -55,10 +56,11 @@ pub fn envelope_subdivision_alg(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], o
 
 pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(Vec<SubFace>, SubInfo)> {
     if envs.len() > 1 {
+        // one subdivision per envelope: independent
+        let res = crate::par::map(envs, |e| esa(&[e.clone()], dom, cuts, opts))?;
         let mut subs = vec![];
         let mut infos = vec![];
-        for e in envs {
-            let (sb, inf) = esa(&[e.clone()], dom, cuts, opts)?;
+        for (sb, inf) in res {
             subs.push(sb);
             infos.push(inf);
         }
@@ -98,13 +100,12 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
     }
     let mut skips: Vec<Vec<usize>> = vec![vec![]];
     for j in 1..=c.len() {
-        let mut nxt = vec![];
-        let mut nxt_sk = vec![];
-        for (cell, sk) in cells.iter().zip(skips.iter()) {
+        // every cell is tested against curve j independently; the outcomes are assembled in cell order
+        let owners_j = &owners[j - 1];
+        let outcomes = crate::par::map_range(cells.len(), |ci| -> R<Vec<(Rows, Vec<usize>)>> {
+            let (cell, sk) = (&cells[ci], &skips[ci]);
             if cell.iter().any(|r| r.0 == j) {
-                nxt.push(cell.clone());
-                nxt_sk.push(sk.clone());
-                continue;
+                return Ok(vec![(cell.clone(), sk.clone())]);
             }
             let mut cp = cell.clone();
             cp.push((j, 1));
@@ -112,19 +113,24 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             cm.push((j, -1));
             let live_p = live_cell(&c, &cp)?;
             let live_m = live_cell(&c, &cm)?;
-            if live_p && live_m && !relevant_here(&c, &owners[j - 1], cell)? {
-                nxt.push(cell.clone());
+            if live_p && live_m && !relevant_here(&c, owners_j, cell)? {
                 let mut s2 = sk.clone();
                 s2.push(j);
-                nxt_sk.push(s2);
+                Ok(vec![(cell.clone(), s2)])
             } else if live_p && live_m {
-                nxt.push(cp);
-                nxt.push(cm);
-                nxt_sk.push(sk.clone());
-                nxt_sk.push(sk.clone());
+                Ok(vec![(cp, sk.clone()), (cm, sk.clone())])
             } else if live_p || live_m {
-                nxt.push(cell.clone());
-                nxt_sk.push(sk.clone());
+                Ok(vec![(cell.clone(), sk.clone())])
+            } else {
+                Ok(vec![])
+            }
+        })?;
+        let mut nxt = vec![];
+        let mut nxt_sk = vec![];
+        for o in outcomes {
+            for (r, k) in o {
+                nxt.push(r);
+                nxt_sk.push(k);
             }
         }
         cells = nxt;
@@ -133,15 +139,15 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             bail!("envelopeSubdivisionAlg:arrangementSize", "the arrangement passed {} cells at curve {} of {}.", opts.max_cells, j, c.len());
         }
     }
-    let mut subdivision = vec![];
-    let mut cell_con = vec![];
-    let mut face_cell = vec![];
-    for (rows, sk) in cells.iter().zip(skips.iter()) {
+    // the final loop: every cell gets its faces independently (this is where `drop_below` spends
+    // its time); a cell with no interior point is None, a cell that gets no faces is Some with none
+    let per_cell = crate::par::map_range(cells.len(), |ci| -> R<Option<(Vec<Vec<Z>>, Vec<SubFace>)>> {
+        let (rows, sk) = (&cells[ci], &skips[ci]);
         let (pt, ok_pt) = interior_point(&c, rows)?;
         if !ok_pt {
-            continue;
+            return Ok(None);
         }
-        cell_con.push(rows_to_con(&c, rows));
+        let con = rows_to_con(&c, rows);
         let app = applicable(&req, rows, &c, pt)?;
         let mut here: Vec<usize> = app.iter().flat_map(|&i| pair_of[i - 1].iter().cloned()).collect();
         let mut b_here = vec![];
@@ -155,7 +161,7 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             }
         }
         if !all_pairs.iter().all(|p| here.contains(p)) {
-            continue;
+            return Ok(Some((con, vec![])));
         }
         let quad_app: Vec<usize> = app.iter().cloned().filter(|&i| i <= n_quad).collect();
         let mut irr: Vec<Irr> = b_here.iter().map(|&b| Irr { fp: bridges[b].fp.clone(), fb: bridges[b].fb }).collect();
@@ -165,14 +171,21 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             }
         }
         if quad_app.is_empty() && irr.is_empty() {
-            continue;
+            return Ok(Some((con, vec![])));
         }
         if irr.len() > 1 {
             irr = drop_below(irr, &c, rows, &pw, &env.quad, &quad_app)?;
         }
         let sub = winner_faces(&env.quad, &quad_app, &irr, rows, &c, &pw, &rows_out)?;
-        for s in sub {
-            subdivision.push(s);
+        Ok(Some((con, sub)))
+    })?;
+    let mut subdivision = vec![];
+    let mut cell_con = vec![];
+    let mut face_cell = vec![];
+    for r in per_cell.into_iter().flatten() {
+        cell_con.push(r.0);
+        for sf in r.1 {
+            subdivision.push(sf);
             face_cell.push(cell_con.len());
         }
     }
@@ -187,34 +200,37 @@ fn winner_faces(quad: &[QuadC], quad_app: &[usize], irr: &[Irr], rows: &Rows, c:
     let mut out = vec![];
     let base = rows_to_con(c, rows_out);
     if irr.is_empty() {
-        for &j in quad_app {
+        // every applicable quadratic is tested independently
+        let faces = crate::par::map(quad_app, |&j| -> R<Option<SubFace>> {
             let extra = quad_over(quad, quad_app, j)?;
             if !piece_live(c, rows, &extra, q)? {
-                continue;
+                return Ok(None);
             }
             let mut con = base.clone();
             con.extend(extra);
-            out.push(quad_face(&quad[j - 1], con, vec![]));
-        }
+            Ok(Some(quad_face(&quad[j - 1], con, vec![])))
+        })?;
+        out.extend(faces.into_iter().flatten());
         return Ok(out);
     }
     for f in irr {
         let alg: Vec<AlgRow> = quad_app.iter().map(|&j| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: -1 }).collect();
         out.push(SubFace { kind: SubKind::Bridge, num: vec![], den: zi(0), fp: Some(f.fp.clone()), fb: f.fb, con: base.clone(), alg, ii: vec![], tri: vec![], tf: None, tfs: vec![] });
     }
-    for &j in quad_app {
+    let faces = crate::par::map(quad_app, |&j| -> R<Option<SubFace>> {
         let extra = quad_over(quad, quad_app, j)?;
         if !piece_live(c, rows, &extra, q)? {
-            continue;
+            return Ok(None);
         }
         let alg: Vec<AlgRow> = irr.iter().map(|f| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: 1 }).collect();
         if alg_empty(c, rows_out, &extra, &alg, q)? {
-            continue;
+            return Ok(None);
         }
         let mut con = base.clone();
         con.extend(extra);
-        out.push(quad_face(&quad[j - 1], con, alg));
-    }
+        Ok(Some(quad_face(&quad[j - 1], con, alg)))
+    })?;
+    out.extend(faces.into_iter().flatten());
     Ok(out)
 }
 
@@ -312,12 +328,10 @@ fn alg_empty(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], alg_rows: &[AlgRow]
 
 type RowFailsKey = (Vec<(Vec<Z>, i64)>, Vec<Vec<Z>>, Vec<(Vec<(Vec<u32>, Z)>, Vec<Z>, Z, i64, i64)>);
 
-thread_local! {
-    static ROW_FAILS_CACHE: RefCell<HashMap<RowFailsKey, bool>> = RefCell::new(HashMap::new());
-}
+static ROW_FAILS_CACHE: LazyLock<Memo<RowFailsKey, bool>> = LazyLock::new(|| Memo::new(1000000));
 
 pub fn clear_memos() {
-    ROW_FAILS_CACHE.with(|m| m.borrow_mut().clear());
+    ROW_FAILS_CACHE.clear();
 }
 
 fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<bool> {
@@ -327,7 +341,7 @@ fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<
     k2.sort();
     let k3: Vec<(Vec<(Vec<u32>, Z)>, Vec<Z>, Z, i64, i64)> = a.iter().map(|x| (x.fp.iter().map(|(e, c)| (e.clone(), c.clone())).collect(), x.num.clone(), x.den.clone(), x.fb, x.side)).collect();
     let key: RowFailsKey = (k1, k2, k3);
-    if let Some(v) = ROW_FAILS_CACHE.with(|m| m.borrow().get(&key).cloned()) {
+    if let Some(v) = ROW_FAILS_CACHE.get(&key) {
         return Ok(v);
     }
     let mut ok = false;
@@ -335,9 +349,7 @@ fn row_fails(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], a: &[AlgRow]) -> R<
         let specs: Vec<RowSpec> = a.iter().map(|x| RowSpec::Quad { fp: x.fp.clone(), fb: x.fb, num: x.num.clone(), den: x.den.clone(), side: x.side }).collect();
         ok = alg_row_fails(&specs, &reg, 6).unwrap_or(false);
     }
-    ROW_FAILS_CACHE.with(|m| {
-        m.borrow_mut().insert(key, ok);
-    });
+    ROW_FAILS_CACHE.insert(key, ok);
     Ok(ok)
 }
 
@@ -562,7 +574,7 @@ fn corner_value_face(cf: &BFace, pt: [f64; 2]) -> R<Option<Irr>> {
 }
 
 fn same_irr(a: &Irr, b: &Irr) -> bool {
-    a.fb == b.fb && (Rc::ptr_eq(&a.fp, &b.fp) || *a.fp == *b.fp)
+    a.fb == b.fb && (Arc::ptr_eq(&a.fp, &b.fp) || *a.fp == *b.fp)
 }
 
 fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[QuadC], quad_app: &[usize]) -> R<Vec<Irr>> {
@@ -600,36 +612,41 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
         Some(r) => r,
     };
     let own: Vec<Vec<AlgRow>> = irr.iter().map(|f| quad_app.iter().map(|&j| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: -1 }).collect()).collect();
-    let mut keep = vec![true; n];
-    for i in 0..n {
+    // The drop decision of each face is taken against ALL the other candidates, not against the
+    // ones that were still kept at that moment as in the old ordered loops. "lo is below hi" is a
+    // certificate of a pointwise order that is monotone in hi (adding faces only raises the max)
+    // and transitive (lo <= hi and hi <= hi' imply lo <= hi'), so for distinct faces the kept set
+    // is the same as the old ordered tests gave (checked on the 200-fixture digest); and the
+    // decisions are now independent per face, so the two loops run in parallel and their dependent
+    // chain is gone.
+    let cache = RowCache::new();
+    let drop_top: Vec<bool> = crate::par::map_range(n, |i| {
         for &j in &above {
-            if j == i || !keep[j] {
+            if j == i {
                 continue;
             }
             if v[i].iter().zip(v[j].iter()).all(|(a, b)| *a <= b + 1e-9 * 1f64.max(b.abs())) {
                 let lo = BelowFace { fp: irr[i].fp.clone(), fb: irr[i].fb };
                 let hi = vec![BelowFace { fp: irr[j].fp.clone(), fb: irr[j].fb }];
-                if alg_face_below(&lo, &hi, &reg, 5, &own[i])? {
-                    keep[i] = false;
-                    break;
+                if alg_face_below(&lo, &hi, &reg, 5, &own[i], Some(&cache))? {
+                    return Ok(true);
                 }
             }
         }
+        Ok(false)
+    })?;
+    let kept: Vec<usize> = (0..n).filter(|&i| !drop_top[i]).collect();
+    if kept.len() < 2 {
+        return Ok(kept.into_iter().map(|i| irr[i].clone()).collect());
     }
-    for i in 0..n {
-        if !(keep[i] && wins[i] == 0) {
-            continue;
+    let drop_rest: Vec<bool> = crate::par::map_range(n, |i| {
+        if drop_top[i] || wins[i] != 0 {
+            return Ok(false);
         }
-        let others: Vec<usize> = (0..n).filter(|&j| keep[j] && j != i).collect();
-        if others.is_empty() {
-            break;
-        }
-        let hi: Vec<BelowFace> = others.iter().map(|&j| BelowFace { fp: irr[j].fp.clone(), fb: irr[j].fb }).collect();
-        if alg_face_below(&BelowFace { fp: irr[i].fp.clone(), fb: irr[i].fb }, &hi, &reg, 5, &own[i])? {
-            keep[i] = false;
-        }
-    }
-    Ok(irr.into_iter().zip(keep).filter(|(_, k)| *k).map(|(f, _)| f).collect())
+        let hi: Vec<BelowFace> = kept.iter().filter(|&&j| j != i).map(|&j| BelowFace { fp: irr[j].fp.clone(), fb: irr[j].fb }).collect();
+        alg_face_below(&BelowFace { fp: irr[i].fp.clone(), fb: irr[i].fb }, &hi, &reg, 5, &own[i], Some(&cache))
+    })?;
+    Ok(kept.into_iter().filter(|&i| !drop_rest[i]).map(|i| irr[i].clone()).collect())
 }
 
 fn combine_pairs(envs: &[Env]) -> R<Env> {
@@ -1013,13 +1030,13 @@ fn unique_stable(rows: Vec<Vec<Z>>) -> Vec<Vec<Z>> {
 struct Samples {
     x: Vec<[f64; 2]>,
     z: HashMap<(*const PolyN, i64), HashMap<usize, f64>>,
-    keep: Vec<Rc<PolyN>>,
+    keep: Vec<Arc<PolyN>>,
 }
 
 impl Samples {
-    fn branch(&mut self, fp: &Rc<PolyN>, fb: i64, idx: &[usize]) -> R<Vec<f64>> {
-        let key = (Rc::as_ptr(fp), fb);
-        if !self.keep.iter().any(|k| Rc::ptr_eq(k, fp)) {
+    fn branch(&mut self, fp: &Arc<PolyN>, fb: i64, idx: &[usize]) -> R<Vec<f64>> {
+        let key = (Arc::as_ptr(fp), fb);
+        if !self.keep.iter().any(|k| Arc::ptr_eq(k, fp)) {
             self.keep.push(fp.clone());
         }
         let e = self.z.entry(key).or_default();
@@ -1149,7 +1166,7 @@ fn tie_empty(keys: &[Vec<Z>], rows: &Rows, con: &[Vec<Z>], ii: &[IiRow], pp: &mu
         };
         let lo = BelowFace { fp: t.fp1.clone(), fb: t.fb1 };
         let hi = vec![BelowFace { fp: t.fp2.clone(), fb: t.fb2 }];
-        let tf = alg_face_below(&lo, &hi, rg, 5, &[]).unwrap_or(false);
+        let tf = alg_face_below(&lo, &hi, rg, 5, &[], None).unwrap_or(false);
         if tf {
             return Ok(true);
         }
@@ -1171,7 +1188,7 @@ fn le_rows(f: &SubFace, o: &SubFace, con: &mut Vec<Vec<Z>>, alg: &mut Vec<AlgRow
         alg.push(AlgRow { fp: f.fp.clone().unwrap(), fb: f.fb, num: o.num.clone(), den: o.den.clone(), side: 1 });
     } else {
         let (ff, of) = (f.fp.clone().unwrap(), o.fp.clone().unwrap());
-        if !((Rc::ptr_eq(&ff, &of) || *ff == *of) && f.fb == o.fb) {
+        if !((Arc::ptr_eq(&ff, &of) || *ff == *of) && f.fb == o.fb) {
             ii.push(IiRow { fp1: of, fb1: o.fb, fp2: ff, fb2: f.fb });
         }
     }
@@ -1194,9 +1211,9 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
     let mut tup: Vec<Vec<usize>> = (0..cell_rows[0].len()).map(|k| vec![k]).collect();
     let mut trow: Vec<Rows> = cell_rows[0].clone();
     for g in 1..np {
-        let mut nt = vec![];
-        let mut nr = vec![];
-        for a in 0..trow.len() {
+        // every current tuple is merged with every cell of envelope g independently; results in order
+        let merged = crate::par::map_range(trow.len(), |a| -> R<Vec<(Vec<usize>, Rows)>> {
+            let mut o = vec![];
             for k in 0..cell_rows[g].len() {
                 let r = match merge_rows(&trow[a], &cell_rows[g][k]) {
                     None => continue,
@@ -1207,9 +1224,15 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
                 }
                 let mut t = tup[a].clone();
                 t.push(k);
-                nt.push(t);
-                nr.push(r);
+                o.push((t, r));
             }
+            Ok(o)
+        })?;
+        let mut nt = vec![];
+        let mut nr = vec![];
+        for (t, r) in merged.into_iter().flatten() {
+            nt.push(t);
+            nr.push(r);
         }
         tup = nt;
         trow = nr;
@@ -1226,11 +1249,13 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
     if bound > budget {
         bail!("envelopeSubdivisionAlg:overlaySize", "the overlay of {} pairs would visit up to {} pieces over {} tuples, past the budget of {}.", np, bound, tup.len(), budget);
     }
-    let mut out = vec![];
-    for (t, rows) in tup.iter().zip(trow.iter()) {
+    // every tuple of cells is resolved on its own; the faces are concatenated in tuple order
+    let per_tuple = crate::par::map_range(tup.len(), |ti| -> R<Vec<SubFace>> {
+        let (t, rows) = (&tup[ti], &trow[ti]);
+        let mut out = vec![];
         let gs: Vec<usize> = (0..np).filter(|&g| covered[g][t[g]]).collect();
         if gs.is_empty() {
-            continue;
+            return Ok(out);
         }
         let mut base: Vec<Vec<Z>> = vec![];
         for g in 0..np {
@@ -1284,7 +1309,9 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
                 out.push(SubFace { kind: f.kind.clone(), num: f.num.clone(), den: f.den.clone(), fp: f.fp.clone(), fb: f.fb, con, alg, ii, tri: vec![], tf: None, tfs: vec![] });
             }
         }
-    }
+        Ok(out)
+    })?;
+    let out: Vec<SubFace> = per_tuple.into_iter().flatten().collect();
     Ok(out)
 }
 

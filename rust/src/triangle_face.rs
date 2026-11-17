@@ -11,7 +11,7 @@ use crate::numeric::polyval_f;
 use crate::rat_q::*;
 use num_integer::Integer;
 use num_traits::{One, Signed, Zero};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// The triangle as biconjAtoms hands it over (doubles plus the forms' exact conics).
 #[derive(Clone, Debug)]
@@ -285,7 +285,7 @@ pub fn dual_point_sign(dp: &DualPoint, q: &M2) -> R<i32> {
 }
 
 // ---- cut_triangles ------------------------------------------------------------------------------
-pub fn cut_triangles(sub: Vec<SubFace>, tfs: Vec<Rc<TriFace>>) -> R<Vec<SubFace>> {
+pub fn cut_triangles(sub: Vec<SubFace>, tfs: Vec<Arc<TriFace>>) -> R<Vec<SubFace>> {
     let mut sub: Vec<SubFace> = sub
         .into_iter()
         .map(|mut f| {
@@ -495,7 +495,7 @@ fn all_inside(tf: &TriFace, lo: [f64; 2], hi: [f64; 2]) -> R<bool> {
     Ok(true)
 }
 
-fn triangle_itself(tf: &Rc<TriFace>, t: i64, keys: &[Vec<Z>], flip: &[i64], tfs: &[Rc<TriFace>]) -> R<SubFace> {
+fn triangle_itself(tf: &Arc<TriFace>, t: i64, keys: &[Vec<Z>], flip: &[i64], tfs: &[Arc<TriFace>]) -> R<SubFace> {
     let con: Vec<Vec<Z>> = keys.iter().zip(flip.iter()).map(|(k, f)| {
         let mut r = k.clone();
         r.push(zi(*f));

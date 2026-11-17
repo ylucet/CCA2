@@ -799,8 +799,9 @@ pub fn compact_cells(fn_: Vec<Vec<Z>>, fd: Vec<Z>, fc: Vec<Vec<FcRow>>, ecq: &[V
     let (mut fn_, mut fd, mut fc) = (fn_, fd, fc);
     for _ in 0..8 {
         let mut drops = 0;
-        for k in 0..fc.len() {
-            let (r, d) = drop_implied(std::mem::take(&mut fc[k]), ecq)?;
+        // every cell sheds its implied rows independently
+        let res = crate::par::map_range(fc.len(), |k| drop_implied(fc[k].clone(), ecq))?;
+        for (k, (r, d)) in res.into_iter().enumerate() {
             fc[k] = r;
             drops += d;
         }
@@ -1048,15 +1049,12 @@ pub fn assemble_qua_con_cells(cells: Vec<Cell>) -> R<QuaCon> {
             }
         }
     }
-    let mut live = vec![true; cells.len()];
-    for k in 0..cells.len() {
+    // every cell is tested for liveness on its own (a cell's rows are simplified in the process)
+    let verdicts = crate::par::map_range(cells.len(), |k| -> R<(bool, Option<Vec<Vec<Z>>>)> {
         let rows = cells[k].con.clone();
         let has_branch = rows.iter().any(|r| !r[7].is_zero());
         if rows.iter().any(|r| r[6].is_zero()) {
-            if both_sides(&rows) {
-                live[k] = false;
-            }
-            continue;
+            return Ok((!both_sides(&rows), None));
         }
         let mut keep = vec![true; rows.len()];
         for (i, r) in rows.iter().enumerate() {
@@ -1070,33 +1068,35 @@ pub fn assemble_qua_con_cells(cells: Vec<Cell>) -> R<QuaCon> {
             if zi(cs as i64) == r[6] {
                 keep[i] = false;
             } else {
-                live[k] = false;
-                break;
+                return Ok((false, None));
             }
         }
-        if !live[k] {
-            continue;
-        }
         let rows: Vec<Vec<Z>> = rows.into_iter().zip(keep.iter()).filter(|(_, kp)| **kp).map(|(r, _)| r).collect();
-        cells[k].con = rows.clone();
         if rows.is_empty() {
-            continue;
+            return Ok((true, Some(rows)));
         }
         if both_sides(&rows) {
-            live[k] = false;
-            continue;
+            return Ok((false, Some(rows)));
         }
         let is_line: Vec<bool> = rows.iter().map(|r| all_zero(&r[0..3]) && r[7].is_zero()).collect();
         let lin: Vec<Vec<Z>> = rows.iter().zip(is_line.iter()).filter(|(_, l)| **l).map(|(r, _)| r[3..6].iter().map(|x| &r[6] * x).collect()).collect();
-        live[k] = feasible2(&lin, true);
-        if live[k] && has_branch {
-            continue;
+        let mut lv = feasible2(&lin, true);
+        if lv && has_branch {
+            return Ok((lv, Some(rows)));
         }
-        if live[k] && !is_line.iter().all(|x| *x) {
+        if lv && !is_line.iter().all(|x| *x) {
             let tab: Vec<Vec<Z>> = rows.iter().map(|r| r[0..6].to_vec()).collect();
             let rr: Vec<(usize, i64)> = rows.iter().enumerate().map(|(i, r)| (i + 1, side_i(&r[6]))).collect();
-            live[k] = cell_has_interior(&tab, &rr)?;
+            lv = cell_has_interior(&tab, &rr)?;
         }
+        Ok((lv, Some(rows)))
+    })?;
+    let mut live = Vec::with_capacity(cells.len());
+    for (k, (lv, rows)) in verdicts.into_iter().enumerate() {
+        if let Some(r) = rows {
+            cells[k].con = r;
+        }
+        live.push(lv);
     }
 
     if !live.iter().any(|x| *x) {

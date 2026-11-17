@@ -23,6 +23,10 @@ nothing here runs; say so rather than reasoning about what a run would show.
 The MATLAB sources live in `MATLAB/` (moved from the root 2026-11-13); the suite
 driver runs MATLAB there. The Python port is `python/`, the Rust port `rust/`.
 
+Rust and FLINT: the Rust build links FLINT for speed, found by `rust/build.rs` (see `rust/README.md`).
+A worktree has no `python/.pydeps`; `build.rs` now falls back to the main checkout's copy, and warns
+loudly if it finds none. Benchmark builds: `CCA2_FLINT_BUILD=require cargo build --release`.
+
     bash .claude/suite.sh --fast       # 18 suites, one MATLAB, ~90 s
     bash .claude/suite.sh --normal     # 3 suites, ~215 s
     bash .claude/suite.sh --slow       # 5 symbolic suites, one MATLAB each

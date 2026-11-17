@@ -5,15 +5,15 @@
 //! a x^2 + b xy + c y^2 + d x + e y + f. A face row is 10 wide in the weighted cubic basis.
 //! There is ONE path on unbounded integers (no 2^53 wall), as in the Python port.
 
+use crate::memo::Memo;
+use std::sync::LazyLock;
 use crate::bail;
 use crate::errors::R;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub type Z = BigInt;
 pub type Q = BigRational;
@@ -688,29 +688,21 @@ fn poly_squarefree_build(p: &[Z]) -> Vec<Z> {
     }
 }
 
-thread_local! {
-    static SQF_MEMO: RefCell<HashMap<Vec<Z>, Rc<Vec<Z>>>> = RefCell::new(HashMap::new());
-    static CHAIN_MEMO: RefCell<HashMap<Vec<Z>, Rc<Vec<Vec<Z>>>>> = RefCell::new(HashMap::new());
-}
+static SQF_MEMO: LazyLock<Memo<Vec<Z>, Arc<Vec<Z>>>> = LazyLock::new(|| Memo::new(20000));
+static CHAIN_MEMO: LazyLock<Memo<Vec<Z>, Arc<Vec<Vec<Z>>>>> = LazyLock::new(|| Memo::new(20000));
 
 pub fn clear_memos() {
-    SQF_MEMO.with(|m| m.borrow_mut().clear());
-    CHAIN_MEMO.with(|m| m.borrow_mut().clear());
+    SQF_MEMO.clear();
+    CHAIN_MEMO.clear();
 }
 
 /// The squarefree part of p (same roots, each simple); memoised.
 pub fn poly_squarefree(p: &[Z]) -> Vec<Z> {
-    if let Some(r) = SQF_MEMO.with(|m| m.borrow().get(p).cloned()) {
+    if let Some(r) = SQF_MEMO.get(p) {
         return (*r).clone();
     }
     let r = poly_squarefree_build(p);
-    SQF_MEMO.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(p.to_vec(), Rc::new(r.clone()));
-    });
+    SQF_MEMO.insert(p.to_vec(), Arc::new(r.clone()));
     r
 }
 
@@ -741,18 +733,12 @@ fn sturm_chain_build(p: &[Z]) -> Vec<Vec<Z>> {
 }
 
 /// sturmChain(p), shared from a memo (callers must not mutate it).
-pub fn sturm_chain_shared(p: &[Z]) -> Rc<Vec<Vec<Z>>> {
-    if let Some(c) = CHAIN_MEMO.with(|m| m.borrow().get(p).cloned()) {
+pub fn sturm_chain_shared(p: &[Z]) -> Arc<Vec<Vec<Z>>> {
+    if let Some(c) = CHAIN_MEMO.get(p) {
         return c;
     }
-    let c = Rc::new(sturm_chain_build(p));
-    CHAIN_MEMO.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(p.to_vec(), c.clone());
-    });
+    let c = Arc::new(sturm_chain_build(p));
+    CHAIN_MEMO.insert(p.to_vec(), c.clone());
     c
 }
 
@@ -1348,23 +1334,15 @@ fn parallel_pair_data(c: &[Z]) -> R<PairLine> {
     Ok(PairLine { parallel: true, apex: [zi(0), zi(0), zi(1)], quad: q, iv, vertical: false, form: [u, v] })
 }
 
-thread_local! {
-    static PAIR_MEMO: RefCell<HashMap<Vec<Z>, Rc<PairLine>>> = RefCell::new(HashMap::new());
-}
+static PAIR_MEMO: LazyLock<Memo<Vec<Z>, Arc<PairLine>>> = LazyLock::new(|| Memo::new(20000));
 
 /// pairLineData, memoised on the raw conic (a pure function of it).
-pub fn pair_line_data_m(c: &[Z]) -> R<Rc<PairLine>> {
-    if let Some(p) = PAIR_MEMO.with(|m| m.borrow().get(c).cloned()) {
+pub fn pair_line_data_m(c: &[Z]) -> R<Arc<PairLine>> {
+    if let Some(p) = PAIR_MEMO.get(c) {
         return Ok(p);
     }
-    let p = Rc::new(pair_line_data(c)?);
-    PAIR_MEMO.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() > 20000 {
-            m.clear();
-        }
-        m.insert(c.to_vec(), p.clone());
-    });
+    let p = Arc::new(pair_line_data(c)?);
+    PAIR_MEMO.insert(c.to_vec(), p.clone());
     Ok(p)
 }
 

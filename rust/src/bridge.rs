@@ -9,7 +9,7 @@ use crate::poly_n::{self as pn, PolyN};
 use crate::rat_q::*;
 use num_traits::{One, Signed, Zero};
 use std::collections::BTreeMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 // ==========================================================================================
 // bridge_phi (ascending powers of mu)
@@ -130,21 +130,21 @@ fn cabs(z: crate::numeric::Cx) -> f64 {
     z.re.hypot(z.im)
 }
 
-fn pairf_of(a: &AlgPair) -> (Rc<AlgPairF>, Rc<AlgPairF>) {
+fn pairf_of(a: &AlgPair) -> (Arc<AlgPairF>, Arc<AlgPairF>) {
     a.fcache
         .get_or_init(|| {
-            let f = Rc::new(AlgPairF::new(a));
+            let f = Arc::new(AlgPairF::new(a));
             // the re-based family near mu = -1 (nearArtefact)
             let nn2: Vec<Vec<Z>> = a.n2.iter().zip(a.n1.iter()).map(|(ra, rb)| ra.iter().zip(rb.iter()).map(|(x, y)| zi(2) * x - y).collect()).collect();
             let mm2: Vec<Z> = a.m2.iter().zip(a.m1.iter()).map(|(x, y)| zi(2) * x - y).collect();
             let b = AlgPair { d: a.d.clone(), n1: a.n2.clone(), m1: a.m2.clone(), n2: nn2, m2: mm2, dlm: a.dlm.clone(), dl: a.dl.clone(), kp: a.kp.clone(), p: a.p.clone(), fcache: Default::default() };
-            (f, Rc::new(AlgPairF::new(&b)))
+            (f, Arc::new(AlgPairF::new(&b)))
         })
         .clone()
 }
 
 /// Is the (double) point in the bridge face's region? One verdict per point.
-pub fn bridge_member(pr: &Rc<PairData>, x: &[[f64; 2]]) -> R<Vec<bool>> {
+pub fn bridge_member(pr: &Arc<PairData>, x: &[[f64; 2]]) -> R<Vec<bool>> {
     match &**pr {
         PairData::Rat(p) => {
             let bf: Vec<f64> = p.b.iter().map(to_f64).collect();
@@ -475,16 +475,20 @@ pub fn bridge_witness(pr: &AlgPair, c1: &[Z], c2: &[Z]) -> R<Vec<[Z; 3]>> {
     let d2 = 2.0 * to_f64(&pr.d);
     let mut tries = 0;
     let mut w: Vec<[Z; 3]> = vec![];
-    for q in &s {
+    // The tie samples are tried independently; the serial loop stops at 12 distinct witnesses, so the
+    // samples are taken in chunks and the stopping rule is applied to the results IN ORDER (a result
+    // after the stop is ignored, errors included): the outcome is the serial one.
+    let try_sample = |q: &[f64; 2]| -> R<(usize, Option<[Z; 3]>)> {
         let x0 = [
             ((n1[0][0] * q[0] + n1[0][1] * q[1] + m1[0]) + (n2[0][0] * q[0] + n2[0][1] * q[1] + m2[0])) / d2,
             ((n1[1][0] * q[0] + n1[1][1] * q[1] + m1[1]) + (n2[1][0] * q[0] + n2[1][1] * q[1] + m2[1])) / d2,
         ];
         if !(x0[0].is_finite() && x0[1].is_finite()) {
-            continue;
+            return Ok((0, None));
         }
+        let mut t = 0;
         for xd_try in [1i64, 2, 4, 8, 16, 32, 64] {
-            tries += 1;
+            t += 1;
             let xn = [Z::from(round_half_away(x0[0] * xd_try as f64)), Z::from(round_half_away(x0[1] * xd_try as f64))];
             let xd = zi(xd_try);
             if (!c1.is_empty() && sign_at_rational(c1, &xn, &xd) == 0) || (!c2.is_empty() && sign_at_rational(c2, &xn, &xd) == 0) {
@@ -492,15 +496,25 @@ pub fn bridge_witness(pr: &AlgPair, c1: &[Z], c2: &[Z]) -> R<Vec<[Z; 3]>> {
             }
             let (in_r, _) = if p.is_empty() { member_exact(pr, &xn, &xd)? } else { member_exact_arc(pr, &xn, &xd)? };
             if in_r {
-                let row = [xn[0].clone(), xn[1].clone(), xd];
+                return Ok((t, Some([xn[0].clone(), xn[1].clone(), xd])));
+            }
+        }
+        Ok((t, None))
+    };
+    let chunk = if crate::par::enabled() { 128 } else { s.len().max(1) };
+    'chunks: for qs in s.chunks(chunk) {
+        let res = crate::par::map(qs, |q| Ok(try_sample(q)))?;
+        for r in res {
+            let (t, row) = r?;
+            tries += t;
+            if let Some(row) = row {
                 if !w.contains(&row) {
                     w.push(row);
                 }
-                break;
             }
-        }
-        if w.len() >= 12 {
-            break;
+            if w.len() >= 12 {
+                break 'chunks;
+            }
         }
     }
     if !w.is_empty() {
@@ -912,10 +926,10 @@ pub fn bridge_face_alg(n1: &[Z], d1: &Z, n2: &[Z], d2: &Z, p: &[Vec<Z>]) -> R<BF
         }
     }
     let mut face = BFace::blank(FaceKind::Algebraic);
-    face.fp = Rc::new(fp);
+    face.fp = Arc::new(fp);
     face.fb = fb;
     face.cells = cells;
-    face.pair = Some(Rc::new(PairData::Alg(pr)));
+    face.pair = Some(Arc::new(PairData::Alg(pr)));
     face.wit = Some(wit);
     Ok(face)
 }
@@ -984,9 +998,9 @@ pub fn bridge_face_rat(n1: &[Z], d1: &Z, n2: &[Z], d2: &Z, p: &[Vec<Z>]) -> R<BF
     face.rden = den;
     face.wit = Some(wit);
     face.cells = cells;
-    face.fp = Rc::new(fp);
+    face.fp = Arc::new(fp);
     face.fb = -1;
-    face.pair = Some(Rc::new(PairData::Rat(pr)));
+    face.pair = Some(Arc::new(PairData::Rat(pr)));
     Ok(face)
 }
 

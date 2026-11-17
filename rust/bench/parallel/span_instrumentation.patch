@@ -1,0 +1,454 @@
+diff --git a/rust/src/alg_face_below.rs b/rust/src/alg_face_below.rs
+index a1c64eb..aea2f6f 100644
+--- a/rust/src/alg_face_below.rs
++++ b/rust/src/alg_face_below.rs
+@@ -73,7 +73,16 @@ fn rec(lo: &BelowFace, hi: &[BelowFace], b: [f64; 4], ctx: &Ctx, depth: usize) -
+         al.extend(ctx.own.iter().cloned());
+         let mut ah = vec![rh];
+         ah.extend(ctx.own.iter().cloned());
+-        if alg_row_fails_box(&al, b, &in_box, inner, factors, corners)? && alg_row_fails_box(&ah, b, &in_box, inner, factors, corners)? {
++        let mut par = crate::ptrace::Par::new(2);
++        let both = {
++            let _b = par.enter();
++            alg_row_fails_box(&al, b, &in_box, inner, factors, corners)?
++        } && {
++            let _b = par.enter();
++            alg_row_fails_box(&ah, b, &in_box, inner, factors, corners)?
++        };
++        drop(par);
++        if both {
+             return Ok(true);
+         }
+     }
+@@ -109,10 +118,20 @@ fn rec(lo: &BelowFace, hi: &[BelowFace], b: [f64; 4], ctx: &Ctx, depth: usize) -
+     }
+     let xm = (b[0] + b[1]) / 2.0;
+     let ym = (b[2] + b[3]) / 2.0;
+-    Ok(rec(lo, hi, [b[0], xm, b[2], ym], ctx, depth - 1)?
+-        && rec(lo, hi, [xm, b[1], b[2], ym], ctx, depth - 1)?
+-        && rec(lo, hi, [b[0], xm, ym, b[3]], ctx, depth - 1)?
+-        && rec(lo, hi, [xm, b[1], ym, b[3]], ctx, depth - 1)?)
++    let mut par = crate::ptrace::Par::new(2);
++    Ok({
++        let _b = par.enter();
++        rec(lo, hi, [b[0], xm, b[2], ym], ctx, depth - 1)?
++    } && {
++        let _b = par.enter();
++        rec(lo, hi, [xm, b[1], b[2], ym], ctx, depth - 1)?
++    } && {
++        let _b = par.enter();
++        rec(lo, hi, [b[0], xm, ym, b[3]], ctx, depth - 1)?
++    } && {
++        let _b = par.enter();
++        rec(lo, hi, [xm, b[1], ym, b[3]], ctx, depth - 1)?
++    })
+ }
+ 
+ /// A quadratic with DYADIC coefficients strictly between zl and zh at every sample.
+diff --git a/rust/src/alg_row_fails.rs b/rust/src/alg_row_fails.rs
+index da64018..94616fa 100644
+--- a/rust/src/alg_row_fails.rs
++++ b/rust/src/alg_row_fails.rs
+@@ -144,6 +144,16 @@ thread_local! {
+     static MEMO_CURVE_PTS: RefCell<HashMap<M2, Rc<(bool, Option<Vec<(f64, Vec<Cx>)>>)>>> = RefCell::new(HashMap::new());
+ }
+ 
++pub fn clear_all_memos() {
++    clear_memos();
++    MEMO_SF.with(|m| m.borrow_mut().clear());
++    MEMO_FACE.with(|m| m.borrow_mut().clear());
++    MEMO_SURD.with(|m| m.borrow_mut().clear());
++    MEMO_TOP.with(|m| m.borrow_mut().clear());
++    MEMO_SURDFACE.with(|m| m.borrow_mut().clear());
++    MEMO_FACTOR_BU.with(|m| m.borrow_mut().clear());
++}
++
+ pub fn clear_memos() {
+     MEMO_SURDOF.with(|m| m.borrow_mut().clear());
+     MEMO_FACTOR_INTS.with(|m| m.borrow_mut().clear());
+@@ -172,7 +182,9 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4])
+     let w = (bx[1] - bx[0]).max(bx[3] - bx[2]);
+     let mut sq: Vec<[f64; 3]> = vec![];
+     let mut bu_memo: HashMap<(usize, usize, u64, u64, i64, u8), Option<SP>> = HashMap::new();
++    let mut par = crate::ptrace::Par::new(16);
+     for p0 in corners {
++        let _b = par.enter();
+         let mut p = *p0;
+         let q = [round(p[0] * 256.0) / 256.0, round(p[1] * 256.0) / 256.0];
+         if q.iter().zip(p.iter()).all(|(qi, pi)| (qi - pi).abs() <= 1e-9 * 1f64.max(pi.abs())) {
+@@ -195,6 +207,7 @@ pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &dyn Fn(&[f64; 4])
+             }
+         }
+     }
++    drop(par);
+     if sq.is_empty() {
+         return Ok(false);
+     }
+@@ -346,10 +359,22 @@ fn box_rec(rows: &[Row], b: [f64; 4], in_box: &dyn Fn(&[f64; 4]) -> bool, depth:
+     }
+     let xm = (b[0] + b[1]) / 2.0;
+     let ym = (b[2] + b[3]) / 2.0;
+-    box_rec(rows, [b[0], xm, b[2], ym], in_box, depth - 1, sq)
+-        && box_rec(rows, [xm, b[1], b[2], ym], in_box, depth - 1, sq)
+-        && box_rec(rows, [b[0], xm, ym, b[3]], in_box, depth - 1, sq)
+-        && box_rec(rows, [xm, b[1], ym, b[3]], in_box, depth - 1, sq)
++    let mut par = crate::ptrace::Par::new(4);
++    let r = {
++        let _b = par.enter();
++        box_rec(rows, [b[0], xm, b[2], ym], in_box, depth - 1, sq)
++    } && {
++        let _b = par.enter();
++        box_rec(rows, [xm, b[1], b[2], ym], in_box, depth - 1, sq)
++    } && {
++        let _b = par.enter();
++        box_rec(rows, [b[0], xm, ym, b[3]], in_box, depth - 1, sq)
++    } && {
++        let _b = par.enter();
++        box_rec(rows, [xm, b[1], ym, b[3]], in_box, depth - 1, sq)
++    };
++    drop(par);
++    r
+ }
+ 
+ fn poly_sign(p: &SP, b: &[f64; 4]) -> i32 {
+diff --git a/rust/src/biconj_atoms.rs b/rust/src/biconj_atoms.rs
+index 28538e1..d648750 100644
+--- a/rust/src/biconj_atoms.rs
++++ b/rust/src/biconj_atoms.rs
+@@ -40,9 +40,12 @@ pub fn atoms_route(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
+     }
+     let run = || -> R<AlgCon> {
+         let mut envs = vec![];
++        let mut par = crate::ptrace::Par::new(1);
+         for p in &pairs {
++            let _b = par.enter();
+             envs.push(envelope_prune(p)?);
+         }
++        drop(par);
+         if tris.is_empty() {
+             let sub = envelope_subdivision_alg(&envs, &hull_rows(obj)?, &[], &aopts)?;
+             return Ok(AlgCon::AlgCrv(assemble_alg_crv(&sub)?));
+@@ -159,13 +162,19 @@ pub fn biconj_atoms(f: &QuaPol) -> R<(Vec<Env>, Vec<AtomTri>)> {
+     let tris = triple_faces(&forms, &df);
+     let (ab, tris) = active_atom_pairs(&atoms, &forms, tris, &df)?;
+     let mut g: BTreeMap<usize, QuaCon> = BTreeMap::new();
++    let mut par = crate::ptrace::Par::new(1);
+     for a in ab.iter().flatten().cloned().collect::<BTreeSet<_>>() {
++        let _b = par.enter();
+         g.insert(a, conj_q(&atoms[a - 1].q)?.0);
+     }
++    drop(par);
+     let mut pairs = vec![];
++    let mut par = crate::ptrace::Par::new(1);
+     for r in &ab {
++        let _b = par.enter();
+         pairs.push(envelope_assemble(&g[&r[0]], &g[&r[1]], &d)?.0);
+     }
++    drop(par);
+     Ok((pairs, tris))
+ }
+ 
+diff --git a/rust/src/bin/prof.rs b/rust/src/bin/prof.rs
+index ecd34f9..12204a3 100644
+--- a/rust/src/bin/prof.rs
++++ b/rust/src/bin/prof.rs
+@@ -103,4 +103,5 @@ fn main() {
+         writeln!(out, "{}", s.join(" ")).unwrap();
+     }
+     eprintln!("id {} {} ok={} wall {:.3} s, {} samples", id, fname, ok, wall, n);
++    eprintln!("SPAN id {} classes {} T1 {:.4} Tinf {:.4} ratio {:.2} regions {:?}", id, cca2::ptrace::classes(), wall, wall - cca2::ptrace::saved(), wall / (wall - cca2::ptrace::saved()), cca2::ptrace::regions());
+ }
+diff --git a/rust/src/bridge.rs b/rust/src/bridge.rs
+index dcdf2cc..b4332b7 100644
+--- a/rust/src/bridge.rs
++++ b/rust/src/bridge.rs
+@@ -475,7 +475,9 @@ pub fn bridge_witness(pr: &AlgPair, c1: &[Z], c2: &[Z]) -> R<Vec<[Z; 3]>> {
+     let d2 = 2.0 * to_f64(&pr.d);
+     let mut tries = 0;
+     let mut w: Vec<[Z; 3]> = vec![];
++    let mut par = crate::ptrace::Par::new(32);
+     for q in &s {
++        let _b = par.enter();
+         let x0 = [
+             ((n1[0][0] * q[0] + n1[0][1] * q[1] + m1[0]) + (n2[0][0] * q[0] + n2[0][1] * q[1] + m2[0])) / d2,
+             ((n1[1][0] * q[0] + n1[1][1] * q[1] + m1[1]) + (n2[1][0] * q[0] + n2[1][1] * q[1] + m2[1])) / d2,
+diff --git a/rust/src/envelope.rs b/rust/src/envelope.rs
+index 7b55dfa..1535e9e 100644
+--- a/rust/src/envelope.rs
++++ b/rust/src/envelope.rs
+@@ -486,7 +486,9 @@ fn straight_tie_guard(na: &[Z], nb: &[Z], q: &[Z]) -> R<()> {
+ pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())> {
+     let pairs = envelope_cell_pairs(ga, gb, d)?;
+     let mut env = Env::default();
++    let mut par = crate::ptrace::Par::new(1);
+     for (k0, pr) in pairs.iter().enumerate() {
++        let _b = par.enter();
+         let k = k0 + 1;
+         let (na, da) = (&ga.fn_[pr.ij[0] - 1], &ga.fd[pr.ij[0] - 1]);
+         let (nb, db) = (&gb.fn_[pr.ij[1] - 1], &gb.fd[pr.ij[1] - 1]);
+diff --git a/rust/src/envelope_subdivision_alg.rs b/rust/src/envelope_subdivision_alg.rs
+index 5f94e08..e0a05c8 100644
+--- a/rust/src/envelope_subdivision_alg.rs
++++ b/rust/src/envelope_subdivision_alg.rs
+@@ -57,11 +57,14 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
+     if envs.len() > 1 {
+         let mut subs = vec![];
+         let mut infos = vec![];
++        let mut par = crate::ptrace::Par::new(1);
+         for e in envs {
++            let _b = par.enter();
+             let (sb, inf) = esa(&[e.clone()], dom, cuts, opts)?;
+             subs.push(sb);
+             infos.push(inf);
+         }
++        drop(par);
+         return Ok((min_overlay(&subs, &infos, opts.overlay_budget)?, SubInfo { cell_con: vec![], face_cell: vec![] }));
+     }
+     let env = combine_pairs(envs)?;
+@@ -100,7 +103,9 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
+     for j in 1..=c.len() {
+         let mut nxt = vec![];
+         let mut nxt_sk = vec![];
++        let mut par = crate::ptrace::Par::new(1);
+         for (cell, sk) in cells.iter().zip(skips.iter()) {
++            let _b = par.enter();
+             if cell.iter().any(|r| r.0 == j) {
+                 nxt.push(cell.clone());
+                 nxt_sk.push(sk.clone());
+@@ -127,6 +132,7 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
+                 nxt_sk.push(sk.clone());
+             }
+         }
++        drop(par);
+         cells = nxt;
+         skips = nxt_sk;
+         if cells.len() > opts.max_cells {
+@@ -136,7 +142,9 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
+     let mut subdivision = vec![];
+     let mut cell_con = vec![];
+     let mut face_cell = vec![];
++    let mut par = crate::ptrace::Par::new(1);
+     for (rows, sk) in cells.iter().zip(skips.iter()) {
++        let _b = par.enter();
+         let (pt, ok_pt) = interior_point(&c, rows)?;
+         if !ok_pt {
+             continue;
+@@ -176,6 +184,7 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
+             face_cell.push(cell_con.len());
+         }
+     }
++    drop(par);
+     Ok((subdivision, SubInfo { cell_con, face_cell }))
+ }
+ 
+@@ -202,7 +211,9 @@ fn winner_faces(quad: &[QuadC], quad_app: &[usize], irr: &[Irr], rows: &Rows, c:
+         let alg: Vec<AlgRow> = quad_app.iter().map(|&j| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: -1 }).collect();
+         out.push(SubFace { kind: SubKind::Bridge, num: vec![], den: zi(0), fp: Some(f.fp.clone()), fb: f.fb, con: base.clone(), alg, ii: vec![], tri: vec![], tf: None, tfs: vec![] });
+     }
++    let mut par = crate::ptrace::Par::new(1);
+     for &j in quad_app {
++        let _b = par.enter();
+         let extra = quad_over(quad, quad_app, j)?;
+         if !piece_live(c, rows, &extra, q)? {
+             continue;
+@@ -601,7 +612,9 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
+     };
+     let own: Vec<Vec<AlgRow>> = irr.iter().map(|f| quad_app.iter().map(|&j| AlgRow { fp: f.fp.clone(), fb: f.fb, num: quad[j - 1].num.clone(), den: quad[j - 1].den.clone(), side: -1 }).collect()).collect();
+     let mut keep = vec![true; n];
++    let mut par = crate::ptrace::Par::new(8);
+     for i in 0..n {
++        let _b = par.enter();
+         for &j in &above {
+             if j == i || !keep[j] {
+                 continue;
+@@ -616,7 +629,10 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
+             }
+         }
+     }
++    drop(par);
++    let mut par = crate::ptrace::Par::new(64);
+     for i in 0..n {
++        let _b = par.enter();
+         if !(keep[i] && wins[i] == 0) {
+             continue;
+         }
+@@ -629,6 +645,7 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
+             keep[i] = false;
+         }
+     }
++    drop(par);
+     Ok(irr.into_iter().zip(keep).filter(|(_, k)| *k).map(|(f, _)| f).collect())
+ }
+ 
+@@ -1196,8 +1213,10 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
+     for g in 1..np {
+         let mut nt = vec![];
+         let mut nr = vec![];
++        let mut par = crate::ptrace::Par::new(1);
+         for a in 0..trow.len() {
+             for k in 0..cell_rows[g].len() {
++                let _b = par.enter();
+                 let r = match merge_rows(&trow[a], &cell_rows[g][k]) {
+                     None => continue,
+                     Some(r) => r,
+@@ -1211,6 +1230,7 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
+                 nr.push(r);
+             }
+         }
++        drop(par);
+         tup = nt;
+         trow = nr;
+     }
+@@ -1227,7 +1247,9 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
+         bail!("envelopeSubdivisionAlg:overlaySize", "the overlay of {} pairs would visit up to {} pieces over {} tuples, past the budget of {}.", np, bound, tup.len(), budget);
+     }
+     let mut out = vec![];
++    let mut par = crate::ptrace::Par::new(1);
+     for (t, rows) in tup.iter().zip(trow.iter()) {
++        let _b = par.enter();
+         let gs: Vec<usize> = (0..np).filter(|&g| covered[g][t[g]]).collect();
+         if gs.is_empty() {
+             continue;
+@@ -1285,6 +1307,7 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
+             }
+         }
+     }
++    drop(par);
+     Ok(out)
+ }
+ 
+diff --git a/rust/src/lib.rs b/rust/src/lib.rs
+index 40fbdab..b61207c 100644
+--- a/rust/src/lib.rs
++++ b/rust/src/lib.rs
+@@ -31,3 +31,4 @@ pub mod alg_face_below;
+ pub mod triangle_face;
+ pub mod biconj_atoms;
+ pub mod flint;
++pub mod ptrace;
+diff --git a/rust/src/ptrace.rs b/rust/src/ptrace.rs
+new file mode 100644
+index 0000000..639a516
+--- /dev/null
++++ b/rust/src/ptrace.rs
+@@ -0,0 +1,104 @@
++//! Instrumentation for the parallelisation study (PARALLEL.md). NOT part of the engine: it lives in
++//! bench/parallel/span_instrumentation.patch and is applied only to repeat the measurement.
++//!
++//! Work / span accounting of a SERIAL run. A `Par` marks a region whose branches could run
++//! concurrently; each branch is timed. For a region with branches of wall time w_i and inner
++//! savings s_i, the span is max_i (w_i - s_i) and the saving is sum_i w_i - span. SAVED holds the
++//! running total, so T_inf = wall - SAVED at the end. CCA2_PT_CLASSES is a bit mask of the region
++//! classes that count (PARALLEL.md section 4): 1 independent loops, 2 alg_face_below fork-join,
++//! 4 box_rec fork-join, 8 / 64 drop_below loops 1 / 2, 16 corner loop, 32 bridge_witness samples.
++use std::cell::Cell;
++use std::sync::OnceLock;
++use std::time::Instant;
++
++pub fn classes() -> u32 {
++    static ON: OnceLock<u32> = OnceLock::new();
++    *ON.get_or_init(|| std::env::var("CCA2_PT_CLASSES").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
++}
++
++thread_local! {
++    static SAVED: Cell<f64> = const { Cell::new(0.0) };
++    static NREG: Cell<[u64; 8]> = const { Cell::new([0; 8]) };
++}
++
++pub fn saved() -> f64 {
++    SAVED.with(|s| s.get())
++}
++pub fn reset() {
++    SAVED.with(|s| s.set(0.0));
++    NREG.with(|s| s.set([0; 8]));
++}
++pub fn regions() -> [u64; 8] {
++    NREG.with(|s| s.get())
++}
++
++pub fn cold() -> u32 {
++    static ON: OnceLock<u32> = OnceLock::new();
++    *ON.get_or_init(|| std::env::var("CCA2_PT_COLD").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
++}
++
++/// Every memo of the engine emptied: a branch entered cold owes nothing to the branches before it.
++pub fn clear_all() {
++    crate::conic_meet::clear_memo();
++    crate::alg_row_fails::clear_all_memos();
++    crate::rat_q::clear_all_memos();
++    crate::envelope_subdivision_alg::clear_memos();
++}
++
++pub struct Par {
++    cold: bool,
++    on: bool,
++    sum: f64,
++    max: f64,
++}
++pub struct Branch<'a> {
++    par: &'a mut Par,
++    t0: Option<Instant>,
++    s0: f64,
++}
++impl Par {
++    #[inline]
++    pub fn new(class: u32) -> Par {
++        let on = classes() & class != 0;
++        if on {
++            NREG.with(|s| {
++                let mut a = s.get();
++                a[class.trailing_zeros() as usize] += 1;
++                s.set(a);
++            });
++        }
++        Par { cold: on && cold() & class != 0, on, sum: 0.0, max: 0.0 }
++    }
++    #[inline]
++    pub fn enter(&mut self) -> Branch<'_> {
++        if self.cold {
++            clear_all();
++        }
++        if self.on {
++            let s0 = saved();
++            Branch { par: self, t0: Some(Instant::now()), s0 }
++        } else {
++            Branch { par: self, t0: None, s0: 0.0 }
++        }
++    }
++}
++impl Drop for Branch<'_> {
++    #[inline]
++    fn drop(&mut self) {
++        if let Some(t0) = self.t0 {
++            let w = t0.elapsed().as_secs_f64();
++            let s = saved() - self.s0;
++            self.par.sum += w;
++            self.par.max = self.par.max.max(w - s);
++            SAVED.with(|c| c.set(self.s0));
++        }
++    }
++}
++impl Drop for Par {
++    #[inline]
++    fn drop(&mut self) {
++        if self.on && self.sum > self.max {
++            SAVED.with(|c| c.set(c.get() + self.sum - self.max));
++        }
++    }
++}
+diff --git a/rust/src/rat_q.rs b/rust/src/rat_q.rs
+index 2227058..e32cf9e 100644
+--- a/rust/src/rat_q.rs
++++ b/rust/src/rat_q.rs
+@@ -693,6 +693,11 @@ thread_local! {
+     static CHAIN_MEMO: RefCell<HashMap<Vec<Z>, Rc<Vec<Vec<Z>>>>> = RefCell::new(HashMap::new());
+ }
+ 
++pub fn clear_all_memos() {
++    clear_memos();
++    PAIR_MEMO.with(|m| m.borrow_mut().clear());
++}
++
+ pub fn clear_memos() {
+     SQF_MEMO.with(|m| m.borrow_mut().clear());
+     CHAIN_MEMO.with(|m| m.borrow_mut().clear());
