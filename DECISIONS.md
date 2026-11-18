@@ -62,7 +62,7 @@ with an equality row, and changed no recorded fixture (serial digest identical, 
 
 **Verified.** Rust `conjstress` (serial and parallel): n=6..13 (n=14..20: see TODO), fold == tree, error vs the definition
 ~5e-16 (was up to 5e1). Regression tests against the DEFINITION (not another engine):
-`rust/tests/star.rs` (n=6..10 default, n=11..20 `--ignored`) and `python/tests/test_star_polygons.py`
+`rust/tests/star.rs` (n=6..10 default; `--ignored` n=11..20, sizes chosen by `CCA2_STAR_NS`) and `python/tests/test_star_polygons.py`
 (n=4..7). MATLAB fast suite 834/0; Python suite 2741 pass; Rust `cargo test --release` all pass.
 **Side effects of the fix (all expected):** (1) the MATLAB goldens were re-recorded for the 12 records whose
 vertex NAMES (root index of a vertex) changed -- the old points were wrong so the order differed; 6 conj,
