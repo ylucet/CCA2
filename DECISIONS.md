@@ -60,7 +60,7 @@ abscissae (conic discriminant roots, asymptotes, pairwise intersections), a poin
 y-sector (and past both ends) tested. It runs only when the cheaper tests said "no interior", skips cells
 with an equality row, and changed no recorded fixture (serial digest identical, goldens unchanged).
 
-**Verified.** Rust `conjstress` (serial and parallel): n=6..13 (n=14..20: see TODO), fold == tree, error vs the definition
+**Verified.** Rust `conjstress` (serial and parallel): n=6..13; the definition test `rust/tests/star.rs` passes for n=6..16, n=17..20 NOT run (hours, see TODO), fold == tree, error vs the definition
 ~5e-16 (was up to 5e1). Regression tests against the DEFINITION (not another engine):
 `rust/tests/star.rs` (n=6..10 default; `--ignored` n=11..20, sizes chosen by `CCA2_STAR_NS`) and `python/tests/test_star_polygons.py`
 (n=4..7). MATLAB fast suite 834/0; Python suite 2741 pass; Rust `cargo test --release` all pass.
