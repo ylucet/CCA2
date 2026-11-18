@@ -71,10 +71,16 @@ replay of the 4 slow-suite conj records the Python replay flagged); the slow `sl
 unchanged and still pass. (2) `rust/ref` re-generated from Python; `rust/bench/parallel/digest_serial.tsv`
 re-baselined (10 of 200 fixtures changed hash, same face counts; old file kept as
 `digest_serial.pre-2026-11-17.tsv`); parallel == serial still holds at 1/2/8/32 threads.
-**Pre-existing gap found on the way (NOT caused by this fix):** the Rust port lacks the perfect-square
-tangency certificate (`psTangency`, task #11, MATLAB + Python only), so on 3 diagonal-kink biconj records
-(biconj.jsonl #69, #95, #110) Rust keeps zero-area faces (nf 4/19/19 vs 2/14/14; values identical). The
-stale `rust/ref` hid it. `rust/tests/parity.rs` skips only the `nf` comparison for those 3 records.
+**Pre-existing gap found on the way (NOT caused by this fix; CLOSED 2026-11-17):** the Rust port lacked
+the perfect-square tangency certificate (`psTangency`, task #11, MATLAB + Python only), so on 3 diagonal-kink
+biconj records (biconj.jsonl #69, #95, #110) Rust kept zero-area faces (nf 4/19/19 vs 2/14/14; values
+identical). The stale `rust/ref` hid it; `rust/tests/parity.rs` had skipped only the `nf` comparison for
+those 3 records. It is now ported to Rust (`rust/src/alg_row_fails.rs`: `ps_tangency` + `square_poly` /
+`square_pos`, called at the top of `alg_row_fails_box`, s-symmetric exactly as in MATLAB `psTangency` and
+Python `_psTangency`), pinned by `rust/tests/ps_tangency.rs`. The 3 records now drop their zero-area faces
+(nf 4/19/19 -> 2/14/14, matching Python), the `parity.rs` skip is removed, and
+`bench/parallel/digest_serial.tsv` is re-baselined (fixtures 165/174: 4->2, 19->14; old file kept as
+`digest_serial.pre-psTangency-2026-11-17.tsv`). Parallel == serial still holds at 1/2/8/32 threads.
 `python/star_defect_diagnosis.py` is kept; it now reports the defect NOT reproduced.
 
 **Not viable (recorded so nobody retries it):** a class-based refusal ("strictly convex quadratic on

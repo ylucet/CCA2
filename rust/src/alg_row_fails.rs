@@ -317,6 +317,14 @@ pub fn alg_row_fails(a: &[RowSpec], reg: &Region, depth: usize) -> R<bool> {
 
 /// `rows_cache`: the per-cell RowCache of the caller (drop_below), or None.
 pub fn alg_row_fails_box(a: &[RowSpec], bx: [f64; 4], in_box: &(dyn Fn(&[f64; 4]) -> bool + Sync), depth: usize, factors: &[M2], corners: &[[f64; 2]], rows_cache: Option<&RowCache>) -> R<bool> {
+    // A PERFECT-SQUARE TANGENCY (MATLAB psTangency, 2026-11-16): a row whose bridge branch exceeds
+    // the quad by a perfect square holds only where the square is 0 -- a 1-D set -- so the face
+    // owns no area. Certified globally -- no box, no region, no subdivision.
+    for at in a {
+        if ps_tangency(at) {
+            return Ok(true);
+        }
+    }
     let mut rows = vec![];
     for at in a {
         if let Some(r) = row_polys(at, factors, rows_cache)? {
@@ -386,6 +394,110 @@ fn nz_of(fp: &PolyN) -> usize {
     fp.keys().map(|e| e[2]).max().unwrap() as usize + 1
 }
 
+/// Twice the quad face's numerator as an M2 matrix (x^i y^j), from the 10 weighted-basis entries
+/// (5..10: [xx/2, xy, yy/2, x, y, 1]; entries 1..4, the cubics, are zero on a quadratic face).
+fn quad_num(num: &[Z]) -> M2 {
+    vec![vec![zi(2) * &num[9], zi(2) * &num[8], num[6].clone()], vec![zi(2) * &num[7], zi(2) * &num[5], zi(0)], vec![num[4].clone(), zi(0), zi(0)]]
+}
+
+/// s in Z[x, y] with s^2 = d exactly (d a perfect square, its content a square), or None
+/// (MATLAB squarePoly, 2026-11-16).
+fn square_poly(d: &M2) -> Option<M2> {
+    let d = biv::trim_n(d);
+    if biv::is_zero(&d) {
+        return None;
+    }
+    let cont = biv::content(&d);
+    if !cont.is_positive() {
+        return None;
+    }
+    let dcf: M2 = d.iter().map(|r| r.iter().map(|x| x.div_floor(&cont)).collect()).collect();
+    let s0 = z_sqrt(&biv::trim_n(&dcf))?;
+    let sc = cont.sqrt();
+    if &sc * &sc != cont {
+        return None;
+    }
+    Some(biv::scal(&s0, &sc))
+}
+
+/// S with p = (positive constant) * S^2 (so p >= 0 at every point), or None when p is not of
+/// that form (MATLAB squarePos, 2026-11-16).
+fn square_pos(p: &M2) -> Option<M2> {
+    let p = biv::trim_n(p);
+    if biv::is_zero(&p) {
+        return None;
+    }
+    let cont = biv::content(&p);
+    if !cont.is_positive() {
+        return None;
+    }
+    let pcf: M2 = p.iter().map(|r| r.iter().map(|x| x.div_floor(&cont)).collect()).collect();
+    z_sqrt(&biv::trim_n(&pcf))
+}
+
+/// A QUAD-vs-BRIDGE row whose bridge branch exceeds the quad by a PERFECT SQUARE (MATLAB
+/// psTangency, 2026-11-16, s-symmetric; port of python/cca2/alg_row_fails.py::_psTangency). The
+/// bridge must be RATIONAL: D = A1^2 - 4 A2 A0 = s^2 for a polynomial s. The REAL sign of s is
+/// region-dependent (s is a polynomial whose value can be negative in a region), so one branch of
+/// "q - z" cannot be certified from a single e = +-1. Both branches are certified at once: with
+/// Q/Dn = q and Dn = 2 den,
+///     P+ = 2 A2 Q + Dn A1 - Dn s,     P- = 2 A2 Q + Dn A1 + Dn s,
+/// the two roots are (A1 +- s)/(2 A2) and q - (A1 +- s)/(2 A2) = P^/(2 A2 Dn) (A2 > 0, Dn > 0),
+/// so sign(q - root) = sign(P^). The row side * (q - z) >= 0 (z the top root if FB in {-1, 2}, the
+/// bottom root if FB in {1, -2}) holds only on a CURVE (a 1-D set; the face owns no area) when:
+///     upper, side > 0:  P+ OR  P- is a NEGATIVE square (<= 0, zero on a curve);
+///     upper, side < 0:  P+ AND P- are POSITIVE squares (>= 0);
+///     lower, side > 0:  P+ AND P- are NEGATIVE squares;
+///     lower, side < 0:  P+ OR  P- is a POSITIVE square.
+/// A square is (non-zero constant) * S^2; "negative" means that constant is negative. diagonalKink
+/// c = -2, top row: P+ = -4 (x + y - 1)^2 (a negative square), side > 0 -- certifies.
+pub fn ps_tangency(a: &RowSpec) -> bool {
+    let (fp, fb, num, den, side) = match a {
+        RowSpec::Quad { fp, fb, num, den, side } => (fp, *fb, num, den, *side),
+        RowSpec::Face { .. } => return false, // a face-against-face row: not this
+    };
+    if num.len() != 10 || !all_zero(&num[0..4]) || !den.is_positive() {
+        return false; // q a polynomial in x, y (no z terms)
+    }
+    let s = slices(fp);
+    if s.len() != 3 {
+        return false; // degree 2 in z
+    }
+    let a2 = biv::trim_n(&s[2]);
+    if !biv::is_const(&a2) || !a2[0][0].is_positive() {
+        return false; // A2 a positive constant
+    }
+    let a2s = a2[0][0].clone();
+    let a1 = s[1].clone();
+    let a0 = s[0].clone();
+    let dn = zi(2) * den;
+    let d = biv::trim_n(&biv::pad_add(&biv::conv2(&a1, &a1), &biv::scal(&a0, &(-zi(4) * &a2s))));
+    let sp = match square_poly(&d) {
+        Some(sp) => sp,
+        None => return false, // D = s^2: the bridge is rational
+    };
+    let hi = fb == -1 || fb == 2; // the top root (FB in {-1, 2})?
+    let base = biv::trim_n(&biv::pad_add(&biv::scal(&quad_num(num), &(a2s.clone() + &a2s)), &biv::scal(&a1, &dn)));
+    let dn2 = dn.clone();
+    let pp = biv::trim_n(&biv::pad_add(&base, &biv::scal(&sp, &(-dn)))); // P+
+    let pm = biv::trim_n(&biv::pad_add(&base, &biv::scal(&sp, &dn2))); // P-
+    let pos_p = square_pos(&pp).is_some(); // P^ a positive square (>= 0)
+    let pos_m = square_pos(&pm).is_some();
+    let neg_p = square_pos(&biv::neg(&pp)).is_some(); // P^ a negative square (<= 0)
+    let neg_m = square_pos(&biv::neg(&pm)).is_some();
+    if hi {
+        if side > 0 {
+            neg_p || neg_m
+        } else {
+            pos_p && pos_m
+        }
+    } else if side > 0 {
+        neg_p && neg_m
+    } else {
+        pos_p || pos_m
+    }
+}
+
 fn row_polys(a: &RowSpec, factors: &[M2], cache: Option<&RowCache>) -> R<Option<Row>> {
     if let Some(c) = cache {
         if let Some(r) = c.get(a) {
@@ -407,7 +519,7 @@ fn row_polys_calc(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
     if num.len() != 10 || !all_zero(&num[0..4]) || !den.is_positive() {
         return Ok(None);
     }
-    let q = vec![vec![zi(2) * &num[9], zi(2) * &num[8], num[6].clone()], vec![zi(2) * &num[7], zi(2) * &num[5], zi(0)], vec![num[4].clone(), zi(0), zi(0)]];
+    let q = quad_num(num);
     let dn = zi(2) * den;
     let want = -side as i32;
     let nz = nz_of(fp);
