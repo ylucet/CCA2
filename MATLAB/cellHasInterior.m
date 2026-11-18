@@ -95,6 +95,7 @@ function tf = cellHasInterior(EcQ, rows)
     % CONFIRM, which is why an empty result below returns false only after the vertex test also
     % found nothing: together they are the pipeline's cells, and the routine errs toward keeping.
     tf = probeInterior(EcQ, rows);
+    if ~tf, tf = cadInterior(EcQ, rows); end
 end
 
 function tf = negSemidefinite(c)
@@ -160,4 +161,79 @@ function tf = probeInterior(EcQ, rows)
         if satisfiesAll(EcQ, rows, X(i,:)), tf = true; return, end
     end
     tf = false;
+end
+
+function tf = cadInterior(EcQ, rows)
+% objective: the COMPLETE sample search, run when the witness search above finds nothing. The cell is
+% open, so if it is non-empty it meets a sector of the cylindrical decomposition of the plane by the
+% critical abscissae (the roots of every conic's discriminant in y, the vertical asymptotes of the
+% rows that are linear in y, and every pairwise intersection); a point in the middle of each sector,
+% and one past each end, is tested. Needed because probeInterior's box is only a few units wide, so a
+% cell far from the origin whose conics do not meet was declared empty (the 15-spike star polygon;
+% DECISIONS.md 2026-11-17). A cell with an equality row has no interior sector: not handled here.
+% Twin of python/cca2/cell_has_interior.py _cadInterior and rust/src/cells.rs cad_interior.
+    tf = false;
+    if any(rows(:,2) == 0), return, end
+    idx = unique(rows(:,1));
+    cs = EcQ(idx, 1:6);
+    xs = zeros(0,1);
+    for k = 1:size(cs,1)
+        c = cs(k,:);
+        if c(3) ~= 0
+            q = [c(2)^2 - 4*c(3)*c(1), 2*c(2)*c(5) - 4*c(3)*c(4), c(5)^2 - 4*c(3)*c(6)];
+        elseif c(2) ~= 0
+            xs(end+1,1) = -c(5)/c(2);  %#ok<AGROW>
+            continue
+        else
+            continue
+        end
+        if q(1) ~= 0
+            d = q(2)^2 - 4*q(1)*q(3);
+            if d >= 0
+                sd = sqrt(d);
+                xs(end+1,1) = (-q(2) - sd)/(2*q(1));  %#ok<AGROW>
+                xs(end+1,1) = (-q(2) + sd)/(2*q(1));  %#ok<AGROW>
+            end
+        elseif q(2) ~= 0
+            xs(end+1,1) = -q(3)/q(2);  %#ok<AGROW>
+        end
+    end
+    for a = 1:numel(idx)
+        for b = a+1:numel(idx)
+            try
+                P = conicMeet(EcQ(idx(a),:), EcQ(idx(b),:));
+            catch ME
+                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME); end
+                continue
+            end
+            xs = [xs; P(:,1)];  %#ok<AGROW>
+        end
+    end
+    xs = unique(xs(isfinite(xs)));
+    if isempty(xs), xs = 0; end
+    samp = [xs(1) - 1; xs(end) + 1; (xs(1:end-1) + xs(2:end))/2];
+    for x = samp.'
+        ys = zeros(0,1);
+        for k = 1:size(cs,1)
+            c = cs(k,:);
+            B = c(2)*x + c(5);
+            C = c(1)*x*x + c(4)*x + c(6);
+            if c(3) ~= 0
+                d = B*B - 4*c(3)*C;
+                if d >= 0
+                    sd = sqrt(d);
+                    ys(end+1,1) = (-B - sd)/(2*c(3));  %#ok<AGROW>
+                    ys(end+1,1) = (-B + sd)/(2*c(3));  %#ok<AGROW>
+                end
+            elseif B ~= 0
+                ys(end+1,1) = -C/B;  %#ok<AGROW>
+            end
+        end
+        ys = unique(ys(isfinite(ys)));
+        if isempty(ys), ys = 0; end
+        cand = [ys(1) - 1; ys(end) + 1; (ys(1:end-1) + ys(2:end))/2];
+        for y = cand.'
+            if satisfiesAll(EcQ, rows, [x y]), tf = true; return, end
+        end
+    end
 end

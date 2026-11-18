@@ -119,9 +119,11 @@ fn line_meets_conic(l: &[Z], c: &[Z], tol: f64) -> Vec<[f64; 2]> {
     let t = real_roots_exact(&[q2, q1, q0]);
     let p0f = [q_to_f64(&Q::new(p0[0].clone(), sc.clone())), q_to_f64(&Q::new(p0[1].clone(), sc.clone()))];
     let uf = [to_f64(&u[0]), to_f64(&u[1])];
+    // the quadratic's roots are t' = scale * t (it was multiplied through by scale^2)
+    let scf = to_f64(&sc);
     let mut p: Vec<[f64; 2]> = t
         .iter()
-        .map(|ti| [p0f[0] + ti * uf[0], p0f[1] + ti * uf[1]])
+        .map(|ti| [p0f[0] + ti / scf * uf[0], p0f[1] + ti / scf * uf[1]])
         .filter(|q| q[0].is_finite() && q[1].is_finite())
         .collect();
     if p.len() == 2 && (p[0][0] - p[1][0]).hypot(p[0][1] - p[1][1]) <= tol * 1f64.max(p[0][0].hypot(p[0][1])) {

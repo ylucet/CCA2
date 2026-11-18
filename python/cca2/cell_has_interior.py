@@ -40,7 +40,73 @@ def cellHasInterior(EcQ, rows):
             for p in P:
                 if _satisfiesAll(EcQ, rows, p):
                     return True
-    return _probeInterior(EcQ, rows)
+    if _probeInterior(EcQ, rows):
+        return True
+    return _cadInterior(EcQ, rows)
+
+
+def _cadInterior(EcQ, rows):
+    """Complete sample search (a 2-D cylindrical decomposition), run when the witness search finds
+    nothing: the cell is open, so if non-empty it meets a sector of the decomposition by the critical
+    abscissae (conic discriminant roots, vertical asymptotes, pairwise intersections); a point in the
+    middle of every sector (and past both ends) is tested. The random probe box is only a few units
+    wide and misses a cell far from the origin when the conics do not meet (DECISIONS 2026-11-17).
+    Skipped when a row is an equality (side 0), which has no interior sector."""
+    if any(r[1] == 0 for r in rows):
+        return False
+    idx = sorted(set(r[0] for r in rows))
+    cs = [[float(t) for t in EcQ[i - 1][0:6]] for i in idx]
+    xs = []
+    for c in cs:
+        a0, a1, a2, a3, a4, a5 = c
+        if a2 != 0:   # disc(x) = (a1 x + a4)^2 - 4 a2 (a0 x^2 + a3 x + a5)
+            q = [a1 * a1 - 4 * a2 * a0, 2 * a1 * a4 - 4 * a2 * a3, a4 * a4 - 4 * a2 * a5]
+        elif a1 != 0:
+            xs.append(-a4 / a1)
+            continue
+        else:
+            continue
+        if q[0] != 0:
+            d = q[1] ** 2 - 4 * q[0] * q[2]
+            if d >= 0:
+                sd = d ** 0.5
+                xs += [(-q[1] - sd) / (2 * q[0]), (-q[1] + sd) / (2 * q[0])]
+        elif q[1] != 0:
+            xs.append(-q[2] / q[1])
+    for a in range(len(idx)):
+        for b in range(a + 1, len(idx)):
+            try:
+                P, _ = conicMeet(EcQ[idx[a] - 1], EcQ[idx[b] - 1])
+            except CCA2Error as ME:
+                if ME.identifier != 'ratQ:overflow':
+                    raise
+                continue
+            xs += [float(p[0]) for p in P]
+    xs = sorted(set(x for x in xs if np.isfinite(x)))
+    if not xs:
+        xs = [0.0]
+    samp = [xs[0] - 1.0, xs[-1] + 1.0] + [(xs[i] + xs[i + 1]) / 2 for i in range(len(xs) - 1)]
+    for x in samp:
+        ys = []
+        for a0, a1, a2, a3, a4, a5 in cs:
+            B = a1 * x + a4
+            C = a0 * x * x + a3 * x + a5
+            if a2 != 0:
+                d = B * B - 4 * a2 * C
+                if d >= 0:
+                    sd = d ** 0.5
+                    ys += [(-B - sd) / (2 * a2), (-B + sd) / (2 * a2)]
+            elif B != 0:
+                ys.append(-C / B)
+        ys = sorted(set(y for y in ys if np.isfinite(y)))
+        if not ys:
+            ys = [0.0]
+        cand = [ys[0] - 1.0, ys[-1] + 1.0] + [(ys[i] + ys[i + 1]) / 2 for i in range(len(ys) - 1)]
+        X1 = np.array(cand)
+        X0 = np.full(X1.shape, x)
+        if _satisfiesAllMany(EcQ, rows, X0, X1).any():
+            return True
+    return False
 
 
 def _negSemidefinite(c):

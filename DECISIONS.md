@@ -25,6 +25,67 @@ Newest entries at the top.
 
 ---
 
+## 2026-11-17 — the star-polygon conjugate was WRONG (too low): `conicMeet`'s line-vs-conic branch ignored the line's scale
+
+**Status: FIXED (MATLAB, Python, Rust).** Found by the task-#4 `conjstress` tool. `conjQ` of a star
+polygon (2n vertices, f = (x²+y²)/2) returned values TOO LOW (even negative) at some dual points:
+Rust wrong at n=6 (111/625 grid points), n=7, n=8, n=9, n=10 (199/625, values like -9811 for a
+conjugate >= 0); Python wrong at n=7. fold and tree gave the same wrong values, so not the reduction.
+
+**Real cause.** `lineMeetsConic` multiplies the substituted quadratic through by scale^2 (scale = d
+or e, the line's pivot coefficient), so its roots are t' = scale*t, but the points were built as
+`P0/scale + t'*u` -- the division by `scale` was missing. Only |scale| = 1 was right. The returned
+points were then Newton-polished (8 steps), which masked it when the start landed near the right root
+and otherwise converged to the wrong root, duplicated one root, or dropped the other. Concrete case
+(n=10, step 18 of the max fold): the line 26x+9y+405 = 0 against the line pair 222x²-725xy-222y²-...
+returned x = 278.63, 278.647 (spurious) and missed x = -5.954. A missing intersection point is a
+missing witness, so `cellHasInterior`'s witness search (pairwise intersections + 400 probes) said "no
+interior" for a cell that has one; `_dropImplied` dropped a bounding row, the cell grew over a higher
+face, and eval picked the lower face. The first diagnosis (earlier today) blamed only the witness search
+as "incomplete"; for n=6..14 that was the symptom (with correct intersection points the search finds its
+witness).
+
+**Second, independent hole (found at n=15).** `cellHasInterior`'s last resort is 400 random probes in a
+box of half-width max(2, 2*spread of the intersection points) around their centroid, and when the
+conics do not meet at all the box is [-4,4]^2 -- a cell far from the origin was declared empty.
+Concrete case: a line 29x+17y-1123 >= 0 and a parabola >= 0 that never meet, with a witness at
+(0.11, 70.73). Max-fold step 21 of the 28 triangles dropped a bounding row, and the 15-spike conjugate was
+-1640 where the definition says 2499.
+
+**Fix (two parts, identical in MATLAB, Python, Rust).** (1) `t = t / scale` in the line-vs-conic branch
+(`MATLAB/conicMeet.m`, `python/cca2/conic_meet.py`, `rust/src/conic_meet.rs`). (2) A COMPLETE sample
+search `cadInterior` after the probes in `cellHasInterior` (`MATLAB/cellHasInterior.m`,
+`python/cca2/cell_has_interior.py`, `rust/src/cells.rs`): a 2-D cylindrical decomposition -- critical
+abscissae (conic discriminant roots, asymptotes, pairwise intersections), a point in each x-sector and
+y-sector (and past both ends) tested. It runs only when the cheaper tests said "no interior", skips cells
+with an equality row, and changed no recorded fixture (serial digest identical, goldens unchanged).
+
+**Verified.** Rust `conjstress` (serial and parallel): n=6..13; the definition test `rust/tests/star.rs` passes for n=6..16, n=17..20 NOT run (hours, see TODO), fold == tree, error vs the definition
+~5e-16 (was up to 5e1). Regression tests against the DEFINITION (not another engine):
+`rust/tests/star.rs` (n=6..10 default; `--ignored` n=11..20, sizes chosen by `CCA2_STAR_NS`) and `python/tests/test_star_polygons.py`
+(n=4..7). MATLAB fast suite 834/0; Python suite 2741 pass; Rust `cargo test --release` all pass.
+**Side effects of the fix (all expected):** (1) the MATLAB goldens were re-recorded for the 12 records whose
+vertex NAMES (root index of a vertex) changed -- the old points were wrong so the order differed; 6 conj,
+7 biconj records in `python/golden`, recorded from the fixed MATLAB (fast + normal suites plus a direct
+replay of the 4 slow-suite conj records the Python replay flagged); the slow `slow_*.jsonl` goldens are
+unchanged and still pass. (2) `rust/ref` re-generated from Python; `rust/bench/parallel/digest_serial.tsv`
+re-baselined (10 of 200 fixtures changed hash, same face counts; old file kept as
+`digest_serial.pre-2026-11-17.tsv`); parallel == serial still holds at 1/2/8/32 threads.
+**Pre-existing gap found on the way (NOT caused by this fix; CLOSED 2026-11-17):** the Rust port lacked
+the perfect-square tangency certificate (`psTangency`, task #11, MATLAB + Python only), so on 3 diagonal-kink
+biconj records (biconj.jsonl #69, #95, #110) Rust kept zero-area faces (nf 4/19/19 vs 2/14/14; values
+identical). The stale `rust/ref` hid it; `rust/tests/parity.rs` had skipped only the `nf` comparison for
+those 3 records. It is now ported to Rust (`rust/src/alg_row_fails.rs`: `ps_tangency` + `square_poly` /
+`square_pos`, called at the top of `alg_row_fails_box`, s-symmetric exactly as in MATLAB `psTangency` and
+Python `_psTangency`), pinned by `rust/tests/ps_tangency.rs`. The 3 records now drop their zero-area faces
+(nf 4/19/19 -> 2/14/14, matching Python), the `parity.rs` skip is removed, and
+`bench/parallel/digest_serial.tsv` is re-baselined (fixtures 165/174: 4->2, 19->14; old file kept as
+`digest_serial.pre-psTangency-2026-11-17.tsv`). Parallel == serial still holds at 1/2/8/32 threads.
+`python/star_defect_diagnosis.py` is kept; it now reports the defect NOT reproduced.
+
+**Not viable (recorded so nobody retries it):** a class-based refusal ("strictly convex quadratic on
+a bounded non-convex polygon") would also refuse correct cases such as golden conj record 36 (L-shape).
+
 ## 2026-08-23 — the BICONJUGATE's face type is NOT rational: degree 1, 2 or 4; and `f**` is NOT C1
 
 Three questions closed on the envelope side. `CONJ_FIELD_PROOF.md` §5.1 had computed ONE degree-4

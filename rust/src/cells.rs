@@ -103,7 +103,115 @@ pub fn cell_has_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {
             }
         }
     }
-    probe_interior(ecq, rows)
+    if probe_interior(ecq, rows)? {
+        return Ok(true);
+    }
+    cad_interior(ecq, rows)
+}
+
+/// Complete sample search (a 2-D cylindrical decomposition), run when the witness search finds nothing:
+/// the cell is open, so if non-empty it meets a sector of the decomposition by the critical abscissae
+/// (conic discriminant roots, vertical asymptotes, pairwise intersections); a point in the middle of
+/// every sector (and past both ends) is tested. The random probe box is only a few units wide and misses
+/// a cell far from the origin when the conics do not meet (DECISIONS 2026-11-17). Skipped when a row is
+/// an equality (side 0). Mirrors python/cca2/cell_has_interior.py `_cadInterior`.
+fn cad_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {
+    if rows.iter().any(|r| r.1 == 0) {
+        return Ok(false);
+    }
+    let idx: Vec<usize> = rows.iter().map(|r| r.0).collect::<BTreeSet<_>>().into_iter().collect();
+    let cs: Vec<[f64; 6]> = idx.iter().map(|&i| conic_f(&ecq[i - 1]).0).collect();
+    let mut xs: Vec<f64> = vec![];
+    for c in &cs {
+        let [a0, a1, a2, a3, a4, a5] = *c;
+        let q: [f64; 3];
+        if a2 != 0.0 {
+            q = [a1 * a1 - 4.0 * a2 * a0, 2.0 * a1 * a4 - 4.0 * a2 * a3, a4 * a4 - 4.0 * a2 * a5];
+        } else if a1 != 0.0 {
+            xs.push(-a4 / a1);
+            continue;
+        } else {
+            continue;
+        }
+        if q[0] != 0.0 {
+            let d = q[1] * q[1] - 4.0 * q[0] * q[2];
+            if d >= 0.0 {
+                let sd = d.sqrt();
+                xs.push((-q[1] - sd) / (2.0 * q[0]));
+                xs.push((-q[1] + sd) / (2.0 * q[0]));
+            }
+        } else if q[1] != 0.0 {
+            xs.push(-q[2] / q[1]);
+        }
+    }
+    for a in 0..idx.len() {
+        for b in a + 1..idx.len() {
+            let m = conic_meet(&ecq[idx[a] - 1], &ecq[idx[b] - 1])?;
+            xs.extend(m.0.iter().map(|p| p[0]));
+        }
+    }
+    let uniq = |mut v: Vec<f64>| -> Vec<f64> {
+        v.retain(|x| x.is_finite());
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v.dedup();
+        v
+    };
+    let mut xs = uniq(xs);
+    if xs.is_empty() {
+        xs.push(0.0);
+    }
+    let mut samp = vec![xs[0] - 1.0, xs[xs.len() - 1] + 1.0];
+    for i in 0..xs.len() - 1 {
+        samp.push((xs[i] + xs[i + 1]) / 2.0);
+    }
+    let conics: Vec<([f64; 6], f64, i64)> = rows
+        .iter()
+        .map(|&(e, s)| {
+            let (c, cm) = conic_f(&ecq[e - 1]);
+            (c, cm, s)
+        })
+        .collect();
+    for &x in &samp {
+        let mut ys: Vec<f64> = vec![];
+        for &[a0, a1, a2, a3, a4, a5] in &cs {
+            let b = a1 * x + a4;
+            let c = a0 * x * x + a3 * x + a5;
+            if a2 != 0.0 {
+                let d = b * b - 4.0 * a2 * c;
+                if d >= 0.0 {
+                    let sd = d.sqrt();
+                    ys.push((-b - sd) / (2.0 * a2));
+                    ys.push((-b + sd) / (2.0 * a2));
+                }
+            } else if b != 0.0 {
+                ys.push(-c / b);
+            }
+        }
+        let mut ys = uniq(ys);
+        if ys.is_empty() {
+            ys.push(0.0);
+        }
+        let mut cand = vec![ys[0] - 1.0, ys[ys.len() - 1] + 1.0];
+        for i in 0..ys.len() - 1 {
+            cand.push((ys[i] + ys[i + 1]) / 2.0);
+        }
+        for &y in &cand {
+            let m = 1f64.max(x.abs().max(y.abs())).powi(2);
+            let mut ok = true;
+            for (f, cm, s) in &conics {
+                let v = f[0] * x.powi(2) + f[1] * x * y + f[2] * y.powi(2) + f[3] * x + f[4] * y + f[5];
+                let scale = 1f64.max(cm * m);
+                if (*s as f64) * v < -1e-9 * scale {
+                    ok = false;
+                    break;
+                }
+            }
+            if ok {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
 }
 
 fn probe_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {
