@@ -4,7 +4,7 @@
 //! that dropped roots (DECISIONS.md 2026-11-17: wrong at n = 6..10 before the fix).
 //!
 //!     cargo test --release --test star                      # n = 6..10, ~15 s
-//!     cargo test --release --test star -- --ignored         # n = 11..20, hours (fold only)
+//!     cargo test --release --test star -- --ignored         # n = 11..20 (CCA2_STAR_NS=15,16 picks sizes; hours)
 use cca2::qua_pol::QuaPol;
 use cca2::rat_q::Num;
 
@@ -86,7 +86,14 @@ fn stars_6_to_10() {
 #[test]
 #[ignore]
 fn stars_11_to_20() {
-    for n in 11..=20 {
+    // CCA2_STAR_NS=15,16 picks the sizes; a size takes minutes, the biggest hours (shared machine)
+    let ns: Vec<usize> = match std::env::var("CCA2_STAR_NS") {
+        Ok(v) => v.split(',').map(|x| x.trim().parse().unwrap()).collect(),
+        Err(_) => (11..=20).collect(),
+    };
+    for n in ns {
+        let t0 = std::time::Instant::now();
         check(n);
+        eprintln!("star n={} ok ({:.0} s)", n, t0.elapsed().as_secs_f64());
     }
 }
