@@ -39,6 +39,14 @@ slprj/
 .claude/notDegenerate-*/
 
 # Python port: local virtualenv and caches
+# manuscript/ build intermediates (the PDF and .tex/.bib sources are committed)
+manuscript/main.aux
+manuscript/main.bbl
+manuscript/main.blg
+manuscript/main.fdb_latexmk
+manuscript/main.fls
+manuscript/main.log
+manuscript/main.out
 python/.pydeps/
 python/**/__pycache__/
 python/.pytest_cache/
