@@ -372,7 +372,7 @@ def piece_value_row(val):
         return None
     try:
         p = sp.Poly(val, X, Y, domain='QQ')
-    except (sp.PolyError, TypeError, ValueError) as e:
+    except (sp.PolynomialError, sp.GeneratorsError, TypeError, ValueError) as e:
         raise ParseReject('piece value is not a rational quadratic in x, y: %s (%s)' % (val, e))
     if p.total_degree() > 2:
         raise ParseReject('piece value has degree > 2: %s' % val)
@@ -1082,6 +1082,27 @@ def eval_engine_double(result, P):
 # registry value at a test point (exact sympy, then one rounding)
 # ==========================================================================================
 
+def point_tol(pt_sympy):
+    """Agreement tolerance on the exact path, set by the test point's own precision.
+
+    An exact point (rational / algebraic, e.g. sqrt(2)/1000) determines the value
+    exactly, so the tight TOL_EXACT applies. A decimal-literal point with d significant
+    digits determines the value only to about d digits (the value error is
+    ~ |grad f*| * 10^-d), so two correct evaluations of it can differ at the (d+1)-th
+    digit -- and near a face boundary (the registry's 'near_degeneracy' points) adjacent
+    faces differ by about that much. Allow a small margin over the point's last digits.
+    This is still 10 orders of magnitude tighter than double precision, so it cannot
+    hide a real engine defect."""
+    dmin = None
+    for t in pt_sympy:
+        if isinstance(t, sp.Float):
+            d = float(t._prec) * 0.3010299956639812          # bits -> decimal digits
+            dmin = d if dmin is None else min(dmin, d)
+    if dmin is None:
+        return TOL_EXACT
+    return mp.mpf(10) ** (-(int(dmin) - 3))                  # 3-digit margin over the point
+
+
 def registry_value_mp(expr, pt_sympy, vars_list=None):
     """The stored registry value at the exact point, one rounding to PREC bits. The stored
     expression is written in the entry's own symbols (x, y for the primal; s1, s2 for f*);
@@ -1184,7 +1205,7 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
         b = registry_value_mp(stored, pts_sympy[label], svar)
         try:
             a = eval_engine_mp(res, P)
-            tol = TOL_EXACT
+            tol = point_tol(pts_sympy[label])
         except Ambiguous:
             try:
                 a = eval_engine_double(res, P)
@@ -1282,7 +1303,7 @@ def run_rust(entry, fx, ops, golden, pts_sympy):
                 P = _mp_pt(pt)
                 try:
                     a = eval_quacon_mp(rust_mp, P)
-                    tol = TOL_EXACT
+                    tol = point_tol(pt)
                 except Ambiguous:
                     a = _as_mp(ev[i])
                     tol = TOL_DOUBLE
