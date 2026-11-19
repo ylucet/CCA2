@@ -301,3 +301,66 @@ Python 43.6 / 41.8; min-subdivision MATLAB 73 / 73, Python 10.9 / 10.8; 177 MATL
 - The changes are shared code, so the AlgCrv fixtures gained a little too (kink 45 -> 42 s).
 - **Total over all 200: MATLAB 1126 s, Python 89 s** (12.7x). Python's own path: 939 s (no
   accelerators) -> 495 -> 372 (conjQ) -> 113 (AlgCrv) -> 89 s (EnvelopeMin).
+
+## Cross-check against convexdb 1.24.0
+
+The external-oracle pass for gap G3 (outline section 6): every 2-D PLQ entry the
+engines accept, compared against the registry's stored `f_star` / `co_f` at the
+registry's own test points. A QuaCon result (Python or Rust) is evaluated from its
+EXACT stored data at 512-bit precision against the registry value (exact sympy,
+rounded once to the same precision), demanded to relative 1e-60 on an exact test
+point and to the point's own precision on a decimal one (the registry's
+"near_degeneracy" points, where adjacent faces differ by ~1e-31). Any non-QuaCon
+result (AlgCrv, EnvelopeMin) is on the 1e-6 double protocol (the engine's own
+documented evaluation). An "open" entry has no stored `co_f` and is sanity-checked,
+not graded. Registry: the sibling `convexdb` checkout (version 1.24.0),
+`export/convexdb.json`; read by relative folder, no URL. Per-entry detail:
+`bench/convexdb_cross.json`; script `bench/cross_convexdb.py`.
+
+| | conj | biconj |
+|---|---|---|
+| Python | agree 18 | agree 16 · refuse 2 |
+| Rust | agree 18 | agree 14 · refuse 2 · open 2 |
+
+2-D entries in the registry: 34. Accepted by the engines: 18. Not PLQ / not
+representable (expected refusals, registry content): 16.
+
+| entry | parse | py conj | py biconj | rs conj | rs biconj |
+|---|---|---|---|---|---|
+| benoist_4_1 | not PLQ / not representable: piece value is n... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_elliptic_cell | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_half_disc | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_hyperbola_branch | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_hyperbolic_cell | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_one_convex_edge_plus_linear | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| bilinear_one_convex_edge_rational | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| bilinear_parabolic_cell | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_parabolic_lens | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_unit_disc | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| bilinear_zero_convex_edges | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| disc_indicator_2d | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| gaussian_bump_2d | not PLQ / not representable: piece value is n... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| general_indefinite_rotation | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| karmarkar_bilinear_sqrt2 | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| karmarkar_erratum_circle | ok (2d, 2 faces, 5 edges, 4 vertices) | agree | agree | agree | agree |
+| karmarkar_erratum_hyperbola | ok (2d, 3 faces, 7 edges, 5 vertices) | agree | agree | agree | open |
+| karmarkar_erratum_unbounded | ok (2d, 2 faces, 3 edges, 4 vertices) | agree | agree | agree | agree |
+| lee_abs_unit_circle | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| lee_indefinite_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | open |
+| locatelli_3_1 | not PLQ / not representable: piece value is n... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| multi_face_bilinear_square | ok (2d, 1 faces, 4 edges, 4 vertices) | agree | agree | agree | agree |
+| negative_bilinear_rotation | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| nonconvex_domain_indicator_2d | ok (2d, 2 faces, 8 edges, 8 vertices) | agree | agree | agree | agree |
+| norm1_2d | not PLQ / not representable: two pieces own t... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| plq_fan_elliptic_edge | ok (2d, 3 faces, 7 edges, 5 vertices) | agree | refuse — PLQ:biconjQ:convexPieceCoupling | agree | refuse — rust: PLQ:biconjQ:convexPieceCoupling |
+| plq_fan_s4_vertex | ok (2d, 5 faces, 11 edges, 7 vertices) | agree | refuse — PLQ:biconjQ:convexPieceCoupling | agree | refuse — rust: PLQ:biconjQ:convexPieceCoupling |
+| quad_norm2_half_2d | ok (2d, 1 faces, 0 edges, 0 vertices) | agree | agree | agree | agree |
+| quad_nsd_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| quad_psd_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+| segment_indicator_2d | not PLQ / not representable: unbounded or deg... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| separable_bump_quadratic_2d | not PLQ / not representable: two pieces own t... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| separable_multiwell_abs_2d | not PLQ / not representable: two pieces own t... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| three_convex_edges_split | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
+
+_Recorded 2026-11-19 15:16; shared machine, no timing conclusions._
+

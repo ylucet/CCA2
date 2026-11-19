@@ -26,6 +26,21 @@ Legacy symbolic engine (`'cplq'`, no longer the default):
 
 Release / paper:
 - MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
+- **DONE 2026-11-19: gap G3 external-oracle cross-check** (`python/bench/cross_convexdb.py`,
+  `python/tests/test_cross_convexdb.py`; section in `python/bench/RESULTS.md`). Every 2-D PLQ entry
+  the engines accept is compared against the registry's stored `f_star`/`co_f` at the registry's
+  own test points: Python and Rust agree with the registry on all 18 accepted entries for `conj`
+  and `biconj` (0 disagreement). QuaCon is checked at 512 bits (1e-60, or the point's own precision
+  on a decimal point); non-QuaCon (AlgCrv/EnvelopeMin) on the engine's 1e-6 double protocol; 2
+  entries have no stored `co_f` (open, sanity-checked only). 16 non-PLQ entries are refused as
+  expected. Two notes, neither an engine bug: (a) `plq_fan_elliptic_edge` / `plq_fan_s4_vertex`
+  are REFUSED for biconj by both engines (`PLQ:biconjQ:convexPieceCoupling`) -- a known limitation,
+  the registry stores a `co_f` for them; (b) two near-misses were adjudicated as protocol
+  artifacts, not defects: `three_convex_edges_split` biconj (my exact AlgCrv evaluator returned +inf
+  on a near-boundary point the engine's own double eval values finitely -- non-QuaCon now use the
+  double protocol) and `plq_fan_s4_vertex` conj (a 2e-31 gap on the registry's 31-digit
+  "near_degeneracy" point, where two independent engines agree with each other to 2e-31 and the
+  point's own last digits are not significant -- the tolerance is now point-aware).
 
 Decided, not to do: Example 2 pair 2's non-winning faces (leave them, 2026-11-05).
 

@@ -12,13 +12,14 @@ at the registry's OWN test points (eval_points: off_lattice, on_boundary, near_d
 Protocol
   * The registry value is evaluated EXACTLY (sympy) at the exact test point, then rounded
     once to a 512-bit mpmath number.
-  * An engine result whose faces are rational or algebraic (a QuaCon, or an AlgCrv with
-    implicit faces) is evaluated from its EXACT stored data at the same 512-bit precision --
-    conic signs, face quadratics and named roots all computed in that precision. That is the
-    "exactly where both are exact" comparison; two distinct exact values cannot hide inside
-    a 1e-60 relative gap.
-  * An EnvelopeMin (the engine's non-subdivided form) has no stored subdivision to read, so
-    it is evaluated through the engine's own double-precision eval and compared at 1e-6
+  * A QuaCon result is evaluated from its EXACT stored data at the same 512-bit precision --
+    conic signs and face quadratics all computed in that precision. That is the "exactly
+    where both are exact" comparison; two distinct exact values cannot hide inside a 1e-60
+    relative gap (or, on a decimal test point, the point's own precision -- its last digits
+    are not significant, so the tolerance is relaxed there, still 10 orders tighter than
+    double).
+  * Any non-QuaCon result (an AlgCrv with implicit/algebraic faces, an EnvelopeMin) is
+    evaluated through the engine's own documented double-precision eval and compared at 1e-6
     relative -- the one place the engine documents "doubles, where a tolerance is allowed".
 
 Status per (entry, engine, operator):
@@ -1433,11 +1434,14 @@ def write_results_md(path, ver, s, records):
     lines.append('')
     lines.append('The external-oracle pass for gap G3 (outline section 6): every 2-D PLQ entry the')
     lines.append('engines accept, compared against the registry\'s stored `f_star` / `co_f` at the')
-    lines.append('registry\'s own test points. A QuaCon / AlgCrv result (Python or Rust) is')
-    lines.append('evaluated from its EXACT stored data at 512-bit precision, the registry value is')
-    lines.append('exact sympy rounded once to the same precision, and agreement is demanded to')
-    lines.append('relative 1e-60. An EnvelopeMin is on the 1e-6 double protocol (the engine\'s own')
-    lines.append('documented evaluation). Registry: the sibling `convexdb` checkout (version %s),' % ver)
+    lines.append('registry\'s own test points. A QuaCon result (Python or Rust) is evaluated from its')
+    lines.append('EXACT stored data at 512-bit precision against the registry value (exact sympy,')
+    lines.append('rounded once to the same precision), demanded to relative 1e-60 on an exact test')
+    lines.append('point and to the point\'s own precision on a decimal one (the registry\'s')
+    lines.append('"near_degeneracy" points, where adjacent faces differ by ~1e-31). Any non-QuaCon')
+    lines.append('result (AlgCrv, EnvelopeMin) is on the 1e-6 double protocol (the engine\'s own')
+    lines.append('documented evaluation). An "open" entry has no stored `co_f` and is sanity-checked,')
+    lines.append('not graded. Registry: the sibling `convexdb` checkout (version %s),' % ver)
     lines.append('`export/convexdb.json`; read by relative folder, no URL. Per-entry detail:')
     lines.append('`bench/convexdb_cross.json`; script `bench/cross_convexdb.py`.')
     lines.append('')

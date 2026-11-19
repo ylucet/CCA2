@@ -1,0 +1,1430 @@
+{
+ "registry": "/home/ylucet/AI/convexdb/export/convexdb.json",
+ "convexdb_version": "1.24.0",
+ "summary": {
+  "2d_entries": 34,
+  "accepted": 18,
+  "not_plq_or_refused_input": 16,
+  "py_conj": {
+   "agree": 18,
+   "refuse": 0,
+   "disagree": 0,
+   "open": 0
+  },
+  "py_biconj": {
+   "agree": 16,
+   "refuse": 2,
+   "disagree": 0,
+   "open": 0
+  },
+  "rs_conj": {
+   "agree": 18,
+   "refuse": 0,
+   "disagree": 0,
+   "open": 0
+  },
+  "rs_biconj": {
+   "agree": 14,
+   "refuse": 2,
+   "disagree": 0,
+   "open": 2
+  }
+ },
+ "records": [
+  {
+   "slug": "benoist_4_1",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000 + 1/10",
+     "0"
+    ],
+    "on_boundary": [
+     "-1",
+     "0"
+    ]
+   },
+   "parse": "not PLQ / not representable: piece value is not a rational quadratic in x, y: sqrt(x**2 + exp(-y**2)) (sqrt(x**2 + exp(-y**2)) contains an element of the set of generators.)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "bilinear_elliptic_cell",
+   "dim": 2,
+   "status_conj": "open",
+   "status_coenv": "open",
+   "f_star_stored": false,
+   "co_f_stored": false,
+   "eval_points": [],
+   "pts": {},
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: 36*x**2 + 1200*y**2",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.06
+  },
+  {
+   "slug": "bilinear_half_disc",
+   "dim": 2,
+   "status_conj": "open",
+   "status_coenv": "established",
+   "f_star_stored": false,
+   "co_f_stored": true,
+   "eval_points": [],
+   "pts": {},
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: x**2 + y**2 - 1",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "bilinear_hyperbola_branch",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "-1/50 + sqrt(2)/1000",
+     "-1/50 + sqrt(2)/1000"
+    ],
+    "on_boundary": [
+     "0",
+     "-1/50 + sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: y",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.01
+  },
+  {
+   "slug": "bilinear_hyperbolic_cell",
+   "dim": 2,
+   "status_conj": "open",
+   "status_coenv": "open",
+   "f_star_stored": false,
+   "co_f_stored": false,
+   "eval_points": [],
+   "pts": {},
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: 9*x**2 - 75*y**2",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.01
+  },
+  {
+   "slug": "bilinear_one_convex_edge_plus_linear",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.008
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 0.436
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 0.58
+  },
+  {
+   "slug": "bilinear_one_convex_edge_rational",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.007
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 0.055
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 0.14
+  },
+  {
+   "slug": "bilinear_parabolic_cell",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "open",
+   "f_star_stored": true,
+   "co_f_stored": false,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: 3*x**2",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "bilinear_parabolic_lens",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: -x**2",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "bilinear_unit_disc",
+   "dim": 2,
+   "status_conj": "open",
+   "status_coenv": "established",
+   "f_star_stored": false,
+   "co_f_stored": true,
+   "eval_points": [],
+   "pts": {},
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: x**2 + y**2 - 1",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "bilinear_zero_convex_edges",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.001
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.001
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    }
+   },
+   "wall": 0.03
+  },
+  {
+   "slug": "disc_indicator_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: x**2 + y**2 - 1",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "gaussian_bump_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "0",
+     "0"
+    ],
+    "on_boundary": [
+     "0",
+     "0"
+    ]
+   },
+   "parse": "not PLQ / not representable: piece value is not a rational quadratic in x, y: exp(-x**2)*exp(-y**2) (exp(-x**2) contains an element of the set of generators.)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "general_indefinite_rotation",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.006
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 0.057
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 0.13
+  },
+  {
+   "slug": "karmarkar_bilinear_sqrt2",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.032
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 2.595
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 3.49
+  },
+  {
+   "slug": "karmarkar_erratum_circle",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 2 faces, 5 edges, 4 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.094
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 3.135
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 4.63
+  },
+  {
+   "slug": "karmarkar_erratum_hyperbola",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "open",
+   "f_star_stored": true,
+   "co_f_stored": false,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 3 faces, 7 edges, 5 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 1.003
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "open entry; off_lattice: +inf",
+     "t": 33.377
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "open",
+     "detail": "rust kind=EnvelopeMin; values ['+inf']"
+    }
+   },
+   "wall": 41.99
+  },
+  {
+   "slug": "karmarkar_erratum_unbounded",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "-1/50 + sqrt(2)/1000"
+    ],
+    "on_boundary": [
+     "sqrt(2)/1000",
+     "0"
+    ]
+   },
+   "parse": "ok (2d, 2 faces, 3 edges, 4 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.003
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.007
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
+    }
+   },
+   "wall": 0.06
+  },
+  {
+   "slug": "lee_abs_unit_circle",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: irrational or non-constant data in a condition: x**2 + y**2 - 1",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.01
+  },
+  {
+   "slug": "lee_indefinite_triangle",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "open",
+   "f_star_stored": true,
+   "co_f_stored": false,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.046
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "open entry; off_lattice: value 1.99999999999987e-6 (f=2.0e-6)",
+     "t": 3.129
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "open",
+     "detail": "rust kind=AlgCrv; values ['2.0e-6']"
+    }
+   },
+   "wall": 3.94
+  },
+  {
+   "slug": "locatelli_3_1",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: piece value is not a rational quadratic in x, y: y/x**2 (x**(-2) contains an element of the set of generators.)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "multi_face_bilinear_square",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 4 edges, 4 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.002
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.002
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    }
+   },
+   "wall": 0.04
+  },
+  {
+   "slug": "negative_bilinear_rotation",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.006
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 0.062
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 0.18
+  },
+  {
+   "slug": "nonconvex_domain_indicator_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 2 faces, 8 edges, 8 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.007
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.031
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    }
+   },
+   "wall": 0.09
+  },
+  {
+   "slug": "norm1_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ],
+    "on_boundary": [
+     "-1",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: two pieces own the same side of line (0, 1, 0) (degenerate partition)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.01
+  },
+  {
+   "slug": "plq_fan_elliptic_edge",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "open",
+   "f_star_stored": true,
+   "co_f_stored": false,
+   "eval_points": [
+    "off_lattice",
+    "near_degeneracy"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ],
+    "near_degeneracy": [
+     "sqrt(78921157/9592200 - 121541*sqrt(4186)/959220) + 3709/2190 + 31*sqrt(4186)/876",
+     "(-199404884/365 - 4557*sqrt(3371060849 - 51915370*sqrt(4186))/730 + 49013*sqrt(157842314 - 2430820*sqrt(4186))/1460 + 12701737*sqrt(4186)/1460)/(-35371 + 4*sqrt(14)*sqrt(11274451 - 173630*sqrt(4186)) + 620*sqrt(4186))"
+    ]
+   },
+   "parse": "ok (2d, 3 faces, 7 edges, 5 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.334
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "PLQ:biconjQ:convexPieceCoupling",
+     "t": 0.0
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "rust: PLQ:biconjQ:convexPieceCoupling"
+    }
+   },
+   "wall": 11.56
+  },
+  {
+   "slug": "plq_fan_s4_vertex",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "open",
+   "f_star_stored": true,
+   "co_f_stored": false,
+   "eval_points": [
+    "off_lattice",
+    "near_degeneracy"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ],
+    "near_degeneracy": [
+     "3.90777893600162821140564236354",
+     "1.41459597855045144700347703618"
+    ]
+   },
+   "parse": "ok (2d, 5 faces, 11 edges, 7 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 2.189
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "PLQ:biconjQ:convexPieceCoupling",
+     "t": 0.0
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "rust: PLQ:biconjQ:convexPieceCoupling"
+    }
+   },
+   "wall": 5.97
+  },
+  {
+   "slug": "quad_norm2_half_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 0 edges, 0 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.0
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.0
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    }
+   },
+   "wall": 0.02
+  },
+  {
+   "slug": "quad_nsd_triangle",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.001
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.001
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    }
+   },
+   "wall": 0.05
+  },
+  {
+   "slug": "quad_psd_triangle",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.002
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.0
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    }
+   },
+   "wall": 0.1
+  },
+  {
+   "slug": "segment_indicator_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: unbounded or degenerate 1-D domain (not needed by the registry yet)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.0
+  },
+  {
+   "slug": "separable_bump_quadratic_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "0",
+     "sqrt(2)/1000 + 1/10"
+    ],
+    "on_boundary": [
+     "0",
+     "sqrt(2)/1000 + 1/10"
+    ]
+   },
+   "parse": "not PLQ / not representable: two pieces own the same side of line (1, 0, -1) (degenerate partition)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.01
+  },
+  {
+   "slug": "separable_multiwell_abs_2d",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice",
+    "on_boundary"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ],
+    "on_boundary": [
+     "-10",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "not PLQ / not representable: two pieces own the same side of line (0, 1, 0) (degenerate partition)",
+   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "py": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    },
+    "biconj": {
+     "status": "refuse",
+     "detail": "input not representable by QuaPol"
+    }
+   },
+   "wall": 0.04
+  },
+  {
+   "slug": "three_convex_edges_split",
+   "dim": 2,
+   "status_conj": "established",
+   "status_coenv": "established",
+   "f_star_stored": true,
+   "co_f_stored": true,
+   "eval_points": [
+    "off_lattice"
+   ],
+   "pts": {
+    "off_lattice": [
+     "sqrt(2)/1000",
+     "sqrt(2)/1000"
+    ]
+   },
+   "parse": "ok (2d, 1 faces, 3 edges, 3 vertices)",
+   "py": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.109
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
+     "t": 10.743
+    }
+   },
+   "rs": {
+    "conj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
+    },
+    "biconj": {
+     "status": "agree",
+     "detail": "matched at 1 test point(s) (double protocol)"
+    }
+   },
+   "wall": 13.42
+  }
+ ]
+}
