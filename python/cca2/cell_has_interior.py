@@ -3,8 +3,13 @@
 
 rows is a list of [index (1-based) into EcQ, side]. Lines are decided exactly by
 rat_q.feasible2; a curved cell is decided by looking for a witness point (pairwise conic
-intersections, then a seeded random probe) -- the same screen MATLAB uses.
+intersections, then a seeded random probe) -- the same screen MATLAB uses -- and, when that finds
+nothing, by an exact and complete CAD (_cadPoint; the completeness argument is its docstring).
 """
+from fractions import Fraction
+from functools import cmp_to_key
+import math
+
 import numpy as np
 
 from . import rat_q
@@ -46,67 +51,290 @@ def cellHasInterior(EcQ, rows):
 
 
 def _cadInterior(EcQ, rows):
-    """Complete sample search (a 2-D cylindrical decomposition), run when the witness search finds
-    nothing: the cell is open, so if non-empty it meets a sector of the decomposition by the critical
-    abscissae (conic discriminant roots, vertical asymptotes, pairwise intersections); a point in the
-    middle of every sector (and past both ends) is tested. The random probe box is only a few units
-    wide and misses a cell far from the origin when the conics do not meet (DECISIONS 2026-11-17).
-    Skipped when a row is an equality (side 0), which has no interior sector."""
+    return _cadPoint(EcQ, rows) is not None
+
+
+def _cadPoint(EcQ, rows):
+    """EXACT and COMPLETE decision of "does the open cell {side_i * q_i > 0} have a point?",
+    run when the witness search finds nothing.  (Side-0 rows -- equalities -- have no open
+    cell; the function answers False for them, as the witness stage alone decides those.)
+
+    COMPLETENESS ARGUMENT (a cylindrical algebraic decomposition over Q, no floating point).
+    1. Shear x -> x + k y (k a small integer, chosen so that every non-line conic has a nonzero
+       y^2 coefficient).  A shear is a linear bijection, so the cell is non-empty iff the
+       sheared cell is.  Afterwards every row is of one of four kinds: a *full conic*
+       (a2 != 0), a *slanted line* (y-degree 1), a *vertical line* a3 x + a5 (y-degree 0), or
+       a constant.
+    2. The CRITICAL ABSCISSAE X are the real roots (a finite set, as every polynomial below is
+       non-zero) of
+         (a) disc_y(q) of every full conic q  (roots appear/merge: also the crossing of the two
+             lines of a degenerate conic, which is its singular point);
+         (b) a3 x + a5 of every vertical line  (a vertical line is invisible to every resultant,
+             which was defect (a) of finding #2);
+         (c) Res_y(q_i, q_j) of every pair with a full conic and a non-zero resultant, and the
+             linear resultant of two slanted lines;
+         (d) for a pair of non-proportional full conics with Res_y == 0 (they share a line L:
+             q_i = L M_i, q_j = L M_j; the gcd of two rational conics is rational, since a
+             shared irrational or complex line would bring its conjugate and make them
+             proportional): the abscissa of M_i ^ M_j.  The other pair crossings L ^ M are
+             singular points of q_i or q_j, covered by (a).  This is defect (b) of #2: the
+             resultant is identically zero, so the old code dropped the pair.
+       A slanted line sharing a factor with a conic is a factor of it, and adds nothing beyond
+       (a).
+    3. On each open interval I of R \\ X the number of distinct real roots of each q_i(x, .),
+       and the order of all the roots of all the q_i(x, .) together, is constant: two root
+       branches can only meet where a discriminant (a), a leading coefficient (constant after
+       the shear, or the vertical lines (b)), or a resultant (c)/(d) vanishes.  Hence the sign
+       of every row on the k-th open sector of the vertical line {x} x R (between the k-th and
+       (k+1)-th root; below the first; above the last) is the same for all x in I.
+    4. If the cell S is non-empty it is open, so its projection to x contains an open
+       interval and therefore a point x0 outside X, and S meets the line {x0} x R in a
+       non-empty open set, which contains a point off every root, i.e. a point of some sector.
+       By 3 the same sector of any other column x_s of the same interval I is in S.  So testing
+       one rational point per sector of one rational column per interval I (and beyond both
+       ends) decides the cell.  The rational columns and sector points are taken from exact
+       Sturm isolation (rat_q.isolateRoots); the sign tests are exact Fractions.
+    _cadPoint returns that rational point (a certificate) or None (a proof of emptiness).  The random probe box of the witness stage is not needed for either."""
     if any(r[1] == 0 for r in rows):
-        return False
+        return None
     idx = sorted(set(r[0] for r in rows))
-    cs = [[float(t) for t in EcQ[i - 1][0:6]] for i in idx]
-    xs = []
-    for c in cs:
-        a0, a1, a2, a3, a4, a5 = c
-        if a2 != 0:   # disc(x) = (a1 x + a4)^2 - 4 a2 (a0 x^2 + a3 x + a5)
-            q = [a1 * a1 - 4 * a2 * a0, 2 * a1 * a4 - 4 * a2 * a3, a4 * a4 - 4 * a2 * a5]
-        elif a1 != 0:
-            xs.append(-a4 / a1)
+    cs = [[int(t) for t in EcQ[i - 1][0:6]] for i in idx]
+    sides = {}
+    for r in rows:
+        sides.setdefault(r[0], set()).add(r[1])
+    if any(len(v) > 1 for v in sides.values()):
+        return None                                     # q > 0 and q < 0 on the same conic
+    sg = [next(iter(sides[i])) for i in idx]
+    k = 0
+    while any((c[0] != 0 or c[1] != 0 or c[2] != 0) and c[0] * k * k + c[1] * k + c[2] == 0
+              for c in cs):
+        k += 1
+    cs = [_shear(c, k) for c in cs]
+    X, special = _criticalPolys(cs)
+    for x0 in _samples(X):
+        yp = _yPolys(cs, sg, x0, special)
+        if yp is None:
             continue
+        for y0 in _samples(yp):
+            if all(s * _evalExact(c, x0, y0) > 0 for c, s in zip(cs, sg)):
+                return (x0 + k * y0, y0)                # a rational point of the cell (unsheared)
+    return None
+
+
+def _shear(c, k):
+    a, b, cc, d, e, f = c
+    return [a, 2 * a * k + b, a * k * k + b * k + cc, d, d * k + e, f]
+
+
+def _evalExact(c, x, y):
+    return c[0] * x * x + c[1] * x * y + c[2] * y * y + c[3] * x + c[4] * y + c[5]
+
+
+def _pmul(a, b):
+    return rat_q.polyMul1(a, b)
+
+
+def _padd(a, b, sb=1):
+    return rat_q.polyTrim(rat_q.polyAdd1(a, [sb * x for x in b]))
+
+
+def _criticalPolys(cs):
+    """The integer polynomials in x whose real roots are the critical abscissae (step 2), and the
+    set of row indices whose y-polynomials can share a root at EVERY column (a repeated factor, or
+    a common one with another row): at any other column the y-polynomials are squarefree and
+    pairwise coprime, because a resultant that is not identically zero has no root there."""
+    polys = []
+    special = set()
+    full = [i for i, c in enumerate(cs) if c[2] != 0]
+    slant = [i for i, c in enumerate(cs) if c[2] == 0 and c[0] == 0 and c[1] == 0 and c[4] != 0]
+    for i, (a0, a1, a2, a3, a4, a5) in enumerate(cs):
+        if a2 != 0:
+            d = [a1 * a1 - 4 * a2 * a0, 2 * a1 * a4 - 4 * a2 * a3, a4 * a4 - 4 * a2 * a5]
+            if not rat_q.polyTrim(d):
+                special.add(i)
+            polys.append(d)
+        elif a4 == 0 and a2 == 0 and a1 == 0 and a0 == 0:
+            polys.append([a3, a5])                      # vertical line (or a constant)
+    for ii, i in enumerate(full):
+        p = cs[i]
+        al, be, ga = [p[2]], [p[1], p[4]], [p[0], p[3], p[5]]
+        for j in full[ii + 1:]:
+            q = cs[j]
+            al2, be2, ga2 = [q[2]], [q[1], q[4]], [q[0], q[3], q[5]]
+            u = _padd(_pmul(al2, be), _pmul(al, be2), -1)      # alpha' beta  - alpha beta'
+            w = _padd(_pmul(al2, ga), _pmul(al, ga2), -1)      # alpha' gamma - alpha gamma'
+            v = _padd(_pmul(be, ga2), _pmul(be2, ga), -1)      # beta gamma'  - beta' gamma
+            res = _padd(_pmul(w, w), _pmul(u, v))              # = (a g' - a' g)^2 - (a b' - a' b)(b g' - b' g)
+            if res:
+                polys.append(res)
+            else:
+                special.update((i, j))
+                if u or w:
+                    polys.extend(_sharedLineCrossing(p, q, u, w))
+        for j in slant:
+            q = cs[j]
+            B, C = [q[4]], [q[3], q[5]]
+            res = _padd(_padd(_pmul(al, _pmul(C, C)), _pmul(be, _pmul(B, C)), -1),
+                        _pmul(ga, _pmul(B, B)))
+            if res:
+                polys.append(res)
+            else:
+                special.update((i, j))
+    for ii, i in enumerate(slant):
+        p = cs[i]
+        for j in slant[ii + 1:]:
+            q = cs[j]
+            res = _padd(_pmul([p[4]], [q[3], q[5]]), _pmul([q[4]], [p[3], p[5]]), -1)
+            if res:
+                polys.append(res)
+            else:
+                special.update((i, j))
+    return polys, special
+
+
+def _sharedLineCrossing(p, q, u, w):
+    """p = L M_p and q = L M_q share the line L (resultant == 0, p, q not proportional).
+    T = alpha' p - alpha q = u(x) y + w(x) = L * N with N vertical, so L = T / gcd(u, w).
+    Returns [den*x - num] for the abscissa of M_p ^ M_q (nothing if they are parallel)."""
+    g = rat_q.polyGcd(u, w) if w else rat_q.polyPrimitive(u)
+    if not u:
+        error('cellHasInterior:internal', 'shared line factor with no y term: %s %s' % (p, q))
+    lu, lw = _fdiv(u, g), _fdiv(w, g)
+    # L = ell y + pp x + rr
+    ell = lu[-1]
+    pp = lw[-2] if len(lw) >= 2 else Fraction(0)
+    rr = lw[-1] if lw else Fraction(0)
+    if len(lu) != 1 or len(lw) > 2 or ell == 0:
+        error('cellHasInterior:internal', 'shared factor of two conics is not a line: %s %s' % (p, q))
+    M = []
+    for c in (p, q):
+        a0, a1, a2, a3, a4, a5 = [Fraction(t) for t in c]
+        m = a2 / ell
+        kk = (a1 - pp * m) / ell
+        hh = (a4 - rr * m) / ell
+        M.append((m, kk, hh))
+    (m1, k1, h1), (m2, k2, h2) = M
+    det = m1 * k2 - m2 * k1
+    if det == 0:
+        return []
+    xp = (m2 * h1 - m1 * h2) / det
+    return [[xp.denominator, -xp.numerator]]
+
+
+def _fdiv(p, g):
+    """p / g as a list of Fractions (exact division of integer polynomials over Q); the
+    quotient is empty when p is zero."""
+    p = [Fraction(x) for x in rat_q.polyTrim(p)]
+    g = [Fraction(x) for x in rat_q.polyTrim(g)]
+    if not p:
+        return []
+    out = []
+    for i in range(len(p) - len(g) + 1):
+        c = p[i] / g[0]
+        out.append(c)
+        for j, gj in enumerate(g):
+            p[i + j] -= c * gj
+    if len(p) < len(g) or any(x != 0 for x in p):
+        error('cellHasInterior:internal', 'inexact polynomial division in a shared line factor')
+    return out
+
+
+def _yPolys(cs, sg, x0, special):
+    """The y-polynomials q(x0, .) of one column, scaled to integers, as (poly, special) pairs for
+    _samples -- or None when the column holds no point of the cell.  Exact shortcuts: a row that is
+    constant in y with the wrong sign, or a quadratic without real roots with the wrong sign,
+    kills the column; a quadratic without real roots with the right sign holds everywhere, so its
+    (absent) roots are not sample boundaries.  The rows in `special` need the coprime-base
+    treatment in _samples; the others are squarefree and coprime to everything at this
+    (non-critical) column."""
+    out = []
+    for i, (a0, a1, a2, a3, a4, a5) in enumerate(cs):
+        co = [Fraction(a2), a1 * x0 + a4, a0 * x0 * x0 + a3 * x0 + a5]
+        den = 1
+        for t in co:
+            den = den * t.denominator // math.gcd(den, t.denominator)
+        co = rat_q.polyPrimitive([int(t * den) for t in co])
+        if not co:
+            return None
+        if len(co) == 1:
+            if sg[i] * co[0] <= 0:
+                return None
+        elif len(co) == 3 and co[1] * co[1] - 4 * co[0] * co[2] < 0:
+            if sg[i] * co[0] < 0:
+                return None
         else:
+            out.append((co, i in special))
+    return out
+
+
+def _coprimeBase(polys):
+    """Pairwise coprime squarefree primitive polynomials with the same set of real roots as the
+    product of `polys` (so no two of them share a root)."""
+    work = [rat_q.polyPrimitive(rat_q.polySquarefree(p)) for p in polys if len(rat_q.polyTrim(p)) > 1]
+    base = []
+    while work:
+        p = rat_q.polyPrimitive(rat_q.polySquarefree(work.pop()))
+        if len(p) <= 1:
             continue
-        if q[0] != 0:
-            d = q[1] ** 2 - 4 * q[0] * q[2]
-            if d >= 0:
-                sd = d ** 0.5
-                xs += [(-q[1] - sd) / (2 * q[0]), (-q[1] + sd) / (2 * q[0])]
-        elif q[1] != 0:
-            xs.append(-q[2] / q[1])
-    for a in range(len(idx)):
-        for b in range(a + 1, len(idx)):
-            try:
-                P, _ = conicMeet(EcQ[idx[a] - 1], EcQ[idx[b] - 1])
-            except CCA2Error as ME:
-                if ME.identifier != 'ratQ:overflow':
-                    raise
-                continue
-            xs += [float(p[0]) for p in P]
-    xs = sorted(set(x for x in xs if np.isfinite(x)))
-    if not xs:
-        xs = [0.0]
-    samp = [xs[0] - 1.0, xs[-1] + 1.0] + [(xs[i] + xs[i + 1]) / 2 for i in range(len(xs) - 1)]
-    for x in samp:
-        ys = []
-        for a0, a1, a2, a3, a4, a5 in cs:
-            B = a1 * x + a4
-            C = a0 * x * x + a3 * x + a5
-            if a2 != 0:
-                d = B * B - 4 * a2 * C
-                if d >= 0:
-                    sd = d ** 0.5
-                    ys += [(-B - sd) / (2 * a2), (-B + sd) / (2 * a2)]
-            elif B != 0:
-                ys.append(-C / B)
-        ys = sorted(set(y for y in ys if np.isfinite(y)))
-        if not ys:
-            ys = [0.0]
-        cand = [ys[0] - 1.0, ys[-1] + 1.0] + [(ys[i] + ys[i + 1]) / 2 for i in range(len(ys) - 1)]
-        X1 = np.array(cand)
-        X0 = np.full(X1.shape, x)
-        if _satisfiesAllMany(EcQ, rows, X0, X1).any():
+        for i, b in enumerate(base):
+            g = rat_q.polyGcd(p, b)
+            if len(g) > 1:
+                base.pop(i)
+                work += [rat_q.polyDivExact1(b, g), rat_q.polyDivExact1(p, g), g]
+                break
+        else:
+            base.append(p)
+    return base
+
+
+class _Root:
+    """The unique real root of `poly` (squarefree) in the half-open interval (lo, hi]."""
+
+    def __init__(self, poly, lo, hi, chain):
+        self.poly, self.lo, self.hi, self.chain = poly, lo, hi, chain
+
+    def refine(self):
+        mid = (self.lo + self.hi) / 2
+        if rat_q.sturmV(self.chain, mid) - rat_q.sturmV(self.chain, self.hi) == 1:
+            self.lo = mid
+        else:
+            self.hi = mid
+
+
+def _before(r, s):
+    """r < s for roots of coprime polynomials (so r != s): refine until the intervals separate."""
+    while True:
+        if r.hi <= s.lo:
             return True
-    return False
+        if s.hi <= r.lo:
+            return False
+        (r if r.hi - r.lo >= s.hi - s.lo else s).refine()
+
+
+def _samples(polys):
+    """Rational sample points: one in every open interval between consecutive distinct real
+    roots of the polynomials in `polys` (integer polynomials), one below and one above all
+    roots (0 when there is none).  Exact: coprime base, Sturm isolation of each factor, pairwise
+    separation by bisection."""
+    if polys and isinstance(polys[0], tuple):
+        polys = _coprimeBase([p for p, sp in polys if sp]) + [p for p, sp in polys if not sp]
+    else:
+        polys = _coprimeBase(polys)
+    roots = []
+    for p in polys:
+        chain = rat_q.sturmChain(p)
+        for lo, hi in rat_q.isolateRoots(p):
+            roots.append(_Root(p, lo, hi, chain))
+    if not roots:
+        return [Fraction(0)]
+    roots.sort(key=cmp_to_key(lambda r, s: -1 if _before(r, s) else 1))
+    out = [roots[0].lo]                                 # r_1 > lo_1 and r_1 is the least root
+    for r, s in zip(roots, roots[1:]):
+        while r.hi >= s.lo:                             # r < s: bisect until a gap opens
+            (r if r.hi - r.lo >= s.hi - s.lo else s).refine()
+        out.append((r.hi + s.lo) / 2)                   # r <= hi < mid < lo < s
+    out.append(roots[-1].hi + 1)                        # every root is <= its hi
+    return out
 
 
 def _negSemidefinite(c):
