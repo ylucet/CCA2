@@ -134,3 +134,28 @@ def test_review_oracle_hand_cases():
           'q': (Fr(0), Fr(0), Fr(1), Fr(0), Fr(0), Fr(0))}
     assert O.conj_exact({'pieces': [y2]}, (Fr(1), Fr(0))) is None
     assert O.conj_exact({'pieces': [y2]}, (Fr(-1), Fr(0))) == 0
+
+
+# Finding 2, second mechanism: rows that are DEGENERATE conics sharing a line. conicMeet reports
+# the pair 'degenerate' (infinitely many common points) and returns no points, so the other lines'
+# crossings never become critical abscissae of the CAD. Reached inside a real conj call (random
+# nonconvex hexagon V = (5,3),(2,1),(-1,6),(-6,2),(3,-2),(4,-2), q = (3,-3,3,-1,-2,2), found by
+# tests/review/hunt_cell_interior.py); the strict interior point below is checked exactly.
+HUNT_ECQ = [[101, 76, -25, 3378, 3000, 9225], [91, 38, -53, -174, -606, -1341],
+            [64, 37, -27, 2386, 2113, 6582], [1221, 154, -1067, -42386, -49250, -138147],
+            [0, 0, 0, 3, -5, 65], [0, 0, 0, 3, -5, -31], [0, 0, 0, -18, 8, -119],
+            [0, 0, 0, 9, -4, 313], [0, 0, 0, 5, -2, 169]]
+HUNT_ROWS = [[1, 1], [2, -1], [3, -1], [4, 1], [5, 1], [6, 1], [7, 1], [8, 1], [9, 1]]
+
+
+def test_hunt_cell_really_has_interior():
+    x, y = Fr(-58.425327423549874), Fr(-109.38222339485247)
+    for e, side in HUNT_ROWS:
+        c = HUNT_ECQ[e - 1]
+        v = c[0] * x * x + c[1] * x * y + c[2] * y * y + c[3] * x + c[4] * y + c[5]
+        assert side * v > 0
+
+
+@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #2: degenerate conics sharing a line hide CAD abscissae')
+def test_cell_has_interior_shared_line_factor():
+    assert cellHasInterior(HUNT_ECQ, HUNT_ROWS)

@@ -36,6 +36,24 @@ fn cell_has_interior_far_vertical_strip() {
     assert!(cca2::cells::cell_has_interior(&ecq, &[(1, 1), (2, -1), (3, 1)]).unwrap());
 }
 
+/// Finding 2, second mechanism: degenerate conic rows sharing the line x + y + 3 = 0 (conic_meet
+/// reports them degenerate and returns no points, so the other lines' crossings are not CAD
+/// abscissae). Reached inside a real conj call (python/tests/review/hunt_cell_interior.py);
+/// (-58.4253, -109.3822) satisfies every row strictly.
+#[test]
+#[ignore = "review 2026-11-19 #2: cell_has_interior misses a cell bounded by line-pair conics"]
+fn cell_has_interior_shared_line_factor() {
+    let z = |v: &[i64]| v.iter().map(|&x| Z::from(x)).collect::<Vec<Z>>();
+    let ecq = vec![
+        z(&[101, 76, -25, 3378, 3000, 9225]), z(&[91, 38, -53, -174, -606, -1341]),
+        z(&[64, 37, -27, 2386, 2113, 6582]), z(&[1221, 154, -1067, -42386, -49250, -138147]),
+        z(&[0, 0, 0, 3, -5, 65]), z(&[0, 0, 0, 3, -5, -31]), z(&[0, 0, 0, -18, 8, -119]),
+        z(&[0, 0, 0, 9, -4, 313]), z(&[0, 0, 0, 5, -2, 169]),
+    ];
+    let rows = [(1, 1), (2, -1), (3, -1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 1)];
+    assert!(cca2::cells::cell_has_interior(&ecq, &rows).unwrap());
+}
+
 /// Finding 6 (MAJOR, Rust only): biconj panics -- `sort_by(partial_cmp().unwrap_or(Equal))` on a
 /// breakpoint list holding NaN in biconj_atoms::tie_arc ("user-provided comparison function does
 /// not correctly implement a total order", Rust >= 1.81). Input: random differential case R4-017,

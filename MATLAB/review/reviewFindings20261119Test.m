@@ -33,6 +33,17 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             tc.verifyTrue(cellHasInterior(EcQ, rows));
         end
 
+        function cellInteriorMissesSharedLineFactorCell(tc)
+            % Finding 2, second mechanism: four degenerate conics sharing x + y + 3 = 0; conicMeet
+            % calls each pair degenerate and returns no points, so the CAD misses abscissae.
+            % Reached in a real conj call; (-58.4253, -109.3822) satisfies every row strictly.
+            EcQ = [101 76 -25 3378 3000 9225; 91 38 -53 -174 -606 -1341; 64 37 -27 2386 2113 6582;
+                   1221 154 -1067 -42386 -49250 -138147; 0 0 0 3 -5 65; 0 0 0 3 -5 -31;
+                   0 0 0 -18 8 -119; 0 0 0 9 -4 313; 0 0 0 5 -2 169];
+            rows = [1 1; 2 -1; 3 -1; 4 1; 5 1; 6 1; 7 1; 8 1; 9 1];
+            tc.verifyTrue(cellHasInterior(EcQ, rows));
+        end
+
         function conjCPLQTinyPositiveEigenvalue(tc)
             % Finding 7 (legacy 'cplq' engine, MAJOR there). f = (x^2 + y^2)/2^31 is strictly convex,
             % f*(s) = 2^29 |s|^2 everywhere. conjCPLQ's absolute eig(Q) > sqrt(eps) test sends it
