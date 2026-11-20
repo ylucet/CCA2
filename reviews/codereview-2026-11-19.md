@@ -29,7 +29,7 @@ legacy symbolic suites' internals (`plq`, `region`, `functionNDomain`).
 | `bash .claude/suite.sh --normal` | **35 / 0** over 8 suites (738 s) |
 | `CCA2_TEST_TIMEOUT=5400 bash .claude/suite.sh --slow -j 4` | **128 pass / 0 fail / 2 incomplete** — the 2 are `biconjCPLQTest`'s quarantined poly2 kinks (assumeFail) |
 | `bash .claude/suite.sh clipArcByConicTest` | 7 / 0 — this suite is in **no** bucket (finding 14) |
-| `bash .claude/suite.sh --verylong -j 4` | see section 5.4 |
+| `CCA2_TEST_TIMEOUT=5400 bash .claude/suite.sh --verylong -j 4` | **40 pass / 0 fail / 8 incomplete** (all deliberate quarantines), 5049 s |
 | `python3 -m pytest -q -n 8` (python/) | **2753 passed, 1 skipped** |
 | `cargo test --release -- --include-ignored` (CCA2_STAR_NS=11..14) | all green (parallel 4, parity 3, ps_tangency 3, star 2) |
 | `CCA2_FLINT=0 cargo test --release --test parity` | 2 passed, 1 ignored |
@@ -104,8 +104,8 @@ rows (face 91 of 243) contain no t* <= 1 row. Wrong on 342 of 14 641 points of a
 nonconvex polygon (a diagonal's candidate keeps a value outside its availability range); not
 traced to a line. Tests: `test_conj_L_shape_y2`, Rust `conj_l_shape_y2`, MATLAB `conjLShapeY2`.
 
-**#9 — `biconj` wrong values on small continuous inputs (all three engines; Python and Rust
-confirmed point by point, MATLAB in section 5.1).**
+**#9 — `biconj` wrong values on small continuous inputs (all three engines; confirmed point by
+point in Python and Rust, and MATLAB returns the same wrong values — section 5.1).**
 On the random/exhaustive corpus (continuous families E, R1-R6) the engines answer 243 (Python) /
 240 (Rust) `biconj` calls; **18 / 14 are wrong** against a certified bracket
 lo <= f** <= hi (lo = <s,x> - f*(s) with exact f*; hi = an LP over convex combinations of domain
@@ -198,10 +198,13 @@ two-piece inputs `conj` agrees with the oracle (sup over the closed pieces), but
 `biconj` calls are above a certified upper bound (e.g. D-160: 14.36 where a convex combination of
 domain points gives -4.89). Either refuse by name or define and implement the lsc semantics.
 
-**#11 — Python and Rust disagree on random inputs.** 11 of 357 fixtures (biconj): R4-010, R4-045,
-D-069, R3-072, D-132, R4-150, R2-162, R4-164, R2-169, R2-204 (values) and R4-080 (Python refuses
-`bridgeFaceAlg:noZ`, Rust panics), plus R4-003 (Python > 600 s, Rust answers). The parity claim
-holds on the recorded corpus only; it should be stated that way.
+**#11 — the three engines disagree on random inputs.** Python vs Rust: 11 of 357 fixtures
+(biconj): R4-010, R4-045, D-069, R3-072, D-132, R4-150, R2-162, R4-164, R2-169, R2-204 (values)
+and R4-080 (Python refuses `bridgeFaceAlg:noZ`, Rust panics), plus R4-003 (Python > 600 s, Rust
+answers). MATLAB sides with Rust on some (R3-072, R4-045) and with Python on others (R4-010); it
+also refuses by its 2^53 ceiling where the ports answer (`ratQ:overflow` on R4-003, R4-059,
+R4-101; `bridgeFaceAlg:witnessOverflow` on R3-037, and in place of `noWitness` on R2-029, D-090).
+The parity claim holds on the recorded corpus only; the draft should say so.
 
 ### MINOR
 
@@ -221,6 +224,8 @@ holds on the recorded corpus only; it should be stated that way.
     `alg_row_fails.rs:1661,1808`); 128 warnings (mostly index loops, complex types).
 16. MATLAB `algFaceBelow>separator` (line 134) solves nearly singular systems (RCOND ~1e-21,
     warnings during `biconjQ` on random inputs); whether a decision depends on it is unconfirmed.
+18b. `python/cca2/alg_row_fails.py:1376-1386`: unreachable code after `return hit` in
+    `_curvePoints` (ruff F821: it references an undefined `S`); harmless, misleading.
 17. Error-identifier inconsistency for f** = -inf: `PLQ:biconjQ:noFace` (whole plane),
     `PLQ:biconjQ:minusInfinity` (cones), `biconjAtoms:emptyDomain` (fans).
 
@@ -251,9 +256,15 @@ reviewDiffDriver.m`; grading `compare_engines.py`; re-verification `verify_wrong
 |---|---|---|
 | Python (357) | 350 / 6 / 1 (timeout) | 237 / 30 / 90 |
 | Rust (357) | 351 / 6 / 0 | 238 / 26 / 93 (5 panics) |
-| MATLAB | MATLAB_ROW |  |
+| MATLAB (333 of 357 finished) | 327 / 6 / 0 | 224 / 20 / 89 |
 
-(wrong counts include the 12 discontinuous D cases of finding #10.)
+(wrong counts include the discontinuous D cases of finding #10: 12 in Python and Rust, 10 in
+MATLAB. On continuous inputs MATLAB is wrong on 10 of 223 answered `biconj` calls, the same
+fixtures and the same values as the ports where it answers; it refuses more by its 2^53 ceiling.)
+MATLAB ran in four processes capped at 3 h each; two shards hit the cap, each stuck on one
+fixture for over an hour (R4-150, a continuous 3-piece pentagon fan, and R3-177; Rust answers
+both in seconds), so 24 fixtures have no MATLAB result. That is recorded as a MATLAB performance
+observation, not graded.
 The reviewer's f* oracle was itself cross-checked against `check.supAt` on 11 424 points: the
 only 39 disagreements are finding #5 (the reviewer's oracle is right: hand computation).
 
@@ -269,14 +280,35 @@ curved-cell liveness.
 
 ### 5.3 Mutation check (Python, 5-10 hand mutants, full fast suite, file restored each time)
 
-MUTATION_TABLE
+| mutant (Python copy, full fast suite) | result |
+|---|---|
+| M1 Case D keeps zero-curvature edges (`alpha <= 0` -> `< 0`) | killed (2 failed) |
+| M2 `recessionConditions`: interior negative-curvature cone test removed | **survived** |
+| M3 `conicMeet`: the `/scale` fix reverted (the star bug) | killed (3 failed) |
+| M4 `cellHasInterior`: CAD fallback switched off | **survived** |
+| M5 `cellHasInterior`: tolerance band 1e-9 -> 1e-4 | no verdict: suite did not finish in 900 s (baseline 65 s) |
+| M6 `EnvelopeMin.eval`: min -> max | **survived** |
+| M7 `QuaCon.eval`: face tolerance sqrt(eps) -> 1e-3 | **survived** |
+| M8 `rat_q.evalFace`: divide by 2d | killed (9 failed) |
+| M9 `biconj`: interior negative-curvature cone test removed | killed (1 failed) |
+| M10 `_dropImplied`: drop rows without the interior test | killed (14 failed) |
+
+Survivors are missing tests: M2 (no fixture where the cone's interior has negative curvature but
+the rays do not), M4 (nothing needs the CAD fallback, although the star fix added it for one),
+M6 (no fast test checks `EnvelopeMin` VALUES — Example 2's default return type), M7 (no point
+near a face boundary is evaluated). Note on method: the first attempt with `pytest -x -n 16`
+reported no result for M5-M8; the cause was a numba cache lock left by a killed run, not the
+mutants; M5-M10 were rerun with fresh caches.
 
 ### 5.4 Reproducibility of the paper's test numbers
 
 MATLAB fast 834/0 and normal 35/0 reproduce the paper's table; the slow bucket's eight exact
 suites are green (kink 3/0, min-subdivision 4/0, erratum Ex. 2 4/0, algCrv 3/0, envelope-slow
 1/0, algRowFails-surd 5/0, unbounded-face 19/0, guard-symbolic 11/0). Python now has 2753 passing
-tests (the draft says 2741: more tests since). Rust: as in section 1. VERYLONG_ROW
+tests (the draft says 2741: more tests since). Rust: as in section 1. The very-long bucket
+(`--verylong -j 4`, 46 jobs, 5049 s): **40 pass, 0 fail, 8 incomplete**; the 8 are deliberate
+quarantines (`assumeFail` in `testcPLQ` (G11) and `testMaxMultiRegion` (legacy pins)); the
+erratum Example 2 subdivision suite passes 3/0 in 3165 s.
 Timings are from a shared machine and are not used for any conclusion.
 
 ### 5.5 Complexity
