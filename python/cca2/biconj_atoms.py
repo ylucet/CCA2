@@ -435,7 +435,9 @@ def realRoots(c):
     c = trimLead(c)
     if len(c) < 2:
         return []
-    return [z.real for z in _roots(c) if abs(z.imag) <= 1e-6 * max(1.0, abs(z))]
+    # non-finite coefficients make the eigenvalue run produce NaN roots; they are not
+    # breakpoints (review 2026-11-19 #6), and sampling at them silently degrades tieArc
+    return [z.real for z in _roots(c) if math.isfinite(z.real) and abs(z.imag) <= 1e-6 * max(1.0, abs(z))]
 
 
 def _polyval(p, t):

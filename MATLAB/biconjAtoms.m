@@ -441,8 +441,10 @@ function r = realRoots(c)
     c = trimLead(c);
     if numel(c) < 2, r = zeros(0,1); return, end
     r = roots(c);
-    r = real(r(abs(imag(r)) <= 1e-6 * max(1, abs(r))));
-    r = r(:);
+    % non-finite coefficients make roots() return NaN; they are not breakpoints
+    % (review 2026-11-19 #6) and sampling at them silently degrades tieArc
+    r = r(isfinite(r) & (abs(imag(r)) <= 1e-6 * max(1, abs(r))));
+    r = real(r(:));
 end
 
 function [s, ok] = pointAt(par, t)

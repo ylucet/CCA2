@@ -192,7 +192,7 @@ fn general(pr: &Prep, x: &[[f64; 2]], b: i64) -> (Vec<f64>, Vec<Vec<f64>>) {
             let rev: Vec<f64> = cz.iter().rev().cloned().collect();
             let r = roots(&rev);
             rr = r.iter().filter(|v| v.im.abs() <= imag_tol * 1f64.max(cabs(**v)) || double_root_noise(&cz, **v)).map(|v| v.re).collect();
-            rr.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            rr.sort_by(|a, b| a.total_cmp(b)); // NaN-safe (review #6)
             if cz.len() == 3 {
                 let ca = abs_fibre(pr, 3, xx, yy);
                 let dq = cz[1].powi(2) - 4.0 * cz[2] * cz[0];
@@ -202,7 +202,7 @@ fn general(pr: &Prep, x: &[[f64; 2]], b: i64) -> (Vec<f64>, Vec<Vec<f64>>) {
                     if dx > 0.0 {
                         let qq = -(cx[1] + sgnz(cx[1]) * dx.sqrt()) / 2.0;
                         let mut v = vec![qq / cx[2], cx[0] / qq];
-                        v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        v.sort_by(|a, b| a.total_cmp(b)); // NaN-safe (review #6)
                         rr = v;
                     } else {
                         rr = vec![-cz[1] / (2.0 * cz[2]); 2];

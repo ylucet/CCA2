@@ -55,19 +55,43 @@ fn cell_has_interior_shared_line_factor() {
 
 /// Finding 6 (MAJOR, Rust only): biconj panics -- `sort_by(partial_cmp().unwrap_or(Equal))` on a
 /// breakpoint list holding NaN in biconj_atoms::tie_arc ("user-provided comparison function does
-/// not correctly implement a total order", Rust >= 1.81). Input: random differential case R4-017,
-/// a continuous three-piece fan on a convex pentagon. Python and MATLAB return a result.
+/// not correctly implement a total order", Rust >= 1.81). Five random-differential inputs hit it
+/// (R4-017, R4-080, R1-091, R4-115, R4-171; Python answers or refuses by name on all five);
+/// each must answer or refuse by name, never panic.
 #[test]
-#[ignore = "review 2026-11-19 #6: panic in biconj_atoms::tie_arc on NaN breakpoints"]
 fn biconj_does_not_panic_on_r4_017() {
-    let f = pol(
-        &[[-3, 1], [-2, -2], [-1, 0], [0, 3], [-2, 3]],
-        &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1], [4, 5, 1], [5, 1, 1]],
-        &[[0, 0, 0, 0, 2, 2, 1, 1, -1, -2], [0, 0, 0, 0, 2, 0, -7, 2, -1, -1], [0, 0, 0, 0, 10, -10, 5, 24, -25, 17]],
-        &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 3], [3, 0], [3, 0]],
-    );
-    let r = std::panic::catch_unwind(|| cca2::biconj_q::biconj_q(&f, &Default::default()).map(|h| h.kind().to_string()));
-    assert!(r.is_ok(), "biconj_q panicked");
+    let cases: Vec<(&str, &[[i64; 2]], &[[usize; 3]], &[[i64; 10]], &[[usize; 2]])> = vec![
+        ("R4-017",
+         &[[-3, 1], [-2, -2], [-1, 0], [0, 3], [-2, 3]],
+         &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1], [4, 5, 1], [5, 1, 1]],
+         &[[0, 0, 0, 0, 2, 2, 1, 1, -1, -2], [0, 0, 0, 0, 2, 0, -7, 2, -1, -1], [0, 0, 0, 0, 10, -10, 5, 24, -25, 17]],
+         &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 3], [3, 0], [3, 0]]),
+        ("R4-080",
+         &[[-3, -2], [0, -3], [0, -1], [-2, 1], [-3, -1]],
+         &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1], [4, 5, 1], [5, 1, 1]],
+         &[[0, 0, 0, 0, -1, -2, 1, -1, 0, 1], [0, 0, 0, 0, -3, -1, 13, 0, 12, 7], [0, 0, 0, 0, -9, 6, 9, -4, 25, 14]],
+         &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 3], [3, 0], [3, 0]]),
+        ("R1-091",
+         &[[-3, -3], [0, 0], [0, 2], [-2, 0]],
+         &[[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1]],
+         &[[0, 0, 0, 0, 2, 0, -1, -1, 0, -2]],
+         &[[1, 0], [1, 0], [1, 0], [1, 0]]),
+        ("R4-115",
+         &[[-3, -2], [-1, -3], [3, -1], [3, 1], [-2, 3]],
+         &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1], [4, 5, 1], [5, 1, 1]],
+         &[[0, 0, 0, 0, 1, 2, 2, -2, 1, 1], [0, 0, 0, 0, -1, 9, -10, 9, -20, -17], [0, 0, 0, 0, 11, 3, -34, 6, -32, -20]],
+         &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 3], [3, 0], [3, 0]]),
+        ("R4-171",
+         &[[-1, 0], [1, -2], [2, -1], [3, 1], [1, 2]],
+         &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1], [4, 5, 1], [5, 1, 1]],
+         &[[0, 0, 0, 0, 1, 0, 1, 2, -2, 0], [0, 0, 0, 0, 3, 3, 1, 5, 4, 2], [0, 0, 0, 0, 3, 1, 17, 6, -2, 3]],
+         &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 3], [3, 0], [3, 0]]),
+    ];
+    for (name, v, e, f, ff) in cases {
+        let f = pol(v, e, f, ff);
+        let r = std::panic::catch_unwind(|| cca2::biconj_q::biconj_q(&f, &Default::default()).map(|h| h.kind().to_string()));
+        assert!(r.is_ok(), "biconj_q panicked on {}", name);
+    }
 }
 
 /// Finding 8 (CRITICAL): f = y^2/2 on the L-shape (0,0),(2,0),(2,1),(1,1),(1,2),(0,2). At

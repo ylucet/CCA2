@@ -743,7 +743,7 @@ pub fn cell_sample_point(c: &[Vec<Z>], rows: &[(usize, i64)], h: &[[f64; 3]], r:
     v.sort_by(|a, b| {
         let ta = (a[1] - c0[1]).atan2(a[0] - c0[0]);
         let tb = (b[1] - c0[1]).atan2(b[0] - c0[0]);
-        ta.partial_cmp(&tb).unwrap_or(std::cmp::Ordering::Equal)
+        ta.total_cmp(&tb)                       // total order: NaN-safe, never panics (review #6)
     });
     let prep = SlackPrep::new(c, rows)?;
     for n in [12usize, 48, 192] {
@@ -884,7 +884,7 @@ fn polygon_vertices(h: &[[f64; 3]], r: f64) -> Vec<[f64; 2]> {
     if v.is_empty() {
         return v;
     }
-    v.sort_by(|p, q| p.partial_cmp(q).unwrap_or(std::cmp::Ordering::Equal));
+    v.sort_by(|p, q| p[0].total_cmp(&q[0]).then(p[1].total_cmp(&q[1])));   // NaN-safe (review #6)
     let mut out: Vec<[f64; 2]> = vec![];
     for p in v {
         if out.iter().any(|u| (p[0] - u[0]).abs() <= 1e-12 && (p[1] - u[1]).abs() <= 1e-12) {

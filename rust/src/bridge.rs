@@ -452,7 +452,7 @@ fn tie_sample(dlm: &[Vec<Z>], dl: &[Z], kp: &Z, p: &[Vec<Z>]) -> R<Vec<[f64; 2]>
         s.sort_by(|a, b| {
             let da = ((a[0] - mx).powi(2) + (a[1] - my).powi(2)).sqrt();
             let db = ((b[0] - mx).powi(2) + (b[1] - my).powi(2)).sqrt();
-            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            da.total_cmp(&db)                  // total order: NaN-safe, never panics (review #6)
         });
     }
     Ok(s)
@@ -803,7 +803,7 @@ fn branch_index(fp: &PolyN, pr: &AlgPair, q1: &Z, q2: &Z, xn: &[Z], xd: &Z) -> R
     }
     let pzf: Vec<f64> = pz.iter().map(to_f64).collect();
     let mut rr: Vec<f64> = roots(&pzf).into_iter().filter(|z| z.im.abs() <= 1e-10 * 1f64.max(cabs(*z))).map(|z| z.re).collect();
-    rr.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    rr.sort_by(|a, b| a.total_cmp(b));        // NaN-safe (review #6)
     let scale = 1f64.max(zstar.abs());
     let gap = rr.iter().map(|r| (r - zstar).abs()).fold(f64::INFINITY, f64::min);
     if gap > 1e-6 * scale {
@@ -1024,7 +1024,7 @@ fn candidate_params(pr: &RatPair) -> Vec<f64> {
             }
         }
     }
-    rts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    rts.sort_by(|a, b| a.total_cmp(b));      // NaN-safe (review #6)
     let mut t = if rts.is_empty() {
         vec![0.0, 1.0, -1.0]
     } else {

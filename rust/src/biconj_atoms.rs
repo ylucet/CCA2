@@ -344,7 +344,7 @@ fn tie_arc(i: usize, j: usize, forms: &[Form], d: &[[f64; 3]]) -> bool {
         if let Par::Rat { dn, .. } = &par {
             bp.extend(real_roots(dn));
         }
-        bp.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        bp.sort_by(|a, b| a.total_cmp(b));   // total order: NaN-safe, never panics (review #6)
         bp.dedup();
         let samp: Vec<f64> = if bp.is_empty() {
             vec![0.0]
@@ -593,7 +593,7 @@ fn real_point(a: [[f64; 2]; 2], g: [f64; 2], f0: f64) -> Option<[f64; 2]> {
     let smax = l[0].abs().max(l[1].abs());
     let tol = 2.0 * smax * EPS;
     let mut sv: Vec<(f64, [f64; 2])> = vec![(l[0].abs(), [v[0][0], v[1][0]]), (l[1].abs(), [v[0][1], v[1][1]])];
-    sv.sort_by(|x, y| y.0.partial_cmp(&x.0).unwrap());
+    sv.sort_by(|x, y| y.0.total_cmp(&x.0));
     for (s, vv) in sv {
         if !(s > tol) {
             dirs.push(vv);
@@ -659,7 +659,11 @@ fn real_roots(c: &[f64]) -> Vec<f64> {
     if c.len() < 2 {
         return vec![];
     }
-    roots(&c).into_iter().filter(|z| z.im.abs() <= 1e-6 * 1f64.max(z.re.hypot(z.im))).map(|z| z.re).collect()
+    // Non-finite coefficients make the companion-matrix eigenvalue run produce NaN roots;
+    // they are not breakpoints (review 2026-11-19 #6), and sorting them would panic.
+    roots(&c).into_iter()
+        .filter(|z| z.re.is_finite() && z.im.abs() <= 1e-6 * 1f64.max(z.re.hypot(z.im)))
+        .map(|z| z.re).collect()
 }
 
 fn point_at(par: &Par, t: f64) -> ([f64; 2], bool) {
@@ -787,7 +791,7 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
             }
             let w = [u[0] + dv[0], u[1] + dv[1]];
             let mut pr = [u, w];
-            pr.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            pr.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));   // NaN-safe (review #6)
             let key = [pr[0][0], pr[0][1], pr[1][0], pr[1][1]];
             if edge_at.iter().any(|r| r.iter().zip(key.iter()).all(|(a, b)| (a - b).abs() < 1e-12)) {
                 continue;

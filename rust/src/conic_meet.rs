@@ -62,7 +62,7 @@ fn conic_meet_raw(a: &[Z], b: &[Z], tol: f64, polish: usize) -> R<Meet> {
     }
     if !p.is_empty() {
         let mut keyed: Vec<[f64; 2]> = p.iter().map(|q| [round12(q[0]), round12(q[1])]).collect();
-        keyed.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
+        keyed.sort_by(|x, y| x[0].total_cmp(&y[0]).then(x[1].total_cmp(&y[1])));   // NaN-safe (review #6)
         let af: Vec<f64> = a.iter().map(to_f64).collect();
         let bf: Vec<f64> = b.iter().map(to_f64).collect();
         let mut out = Vec::new();
@@ -261,8 +261,12 @@ pub fn real_roots_f(p: &[f64]) -> Vec<f64> {
     let m = p.iter().fold(0.0f64, |m, x| m.max(x.abs()));
     let pf: Vec<f64> = p.iter().map(|x| x / m).collect();
     let rr = roots(&pf);
-    let mut re: Vec<f64> = rr.iter().filter(|z| z.im.abs() <= 1e-7 * 1f64.max(z.re.abs())).map(|z| z.re).collect();
-    re.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    // Non-finite coefficients make the eigenvalue run produce NaN roots; they are not
+    // breakpoints (review 2026-11-19 #6), and sorting them would panic.
+    let mut re: Vec<f64> = rr.iter()
+        .filter(|z| z.re.is_finite() && z.im.abs() <= 1e-7 * 1f64.max(z.re.abs()))
+        .map(|z| z.re).collect();
+    re.sort_by(|a, b| a.total_cmp(b));        // NaN-safe (review #6)
     if re.len() > 1 {
         let mut keep = vec![re[0]];
         for i in 1..re.len() {
