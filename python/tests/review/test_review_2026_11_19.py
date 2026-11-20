@@ -57,7 +57,7 @@ def test_conj_two_cone_fan_R6_152():
 # ---------------------------------------------------------------------------------------------
 # Finding 2 (MAJOR): cellHasInterior's 'complete' CAD fallback ignores vertical lines
 # ---------------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #2: _cadInterior skips vertical lines')
+
 def test_cell_has_interior_far_vertical_strip():
     EcQ = [rat_q.conic([0, 0, 0, 1, 0, -10]),      # x = 10
            rat_q.conic([0, 0, 0, 2, 0, -21]),      # x = 10.5
@@ -153,7 +153,6 @@ def test_hunt_cell_really_has_interior():
         assert side * v > 0
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #2: degenerate conics sharing a line hide CAD abscissae')
 def test_cell_has_interior_shared_line_factor():
     assert cellHasInterior(HUNT_ECQ, HUNT_ROWS)
 
@@ -166,7 +165,6 @@ def _L_y2():
     return QuaPol(V, [[i + 1, (i + 1) % 6 + 1, 1] for i in range(6)], [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0]], [[1, 0]] * 6)
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #8: face (2 s1 + s2)^2/2 used outside its range')
 def test_conj_L_shape_y2():
     # f = y^2/2 on the L-shape of golden conj record 36. sup at s = (2.53125, -1.453125) is
     # attained at (2, 0): 2 s1 = 5.0625 (y = 0 since s2 < 0). Engines (all three): 6.5137939453125.
