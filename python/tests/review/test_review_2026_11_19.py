@@ -33,7 +33,6 @@ def _cone_y2():
 # ---------------------------------------------------------------------------------------------
 # Finding 1 (CRITICAL): conj on a cone whose zero-curvature direction is strictly inside
 # ---------------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #1: recessionConditions tests the edge rays only')
 def test_conj_cone_with_interior_null_direction_is_infinite():
     g = _cone_y2().conj()
     v = g.eval([[1, 0], [0.5, 0.3], [0.1, 0], [-1, 0]])[0]
@@ -42,7 +41,6 @@ def test_conj_cone_with_interior_null_direction_is_infinite():
     assert v[3] == 0
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #1: two-cone fan R6-152 (random differential test)')
 def test_conj_two_cone_fan_R6_152():
     # piece 1: y^2 - x - 2y on cone((1,-1),(2,1)); piece 2 continuous across the ray (2,1)
     f = QuaPol([[0, 0], [1, -1], [2, 1], [-1, 2]], [[1, 2, 0], [1, 3, 0], [1, 4, 0]],

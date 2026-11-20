@@ -477,7 +477,47 @@ def recessionConditions(sh, Hn, Ln, fD, Vi, vd):
         if all(x == 0 for x in row):
             continue
         dom.append(row)
+
+    # A NULL DIRECTION STRICTLY INSIDE the cone: H PSD singular with null(H) off the edge rays.
+    # The loop above never sees it, and without its half-plane dom f* is the whole plane
+    # (review 2026-11-19, finding 1). For such a d, Hd = 0, so the slope test is void and mu = 0,
+    # and the row is exactly the null edge ray's. Membership is in the closed recession cone,
+    # which is the non-negative span of the piece's rays (a half-plane is handled above, and a
+    # proper cone holds at most one of +/-d0; if a null edge ray exists it is that one, already
+    # carrying the row).
+    if rat_q.isPSD2(Hn) and rat_q.detExact(Hn) == 0 and any(x != 0 for r in Hn for x in r):
+        d0 = [-Hn[0][1], Hn[0][0]] if Hn[0][0] != 0 else [1, 0]
+        for d in (d0, [-d0[0], -d0[1]]):
+            if not _inRayCone(R, d):
+                continue
+            if any(quad(r, Hn, r) == 0 for r in R):
+                break
+            row = [-fD * vd * d[0], -fD * vd * d[1], vd * dot(Ln, d)]
+            if all(x == 0 for x in row):
+                continue
+            dom.append(row)
     return ok, dom, why
+
+
+def _inRayCone(R, d):
+    """Is d in the NON-NEGATIVE SPAN of the rays? In the plane one pair of rays suffices
+    (Caratheodory), so test every pair; a collinear pair is a ray (same direction) or a line
+    (opposite)."""
+    def pair(r1, r2):
+        cr = r1[0] * r2[1] - r1[1] * r2[0]
+        if cr == 0:
+            if r1[0] * d[1] - r1[1] * d[0] != 0:
+                return False
+            if r1[0] * r2[0] + r1[1] * r2[1] < 0:      # opposite: the line spans both ways
+                return True
+            return r1[0] * d[0] + r1[1] * d[1] >= 0
+        return (cr * (r1[0] * d[1] - r1[1] * d[0]) >= 0) and \
+               (cr * (d[0] * r2[1] - d[1] * r2[0]) >= 0)
+    for i in range(len(R)):
+        for j in range(len(R)):
+            if pair(R[i], R[j]):
+                return True
+    return False
 
 
 def caseDBoundaryMax(fN, fD, Vi, vd, sh, dom):
