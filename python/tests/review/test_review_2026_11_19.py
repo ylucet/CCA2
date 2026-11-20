@@ -75,7 +75,6 @@ def test_cell_has_interior_far_horizontal_strip_control():
 # ---------------------------------------------------------------------------------------------
 # Finding 5 (MINOR, test oracle): check.supAt samples recession directions
 # ---------------------------------------------------------------------------------------------
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #5: check.supAt misses an interior null direction')
 def test_definition_oracle_detects_unbounded_cone():
     # R5-053: q = x^2 - 2x - y + 2 on the cone apex (-1,1), rays (-1,0), (1,-2); the null
     # direction (0,-1) of H is strictly inside, and the slope along it is -s2 - 1 > 0 here

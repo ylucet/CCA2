@@ -15,6 +15,7 @@ Each check returns a list of defects (empty when the definition holds on the sam
 and tolerances throughout: this module only JUDGES results, it never produces one.
 """
 import math
+from fractions import Fraction as Fr
 
 import numpy as np
 
@@ -232,6 +233,38 @@ def supAt(f, s):
                     far = [cx[0] + d[0], cx[1] + d[1]]
                     if _supOnEdge(H, L, c, cx, far, True, s) == INF:
                         return INF
+            # A NULL DIRECTION STRICTLY INSIDE THE CONE (review 2026-11-19, finding 5): the
+            # samples above can miss it, so decide it exactly from the face's rational data.
+            # A singular H has a null LINE; when it lies in the closed recession cone the
+            # objective is LINEAR along it (any base point works: the piece is convex and the
+            # direction recedes from every point), so the sup is +inf exactly when the slope
+            # is positive. At most one of the antipodal pair lies in a proper cone.
+            n0 = f.fN[k - 1]
+            dd = f.fD[k - 1]
+            H11, H12, H22 = Fr(n0[4], dd), Fr(n0[5], dd), Fr(n0[6], dd)
+            if H11 * H22 - H12 * H12 == 0 and (H11 or H12 or H22):
+                nv = (-H12, H11) if H11 else (1, 0)              # spans null(H) exactly
+                def vx(i):                                       # exact vertex i
+                    return [Fr(f.VN[i - 1][0], f.VD[i - 1]), Fr(f.VN[i - 1][1], f.VD[i - 1])]
+                ea = [e for e, fr in zip(f.E, f.F) if (fr[0] == k or fr[1] == k) and e[2] == 0][:2]
+                r1 = [vx(ea[0][1])[0] - vx(ea[0][0])[0], vx(ea[0][1])[1] - vx(ea[0][0])[1]]
+                r2 = [vx(ea[1][1])[0] - vx(ea[1][0])[0], vx(ea[1][1])[1] - vx(ea[1][0])[1]]
+
+                def in2(d):
+                    cr = r1[0] * r2[1] - r1[1] * r2[0]
+                    if cr == 0:
+                        return (r1[0] * d[1] - r1[1] * d[0] == 0
+                                and (r1[0] * r2[0] + r1[1] * r2[1] < 0
+                                     or r1[0] * d[0] + r1[1] * d[1] >= 0))
+                    return (cr * (r1[0] * d[1] - r1[1] * d[0]) >= 0
+                            and cr * (d[0] * r2[1] - d[1] * r2[0]) >= 0)
+                Lx, Ly = Fr(n0[7], dd), Fr(n0[8], dd)           # exact L (L above is doubles)
+                for d in (nv, [-nv[0], -nv[1]]):
+                    if in2(d):
+                        slope = Fr(s[0]) * d[0] + Fr(s[1]) * d[1] - (Lx * d[0] + Ly * d[1])
+                        if slope > 0:
+                            return INF
+                        break
         if ev[0] > 1e-12 * max(1.0, abs(ev[1])):            # an interior stationary point
             x = np.linalg.solve(Hm, np.array([s[0] - L[0], s[1] - L[1]]))
             if _inFace(f, k, [float(x[0]), float(x[1])]):
@@ -308,11 +341,32 @@ def domainSamples(f, n=7):
 
 
 def checkBiconj(f, h, X=None, tol=1e-6):
-    """Defects of h as the biconjugate (closed convex envelope) of f."""
+    """Defects of h as the biconjugate (closed convex envelope) of f.
+
+    For a BOUNDED domain the points outside the vertex box are always outside conv(dom f),
+    where the biconjugate is +infinity -- finding 9a of the 2026-11-19 review was invisible to
+    samples inside the box, so the outside is sampled too (finding 5)."""
     X = X or domainSamples(f)
+    outside = []
+    if f.nv > 0 and all(e[2] != 0 for e in f.E):
+        V = _V(f)
+        xs = [v[0] for v in V]
+        ys = [v[1] for v in V]
+        lo, hi = (min(xs), min(ys)), (max(xs), max(ys))
+        px = 0.5 * max(1.0, hi[0] - lo[0])
+        py = 0.5 * max(1.0, hi[1] - lo[1])
+        outside = [[lo[0] - px, lo[1] - py], [hi[0] + px, hi[1] + py], [lo[0] - px, hi[1] + py],
+                   [hi[0] + px, lo[1] - py], [lo[0] - px, (lo[1] + hi[1]) / 2],
+                   [hi[0] + px, (lo[1] + hi[1]) / 2], [(lo[0] + hi[0]) / 2, lo[1] - py],
+                   [(lo[0] + hi[0]) / 2, hi[1] + py]]
+        X = list(X) + outside
     fv = evalQuaPol(f, X)
     hv = _val(h, X)
     bad = []
+    # (0) outside conv(dom f) the biconjugate is +infinity
+    for x, a in zip(outside, hv[len(X) - len(outside):] if outside else []):
+        if not (a == INF):
+            bad.append('f**(%r) = %r outside conv(dom f), where it is +infinity' % (x, a))
     # (1) h <= f wherever f is finite
     for x, a, b in zip(X, hv, fv):
         if math.isfinite(b) and not (a <= b + tol * max(1.0, abs(b))):
@@ -341,8 +395,19 @@ def checkBiconj(f, h, X=None, tol=1e-6):
             continue
         fs = supAt(f, s)
         if not math.isfinite(fs):
-            bad.append('f**(%r): the gradient %r of the result is outside dom f*' % (x, s))
-            continue
+            # the NUMERICAL gradient carries ~1e-11 noise (central difference of values that
+            # themselves carry double-precision noise); when the true gradient sits ON the
+            # boundary of dom f* (finite there) the noise can push s just outside, and the exact
+            # supAt then rightly returns +inf at s. Round s off the rounding band and retest: a
+            # point within rounding of the boundary is not a defect (checkConj's same policy).
+            # 9 significant digits swallows the ~1e-11 noise while a genuine O(1) boundary miss
+            # survives.
+            sr = [float('%.9g' % v) for v in s]
+            if sr != s and math.isfinite(supAt(f, sr)):
+                s, fs = sr, supAt(f, sr)
+            else:
+                bad.append('f**(%r): the gradient %r of the result is outside dom f*' % (x, s))
+                continue
         lower = s[0] * x[0] + s[1] * x[1] - fs
         if abs(a - lower) > 1e-4 * max(1.0, abs(a)):
             bad.append('f**(%r) = %.10g but <s,x> - f*(s) = %.10g at its own gradient'
