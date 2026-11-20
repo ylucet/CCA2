@@ -3,6 +3,15 @@
 ## Open now -- index (cleaned 2026-11-05; the dated sections below keep the history)
 
 Exact engine (the default for `conj` and `biconj`):
+- **OPEN 2026-11-19, code review (reviews/codereview-2026-11-19.md), CRITICAL #1:** `conj` is finite where f* = +inf when a PSD-singular H has its null direction strictly inside an unbounded piece's recession cone (`recessionConditions` tests the edge rays only); all three engines. Tests: python/tests/review, rust/tests/review_2026_11_19.rs, MATLAB/review.
+- **OPEN 2026-11-19, review CRITICAL #8:** `conj` too high for y^2/2 on the L-shape (Case D, ear-clip diagonal candidate used outside 0 <= t* <= 1); all three engines.
+- **OPEN 2026-11-19, review CRITICAL #9:** `biconj` wrong on 18/243 (Py) and 14/240 (Rs) small continuous random inputs: finite outside conv(dom f), below <s,x> - f*(s) with the engine's own conj, +inf inside dom f, above a convex combination; all three engines; predates 2026-11-17.
+- **OPEN 2026-11-19, review MAJOR #2:** `cellHasInterior`'s CAD fallback is not complete (vertical lines; degenerate conics sharing a line); reached in a real conj call.
+- **OPEN 2026-11-19, review MAJOR #3/#4:** the convexdb cross-check refuses 4 established PLQ entries as non-PLQ (|x|+|y|, two separable, segment indicator) and truncates rational data; the "16 non-PLQ" record below is wrong and `test_non_plq_refused` pins the wrong verdict.
+- **OPEN 2026-11-19, review MAJOR #5:** `check.supAt` misses an interior null recession direction and `checkBiconj` never samples outside the bounding box of dom f; `test_definition` covers golden fixtures only.
+- **OPEN 2026-11-19, review MAJOR #6:** Rust `biconj_atoms::tie_arc` panics on NaN breakpoints (`partial_cmp().unwrap_or(Equal)` sort); 5/357 random inputs.
+- **OPEN 2026-11-19, review MAJOR #7:** legacy `conjCPLQ` eig tolerance: needle for (x^2+y^2)/2^31, `MATLAB:badsubscript` for diag(1, +-2^-30).
+- **OPEN 2026-11-19, review MAJOR #10/#11:** discontinuous input accepted silently (biconj wrong on 12/24); Python and Rust disagree on 11/357 random biconj inputs.
 - **FIXED 2026-11-17: star-polygon conjugate was too low** -- two causes: `conicMeet`'s line-vs-conic branch used the roots t'=scale*t as t (missing `/scale`), and `cellHasInterior`'s probe box missed cells far from the origin when the conics do not meet, so cells were wrongly judged empty. Both fixed in MATLAB, Python, Rust (DECISIONS 2026-11-17). Checked n=6..12 in Rust against the definition (`conjstress`), n=4..8 in `python/tests/test_star_polygons.py`. Checked against the definition: n=6..16 (Rust, `rust/tests/star.rs`; n=15 took 217 s, n=16 154 s). NOT checked: n=17..20 (n=17 still running at 30+ min in this session -- the n=16 -> n=17 jump is ~10x, so all four sizes are hours on the shared machine); run `CCA2_STAR_NS=17,18,19,20 cargo test --release --test star -- --ignored --nocapture` (fine as an overnight/unattended run).
 - **FIXED 2026-11-17: Rust now has `psTangency`** (task #11's zero-area-face certificate, now all three engines): ported to `rust/src/alg_row_fails.rs` (`ps_tangency` + `square_poly`/`square_pos`, top of `alg_row_fails_box`, s-symmetric like MATLAB/Python), pinned by `rust/tests/ps_tangency.rs` (mirror of `python/tests/test_ps_tangency.py`). The 3 diagonal-kink biconj records now drop their zero-area faces (nf 4/19/19 -> 2/14/14, matching Python) and `parity.rs` compares `nf` for them again (skip removed). `bench/parallel/digest_serial.tsv` re-baselined (fixtures 165/174: 4->2, 19->14; old file kept as `digest_serial.pre-psTangency-2026-11-17.tsv`); parallel == serial still holds at 1/2/8/32 threads.
 - Bridge producer: noWitness when a tie has no usable rational point (SUPPORT_MATRIX 3.2; by design). The overflow refusals are gone (2026-11-05).
@@ -10,7 +19,7 @@ Exact engine (the default for `conj` and `biconj`):
   2026-11-11: one mechanism behind zero-area faces fixed (cellSamplePoint accepted a sample ON a
   boundary line; DECISIONS 2026-11-11 item 2). Whether it removes these two was NOT re-measured.
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
-- Two BRIDGE faces owning one cell -- refused by name, never observed.
+- Two BRIDGE faces owning one cell -- refused by name, never observed. (STALE per review 2026-11-19 #13: no longer refused since 2026-10-17; erratum Example 1 reaches it.)
 
 Python port (`python/`, merged to main 2026-11-11):
 - FIXED 2026-11-11: the big kink AlgCrv was 334 faces in Python against MATLAB's 317. Cause: the
