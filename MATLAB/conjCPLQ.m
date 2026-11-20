@@ -114,7 +114,18 @@ function g = conjCPLQ(obj, idx, route)
             return
         end
         ev = eig(Q);
-        if all(ev > sqrt(eps))
+        evs  = sort(ev);
+        % DEFINITNESS IS RELATIVE TO THE SIZE OF Q, WITH NO ABSOLUTE FLOOR (review 2026-11-19
+        % finding 7). The old absolute test `all(ev > sqrt(eps))` misrouted every
+        % small-magnitude quadratic: Q = 2^-30 I (f = (x^2+y^2)/2^31, strictly convex with
+        % f* = 2^29 |s|^2) fell into the AFFINE branch and returned a needle, and
+        % diag(1, ±2^-30) fell into the rank-1 branch, where `null` of a numerically full-rank
+        % matrix is empty and `n(:,1)` crashed with MATLAB:badsubscript. The threshold
+        % eps*norm(Q) separates these from genuine zero/roundoff eigenvalues: a
+        % numerically rank-1 Q has its small eigenvalue <= eps*norm(Q), and one that is
+        % smaller than that is indistinguishable from 0 in doubles.
+        tolE = eps * norm(Q);
+        if all(ev > tolE)
             % Strictly convex: the conjugate is again a full-domain quadratic
             %   f*(s) = 1/2 (s-L)' inv(Q) (s-L) - kappa.
             M    = inv(Q);                 %#ok<MINV> small 2x2, explicit inverse is fine/clear
@@ -138,8 +149,6 @@ function g = conjCPLQ(obj, idx, route)
         % QuaParCPLQ -- see `TODO.md` and `RETURN_TYPE.md`.
         %
         % Classified rather than implemented, so the next person starts from the answer.
-        evs  = sort(ev);
-        tolE = sqrt(eps) * max(1, norm(Q));
         if evs(1) < -tolE
             % A negative eigenvalue: f decreases without bound along that eigendirection, so no
             % affine function minorises it, conv f = -inf, and f*(s) = +inf for EVERY s.
@@ -190,8 +199,14 @@ function g = conjCPLQ(obj, idx, route)
             % THE LINE. n spans null(Q); the line is {s : <s - L, n> = 0}, i.e. through the point
             % L in the direction t perpendicular to n. On it f*(s) = 1/2 (s-L)' pinv(Q) (s-L) -
             % kappa, which in the stored 6-coefficient basis is the quadratic below.
-            n = null((Q+Q.')/2);
-            n = n(:,1).' / norm(n(:,1));
+            % The null direction comes from eig, NOT from null(): `null` uses its own rcond
+            % rank test and can report a numerically full-rank Q as rank 2, in which case it
+            % returns an empty matrix and `n(:,1)` crashes (review 2026-11-19 finding 7).
+            % The eigenvector of the smallest-magnitude eigenvalue spans the (numerical) null
+            % space and exists for every 2x2 matrix.
+            [nm, Vm] = eig((Q+Q.')/2);
+            n = Vm(:, argmin(abs(nm))).';
+            n = n / norm(n);
             t = [-n(2), n(1)];                       % along the line
             M = pinv((Q+Q.')/2);
             % 1/2 (s-L)' M (s-L) - kappa  expanded into [x^2 xy y^2 x y const]
