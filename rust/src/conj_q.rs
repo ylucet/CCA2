@@ -534,7 +534,58 @@ fn recession_conditions(sh: &Shape, hn: &[Vec<Z>], ln: &[Z], fd: &Z, vi: &[Vec<Z
         }
         dom.push(row);
     }
+    // A NULL DIRECTION STRICTLY INSIDE the cone: H PSD singular with null(H) off the edge rays.
+    // The loop above never sees it, and without its row dom f* is the whole plane (review
+    // 2026-11-19, finding 1). For such a d, Hd = 0, so the slope test is void and mu = 0, and
+    // the row is exactly the null edge ray's. The closed recession cone is the non-negative span
+    // of the rays (the half-plane case already returned above, and a proper cone holds at most
+    // one of +/-d0; if a null edge ray exists it is that one, already carrying the row).
+    if is_psd2(hn) && det_exact(hn)?.is_zero() && hn.iter().flatten().any(|x| !x.is_zero()) {
+        let d0 = if !hn[0][0].is_zero() { vec![-&hn[0][1], hn[0][0].clone()] } else { zv(&[1, 0]) };
+        for d in [d0.clone(), neg(&d0)] {
+            if !in_ray_cone(r, &d) {
+                continue;
+            }
+            if r.iter().any(|rr| quad(rr, hn, rr).is_zero()) {
+                break;
+            }
+            let row = vec![-&fdvd * &d[0], -&fdvd * &d[1], vd * dot(ln, &d)];
+            if all_zero(&row) {
+                continue;
+            }
+            dom.push(row);
+        }
+    }
     Ok((true, dom, String::new()))
+}
+
+/// Is `d` in the NON-NEGATIVE SPAN of the rays? In the plane one pair of rays suffices
+/// (Caratheodory), so test every pair; a collinear pair is a ray (same direction) or a line
+/// (opposite directions).
+fn in_ray_cone(r: &[Vec<Z>], d: &[Z]) -> bool {
+    let pair = |r1: &Vec<Z>, r2: &Vec<Z>| -> bool {
+        let cr = &r1[0] * &r2[1] - &r1[1] * &r2[0];
+        if cr.is_zero() {
+            if !(&r1[0] * &d[1] - &r1[1] * &d[0]).is_zero() {
+                return false;
+            }
+            if (&r1[0] * &r2[0] + &r1[1] * &r2[1]).is_negative() {
+                return true;                            // opposite: the line spans both ways
+            }
+            return !(&r1[0] * &d[0] + &r1[1] * &d[1]).is_negative();
+        }
+        let a = &cr * (&r1[0] * &d[1] - &r1[1] * &d[0]);
+        let b = cr * (&d[0] * &r2[1] - &d[1] * &r2[0]);
+        !a.is_negative() && !b.is_negative()
+    };
+    for i in 0..r.len() {
+        for j in 0..r.len() {
+            if pair(&r[i], &r[j]) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 struct EdC {

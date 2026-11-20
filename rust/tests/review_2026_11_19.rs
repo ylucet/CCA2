@@ -17,7 +17,6 @@ fn pol(v: &[[i64; 2]], e: &[[usize; 3]], f: &[[i64; 10]], ff: &[[usize; 2]]) -> 
 /// Finding 1 (CRITICAL): f(x,y) = y^2/2 on the cone {x >= |y|}. Along x = (t,0) the objective is
 /// s1*t, so f*(s) = +inf for s1 > 0; recession_conditions only tests the two edge rays.
 #[test]
-#[ignore = "review 2026-11-19 #1: conj finite where f* = +inf (interior null recession direction)"]
 fn conj_cone_with_interior_null_direction() {
     let f = pol(&[[0, 0], [1, -1], [1, 1]], &[[1, 2, 0], [1, 3, 0]], &[[0, 0, 0, 0, 0, 0, 1, 0, 0, 0]], &[[1, 0], [0, 1]]);
     let g = cca2::conj_q::conj_q(&f).unwrap().0;
