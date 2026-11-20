@@ -36,7 +36,7 @@ legacy symbolic suites' internals (`plq`, `region`, `functionNDomain`).
 | `cargo clippy --release --all-targets` | **fails**: 5 deny-level `approx_constant` errors, 128 warnings (finding 15) |
 | reviewer tests: `pytest tests/review` | 3 passed, 13 xfailed (each xfail checked with `--runxfail` to fail for the stated reason) |
 | reviewer tests: `cargo test --release --test review_2026_11_19 -- --ignored` | 7 / 7 fail as expected |
-| reviewer tests: `runtests(fullfile('review','reviewFindings20261119Test.m'))` | all fail as expected (list in section 8) |
+| reviewer tests: `runtests(fullfile('review','reviewFindings20261119Test.m'))` | 8 / 8 fail as expected |
 
 ## 2. Overall assessment
 
@@ -44,8 +44,10 @@ The test suites are green, but they do not test what the paper claims. An exhaus
 differential test (357 small exact inputs, three engines, an exact rational f* oracle and a
 certified f** bracket) finds **wrong values in both operators in all three engines**: `conj` is
 wrong on 6 of 327 continuous inputs (finite where f* = +inf; too high on an L-shape), and `biconj`
-is wrong on **18 of 243 (Python) / 14 of 240 (Rust)** answered continuous inputs — too low,
-too high, +inf inside dom f, finite outside conv(dom f). The defects predate the 2026-11-17 fixes.
+is wrong on **18 of 243 (Python) / 14 of 240 (Rust) / 10 of 223 (MATLAB)** answered continuous
+inputs — too low, too high, +inf inside dom f, finite outside conv(dom f). The three engines
+return the same wrong values, so the parity harness cannot see them. The defects predate the
+2026-11-17 fixes.
 These change claims the draft makes (abstract: "exactly"; "a small class of inputs on which the
 biconjugate is still slightly low"; section 4.2 "complete" cell-interior search; the harness as
 the reason the claims are checkable).
@@ -224,10 +226,11 @@ The parity claim holds on the recorded corpus only; the draft should say so.
     `alg_row_fails.rs:1661,1808`); 128 warnings (mostly index loops, complex types).
 16. MATLAB `algFaceBelow>separator` (line 134) solves nearly singular systems (RCOND ~1e-21,
     warnings during `biconjQ` on random inputs); whether a decision depends on it is unconfirmed.
-18b. `python/cca2/alg_row_fails.py:1376-1386`: unreachable code after `return hit` in
-    `_curvePoints` (ruff F821: it references an undefined `S`); harmless, misleading.
 17. Error-identifier inconsistency for f** = -inf: `PLQ:biconjQ:noFace` (whole plane),
     `PLQ:biconjQ:minusInfinity` (cones), `biconjAtoms:emptyDomain` (fans).
+
+17b. `python/cca2/alg_row_fails.py:1376-1386`: unreachable code after `return hit` in
+    `_curvePoints` (ruff F821: it references an undefined `S`); harmless, misleading.
 
 ### INFO
 
