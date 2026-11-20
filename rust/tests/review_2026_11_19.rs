@@ -70,3 +70,42 @@ fn biconj_does_not_panic_on_r4_017() {
     let r = std::panic::catch_unwind(|| cca2::biconj_q::biconj_q(&f, &Default::default()).map(|h| h.kind().to_string()));
     assert!(r.is_ok(), "biconj_q panicked");
 }
+
+/// Finding 8 (CRITICAL): f = y^2/2 on the L-shape (0,0),(2,0),(2,1),(1,1),(1,2),(0,2). At
+/// s = (2.53125, -1.453125) the sup is 2*s1 = 5.0625 (at (2,0)); all three engines return
+/// 6.5137939453125 = (2 s1 + s2)^2 / 2, a face used outside its availability range.
+#[test]
+#[ignore = "review 2026-11-19 #8: conj too high on the L-shape with y^2/2"]
+fn conj_l_shape_y2() {
+    let v = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
+    let e: Vec<[usize; 3]> = (0..6).map(|i| [i + 1, (i + 1) % 6 + 1, 1]).collect();
+    let f = pol(&v, &e, &[[0, 0, 0, 0, 0, 0, 1, 0, 0, 0]], &[[1, 0]; 6]);
+    let (val, _) = cca2::conj_q::conj_q(&f).unwrap().0.eval(&[[2.53125, -1.453125]]).unwrap();
+    assert!((val[0] - 5.0625).abs() < 1e-12, "got {}", val[0]);
+}
+
+/// Finding 9a (CRITICAL): f = (y^2 - x^2)/2 on the unit square; at (-0.49, 0.01), outside the
+/// square, f** = +inf. Rust (and Python, MATLAB) return 0.24616241455078125.
+#[test]
+#[ignore = "review 2026-11-19 #9a: biconj finite outside conv(dom f)"]
+fn biconj_infinite_outside_the_square() {
+    let f = pol(&[[0, 0], [1, 0], [1, 1], [0, 1]], &[[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, -1, 0, 1, 0, 0, 0]], &[[1, 0]; 4]);
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-0.4921875, 0.01171875]]).unwrap();
+    assert!(v[0].is_infinite(), "got {}", v[0]);
+}
+
+/// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN
+/// conj: f**(x) >= <s,x> - f*(s) = 1.04606 at the s below; the engine's f**(x) is 0.40871.
+#[test]
+#[ignore = "review 2026-11-19 #9b: biconj below <s,x> - f*(s)"]
+fn biconj_fenchel_young_l_shape() {
+    let v = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
+    let e: Vec<[usize; 3]> = (0..6).map(|i| [i + 1, (i + 1) % 6 + 1, 1]).collect();
+    let f = pol(&v, &e, &[[0, 0, 0, 0, 0, -1, 1, 0, 0, 0]], &[[1, 0]; 6]);
+    let x = [0.2578125, 1.76171875];
+    let s = [-1.9484626037100141, 1.6789473678974558];
+    let g = cca2::conj_q::conj_q(&f).unwrap().0.eval(&[s]).unwrap().0[0];
+    let h = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[x]).unwrap()[0];
+    assert!(h >= s[0] * x[0] + s[1] * x[1] - g - 1e-9, "f** = {} < <s,x> - f*(s) = {}", h, s[0] * x[0] + s[1] * x[1] - g);
+}

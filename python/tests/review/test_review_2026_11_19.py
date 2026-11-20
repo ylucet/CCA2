@@ -159,3 +159,64 @@ def test_hunt_cell_really_has_interior():
 @pytest.mark.xfail(strict=True, reason='review 2026-11-19 #2: degenerate conics sharing a line hide CAD abscissae')
 def test_cell_has_interior_shared_line_factor():
     assert cellHasInterior(HUNT_ECQ, HUNT_ROWS)
+
+
+# ---------------------------------------------------------------------------------------------
+# Finding 8 (CRITICAL): conj too HIGH on a bounded nonconvex polygon (PSD-singular quadratic)
+# ---------------------------------------------------------------------------------------------
+def _L_y2():
+    V = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]
+    return QuaPol(V, [[i + 1, (i + 1) % 6 + 1, 1] for i in range(6)], [[0, 0, 0, 0, 0, 0, 1, 0, 0, 0]], [[1, 0]] * 6)
+
+
+@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #8: face (2 s1 + s2)^2/2 used outside its range')
+def test_conj_L_shape_y2():
+    # f = y^2/2 on the L-shape of golden conj record 36. sup at s = (2.53125, -1.453125) is
+    # attained at (2, 0): 2 s1 = 5.0625 (y = 0 since s2 < 0). Engines (all three): 6.5137939453125.
+    s = [2.53125, -1.453125]
+    assert check.supAt(_L_y2(), s) == 5.0625
+    assert abs(_L_y2().conj().eval([s])[0][0] - 5.0625) < 1e-12
+
+
+# ---------------------------------------------------------------------------------------------
+# Finding 9 (CRITICAL): biconj values wrong on small continuous inputs (random differential test)
+# ---------------------------------------------------------------------------------------------
+SQ = ([[0, 0], [1, 0], [1, 1], [0, 1]], [[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1]], [[1, 0]] * 4)
+LV = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]
+LE = [[i + 1, (i + 1) % 6 + 1, 1] for i in range(6)]
+
+
+@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9a: f** finite outside conv(dom f)')
+def test_biconj_infinite_outside_the_square():
+    # f = (y^2 - x^2)/2 on the unit square (E-square-H-101); x = (-0.49, 0.01) is outside the
+    # square, so f**(x) = +inf. Engines: 0.24616241455078125.
+    f = QuaPol(SQ[0], SQ[1], [[0, 0, 0, 0, -1, 0, 1, 0, 0, 0]], SQ[2])
+    assert f.biconj().eval([[-0.4921875, 0.01171875]])[0][0] == INF
+
+
+@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9b: f** below <s,x> - f*(s) (Fenchel-Young vs its own conj)')
+def test_biconj_fenchel_young_L_shape():
+    # f = -xy + y^2/2 on the L-shape (E-L-H0-11). For ANY s, f**(x) >= <s,x> - f*(s); with the
+    # engine's OWN conj at s below, the bound is 1.04606, the engine's f**(x) is 0.40871.
+    f = QuaPol(LV, LE, [[0, 0, 0, 0, 0, -1, 1, 0, 0, 0]], [[1, 0]] * 6)
+    x = [0.2578125, 1.76171875]
+    s = [-1.9484626037100141, 1.6789473678974558]
+    g = f.conj().eval([s])[0][0]
+    assert abs(g - check.supAt(f, s)) < 1e-9          # the engine's conj is right at s
+    h = f.biconj().eval([x])
+    h = h[0] if isinstance(h, tuple) else h
+    assert h[0] >= s[0] * x[0] + s[1] * x[1] - g - 1e-9
+
+
+@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9c: f** = +inf at a point of dom f')
+def test_biconj_finite_inside_the_domain_R3_072():
+    # two continuous pieces on a quadrilateral (R3-072); x is in piece 1, f(x) = -12.29 is finite,
+    # so f**(x) <= f(x) < inf. Python returns +inf.
+    f = QuaPol([[-3, 2], [-1, 0], [2, 0], [-2, 3]], [[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+               [[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
+               [[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]])
+    x = [-2.4921875, 1.51171875]
+    assert math.isfinite(check.evalQuaPol(f, [x])[0])
+    h = f.biconj().eval([x])
+    h = h[0] if isinstance(h, tuple) else h
+    assert math.isfinite(h[0])

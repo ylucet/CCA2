@@ -44,6 +44,35 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             tc.verifyTrue(cellHasInterior(EcQ, rows));
         end
 
+        function conjLShapeY2(tc)
+            % Finding 8 (CRITICAL): f = y^2/2 on the L-shape; sup at s = (2.53125, -1.453125) is
+            % 2*s1 = 5.0625 (attained at (2,0)). conjQ returns (2 s1 + s2)^2/2 = 6.5137939453125.
+            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];
+            E = [(1:6).' [2:6 1].' ones(6,1)];
+            f = QuaPol(V, E, [0 0 0 0 0 0 1 0 0 0], repmat([1 0], 6, 1));
+            g = conjQ(f);
+            tc.verifyEqual(g.eval([2.53125 -1.453125]), 5.0625, 'AbsTol', 1e-12);
+        end
+
+        function biconjInfiniteOutsideTheSquare(tc)
+            % Finding 9a (CRITICAL): f = (y^2 - x^2)/2 on the unit square; (-0.49, 0.01) is outside
+            % the square, so f** = +inf there.
+            f = QuaPol([0 0; 1 0; 1 1; 0 1], [1 2 1; 2 3 1; 3 4 1; 4 1 1], [0 0 0 0 -1 0 1 0 0 0], repmat([1 0], 4, 1));
+            h = biconjQ(f);
+            tc.verifyEqual(h.eval([-0.4921875 0.01171875]), Inf);
+        end
+
+        function biconjFenchelYoungLShape(tc)
+            % Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. f**(x) >= <s,x> - f*(s) for
+            % every s; with conjQ's own value at s the bound is 1.04606.
+            V = [0 0; 2 0; 2 1; 1 1; 1 2; 0 2];
+            E = [(1:6).' [2:6 1].' ones(6,1)];
+            f = QuaPol(V, E, [0 0 0 0 0 -1 1 0 0 0], repmat([1 0], 6, 1));
+            x = [0.2578125 1.76171875];  s = [-1.9484626037100141 1.6789473678974558];
+            g = conjQ(f);  h = biconjQ(f);
+            tc.verifyGreaterThanOrEqual(h.eval(x), s*x.' - g.eval(s) - 1e-9);
+        end
+
         function conjCPLQTinyPositiveEigenvalue(tc)
             % Finding 7 (legacy 'cplq' engine, MAJOR there). f = (x^2 + y^2)/2^31 is strictly convex,
             % f*(s) = 2^29 |s|^2 everywhere. conjCPLQ's absolute eig(Q) > sqrt(eps) test sends it
