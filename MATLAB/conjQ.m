@@ -794,6 +794,64 @@ function [ok, dom, why] = recessionConditions(sh, Hn, Ln, fD, Vi, vd)
         if all(row == 0), continue, end
         dom(end+1,:) = row; %#ok<AGROW>
     end
+
+    % A NULL DIRECTION STRICTLY INSIDE the cone: H PSD singular with null(H) off the edge rays.
+    % The loop above never sees it, and without its row dom f* is the whole plane (review
+    % 2026-11-19, finding 1). For such a d, Hd = 0, so the slope test is void and mu = 0, and
+    % the row is exactly the null edge ray's. The closed recession cone is the non-negative span
+    % of the rays (the half-plane case already returned above, and a proper cone holds at most
+    % one of +/-d0; if a null edge ray exists it is that one, already carrying the row).
+    if ratQ.isPSD2(Hn) && ratQ.detExact(Hn) == 0 && any(Hn(:) ~= 0)
+        if Hn(1,1) ~= 0, d0 = [-Hn(1,2); Hn(1,1)]; else, d0 = [1; 0]; end
+        for sg = [-1 1]
+            d = sg * d0;
+            if ~inRayCone(R, d), continue, end
+            nullRay = false;
+            for r = 1:size(R,1)
+                if ratQ.chkB(R(r,:) * Hn * R(r,:).', abs(R(r,:)) * abs(Hn) * abs(R(r,:)).', 'ray curvature') == 0
+                    nullRay = true;
+                    break
+                end
+            end
+            if nullRay, break, end
+            row = [ratQ.chk(-fD*vd*d(1), 'r1'), ratQ.chk(-fD*vd*d(2), 'r2'), ...
+                   ratQ.chkB(vd*(Ln.'*d), abs(vd)*(abs(Ln).'*abs(d)), 'r0')];
+            if all(row == 0), continue, end
+            dom(end+1,:) = row; %#ok<AGROW>
+        end
+    end
+end
+
+function ok = inRayCone(R, d)
+% objective: is d in the NON-NEGATIVE SPAN of the rows of R?
+% In the plane one pair of rays suffices (Caratheodory), so test every pair; a collinear
+% pair is a ray (same direction) or a line (opposite directions).
+    ok = false;
+    for i = 1:size(R,1)
+        for j = 1:size(R,1)
+            r1 = R(i,:);  r2 = R(j,:);
+            cr = ratQ.chkB(r1(1)*r2(2) - r1(2)*r2(1), abs(r1(1))*abs(r2(2)) + abs(r1(2))*abs(r2(1)), 'recession span');
+            if cr == 0
+                if ratQ.chkB(r1(1)*d(2) - r1(2)*d(1), abs(r1(1))*abs(d(2)) + abs(r1(2))*abs(d(1)), 'recession span') ~= 0
+                    continue
+                end
+                if ratQ.chkB(r1(1)*r2(1) + r1(2)*r2(2), abs(r1(1))*abs(r2(1)) + abs(r1(2))*abs(r2(2)), 'recession span') < 0
+                    ok = true;  return                     % opposite: the line spans both ways
+                end
+                if ratQ.chkB(r1(1)*d(1) + r1(2)*d(2), abs(r1(1))*abs(d(1)) + abs(r1(2))*abs(d(2)), 'recession span') >= 0
+                    ok = true;  return
+                end
+            else
+                a = ratQ.chkB(cr * (r1(1)*d(2) - r1(2)*d(1)), ...
+                              abs(cr) * (abs(r1(1))*abs(d(2)) + abs(r1(2))*abs(d(1))), 'recession span');
+                b = ratQ.chkB(cr * (d(1)*r2(2) - d(2)*r2(1)), ...
+                              abs(cr) * (abs(d(1))*abs(r2(2)) + abs(d(2))*abs(r2(1))), 'recession span');
+                if a >= 0 && b >= 0
+                    ok = true;  return
+                end
+            end
+        end
+    end
 end
 
 function g = caseDBoundaryMax(fN, fD, Vi, vd, sh, dom)
