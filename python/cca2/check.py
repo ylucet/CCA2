@@ -401,8 +401,10 @@ def checkBiconj(f, h, X=None, tol=1e-6):
             # supAt then rightly returns +inf at s. Round s off the rounding band and retest: a
             # point within rounding of the boundary is not a defect (checkConj's same policy).
             # 9 significant digits swallows the ~1e-11 noise while a genuine O(1) boundary miss
-            # survives.
-            sr = [float('%.9g' % v) for v in s]
+            # survives -- except for a true component 0, which read as 7.4e-12 keeps all its
+            # digits (cone records 7 and 32): a component within 1e-9 of the gradient's scale is 0.
+            sc = max(1.0, abs(s[0]), abs(s[1]))
+            sr = [0.0 if abs(v) <= 1e-9 * sc else float('%.9g' % v) for v in s]
             if sr != s and math.isfinite(supAt(f, sr)):
                 s, fs = sr, supAt(f, sr)
             else:
