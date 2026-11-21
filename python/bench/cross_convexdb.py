@@ -299,10 +299,17 @@ class HP:
 
 def _rat(t):
     if t is None:
-        return sp.S.Zero
+        return Fraction(0)
     if t.is_Rational:
-        return sp.Rational(t)
+        return Fraction(t)
     raise ParseReject('irrational or non-constant data in a condition: %s' % t)
+
+
+def _prim_abc(A, B, C):
+    """Rational (A, B, C) -> a PRIMITIVE INTEGER triple spanning the same line (review
+    2026-11-19 #4: the old int() truncation turned x*y/3 into 0 and y <= 1/2 into y <= 0)."""
+    D = math.lcm(A.denominator, B.denominator, C.denominator)
+    return int(A * D), int(B * D), int(C * D)
 
 
 def dnf(cond):
@@ -360,10 +367,11 @@ def atom_to_hp_tuple(cond):
     A, B, C = _rat(A), _rat(B), _rat(C)
     if A == 0 and B == 0:
         raise ParseReject('constant relation in a condition (degenerate partition)')
+    a, b, c = _prim_abc(A, B, C)
     if isinstance(rel, (sp.Ge, sp.Gt)):
-        return (HP(int(A), int(B), int(C), s),)      # Gt: closed side used; value checked continuous
+        return (HP(a, b, c, s),)      # Gt: closed side used; value checked continuous
     if isinstance(rel, (sp.Le, sp.Lt)):
-        return (HP(int(A), int(B), int(C), -s),)
+        return (HP(a, b, c, -s),)
     if isinstance(rel, sp.Eq):
         raise ParseReject('an equality constraint is a lower-dimensional domain '
                           '(1-D chain), not a 2-D PLQ piece')
@@ -396,7 +404,9 @@ def _dedup_clauses(out):
 
 def piece_value_row(val):
     """A quadratic in x, y (rational coefficients) -> the engine's 10-wide weighted row,
-    value = (c5 x^2 + 2 c6 xy + c7 y^2)/2 + c8 x + c9 y + c10. None for an oo value."""
+    value = (c5 x^2 + 2 c6 xy + c7 y^2)/2 + c8 x + c9 y + c10. None for an oo value.
+    The coefficients are exact Fractions (QuaPol takes them as exact; review 2026-11-19 #4:
+    the old int() truncation turned x*y/3 into 0 and the entry into a spurious refusal)."""
     if val is None or val in (sp.oo, sp.zoo, sp.nan):
         return None
     try:
@@ -411,7 +421,8 @@ def piece_value_row(val):
     A10 = p.coeff_monomial(X)
     A01 = p.coeff_monomial(Y)
     A00 = p.coeff_monomial(1)
-    return [0, 0, 0, 0, int(2 * A20), int(A11), int(2 * A02), int(A10), int(A01), int(A00)]
+    return [0, 0, 0, 0, Fraction(2 * A20), Fraction(A11), Fraction(2 * A02),
+            Fraction(A10), Fraction(A01), Fraction(A00)]
 
 
 def _expand_abs(E):
@@ -814,11 +825,12 @@ def dnf_1d(cond):
             A = expr.coeff(X)
             B = expr.coeff(Y)
             C = sp.simplify(expr - (A or 0) * X - (B or 0) * Y)
-            A, B, C = int(_rat(A)), int(_rat(B)), int(_rat(C))
+            A, B, C = _rat(A), _rat(B), _rat(C)
             if A == 0 and B == 0:
                 if C == 0:
                     continue
                 return []
+            A, B, C = _prim_abc(A, B, C)
             gg = math.gcd(abs(A), abs(B))
             A, B, C = A // gg, B // gg, C // gg
             if A < 0 or (A == 0 and B < 0):
@@ -840,10 +852,11 @@ def dnf_1d(cond):
         A, B, C = _rat(A), _rat(B), _rat(C)
         if A == 0 and B == 0:
             raise ParseReject('constant relation in a 1-D condition')
+        aa, bb, cc = _prim_abc(A, B, C)
         if isinstance(rel, (sp.Ge, sp.Gt)):
-            hp = HP(int(A), int(B), int(C), s)
+            hp = HP(aa, bb, cc, s)
         elif isinstance(rel, (sp.Le, sp.Lt)):
-            hp = HP(int(A), int(B), int(C), -s)
+            hp = HP(aa, bb, cc, -s)
         else:
             raise ParseReject('unsupported relation in a 1-D condition: %s' % a)
         out = [cl + (('hp', hp),) for cl in out]

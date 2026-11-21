@@ -107,13 +107,13 @@ def test_crosscheck_accepts_bounded_segment_indicator():
     assert sorted(tuple(v) for v in fx.V) == [(0, 0), (1, 1)]
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #4: int() truncates rational coefficients')
+# Fixed: review 2026-11-19 #4 (Fractions throughout; the half-plane data is scaled to a
+# primitive integer triple, which spans the same line, so the closed-region reading is exact).
 def test_crosscheck_keeps_rational_coefficients():
     row = cc.piece_value_row(X * Y / 3 + X / 2)
     assert row[5] == Fr(1, 3) and row[7] == Fr(1, 2)
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #4: int() truncates rational half-plane data')
 def test_crosscheck_keeps_rational_halfplane():
     (hp,) = cc.atom_to_hp_tuple(Y <= sp.Rational(1, 2))
     assert hp.holds((Fr(0), Fr(1, 4))) and not hp.holds((Fr(0), Fr(3, 4)))
