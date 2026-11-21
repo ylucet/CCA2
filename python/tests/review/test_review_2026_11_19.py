@@ -183,7 +183,6 @@ LV = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]
 LE = [[i + 1, (i + 1) % 6 + 1, 1] for i in range(6)]
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9a: f** finite outside conv(dom f)')
 def test_biconj_infinite_outside_the_square():
     # f = (y^2 - x^2)/2 on the unit square (E-square-H-101); x = (-0.49, 0.01) is outside the
     # square, so f**(x) = +inf. Engines: 0.24616241455078125.
@@ -191,7 +190,6 @@ def test_biconj_infinite_outside_the_square():
     assert f.biconj().eval([[-0.4921875, 0.01171875]])[0][0] == INF
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9b: f** below <s,x> - f*(s) (Fenchel-Young vs its own conj)')
 def test_biconj_fenchel_young_L_shape():
     # f = -xy + y^2/2 on the L-shape (E-L-H0-11). For ANY s, f**(x) >= <s,x> - f*(s); with the
     # engine's OWN conj at s below, the bound is 1.04606, the engine's f**(x) is 0.40871.

@@ -110,7 +110,6 @@ fn conj_l_shape_y2() {
 /// Finding 9a (CRITICAL): f = (y^2 - x^2)/2 on the unit square; at (-0.49, 0.01), outside the
 /// square, f** = +inf. Rust (and Python, MATLAB) return 0.24616241455078125.
 #[test]
-#[ignore = "review 2026-11-19 #9a: biconj finite outside conv(dom f)"]
 fn biconj_infinite_outside_the_square() {
     let f = pol(&[[0, 0], [1, 0], [1, 1], [0, 1]], &[[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1]],
                 &[[0, 0, 0, 0, -1, 0, 1, 0, 0, 0]], &[[1, 0]; 4]);
@@ -121,7 +120,6 @@ fn biconj_infinite_outside_the_square() {
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN
 /// conj: f**(x) >= <s,x> - f*(s) = 1.04606 at the s below; the engine's f**(x) is 0.40871.
 #[test]
-#[ignore = "review 2026-11-19 #9b: biconj below <s,x> - f*(s)"]
 fn biconj_fenchel_young_l_shape() {
     let v = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
     let e: Vec<[usize; 3]> = (0..6).map(|i| [i + 1, (i + 1) % 6 + 1, 1]).collect();

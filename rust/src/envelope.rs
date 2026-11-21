@@ -512,9 +512,14 @@ pub fn envelope_assemble(ga: &QuaCon, gb: &QuaCon, d: &[Vec<Z>]) -> R<(Env, ())>
             let mut pa = pr.p.clone();
             pa.push(pr.q[3..6].to_vec());
             collect(cells_for(na, da, &pa)?, &mut env);
+            // The B side is its own group: the pair's value is the MAX of two separate sups, and
+            // each is +inf where none of its own candidates covers x (review 2026-11-19 #9a).
             let mut pb = pr.p.clone();
             pb.push(neg(&pr.q[3..6]));
-            collect(cells_for(nb, db, &pb)?, &mut env);
+            let kb = pairs.len() + k;
+            for c in cells_for(nb, db, &pb)? {
+                env.quad.push(QuadC { num: c.num, den: c.den, con: c.con, pair: vec![kb] });
+            }
             return Ok(env);
         }
         let corners = |env: &mut Env| -> R<()> {
