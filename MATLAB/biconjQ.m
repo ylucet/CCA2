@@ -97,6 +97,7 @@ function h = biconjQ(obj, opts)
     RatCon.assertNoClosedEdges(obj.E, 'biconjQ');
     obj.assertOperable();
     obj.assertExact();
+    obj.assertContinuous();     % a discontinuous f has no biconjugate to compute -- named refusal
 
     nf = size(obj.fN, 1);
 

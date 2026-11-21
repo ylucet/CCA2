@@ -123,7 +123,12 @@ classdef conjQTest < matlab.unittest.TestCase
             % what a user means and what a WELL-FORMED subdivision says. Measured 2026-09-04.
             F  = [1 0; 1 0; 2 0; 2 0; 2 1];       % face 1 = edges 1,2,5; face 2 = edges 3,4,5
             H1 = [1 0; 0 1];  L1 = [0;0];  k1 = 0;
-            H2 = [4 1; 1 3];  L2 = [-2;1]; k2 = 0;
+            % f2 = f1 + x(x - y): the two pieces AGREE on the shared diagonal, because
+            % x(x - y) vanishes on it -- f is CONTINUOUS, the exact engine's scope (review
+            % 2026-11-19 #10: a jump across a shared edge is refused by name, pinned below).
+            % The diagonal Hessian is also different from f1's, so the fold still has two
+            % genuinely different quadratics to max.
+            H2 = [3 -1; -1 1];  L2 = [0;0];  k2 = 0;
             f  = QuaPol(V, E, [0 0 0 0, H1(1,1), H1(1,2), H1(2,2), L1(1), L1(2), k1; ...
                                0 0 0 0, H2(1,1), H2(1,2), H2(2,2), L2(1), L2(2), k2], F);
             testCase.verifyEqual(f.nf, 2);
@@ -140,6 +145,15 @@ classdef conjQTest < matlab.unittest.TestCase
             [got, idx] = g.eval(S);
             testCase.verifyTrue(all(idx > 0), 'the folded cells must cover the plane');
             testCase.verifyEqual(got, want, 'RelTol', 1e-9, 'AbsTol', 1e-9);
+
+            % The DISCONTINUOUS split of the same square -- the original fixture, 2x^2 + xy +
+            % 1.5y^2 - 2x + y on the upper triangle, which disagrees with f1 on the diagonal --
+            % is OUT OF the exact engine's scope (review 2026-11-19 #10): refused by name, not
+            % answered.
+            fD = QuaPol(V, E, [0 0 0 0, 1, 0, 1, 0, 0, 0; 0 0 0 0, 4, 1, 3, -2, 1, 0], ...
+                        [1 0; 1 0; 2 0; 2 0; 2 1]);
+            testCase.verifyError(@() conjQ(fD), 'PLQ:notContinuous', ...
+                'a jump across the shared diagonal is out of scope, refused by name');
         end
 
 
@@ -355,7 +369,12 @@ classdef conjQTest < matlab.unittest.TestCase
             V = [0 0; 1 0; 0 1; -1 0; 0 -1];
             E = [1 2 0; 1 3 0; 1 4 0; 1 5 0];
             F = [1 4; 2 1; 3 2; 4 3];
-            Hs = {[1 0;0 1], [2 0;0 1], [1 0;0 2], [3 0;0 3]};
+            % CONTINUOUS fan (review 2026-11-19 #10): the quadrants must agree on every shared
+            % ray. With diagonal pieces x^2/2 + y^2/2 | a x^2 + y^2/2 | a x^2 + b y^2 | x^2/2 +
+            % b y^2, that is exactly the case for a = 2, b = 3 below. The original fixture
+            % ({I, diag(2,1), diag(1,2), diag(3,3)}) disagreed on three of the four rays and is
+            % now refused by name -- pinned at the end of this test.
+            Hs = {[1 0;0 1], [4 0;0 1], [4 0;0 6], [1 0;0 6]};
             fc = zeros(4,10);
             for k = 1:4
                 fc(k,:) = [0 0 0 0, Hs{k}(1,1), Hs{k}(1,2), Hs{k}(2,2), 0, 0, 0];
@@ -371,6 +390,17 @@ classdef conjQTest < matlab.unittest.TestCase
                 want = max(want, (u>0).*(u.^2/(2*Hs{k}(1,1))) + (v>0).*(v.^2/(2*Hs{k}(2,2))));
             end
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
+
+            % The DISCONTINUOUS fan -- the original fixture {I, diag(2,1), diag(1,2), diag(3,3)},
+            % which disagrees with its neighbours on three of the four shared rays -- is OUT OF
+            % the exact engine's scope (review 2026-11-19 #10): refused by name, not answered.
+            HsD = {[1 0;0 1], [2 0;0 1], [1 0;0 2], [3 0;0 3]};
+            fcD = zeros(4,10);
+            for k = 1:4
+                fcD(k,:) = [0 0 0 0, HsD{k}(1,1), HsD{k}(1,2), HsD{k}(2,2), 0, 0, 0];
+            end
+            testCase.verifyError(@() conjQ(QuaPol(V, E, fcD, F)), 'PLQ:notContinuous', ...
+                'jumps across the shared rays are out of scope, refused by name');
         end
 
         function aTHINConjugateKeepsTheFaceDENOMINATOR(testCase)
@@ -966,12 +996,16 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(up.eval([0 0; 0 -2; 0 1; 1 -1; -0.5 0]), [0; 0; inf; inf; inf]);
             dn = conjQ(QuaPol(V, E, [0 0 0 0 0 0 2 1 0 0], [0 1; 1 0]));
             testCase.verifyEqual(dn.eval([1 -2; 1 0; 1 3; 0 0; 2 -1]), [1; 0; 0; inf; inf], 'AbsTol', 1e-14);
-            % the two discontinuous examples built from exactly these pieces
+            % the two discontinuous examples built from exactly these pieces: OUT OF the exact
+            % engine's scope -- a jump across the shared line (review 2026-11-19 #10) -- refused
+            % by name. (They used to be answered as the sup over the closed pieces; that answer
+            % was right for conj but the pair's biconjugate was wrong, which is why the input is
+            % now refused at the entry of both operators.)
             D = QuaPol.examplesDiscontinuous();
-            testCase.verifyEqual(conjQ(D{1}).eval([0 0; 0 -1; 0 1]), [0; inf; inf], ...
-                'f = 0 above, 1 below: f* is finite at the origin only');
-            testCase.verifyEqual(conjQ(D{3}).eval([1 0; 1 -2; 1 1; 0 0]), [0.25; 1; inf; inf], ...
-                'AbsTol', 1e-14, 'x^2 above, y^2 + x below: f* lives on the ray {s1 = 1, s2 <= 0}');
+            testCase.verifyError(@() conjQ(D{1}), 'PLQ:notContinuous', ...
+                'f = 0 above, 1 below: a jump across the shared line');
+            testCase.verifyError(@() conjQ(D{3}), 'PLQ:notContinuous', ...
+                'x^2 above, y^2 + x below: a jump across the shared line');
         end
 
         function aCHAINWhoseRowCountIsNotItsEdgeCountIsStillRefused(testCase)

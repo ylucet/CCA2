@@ -170,6 +170,41 @@ class QuaPol:
                   'Convex-analysis operators require a quadratic numerator (degree<=2); got '
                   'degree %d. Cubic is allowed for isConvex only.' % self.degree())
 
+    def assertContinuous(self):
+        """f is CONTINUOUS across every shared edge -- exact, three points per edge.
+
+        d = f_L - f_R restricted to the edge LINE is a univariate quadratic, and it vanishes on
+        the whole edge iff it vanishes at three points of it: both endpoints and the midpoint
+        (the same condition (b) three-point test as MATLAB isConvexQ.m, whose header carries the
+        reference). A degenerate edge (both endpoints at one vertex) leaves one point, and the
+        midpoint formula below evaluates to that point, so the single test that remains decides
+        d on it.
+        """
+        self.assertExact()
+        if self.nf < 2:
+            return
+        fN, fD = self.fN, self.fD
+        for j, row in enumerate(self.F):
+            iL, iR = row
+            if iL == 0 or iR == 0 or iL == iR:
+                continue
+            dn = [a * fD[iR - 1] - b * fD[iL - 1] for a, b in zip(fN[iL - 1], fN[iR - 1])]
+            e = self.E[j]
+            P1 = self.VN[e[0] - 1]; D1 = self.VD[e[0] - 1]
+            P2 = self.VN[e[1] - 1]; D2 = self.VD[e[1] - 1]
+
+            def val(P, D):
+                # 2*D^2 * ((n5 x^2)/2 + n6 xy + (n7 y^2)/2 + n8 x + n9 y + n10) at (x,y) = P/D:
+                # all integers, zero exactly when the jump value is (isConvexQ.m evalNum).
+                return (dn[4] * P[0] * P[0] + 2 * dn[5] * P[0] * P[1] + dn[6] * P[1] * P[1]
+                        + 2 * dn[7] * P[0] * D + 2 * dn[8] * P[1] * D + 2 * dn[9] * D * D)
+            if (val(P1, D1) != 0 or val(P2, D2) != 0
+                    or val((P1[0] * D2 + P2[0] * D1, P1[1] * D2 + P2[1] * D1), 2 * D1 * D2) != 0):
+                error('PLQ:notContinuous',
+                      'f is discontinuous across edge %d: faces %d and %d do not agree on the '
+                      'edge, and the conjugate and biconjugate are implemented only for '
+                      'continuous inputs.' % (j + 1, iL, iR))
+
     # ---- the operators ---------------------------------------------------------------------------
     def conj(self, engine='exact'):
         """The Legendre-Fenchel conjugate f*(s) = sup_x <s,x> - f(x), exactly, as a QuaCon."""

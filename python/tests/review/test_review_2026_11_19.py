@@ -232,7 +232,6 @@ def _d_family():
     return json.load(open(path))
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #10: discontinuous input must be refused by name')
 def test_discontinuous_input_refused_by_name():
     for rec in _d_family():
         f = QuaPol(rec['V'], rec['E'], rec['f'], rec['F'])

@@ -123,7 +123,6 @@ fn biconj_infinite_outside_the_square() {
 /// at the entry of conj and biconj, in every engine. The current engine answers conj (and gets
 /// biconj wrong: 12 of 24 answered calls above a certified upper bound).
 #[test]
-#[ignore = "review 2026-11-19 #10: discontinuous input must be refused by name"]
 fn discontinuous_input_refused_by_name() {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixes: Vec<serde_json::Value> = serde_json::from_str(
@@ -149,6 +148,19 @@ fn discontinuous_input_refused_by_name() {
         let e2 = cca2::biconj_q::biconj_q(&p, &Default::default()).unwrap_err();
         assert_eq!(e2.id, "PLQ:notContinuous", "{}: biconj refused as {:?}", x["name"], e2.id);
     }
+}
+
+/// Finding 10 guard. R3-072 (a continuous 2-piece split of a quadrilateral: the two quadratics
+/// differ by a multiple of the shared edge's own linear form) must PASS the continuity check, so
+/// conjQ and biconjQ still answer it.
+#[test]
+fn continuous_input_not_refused() {
+    let f = pol(&[[-3, 2], [-1, 0], [2, 0], [-2, 3]],
+                &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    cca2::conj_q::conj_q(&f).unwrap();
+    cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap();
 }
 
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN

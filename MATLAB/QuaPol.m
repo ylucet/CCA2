@@ -761,6 +761,40 @@ classdef QuaPol < RatPol & QuaPar
                      'got degree %d. Cubic is allowed for isConvex only.'], obj.degree);
             end
        end
+       function assertContinuous(obj)
+       % objective: error unless f is CONTINUOUS across every shared edge, decided EXACTLY by
+       %   integer arithmetic.
+       %
+       % d = f_L - f_R restricted to the edge LINE is a univariate quadratic, and it vanishes on
+       % the whole edge iff it vanishes at three points of it: both endpoints and the midpoint
+       % (condition (b) of isConvexQ.m, the same three-point test, whose header carries the
+       % reference). A degenerate edge (both endpoints at one vertex) leaves one point, and the
+       % midpoint formula below evaluates to that point, so the single test that remains decides
+       % d on it.
+            % 2*D^2 * ((n5 x^2)/2 + n6 xy + (n7 y^2)/2 + n8 x + n9 y + n10) at (x,y) = P/D --
+            % the same formula as isConvexQ.m evalNum: all integers, zero exactly when the jump
+            % value is; checked against its scale by ratQ.chkB.
+            jumpNum = @(n, P, D) ratQ.chkB(n(5)*P(1)^2 + 2*n(6)*P(1)*P(2) + n(7)*P(2)^2 ...
+                                          + 2*n(8)*P(1)*D + 2*n(9)*P(2)*D + 2*n(10)*D^2, ...
+                                          abs(n(5:10)) * abs([P(1)^2; 2*P(1)*P(2); P(2)^2; 2*P(1)*D; 2*P(2)*D; 2*D^2]), 'jump value');
+            obj.assertExact();
+            if obj.nf < 2, return; end
+            for j = 1:size(obj.F, 1)
+                iL = obj.F(j,1);  iR = obj.F(j,2);
+                if iL == 0 || iR == 0 || iL == iR, continue, end
+                [dn, ~] = ratQ.sub(obj.fN(iL,:), obj.fD(iL), obj.fN(iR,:), obj.fD(iR));
+                P1 = obj.VN(obj.E(j,1), :);  D1 = obj.VD(obj.E(j,1));
+                P2 = obj.VN(obj.E(j,2), :);  D2 = obj.VD(obj.E(j,2));
+                Pm = [P1(1)*D2 + P2(1)*D1, P1(2)*D2 + P2(2)*D1];
+                Dm = 2*D1*D2;
+                if jumpNum(dn, P1, D1) ~= 0 || jumpNum(dn, P2, D2) ~= 0 || jumpNum(dn, Pm, Dm) ~= 0
+                    error('PLQ:notContinuous', ...
+                        ['f is discontinuous across edge %d: faces %d and %d do not agree on ' ...
+                         'the edge, and the conjugate and biconjugate are implemented only for ' ...
+                         'continuous inputs.'], j, iL, iR);
+                end
+            end
+       end
        function g = conj(obj, engine)
        % objective: Legendre-Fenchel conjugate f*(s) = sup_x <s,x> - f(x)
        % [input]  obj   : QuaPol (quadratic on polyhedral); must be operable (degree<=2)
