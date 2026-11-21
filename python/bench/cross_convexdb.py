@@ -996,6 +996,16 @@ class Ambiguous(Exception):
     pass
 
 
+class FaceConflict(Ambiguous):
+    """Two faces of the engine's result hold at the same point with DIFFERENT values.
+
+    That is not an "cannot evaluate exactly" case (which is what Ambiguous means and what
+    justifies the double-precision fallback): it is a defect of the result itself. Review
+    2026-11-19 #12: report it as a disagreement instead of silently falling back to the
+    1e-6 double protocol, which can hide it (the double eval may pick one face and agree)."""
+    pass
+
+
 def _mp_pt(pt):
     out = []
     for t in pt:
@@ -1069,7 +1079,9 @@ def _face_holds(fc_rows, EcQ, P, g=None):
             raise Ambiguous('table-%d row in a QuaCon face' % tbl)
         c = EcQ[e - 1]
         q = eval_pairline_mp(c, br, P) if br else eval_conic_mp(c, P)
-        scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(mp.mpf(1), P[0], P[1]) ** 2)
+        # scale with |coordinates| (review 2026-11-19 #12: the signed max under-scaled a
+        # point like (-5, 0.1), where the conic is ~25x bigger than the tolerance allowed)
+        scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(abs(P[0]), abs(P[1])) ** 2)
         if side == 0:
             if abs(q) > TOL_ONCURVE * scale:
                 return False
@@ -1089,7 +1101,9 @@ def eval_quacon_mp(g, P):
     vals = [eval_face_mp(g.fN[k], g.fD[k], P) for k in held]
     m = max(abs(v) for v in vals)
     if max(vals) - min(vals) > TOL_ONCURVE * m:
-        raise Ambiguous('two faces hold at %s with different values' % (P,))
+        # a defect of the result, not an exactness gap: report, never fall back (#12)
+        raise FaceConflict('two faces hold at %s with different values: %s'
+                           % (P, [mp.nstr(v, 25) for v in vals]))
     return vals[0]
 
 
@@ -1138,7 +1152,8 @@ def eval_algcrv_mp(g, P):
             if tbl == 0:
                 c = g.EcQ[idx - 1]
                 q = eval_pairline_mp(c, br, P) if br else eval_conic_mp(c, P)
-                scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(mp.mpf(1), P[0], P[1]) ** 2)
+                # |coordinates|, as in _face_holds (review 2026-11-19 #12)
+                scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(abs(P[0]), abs(P[1])) ** 2)
                 if side == 0 and abs(q) > TOL_ONCURVE * scale:
                     ok = False
                     break
@@ -1326,9 +1341,13 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
     svar = entry.vars_fstar if op == 'conj' else entry.vars_f
     if stored is None:
         vals = []
+        conflicts = []
         for (label, P) in pts_mp:
             try:
                 v = eval_engine_mp(res, P)
+            except FaceConflict as e:
+                conflicts.append('%s: %s' % (label, e))      # a defect: report, do not fall back
+                continue
             except Ambiguous as e:
                 try:
                     v = eval_engine_double(res, P)
@@ -1336,6 +1355,9 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
                     v = mp.inf
                     e = Ambiguous('%s; double eval: %s' % (e, e2))
             vals.append((label, v))
+        if conflicts:
+            return 'disagree', 'open entry; FACE CONFLICT (two faces, two values): ' \
+                              + '; '.join(conflicts), t, vals
         ok, notes = open_sanity(entry, op, res, vals, pts_sympy)
         return ('agree' if ok else 'disagree'), 'open entry; ' + '; '.join(notes), t, vals
     bad = []
@@ -1346,6 +1368,11 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
         try:
             a = eval_engine_mp(res, P)
             tol = point_tol(pts_sympy[label])
+        except FaceConflict as e:
+            # a defect of the engine's result, not an exactness gap: report as a disagreement
+            # instead of falling back to the 1e-6 double protocol, which can hide it (#12)
+            bad.append('%s: FACE CONFLICT in the engine result: %s' % (label, e))
+            continue
         except Ambiguous:
             try:
                 a = eval_engine_double(res, P)
@@ -1432,8 +1459,23 @@ def run_rust(entry, fx, ops, golden, pts_sympy):
             except Exception:      # noqa: BLE001
                 rust_mp = None
         if stored is None:
-            out[op] = ('open', 'rust kind=%s; values %s' % (kind, [mp.nstr(_as_mp(v), 12) for v in ev]),
-                       None, [(l, _as_mp(v)) for (l, v) in zip(pts, ev)])
+            # review 2026-11-19 #12: an open Rust entry must get the SAME f** <= f sanity
+            # check the open Python entry gets; before it was only reported as 'open'
+            vals = [(l, _as_mp(v)) for (l, v) in zip(pts_labels(pts_sympy), ev)]
+            conflicts = []
+            if rust_mp is not None:
+                for (label, pt) in zip(pts_labels(pts_sympy), pts):
+                    try:
+                        eval_quacon_mp(rust_mp, _mp_pt(pt))
+                    except FaceConflict as e:
+                        conflicts.append('%s: %s' % (label, e))
+            if conflicts:
+                out[op] = ('disagree', 'open entry; FACE CONFLICT (two faces, two values): '
+                             + '; '.join(conflicts), None, vals)
+                continue
+            ok, notes = open_sanity(entry, op, None, vals, pts_sympy)
+            out[op] = (('agree' if ok else 'disagree'),
+                       'open entry; ' + '; '.join(notes) + ' [rust kind=%s]' % kind, None, vals)
             continue
         bad = []
         vals = []
@@ -1444,19 +1486,23 @@ def run_rust(entry, fx, ops, golden, pts_sympy):
                 try:
                     a = eval_quacon_mp(rust_mp, P)
                     tol = point_tol(pt)
+                except FaceConflict as e:
+                    # a defect of the Rust result, not an exactness gap: report it (#12)
+                    bad.append('%s: FACE CONFLICT in the Rust result: %s' % (label, e))
+                    continue
                 except Ambiguous:
                     a = _as_mp(ev[i])
                     tol = TOL_DOUBLE
             else:
                 a = _as_mp(ev[i])
                 tol = TOL_DOUBLE
-            a_inf = a is mp.inf
-            b_inf = b is mp.inf
+            a_inf = a is mp.inf or a == mp.inf
+            b_inf = b is mp.inf or b == mp.inf
             if a_inf and b_inf:
                 vals.append((label, mp.inf, mp.inf))
                 continue
             if a_inf != b_inf:
-                bad.append('%s: rust %s vs registry +inf' % (label, a))
+                bad.append('%s: rust %s vs registry %s' % (label, mp.nstr(a, 20), mp.nstr(b, 20)))
                 continue
             if abs(a - b) > tol * max(mp.mpf(1), abs(a), abs(b)):
                 bad.append('%s: rust %s vs registry %s (rel gap %s)'

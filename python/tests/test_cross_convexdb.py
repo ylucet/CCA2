@@ -51,8 +51,15 @@ TEST_SLUGS = [
 def registry():
     try:
         path = cc.find_registry_json()
-    except SystemExit:
-        pytest.skip('convexdb registry not found (sibling folder missing)')
+    except SystemExit as e:
+        # review 2026-11-19 #12: skip with a VISIBLE reason (fresh clone / CI has no sibling
+        # registry). The reason carries the paths tried and the CCA2_CONVEXDB_DIR override,
+        # and is printed to stderr as well, so a green run does not look like these tests
+        # passed.
+        msg = ('convexdb registry not found in the sibling folder, so the cross-check '
+               'tests are SKIPPED (not passed): %s' % str(e).replace('\n', ' | '))
+        print('\n*** %s ***' % msg, file=sys.stderr)
+        pytest.skip(msg)
     _ver, entries = cc.load_entries(path)
     return entries
 
@@ -95,3 +102,30 @@ def test_accepted_entries_agree(registry):
         assert rec['parse'].startswith('ok'), (slug, rec['parse'])
         assert rec['py']['conj']['status'] == 'agree', (slug, rec['py']['conj'])
         assert rec['py']['biconj']['status'] == 'agree', (slug, rec['py']['biconj'])
+
+
+def _const_face_quacon(values):
+    """A QuaCon-shaped object with one face per value, each face holding everywhere (empty FC)."""
+    class G:
+        nf = len(values)
+        FC = [[] for _ in values]
+        EcQ = []
+        fN = [[0, 0, 0, 0, 0, 0, 0, 0, 0, v] for v in values]
+        fD = [1] * len(values)
+    return G
+
+
+def test_face_conflict_is_reported_not_fallen_back():
+    # review 2026-11-19 #12: a result whose two faces both hold at a point with DIFFERENT
+    # values is a defect of the result, not an exactness gap. eval_quacon_mp must raise
+    # FaceConflict so the cross-check reports it as a disagreement -- not a bare Ambiguous,
+    # which would trigger the 1e-6 double fallback that the double eval can hide.
+    assert issubclass(cc.FaceConflict, cc.Ambiguous)
+    g = _const_face_quacon([1, 2])                 # both faces hold at the origin
+    P = (cc.mp.mpf(0), cc.mp.mpf(0))
+    with pytest.raises(cc.FaceConflict):
+        cc.eval_quacon_mp(g, P)
+    # a result with a single held face has no conflict and returns its value
+    assert cc.eval_quacon_mp(_const_face_quacon([3]), P) == cc.mp.mpf(3)
+    # two faces that AGREE at the point are fine (no conflict)
+    assert cc.eval_quacon_mp(_const_face_quacon([5, 5]), P) == cc.mp.mpf(5)
