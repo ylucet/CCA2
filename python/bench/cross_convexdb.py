@@ -1308,8 +1308,16 @@ def run_python(entry, fx, ops):
     return out
 
 
-def open_sanity(entry, op, res, vals, pts_sympy):
-    """Necessary-condition checks for an engine value on an OPEN registry entry."""
+def open_sanity(entry, op, res, vals, pts_sympy, double=frozenset()):
+    """Necessary-condition checks for an engine value on an OPEN registry entry.
+
+    `double` is the set of labels whose value came from the double protocol (a non-QuaCon
+    result -- AlgCrv / EnvelopeMin, or the Rust golden binary's eval): those carry ~1e-6
+    RELATIVE error, so the f** <= f test uses a matching relative tolerance there. Exact
+    (QuaCon) values are checked to 1e-20 absolute. Without this split, a double-protocol
+    value a hair above f (lee_indefinite_triangle's Rust biconj: 4e-19 over in absolute, a
+    relative 2e-13 -- far inside its own ~1e-6 relative error) is misreported as a violation
+    (review 2026-11-19 #12 follow-up)."""
     notes = []
     ok = True
     for (label, v) in vals:
@@ -1322,11 +1330,20 @@ def open_sanity(entry, op, res, vals, pts_sympy):
             notes.append('%s: engine %s (point outside the primal domain)' % (label, mp.nstr(v, 12)))
             continue
         fv = mp.mpf(str(sp.N(sp.expand(f_here), 120)))
-        if op == 'biconj' and v > fv + mp.mpf(1e-20):      # decimal-literal points carry ~36 digits
-            ok = False
-            notes.append('%s: VIOLATION f**=%s > f=%s' % (label, mp.nstr(v, 15), mp.nstr(fv, 15)))
-        else:
-            notes.append('%s: value %s (f=%s)' % (label, mp.nstr(v, 15), mp.nstr(fv, 15)))
+        if op == 'biconj':
+            if label in double:
+                bound = fv * (1 + TOL_DOUBLE)                 # double protocol: relative error
+            else:
+                bound = fv + mp.mpf(1e-20)                    # exact (QuaCon): decimal points ~36 digits
+            if v > bound:
+                ok = False
+                notes.append('%s: VIOLATION f**=%s > f=%s%s' % (
+                    label, mp.nstr(v, 15), mp.nstr(fv, 15),
+                    ' (double protocol)' if label in double else ''))
+            else:
+                notes.append('%s: value %s (f=%s%s)' % (
+                    label, mp.nstr(v, 15), mp.nstr(fv, 15),
+                    ', double protocol' if label in double else ''))
     if op == 'conj':
         notes.append('NOTE: no exact sup oracle for open conj entries (none exist in the registry)')
     return ok, notes
@@ -1342,23 +1359,25 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
     if stored is None:
         vals = []
         conflicts = []
+        double = set()
         for (label, P) in pts_mp:
             try:
                 v = eval_engine_mp(res, P)
             except FaceConflict as e:
                 conflicts.append('%s: %s' % (label, e))      # a defect: report, do not fall back
                 continue
-            except Ambiguous as e:
+            except Ambiguous:
                 try:
                     v = eval_engine_double(res, P)
+                    double.add(label)
                 except Exception as e2:    # noqa: BLE001
                     v = mp.inf
-                    e = Ambiguous('%s; double eval: %s' % (e, e2))
+                    e = Ambiguous('double eval: %s' % e2)
             vals.append((label, v))
         if conflicts:
             return 'disagree', 'open entry; FACE CONFLICT (two faces, two values): ' \
                               + '; '.join(conflicts), t, vals
-        ok, notes = open_sanity(entry, op, res, vals, pts_sympy)
+        ok, notes = open_sanity(entry, op, res, vals, pts_sympy, double)
         return ('agree' if ok else 'disagree'), 'open entry; ' + '; '.join(notes), t, vals
     bad = []
     vals = []
@@ -1473,7 +1492,9 @@ def run_rust(entry, fx, ops, golden, pts_sympy):
                 out[op] = ('disagree', 'open entry; FACE CONFLICT (two faces, two values): '
                              + '; '.join(conflicts), None, vals)
                 continue
-            ok, notes = open_sanity(entry, op, None, vals, pts_sympy)
+            # the Rust evalV values come from the golden binary (at best double precision),
+            # so the f** <= f test uses the double-protocol (relative) tolerance
+            ok, notes = open_sanity(entry, op, None, vals, pts_sympy, double=set(pts_labels(pts_sympy)))
             out[op] = (('agree' if ok else 'disagree'),
                        'open entry; ' + '; '.join(notes) + ' [rust kind=%s]' % kind, None, vals)
             continue
