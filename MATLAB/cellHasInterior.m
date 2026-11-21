@@ -164,76 +164,281 @@ function tf = probeInterior(EcQ, rows)
 end
 
 function tf = cadInterior(EcQ, rows)
-% objective: the COMPLETE sample search, run when the witness search above finds nothing. The cell is
-% open, so if it is non-empty it meets a sector of the cylindrical decomposition of the plane by the
-% critical abscissae (the roots of every conic's discriminant in y, the vertical asymptotes of the
-% rows that are linear in y, and every pairwise intersection); a point in the middle of each sector,
-% and one past each end, is tested. Needed because probeInterior's box is only a few units wide, so a
-% cell far from the origin whose conics do not meet was declared empty (the 15-spike star polygon;
-% DECISIONS.md 2026-11-17). A cell with an equality row has no interior sector: not handled here.
-% Twin of python/cca2/cell_has_interior.py _cadInterior and rust/src/cells.rs cad_interior.
+% objective: the EXACT and COMPLETE decision of "does the open cell {side_i * q_i > 0} have a point?",
+% run when the witness search above finds nothing. Twin of python/cca2/cell_has_interior.py
+% _cadInterior (whose docstring holds the completeness argument) and rust/src/cells.rs cad_interior.
+% A cylindrical decomposition over Q, no floating point: shear so that every non-line conic has a y^2
+% term; the critical abscissae are the roots of every discriminant, every vertical line's abscissa,
+% every pairwise resultant, and -- for two conics whose resultant is identically zero (they share a
+% line) -- the crossing of their non-shared lines; one rational (dyadic) column per interval between
+% them and one rational point per sector are tested with exact integer signs.
+% A cell with an equality row has no open cell: false. Past the 2^53 wall (ratQ:overflow) the cell is
+% KEPT, the direction this routine errs in.
     tf = false;
     if any(rows(:,2) == 0), return, end
+    try
+        tf = cadExact(EcQ, rows);
+    catch ME
+        if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME); end
+        tf = true;
+    end
+end
+
+function tf = cadExact(EcQ, rows)
+    tf = false;
     idx = unique(rows(:,1));
+    sg = zeros(numel(idx), 1);
+    for k = 1:numel(idx)
+        sd = unique(rows(rows(:,1) == idx(k), 2));
+        if numel(sd) > 1, return, end              % q > 0 and q < 0 on the same conic
+        sg(k) = sd;
+    end
     cs = EcQ(idx, 1:6);
-    xs = zeros(0,1);
-    for k = 1:size(cs,1)
-        c = cs(k,:);
+    k = 0;
+    while any((cs(:,1) ~= 0 | cs(:,2) ~= 0 | cs(:,3) ~= 0) & cs(:,1)*k^2 + cs(:,2)*k + cs(:,3) == 0)
+        k = k + 1;
+    end
+    cs = [cs(:,1), 2*k*cs(:,1) + cs(:,2), k^2*cs(:,1) + k*cs(:,2) + cs(:,3), cs(:,4), k*cs(:,4) + cs(:,5), cs(:,6)];
+    ratQ.chk(cs, 'sheared conics');
+    [xpolys, special] = cadCritical(cs);
+    xs = cadSamples(xpolys, {});
+    for x0 = xs(:).'
+        [xn, xd] = dyadic(x0);
+        [plain, sp, alive] = cadYPolys(cs, sg, xn, xd, special);
+        if ~alive, continue, end
+        for y0 = cadSamples(sp, plain)
+            [yn, yd] = dyadic(y0);
+            ok = true;
+            for r = 1:size(cs,1)
+                c = cs(r,:);
+                v = c(1)*xn^2*yd^2 + c(2)*xn*yn*xd*yd + c(3)*yn^2*xd^2 + c(4)*xn*xd*yd^2 + c(5)*yn*yd*xd^2 + c(6)*xd^2*yd^2;
+                ratQ.chk([c(1)*xn^2*yd^2, c(2)*xn*yn*xd*yd, c(3)*yn^2*xd^2, c(4)*xn*xd*yd^2, c(5)*yn*yd*xd^2, c(6)*xd^2*yd^2, v], 'exact cell value');
+                if sg(r) * v <= 0, ok = false; break, end
+            end
+            if ok, tf = true; return, end
+        end
+    end
+end
+
+function [n, d] = dyadic(x)
+    d = 1;
+    while x*d ~= round(x*d), d = d*2; end
+    n = x*d;
+end
+
+function p = pmul(a, b)
+    if isempty(a) || isempty(b), p = []; return, end
+    p = ratQ.polyTrim(ratQ.chk(conv(a, b), 'polynomial product'));
+end
+
+function p = padd(a, b, sb)
+    b = sb * b;
+    k = max(numel(a), numel(b));
+    p = ratQ.polyTrim([zeros(1, k-numel(a)), a(:).'] + [zeros(1, k-numel(b)), b(:).']);
+end
+
+function [polys, special] = cadCritical(cs)
+% The integer polynomials in x whose real roots are the critical abscissae (step 2 of the argument),
+% and the rows whose y-polynomials can share a root at EVERY column (a repeated factor, or a common
+% one with another row): at any other column the y-polynomials are squarefree and pairwise coprime,
+% because a resultant that is not identically zero has no root there.
+    polys = {};
+    special = false(size(cs,1), 1);
+    full = find(cs(:,3) ~= 0).';
+    slant = find(cs(:,3) == 0 & cs(:,1) == 0 & cs(:,2) == 0 & cs(:,5) ~= 0).';
+    for r = 1:size(cs,1)
+        c = cs(r,:);
         if c(3) ~= 0
-            q = [c(2)^2 - 4*c(3)*c(1), 2*c(2)*c(5) - 4*c(3)*c(4), c(5)^2 - 4*c(3)*c(6)];
-        elseif c(2) ~= 0
-            xs(end+1,1) = -c(5)/c(2);  %#ok<AGROW>
-            continue
-        else
-            continue
-        end
-        if q(1) ~= 0
-            d = q(2)^2 - 4*q(1)*q(3);
-            if d >= 0
-                sd = sqrt(d);
-                xs(end+1,1) = (-q(2) - sd)/(2*q(1));  %#ok<AGROW>
-                xs(end+1,1) = (-q(2) + sd)/(2*q(1));  %#ok<AGROW>
-            end
-        elseif q(2) ~= 0
-            xs(end+1,1) = -q(3)/q(2);  %#ok<AGROW>
+            polys{end+1} = [c(2)^2 - 4*c(3)*c(1), 2*c(2)*c(5) - 4*c(3)*c(4), c(5)^2 - 4*c(3)*c(6)]; %#ok<AGROW>
+            if isempty(ratQ.polyTrim(polys{end})), special(r) = true; end
+        elseif c(5) == 0 && c(2) == 0 && c(1) == 0
+            polys{end+1} = [c(4), c(6)]; %#ok<AGROW>   % a vertical line (or a constant)
         end
     end
-    for a = 1:numel(idx)
-        for b = a+1:numel(idx)
-            try
-                P = conicMeet(EcQ(idx(a),:), EcQ(idx(b),:));
-            catch ME
-                if ~strcmp(ME.identifier, 'ratQ:overflow'), rethrow(ME); end
-                continue
-            end
-            xs = [xs; P(:,1)];  %#ok<AGROW>
-        end
-    end
-    xs = unique(xs(isfinite(xs)));
-    if isempty(xs), xs = 0; end
-    samp = [xs(1) - 1; xs(end) + 1; (xs(1:end-1) + xs(2:end))/2];
-    for x = samp.'
-        ys = zeros(0,1);
-        for k = 1:size(cs,1)
-            c = cs(k,:);
-            B = c(2)*x + c(5);
-            C = c(1)*x*x + c(4)*x + c(6);
-            if c(3) ~= 0
-                d = B*B - 4*c(3)*C;
-                if d >= 0
-                    sd = sqrt(d);
-                    ys(end+1,1) = (-B - sd)/(2*c(3));  %#ok<AGROW>
-                    ys(end+1,1) = (-B + sd)/(2*c(3));  %#ok<AGROW>
+    for i = 1:numel(full)
+        p = cs(full(i),:);
+        al = p(3);  be = [p(2), p(5)];  ga = [p(1), p(4), p(6)];
+        for j = i+1:numel(full)
+            q = cs(full(j),:);
+            al2 = q(3);  be2 = [q(2), q(5)];  ga2 = [q(1), q(4), q(6)];
+            u = padd(pmul(al2, be), pmul(al, be2), -1);       % alpha' beta  - alpha beta'
+            w = padd(pmul(al2, ga), pmul(al, ga2), -1);       % alpha' gamma - alpha gamma'
+            v = padd(pmul(be, ga2), pmul(be2, ga), -1);       % beta gamma'  - beta' gamma
+            res = padd(pmul(w, w), pmul(u, v), 1);            % (a g' - a' g)^2 - (a b' - a' b)(b g' - b' g)
+            if ~isempty(res)
+                polys{end+1} = res; %#ok<AGROW>
+            else
+                special([full(i), full(j)]) = true;
+                if ~isempty(u) || ~isempty(w)
+                    polys = [polys, sharedLineCrossing(p, q, u, w)]; %#ok<AGROW>
                 end
-            elseif B ~= 0
-                ys(end+1,1) = -C/B;  %#ok<AGROW>
             end
         end
-        ys = unique(ys(isfinite(ys)));
-        if isempty(ys), ys = 0; end
-        cand = [ys(1) - 1; ys(end) + 1; (ys(1:end-1) + ys(2:end))/2];
-        for y = cand.'
-            if satisfiesAll(EcQ, rows, [x y]), tf = true; return, end
+        for j = slant
+            q = cs(j,:);
+            B = q(5);  C = [q(4), q(6)];
+            res = padd(padd(pmul(al, pmul(C, C)), pmul(be, pmul(B, C)), -1), pmul(ga, pmul(B, B)), 1);
+            if ~isempty(res), polys{end+1} = res; else, special([full(i), j]) = true; end %#ok<AGROW>
         end
     end
+    for i = 1:numel(slant)
+        for j = i+1:numel(slant)
+            p = cs(slant(i),:);  q = cs(slant(j),:);
+            res = padd(pmul(p(5), [q(4), q(6)]), pmul(q(5), [p(4), p(6)]), -1);
+            if ~isempty(res), polys{end+1} = res; else, special([slant(i), slant(j)]) = true; end %#ok<AGROW>
+        end
+    end
+end
+
+function out = sharedLineCrossing(p, q, u, w)
+% p = L Mp and q = L Mq share the line L (resultant == 0, p and q not proportional):
+% T = alpha' p - alpha q = u(x) y + w(x) = L * N with N vertical, so L = T / gcd(u, w). Returns the
+% polynomial [den, -num] of the abscissa of Mp ^ Mq ({} when they are parallel). Symbolic: rare.
+    out = {};
+    if isempty(u), error('cellHasInterior:internal', 'shared line factor with no y term'); end
+    if isempty(w), g = ratQ.polyPrimitive(u); else, g = ratQ.polyGcd(u, w); end
+    syms X
+    G = poly2sym(sym(g), X);
+    Lu = simplify(poly2sym(sym(u), X) / G);
+    if isempty(w), Lw = sym(0); else, Lw = simplify(poly2sym(sym(w), X) / G); end
+    ell = subs(Lu, X, 0);
+    rr = subs(Lw, X, 0);
+    pp = subs(Lw, X, 1) - rr;
+    if ell == 0 || simplify(Lu - ell) ~= 0 || simplify(Lw - (pp*X + rr)) ~= 0
+        error('cellHasInterior:internal', 'shared factor of two conics is not a line');
+    end
+    m = sym(zeros(2,3));
+    cc = {p, q};
+    for t = 1:2
+        c = sym(cc{t});
+        mm = c(3) / ell;
+        m(t,:) = [mm, (c(2) - pp*mm)/ell, (c(5) - rr*mm)/ell];
+    end
+    det_ = m(1,1)*m(2,2) - m(2,1)*m(1,2);
+    if det_ == 0, return, end
+    xp = (m(2,1)*m(1,3) - m(1,1)*m(2,3)) / det_;
+    [nn, dd] = numden(xp);
+    out = {[double(dd), -double(nn)]};
+end
+
+function [plain, sp, alive] = cadYPolys(cs, sg, xn, xd, special)
+% The y-polynomials q(x0, .) of one column, x0 = xn/xd, scaled to integers: {plain} for the rows that
+% are squarefree and coprime to everything at this (non-critical) column, {sp} for the `special` rows
+% that need the coprime-base treatment. alive = false when the column holds no point of the cell:
+% a row constant in y with the wrong sign, or a quadratic without real roots with the wrong sign,
+% kills it; a quadratic without real roots with the right sign holds everywhere, so it adds no
+% sample boundary.
+    plain = {};  sp = {};  alive = true;
+    for r = 1:size(cs,1)
+        c = cs(r,:);
+        co = [c(3)*xd^2, c(2)*xn*xd + c(5)*xd^2, c(1)*xn^2 + c(4)*xn*xd + c(6)*xd^2];
+        ratQ.chk(co, 'column polynomial');
+        co = ratQ.polyPrimitive(co);
+        if isempty(co) || (numel(co) == 1 && sg(r)*co <= 0)
+            alive = false;  return
+        elseif numel(co) == 1
+            continue
+        elseif numel(co) == 3 && co(2)^2 - 4*co(1)*co(3) < 0
+            if sg(r)*co(1) < 0, alive = false; return, end
+        elseif special(r)
+            sp{end+1} = co; %#ok<AGROW>
+        else
+            plain{end+1} = co; %#ok<AGROW>
+        end
+    end
+end
+
+function base = coprimeBase(polys)
+% Pairwise coprime squarefree primitive polynomials with the same real roots as the product.
+    work = {};
+    for k = 1:numel(polys)
+        if numel(ratQ.polyTrim(polys{k})) > 1, work{end+1} = polys{k}; end %#ok<AGROW>
+    end
+    base = {};
+    while ~isempty(work)
+        p = ratQ.polyPrimitive(ratQ.polySquarefree(work{end}));  work(end) = [];
+        if numel(p) <= 1, continue, end
+        hit = 0;
+        for i = 1:numel(base)
+            g = ratQ.polyGcd(p, base{i});
+            if numel(g) > 1, hit = i; break, end
+        end
+        if hit == 0
+            base{end+1} = p; %#ok<AGROW>
+        else
+            b = base{hit};  base(hit) = [];
+            work = [work, {exactDiv(b, g), exactDiv(p, g), g}]; %#ok<AGROW>
+        end
+    end
+end
+
+function q = exactDiv(p, g)
+% p / g for integer polynomials by long division in integers (deconv is floating point); an error if
+% the division is not exact, which for primitive p and g | p cannot happen (Gauss).
+    r = p(:).';  g = g(:).';  n = numel(r) - numel(g) + 1;
+    q = zeros(1, max(n, 0));
+    for i = 1:n
+        c = r(i) / g(1);
+        if c ~= round(c), error('cellHasInterior:internal', 'inexact gcd division'); end
+        q(i) = c;
+        r(i:i+numel(g)-1) = r(i:i+numel(g)-1) - c * g;
+    end
+    if n < 1 || any(r ~= 0), error('cellHasInterior:internal', 'inexact gcd division'); end
+    ratQ.chk(q, 'gcd quotient');
+end
+
+function [tf, r, s] = cadBefore(r, s)
+% r < s for roots of coprime polynomials (so r ~= s): refine until the intervals separate.
+    while true
+        if r.hi <= s.lo, tf = true; return, end
+        if s.hi <= r.lo, tf = false; return, end
+        if r.hi - r.lo >= s.hi - s.lo, r = cadRefine(r); else, s = cadRefine(s); end
+    end
+end
+
+function r = cadRefine(r)
+    mid = (r.lo + r.hi) / 2;
+    if mid <= r.lo || mid >= r.hi      % the dyadic endpoint no longer fits a double: keep the cell
+        error('ratQ:overflow', 'root interval below double resolution');
+    end
+    if ratQ.sturmV(r.chain, mid) - ratQ.sturmV(r.chain, r.hi) == 1, r.lo = mid; else, r.hi = mid; end
+end
+
+function s = cadSamples(sp, plain)
+% Rational (dyadic) sample points: one in every open interval between consecutive distinct real roots
+% of the polynomials sp (made coprime first) and plain (already squarefree and coprime), one below and
+% one above all roots (0 when there is none). Exact: Sturm isolation of each factor, pairwise
+% separation by bisection.
+    if nargin < 2, plain = {}; end
+    polys = coprimeBase(sp);
+    for k = 1:numel(plain)
+        if numel(plain{k}) > 1, polys{end+1} = plain{k}; end %#ok<AGROW>
+    end
+    roots = {};
+    for k = 1:numel(polys)
+        p = polys{k};
+        chain = ratQ.sturmChain(p);
+        I = ratQ.isolateRoots(p);
+        for t = 1:size(I,1)
+            r = struct('chain', {chain}, 'lo', I(t,1), 'hi', I(t,2));
+            a = 1;  b = numel(roots) + 1;        % binary insertion keeps roots sorted
+            while a < b
+                m = floor((a + b) / 2);
+                [tf, roots{m}, r] = cadBefore(roots{m}, r); %#ok<AGROW>
+                if tf, a = m + 1; else, b = m; end
+            end
+            roots = [roots(1:a-1), {r}, roots(a:end)]; %#ok<AGROW>
+        end
+    end
+    if isempty(roots), s = 0; return, end
+    s = roots{1}.lo;
+    for i = 1:numel(roots)-1
+        r = roots{i};  t = roots{i+1};
+        while r.hi >= t.lo
+            if r.hi - r.lo >= t.hi - t.lo, r = cadRefine(r); else, t = cadRefine(t); end
+        end
+        roots{i} = r;  roots{i+1} = t;
+        s(end+1) = (r.hi + t.lo) / 2; %#ok<AGROW>
+    end
+    s(end+1) = roots{end}.hi + 1;
 end

@@ -1734,3 +1734,55 @@ CCA2/
     currently calls for (see Implementation status's "Next planned").
 
 *(No open questions remain — the design is fully specified.)*
+
+## cellHasInterior: the exact CAD fallback (review 2026-11-19 #2)
+
+`cellHasInterior(EcQ, rows)` removes cells of the arrangement that have no interior. Three stages:
+lines exactly (`feasible2`); a witness search (pairwise conic intersections, a seeded probe box; double
+precision, 1e-9 band, it only ever CONFIRMS); and, when both find nothing, `_cadInterior` /
+`cad_interior` / `cadInterior`, which DECIDES whether the open cell {side_i * q_i > 0} has a point.
+Only a False of this last stage removes a cell, so its completeness is what matters.
+
+**Algorithm (a cylindrical decomposition over Q, no floating point).**
+
+1. Shear x -> x + k y, k the least integer >= 0 with a0 k^2 + a1 k + a2 != 0 for every non-line conic.
+   A shear is a linear bijection of the plane, so the cell is non-empty iff the sheared one is. Every
+   row is now a *full conic* (a2 != 0), a *slanted line* (y-degree 1), a *vertical line* (a3 x + a5) or
+   a constant.
+2. Critical abscissae X = the real roots of: (a) the y-discriminant of every full conic (a double
+   root, and the crossing of the two lines of a degenerate conic); (b) the abscissa of every vertical
+   line (invisible to resultants; the old code skipped them); (c) Res_y of every pair that has a full
+   conic and whose resultant is not identically zero, and the linear resultant of two slanted lines;
+   (d) for two non-proportional full conics with Res_y == 0, which share a line L (q_i = L M_i,
+   q_j = L M_j): the abscissa of M_i ^ M_j. Here T = a2' q_i - a2 q_j = u(x) y + w(x) = L N with N
+   vertical, so L = T / gcd(u, w) and M_i = q_i / L are rational lines. (The gcd of two rational
+   conics is rational: a shared irrational or complex line would bring its conjugate and make the
+   conics proportional.) The old code dropped such pairs because `conicMeet` returns no points.
+   The other crossings L ^ M are singular points of q_i or q_j, covered by (a).
+3. On each open interval I of R \ X, the number of distinct real roots of every q_i(x, .) and the
+   order of all those roots together are constant: two root branches can only meet where a
+   discriminant, a vertical line (b) or a resultant (c)/(d) vanishes (the leading coefficients are
+   constants after the shear). So the sign of every row on the m-th sector of the column {x} x R (below
+   the first root, between the m-th and (m+1)-th, above the last) is the same for all x in I.
+4. If the cell S is non-empty it is open, so its projection contains an open interval, hence a point
+   x0 outside X; S meets {x0} x R in a non-empty open set, which has a point off every root, i.e. in
+   some sector. By 3 the same sector of any other column x_s of the same I lies in S. So testing one
+   rational point per sector of one rational column per interval (and beyond both ends) decides S.
+   A True comes with a rational point (`_cadPoint` returns it); a False is a proof of emptiness.
+
+**Exactness.** Columns and sector points are rationals chosen by Sturm isolation (`rat_q`): the
+critical polynomials are made pairwise coprime (gcd refinement), each factor's roots are isolated, and
+roots of different factors are ordered by bisection until their intervals separate (they cannot be
+equal). The sign tests are exact (Fractions / BigRational / scaled integers). Exact shortcuts per
+column: a row constant in y or a quadratic without real roots decides the column or drops out; at a
+non-critical column only the rows flagged "special" (repeated factor, or a zero resultant with another
+row) can share a root, so only those need the gcd treatment.
+
+**Limits.** Rows with side 0 (equalities) have no open cell: the stage answers False and the witness
+stage alone decides them. The earlier witness stages accept a boundary point within the 1e-9 band, so a
+zero-area cell touching the boundary is still kept (review item 19: face-count inflation, not a wrong
+value). In MATLAB, integers past 2^53 raise `ratQ:overflow` and the cell is kept, as everywhere in that
+engine; Python and Rust have no such limit. Mutation check: with the fallback switched off the far
+vertical strip and the shared-line cell are declared empty
+(`python/tests/test_cell_has_interior_cad.py::test_mutation_fallback_off_is_detected`, and the two
+review tests in all three engines).

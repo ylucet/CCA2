@@ -10,6 +10,7 @@ use crate::qua_con::QuaCon;
 use crate::rat_q::*;
 use num_traits::{Signed, Zero};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 // ==========================================================================================
 // cell_has_interior
@@ -109,99 +110,50 @@ pub fn cell_has_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {
     cad_interior(ecq, rows)
 }
 
-/// Complete sample search (a 2-D cylindrical decomposition), run when the witness search finds nothing:
-/// the cell is open, so if non-empty it meets a sector of the decomposition by the critical abscissae
-/// (conic discriminant roots, vertical asymptotes, pairwise intersections); a point in the middle of
-/// every sector (and past both ends) is tested. The random probe box is only a few units wide and misses
-/// a cell far from the origin when the conics do not meet (DECISIONS 2026-11-17). Skipped when a row is
-/// an equality (side 0). Mirrors python/cca2/cell_has_interior.py `_cadInterior`.
+/// EXACT and COMPLETE decision of "does the open cell {side_i * q_i > 0} have a point?", run when the
+/// witness search finds nothing. Mirrors python/cca2/cell_has_interior.py `_cadInterior`; the
+/// completeness argument is in that docstring (cylindrical decomposition over Q: shear so every
+/// non-line conic has a y^2 term; critical abscissae = discriminants, vertical-line roots, pairwise
+/// resultants, and for conics with a zero resultant the crossing of their non-shared lines; one
+/// rational sample column per interval between them, one rational point per sector; exact signs).
+/// Equalities (side 0) have no open cell: false.
 fn cad_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {
     if rows.iter().any(|r| r.1 == 0) {
         return Ok(false);
     }
     let idx: Vec<usize> = rows.iter().map(|r| r.0).collect::<BTreeSet<_>>().into_iter().collect();
-    let cs: Vec<[f64; 6]> = idx.iter().map(|&i| conic_f(&ecq[i - 1]).0).collect();
-    let mut xs: Vec<f64> = vec![];
-    for c in &cs {
-        let [a0, a1, a2, a3, a4, a5] = *c;
-        let q: [f64; 3];
-        if a2 != 0.0 {
-            q = [a1 * a1 - 4.0 * a2 * a0, 2.0 * a1 * a4 - 4.0 * a2 * a3, a4 * a4 - 4.0 * a2 * a5];
-        } else if a1 != 0.0 {
-            xs.push(-a4 / a1);
-            continue;
-        } else {
-            continue;
+    let mut sg: Vec<i64> = vec![];
+    for &i in &idx {
+        let sides: BTreeSet<i64> = rows.iter().filter(|r| r.0 == i).map(|r| r.1).collect();
+        if sides.len() > 1 {
+            return Ok(false); // q > 0 and q < 0 on the same conic
         }
-        if q[0] != 0.0 {
-            let d = q[1] * q[1] - 4.0 * q[0] * q[2];
-            if d >= 0.0 {
-                let sd = d.sqrt();
-                xs.push((-q[1] - sd) / (2.0 * q[0]));
-                xs.push((-q[1] + sd) / (2.0 * q[0]));
-            }
-        } else if q[1] != 0.0 {
-            xs.push(-q[2] / q[1]);
-        }
+        sg.push(*sides.iter().next().unwrap());
     }
-    for a in 0..idx.len() {
-        for b in a + 1..idx.len() {
-            let m = conic_meet(&ecq[idx[a] - 1], &ecq[idx[b] - 1])?;
-            xs.extend(m.0.iter().map(|p| p[0]));
-        }
+    let cs0: Vec<Vec<Z>> = idx.iter().map(|&i| ecq[i - 1][0..6].to_vec()).collect();
+    let mut k = 0i64;
+    while cs0.iter().any(|c| {
+        (!c[0].is_zero() || !c[1].is_zero() || !c[2].is_zero()) && (&c[0] * zi(k * k) + &c[1] * zi(k) + &c[2]).is_zero()
+    }) {
+        k += 1;
     }
-    let uniq = |mut v: Vec<f64>| -> Vec<f64> {
-        v.retain(|x| x.is_finite());
-        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        v.dedup();
-        v
-    };
-    let mut xs = uniq(xs);
-    if xs.is_empty() {
-        xs.push(0.0);
-    }
-    let mut samp = vec![xs[0] - 1.0, xs[xs.len() - 1] + 1.0];
-    for i in 0..xs.len() - 1 {
-        samp.push((xs[i] + xs[i + 1]) / 2.0);
-    }
-    let conics: Vec<([f64; 6], f64, i64)> = rows
+    let cs: Vec<Vec<Z>> = cs0
         .iter()
-        .map(|&(e, s)| {
-            let (c, cm) = conic_f(&ecq[e - 1]);
-            (c, cm, s)
-        })
+        .map(|c| vec![c[0].clone(), zi(2 * k) * &c[0] + &c[1], &c[0] * zi(k * k) + &c[1] * zi(k) + &c[2], c[3].clone(), &c[3] * zi(k) + &c[4], c[5].clone()])
         .collect();
-    for &x in &samp {
-        let mut ys: Vec<f64> = vec![];
-        for &[a0, a1, a2, a3, a4, a5] in &cs {
-            let b = a1 * x + a4;
-            let c = a0 * x * x + a3 * x + a5;
-            if a2 != 0.0 {
-                let d = b * b - 4.0 * a2 * c;
-                if d >= 0.0 {
-                    let sd = d.sqrt();
-                    ys.push((-b - sd) / (2.0 * a2));
-                    ys.push((-b + sd) / (2.0 * a2));
-                }
-            } else if b != 0.0 {
-                ys.push(-c / b);
-            }
-        }
-        let mut ys = uniq(ys);
-        if ys.is_empty() {
-            ys.push(0.0);
-        }
-        let mut cand = vec![ys[0] - 1.0, ys[ys.len() - 1] + 1.0];
-        for i in 0..ys.len() - 1 {
-            cand.push((ys[i] + ys[i + 1]) / 2.0);
-        }
-        for &y in &cand {
-            let m = 1f64.max(x.abs().max(y.abs())).powi(2);
+    let (xpolys, special) = cad_critical_polys(&cs)?;
+    let xs = cad_samples(&xpolys, &[])?;
+    for x0 in &xs {
+        let (ypolys, yspecial) = match cad_y_polys(&cs, &sg, x0, &special) {
+            Some(v) => v,
+            None => continue,
+        };
+        let ys = cad_samples(&yspecial, &ypolys)?;
+        for y0 in &ys {
             let mut ok = true;
-            for (f, cm, s) in &conics {
-                let v = f[0] * x.powi(2) + f[1] * x * y + f[2] * y.powi(2) + f[3] * x + f[4] * y + f[5];
-                let scale = 1f64.max(cm * m);
-                if (*s as f64) * v < -1e-9 * scale {
+            for (c, s) in cs.iter().zip(sg.iter()) {
+                let v = cad_eval(c, x0, y0);
+                if (*s > 0 && !v.is_positive()) || (*s < 0 && !v.is_negative()) {
                     ok = false;
                     break;
                 }
@@ -212,6 +164,291 @@ fn cad_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {
         }
     }
     Ok(false)
+}
+
+fn cad_eval(c: &[Z], x: &Q, y: &Q) -> Q {
+    qz(&c[0]) * x * x + qz(&c[1]) * x * y + qz(&c[2]) * y * y + qz(&c[3]) * x + qz(&c[4]) * y + qz(&c[5])
+}
+
+fn padd(a: &[Z], b: &[Z], sb: i64) -> Vec<Z> {
+    let nb: Vec<Z> = b.iter().map(|x| x * zi(sb)).collect();
+    poly_trim(&poly_add1(a, &nb))
+}
+
+fn pmul(a: &[Z], b: &[Z]) -> Vec<Z> {
+    poly_trim(&poly_mul1(a, b))
+}
+
+fn cad_critical_polys(cs: &[Vec<Z>]) -> R<(Vec<Vec<Z>>, BTreeSet<usize>)> {
+    let mut polys: Vec<Vec<Z>> = vec![];
+    let mut special: BTreeSet<usize> = BTreeSet::new();
+    let full: Vec<usize> = (0..cs.len()).filter(|&i| !cs[i][2].is_zero()).collect();
+    let slant: Vec<usize> = (0..cs.len())
+        .filter(|&i| cs[i][2].is_zero() && cs[i][0].is_zero() && cs[i][1].is_zero() && !cs[i][4].is_zero())
+        .collect();
+    for (i, c) in cs.iter().enumerate() {
+        if !c[2].is_zero() {
+            let d = vec![
+                &c[1] * &c[1] - zi(4) * &c[2] * &c[0],
+                zi(2) * &c[1] * &c[4] - zi(4) * &c[2] * &c[3],
+                &c[4] * &c[4] - zi(4) * &c[2] * &c[5],
+            ];
+            if poly_trim(&d).is_empty() {
+                special.insert(i);
+            }
+            polys.push(d);
+        } else if c[4].is_zero() && c[1].is_zero() && c[0].is_zero() {
+            polys.push(vec![c[3].clone(), c[5].clone()]); // vertical line (or a constant)
+        }
+    }
+    for (ii, &i) in full.iter().enumerate() {
+        let p = &cs[i];
+        let (al, be, ga) = (vec![p[2].clone()], vec![p[1].clone(), p[4].clone()], vec![p[0].clone(), p[3].clone(), p[5].clone()]);
+        for &j in &full[ii + 1..] {
+            let q = &cs[j];
+            let (al2, be2, ga2) = (vec![q[2].clone()], vec![q[1].clone(), q[4].clone()], vec![q[0].clone(), q[3].clone(), q[5].clone()]);
+            let u = padd(&pmul(&al2, &be), &pmul(&al, &be2), -1);
+            let w = padd(&pmul(&al2, &ga), &pmul(&al, &ga2), -1);
+            let v = padd(&pmul(&be, &ga2), &pmul(&be2, &ga), -1);
+            let res = padd(&pmul(&w, &w), &pmul(&u, &v), 1);
+            if !res.is_empty() {
+                polys.push(res);
+            } else {
+                special.insert(i);
+                special.insert(j);
+                if !u.is_empty() || !w.is_empty() {
+                    polys.extend(cad_shared_line_crossing(p, q, &u, &w)?);
+                }
+            }
+        }
+        for &j in &slant {
+            let q = &cs[j];
+            let (b, cc) = (vec![q[4].clone()], vec![q[3].clone(), q[5].clone()]);
+            let t1 = pmul(&al, &pmul(&cc, &cc));
+            let t2 = pmul(&be, &pmul(&b, &cc));
+            let t3 = pmul(&ga, &pmul(&b, &b));
+            let res = padd(&padd(&t1, &t2, -1), &t3, 1);
+            if !res.is_empty() {
+                polys.push(res);
+            } else {
+                special.insert(i);
+                special.insert(j);
+            }
+        }
+    }
+    for (ii, &i) in slant.iter().enumerate() {
+        let p = &cs[i];
+        for &j in &slant[ii + 1..] {
+            let q = &cs[j];
+            let res = padd(&pmul(&[p[4].clone()], &[q[3].clone(), q[5].clone()]), &pmul(&[q[4].clone()], &[p[3].clone(), p[5].clone()]), -1);
+            if !res.is_empty() {
+                polys.push(res);
+            } else {
+                special.insert(i);
+                special.insert(j);
+            }
+        }
+    }
+    Ok((polys, special))
+}
+
+/// p = L M_p and q = L M_q share the line L (resultant == 0, not proportional): T = alpha' p - alpha q
+/// = u(x) y + w(x) = L * N with N vertical, so L = T / gcd(u, w). The abscissa of M_p ^ M_q.
+fn cad_shared_line_crossing(p: &[Z], q: &[Z], u: &[Z], w: &[Z]) -> R<Vec<Vec<Z>>> {
+    if u.is_empty() {
+        bail!("cellHasInterior:internal", "shared line factor with no y term: {:?} {:?}", p, q);
+    }
+    let g = if w.is_empty() { poly_primitive(u) } else { poly_gcd(u, w)? };
+    let lu = cad_fdiv(u, &g)?;
+    let lw = cad_fdiv(w, &g)?;
+    if lu.len() != 1 || lw.len() > 2 || lu[0].is_zero() {
+        bail!("cellHasInterior:internal", "shared factor of two conics is not a line: {:?} {:?}", p, q);
+    }
+    let ell = lu[0].clone();
+    let pp = if lw.len() >= 2 { lw[lw.len() - 2].clone() } else { Q::zero() };
+    let rr = if !lw.is_empty() { lw[lw.len() - 1].clone() } else { Q::zero() };
+    let mut m = vec![];
+    for c in [p, q] {
+        let mm = qz(&c[2]) / &ell;
+        let kk = (qz(&c[1]) - &pp * &mm) / &ell;
+        let hh = (qz(&c[4]) - &rr * &mm) / &ell;
+        m.push((mm, kk, hh));
+    }
+    let det = &m[0].0 * &m[1].1 - &m[1].0 * &m[0].1;
+    if det.is_zero() {
+        return Ok(vec![]);
+    }
+    let xp = (&m[1].0 * &m[0].2 - &m[0].0 * &m[1].2) / det;
+    Ok(vec![vec![xp.denom().clone(), -xp.numer().clone()]])
+}
+
+fn cad_fdiv(p: &[Z], g: &[Z]) -> R<Vec<Q>> {
+    let mut p: Vec<Q> = poly_trim(p).iter().map(qz).collect();
+    let g: Vec<Q> = poly_trim(g).iter().map(qz).collect();
+    if p.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut out = vec![];
+    if p.len() >= g.len() {
+        for i in 0..=(p.len() - g.len()) {
+            let c = &p[i] / &g[0];
+            for (j, gj) in g.iter().enumerate() {
+                let t = &c * gj;
+                p[i + j] -= t;
+            }
+            out.push(c);
+        }
+    }
+    if p.len() < g.len() || p.iter().any(|x| !x.is_zero()) {
+        bail!("cellHasInterior:internal", "inexact polynomial division in a shared line factor");
+    }
+    Ok(out)
+}
+
+/// The y-polynomials q(x0, .) of one column scaled to integers, as (rows in `special`, the others);
+/// None when the column holds no point of the cell. Exact shortcuts: a row constant in y with the
+/// wrong sign, or a quadratic without real roots with the wrong sign, kills the column; a quadratic
+/// without real roots with the right sign holds everywhere, so it adds no sample boundary.
+fn cad_y_polys(cs: &[Vec<Z>], sg: &[i64], x0: &Q, special: &BTreeSet<usize>) -> Option<(Vec<Vec<Z>>, Vec<Vec<Z>>)> {
+    let (mut sp, mut plain) = (vec![], vec![]);
+    for (i, c) in cs.iter().enumerate() {
+        let co = [qz(&c[2]), qz(&c[1]) * x0 + qz(&c[4]), qz(&c[0]) * x0 * x0 + qz(&c[3]) * x0 + qz(&c[5])];
+        let mut den = zi(1);
+        for t in &co {
+            den = num_integer::Integer::lcm(&den, t.denom());
+        }
+        let ints: Vec<Z> = co.iter().map(|t| (t * qz(&den)).to_integer()).collect();
+        let ints = poly_primitive(&ints);
+        if ints.is_empty() {
+            return None;
+        }
+        if ints.len() == 1 {
+            if sg[i] as i32 * sign(&ints[0]) <= 0 {
+                return None;
+            }
+        } else if ints.len() == 3 && (&ints[1] * &ints[1] - zi(4) * &ints[0] * &ints[2]).is_negative() {
+            if sg[i] as i32 * sign(&ints[0]) < 0 {
+                return None;
+            }
+        } else if special.contains(&i) {
+            sp.push(ints);
+        } else {
+            plain.push(ints);
+        }
+    }
+    Some((plain, sp))
+}
+
+/// Pairwise coprime squarefree primitive polynomials with the same real roots as the product.
+fn cad_coprime_base(polys: &[Vec<Z>]) -> R<Vec<Vec<Z>>> {
+    let mut work: Vec<Vec<Z>> = polys.iter().filter(|p| poly_trim(p).len() > 1).cloned().collect();
+    let mut base: Vec<Vec<Z>> = vec![];
+    while let Some(p0) = work.pop() {
+        let p = poly_primitive(&poly_squarefree(&p0));
+        if p.len() <= 1 {
+            continue;
+        }
+        let mut hit = None;
+        for (i, b) in base.iter().enumerate() {
+            let g = poly_gcd(&p, b)?;
+            if g.len() > 1 {
+                hit = Some((i, g));
+                break;
+            }
+        }
+        match hit {
+            Some((i, g)) => {
+                let b = base.remove(i);
+                for piece in [poly_div_exact1(&b, &g), poly_div_exact1(&p, &g), Some(g)] {
+                    match piece {
+                        Some(x) => work.push(x),
+                        None => bail!("cellHasInterior:internal", "inexact gcd division"),
+                    }
+                }
+            }
+            None => base.push(p),
+        }
+    }
+    Ok(base)
+}
+
+struct CadRoot {
+    chain: Arc<Vec<Vec<Z>>>,
+    lo: Q,
+    hi: Q,
+}
+
+impl CadRoot {
+    fn refine(&mut self) {
+        let mid = (&self.lo + &self.hi) / qi(2);
+        if sturm_v_q(&self.chain, &mid) - sturm_v_q(&self.chain, &self.hi) == 1 {
+            self.lo = mid;
+        } else {
+            self.hi = mid;
+        }
+    }
+}
+
+/// r < s for roots of coprime polynomials (so r != s): refine until the intervals separate.
+fn cad_before(r: &mut CadRoot, s: &mut CadRoot) -> bool {
+    loop {
+        if r.hi <= s.lo {
+            return true;
+        }
+        if s.hi <= r.lo {
+            return false;
+        }
+        if &r.hi - &r.lo >= &s.hi - &s.lo {
+            r.refine()
+        } else {
+            s.refine()
+        }
+    }
+}
+
+/// Rational sample points: one in every open interval between consecutive distinct real roots of
+/// the polynomials `sp` (made coprime first) and `plain` (already squarefree and coprime), one
+/// below and one above all roots (0 when there is none). Exact: Sturm isolation of each factor,
+/// pairwise separation by bisection.
+fn cad_samples(sp: &[Vec<Z>], plain: &[Vec<Z>]) -> R<Vec<Q>> {
+    let mut polys = cad_coprime_base(sp)?;
+    polys.extend(plain.iter().filter(|p| p.len() > 1).cloned());
+    let mut roots: Vec<CadRoot> = vec![];
+    for p in &polys {
+        let chain = sturm_chain_shared(p);
+        for (lo, hi) in isolate_roots(p)? {
+            let mut r = CadRoot { chain: chain.clone(), lo, hi };
+            // binary insertion keeps `roots` sorted
+            let (mut a, mut b) = (0usize, roots.len());
+            while a < b {
+                let m = (a + b) / 2;
+                if cad_before(&mut roots[m], &mut r) {
+                    a = m + 1;
+                } else {
+                    b = m;
+                }
+            }
+            roots.insert(a, r);
+        }
+    }
+    if roots.is_empty() {
+        return Ok(vec![Q::zero()]);
+    }
+    let mut out = vec![roots[0].lo.clone()];
+    for i in 0..roots.len() - 1 {
+        let (left, right) = roots.split_at_mut(i + 1);
+        let (r, t) = (&mut left[i], &mut right[0]);
+        while r.hi >= t.lo {
+            if &r.hi - &r.lo >= &t.hi - &t.lo {
+                r.refine()
+            } else {
+                t.refine()
+            }
+        }
+        out.push((&r.hi + &t.lo) / qi(2));
+    }
+    out.push(&roots[roots.len() - 1].hi + qi(1));
+    Ok(out)
 }
 
 fn probe_interior(ecq: &[Vec<Z>], rows: &[(usize, i64)]) -> R<bool> {

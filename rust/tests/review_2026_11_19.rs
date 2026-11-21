@@ -28,7 +28,6 @@ fn conj_cone_with_interior_null_direction() {
 /// Finding 2 (MAJOR): {10 <= x <= 10.5} outside the circle |x - (100,0)| = 1 has interior
 /// (e.g. (10.25, 0)); the CAD fallback skips vertical lines and calls it empty.
 #[test]
-#[ignore = "review 2026-11-19 #2: cell_has_interior misses a far vertical strip"]
 fn cell_has_interior_far_vertical_strip() {
     let z = |v: &[i64]| v.iter().map(|&x| Z::from(x)).collect::<Vec<Z>>();
     let ecq = vec![z(&[0, 0, 0, 1, 0, -10]), z(&[0, 0, 0, 2, 0, -21]), z(&[1, 0, 1, -200, 0, 9999])];
@@ -40,7 +39,6 @@ fn cell_has_interior_far_vertical_strip() {
 /// abscissae). Reached inside a real conj call (python/tests/review/hunt_cell_interior.py);
 /// (-58.4253, -109.3822) satisfies every row strictly.
 #[test]
-#[ignore = "review 2026-11-19 #2: cell_has_interior misses a cell bounded by line-pair conics"]
 fn cell_has_interior_shared_line_factor() {
     let z = |v: &[i64]| v.iter().map(|&x| Z::from(x)).collect::<Vec<Z>>();
     let ecq = vec![
@@ -98,7 +96,6 @@ fn biconj_does_not_panic_on_r4_017() {
 /// s = (2.53125, -1.453125) the sup is 2*s1 = 5.0625 (at (2,0)); all three engines return
 /// 6.5137939453125 = (2 s1 + s2)^2 / 2, a face used outside its availability range.
 #[test]
-#[ignore = "review 2026-11-19 #8: conj too high on the L-shape with y^2/2"]
 fn conj_l_shape_y2() {
     let v = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
     let e: Vec<[usize; 3]> = (0..6).map(|i| [i + 1, (i + 1) % 6 + 1, 1]).collect();

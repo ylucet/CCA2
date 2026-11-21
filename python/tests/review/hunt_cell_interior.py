@@ -6,7 +6,7 @@ abscissae, plus a fine grid per sector. Any cell the engine calls empty but the 
 finds a STRICT interior point for (every curved row > 0 with a margin, every line row > 0) is
 logged with the conj input, then the conj value is checked against plq_oracle at dual points.
 
-    python3 hunt_cell_interior.py N_RANDOM [seed]
+    python3 hunt_cell_interior.py N_RANDOM [seed [first last]]   (first <= it < last: one shard of the same N inputs)
 """
 import json
 import random
@@ -106,6 +106,8 @@ CI.cellHasInterior = wrapped
 def main():
     n = int(sys.argv[1])
     seed = int(sys.argv[2]) if len(sys.argv) > 2 else 7
+    first = int(sys.argv[3]) if len(sys.argv) > 4 else 0
+    last = int(sys.argv[4]) if len(sys.argv) > 4 else n
     rng = random.Random(seed)
     found = []
     for it in range(n):
@@ -121,6 +123,8 @@ def main():
             Pp = G.rstar(rng, rng.choice([5, 6, 7]))
         q = G.rq(rng, -3, 3)
         pcs = [{'kind': 'poly', 'P': G.P(Pp), 'q': q}]
+        if not first <= it < last:
+            continue                                 # another shard's input (the draws above keep the stream)
         enc = G.encode(pcs)
         HITS.clear()
         try:
