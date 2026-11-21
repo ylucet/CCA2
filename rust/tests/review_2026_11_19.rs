@@ -146,3 +146,15 @@ fn biconj_finite_inside_the_domain_r3_072() {
     assert!(v[0] >= -14.681688881664497 - 1e-9 && v[0] <= -14.679931640625, "got {}", v[0]);
     assert!(v[1] <= -18.455, "got {}", v[1]);
 }
+
+/// Finding 9c (CRITICAL), small-cell mechanism: two continuous pieces on a two-cone fan (R6-075).
+/// x is in piece 2, so f**(x) is finite; certified bracket [1.80731, 1.86682]. The subdivision
+/// dropped the live unit-wide cell holding x: its interior-point grid spans a 1e3 box.
+#[test]
+fn biconj_finite_inside_the_domain_r6_075() {
+    let f = pol(&[[0, 0], [1, 1], [0, 1], [-1, 2]], &[[1, 2, 0], [1, 3, 0], [1, 4, 0]],
+                &[[0, 0, 0, 0, 2, 1, 2, 1, 1, 0], [0, 0, 0, 0, 0, -1, 2, 3, 1, 0]],
+                &[[1, 0], [2, 1], [0, 2]]);
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-0.4088541666666667, 1.1783854166666667]]).unwrap();
+    assert!(v[0] >= 1.8073059721130218 - 1e-9 && v[0] <= 1.8668169186760986, "got {}", v[0]);
+}

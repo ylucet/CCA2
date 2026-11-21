@@ -6,7 +6,8 @@ function [pt, ok, P] = cellSamplePoint(C, rows, H, R, dense)
 %          rows : the cell, [curveIndex side]
 %          H    : the cell's straight rows as [a b c] with a x + b y + c >= 0, normalised
 %          R    : the half-width of the bounding box the subdividers use for unbounded cells
-%          dense: (optional, default false) true keeps sampling past the first grid that finds a point,
+%          dense: (optional, default false) 'sector' ignores H and R and runs the box-free SECTOR
+%                 search below instead (sectorWitness; review 2026-11-19 #9c). true keeps sampling past the first grid that finds a point,
 %                 up to the 48-step one, and returns up to 4000 samples -- for a caller that WITNESSES
 %                 sub-pieces of the cell (minOverlay), where 400 coarse samples miss most of them
 % [output] pt   : 1 x 2, the sampled point with the largest relative slack over EVERY row
@@ -22,6 +23,10 @@ function [pt, ok, P] = cellSamplePoint(C, rows, H, R, dense)
 % (deterministic: the subdivision must not depend on a random seed) over a fan of the straight polygon.
     if nargin < 5, dense = false; end
     pt = [0 0];  ok = false;  P = zeros(0,2);
+    if ischar(dense) && strcmp(dense, 'sector')
+        [pt, ok] = sectorWitness(C, rows);
+        return
+    end
     V = polygonVertices(H, R);
     if size(V,1) < 3, return, end
     c0 = mean(V, 1);
@@ -103,4 +108,103 @@ function V = polygonVertices(H, R)
     end
     if isempty(V), return, end
     V = uniquetol(V, 1e-12, 'ByRows', true, 'DataScale', 1);
+end
+
+function [pt, ok] = sectorWitness(C, rows)
+% A strictly interior point of the cell by a SECTOR search (port of Python cellWitness).
+%
+% The grid above covers the straight rows' polygon clipped to a box of half-width R, so a cell that
+% is small next to that polygon (a unit-wide cell under rows that leave the polygon open to
+% |x| = 1e3) falls between the grid points, and a live cell was dropped: co f = +inf at points of
+% dom f (review 2026-11-19 #9c, R6-075). This search depends on no box. It is a cylindrical
+% decomposition of the rows' curves (a branch row as its own line): the critical abscissae are the
+% roots of every curve's discriminant in y, of its leading coefficient in y, and of every pairwise
+% resultant in y; an open cell meets the open sector between two consecutive critical abscissae
+% and two consecutive curves above one of them, so the middle of every sector (and past both
+% ends) is tested with `slack`. Doubles: a witness search, the point is checked, never trusted.
+    pt = [0 0];  ok = false;
+    if isempty(rows), ok = true; return, end
+    P = zeros(size(rows,1), 6);
+    for t = 1:size(rows,1)
+        c = double(C(rows(t,1), 1:6));  br = C(rows(t,1), 7);
+        if br ~= 0
+            v = ratQ.pairLineEval(c, br, [0 0; 1 0; 0 1]);
+            P(t,:) = [0 0 0, v(2) - v(1), v(3) - v(1), v(1)];
+        else
+            P(t,:) = c;
+        end
+    end
+    P = unique(P, 'rows');                       % sorted: a deterministic order
+    n = size(P,1);
+    Y = cell(n, 3);
+    for k = 1:n
+        Y(k,:) = {P(k,3), [P(k,2) P(k,5)], [P(k,1) P(k,4) P(k,6)]};
+    end
+    xs = [];
+    for k = 1:n
+        if Y{k,1} ~= 0
+            xs = [xs; realRootsF(psub(conv(Y{k,2}, Y{k,2}), 4 * Y{k,1} * Y{k,3}))]; %#ok<AGROW>
+        else
+            xs = [xs; realRootsF(Y{k,2})]; %#ok<AGROW>
+        end
+    end
+    for i = 1:n
+        for j = i+1:n
+            xs = [xs; realRootsF(resultantY(Y(i,:), Y(j,:)))]; %#ok<AGROW>
+        end
+    end
+    xs = unique(xs(isfinite(xs)));
+    if isempty(xs), xs = 0; end
+    span = max(1, xs(end) - xs(1));
+    samp = [xs(1) - span; xs(end) + span; (xs(1:end-1) + xs(2:end)) / 2];
+    best = -inf;
+    for x = samp.'
+        ys = [];
+        for k = 1:n
+            a = Y{k,1};  b = polyval(Y{k,2}, x);  c = polyval(Y{k,3}, x);
+            if a ~= 0
+                d = b*b - 4*a*c;
+                if d >= 0, sd = sqrt(d);  ys = [ys; (-b - sd)/(2*a); (-b + sd)/(2*a)]; end %#ok<AGROW>
+            elseif b ~= 0
+                ys = [ys; -c/b]; %#ok<AGROW>
+            end
+        end
+        ys = unique(ys(isfinite(ys)));
+        if isempty(ys), ys = 0; end
+        sp = max(1, ys(end) - ys(1));
+        cand = [ys(1) - sp; ys(end) + sp; (ys(1:end-1) + ys(2:end)) / 2];
+        s = slack(C, rows, [repmat(x, numel(cand), 1), cand]);
+        [sb, kb] = max(s);
+        if sb > best, best = sb;  pt = [x, cand(kb)]; end
+    end
+    ok = best > 0;
+end
+
+function r = realRootsF(p)
+    p = p(find(p ~= 0, 1):end);
+    r = zeros(0,1);
+    if numel(p) < 2, return, end
+    z = roots(p);
+    r = real(z(abs(imag(z)) <= 1e-9 * max(1, abs(z))));
+end
+
+function d = psub(a, b)
+    n = max(numel(a), numel(b));
+    d = [zeros(1, n - numel(a)), a] - [zeros(1, n - numel(b)), b];
+end
+
+function r = resultantY(p, q)
+% The resultant in y of two curves A y^2 + B y + C (A constant, B, C polynomials in x).
+    [A, B, Cc] = p{:};  [D, E, F] = q{:};
+    if A == 0 && D == 0
+        r = psub(conv(B, F), conv(Cc, E));
+    elseif A == 0
+        r = psub(D * conv(Cc, Cc), conv(E, conv(B, Cc)));
+        r = psub(r, -conv(F, conv(B, B)));
+    elseif D == 0
+        r = resultantY(q, p);
+    else
+        t1 = psub(A * F, D * Cc);  t2 = psub(A * E, D * B);  t3 = psub(conv(B, F), conv(Cc, E));
+        r = psub(conv(t1, t1), conv(t2, t3));
+    end
 end
