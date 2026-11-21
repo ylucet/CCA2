@@ -402,6 +402,62 @@ def _dedup_clauses(out):
     return ded
 
 
+def full_dim_2d(cons):
+    """cons: list of (A, B, D) meaning A*x + B*y > D (strict, rational coefficients).
+    True iff the region has a nonempty interior -- i.e. is a 2-D region, not an edge or a point.
+    Exact: one step of Fourier-Motzkin elimination of y leaves a 1-D interval test on x.
+    (A polyhedron has nonempty interior iff its strict system is feasible.)"""
+    lowers = []    # y > m x + q
+    uppers = []    # y < m x + q
+    xlo = []       # x > v
+    xhi = []       # x < v
+    for (A, B, D) in cons:
+        A, B, D = Fraction(A), Fraction(B), Fraction(D)
+        if B > 0:
+            lowers.append((Fraction(-A, B), Fraction(D, B)))
+        elif B < 0:
+            uppers.append((Fraction(-A, B), Fraction(D, B)))
+        elif A == 0:
+            if D >= 0:
+                return False              # 0 > D, impossible
+        elif A > 0:
+            xlo.append(Fraction(D, A))
+        else:
+            xhi.append(Fraction(D, A))
+    if lowers and uppers:
+        for (ml, ql) in lowers:
+            for (mu, qu) in uppers:
+                d = ml - mu
+                rhs = qu - ql
+                if d == 0:
+                    if ql >= qu:
+                        return False
+                elif d > 0:
+                    xhi.append(rhs / d)
+                else:
+                    xlo.append(rhs / d)
+    lo = max(xlo) if xlo else None
+    hi = min(xhi) if xhi else None
+    return lo < hi if (lo is not None and hi is not None) else True
+
+
+def _two_d_overlap(cond_i, cond_j):
+    """True iff two branch conditions meet in a 2-D region (not merely on a shared edge).
+
+    The registry's Piecewise is first-match, so branch i is effective where no earlier branch
+    matched. The exclusion (AND NOT c_j) is required exactly where c_i 2-D-overlaps c_j -- that
+    is where the as-written pieces would own the same side of a line (norm1_2d's catch-all over
+    an explicit region). On a shared edge the as-written regions already partition the plane,
+    and De-Morgan'ing against a merely edge-sharing branch shatters it into overlapping clauses
+    (which broke karmarkar_erratum_hyperbola: 3 edge-sharing cells became 12 overlapping pieces)."""
+    for ci in dnf(cond_i):
+        for cj in dnf(cond_j):
+            cons = [(hp.s * hp.a, hp.s * hp.b, -hp.s * hp.c) for hp in (tuple(ci) + tuple(cj))]
+            if full_dim_2d(cons):
+                return True
+    return False
+
+
 def piece_value_row(val):
     """A quadratic in x, y (rational coefficients) -> the engine's 10-wide weighted row,
     value = (c5 x^2 + 2 c6 xy + c7 y^2)/2 + c8 x + c9 y + c10. None for an oo value.
@@ -468,21 +524,25 @@ def _factor_partition(t):
     """One term containing Piecewise(s) -> its partition [(cond, factor value)]."""
     if isinstance(t, sp.Piecewise):
         # The registry's Piecewise is FIRST-MATCH: branch i is effective only where no earlier
-        # branch matched, so its region is c_i AND NOT c_1 AND ... AND NOT c_{i-1}. Keeping the
-        # conditions as written turns those closed regions into overlaps in open sets (e.g. the
-        # catch-all branch of norm1_2d owns both halves of a line), which the subdivision then
-        # refuses as "two pieces own the same side of a line" (review 2026-11-19 #3). The
-        # negated sides come out strict; dnf reads them as the closed side -- on the shared
-        # boundary the first-match order is the registry's own, so the parser's value there is
-        # the registry's value there, and the pieces agree on it by continuity.
+        # branch matched, so its region is c_i AND NOT c_1 AND ... AND NOT c_{i-1}. But the
+        # exclusion (AND NOT c_j) is only needed where c_i genuinely 2-D-overlaps c_j -- that is
+        # where the as-written pieces would own the same side of a line (norm1_2d's catch-all over
+        # an explicit region; review 2026-11-19 #3). On a shared edge the as-written regions
+        # already partition the plane, and De-Morgan'ing against a merely edge-sharing branch
+        # shatters it into overlapping clauses (which broke karmarkar_erratum_hyperbola: 3
+        # edge-sharing cells became 12 overlapping pieces). The negated sides come out strict;
+        # dnf reads them as the closed side -- on the shared boundary the first-match order is
+        # the registry's own, so the parser's value there is the registry's value there, and the
+        # pieces agree on it by continuity.
         out = []
         prev = []
         for (val, cond) in t.args:
             eff = cond
-            for cj in prev:
-                eff = sp.And(eff, sp.Not(cj))
+            for (cj, valj) in prev:
+                if _two_d_overlap(cond, cj):
+                    eff = sp.And(eff, sp.Not(cj))
             out.append((eff, val))
-            prev.append(cond)
+            prev.append((cond, val))
         return out
     if t.is_Mul:
         parts = [_factor_partition(a) for a in t.args if _has_pw(a)]
@@ -1210,13 +1270,15 @@ def run_python(entry, fx, ops):
     from cca2.qua_pol import QuaPol
     from cca2.errors import CCA2Error
     out = {}
+    t0 = time.time()
     try:
         f = QuaPol([list(r) for r in fx.V], [list(r) for r in fx.E],
                    [list(r) for r in fx.f], [list(r) for r in fx.F])
     except CCA2Error as e:
-        return {op: ('refuse', 'QuaPol: %s' % e.identifier) for op in ops}
+        # 3-tuple, like every other refusal path: process_entry unpacks (status, detail, t)
+        return {op: ('refuse', 'QuaPol: %s' % e.identifier, time.time() - t0) for op in ops}
     except Exception as e:      # noqa: BLE001
-        return {op: ('refuse', 'QuaPol: %s: %s' % (type(e).__name__, e)) for op in ops}
+        return {op: ('refuse', 'QuaPol: %s: %s' % (type(e).__name__, e), time.time() - t0) for op in ops}
     for op in ops:
         t0 = time.time()
         try:
