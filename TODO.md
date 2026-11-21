@@ -7,7 +7,8 @@ Exact engine (the default for `conj` and `biconj`):
 - **OPEN 2026-11-19, review CRITICAL #8:** `conj` too high for y^2/2 on the L-shape (Case D, ear-clip diagonal candidate used outside 0 <= t* <= 1); all three engines.
 - **OPEN 2026-11-19, review CRITICAL #9:** `biconj` wrong on 18/243 (Py) and 14/240 (Rs) small continuous random inputs: finite outside conv(dom f), below <s,x> - f*(s) with the engine's own conj, +inf inside dom f, above a convex combination; all three engines; predates 2026-11-17.
 - **OPEN 2026-11-19, review MAJOR #2:** `cellHasInterior`'s CAD fallback is not complete (vertical lines; degenerate conics sharing a line); reached in a real conj call.
-- **OPEN 2026-11-19, review MAJOR #3/#4:** the convexdb cross-check refuses 4 established PLQ entries as non-PLQ (|x|+|y|, two separable, segment indicator) and truncates rational data; the "16 non-PLQ" record below is wrong and `test_non_plq_refused` pins the wrong verdict.
+- **FIXED 2026-11-20, review MAJOR #3/#4:** the convexdb cross-check refuses 4 established PLQ entries as non-PLQ (|x|+|y|, two separable, segment indicator) and truncates rational data. Fixed in `python/bench/cross_convexdb.py` (parser + De-Morgan exclusion now applied only where a branch genuinely 2-D-overlaps an earlier one; rational data kept exact). 22 accepted, 12 non-PLQ. The one real disagreement found on the rerun is finding **#95-A** (below).
+- **OPEN 2026-11-20, finding #95-A:** `separable_bump_quadratic_2d` (f = y^2/2 + bump(x), bump = 1-x^2 on (-1,1), 0 outside): both engines return a 0-face conjugate (+inf everywhere, incl. at s1=0) where the registry stores a thin line {s1=0} (f*(0,s2) = s2^2/2). Thin-conjugate loss in the engine; recorded as failing tests, engine not touched. Tests: `python/tests/review/test_review_2026_11_20.py` (xfail).
 - **OPEN 2026-11-19, review MAJOR #5:** `check.supAt` misses an interior null recession direction and `checkBiconj` never samples outside the bounding box of dom f; `test_definition` covers golden fixtures only.
 - **OPEN 2026-11-19, review MAJOR #6:** Rust `biconj_atoms::tie_arc` panics on NaN breakpoints (`partial_cmp().unwrap_or(Equal)` sort); 5/357 random inputs.
 - **OPEN 2026-11-19, review MAJOR #7:** legacy `conjCPLQ` eig tolerance: needle for (x^2+y^2)/2^31, `MATLAB:badsubscript` for diag(1, +-2^-30).
@@ -35,21 +36,28 @@ Legacy symbolic engine (`'cplq'`, no longer the default):
 
 Release / paper:
 - MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
-- **DONE 2026-11-19: gap G3 external-oracle cross-check** (`python/bench/cross_convexdb.py`,
-  `python/tests/test_cross_convexdb.py`; section in `python/bench/RESULTS.md`). Every 2-D PLQ entry
-  the engines accept is compared against the registry's stored `f_star`/`co_f` at the registry's
-  own test points: Python and Rust agree with the registry on all 18 accepted entries for `conj`
-  and `biconj` (0 disagreement). QuaCon is checked at 512 bits (1e-60, or the point's own precision
-  on a decimal point); non-QuaCon (AlgCrv/EnvelopeMin) on the engine's 1e-6 double protocol; 2
-  entries have no stored `co_f` (open, sanity-checked only). 16 non-PLQ entries are refused as
-  expected. Two notes, neither an engine bug: (a) `plq_fan_elliptic_edge` / `plq_fan_s4_vertex`
-  are REFUSED for biconj by both engines (`PLQ:biconjQ:convexPieceCoupling`) -- a known limitation,
-  the registry stores a `co_f` for them; (b) two near-misses were adjudicated as protocol
-  artifacts, not defects: `three_convex_edges_split` biconj (my exact AlgCrv evaluator returned +inf
-  on a near-boundary point the engine's own double eval values finitely -- non-QuaCon now use the
-  double protocol) and `plq_fan_s4_vertex` conj (a 2e-31 gap on the registry's 31-digit
-  "near_degeneracy" point, where two independent engines agree with each other to 2e-31 and the
-  point's own last digits are not significant -- the tolerance is now point-aware).
+- **DONE 2026-11-20 (rerun after review 2026-11-19 #3/#4/#12 fixes): gap G3 external-oracle
+  cross-check** (`python/bench/cross_convexdb.py`, `python/tests/test_cross_convexdb.py`; section in
+  `python/bench/RESULTS.md`). Every 2-D PLQ entry the engines accept is compared against the
+  registry's stored `f_star`/`co_f` at the registry's own test points: Python and Rust agree with
+  the registry on all 22 accepted entries for `conj` and `biconj` except one genuine disagreement --
+  `separable_bump_quadratic_2d`, finding **#95-A** above (thin-conjugate loss; recorded as xfailing
+  tests, engine not touched). QuaCon is checked at 512 bits (1e-60, or the point's own precision on
+  a decimal point); non-QuaCon (AlgCrv/EnvelopeMin) on the engine's 1e-6 double protocol, with a
+  protocol-aware sanity bound for open entries (double-protocol values within the double tolerance);
+  4 accepted entries have no stored `co_f` (open, sanity-checked only for biconj:
+  `karmarkar_erratum_hyperbola`, `lee_indefinite_triangle`, `plq_fan_elliptic_edge`,
+  `plq_fan_s4_vertex`). 12 non-PLQ entries are refused as expected. Three notes, none an engine
+  bug: (a) `plq_fan_elliptic_edge` / `plq_fan_s4_vertex` are REFUSED for biconj by both engines
+  (`PLQ:biconjQ:convexPieceCoupling`) -- a known limitation, and the registry leaves them open
+  too (no stored `co_f`); (b) near-misses adjudicated as protocol artifacts, not defects:
+  `three_convex_edges_split` biconj (the exact AlgCrv evaluator returned +inf on a near-boundary
+  point the engine's own double eval values finitely -- non-QuaCon now use the double protocol)
+  and `plq_fan_s4_vertex` conj (a 2e-31 gap on the registry's 31-digit "near_degeneracy" point,
+  where two independent engines agree with each other to 2e-31 and the point's own last digits are
+  not significant -- the tolerance is now point-aware); (c) `lee_indefinite_triangle` biconj (Rust
+  AlgCrv biconj 2.0000000000004e-6 vs f = 2.0e-6: a 4e-19 excess, inside the double protocol's own
+  error -- the open-entry sanity bound is now protocol-aware).
 
 Decided, not to do: Example 2 pair 2's non-winning faces (leave them, 2026-11-05).
 

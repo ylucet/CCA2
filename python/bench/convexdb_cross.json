@@ -3,31 +3,31 @@
  "convexdb_version": "1.24.0",
  "summary": {
   "2d_entries": 34,
-  "accepted": 18,
-  "not_plq_or_refused_input": 16,
+  "accepted": 22,
+  "not_plq_or_refused_input": 12,
   "py_conj": {
-   "agree": 18,
+   "agree": 21,
    "refuse": 0,
-   "disagree": 0,
+   "disagree": 1,
    "open": 0
   },
   "py_biconj": {
-   "agree": 16,
+   "agree": 19,
    "refuse": 2,
-   "disagree": 0,
+   "disagree": 1,
    "open": 0
   },
   "rs_conj": {
-   "agree": 18,
+   "agree": 21,
    "refuse": 0,
-   "disagree": 0,
+   "disagree": 1,
    "open": 0
   },
   "rs_biconj": {
-   "agree": 14,
+   "agree": 19,
    "refuse": 2,
-   "disagree": 0,
-   "open": 2
+   "disagree": 1,
+   "open": 0
   }
  },
  "records": [
@@ -246,7 +246,7 @@
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 0.436
+     "t": 0.448
     }
    },
    "rs": {
@@ -259,7 +259,7 @@
      "detail": "matched at 1 test point(s) (double protocol)"
     }
    },
-   "wall": 0.58
+   "wall": 0.59
   },
   {
    "slug": "bilinear_one_convex_edge_rational",
@@ -287,7 +287,7 @@
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 0.055
+     "t": 0.058
     }
    },
    "rs": {
@@ -340,7 +340,7 @@
      "detail": "input not representable by QuaPol"
     }
    },
-   "wall": 0.0
+   "wall": 0.01
   },
   {
    "slug": "bilinear_parabolic_lens",
@@ -380,7 +380,7 @@
      "detail": "input not representable by QuaPol"
     }
    },
-   "wall": 0.0
+   "wall": 0.01
   },
   {
    "slug": "bilinear_unit_disc",
@@ -436,7 +436,7 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.001
+     "t": 0.002
     },
     "biconj": {
      "status": "agree",
@@ -454,7 +454,7 @@
      "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.03
+   "wall": 0.05
   },
   {
    "slug": "disc_indicator_2d",
@@ -494,7 +494,7 @@
      "detail": "input not representable by QuaPol"
     }
    },
-   "wall": 0.0
+   "wall": 0.01
   },
   {
    "slug": "gaussian_bump_2d",
@@ -562,12 +562,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.006
+     "t": 0.01
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 0.057
+     "t": 0.087
     }
    },
    "rs": {
@@ -580,7 +580,7 @@
      "detail": "matched at 1 test point(s) (double protocol)"
     }
    },
-   "wall": 0.13
+   "wall": 0.17
   },
   {
    "slug": "karmarkar_bilinear_sqrt2",
@@ -603,12 +603,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.032
+     "t": 0.048
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 2.595
+     "t": 3.273
     }
    },
    "rs": {
@@ -621,7 +621,7 @@
      "detail": "matched at 1 test point(s) (double protocol)"
     }
    },
-   "wall": 3.49
+   "wall": 3.56
   },
   {
    "slug": "karmarkar_erratum_circle",
@@ -644,12 +644,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.094
+     "t": 0.086
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 3.135
+     "t": 3.088
     }
    },
    "rs": {
@@ -662,7 +662,7 @@
      "detail": "matched at 1 test point(s) (double protocol)"
     }
    },
-   "wall": 4.63
+   "wall": 3.8
   },
   {
    "slug": "karmarkar_erratum_hyperbola",
@@ -685,12 +685,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 1.003
+     "t": 0.965
     },
     "biconj": {
      "status": "agree",
      "detail": "open entry; off_lattice: +inf",
-     "t": 33.377
+     "t": 31.233
     }
    },
    "rs": {
@@ -699,11 +699,11 @@
      "detail": "matched at 1 test point(s)"
     },
     "biconj": {
-     "status": "open",
-     "detail": "rust kind=EnvelopeMin; values ['+inf']"
+     "status": "agree",
+     "detail": "open entry; off_lattice: +inf [rust kind=EnvelopeMin]"
     }
    },
-   "wall": 41.99
+   "wall": 33.88
   },
   {
    "slug": "karmarkar_erratum_unbounded",
@@ -731,12 +731,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 2 test point(s)",
-     "t": 0.003
+     "t": 0.002
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 2 test point(s)",
-     "t": 0.007
+     "t": 0.004
     }
    },
    "rs": {
@@ -749,7 +749,7 @@
      "detail": "matched at 2 test point(s)"
     }
    },
-   "wall": 0.06
+   "wall": 0.05
   },
   {
    "slug": "lee_abs_unit_circle",
@@ -816,8 +816,8 @@
     },
     "biconj": {
      "status": "agree",
-     "detail": "open entry; off_lattice: value 1.99999999999987e-6 (f=2.0e-6)",
-     "t": 3.129
+     "detail": "open entry; off_lattice: value 1.99999999999987e-6 (f=2.0e-6, double protocol)",
+     "t": 3.13
     }
    },
    "rs": {
@@ -826,11 +826,11 @@
      "detail": "matched at 1 test point(s)"
     },
     "biconj": {
-     "status": "open",
-     "detail": "rust kind=AlgCrv; values ['2.0e-6']"
+     "status": "agree",
+     "detail": "open entry; off_lattice: value 2.0000000000004e-6 (f=2.0e-6, double protocol) [rust kind=AlgCrv]"
     }
    },
-   "wall": 3.94
+   "wall": 3.44
   },
   {
    "slug": "locatelli_3_1",
@@ -911,7 +911,7 @@
      "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.04
+   "wall": 0.05
   },
   {
    "slug": "negative_bilinear_rotation",
@@ -934,12 +934,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.006
+     "t": 0.007
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 0.062
+     "t": 0.059
     }
    },
    "rs": {
@@ -952,7 +952,7 @@
      "detail": "matched at 1 test point(s) (double protocol)"
     }
    },
-   "wall": 0.18
+   "wall": 0.17
   },
   {
    "slug": "nonconvex_domain_indicator_2d",
@@ -993,7 +993,7 @@
      "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.09
+   "wall": 0.1
   },
   {
    "slug": "norm1_2d",
@@ -1016,29 +1016,30 @@
      "sqrt(2)/1000"
     ]
    },
-   "parse": "not PLQ / not representable: two pieces own the same side of line (0, 1, 0) (degenerate partition)",
-   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "parse": "ok (2d, 4 faces, 4 edges, 5 vertices)",
    "py": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.005
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.001
     }
    },
    "rs": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
     }
    },
-   "wall": 0.01
+   "wall": 0.06
   },
   {
    "slug": "plq_fan_elliptic_edge",
@@ -1066,7 +1067,7 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 2 test point(s)",
-     "t": 0.334
+     "t": 0.422
     },
     "biconj": {
      "status": "refuse",
@@ -1084,7 +1085,7 @@
      "detail": "rust: PLQ:biconjQ:convexPieceCoupling"
     }
    },
-   "wall": 11.56
+   "wall": 11.47
   },
   {
    "slug": "plq_fan_s4_vertex",
@@ -1112,7 +1113,7 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 2 test point(s)",
-     "t": 2.189
+     "t": 2.132
     },
     "biconj": {
      "status": "refuse",
@@ -1130,7 +1131,7 @@
      "detail": "rust: PLQ:biconjQ:convexPieceCoupling"
     }
    },
-   "wall": 5.97
+   "wall": 5.7
   },
   {
    "slug": "quad_norm2_half_2d",
@@ -1171,7 +1172,7 @@
      "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.02
+   "wall": 0.03
   },
   {
    "slug": "quad_nsd_triangle",
@@ -1212,7 +1213,7 @@
      "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.05
+   "wall": 0.06
   },
   {
    "slug": "quad_psd_triangle",
@@ -1235,12 +1236,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.002
+     "t": 0.003
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.0
+     "t": 0.001
     }
    },
    "rs": {
@@ -1253,7 +1254,7 @@
      "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.1
+   "wall": 0.11
   },
   {
    "slug": "segment_indicator_2d",
@@ -1271,29 +1272,30 @@
      "sqrt(2)/1000"
     ]
    },
-   "parse": "not PLQ / not representable: unbounded or degenerate 1-D domain (not needed by the registry yet)",
-   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "parse": "ok (chain, 1 faces, 1 edges, 2 vertices)",
    "py": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.0
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 1 test point(s)",
+     "t": 0.0
     }
    },
    "rs": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 1 test point(s)"
     }
    },
-   "wall": 0.0
+   "wall": 0.05
   },
   {
    "slug": "separable_bump_quadratic_2d",
@@ -1316,29 +1318,30 @@
      "sqrt(2)/1000 + 1/10"
     ]
    },
-   "parse": "not PLQ / not representable: two pieces own the same side of line (1, 0, -1) (degenerate partition)",
-   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "parse": "ok (2d, 3 faces, 4 edges, 6 vertices)",
    "py": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "disagree",
+     "detail": "off_lattice: engine +inf vs registry 0.0051424213562373095049; on_boundary: engine +inf vs registry 0.0051424213562373095049",
+     "t": 0.004
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "disagree",
+     "detail": "off_lattice: engine +inf vs registry 0.0051424213562373095049; on_boundary: engine +inf vs registry 0.0051424213562373095049",
+     "t": 0.016
     }
    },
    "rs": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "disagree",
+     "detail": "off_lattice: rust +inf vs registry 0.0051424213562373095049; on_boundary: rust +inf vs registry 0.0051424213562373095049"
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "disagree",
+     "detail": "off_lattice: rust +inf vs registry 0.0051424213562373095049; on_boundary: rust +inf vs registry 0.0051424213562373095049"
     }
    },
-   "wall": 0.01
+   "wall": 0.1
   },
   {
    "slug": "separable_multiwell_abs_2d",
@@ -1361,29 +1364,30 @@
      "sqrt(2)/1000"
     ]
    },
-   "parse": "not PLQ / not representable: two pieces own the same side of line (0, 1, 0) (degenerate partition)",
-   "note": "non-PLQ 2-D entry or a shape QuaPol cannot take (full strips, curved domains, non-quadratic values): out of scope -- \"for every 2-D PLQ entry the engines accept\"",
+   "parse": "ok (2d, 12 faces, 16 edges, 17 vertices)",
    "py": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.091
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)",
+     "t": 0.016
     }
    },
    "rs": {
     "conj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
     },
     "biconj": {
-     "status": "refuse",
-     "detail": "input not representable by QuaPol"
+     "status": "agree",
+     "detail": "matched at 2 test point(s)"
     }
    },
-   "wall": 0.04
+   "wall": 0.22
   },
   {
    "slug": "three_convex_edges_split",
@@ -1406,12 +1410,12 @@
     "conj": {
      "status": "agree",
      "detail": "matched at 1 test point(s)",
-     "t": 0.109
+     "t": 0.173
     },
     "biconj": {
      "status": "agree",
      "detail": "matched at 1 test point(s) (double protocol on 1 point(s))",
-     "t": 10.743
+     "t": 10.961
     }
    },
    "rs": {
@@ -1424,7 +1428,7 @@
      "detail": "matched at 1 test point(s) (double protocol)"
     }
    },
-   "wall": 13.42
+   "wall": 11.88
   }
  ]
 }
