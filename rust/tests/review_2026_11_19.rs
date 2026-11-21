@@ -118,6 +118,39 @@ fn biconj_infinite_outside_the_square() {
     assert!(v[0].is_infinite(), "got {}", v[0]);
 }
 
+/// Finding 10 (MAJOR): a discontinuous two-piece input (the D family of the review generator,
+/// frozen in python/tests/review/d_family.json) must be refused by NAME -- PLQ:notContinuous --
+/// at the entry of conj and biconj, in every engine. The current engine answers conj (and gets
+/// biconj wrong: 12 of 24 answered calls above a certified upper bound).
+#[test]
+#[ignore = "review 2026-11-19 #10: discontinuous input must be refused by name"]
+fn discontinuous_input_refused_by_name() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let fixes: Vec<serde_json::Value> = serde_json::from_str(
+        &std::fs::read_to_string(root.join("../python/tests/review/d_family.json")).unwrap())
+        .unwrap();
+    assert_eq!(fixes.len(), 30, "the D family has 30 fixtures");
+    for x in &fixes {
+        let v: Vec<Vec<Num>> = x["V"].as_array().unwrap().iter().map(|r| {
+            r.as_array().unwrap().iter().map(|c| Num::Q(qi(c.as_i64().unwrap()))).collect()
+        }).collect();
+        let e: Vec<[usize; 3]> = x["E"].as_array().unwrap().iter().map(|r| {
+            [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize, r[2].as_u64().unwrap() as usize]
+        }).collect();
+        let f: Vec<Vec<Num>> = x["f"].as_array().unwrap().iter().map(|r| {
+            r.as_array().unwrap().iter().map(|c| Num::Q(qi(c.as_i64().unwrap()))).collect()
+        }).collect();
+        let ff: Vec<[usize; 2]> = x["F"].as_array().unwrap().iter().map(|r| {
+            [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize]
+        }).collect();
+        let p = QuaPol::new(v, e, f, ff).unwrap();
+        let e1 = cca2::conj_q::conj_q(&p).unwrap_err();
+        assert_eq!(e1.id, "PLQ:notContinuous", "{}: conj refused as {:?}", x["name"], e1.id);
+        let e2 = cca2::biconj_q::biconj_q(&p, &Default::default()).unwrap_err();
+        assert_eq!(e2.id, "PLQ:notContinuous", "{}: biconj refused as {:?}", x["name"], e2.id);
+    }
+}
+
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN
 /// conj: f**(x) >= <s,x> - f*(s) = 1.04606 at the s below; the engine's f**(x) is 0.40871.
 #[test]

@@ -83,6 +83,35 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             tc.verifyEqual(v(:).', [2^29 2^29], 'RelTol', 1e-9);
         end
 
+        function discontinuousInputIsRefusedByName(tc)
+            % Finding 10 (MAJOR). All 30 two-piece D fixtures of the review generator
+            % (plq_gen.py, seed 20261119, frozen in python/tests/review/d_family.json): a convex
+            % quadrilateral cut by a diagonal, the two pieces carrying DIFFERENT quadratics, so
+            % the shared edge is a genuine jump. conjQ and biconjQ must refuse by NAME,
+            % PLQ:notContinuous, rather than answer (biconj answers above a certified bound).
+            root = fileparts(fileparts(fileparts(mfilename('fullpath'))));   % CCA2/
+            fixes = jsondecode(fileread(fullfile(root, 'python', 'tests', 'review', 'd_family.json')));
+            tc.verifyEqual(numel(fixes), 30, 'the D family has 30 fixtures');
+            for k = 1:numel(fixes)
+                rec = fixes(k);
+                f = QuaPol(rec.V, rec.E, rec.f, rec.F);
+                tc.verifyError(@() conjQ(f), 'PLQ:notContinuous', sprintf('%s: conj', rec.name));
+                tc.verifyError(@() biconjQ(f), 'PLQ:notContinuous', sprintf('%s: biconj', rec.name));
+            end
+        end
+
+        function continuousInputIsNotRefused(tc)
+            % Finding 10 guard. R3-072 (a continuous 2-piece split of a quadrilateral: the two
+            % quadratics differ by a multiple of the shared edge's own linear form) must PASS the
+            % continuity check, so conjQ still answers it.
+            V = [-3 2; -1 0; 2 0; -2 3];
+            E = [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1];
+            f = QuaPol(V, E, [0 0 0 0 0 2 -2 2 1 1; 0 0 0 0 4 9 8 -4 -8 5], ...
+                       [1 0; 1 0; 1 2; 2 0; 2 0]);
+            g = conjQ(f);
+            tc.verifyClass(g, 'QuaCon', 'a continuous multi-piece input must not be refused');
+        end
+
         function conjCPLQSmallEigenvalueDoesNotCrash(tc)
             % Finding 7, second face. Q = diag(1, 2^-30) (strictly convex) and Q = diag(1, -2^-30)
             % (indefinite, f* = +inf everywhere) both fall into the rank-1 branch, where
