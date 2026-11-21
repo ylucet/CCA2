@@ -94,13 +94,13 @@ sp = pytest.importorskip('sympy')
 X, Y = sp.symbols('x y')
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #3: |x|+|y| (PLQ) is refused as non-PLQ')
+# Fixed: review 2026-11-19 #3 (first-match Piecewise branches are now turned into the
+# disjoint regions the registry means, and build_fixture_1d reads the half-plane side).
 def test_crosscheck_accepts_norm1():
     fx = cc.build_fixture_2d(sp.Abs(X) + sp.Abs(Y))
     assert len(fx.f) == 4
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #3: 1-D chain parser ignores the half-plane side')
 def test_crosscheck_accepts_bounded_segment_indicator():
     f = sp.Piecewise((0, sp.Eq(X, Y) & (X >= 0) & (X <= 1)), (sp.oo, True))
     fx = cc.build_fixture_1d(f)

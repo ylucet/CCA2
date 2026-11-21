@@ -328,7 +328,21 @@ def dnf(cond):
             out.extend(dnf(a))
         return _dedup_clauses(out)
     if isinstance(cond, sp.Not):
-        return dnf(cond.args[0]) and [()] or []    # unreachable after construction; keep safe
+        inner = cond.args[0]
+        if isinstance(inner, sp.And):
+            out = []                       # Not(a & b & ...) = Or of the negations
+            for a in inner.args:
+                out.extend(dnf(sp.Not(a)))
+            return _dedup_clauses(out)
+        if isinstance(inner, sp.Or):
+            out = [()]                     # Not(a | b | ...) = And of the negations
+            for a in inner.args:
+                sub = dnf(sp.Not(a))
+                if not sub:
+                    return []
+                out = [cl + t for cl in out for t in sub]
+            return _dedup_clauses(out)
+        return _dedup_clauses([atom_to_hp_tuple(cond)])   # a negated atom (Not(rel) is flipped eagerly)
     return _dedup_clauses([atom_to_hp_tuple(cond)])
 
 
@@ -359,6 +373,20 @@ def atom_to_hp_tuple(cond):
 def _dedup_clauses(out):
     seen, ded = set(), []
     for t in out:
+        # a clause owning BOTH sides of one line is the empty region (the open half-planes
+        # do not meet); its closed-side reading is only the boundary line, which is not a
+        # 2-D region. It appears from De Morgan expansions, e.g. Not(x>=0 & y>=0) with the
+        # branch region {y>=0, x<=0} yields the spurious clause {y>=0, x<=0, y<=0}.
+        sides = {}
+        empty = False
+        for h in t:
+            key = (h.a, h.b, h.c)
+            if key in sides and sides[key] != h.s:
+                empty = True
+                break
+            sides[key] = h.s
+        if empty:
+            continue
         key = tuple(sorted(set(t), key=lambda h: (h.a, h.b, h.c, h.s)))
         if key not in seen:
             seen.add(key)
@@ -428,10 +456,23 @@ def _has_pw(t):
 def _factor_partition(t):
     """One term containing Piecewise(s) -> its partition [(cond, factor value)]."""
     if isinstance(t, sp.Piecewise):
-        # the conditions are kept as written (ordered, first match wins); overlaps on shared
-        # boundaries are resolved by registry ORDER at lookup time, and the pieces must agree
-        # there (checked by the edge-continuity test and by fixture_check against the registry)
-        return [(cond, val) for (val, cond) in t.args]
+        # The registry's Piecewise is FIRST-MATCH: branch i is effective only where no earlier
+        # branch matched, so its region is c_i AND NOT c_1 AND ... AND NOT c_{i-1}. Keeping the
+        # conditions as written turns those closed regions into overlaps in open sets (e.g. the
+        # catch-all branch of norm1_2d owns both halves of a line), which the subdivision then
+        # refuses as "two pieces own the same side of a line" (review 2026-11-19 #3). The
+        # negated sides come out strict; dnf reads them as the closed side -- on the shared
+        # boundary the first-match order is the registry's own, so the parser's value there is
+        # the registry's value there, and the pieces agree on it by continuity.
+        out = []
+        prev = []
+        for (val, cond) in t.args:
+            eff = cond
+            for cj in prev:
+                eff = sp.And(eff, sp.Not(cj))
+            out.append((eff, val))
+            prev.append(cond)
+        return out
     if t.is_Mul:
         parts = [_factor_partition(a) for a in t.args if _has_pw(a)]
         if not parts:
@@ -448,29 +489,31 @@ def _factor_partition(t):
 
 def flatten_pieces(E):
     """Registry expression -> [(region, value_sympy)] over a common partition, in the
-    registry's first-match order. region = tuple of HP (the closed region)."""
+    registry's first-match order. region = tuple of HP (the closed region).
+
+    E is a SUM of terms (sp.expand has distributed products over sums). Each term that
+    carries a Piecewise is a piecewise function -- [(cond, its value on cond)] from
+    _factor_partition, in the term's own first-match order -- and the common refinement
+    is the Cartesian product of those partitions, where the value is the SUM of the
+    terms' values on the region (norm1_2d = |x| + |y|: the two partitions refine each
+    other, they are not factors), plus the PW-free remainder of E."""
     E = _expand_abs(sp.expand(E))
     if not _has_pw(E):
         return [((), E)]
-    pws = [t for t in (E.args if E.is_Add else [E]) if _has_pw(t)]
+    terms = E.args if E.is_Add else [E]
+    pws = [t for t in terms if _has_pw(t)]
     if not pws:
         return [((), E)]
     partitions = [_factor_partition(t) for t in pws]
-    rest = E
-    for t in pws:
-        rest = sp.simplify(rest - t)
-    if rest is not sp.S.Zero and rest != 0:
-        if _has_pw(rest):
-            raise ParseReject('could not separate the Piecewise part: %s' % E)
-    pieces = [(sp.true, sp.S.One)]
-    for part in partitions:
-        pieces = [(sp.And(c1, c2), sp.expand(v1 * v2)) for (c1, v1) in pieces for (c2, v2) in part]
-    if rest is not sp.S.Zero and rest != 0:
-        pieces = [(c, sp.expand(v + rest)) for (c, v) in pieces]
+    rest = sp.Add(*[t for t in terms if not _has_pw(t)]) if len(terms) != len(pws) else sp.S.Zero
+    refined = [([c], v) for (c, v) in partitions[0]]
+    for part in partitions[1:]:
+        refined = [(conds + [c], sp.expand(val + v)) for (conds, val) in refined
+                   for (c, v) in part]
     out = []
-    for (c, v) in pieces:
-        for region in dnf(c):
-            out.append((region, v))
+    for (conds, v) in refined:
+        for region in dnf(sp.And(*conds)):
+            out.append((region, sp.expand(v + rest)))
     return out
 
 
@@ -512,6 +555,16 @@ class Fixture:
 
     def value_at(self, p):
         """The function's value at p from the parser's own data (None = +oo / outside)."""
+        if self.kind == 'chain':
+            # a 1-D chain is finite exactly on the segment V[0]..V[1]; the registry stores
+            # +oo off that line, which the parser's region data (an empty region) does not carry
+            a, b = self.V[0], self.V[1]
+            if (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) != 0:
+                return None
+            denom = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2
+            t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / denom
+            if t < 0 or t > 1:
+                return None
         for (hps, row, _) in self.pieces:      # registry order: first match wins
             if all(hp.holds(p) for hp in hps):
                 return _row_value(row, p)
@@ -696,10 +749,13 @@ def build_fixture_1d(f_expr):
             if t[0] == 'eq':
                 continue
             hp = t[1]
-            k = hp.a * d[0] + hp.b * d[1]
-            base = hp.a * p0[0] + hp.b * p0[1] + hp.c
+            # the constraint is hp.s * (a x + b y + c) >= 0; along p(t) = p0 + t d that is
+            # k t + base >= 0 with k, base carrying the side sign hp.s (review 2026-11-19 #3:
+            # `x <= 1` is the side s = -1 and was read as the LOWER bound t >= 1)
+            k = hp.s * (hp.a * d[0] + hp.b * d[1])
+            base = hp.s * (hp.a * p0[0] + hp.b * p0[1] + hp.c)
             if k == 0:
-                if hp.s * base < 0:
+                if base < 0:
                     empty = True
                 continue
             bound = Fraction(-base, k)
@@ -720,7 +776,8 @@ def build_fixture_1d(f_expr):
     ends = sorted({t for (lo, hi, _) in intervals for t in (lo, hi) if t is not None})
     if len(ends) < 2 or any(hi is None for (_, hi, _) in intervals):
         raise ParseReject('unbounded or degenerate 1-D domain (not needed by the registry yet)')
-    V = [p0 + (ends[0] * d[0], ends[0] * d[1]), p0 + (ends[-1] * d[0], ends[-1] * d[1])]
+    V = [(p0[0] + ends[0] * d[0], p0[1] + ends[0] * d[1]),
+         (p0[0] + ends[-1] * d[0], p0[1] + ends[-1] * d[1])]
     rows = {tuple(row) for (_, _, row) in intervals}
     if len(rows) > 1:
         raise ParseReject('piecewise value on a 1-D chain beyond one quadratic (not needed yet)')
@@ -814,19 +871,26 @@ def fixture_check(entry, fx):
     """Verify the parser's own data: at sample points the first-match lookup on the
     parser's regions must equal the registry expression (both exact). Returns defects."""
     defects = []
-    rng = random.Random(20261119)
-    pts = []
-    for _ in range(30):
-        pts.append((Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7])),
-                    Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7]))))
-    for e in fx.E:
-        p1 = fx.V[e[0] - 1]
-        p2 = fx.V[e[1] - 1]
-        pts.append(((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2))
     if fx.kind == 'chain':
+        # a chain is finite only on the segment V[0]..V[1]: sample it (endpoints included),
+        # the line outside it, and off the line -- the registry stores +oo everywhere but the
+        # segment, so plain 2-D random points would all be "domain mismatch"
         a, b = fx.V[0], fx.V[1]
-        for tt in (Fraction(1, 3), Fraction(2, 3)):
-            pts.append((a[0] + tt * (b[0] - a[0]), a[1] + tt * (b[1] - a[1])))
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        pts = [(a[0] + tt * dx, a[1] + tt * dy)
+               for tt in (Fraction(0), Fraction(1, 4), Fraction(1, 2), Fraction(3, 4), Fraction(1),
+                          Fraction(-1, 2), Fraction(3, 2))]
+        pts.append((a[0] + (dx - dy) / 2, a[1] + (dx + dy) / 2))      # off the line
+    else:
+        rng = random.Random(20261119)
+        pts = []
+        for _ in range(30):
+            pts.append((Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7])),
+                        Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7]))))
+        for e in fx.E:
+            p1 = fx.V[e[0] - 1]
+            p2 = fx.V[e[1] - 1]
+            pts.append(((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2))
     for p in set(pts):
         ref = _registry_value_at(entry, p)
         got = fx.value_at(p)
