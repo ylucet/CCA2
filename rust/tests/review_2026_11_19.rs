@@ -130,3 +130,19 @@ fn biconj_fenchel_young_l_shape() {
     let h = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[x]).unwrap()[0];
     assert!(h >= s[0] * x[0] + s[1] * x[1] - g - 1e-9, "f** = {} < <s,x> - f*(s) = {}", h, s[0] * x[0] + s[1] * x[1] - g);
 }
+
+/// Finding 9c/9d (CRITICAL): two continuous pieces on a quadrilateral (R3-072). x is in piece 1,
+/// f(x) = -12.29, so f**(x) is finite; the certified bracket is [-14.68169, -14.67993]. At
+/// (-2.49, 1.85) a convex combination of three domain points gives -18.455, so f** <= that.
+/// The tie-arc screen parametrised the parabola tie through a spurious 1e34 point and dropped
+/// the needed atom pair (+inf, and too high where another pair covered).
+#[test]
+fn biconj_finite_inside_the_domain_r3_072() {
+    let f = pol(&[[-3, 2], [-1, 0], [2, 0], [-2, 3]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let h = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap();
+    let v = h.eval(&[[-2.4921875, 1.51171875], [-2.49, 1.85]]).unwrap();
+    assert!(v[0] >= -14.681688881664497 - 1e-9 && v[0] <= -14.679931640625, "got {}", v[0]);
+    assert!(v[1] <= -18.455, "got {}", v[1]);
+}

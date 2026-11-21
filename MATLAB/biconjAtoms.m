@@ -419,7 +419,10 @@ function p0 = realPoint(A, g, f0)
             c = [w.'*A*w, (2*A*p + g).'*w, p.'*A*p + g.'*p + f0];
             t = roots(c);
             t = real(t(abs(imag(t)) <= 1e-9 * max(1, abs(t))));
-            if ~isempty(t), p0 = p + t(1)*w; return, end
+            % the root of SMALLEST magnitude: along a parabola's axis w'*A*w is round-off and
+            % its other root a spurious ~1e34 point that wrecks the parametrisation, so tieArc
+            % missed real tie arcs (review 2026-11-19 #9c)
+            if ~isempty(t), [~, i0] = min(abs(t)); p0 = p + t(i0)*w; return, end
         end
     end
 end

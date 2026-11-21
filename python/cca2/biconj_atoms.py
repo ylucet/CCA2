@@ -404,7 +404,10 @@ def realPoint(A, g, f0):
             c = [float(w @ A @ w), float((2 * A @ p + g) @ w), float(p @ A @ p + g @ p + f0)]
             t = [z.real for z in _roots(c) if abs(z.imag) <= 1e-9 * max(1.0, abs(z))]
             if t:
-                return p + t[0] * w
+                # the root of SMALLEST magnitude: along a parabola's axis w'Aw is round-off
+                # (~1e-19), and its other root is a spurious ~1e34 point that wrecks the
+                # parametrisation -- tieArc then missed real tie arcs (review 2026-11-19 #9c)
+                return p + min(t, key=abs) * w
     return None
 
 

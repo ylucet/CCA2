@@ -203,7 +203,6 @@ def test_biconj_fenchel_young_L_shape():
     assert h[0] >= s[0] * x[0] + s[1] * x[1] - g - 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9c: f** = +inf at a point of dom f')
 def test_biconj_finite_inside_the_domain_R3_072():
     # two continuous pieces on a quadrilateral (R3-072); x is in piece 1, f(x) = -12.29 is finite,
     # so f**(x) <= f(x) < inf. Python returns +inf.
@@ -212,6 +211,10 @@ def test_biconj_finite_inside_the_domain_R3_072():
                [[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]])
     x = [-2.4921875, 1.51171875]
     assert math.isfinite(check.evalQuaPol(f, [x])[0])
-    h = f.biconj().eval([x])
+    h = f.biconj().eval([x, [-2.49, 1.85]])
     h = h[0] if isinstance(h, tuple) else h
     assert math.isfinite(h[0])
+    # 9c: the certified bracket at x; 9d: a convex combination of three domain points gives
+    # -18.455 at (-2.49, 1.85), and the engine said -17.29 there
+    assert -14.681688881664497 - 1e-9 <= h[0] <= -14.679931640625
+    assert h[1] <= -18.455
