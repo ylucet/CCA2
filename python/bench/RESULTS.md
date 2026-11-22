@@ -319,11 +319,11 @@ not graded. Registry: the sibling `convexdb` checkout (version 1.24.0),
 
 | | conj | biconj |
 |---|---|---|
-| Python | agree 18 | agree 16 · refuse 2 |
-| Rust | agree 18 | agree 14 · refuse 2 · open 2 |
+| Python | agree 21 · disagree 1 | agree 19 · refuse 2 · disagree 1 |
+| Rust | agree 21 · disagree 1 | agree 19 · refuse 2 · disagree 1 |
 
-2-D entries in the registry: 34. Accepted by the engines: 18. Not PLQ / not
-representable (expected refusals, registry content): 16.
+2-D entries in the registry: 34. Accepted by the engines: 22. Not PLQ / not
+representable (expected refusals, registry content): 12.
 
 | entry | parse | py conj | py biconj | rs conj | rs biconj |
 |---|---|---|---|---|---|
@@ -343,24 +343,24 @@ representable (expected refusals, registry content): 16.
 | general_indefinite_rotation | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
 | karmarkar_bilinear_sqrt2 | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
 | karmarkar_erratum_circle | ok (2d, 2 faces, 5 edges, 4 vertices) | agree | agree | agree | agree |
-| karmarkar_erratum_hyperbola | ok (2d, 3 faces, 7 edges, 5 vertices) | agree | agree | agree | open |
+| karmarkar_erratum_hyperbola | ok (2d, 3 faces, 7 edges, 5 vertices) | agree | agree | agree | agree |
 | karmarkar_erratum_unbounded | ok (2d, 2 faces, 3 edges, 4 vertices) | agree | agree | agree | agree |
 | lee_abs_unit_circle | not PLQ / not representable: irrational or no... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
-| lee_indefinite_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | open |
+| lee_indefinite_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
 | locatelli_3_1 | not PLQ / not representable: piece value is n... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
 | multi_face_bilinear_square | ok (2d, 1 faces, 4 edges, 4 vertices) | agree | agree | agree | agree |
 | negative_bilinear_rotation | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
 | nonconvex_domain_indicator_2d | ok (2d, 2 faces, 8 edges, 8 vertices) | agree | agree | agree | agree |
-| norm1_2d | not PLQ / not representable: two pieces own t... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| norm1_2d | ok (2d, 4 faces, 4 edges, 5 vertices) | agree | agree | agree | agree |
 | plq_fan_elliptic_edge | ok (2d, 3 faces, 7 edges, 5 vertices) | agree | refuse — PLQ:biconjQ:convexPieceCoupling | agree | refuse — rust: PLQ:biconjQ:convexPieceCoupling |
 | plq_fan_s4_vertex | ok (2d, 5 faces, 11 edges, 7 vertices) | agree | refuse — PLQ:biconjQ:convexPieceCoupling | agree | refuse — rust: PLQ:biconjQ:convexPieceCoupling |
 | quad_norm2_half_2d | ok (2d, 1 faces, 0 edges, 0 vertices) | agree | agree | agree | agree |
 | quad_nsd_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
 | quad_psd_triangle | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
-| segment_indicator_2d | not PLQ / not representable: unbounded or deg... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
-| separable_bump_quadratic_2d | not PLQ / not representable: two pieces own t... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
-| separable_multiwell_abs_2d | not PLQ / not representable: two pieces own t... | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol | refuse — input not representable by QuaPol |
+| segment_indicator_2d | ok (chain, 1 faces, 1 edges, 2 vertices) | agree | agree | agree | agree |
+| separable_bump_quadratic_2d | ok (2d, 3 faces, 4 edges, 6 vertices) | disagree — off_lattice: engine +inf vs registry 0.005142421356237309... | disagree — off_lattice: engine +inf vs registry 0.005142421356237309... | disagree — off_lattice: rust +inf vs registry 0.00514242135623730950... | disagree — off_lattice: rust +inf vs registry 0.00514242135623730950... |
+| separable_multiwell_abs_2d | ok (2d, 12 faces, 16 edges, 17 vertices) | agree | agree | agree | agree |
 | three_convex_edges_split | ok (2d, 1 faces, 3 edges, 3 vertices) | agree | agree | agree | agree |
 
-_Recorded 2026-11-19 15:16; shared machine, no timing conclusions._
+_Recorded 2026-11-20 20:12; shared machine, no timing conclusions._
 

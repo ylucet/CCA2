@@ -92,26 +92,26 @@ sp = pytest.importorskip('sympy')
 X, Y = sp.symbols('x y')
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #3: |x|+|y| (PLQ) is refused as non-PLQ')
+# Fixed: review 2026-11-19 #3 (first-match Piecewise branches are now turned into the
+# disjoint regions the registry means, and build_fixture_1d reads the half-plane side).
 def test_crosscheck_accepts_norm1():
     fx = cc.build_fixture_2d(sp.Abs(X) + sp.Abs(Y))
     assert len(fx.f) == 4
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #3: 1-D chain parser ignores the half-plane side')
 def test_crosscheck_accepts_bounded_segment_indicator():
     f = sp.Piecewise((0, sp.Eq(X, Y) & (X >= 0) & (X <= 1)), (sp.oo, True))
     fx = cc.build_fixture_1d(f)
     assert sorted(tuple(v) for v in fx.V) == [(0, 0), (1, 1)]
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #4: int() truncates rational coefficients')
+# Fixed: review 2026-11-19 #4 (Fractions throughout; the half-plane data is scaled to a
+# primitive integer triple, which spans the same line, so the closed-region reading is exact).
 def test_crosscheck_keeps_rational_coefficients():
     row = cc.piece_value_row(X * Y / 3 + X / 2)
     assert row[5] == Fr(1, 3) and row[7] == Fr(1, 2)
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #4: int() truncates rational half-plane data')
 def test_crosscheck_keeps_rational_halfplane():
     (hp,) = cc.atom_to_hp_tuple(Y <= sp.Rational(1, 2))
     assert hp.holds((Fr(0), Fr(1, 4))) and not hp.holds((Fr(0), Fr(3, 4)))

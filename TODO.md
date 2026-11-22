@@ -7,7 +7,8 @@ Exact engine (the default for `conj` and `biconj`):
 - **FIXED 2026-11-20, review CRITICAL #8 (verified; fixed by #94, see the MAJOR #2 entry below):** `conj` of y^2/2 on the L-shape. Independent check 2026-11-20 on merged main (machine shared, so only counts matter): Python grid 0.1 on [-6,6]^2 = 0 wrong of 14641 against check.supAt; the 357-input conj differential (plq_gen seed 20261119, run_engines.py + compare_engines.py) gives 0 wrong conj values in Python (339 ok, 18 timeouts under load 400+), Rust (357 ok) and MATLAB (322 ok, 35 not finished within the 30-min cap, none wrong); review tests test_conj_L_shape_y2, conj_l_shape_y2, conjLShapeY2 pass. Biconj WRONG values in the same run are review #9, a separate finding.
 - **OPEN 2026-11-19, review CRITICAL #9:** `biconj` wrong on 18/243 (Py) and 14/240 (Rs) small continuous random inputs: finite outside conv(dom f), below <s,x> - f*(s) with the engine's own conj, +inf inside dom f, above a convex combination; all three engines; predates 2026-11-17.
 - **FIXED 2026-11-20, review MAJOR #2:** `cellHasInterior`'s CAD fallback is now exact and complete in all three engines (rational columns and sample points, Sturm isolation, shared line factors factored out; DESIGN.md section "cellHasInterior: the exact CAD fallback"). Side effect: review #8 (conj L-shape) now passes in all three engines; its marks are removed. Earlier witness stages still accept a zero-area cell that touches the boundary (review item 19, unchanged); equality rows (side 0) are decided by the witness stage only. In MATLAB, past 2^53 (`ratQ:overflow`) the cell is kept, as before.
-- **OPEN 2026-11-19, review MAJOR #3/#4:** the convexdb cross-check refuses 4 established PLQ entries as non-PLQ (|x|+|y|, two separable, segment indicator) and truncates rational data; the "16 non-PLQ" record below is wrong and `test_non_plq_refused` pins the wrong verdict.
+- **FIXED 2026-11-20, review MAJOR #3/#4:** the convexdb cross-check refuses 4 established PLQ entries as non-PLQ (|x|+|y|, two separable, segment indicator) and truncates rational data. Fixed in `python/bench/cross_convexdb.py` (parser + De-Morgan exclusion now applied only where a branch genuinely 2-D-overlaps an earlier one; rational data kept exact). 22 accepted, 12 non-PLQ. The one real disagreement found on the rerun is finding **#95-A** (below).
+- **OPEN 2026-11-20, finding #95-A:** `separable_bump_quadratic_2d` (f = y^2/2 + bump(x), bump = 1-x^2 on (-1,1), 0 outside): both engines return a 0-face conjugate (+inf everywhere, incl. at s1=0) where the registry stores a thin line {s1=0} (f*(0,s2) = s2^2/2). Thin-conjugate loss in the engine; recorded as failing tests, engine not touched. Tests: `python/tests/review/test_review_2026_11_20.py` (xfail).
 - **FIXED 2026-11-20 (review MAJOR #5):** the definition oracle shared #1's blind spot and could not see #9a. `check.supAt` now tests the two null directions of a singular H exactly against the cone's ray span from the face's rational data (Python, commit `c750612`); `checkBiconj` now samples outside the vertex box for bounded domains, where the biconjugate is +infinity; `test_definition_cone_family.py` runs the same oracle on the review generator's E-quadrant/R5/R6 cone family. Boundary policy: the numerical gradient in check (3) carries ~1e-11 noise, so the dom f* boundary band was widened to 9 significant digits (absorbs the noise, keeps O(1) defects). The #9-exposed biconj defects (golden record 38; cone records 7, 32, 33, 45, 49) xfail in-test with pointers to the dedicated #9 tests -- #9 is out of scope. Python lane: 2897 passed.
 - **FIXED 2026-11-20 (review MAJOR #6):** Rust `biconj` panicked on NaN breakpoints in `tie_arc` -- `sort_by(partial_cmp().unwrap_or(Equal))` is not a total order on NaN (Rust >= 1.81 panics); 5/357 random inputs (R4-017, R4-080, R1-091, R4-115, R4-171). Fixed at the source: `real_roots` (biconj_atoms, conic_meet) and `realRoots` (Python, MATLAB) now drop non-finite roots (non-finite coefficients make the eigenvalue run produce NaN, which is not a breakpoint), and all 12 `partial_cmp` sorts in `rust/src` now use `total_cmp` (a total order, so a sort can never panic on them again). All three engines answer or refuse by name on the five inputs (MATLAB: R4-017/R4-080/R4-115/R4-171 answered, R1-091 named refusal; Python: R4-080 named refusal, the rest answered; Rust: no panic, `biconj_does_not_panic_on_r4_017` now covers all five and passes). Lanes: `cargo test --release` green, pytest green, `suite.sh --fast` 834/0.
 - **FIXED 2026-11-20 (review MAJOR #7):** legacy `conjCPLQ`'s Case A definiteness test was absolute (`all(ev > sqrt(eps))` then `tolE = sqrt(eps)*max(1,norm(Q))`): (x^2+y^2)/2^31 (strictly convex, f* = 2^29|s|^2) was routed to the AFFINE branch and returned a needle, and diag(1, ±2^-30) fell into the rank-1 branch, where `null` of a numerically full-rank matrix is empty and `n(:,1)` crashed with `MATLAB:badsubscript`. The test is now `eps*norm(Q)` (relative, no absolute floor) and the rank-1 null direction comes from `eig` (eigenvector of the smallest-magnitude eigenvalue -- always exists), not `null`. This also removes the same latent crash for any Q with a small POSITIVE eigenvalue (e.g. diag(1, 1e-9)), which the old code also sent to the empty-`null` crash. `conjCPLQTinyPositiveEigenvalue` and `conjCPLQSmallEigenvalueDoesNotCrash` pass; `suite.sh --fast` 834/0.
@@ -36,21 +37,28 @@ Legacy symbolic engine (`'cplq'`, no longer the default):
 
 Release / paper:
 - MATLAB + Symbolic Math Toolbox dependency; cite `convexdb` by its Zenodo DOI.
-- **DONE 2026-11-19: gap G3 external-oracle cross-check** (`python/bench/cross_convexdb.py`,
-  `python/tests/test_cross_convexdb.py`; section in `python/bench/RESULTS.md`). Every 2-D PLQ entry
-  the engines accept is compared against the registry's stored `f_star`/`co_f` at the registry's
-  own test points: Python and Rust agree with the registry on all 18 accepted entries for `conj`
-  and `biconj` (0 disagreement). QuaCon is checked at 512 bits (1e-60, or the point's own precision
-  on a decimal point); non-QuaCon (AlgCrv/EnvelopeMin) on the engine's 1e-6 double protocol; 2
-  entries have no stored `co_f` (open, sanity-checked only). 16 non-PLQ entries are refused as
-  expected. Two notes, neither an engine bug: (a) `plq_fan_elliptic_edge` / `plq_fan_s4_vertex`
-  are REFUSED for biconj by both engines (`PLQ:biconjQ:convexPieceCoupling`) -- a known limitation,
-  the registry stores a `co_f` for them; (b) two near-misses were adjudicated as protocol
-  artifacts, not defects: `three_convex_edges_split` biconj (my exact AlgCrv evaluator returned +inf
-  on a near-boundary point the engine's own double eval values finitely -- non-QuaCon now use the
-  double protocol) and `plq_fan_s4_vertex` conj (a 2e-31 gap on the registry's 31-digit
-  "near_degeneracy" point, where two independent engines agree with each other to 2e-31 and the
-  point's own last digits are not significant -- the tolerance is now point-aware).
+- **DONE 2026-11-20 (rerun after review 2026-11-19 #3/#4/#12 fixes): gap G3 external-oracle
+  cross-check** (`python/bench/cross_convexdb.py`, `python/tests/test_cross_convexdb.py`; section in
+  `python/bench/RESULTS.md`). Every 2-D PLQ entry the engines accept is compared against the
+  registry's stored `f_star`/`co_f` at the registry's own test points: Python and Rust agree with
+  the registry on all 22 accepted entries for `conj` and `biconj` except one genuine disagreement --
+  `separable_bump_quadratic_2d`, finding **#95-A** above (thin-conjugate loss; recorded as xfailing
+  tests, engine not touched). QuaCon is checked at 512 bits (1e-60, or the point's own precision on
+  a decimal point); non-QuaCon (AlgCrv/EnvelopeMin) on the engine's 1e-6 double protocol, with a
+  protocol-aware sanity bound for open entries (double-protocol values within the double tolerance);
+  4 accepted entries have no stored `co_f` (open, sanity-checked only for biconj:
+  `karmarkar_erratum_hyperbola`, `lee_indefinite_triangle`, `plq_fan_elliptic_edge`,
+  `plq_fan_s4_vertex`). 12 non-PLQ entries are refused as expected. Three notes, none an engine
+  bug: (a) `plq_fan_elliptic_edge` / `plq_fan_s4_vertex` are REFUSED for biconj by both engines
+  (`PLQ:biconjQ:convexPieceCoupling`) -- a known limitation, and the registry leaves them open
+  too (no stored `co_f`); (b) near-misses adjudicated as protocol artifacts, not defects:
+  `three_convex_edges_split` biconj (the exact AlgCrv evaluator returned +inf on a near-boundary
+  point the engine's own double eval values finitely -- non-QuaCon now use the double protocol)
+  and `plq_fan_s4_vertex` conj (a 2e-31 gap on the registry's 31-digit "near_degeneracy" point,
+  where two independent engines agree with each other to 2e-31 and the point's own last digits are
+  not significant -- the tolerance is now point-aware); (c) `lee_indefinite_triangle` biconj (Rust
+  AlgCrv biconj 2.0000000000004e-6 vs f = 2.0e-6: a 4e-19 excess, inside the double protocol's own
+  error -- the open-entry sanity bound is now protocol-aware).
 
 Decided, not to do: Example 2 pair 2's non-winning faces (leave them, 2026-11-05).
 

@@ -5,13 +5,15 @@ representative subset of the 2-D PLQ registry entries, using the Python engine, 
 the cross-check verdicts:
 
   * no entry may DISAGREE (a disagreement is a real engine-vs-registry defect);
-  * the expected non-PLQ entry (norm1_2d = |x|+|y|) is refused by the parser;
-  * the plain accepted entries (quadratic / bilinear / rotation / multi-face) agree.
+  * the established PLQ entries (quadratic / bilinear / rotation / multi-face, and the
+    first-match Piecewises norm1_2d = |x|+|y| and the 1-D segment indicator) are accepted
+    by the parser and agree;
+  * a known engine defect (separable_bump_quadratic_2d: the thin conjugate line is lost)
+    is recorded as a failing xfail, not hidden by a parser refusal.
 
-This is the fast regression guard. The full 34-entry set (both engines, the slow/heavy
-entries, and the double-protocol / open entries) is the bench run itself; this test keeps
-the agreement invariant in the fast bucket without the ~1 min heavy entries or the Rust
-binary.
+This is the fast regression guard. The full set (both engines, the slow/heavy entries, and
+the double-protocol / open entries) is the bench run itself; this test keeps the agreement
+invariant in the fast bucket without the ~1 min heavy entries or the Rust binary.
 """
 import os
 import sys
@@ -26,9 +28,10 @@ import cross_convexdb as cc  # noqa: E402
 cc.bootstrap_pythonpath()
 
 # A fast, representative slice of cc.FAST_SLUGS: every shape family (quadratic triangle,
-# bilinear, rotation, multi-face, unbounded) plus the one expected refusal. The heavier
-# FAST_SLUGS members (three_convex_edges_split, the erratum hyperbola/circle) are covered
-# by the bench run; keeping them out keeps this test in the seconds.
+# bilinear, rotation, multi-face, unbounded, the first-match Piecewise |x|+|y|, the 1-D
+# segment indicator). The heavier FAST_SLUGS members (three_convex_edges_split, the
+# erratum hyperbola/circle) are covered by the bench run; keeping them out keeps this test
+# in the seconds.
 TEST_SLUGS = [
     'quad_psd_triangle',
     'quad_nsd_triangle',
@@ -40,6 +43,7 @@ TEST_SLUGS = [
     'quad_norm2_half_2d',
     'karmarkar_erratum_unbounded',
     'norm1_2d',
+    'segment_indicator_2d',
 ]
 
 
@@ -47,8 +51,15 @@ TEST_SLUGS = [
 def registry():
     try:
         path = cc.find_registry_json()
-    except SystemExit:
-        pytest.skip('convexdb registry not found (sibling folder missing)')
+    except SystemExit as e:
+        # review 2026-11-19 #12: skip with a VISIBLE reason (fresh clone / CI has no sibling
+        # registry). The reason carries the paths tried and the CCA2_CONVEXDB_DIR override,
+        # and is printed to stderr as well, so a green run does not look like these tests
+        # passed.
+        msg = ('convexdb registry not found in the sibling folder, so the cross-check '
+               'tests are SKIPPED (not passed): %s' % str(e).replace('\n', ' | '))
+        print('\n*** %s ***' % msg, file=sys.stderr)
+        pytest.skip(msg)
     _ver, entries = cc.load_entries(path)
     return entries
 
@@ -74,11 +85,14 @@ def test_no_disagreement(registry, slug):
         assert st in ('agree', 'refuse', 'open'), (slug, op, st)
 
 
-def test_non_plq_refused(registry):
+def test_first_match_piecewise_accepted(registry):
+    # review 2026-11-19 #3: |x|+|y| is an established PLQ (registry status 'established');
+    # the old parser refused it as "two pieces own the same side of line". It must now be
+    # accepted by the parser and agree with the registry on both operators.
     rec = cc.process_entry(_entry(registry, 'norm1_2d'), ['py'], None)
-    assert not rec['parse'].startswith('ok'), rec['parse']
-    assert rec['py']['conj']['status'] == 'refuse'
-    assert rec['py']['biconj']['status'] == 'refuse'
+    assert rec['parse'].startswith('ok'), rec['parse']
+    assert rec['py']['conj']['status'] == 'agree', rec['py']['conj']
+    assert rec['py']['biconj']['status'] == 'agree', rec['py']['biconj']
 
 
 def test_accepted_entries_agree(registry):
@@ -88,3 +102,30 @@ def test_accepted_entries_agree(registry):
         assert rec['parse'].startswith('ok'), (slug, rec['parse'])
         assert rec['py']['conj']['status'] == 'agree', (slug, rec['py']['conj'])
         assert rec['py']['biconj']['status'] == 'agree', (slug, rec['py']['biconj'])
+
+
+def _const_face_quacon(values):
+    """A QuaCon-shaped object with one face per value, each face holding everywhere (empty FC)."""
+    class G:
+        nf = len(values)
+        FC = [[] for _ in values]
+        EcQ = []
+        fN = [[0, 0, 0, 0, 0, 0, 0, 0, 0, v] for v in values]
+        fD = [1] * len(values)
+    return G
+
+
+def test_face_conflict_is_reported_not_fallen_back():
+    # review 2026-11-19 #12: a result whose two faces both hold at a point with DIFFERENT
+    # values is a defect of the result, not an exactness gap. eval_quacon_mp must raise
+    # FaceConflict so the cross-check reports it as a disagreement -- not a bare Ambiguous,
+    # which would trigger the 1e-6 double fallback that the double eval can hide.
+    assert issubclass(cc.FaceConflict, cc.Ambiguous)
+    g = _const_face_quacon([1, 2])                 # both faces hold at the origin
+    P = (cc.mp.mpf(0), cc.mp.mpf(0))
+    with pytest.raises(cc.FaceConflict):
+        cc.eval_quacon_mp(g, P)
+    # a result with a single held face has no conflict and returns its value
+    assert cc.eval_quacon_mp(_const_face_quacon([3]), P) == cc.mp.mpf(3)
+    # two faces that AGREE at the point are fine (no conflict)
+    assert cc.eval_quacon_mp(_const_face_quacon([5, 5]), P) == cc.mp.mpf(5)

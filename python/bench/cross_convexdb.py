@@ -299,10 +299,17 @@ class HP:
 
 def _rat(t):
     if t is None:
-        return sp.S.Zero
+        return Fraction(0)
     if t.is_Rational:
-        return sp.Rational(t)
+        return Fraction(t)
     raise ParseReject('irrational or non-constant data in a condition: %s' % t)
+
+
+def _prim_abc(A, B, C):
+    """Rational (A, B, C) -> a PRIMITIVE INTEGER triple spanning the same line (review
+    2026-11-19 #4: the old int() truncation turned x*y/3 into 0 and y <= 1/2 into y <= 0)."""
+    D = math.lcm(A.denominator, B.denominator, C.denominator)
+    return int(A * D), int(B * D), int(C * D)
 
 
 def dnf(cond):
@@ -328,7 +335,21 @@ def dnf(cond):
             out.extend(dnf(a))
         return _dedup_clauses(out)
     if isinstance(cond, sp.Not):
-        return dnf(cond.args[0]) and [()] or []    # unreachable after construction; keep safe
+        inner = cond.args[0]
+        if isinstance(inner, sp.And):
+            out = []                       # Not(a & b & ...) = Or of the negations
+            for a in inner.args:
+                out.extend(dnf(sp.Not(a)))
+            return _dedup_clauses(out)
+        if isinstance(inner, sp.Or):
+            out = [()]                     # Not(a | b | ...) = And of the negations
+            for a in inner.args:
+                sub = dnf(sp.Not(a))
+                if not sub:
+                    return []
+                out = [cl + t for cl in out for t in sub]
+            return _dedup_clauses(out)
+        return _dedup_clauses([atom_to_hp_tuple(cond)])   # a negated atom (Not(rel) is flipped eagerly)
     return _dedup_clauses([atom_to_hp_tuple(cond)])
 
 
@@ -346,10 +367,11 @@ def atom_to_hp_tuple(cond):
     A, B, C = _rat(A), _rat(B), _rat(C)
     if A == 0 and B == 0:
         raise ParseReject('constant relation in a condition (degenerate partition)')
+    a, b, c = _prim_abc(A, B, C)
     if isinstance(rel, (sp.Ge, sp.Gt)):
-        return (HP(int(A), int(B), int(C), s),)      # Gt: closed side used; value checked continuous
+        return (HP(a, b, c, s),)      # Gt: closed side used; value checked continuous
     if isinstance(rel, (sp.Le, sp.Lt)):
-        return (HP(int(A), int(B), int(C), -s),)
+        return (HP(a, b, c, -s),)
     if isinstance(rel, sp.Eq):
         raise ParseReject('an equality constraint is a lower-dimensional domain '
                           '(1-D chain), not a 2-D PLQ piece')
@@ -359,6 +381,20 @@ def atom_to_hp_tuple(cond):
 def _dedup_clauses(out):
     seen, ded = set(), []
     for t in out:
+        # a clause owning BOTH sides of one line is the empty region (the open half-planes
+        # do not meet); its closed-side reading is only the boundary line, which is not a
+        # 2-D region. It appears from De Morgan expansions, e.g. Not(x>=0 & y>=0) with the
+        # branch region {y>=0, x<=0} yields the spurious clause {y>=0, x<=0, y<=0}.
+        sides = {}
+        empty = False
+        for h in t:
+            key = (h.a, h.b, h.c)
+            if key in sides and sides[key] != h.s:
+                empty = True
+                break
+            sides[key] = h.s
+        if empty:
+            continue
         key = tuple(sorted(set(t), key=lambda h: (h.a, h.b, h.c, h.s)))
         if key not in seen:
             seen.add(key)
@@ -366,9 +402,67 @@ def _dedup_clauses(out):
     return ded
 
 
+def full_dim_2d(cons):
+    """cons: list of (A, B, D) meaning A*x + B*y > D (strict, rational coefficients).
+    True iff the region has a nonempty interior -- i.e. is a 2-D region, not an edge or a point.
+    Exact: one step of Fourier-Motzkin elimination of y leaves a 1-D interval test on x.
+    (A polyhedron has nonempty interior iff its strict system is feasible.)"""
+    lowers = []    # y > m x + q
+    uppers = []    # y < m x + q
+    xlo = []       # x > v
+    xhi = []       # x < v
+    for (A, B, D) in cons:
+        A, B, D = Fraction(A), Fraction(B), Fraction(D)
+        if B > 0:
+            lowers.append((Fraction(-A, B), Fraction(D, B)))
+        elif B < 0:
+            uppers.append((Fraction(-A, B), Fraction(D, B)))
+        elif A == 0:
+            if D >= 0:
+                return False              # 0 > D, impossible
+        elif A > 0:
+            xlo.append(Fraction(D, A))
+        else:
+            xhi.append(Fraction(D, A))
+    if lowers and uppers:
+        for (ml, ql) in lowers:
+            for (mu, qu) in uppers:
+                d = ml - mu
+                rhs = qu - ql
+                if d == 0:
+                    if ql >= qu:
+                        return False
+                elif d > 0:
+                    xhi.append(rhs / d)
+                else:
+                    xlo.append(rhs / d)
+    lo = max(xlo) if xlo else None
+    hi = min(xhi) if xhi else None
+    return lo < hi if (lo is not None and hi is not None) else True
+
+
+def _two_d_overlap(cond_i, cond_j):
+    """True iff two branch conditions meet in a 2-D region (not merely on a shared edge).
+
+    The registry's Piecewise is first-match, so branch i is effective where no earlier branch
+    matched. The exclusion (AND NOT c_j) is required exactly where c_i 2-D-overlaps c_j -- that
+    is where the as-written pieces would own the same side of a line (norm1_2d's catch-all over
+    an explicit region). On a shared edge the as-written regions already partition the plane,
+    and De-Morgan'ing against a merely edge-sharing branch shatters it into overlapping clauses
+    (which broke karmarkar_erratum_hyperbola: 3 edge-sharing cells became 12 overlapping pieces)."""
+    for ci in dnf(cond_i):
+        for cj in dnf(cond_j):
+            cons = [(hp.s * hp.a, hp.s * hp.b, -hp.s * hp.c) for hp in (tuple(ci) + tuple(cj))]
+            if full_dim_2d(cons):
+                return True
+    return False
+
+
 def piece_value_row(val):
     """A quadratic in x, y (rational coefficients) -> the engine's 10-wide weighted row,
-    value = (c5 x^2 + 2 c6 xy + c7 y^2)/2 + c8 x + c9 y + c10. None for an oo value."""
+    value = (c5 x^2 + 2 c6 xy + c7 y^2)/2 + c8 x + c9 y + c10. None for an oo value.
+    The coefficients are exact Fractions (QuaPol takes them as exact; review 2026-11-19 #4:
+    the old int() truncation turned x*y/3 into 0 and the entry into a spurious refusal)."""
     if val is None or val in (sp.oo, sp.zoo, sp.nan):
         return None
     try:
@@ -383,7 +477,8 @@ def piece_value_row(val):
     A10 = p.coeff_monomial(X)
     A01 = p.coeff_monomial(Y)
     A00 = p.coeff_monomial(1)
-    return [0, 0, 0, 0, int(2 * A20), int(A11), int(2 * A02), int(A10), int(A01), int(A00)]
+    return [0, 0, 0, 0, Fraction(2 * A20), Fraction(A11), Fraction(2 * A02),
+            Fraction(A10), Fraction(A01), Fraction(A00)]
 
 
 def _expand_abs(E):
@@ -428,10 +523,27 @@ def _has_pw(t):
 def _factor_partition(t):
     """One term containing Piecewise(s) -> its partition [(cond, factor value)]."""
     if isinstance(t, sp.Piecewise):
-        # the conditions are kept as written (ordered, first match wins); overlaps on shared
-        # boundaries are resolved by registry ORDER at lookup time, and the pieces must agree
-        # there (checked by the edge-continuity test and by fixture_check against the registry)
-        return [(cond, val) for (val, cond) in t.args]
+        # The registry's Piecewise is FIRST-MATCH: branch i is effective only where no earlier
+        # branch matched, so its region is c_i AND NOT c_1 AND ... AND NOT c_{i-1}. But the
+        # exclusion (AND NOT c_j) is only needed where c_i genuinely 2-D-overlaps c_j -- that is
+        # where the as-written pieces would own the same side of a line (norm1_2d's catch-all over
+        # an explicit region; review 2026-11-19 #3). On a shared edge the as-written regions
+        # already partition the plane, and De-Morgan'ing against a merely edge-sharing branch
+        # shatters it into overlapping clauses (which broke karmarkar_erratum_hyperbola: 3
+        # edge-sharing cells became 12 overlapping pieces). The negated sides come out strict;
+        # dnf reads them as the closed side -- on the shared boundary the first-match order is
+        # the registry's own, so the parser's value there is the registry's value there, and the
+        # pieces agree on it by continuity.
+        out = []
+        prev = []
+        for (val, cond) in t.args:
+            eff = cond
+            for (cj, valj) in prev:
+                if _two_d_overlap(cond, cj):
+                    eff = sp.And(eff, sp.Not(cj))
+            out.append((eff, val))
+            prev.append((cond, val))
+        return out
     if t.is_Mul:
         parts = [_factor_partition(a) for a in t.args if _has_pw(a)]
         if not parts:
@@ -448,29 +560,31 @@ def _factor_partition(t):
 
 def flatten_pieces(E):
     """Registry expression -> [(region, value_sympy)] over a common partition, in the
-    registry's first-match order. region = tuple of HP (the closed region)."""
+    registry's first-match order. region = tuple of HP (the closed region).
+
+    E is a SUM of terms (sp.expand has distributed products over sums). Each term that
+    carries a Piecewise is a piecewise function -- [(cond, its value on cond)] from
+    _factor_partition, in the term's own first-match order -- and the common refinement
+    is the Cartesian product of those partitions, where the value is the SUM of the
+    terms' values on the region (norm1_2d = |x| + |y|: the two partitions refine each
+    other, they are not factors), plus the PW-free remainder of E."""
     E = _expand_abs(sp.expand(E))
     if not _has_pw(E):
         return [((), E)]
-    pws = [t for t in (E.args if E.is_Add else [E]) if _has_pw(t)]
+    terms = E.args if E.is_Add else [E]
+    pws = [t for t in terms if _has_pw(t)]
     if not pws:
         return [((), E)]
     partitions = [_factor_partition(t) for t in pws]
-    rest = E
-    for t in pws:
-        rest = sp.simplify(rest - t)
-    if rest is not sp.S.Zero and rest != 0:
-        if _has_pw(rest):
-            raise ParseReject('could not separate the Piecewise part: %s' % E)
-    pieces = [(sp.true, sp.S.One)]
-    for part in partitions:
-        pieces = [(sp.And(c1, c2), sp.expand(v1 * v2)) for (c1, v1) in pieces for (c2, v2) in part]
-    if rest is not sp.S.Zero and rest != 0:
-        pieces = [(c, sp.expand(v + rest)) for (c, v) in pieces]
+    rest = sp.Add(*[t for t in terms if not _has_pw(t)]) if len(terms) != len(pws) else sp.S.Zero
+    refined = [([c], v) for (c, v) in partitions[0]]
+    for part in partitions[1:]:
+        refined = [(conds + [c], sp.expand(val + v)) for (conds, val) in refined
+                   for (c, v) in part]
     out = []
-    for (c, v) in pieces:
-        for region in dnf(c):
-            out.append((region, v))
+    for (conds, v) in refined:
+        for region in dnf(sp.And(*conds)):
+            out.append((region, sp.expand(v + rest)))
     return out
 
 
@@ -512,6 +626,16 @@ class Fixture:
 
     def value_at(self, p):
         """The function's value at p from the parser's own data (None = +oo / outside)."""
+        if self.kind == 'chain':
+            # a 1-D chain is finite exactly on the segment V[0]..V[1]; the registry stores
+            # +oo off that line, which the parser's region data (an empty region) does not carry
+            a, b = self.V[0], self.V[1]
+            if (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]) != 0:
+                return None
+            denom = (b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2
+            t = ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / denom
+            if t < 0 or t > 1:
+                return None
         for (hps, row, _) in self.pieces:      # registry order: first match wins
             if all(hp.holds(p) for hp in hps):
                 return _row_value(row, p)
@@ -696,10 +820,13 @@ def build_fixture_1d(f_expr):
             if t[0] == 'eq':
                 continue
             hp = t[1]
-            k = hp.a * d[0] + hp.b * d[1]
-            base = hp.a * p0[0] + hp.b * p0[1] + hp.c
+            # the constraint is hp.s * (a x + b y + c) >= 0; along p(t) = p0 + t d that is
+            # k t + base >= 0 with k, base carrying the side sign hp.s (review 2026-11-19 #3:
+            # `x <= 1` is the side s = -1 and was read as the LOWER bound t >= 1)
+            k = hp.s * (hp.a * d[0] + hp.b * d[1])
+            base = hp.s * (hp.a * p0[0] + hp.b * p0[1] + hp.c)
             if k == 0:
-                if hp.s * base < 0:
+                if base < 0:
                     empty = True
                 continue
             bound = Fraction(-base, k)
@@ -720,7 +847,8 @@ def build_fixture_1d(f_expr):
     ends = sorted({t for (lo, hi, _) in intervals for t in (lo, hi) if t is not None})
     if len(ends) < 2 or any(hi is None for (_, hi, _) in intervals):
         raise ParseReject('unbounded or degenerate 1-D domain (not needed by the registry yet)')
-    V = [p0 + (ends[0] * d[0], ends[0] * d[1]), p0 + (ends[-1] * d[0], ends[-1] * d[1])]
+    V = [(p0[0] + ends[0] * d[0], p0[1] + ends[0] * d[1]),
+         (p0[0] + ends[-1] * d[0], p0[1] + ends[-1] * d[1])]
     rows = {tuple(row) for (_, _, row) in intervals}
     if len(rows) > 1:
         raise ParseReject('piecewise value on a 1-D chain beyond one quadratic (not needed yet)')
@@ -757,11 +885,12 @@ def dnf_1d(cond):
             A = expr.coeff(X)
             B = expr.coeff(Y)
             C = sp.simplify(expr - (A or 0) * X - (B or 0) * Y)
-            A, B, C = int(_rat(A)), int(_rat(B)), int(_rat(C))
+            A, B, C = _rat(A), _rat(B), _rat(C)
             if A == 0 and B == 0:
                 if C == 0:
                     continue
                 return []
+            A, B, C = _prim_abc(A, B, C)
             gg = math.gcd(abs(A), abs(B))
             A, B, C = A // gg, B // gg, C // gg
             if A < 0 or (A == 0 and B < 0):
@@ -783,10 +912,11 @@ def dnf_1d(cond):
         A, B, C = _rat(A), _rat(B), _rat(C)
         if A == 0 and B == 0:
             raise ParseReject('constant relation in a 1-D condition')
+        aa, bb, cc = _prim_abc(A, B, C)
         if isinstance(rel, (sp.Ge, sp.Gt)):
-            hp = HP(int(A), int(B), int(C), s)
+            hp = HP(aa, bb, cc, s)
         elif isinstance(rel, (sp.Le, sp.Lt)):
-            hp = HP(int(A), int(B), int(C), -s)
+            hp = HP(aa, bb, cc, -s)
         else:
             raise ParseReject('unsupported relation in a 1-D condition: %s' % a)
         out = [cl + (('hp', hp),) for cl in out]
@@ -814,19 +944,26 @@ def fixture_check(entry, fx):
     """Verify the parser's own data: at sample points the first-match lookup on the
     parser's regions must equal the registry expression (both exact). Returns defects."""
     defects = []
-    rng = random.Random(20261119)
-    pts = []
-    for _ in range(30):
-        pts.append((Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7])),
-                    Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7]))))
-    for e in fx.E:
-        p1 = fx.V[e[0] - 1]
-        p2 = fx.V[e[1] - 1]
-        pts.append(((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2))
     if fx.kind == 'chain':
+        # a chain is finite only on the segment V[0]..V[1]: sample it (endpoints included),
+        # the line outside it, and off the line -- the registry stores +oo everywhere but the
+        # segment, so plain 2-D random points would all be "domain mismatch"
         a, b = fx.V[0], fx.V[1]
-        for tt in (Fraction(1, 3), Fraction(2, 3)):
-            pts.append((a[0] + tt * (b[0] - a[0]), a[1] + tt * (b[1] - a[1])))
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        pts = [(a[0] + tt * dx, a[1] + tt * dy)
+               for tt in (Fraction(0), Fraction(1, 4), Fraction(1, 2), Fraction(3, 4), Fraction(1),
+                          Fraction(-1, 2), Fraction(3, 2))]
+        pts.append((a[0] + (dx - dy) / 2, a[1] + (dx + dy) / 2))      # off the line
+    else:
+        rng = random.Random(20261119)
+        pts = []
+        for _ in range(30):
+            pts.append((Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7])),
+                        Fraction(rng.randint(-6, 6), rng.choice([1, 2, 3, 7]))))
+        for e in fx.E:
+            p1 = fx.V[e[0] - 1]
+            p2 = fx.V[e[1] - 1]
+            pts.append(((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2))
     for p in set(pts):
         ref = _registry_value_at(entry, p)
         got = fx.value_at(p)
@@ -856,6 +993,16 @@ def _registry_value_at(entry, p):
 # ==========================================================================================
 
 class Ambiguous(Exception):
+    pass
+
+
+class FaceConflict(Ambiguous):
+    """Two faces of the engine's result hold at the same point with DIFFERENT values.
+
+    That is not an "cannot evaluate exactly" case (which is what Ambiguous means and what
+    justifies the double-precision fallback): it is a defect of the result itself. Review
+    2026-11-19 #12: report it as a disagreement instead of silently falling back to the
+    1e-6 double protocol, which can hide it (the double eval may pick one face and agree)."""
     pass
 
 
@@ -932,7 +1079,9 @@ def _face_holds(fc_rows, EcQ, P, g=None):
             raise Ambiguous('table-%d row in a QuaCon face' % tbl)
         c = EcQ[e - 1]
         q = eval_pairline_mp(c, br, P) if br else eval_conic_mp(c, P)
-        scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(mp.mpf(1), P[0], P[1]) ** 2)
+        # scale with |coordinates| (review 2026-11-19 #12: the signed max under-scaled a
+        # point like (-5, 0.1), where the conic is ~25x bigger than the tolerance allowed)
+        scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(abs(P[0]), abs(P[1])) ** 2)
         if side == 0:
             if abs(q) > TOL_ONCURVE * scale:
                 return False
@@ -952,7 +1101,9 @@ def eval_quacon_mp(g, P):
     vals = [eval_face_mp(g.fN[k], g.fD[k], P) for k in held]
     m = max(abs(v) for v in vals)
     if max(vals) - min(vals) > TOL_ONCURVE * m:
-        raise Ambiguous('two faces hold at %s with different values' % (P,))
+        # a defect of the result, not an exactness gap: report, never fall back (#12)
+        raise FaceConflict('two faces hold at %s with different values: %s'
+                           % (P, [mp.nstr(v, 25) for v in vals]))
     return vals[0]
 
 
@@ -1001,7 +1152,8 @@ def eval_algcrv_mp(g, P):
             if tbl == 0:
                 c = g.EcQ[idx - 1]
                 q = eval_pairline_mp(c, br, P) if br else eval_conic_mp(c, P)
-                scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(mp.mpf(1), P[0], P[1]) ** 2)
+                # |coordinates|, as in _face_holds (review 2026-11-19 #12)
+                scale = max(mp.mpf(1), mp.mpf(max(abs(v) for v in c)) * max(abs(P[0]), abs(P[1])) ** 2)
                 if side == 0 and abs(q) > TOL_ONCURVE * scale:
                     ok = False
                     break
@@ -1133,13 +1285,15 @@ def run_python(entry, fx, ops):
     from cca2.qua_pol import QuaPol
     from cca2.errors import CCA2Error
     out = {}
+    t0 = time.time()
     try:
         f = QuaPol([list(r) for r in fx.V], [list(r) for r in fx.E],
                    [list(r) for r in fx.f], [list(r) for r in fx.F])
     except CCA2Error as e:
-        return {op: ('refuse', 'QuaPol: %s' % e.identifier) for op in ops}
+        # 3-tuple, like every other refusal path: process_entry unpacks (status, detail, t)
+        return {op: ('refuse', 'QuaPol: %s' % e.identifier, time.time() - t0) for op in ops}
     except Exception as e:      # noqa: BLE001
-        return {op: ('refuse', 'QuaPol: %s: %s' % (type(e).__name__, e)) for op in ops}
+        return {op: ('refuse', 'QuaPol: %s: %s' % (type(e).__name__, e), time.time() - t0) for op in ops}
     for op in ops:
         t0 = time.time()
         try:
@@ -1154,8 +1308,16 @@ def run_python(entry, fx, ops):
     return out
 
 
-def open_sanity(entry, op, res, vals, pts_sympy):
-    """Necessary-condition checks for an engine value on an OPEN registry entry."""
+def open_sanity(entry, op, res, vals, pts_sympy, double=frozenset()):
+    """Necessary-condition checks for an engine value on an OPEN registry entry.
+
+    `double` is the set of labels whose value came from the double protocol (a non-QuaCon
+    result -- AlgCrv / EnvelopeMin, or the Rust golden binary's eval): those carry ~1e-6
+    RELATIVE error, so the f** <= f test uses a matching relative tolerance there. Exact
+    (QuaCon) values are checked to 1e-20 absolute. Without this split, a double-protocol
+    value a hair above f (lee_indefinite_triangle's Rust biconj: 4e-19 over in absolute, a
+    relative 2e-13 -- far inside its own ~1e-6 relative error) is misreported as a violation
+    (review 2026-11-19 #12 follow-up)."""
     notes = []
     ok = True
     for (label, v) in vals:
@@ -1168,11 +1330,20 @@ def open_sanity(entry, op, res, vals, pts_sympy):
             notes.append('%s: engine %s (point outside the primal domain)' % (label, mp.nstr(v, 12)))
             continue
         fv = mp.mpf(str(sp.N(sp.expand(f_here), 120)))
-        if op == 'biconj' and v > fv + mp.mpf(1e-20):      # decimal-literal points carry ~36 digits
-            ok = False
-            notes.append('%s: VIOLATION f**=%s > f=%s' % (label, mp.nstr(v, 15), mp.nstr(fv, 15)))
-        else:
-            notes.append('%s: value %s (f=%s)' % (label, mp.nstr(v, 15), mp.nstr(fv, 15)))
+        if op == 'biconj':
+            if label in double:
+                bound = fv * (1 + TOL_DOUBLE)                 # double protocol: relative error
+            else:
+                bound = fv + mp.mpf(1e-20)                    # exact (QuaCon): decimal points ~36 digits
+            if v > bound:
+                ok = False
+                notes.append('%s: VIOLATION f**=%s > f=%s%s' % (
+                    label, mp.nstr(v, 15), mp.nstr(fv, 15),
+                    ' (double protocol)' if label in double else ''))
+            else:
+                notes.append('%s: value %s (f=%s%s)' % (
+                    label, mp.nstr(v, 15), mp.nstr(fv, 15),
+                    ', double protocol' if label in double else ''))
     if op == 'conj':
         notes.append('NOTE: no exact sup oracle for open conj entries (none exist in the registry)')
     return ok, notes
@@ -1187,17 +1358,26 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
     svar = entry.vars_fstar if op == 'conj' else entry.vars_f
     if stored is None:
         vals = []
+        conflicts = []
+        double = set()
         for (label, P) in pts_mp:
             try:
                 v = eval_engine_mp(res, P)
-            except Ambiguous as e:
+            except FaceConflict as e:
+                conflicts.append('%s: %s' % (label, e))      # a defect: report, do not fall back
+                continue
+            except Ambiguous:
                 try:
                     v = eval_engine_double(res, P)
+                    double.add(label)
                 except Exception as e2:    # noqa: BLE001
                     v = mp.inf
-                    e = Ambiguous('%s; double eval: %s' % (e, e2))
+                    e = Ambiguous('double eval: %s' % e2)
             vals.append((label, v))
-        ok, notes = open_sanity(entry, op, res, vals, pts_sympy)
+        if conflicts:
+            return 'disagree', 'open entry; FACE CONFLICT (two faces, two values): ' \
+                              + '; '.join(conflicts), t, vals
+        ok, notes = open_sanity(entry, op, res, vals, pts_sympy, double)
         return ('agree' if ok else 'disagree'), 'open entry; ' + '; '.join(notes), t, vals
     bad = []
     vals = []
@@ -1207,6 +1387,11 @@ def compare_op(entry, op, py_res, pts_mp, pts_sympy):
         try:
             a = eval_engine_mp(res, P)
             tol = point_tol(pts_sympy[label])
+        except FaceConflict as e:
+            # a defect of the engine's result, not an exactness gap: report as a disagreement
+            # instead of falling back to the 1e-6 double protocol, which can hide it (#12)
+            bad.append('%s: FACE CONFLICT in the engine result: %s' % (label, e))
+            continue
         except Ambiguous:
             try:
                 a = eval_engine_double(res, P)
@@ -1293,8 +1478,25 @@ def run_rust(entry, fx, ops, golden, pts_sympy):
             except Exception:      # noqa: BLE001
                 rust_mp = None
         if stored is None:
-            out[op] = ('open', 'rust kind=%s; values %s' % (kind, [mp.nstr(_as_mp(v), 12) for v in ev]),
-                       None, [(l, _as_mp(v)) for (l, v) in zip(pts, ev)])
+            # review 2026-11-19 #12: an open Rust entry must get the SAME f** <= f sanity
+            # check the open Python entry gets; before it was only reported as 'open'
+            vals = [(l, _as_mp(v)) for (l, v) in zip(pts_labels(pts_sympy), ev)]
+            conflicts = []
+            if rust_mp is not None:
+                for (label, pt) in zip(pts_labels(pts_sympy), pts):
+                    try:
+                        eval_quacon_mp(rust_mp, _mp_pt(pt))
+                    except FaceConflict as e:
+                        conflicts.append('%s: %s' % (label, e))
+            if conflicts:
+                out[op] = ('disagree', 'open entry; FACE CONFLICT (two faces, two values): '
+                             + '; '.join(conflicts), None, vals)
+                continue
+            # the Rust evalV values come from the golden binary (at best double precision),
+            # so the f** <= f test uses the double-protocol (relative) tolerance
+            ok, notes = open_sanity(entry, op, None, vals, pts_sympy, double=set(pts_labels(pts_sympy)))
+            out[op] = (('agree' if ok else 'disagree'),
+                       'open entry; ' + '; '.join(notes) + ' [rust kind=%s]' % kind, None, vals)
             continue
         bad = []
         vals = []
@@ -1305,19 +1507,23 @@ def run_rust(entry, fx, ops, golden, pts_sympy):
                 try:
                     a = eval_quacon_mp(rust_mp, P)
                     tol = point_tol(pt)
+                except FaceConflict as e:
+                    # a defect of the Rust result, not an exactness gap: report it (#12)
+                    bad.append('%s: FACE CONFLICT in the Rust result: %s' % (label, e))
+                    continue
                 except Ambiguous:
                     a = _as_mp(ev[i])
                     tol = TOL_DOUBLE
             else:
                 a = _as_mp(ev[i])
                 tol = TOL_DOUBLE
-            a_inf = a is mp.inf
-            b_inf = b is mp.inf
+            a_inf = a is mp.inf or a == mp.inf
+            b_inf = b is mp.inf or b == mp.inf
             if a_inf and b_inf:
                 vals.append((label, mp.inf, mp.inf))
                 continue
             if a_inf != b_inf:
-                bad.append('%s: rust %s vs registry +inf' % (label, a))
+                bad.append('%s: rust %s vs registry %s' % (label, mp.nstr(a, 20), mp.nstr(b, 20)))
                 continue
             if abs(a - b) > tol * max(mp.mpf(1), abs(a), abs(b)):
                 bad.append('%s: rust %s vs registry %s (rel gap %s)'
