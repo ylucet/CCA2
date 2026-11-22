@@ -1,30 +1,47 @@
 classdef kinkSubdivisionTest < matlab.unittest.TestCase
-% The poly2 kink at c = -2 (DECISIONS 2026-09-05): q0 = x^2 + y^2 below the diagonal, q1 = q0 - 2x
-% above it. REVIEW 2026-11-19 #10: the two pieces do NOT agree on the shared diagonal -- the
-% perturbation -2x vanishes on the line x = 0, not on the diagonal 2x - 3y + 4 = 0 (a jump of 4 at
-% (-2,0), 2 at (1,2)) -- so f is DISCONTINUOUS, and the exact engine now refuses it by name
-% (PLQ:notContinuous) at the entry of BOTH conj and biconj. The suite used to pin the old biconjQ
-% answer (the 317-face AlgCrv); that answer is exactly the class finding #10 flags as wrong (12 of
-% 24 answered D-family biconjugates above a certified upper bound).
+% biconjQ on the poly2 kink at c = -2: the two-piece envelope whose single global arrangement had 85
+% curves and did not finish in 90 min (TODO item 2). Since 2026-10-17 it is SUBDIVIDED: the arrangement is
+% clipped to dom f** = conv(dom f), a curve's row is recorded only where it splits a cell, and a
+% bridge's membership is read by majority -- envelopeSubdivisionAlg's header.
 %
-% What survives: the two pieces' OWN conjugates are single-face and stay in scope, so the
-% envelope-assembly test below still runs on them (it exercises envelopeAssemble/envelopeEval,
-% which the fix does not touch).
+% The two pieces do NOT agree on the shared diagonal (review 2026-11-19 #10: the perturbation
+% vanishes on a coordinate line, not on the diagonal 2x - 3y + 4 = 0), so f is DISCONTINUOUS. It is
+% read LOWER SEMICONTINUOUS (#108: on the diagonal f is the min of the two pieces), whose biconjugate
+% is the envelope of the two CLOSED pieces' conjugates -- exactly what theKinkSatisfiesTheDEFINITION
+% checks (sup over max(gA, gB)). #96 refused it for a while; #108 lifted that.
 %
-% BUCKET: slow -- the two single-face conjQs are computed once per session.
+% BUCKET: slow -- one biconjQ, ~11 min on the shared machine (one run), computed once per session.
 
     methods (Test)
-        function biconjQRefusesTheDiscontinuousKink(testCase)
-        % Review 2026-11-19 #10: a jump across the shared diagonal is out of the exact engine's
-        % scope (the paper's standing assumption is continuity), refused by name at the entry of
-        % both operators -- no longer answered (the old answer was the 317-face AlgCrv).
-            f = kinkSubdivisionTest.kink();
-            testCase.verifyError(@() conjQ(f), 'PLQ:notContinuous', ...
-                'a discontinuous two-piece input is out of scope at the entry of conj');
-            testCase.verifyError(@() biconjQ(f), 'PLQ:notContinuous', ...
-                'a discontinuous two-piece input is out of scope at the entry of biconj');
+        function theKinkIsSUBDIVIDEDAndAgreesWithItsFaceList(testCase)
+        % Subdivision against the unsubdivided face list, which envelopeAssembleTest verifies against the
+        % definition: the subdivision must add no hole and change no value.
+            [h, env, V] = kinkSubdivisionTest.cached();
+            testCase.verifyClass(h, 'AlgCrv');
+            rng(4);  W = [rand(1500,4); rand(500,4).^4];  X = (W ./ sum(W,2)) * V;
+            want = envelopeEval(env, X);
+            got = h.eval(X);
+            testCase.verifyEqual(isinf(got), isinf(want), 'a hole in the subdivision where the face list is finite');
+            fin = isfinite(want);
+            testCase.verifyEqual(got(fin), want(fin), 'RelTol', 1e-9, 'AbsTol', 1e-9);
         end
 
+        function theKinkSatisfiesTheDEFINITION(testCase)
+        % Oracle: the numeric sup over the two pieces' conjugates (moved from envelopeAssembleTest,
+        % where this asserted the unsubdivided answer).
+            [h, ~, V, gA, gB] = kinkSubdivisionTest.cached();
+            rng(29);  W = rand(6,3);  W = W ./ sum(W,2);
+            X = [W*V([1 2 3],:); W*V([1 3 4],:)];
+            v = h.eval(X);
+            for i = 1:size(X,1)
+                want = kinkSubdivisionTest.supOracle(gA, gB, X(i,:));
+                testCase.verifyLessThan(abs(v(i) - want)/max(1,abs(want)), 1e-7, ...
+                    sprintf('biconjQ must equal the definition at (%g,%g)', X(i,1), X(i,2)));
+            end
+        end
+    end
+
+    methods (Test)
         function anIRRATIONALStraightTieGetsItsCorners(testCase)
         % Found 2026-10-11 on the poly2 kink at c = -2 (biconjQ's own fixture): one cell pair ties
         % on a PARALLEL PAIR of IRRATIONAL lines, (s1 - 2 s2) = -6 +- sqrt(80). A straight tie is
@@ -32,9 +49,7 @@ classdef kinkSubdivisionTest < matlab.unittest.TestCase
         % candidates ON it -- and both faces are linear along it, so the pair's sup sits at its
         % ends, the corners. The pair covered no point at all and the envelope was +inf on 384 of
         % 600 points of its own domain. Oracle: the numeric sup, as above.
-        % (Unaffected by #10: it tests the envelope of the two SINGLE-FACE conjugates, which stay
-        % in scope.)
-            [V, gA, gB] = kinkSubdivisionTest.cached();
+            [~, ~, V, gA, gB] = kinkSubdivisionTest.cached();
             env = envelopeAssemble(gA, gB);
             rng(23);  W = rand(60,3);  W = W ./ sum(W,2);
             X = [W*V([1 2 3],:); W*V([1 3 4],:)];
@@ -51,25 +66,18 @@ classdef kinkSubdivisionTest < matlab.unittest.TestCase
     end
 
     methods (Static)
-        function f = kink()
-        % The discontinuous two-piece kink (see the class header).
-            V = [-2 0; 2 0; 1 2; -1 2];
-            q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];  q1 = q0;  q1(9) = -2;
-            f = QuaPol(V, [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1], [q0; q1], [1 0; 1 0; 2 0; 2 0; 2 1]);
-        end
-
-        function [V, gA, gB] = cached()
-        % The two pieces' OWN conjugates: each face alone is a single-face QuaPol, still in scope
-        % (biconjQ/conjQ on the DISCONTINUOUS pair is refused -- biconjQRefusesTheDiscontinuousKink).
+        function [h, env, V, gA, gB] = cached()
             persistent C
             if isempty(C)
                 V = [-2 0; 2 0; 1 2; -1 2];
                 q0 = [0 0 0 0, 2, 0, 2, 0, 0, 0];  q1 = q0;  q1(9) = -2;
+                f = QuaPol(V, [1 2 1; 2 3 1; 3 4 1; 4 1 1; 1 3 1], [q0; q1], [1 0; 1 0; 2 0; 2 0; 2 1]);
                 gA = conjQ(QuaPol(V([1 2 3],:), [1 2 1; 2 3 1; 3 1 1], q0, [1 0;1 0;1 0]));
                 gB = conjQ(QuaPol(V([1 3 4],:), [1 2 1; 2 3 1; 3 1 1], q1, [1 0;1 0;1 0]));
-                C = struct('V', V, 'gA', gA, 'gB', gB);
+                C = struct('h', biconjQ(f), 'env', envelopePrune(envelopeAssemble(gA, gB)), ...
+                           'V', V, 'gA', gA, 'gB', gB);
             end
-            V = C.V;  gA = C.gA;  gB = C.gB;
+            h = C.h;  env = C.env;  V = C.V;  gA = C.gA;  gB = C.gB;
         end
 
         function v = supOracle(gA, gB, x)

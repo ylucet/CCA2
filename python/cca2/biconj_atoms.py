@@ -132,11 +132,24 @@ def formHolders(atoms, forms):
     return [[a + 1 for a, at in enumerate(atoms) if atomHolds(at, fm)] for fm in forms]
 
 
+def _holdsValues(at, fm):
+    """An atom that holds a form's support geometrically holds the FORM only if it carries the
+    same values there (lsc input: across a jump, two faces on one edge or vertex are different
+    forms). Atoms and forms without exact data (hand-built in tests) are judged by geometry."""
+    if at.get('fq') is None or fm.get('fq') is None or fm.get('sup') is None:
+        return True
+    return _agree(at['fq'], fm['fq'], fm['sup'])
+
+
 def _norm(v):
     return math.hypot(float(v[0]), float(v[1]))
 
 
 def atomHolds(at, fm):
+    return _atomHoldsGeom(at, fm) and _holdsValues(at, fm)
+
+
+def _atomHoldsGeom(at, fm):
     tol = 1e-12
     if fm['kind'] == 'vertex':
         pts = [fm['u']]
@@ -505,15 +518,17 @@ def collectAtoms(f):
                 w = poly[(i + 1) % m]
                 ed.append({'u': u, 'dv': [w[0] - u[0], w[1] - u[1]], 'ray': False,
                            'iu': order[i], 'iw': order[(i + 1) % m]})
+        fq = (n, d)                             # this face's exact quadratic (lsc checks)
         for e in ed:
-            addVertex(vtx, e['u'], q(e['u']), k, e['iu'])
+            addVertex(vtx, e['u'], q(e['u']), k, e['iu'], fq, f)
             if not e['ray']:
                 w = [e['u'][0] + e['dv'][0], e['u'][1] + e['dv'][1]]
-                addVertex(vtx, w, q(w), k, e['iw'])
+                addVertex(vtx, w, q(w), k, e['iw'], fq, f)
 
         if isCvx:
-            cvx.append(poly)
-            atoms.append({'kind': 'piece', 'q': singlePiece(f, k, eidx), 'region': poly})
+            cvx.append((poly, fq))
+            atoms.append({'kind': 'piece', 'q': singlePiece(f, k, eidx), 'region': poly,
+                          'fq': fq})
             if n[4] * n[6] - n[5] ** 2 > 0:
                 Hn = np.array(H)
                 Hi = np.linalg.inv(Hn)
@@ -522,7 +537,7 @@ def collectAtoms(f):
                 Gn, Gd = formQ('piece', f, k)
                 forms.append(mkForm('piece', Hi.tolist(), [-float(HiL[0]), -float(HiL[1])],
                                     float(0.5 * Ln @ Hi @ Ln - k0), None, None, None, None,
-                                    H, L, poly, Gn, Gd))
+                                    H, L, poly, Gn, Gd, fq, None))
 
         for e in ed:
             u = e['u']
@@ -536,12 +551,14 @@ def collectAtoms(f):
                   + (u[0] * H[0][1] + u[1] * H[1][1] + L[1]) * dv[1])
             ga = q(u)
             Gn, Gd = formQ('edge', f, k, e['iu'], e['iw'])
+            sup = _edgeSupport(f, e['iu'], e['iw'], isRay)
             a2 = 2 * al
             fm = mkForm('edge',
                         [[dv[0] * dv[0] / a2, dv[0] * dv[1] / a2],
                          [dv[1] * dv[0] / a2, dv[1] * dv[1] / a2]],
                         [u[0] - be * dv[0] / a2, u[1] - be * dv[1] / a2],
-                        -ga + be ** 2 / (4 * al), u, dv, al, be, None, None, None, Gn, Gd)
+                        -ga + be ** 2 / (4 * al), u, dv, al, be, None, None, None, Gn, Gd,
+                        fq, sup)
             if isRay:
                 fm['tmax'] = INF
             forms.append(fm)
@@ -550,57 +567,97 @@ def collectAtoms(f):
             if isRay:
                 nd = _norm(dv)
                 key = [u[0], u[1], dv[0] / nd, dv[1] / nd]     # a ray is its base and direction
-                if any(all(abs(a - b) < 1e-12 for a, b in zip(r, key)) for r in rayAt):
+                # the same ray of another face is the same atom only where the two faces AGREE
+                # on it (lsc input: across a jump both values are kept, and the min is theirs)
+                if any(all(abs(a - b) < 1e-12 for a, b in zip(r, key)) and _agree(rq, fq, sup)
+                       for r, rq in rayAt):
                     continue
-                rayAt.append(key)
+                rayAt.append((key, fq))
                 atoms.append({'kind': 'ray', 'u': u, 'w': None, 'dr': dv,
                               'q': QuaPol([f.Vx(e['iu']), f.Vx(e['iw'])], [[1, 2, 0]],
-                                          [f.fx(k)], [[0, 0]])})
+                                          [f.fx(k)], [[0, 0]]), 'fq': fq, 'sup': sup})
                 continue
             w = [u[0] + dv[0], u[1] + dv[1]]
             pr = sorted([u, w])
             key = [pr[0][0], pr[0][1], pr[1][0], pr[1][1]]
-            if any(all(abs(a - b) < 1e-12 for a, b in zip(r, key)) for r in edgeAt):
+            if any(all(abs(a - b) < 1e-12 for a, b in zip(r, key)) and _agree(rq, fq, sup)
+                   for r, rq in edgeAt):
                 continue
-            edgeAt.append(key)
+            edgeAt.append((key, fq))
             atoms.append({'kind': 'edge', 'u': u, 'w': w,
                           'q': QuaPol([f.Vx(e['iu']), f.Vx(e['iw'])], [[1, 2, 1]],
-                                      [f.fx(k)], [[0, 0]])})
+                                      [f.fx(k)], [[0, 0]]), 'fq': fq, 'sup': sup})
 
-    for p, val, face, iv in vtx:
+    for p, val, face, iv, fqv, vex in vtx:
+        # the vertex's value is the MIN over the faces at it (lsc input; = the common value when
+        # f is continuous there), so an atom covers it only where its own face takes that value
         Gn, Gd = formQ('vertex', f, face, iv)
+        sup = [f.Vx(iv)]
         forms.append(mkForm('vertex', [[0.0, 0.0], [0.0, 0.0]], [p[0], p[1]], -val, p, None,
-                            None, None, None, None, None, Gn, Gd))
-        covered = any(inPiece(p, P) for P in cvx)
-        for r in edgeAt:
-            covered = covered or _norm([p[0] - r[0], p[1] - r[1]]) < 1e-12 \
-                or _norm([p[0] - r[2], p[1] - r[3]]) < 1e-12
-        for r in rayAt:
-            covered = covered or _norm([p[0] - r[0], p[1] - r[1]]) < 1e-12   # a ray holds its base
+                            None, None, None, None, None, Gn, Gd, fqv, sup))
+        covered = any(inPiece(p, P) and _agree(pq, fqv, sup) for P, pq in cvx)
+        for r, rq in edgeAt:
+            covered = covered or ((_norm([p[0] - r[0], p[1] - r[1]]) < 1e-12
+                                   or _norm([p[0] - r[2], p[1] - r[3]]) < 1e-12)
+                                  and _agree(rq, fqv, sup))
+        for r, rq in rayAt:
+            covered = covered or (_norm([p[0] - r[0], p[1] - r[1]]) < 1e-12   # a ray holds its base
+                                  and _agree(rq, fqv, sup))
         if not covered:
-            # the value EXACTLY (MATLAB re-reads the double q(u) as a rational)
-            nq, dq = f.faceQ(face)
-            vex = rat_q.evalFaceExact(nq, dq, f.Vx(iv))
             atoms.append({'kind': 'vertex', 'u': p,
-                          'q': QuaPol([f.Vx(iv)], [], [[0, 0, 0, 0, 0, 0, 0, 0, 0, vex]], [])})
+                          'q': QuaPol([f.Vx(iv)], [], [[0, 0, 0, 0, 0, 0, 0, 0, 0, vex]], []),
+                          'fq': fqv})
 
     keep = []
     for at in atoms:
-        if at['kind'] == 'edge' and any(inPiece(at['u'], P) and inPiece(at['w'], P) for P in cvx):
+        if at['kind'] == 'edge' and any(inPiece(at['u'], P) and inPiece(at['w'], P)
+                                        and _agree(pq, at['fq'], at['sup']) for P, pq in cvx):
             continue
         keep.append(at)
     return keep, forms
 
 
-def mkForm(kind, A, b, c, u, d, al, be, H, L, poly, Gn, Gd):
+def mkForm(kind, A, b, c, u, d, al, be, H, L, poly, Gn, Gd, fq=None, sup=None):
+    # fq: the exact quadratic (num, den) of the face the form comes from; sup: the exact points
+    # that decide whether another face takes the same values on the form's support (_agree)
     return {'kind': kind, 'A': A, 'b': b, 'c': c, 'u': u, 'd': d, 'al': al, 'be': be,
-            'H': H, 'L': L, 'poly': poly, 'tmax': 1, 'Gn': Gn, 'Gd': Gd}
+            'H': H, 'L': L, 'poly': poly, 'tmax': 1, 'Gn': Gn, 'Gd': Gd, 'fq': fq, 'sup': sup}
 
 
-def addVertex(vtx, p, v, k, iv):
-    if any(abs(r[0][0] - p[0]) < 1e-12 and abs(r[0][1] - p[1]) < 1e-12 for r in vtx):
-        return
-    vtx.append((list(p), v, k, iv))
+def addVertex(vtx, p, v, k, iv, fq, f):
+    """One entry per vertex POSITION, carrying the SMALLEST value of the faces at it (lsc input:
+    f at a shared vertex is the min over the closed pieces holding it; ties keep the first face,
+    so a continuous f is unchanged)."""
+    vex = rat_q.evalFaceExact(fq[0], fq[1], f.Vx(iv))
+    for t, r in enumerate(vtx):
+        if abs(r[0][0] - p[0]) < 1e-12 and abs(r[0][1] - p[1]) < 1e-12:
+            if vex < r[5]:
+                vtx[t] = (list(p), v, k, iv, fq, vex)
+            return
+    vtx.append((list(p), v, k, iv, fq, vex))
+
+
+def _edgeSupport(f, iu, iw, isRay):
+    """Three exact points of an edge (both ends and the midpoint) or of a ray (base, the point
+    through which it runs, and one more): a quadratic difference vanishing at them vanishes on
+    the whole edge or ray (it is a univariate quadratic along the line)."""
+    u = f.Vx(iu)
+    w = f.Vx(iw)
+    if isRay:
+        return [u, w, (2 * w[0] - u[0], 2 * w[1] - u[1])]
+    return [u, w, ((u[0] + w[0]) / 2, (u[1] + w[1]) / 2)]
+
+
+def _agree(fa, fb, pts):
+    """Do the exact face quadratics fa and fb take the same value at every point of pts?
+
+    This is the exact continuity test behind every place where one atom stands in for another
+    face's values (review 2026-11-19 #10, #108): True for a continuous f, so those inputs take
+    the old path unchanged."""
+    if fa is fb or fa == fb:
+        return True
+    return all(rat_q.evalFaceExact(fa[0], fa[1], P) == rat_q.evalFaceExact(fb[0], fb[1], P)
+               for P in pts)
 
 
 def formQ(kind, f, k, iu=None, iw=None):

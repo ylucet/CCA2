@@ -45,7 +45,6 @@ def biconjQ(obj, opts=None):
     assertNoClosedEdges(obj.E, 'biconjQ')
     obj.assertOperable()
     obj.assertExact()
-    obj.assertContinuous()
 
     nf = len(obj.fN)
 
@@ -64,7 +63,10 @@ def biconjQ(obj, opts=None):
 
     allPSD = all(rat_q.isPSD2(Hof(k)) for k in range(nf))
 
-    flagged = obj.fIsConvex is True
+    # The fIsConvex shortcut trusts the caller, and a jump across an interior edge is never convex
+    # (#108: such an f is read lower semicontinuous), so the flag counts only for a CONTINUOUS f --
+    # decided exactly; otherwise the general path below decides.
+    flagged = obj.fIsConvex is True and obj.isContinuous()[0]
     if flagged:
         assertFlagNotRefuted(obj)
     if allPSD and (nf == 1 or flagged or isConvexQ(obj)[0]):

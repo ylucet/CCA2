@@ -124,8 +124,8 @@ classdef conjQTest < matlab.unittest.TestCase
             F  = [1 0; 1 0; 2 0; 2 0; 2 1];       % face 1 = edges 1,2,5; face 2 = edges 3,4,5
             H1 = [1 0; 0 1];  L1 = [0;0];  k1 = 0;
             % f2 = f1 + x(x - y): the two pieces AGREE on the shared diagonal, because
-            % x(x - y) vanishes on it -- f is CONTINUOUS, the exact engine's scope (review
-            % 2026-11-19 #10: a jump across a shared edge is refused by name, pinned below).
+            % x(x - y) vanishes on it -- f is CONTINUOUS (the original, discontinuous split is
+            % read lower semicontinuous since #108, checked below).
             % The diagonal Hessian is also different from f1's, so the fold still has two
             % genuinely different quadratics to max.
             H2 = [3 -1; -1 1];  L2 = [0;0];  k2 = 0;
@@ -148,12 +148,18 @@ classdef conjQTest < matlab.unittest.TestCase
 
             % The DISCONTINUOUS split of the same square -- the original fixture, 2x^2 + xy +
             % 1.5y^2 - 2x + y on the upper triangle, which disagrees with f1 on the diagonal --
-            % is OUT OF the exact engine's scope (review 2026-11-19 #10): refused by name, not
-            % answered.
+            % is read LOWER SEMICONTINUOUS (#108: on the diagonal f is the min of the two), whose
+            % conjugate is the same max over the CLOSED pieces.
+            H2D = [4 1; 1 3];  L2D = [-2; 1];
             fD = QuaPol(V, E, [0 0 0 0, 1, 0, 1, 0, 0, 0; 0 0 0 0, 4, 1, 3, -2, 1, 0], ...
                         [1 0; 1 0; 2 0; 2 0; 2 1]);
-            testCase.verifyError(@() conjQ(fD), 'PLQ:notContinuous', ...
-                'a jump across the shared diagonal is out of scope, refused by name');
+            testCase.verifyFalse(fD.isContinuous(), 'the original split jumps across the diagonal');
+            wantD = zeros(size(S,1),1);
+            for i = 1:size(S,1)
+                wantD(i) = max(conjQTest.supOverPolygon(S(i,:).', T1, H1, L1, k1), ...
+                               conjQTest.supOverPolygon(S(i,:).', T2, H2D, L2D, 0));
+            end
+            testCase.verifyEqual(conjQ(fD).eval(S), wantD, 'RelTol', 1e-9, 'AbsTol', 1e-9);
         end
 
 
@@ -372,8 +378,8 @@ classdef conjQTest < matlab.unittest.TestCase
             % CONTINUOUS fan (review 2026-11-19 #10): the quadrants must agree on every shared
             % ray. With diagonal pieces x^2/2 + y^2/2 | a x^2 + y^2/2 | a x^2 + b y^2 | x^2/2 +
             % b y^2, that is exactly the case for a = 2, b = 3 below. The original fixture
-            % ({I, diag(2,1), diag(1,2), diag(3,3)}) disagreed on three of the four rays and is
-            % now refused by name -- pinned at the end of this test.
+            % ({I, diag(2,1), diag(1,2), diag(3,3)}) disagreed on three of the four rays; it is
+            % read lower semicontinuous (#108) and checked at the end of this test.
             Hs = {[1 0;0 1], [4 0;0 1], [4 0;0 6], [1 0;0 6]};
             fc = zeros(4,10);
             for k = 1:4
@@ -392,15 +398,20 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(g.eval(S), want, 'RelTol', 1e-12, 'AbsTol', 1e-12);
 
             % The DISCONTINUOUS fan -- the original fixture {I, diag(2,1), diag(1,2), diag(3,3)},
-            % which disagrees with its neighbours on three of the four shared rays -- is OUT OF
-            % the exact engine's scope (review 2026-11-19 #10): refused by name, not answered.
+            % which disagrees with its neighbours on three of the four shared rays -- is read
+            % LOWER SEMICONTINUOUS (#108), and its conjugate is the same max over the closed
+            % quadrants.
             HsD = {[1 0;0 1], [2 0;0 1], [1 0;0 2], [3 0;0 3]};
             fcD = zeros(4,10);
+            wantD = -inf(size(S,1),1);
             for k = 1:4
                 fcD(k,:) = [0 0 0 0, HsD{k}(1,1), HsD{k}(1,2), HsD{k}(2,2), 0, 0, 0];
+                u = S(:,1)*sgn{k}(1);  v = S(:,2)*sgn{k}(2);
+                wantD = max(wantD, (u>0).*(u.^2/(2*HsD{k}(1,1))) + (v>0).*(v.^2/(2*HsD{k}(2,2))));
             end
-            testCase.verifyError(@() conjQ(QuaPol(V, E, fcD, F)), 'PLQ:notContinuous', ...
-                'jumps across the shared rays are out of scope, refused by name');
+            fDisc = QuaPol(V, E, fcD, F);
+            testCase.verifyFalse(fDisc.isContinuous(), 'the original fan jumps across its rays');
+            testCase.verifyEqual(conjQ(fDisc).eval(S), wantD, 'RelTol', 1e-12, 'AbsTol', 1e-12);
         end
 
         function aTHINConjugateKeepsTheFaceDENOMINATOR(testCase)
@@ -996,16 +1007,14 @@ classdef conjQTest < matlab.unittest.TestCase
             testCase.verifyEqual(up.eval([0 0; 0 -2; 0 1; 1 -1; -0.5 0]), [0; 0; inf; inf; inf]);
             dn = conjQ(QuaPol(V, E, [0 0 0 0 0 0 2 1 0 0], [0 1; 1 0]));
             testCase.verifyEqual(dn.eval([1 -2; 1 0; 1 3; 0 0; 2 -1]), [1; 0; 0; inf; inf], 'AbsTol', 1e-14);
-            % the two discontinuous examples built from exactly these pieces: OUT OF the exact
-            % engine's scope -- a jump across the shared line (review 2026-11-19 #10) -- refused
-            % by name. (They used to be answered as the sup over the closed pieces; that answer
-            % was right for conj but the pair's biconjugate was wrong, which is why the input is
-            % now refused at the entry of both operators.)
+            % the two discontinuous examples built from exactly these pieces, read LOWER
+            % SEMICONTINUOUS (#108): f* is the sup over the closed pieces. (#96 refused them for a
+            % while, because the pair's biconjugate was wrong; #108 fixed that.)
             D = QuaPol.examplesDiscontinuous();
-            testCase.verifyError(@() conjQ(D{1}), 'PLQ:notContinuous', ...
-                'f = 0 above, 1 below: a jump across the shared line');
-            testCase.verifyError(@() conjQ(D{3}), 'PLQ:notContinuous', ...
-                'x^2 above, y^2 + x below: a jump across the shared line');
+            testCase.verifyEqual(conjQ(D{1}).eval([0 0; 0 -1; 0 1]), [0; inf; inf], ...
+                'f = 0 above, 1 below: f* is finite at the origin only');
+            testCase.verifyEqual(conjQ(D{3}).eval([1 0; 1 -2; 1 1; 0 0]), [0.25; 1; inf; inf], ...
+                'AbsTol', 1e-14, 'x^2 above, y^2 + x below: f* lives on the ray {s1 = 1, s2 <= 0}');
         end
 
         function aCHAINWhoseRowCountIsNotItsEdgeCountIsStillRefused(testCase)

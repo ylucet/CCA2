@@ -72,7 +72,8 @@ function [g, dom] = conjQ(obj)
     RatCon.assertNoClosedEdges(obj.E, 'conjQ');
     obj.assertOperable();
     obj.assertExact();          % refuses a QuaPol the legacy float pipeline computed -- see there
-    obj.assertContinuous();     % a discontinuous f has no conjugate to compute -- named refusal
+    % A DISCONTINUOUS f is not refused (#108): f* = sup over the closed pieces, which is the
+    % conjugate of the lower semicontinuous reading of f (DESIGN.md, "Discontinuous input").
 
     fN = obj.fN;  fD = obj.fD;  nf = size(fN, 1);
 

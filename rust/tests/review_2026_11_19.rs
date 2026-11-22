@@ -115,18 +115,51 @@ fn biconj_infinite_outside_the_square() {
     assert!(v[0].is_infinite(), "got {}", v[0]);
 }
 
-/// Finding 10 (MAJOR): a discontinuous two-piece input (the D family of the review generator,
-/// frozen in python/tests/review/d_family.json) must be refused by NAME -- PLQ:notContinuous --
-/// at the entry of conj and biconj, in every engine. The current engine answers conj (and gets
-/// biconj wrong: 12 of 24 answered calls above a certified upper bound).
+/// Finding 10 (MAJOR) / #108: a discontinuous input is read LOWER SEMICONTINUOUS (at a shared
+/// point, the min over the closed pieces holding it). The 30 D fixtures of the review generator
+/// must give the values of python/tests/review/d_family_ref.json -- the Python engine's, graded 0
+/// wrong by compare_engines.py (conj exact, biconj inside the certified bracket) -- or the same
+/// named refusal. Before #108 biconj was above a certified upper bound on 12 of them (D-160: 14.36
+/// against -4.89), and #96 refused them all as PLQ:notContinuous.
 #[test]
-fn discontinuous_input_refused_by_name() {
+fn discontinuous_input_lsc_values() {
+    check_d_family(|name| !D_SLOW.contains(&name));
+}
+
+/// The D fixtures that take minutes (in Python; the slowest in Rust too): `-- --ignored`.
+const D_SLOW: [&str; 5] = ["D-069", "D-111", "D-153", "D-188", "D-209"];
+
+#[test]
+#[ignore = "slow: the minutes-long D fixtures of #108 (run with -- --ignored)"]
+fn discontinuous_input_lsc_values_slow() {
+    check_d_family(|name| D_SLOW.contains(&name));
+}
+
+fn check_d_family(keep: impl Fn(&str) -> bool) {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixes: Vec<serde_json::Value> = serde_json::from_str(
-        &std::fs::read_to_string(root.join("../python/tests/review/d_family.json")).unwrap())
+        &std::fs::read_to_string(root.join("../python/tests/review/d_family_ref.json")).unwrap())
         .unwrap();
     assert_eq!(fixes.len(), 30, "the D family has 30 fixtures");
+    let num = |c: &serde_json::Value| -> f64 {
+        match c.as_str() {
+            Some("inf") => f64::INFINITY,
+            Some("-inf") => f64::NEG_INFINITY,
+            Some(o) => panic!("unexpected value {}", o),
+            None => c.as_f64().unwrap(),
+        }
+    };
+    let pts = |v: &serde_json::Value| -> Vec<[f64; 2]> {
+        v.as_array().unwrap().iter().map(|p| [p[0].as_f64().unwrap(), p[1].as_f64().unwrap()]).collect()
+    };
+    let same = |got: f64, want: f64, tol: f64| -> bool {
+        if want.is_infinite() { got == want } else { (got - want).abs() <= tol * want.abs().max(1.0) }
+    };
     for x in &fixes {
+        let name = x["name"].as_str().unwrap();
+        if !keep(name) {
+            continue;
+        }
         let v: Vec<Vec<Num>> = x["V"].as_array().unwrap().iter().map(|r| {
             r.as_array().unwrap().iter().map(|c| Num::Q(qi(c.as_i64().unwrap()))).collect()
         }).collect();
@@ -140,10 +173,22 @@ fn discontinuous_input_refused_by_name() {
             [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize]
         }).collect();
         let p = QuaPol::new(v, e, f, ff).unwrap();
-        let e1 = cca2::conj_q::conj_q(&p).unwrap_err();
-        assert_eq!(e1.id, "PLQ:notContinuous", "{}: conj refused as {:?}", x["name"], e1.id);
-        let e2 = cca2::biconj_q::biconj_q(&p, &Default::default()).unwrap_err();
-        assert_eq!(e2.id, "PLQ:notContinuous", "{}: biconj refused as {:?}", x["name"], e2.id);
+        assert!(!p.is_continuous().unwrap().0, "{}: the D family jumps across its diagonal", name);
+        let (g, _) = cca2::conj_q::conj_q(&p).unwrap();
+        let (gv, _) = g.eval(&pts(&x["S"])).unwrap();
+        for (k, (a, w)) in gv.iter().zip(x["conj"].as_array().unwrap()).enumerate() {
+            assert!(same(*a, num(w), 1e-9), "{}: conj at S[{}] = {} vs {}", name, k, a, num(w));
+        }
+        let h = cca2::biconj_q::biconj_q(&p, &Default::default());
+        if let Some(err) = x.get("biconj_err") {
+            let id = h.err().map(|e| e.id).unwrap_or_else(|| "answered".to_string());
+            assert_eq!(id, err.as_str().unwrap(), "{}: biconj", name);
+            continue;
+        }
+        let hv = h.unwrap().eval(&pts(&x["X"])).unwrap();
+        for (k, (a, w)) in hv.iter().zip(x["biconj"].as_array().unwrap()).enumerate() {
+            assert!(same(*a, num(w), 1e-7), "{}: biconj at X[{}] = {} vs {}", name, k, a, num(w));
+        }
     }
 }
 

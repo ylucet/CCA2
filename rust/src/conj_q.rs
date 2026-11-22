@@ -26,7 +26,6 @@ pub fn conj_q(obj: &QuaPol) -> R<(QuaCon, Dom)> {
     assert_no_closed_edges(&obj.e, "conjQ")?;
     obj.assert_operable()?;
     obj.assert_exact()?;
-    obj.assert_continuous()?;
     let nf = obj.fn_.len();
     if obj.dom.dim < 2 && nf > 1 {
         if nf != obj.ne {

@@ -24,7 +24,6 @@ pub fn biconj_q(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
     assert_no_closed_edges(&obj.e, "biconjQ")?;
     obj.assert_operable()?;
     obj.assert_exact()?;
-    obj.assert_continuous()?;
     let nf = obj.fn_.len();
 
     if obj.dom.dim < 2 {
@@ -43,7 +42,10 @@ pub fn biconj_q(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
         vec![vec![r[4].clone(), r[5].clone()], vec![r[5].clone(), r[6].clone()]]
     };
     let all_psd = (0..nf).all(|k| is_psd2(&hof(k)));
-    let flagged = obj.f_is_convex == Some(true);
+    // The fIsConvex shortcut trusts the caller, and a jump across an interior edge is never convex
+    // (#108: such an f is read lower semicontinuous), so the flag counts only for a CONTINUOUS f --
+    // decided exactly; otherwise the general path below decides.
+    let flagged = obj.f_is_convex == Some(true) && obj.is_continuous()?.0;
     if flagged {
         assert_flag_not_refuted(obj)?;
     }
