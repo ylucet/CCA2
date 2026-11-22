@@ -235,6 +235,52 @@ impl QuaPol {
         Ok(())
     }
 
+    /// f is CONTINUOUS across every shared edge -- exact, three points per edge.
+    ///
+    /// d = f_L - f_R restricted to the edge LINE is a univariate quadratic, and it vanishes on
+    /// the whole edge iff it vanishes at three points of it: both endpoints and the midpoint
+    /// (the same condition (b) three-point test as MATLAB isConvexQ.m). A degenerate edge
+    /// (both endpoints at one vertex) leaves one point, and the midpoint formula below
+    /// evaluates to that point, so the single test that remains decides d on it.
+    pub fn assert_continuous(&self) -> R<()> {
+        self.assert_exact()?;
+        if self.nf < 2 {
+            return Ok(());
+        }
+        for (j, row) in self.f.iter().enumerate() {
+            let (il, ir) = (row[0], row[1]);
+            if il == 0 || ir == 0 || il == ir {
+                continue;
+            }
+            // d = f_il - f_ir as exact rationals, in the weighted basis: the value is
+            // (d5 x^2 + 2 d6 xy + d7 y^2)/2 + d8 x + d9 y + d10 (QuaPol's header; isConvexQ.m
+            // evalNum multiplies this by the positive 2*D^2).
+            let d: Vec<Q> = (0..10)
+                .map(|k| Q::new(self.fn_[il - 1][k].clone(), self.fd[il - 1].clone())
+                    - Q::new(self.fn_[ir - 1][k].clone(), self.fd[ir - 1].clone()))
+                .collect();
+            let half = Q::new(zi(1), zi(2));
+            let eval = |p: [Q; 2]| -> Q {
+                d[4].clone() * p[0].clone() * p[0].clone() * half.clone()
+                    + d[5].clone() * p[0].clone() * p[1].clone()
+                    + d[6].clone() * p[1].clone() * p[1].clone() * half.clone()
+                    + d[7].clone() * p[0].clone()
+                    + d[8].clone() * p[1].clone()
+                    + d[9].clone()
+            };
+            let e = self.e[j];
+            let p1 = self.vx(e[0]);
+            let p2 = self.vx(e[1]);
+            let pm = [p1[0].clone() * half.clone() + p2[0].clone() * half.clone(),
+                      p1[1].clone() * half.clone() + p2[1].clone() * half.clone()];
+            if !eval(p1).is_zero() || !eval(p2).is_zero() || !eval(pm).is_zero() {
+                bail!("PLQ:notContinuous",
+                    "f is discontinuous across edge {}: faces {} and {} do not agree on the edge, and the conjugate and biconjugate are implemented only for continuous inputs.", j + 1, il, ir);
+            }
+        }
+        Ok(())
+    }
+
     pub fn n_rows(&self) -> usize {
         self.fn_.len()
     }

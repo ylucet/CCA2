@@ -20,6 +20,7 @@ from cca2 import check                               # noqa: E402
 from cca2 import rat_q                               # noqa: E402
 from cca2.cell_has_interior import cellHasInterior   # noqa: E402
 import plq_oracle as O                               # noqa: E402
+from cca2.errors import CCA2Error                    # noqa: E402
 
 INF = math.inf
 
@@ -215,3 +216,43 @@ def test_biconj_finite_inside_the_domain_R3_072():
     h = f.biconj().eval([x])
     h = h[0] if isinstance(h, tuple) else h
     assert math.isfinite(h[0])
+
+
+# ---------------------------------------------------------------------------------------------
+# Finding 10 (MAJOR): discontinuous input is accepted silently and gives a wrong biconjugate
+# ---------------------------------------------------------------------------------------------
+def _d_family():
+    """The 30 discontinuous two-piece D fixtures of the review generator (plq_gen.py, seed
+    20261119), frozen in d_family.json: each is a convex quadrilateral cut by a diagonal, the
+    two pieces carrying DIFFERENT quadratics, so the shared edge is a genuine jump."""
+    import json
+    path = os.path.join(HERE, 'd_family.json')
+    return json.load(open(path))
+
+
+def test_discontinuous_input_refused_by_name():
+    for rec in _d_family():
+        f = QuaPol(rec['V'], rec['E'], rec['f'], rec['F'])
+        for op in ('conj', 'biconj'):
+            try:
+                getattr(f, op)()
+            except CCA2Error as e:
+                assert e.identifier == 'PLQ:notContinuous', \
+                    ('%s %s refused as %s, not PLQ:notContinuous' % (rec['name'], op, e.identifier))
+            else:
+                raise AssertionError('%s: %s answered a discontinuous input' % (rec['name'], op))
+
+
+def test_continuous_input_not_refused():
+    # R3 (continuous 2-piece split) and R6 (continuous two-cone fan) carry shared edges whose
+    # pieces agree along the edge; the check must pass them, so conj still answers.
+    import plq_gen
+    for fam in ('R3', 'R6'):
+        cases = [x for x in plq_gen.build(seed=20261119, nrand=210) if x['name'].startswith(fam + '-')]
+        assert cases, fam
+        for rec in cases[:5]:
+            f = QuaPol(rec['V'], rec['E'], rec['f'], rec['F'])
+            try:
+                f.conj()
+            except CCA2Error as e:
+                raise AssertionError('%s: continuous input refused as %s' % (rec['name'], e.identifier))

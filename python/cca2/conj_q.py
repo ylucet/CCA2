@@ -43,6 +43,7 @@ def conjQ(obj):
     assertNoClosedEdges(obj.E, 'conjQ')
     obj.assertOperable()
     obj.assertExact()
+    obj.assertContinuous()
 
     nf = len(obj.fN)
 

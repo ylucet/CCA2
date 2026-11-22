@@ -45,6 +45,7 @@ def biconjQ(obj, opts=None):
     assertNoClosedEdges(obj.E, 'biconjQ')
     obj.assertOperable()
     obj.assertExact()
+    obj.assertContinuous()
 
     nf = len(obj.fN)
 

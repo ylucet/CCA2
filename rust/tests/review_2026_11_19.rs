@@ -115,6 +115,51 @@ fn biconj_infinite_outside_the_square() {
     assert!(v[0].is_infinite(), "got {}", v[0]);
 }
 
+/// Finding 10 (MAJOR): a discontinuous two-piece input (the D family of the review generator,
+/// frozen in python/tests/review/d_family.json) must be refused by NAME -- PLQ:notContinuous --
+/// at the entry of conj and biconj, in every engine. The current engine answers conj (and gets
+/// biconj wrong: 12 of 24 answered calls above a certified upper bound).
+#[test]
+fn discontinuous_input_refused_by_name() {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let fixes: Vec<serde_json::Value> = serde_json::from_str(
+        &std::fs::read_to_string(root.join("../python/tests/review/d_family.json")).unwrap())
+        .unwrap();
+    assert_eq!(fixes.len(), 30, "the D family has 30 fixtures");
+    for x in &fixes {
+        let v: Vec<Vec<Num>> = x["V"].as_array().unwrap().iter().map(|r| {
+            r.as_array().unwrap().iter().map(|c| Num::Q(qi(c.as_i64().unwrap()))).collect()
+        }).collect();
+        let e: Vec<[usize; 3]> = x["E"].as_array().unwrap().iter().map(|r| {
+            [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize, r[2].as_u64().unwrap() as usize]
+        }).collect();
+        let f: Vec<Vec<Num>> = x["f"].as_array().unwrap().iter().map(|r| {
+            r.as_array().unwrap().iter().map(|c| Num::Q(qi(c.as_i64().unwrap()))).collect()
+        }).collect();
+        let ff: Vec<[usize; 2]> = x["F"].as_array().unwrap().iter().map(|r| {
+            [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize]
+        }).collect();
+        let p = QuaPol::new(v, e, f, ff).unwrap();
+        let e1 = cca2::conj_q::conj_q(&p).unwrap_err();
+        assert_eq!(e1.id, "PLQ:notContinuous", "{}: conj refused as {:?}", x["name"], e1.id);
+        let e2 = cca2::biconj_q::biconj_q(&p, &Default::default()).unwrap_err();
+        assert_eq!(e2.id, "PLQ:notContinuous", "{}: biconj refused as {:?}", x["name"], e2.id);
+    }
+}
+
+/// Finding 10 guard. R3-072 (a continuous 2-piece split of a quadrilateral: the two quadratics
+/// differ by a multiple of the shared edge's own linear form) must PASS the continuity check, so
+/// conjQ and biconjQ still answer it.
+#[test]
+fn continuous_input_not_refused() {
+    let f = pol(&[[-3, 2], [-1, 0], [2, 0], [-2, 3]],
+                &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    cca2::conj_q::conj_q(&f).unwrap();
+    cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap();
+}
+
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN
 /// conj: f**(x) >= <s,x> - f*(s) = 1.04606 at the s below; the engine's f**(x) is 0.40871.
 #[test]
