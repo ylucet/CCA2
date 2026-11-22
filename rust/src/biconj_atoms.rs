@@ -605,7 +605,10 @@ fn real_point(a: [[f64; 2]; 2], g: [f64; 2], f0: f64) -> Option<[f64; 2]> {
             let ap = [a[0][0] * p[0] + a[0][1] * p[1], a[1][0] * p[0] + a[1][1] * p[1]];
             let c = [w[0] * aw[0] + w[1] * aw[1], (2.0 * ap[0] + g[0]) * w[0] + (2.0 * ap[1] + g[1]) * w[1], p[0] * ap[0] + p[1] * ap[1] + g[0] * p[0] + g[1] * p[1] + f0];
             let t: Vec<f64> = roots(&c).into_iter().filter(|z| z.im.abs() <= 1e-9 * 1f64.max(z.re.hypot(z.im))).map(|z| z.re).collect();
-            if let Some(t0) = t.first() {
+            // the root NEAREST the base: along a parabola's axis w'Aw is rounding noise, and the
+            // other root of that near-linear quadratic is spurious (~1e31 on D-202 of the 2026-11-19
+            // review), which puts the parametrisation's base point at infinity
+            if let Some(t0) = t.iter().copied().min_by(|x, y| x.abs().total_cmp(&y.abs())) {
                 return Some([p[0] + t0 * w[0], p[1] + t0 * w[1]]);
             }
         }

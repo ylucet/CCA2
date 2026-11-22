@@ -204,10 +204,11 @@ def test_biconj_fenchel_young_L_shape():
     assert h[0] >= s[0] * x[0] + s[1] * x[1] - g - 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9c: f** = +inf at a point of dom f')
 def test_biconj_finite_inside_the_domain_R3_072():
     # two continuous pieces on a quadrilateral (R3-072); x is in piece 1, f(x) = -12.29 is finite,
-    # so f**(x) <= f(x) < inf. Python returns +inf.
+    # so f**(x) <= f(x) < inf. Python returned +inf until #108: realPoint took a spurious ~1e31
+    # root along a parabola's axis, so the tie arc that needs the missing atom pair was never
+    # sampled (biconj_atoms.realPoint).
     f = QuaPol([[-3, 2], [-1, 0], [2, 0], [-2, 3]], [[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
                [[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
                [[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]])

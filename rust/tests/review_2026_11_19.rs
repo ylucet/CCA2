@@ -157,7 +157,10 @@ fn continuous_input_not_refused() {
                 &[[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
                 &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
     cca2::conj_q::conj_q(&f).unwrap();
-    cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap();
+    // review #9c (fixed by #108's realPoint change): f** was +inf at this point of piece 1, where
+    // f = -12.29; the value is inside compare_engines.py's certified bracket, same in Python.
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-2.4921875, 1.51171875]]).unwrap();
+    assert!((v[0] - (-14.681688881664499)).abs() < 1e-9, "got {}", v[0]);
 }
 
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN

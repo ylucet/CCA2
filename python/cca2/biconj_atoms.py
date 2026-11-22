@@ -404,7 +404,10 @@ def realPoint(A, g, f0):
             c = [float(w @ A @ w), float((2 * A @ p + g) @ w), float(p @ A @ p + g @ p + f0)]
             t = [z.real for z in _roots(c) if abs(z.imag) <= 1e-9 * max(1.0, abs(z))]
             if t:
-                return p + t[0] * w
+                # the root NEAREST the base: along a parabola's axis w'Aw is rounding noise, and
+                # the other root of that near-linear quadratic is spurious (~1e31 on D-202 of the
+                # 2026-11-19 review), which puts the parametrisation's base point at infinity
+                return p + min(t, key=abs) * w
     return None
 
 

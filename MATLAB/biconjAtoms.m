@@ -419,7 +419,10 @@ function p0 = realPoint(A, g, f0)
             c = [w.'*A*w, (2*A*p + g).'*w, p.'*A*p + g.'*p + f0];
             t = roots(c);
             t = real(t(abs(imag(t)) <= 1e-9 * max(1, abs(t))));
-            if ~isempty(t), p0 = p + t(1)*w; return, end
+            % the root NEAREST the base: along a parabola's axis w'Aw is rounding noise, and the
+            % other root of that near-linear quadratic is spurious (~1e31 on D-202 of the
+            % 2026-11-19 review), which puts the parametrisation's base point at infinity
+            if ~isempty(t), [~, i0] = min(abs(t)); p0 = p + t(i0)*w; return, end
         end
     end
 end
