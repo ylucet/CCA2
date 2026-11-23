@@ -21,7 +21,7 @@ Exact engine (the default for `conj` and `biconj`):
   2026-11-11: one mechanism behind zero-area faces fixed (cellSamplePoint accepted a sample ON a
   boundary line; DECISIONS 2026-11-11 item 2). Whether it removes these two was NOT re-measured.
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
-- Two BRIDGE faces owning one cell -- refused by name, never observed. (STALE per review 2026-11-19 #13: no longer refused since 2026-10-17; erratum Example 1 reaches it.)
+- Two BRIDGE faces owning one cell -- no longer refused since 2026-10-17: overlapping pieces, value by max (`envelopeSubdivisionAlg`); erratum Example 1 reaches it (18 cells). Was (2026-09-19): refused by name (`envelopeSubdivisionAlg:twoBridges`), never observed. Review 2026-11-19 #13 statement fixed 2026-11-22; outline G7 (manuscript/) still carries the old wording.
 
 Python port (`python/`, merged to main 2026-11-11):
 - FIXED 2026-11-11: the big kink AlgCrv was 334 faces in Python against MATLAB's 317. Cause: the

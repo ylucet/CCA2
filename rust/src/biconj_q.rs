@@ -511,7 +511,7 @@ fn qua_pol_as_qua_con(obj: &QuaPol) -> R<crate::qua_con::QuaCon> {
             for &v in &vs {
                 let v = &vi[v - 1];
                 if (&r[0] * &v[0] + &r[1] * &v[1] + &vd * &r[2]).is_negative() {
-                    bail!("PLQ:biconjQ:nonConvexPiece", "piece {} is NOT CONVEX, and co f = f here, so the answer must carry that same non-convex region.", k);
+                    bail!("PLQ:biconjQ:nonConvexPiece", "piece {} is NOT CONVEX, so its region is not an intersection of half-planes and cannot be one face of a QuaCon. This route only returns f unchanged (one face per piece); the convex envelope of a non-convex piece is a different function (on the convex hull of the piece), and this route does not compute it, so it declines.", k);
                 }
             }
             for q in &rays {
