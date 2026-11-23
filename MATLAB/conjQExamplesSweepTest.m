@@ -3,10 +3,8 @@ classdef conjQExamplesSweepTest < matlab.unittest.TestCase
 %
 %   pass     an answer came back
 %   REFUSED  the input is OUT OF SCOPE, by one of these identifiers only -- not a gap, never to be
-%            fixed: a cubic numerator (the conjugate is for QuaPol), an inexact QuaPol built by
-%            the legacy float pipeline (the exact engine does not compute on rounded data), or a
-%            jump across a shared edge (the paper's standing assumption is continuity; a
-%            discontinuous split is refused by name, review 2026-11-19 #10)
+%            fixed: a cubic numerator (the conjugate is for QuaPol), or an inexact QuaPol built by
+%            the legacy float pipeline (the exact engine does not compute on rounded data)
 %   FAIL     anything else: an in-scope input the engine does not answer
 %
 % The two counts are kept apart on purpose (decided 2026-10-11): a refusal is correct behaviour, a
@@ -15,7 +13,7 @@ classdef conjQExamplesSweepTest < matlab.unittest.TestCase
 % boundary.
 
     properties (Constant)
-        outOfScope = {'PLQ:op:unsupportedType', 'PLQ:QuaPol:notExact', 'PLQ:notContinuous'};
+        outOfScope = {'PLQ:op:unsupportedType', 'PLQ:QuaPol:notExact'};
         % in scope, not answered yet -- each one a TODO item
         knownFail = cell(1,0);   % none (examplesNonconvex{2} answered 2026-10-11)
     end

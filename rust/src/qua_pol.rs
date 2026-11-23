@@ -242,10 +242,14 @@ impl QuaPol {
     /// (the same condition (b) three-point test as MATLAB isConvexQ.m). A degenerate edge
     /// (both endpoints at one vertex) leaves one point, and the midpoint formula below
     /// evaluates to that point, so the single test that remains decides d on it.
-    pub fn assert_continuous(&self) -> R<()> {
+    ///
+    /// A discontinuous f is NOT refused (#108): conj and biconj read it as LOWER SEMICONTINUOUS
+    /// (at a shared point f is the min over the closed pieces holding it). This is the exact test
+    /// the continuity-dependent shortcuts use to choose their path.
+    pub fn is_continuous(&self) -> R<(bool, String)> {
         self.assert_exact()?;
         if self.nf < 2 {
-            return Ok(());
+            return Ok((true, String::new()));
         }
         for (j, row) in self.f.iter().enumerate() {
             let (il, ir) = (row[0], row[1]);
@@ -274,11 +278,10 @@ impl QuaPol {
             let pm = [p1[0].clone() * half.clone() + p2[0].clone() * half.clone(),
                       p1[1].clone() * half.clone() + p2[1].clone() * half.clone()];
             if !eval(p1).is_zero() || !eval(p2).is_zero() || !eval(pm).is_zero() {
-                bail!("PLQ:notContinuous",
-                    "f is discontinuous across edge {}: faces {} and {} do not agree on the edge, and the conjugate and biconjugate are implemented only for continuous inputs.", j + 1, il, ir);
+                return Ok((false, format!("f is discontinuous across edge {}: faces {} and {} do not agree on the edge", j + 1, il, ir)));
             }
         }
-        Ok(())
+        Ok((true, String::new()))
     }
 
     pub fn n_rows(&self) -> usize {

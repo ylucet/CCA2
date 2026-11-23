@@ -204,7 +204,9 @@ def test_biconj_fenchel_young_L_shape():
 
 def test_biconj_finite_inside_the_domain_R3_072():
     # two continuous pieces on a quadrilateral (R3-072); x is in piece 1, f(x) = -12.29 is finite,
-    # so f**(x) <= f(x) < inf. Python returns +inf.
+    # so f**(x) <= f(x) < inf. Python returned +inf until #108: realPoint took a spurious ~1e31
+    # root along a parabola's axis, so the tie arc that needs the missing atom pair was never
+    # sampled (biconj_atoms.realPoint).
     f = QuaPol([[-3, 2], [-1, 0], [2, 0], [-2, 3]], [[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
                [[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
                [[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]])
@@ -243,17 +245,156 @@ def _d_family():
     return json.load(open(path))
 
 
-def test_discontinuous_input_refused_by_name():
-    for rec in _d_family():
-        f = QuaPol(rec['V'], rec['E'], rec['f'], rec['F'])
-        for op in ('conj', 'biconj'):
-            try:
-                getattr(f, op)()
-            except CCA2Error as e:
-                assert e.identifier == 'PLQ:notContinuous', \
-                    ('%s %s refused as %s, not PLQ:notContinuous' % (rec['name'], op, e.identifier))
-            else:
-                raise AssertionError('%s: %s answered a discontinuous input' % (rec['name'], op))
+# #108 lifted #96's stopgap refusal: a discontinuous f is read LOWER SEMICONTINUOUS (at a shared
+# point, the min over the closed pieces holding it), f* = sup over the closed pieces, f** = cl co f.
+# d_family_ref.json (make_d_family_ref.py) holds the Python values the other two engines must match;
+# they were graded 0 wrong by compare_engines.py (conj exact, biconj inside the certified bracket).
+_D_REF = None
+_D_PIECES = None
+# Minutes-long in Python (the fast lane keeps the rest; Rust runs them under -- --ignored).
+_D_SLOW = {'D-069', 'D-111', 'D-153', 'D-188', 'D-209'}
+
+
+def _d_ref():
+    global _D_REF
+    if _D_REF is None:
+        import json
+        _D_REF = {r['name']: r for r in json.load(open(os.path.join(HERE, 'd_family_ref.json')))}
+    return _D_REF
+
+
+def _d_pieces(name):
+    global _D_PIECES
+    if _D_PIECES is None:
+        import plq_gen
+        _D_PIECES = {x['name']: plq_gen.load_pieces(x['pieces'])
+                     for x in plq_gen.build(seed=20261119, nrand=210) if x['name'].startswith('D-')}
+    return _D_PIECES[name]
+
+
+def _d_shared_points(rec):
+    """Exact points where the lsc reading matters: every vertex, and 9 points of each edge (both
+    ends, so the shared diagonal's ends, and the interior of the jump)."""
+    V = [tuple(Fr(c) for c in v) for v in rec['V']]
+    pts = set(V)
+    for e in rec['E']:
+        a, b = V[e[0] - 1], V[e[1] - 1]
+        for k in range(9):
+            t = Fr(k, 8)
+            pts.add((a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+    return sorted(pts)
+
+
+def _rel(a, b):
+    return abs(a - b) / max(1.0, abs(b))
+
+
+def _ev(g, P):
+    v = g.eval(P)
+    return v[0] if isinstance(v, tuple) else v
+
+
+@pytest.mark.parametrize('name', [pytest.param('D-%03d' % i, marks=pytest.mark.slow)
+                                  if 'D-%03d' % i in _D_SLOW else 'D-%03d' % i
+                                  for i in range(6, 210, 7)])
+def test_discontinuous_input_lsc(name):
+    import numpy as np
+    from scipy.optimize import minimize
+    rec = _d_ref()[name]
+    fx = _d_pieces(name)
+    f = QuaPol(rec['V'], rec['E'], rec['f'], rec['F'])
+    assert not f.isContinuous()[0], name                      # a genuine jump: the family's point
+    # ---- conj: the sup over the closed pieces (exact oracle), and the cross-engine reference
+    g = f.conj()
+    gv = _ev(g, rec['S'])
+    for s, v, r in zip(rec['S'], gv, rec['conj']):
+        o = O.conj_exact(fx, (Fr(s[0]), Fr(s[1])))
+        o = INF if o is None else float(o)
+        assert (v == o) if math.isinf(o) else _rel(v, o) < 1e-9, (name, s, v, o)
+        r = float(r) if isinstance(r, str) else r
+        assert (v == r) if math.isinf(r) else _rel(v, r) < 1e-9
+    # ---- biconj
+    if 'biconj_err' in rec:
+        # a named refusal shared with continuous inputs (curvedCell: a convex piece with a singular
+        # Hessian; noWitness), pinned so that a new refusal or a new answer shows here
+        with pytest.raises(CCA2Error) as e:
+            f.biconj()
+        assert e.value.identifier == rec['biconj_err']
+        return
+    h = f.biconj()
+    X = rec['X']
+    hv = _ev(h, X)
+    for x, v, r in zip(X, hv, rec['biconj']):
+        r = float(r) if isinstance(r, str) else r
+        assert (v == r) if math.isinf(r) else _rel(v, r) < 1e-7, (name, x, v, r)
+    # f** <= a certified upper bound (convex combinations of domain samples)
+    samples = O.domain_samples(fx, n=16)
+    for x, v in list(zip(X, hv))[::4]:
+        hi = O.hull_upper(fx, samples, (Fr(x[0]), Fr(x[1])))
+        assert v <= hi + 1e-7 * max(1.0, abs(hi)), (name, x, v, hi)
+    # Fenchel-Young against the engine's OWN conjugate, and f** = (f*)*: the sup over s of
+    # <s,x> - f*(s) (the five best points of a grid, then Nelder-Mead from each, restarted with a
+    # unit simplex -- one short run stalls on the kinks of f*) meets f**(x)
+    gs = np.linspace(-16, 16, 65)
+    grid = np.array([[a, b] for a in gs for b in gs])
+    gg = np.array(_ev(g, grid.tolist()))
+    for j, (x, v) in enumerate(zip(X, hv)):
+        ph = grid @ np.array(x) - gg
+        assert v >= np.max(ph) - 1e-9 * max(1.0, abs(v)), (name, x, v, np.max(ph))
+        if not math.isfinite(v) or j % 2:
+            continue
+
+        def neg(s, x=x):
+            val = _ev(g, [[float(s[0]), float(s[1])]])[0]
+            return 1e300 if not math.isfinite(val) else -(s[0] * x[0] + s[1] * x[1] - val)
+        cc = -math.inf
+        for i in np.argsort(-ph)[:5]:
+            s0, c0 = grid[i], ph[i]
+            for _ in range(4):
+                r = minimize(neg, s0, method='Nelder-Mead',
+                             options={'xatol': 1e-12, 'fatol': 1e-14, 'maxiter': 2000,
+                                      'initial_simplex': [s0, s0 + [1, 0], s0 + [0, 1]]})
+                if -r.fun <= c0:
+                    break
+                s0, c0 = r.x, -r.fun
+            cc = max(cc, c0)
+        assert v >= cc - 1e-9 * max(1.0, abs(v)), (name, x, v, cc)        # Fenchel-Young
+        assert v - cc <= 1e-6 * max(1.0, abs(v)), (name, x, v, cc)       # f** = conj(conj)
+
+
+# Open (#108 residual, TODO): the atoms route SUBDIVIDES the min over atom pairs into an AlgCrv
+# whose evaluator takes the max over the faces holding at a point. Where the input jumps, a face of
+# one piece's atom reaches a shared vertex with that piece's larger value: D-132 gives 11 at its
+# vertex (-2,2) and 9.875 at (-13/8, 11/8) on the diagonal next to it (lsc f = -7, -4.02); D-153
+# gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it; D-111 8.5 at (-2,3) (lsc f = 3).
+# The unsubdivided EnvelopeMin is
+# right there but too low elsewhere (D-209, the review #9b class), so neither form is used yet.
+_D_SHARED_OPEN = {'D-111', 'D-132', 'D-153'}
+
+
+def _shared_param(i):
+    n = 'D-%03d' % i
+    marks = []
+    if n in _D_SLOW:
+        marks.append(pytest.mark.slow)
+    if n in _D_SHARED_OPEN:
+        marks.append(pytest.mark.xfail(strict=True, reason='#108 residual: AlgCrv max at a jump vertex'))
+    return pytest.param(n, marks=marks)
+
+
+@pytest.mark.parametrize('name', [_shared_param(i) for i in range(6, 210, 7)])
+def test_discontinuous_shared_points(name):
+    """f** <= lsc f at every vertex and at 9 points of every edge (both sides of the jump)."""
+    rec = _d_ref()[name]
+    if 'biconj_err' in rec:
+        return
+    fx = _d_pieces(name)
+    h = QuaPol(rec['V'], rec['E'], rec['f'], rec['F']).biconj()
+    P = _d_shared_points(rec)
+    for p, v in zip(P, _ev(h, [[float(a), float(b)] for a, b in P])):
+        fp = float(O.f_at(fx, p))
+        # values read in doubles near algebraic branch points: 1e-7 relative
+        assert v <= fp + 1e-7 * max(1.0, abs(fp)), (name, p, v, fp)
 
 
 def test_continuous_input_not_refused():

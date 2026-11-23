@@ -97,7 +97,14 @@ struct Atom {
     u: [f64; 2],
     w: [f64; 2],
     dr: [f64; 2],
+    /// the exact quadratic of the face whose values the atom carries (lsc checks, `agree`)
+    fq: Fq,
+    /// an edge/ray atom's three exact support points (see `edge_support`); empty otherwise
+    sup: Vec<[Q; 2]>,
 }
+
+/// A face's exact quadratic (numerator row, denominator).
+type Fq = (Vec<Z>, Z);
 
 #[derive(Clone, Debug, PartialEq)]
 enum FKind {
@@ -122,6 +129,9 @@ struct Form {
     gn: Vec<Z>,
     gd: Z,
     dom: OnceLock<Vec<[f64; 3]>>,
+    /// the face the form comes from, and the exact points of its support (`holds_values`)
+    fq: Fq,
+    sup: Vec<[Q; 2]>,
 }
 
 fn norm(v: [f64; 2]) -> f64 {
@@ -252,6 +262,41 @@ fn cover_requirements(req: &[(Vec<[usize; 2]>, Vec<usize>)], na: usize) -> R<Vec
 }
 
 fn atom_holds(at: &Atom, fm: &Form) -> bool {
+    atom_holds_geom(at, fm) && holds_values(at, fm)
+}
+
+/// An atom that holds a form's support geometrically holds the FORM only if it carries the same
+/// values there (lsc input: across a jump, two faces on one edge or vertex are different forms).
+fn holds_values(at: &Atom, fm: &Form) -> bool {
+    fm.kind == FKind::Piece || agree(&at.fq, &fm.fq, &fm.sup)
+}
+
+/// Do the exact face quadratics `fa` and `fb` take the same value at every point of `pts`? The
+/// exact continuity test behind every place where one atom stands in for another face's values
+/// (review 2026-11-19 #10, #108): true for a continuous f, so those inputs take the old path.
+fn agree(fa: &Fq, fb: &Fq, pts: &[[Q; 2]]) -> bool {
+    if fa == fb {
+        return true;
+    }
+    pts.iter().all(|p| eval_face_exact(&fa.0, &fa.1, &p[0], &p[1]) == eval_face_exact(&fb.0, &fb.1, &p[0], &p[1]))
+}
+
+/// Three exact points of an edge (both ends and the midpoint) or of a ray (base, the point it runs
+/// through, and one more): a quadratic difference vanishing at them vanishes on the whole edge or
+/// ray (it is a univariate quadratic along the line).
+fn edge_support(f: &QuaPol, iu: usize, iw: usize, is_ray: bool) -> Vec<[Q; 2]> {
+    let u = f.vx(iu);
+    let w = f.vx(iw);
+    let two = qi(2);
+    let third = if is_ray {
+        [&two * &w[0] - &u[0], &two * &w[1] - &u[1]]
+    } else {
+        [(&u[0] + &w[0]) / &two, (&u[1] + &w[1]) / &two]
+    };
+    vec![u, w, third]
+}
+
+fn atom_holds_geom(at: &Atom, fm: &Form) -> bool {
     let tol = 1e-12;
     let (pts, dirs): (Vec<[f64; 2]>, Vec<[f64; 2]>) = match fm.kind {
         FKind::Vertex => (vec![fm.u], vec![]),
@@ -686,10 +731,10 @@ fn point_at(par: &Par, t: f64) -> ([f64; 2], bool) {
 fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
     let mut atoms: Vec<Atom> = vec![];
     let mut forms: Vec<Form> = vec![];
-    let mut cvx: Vec<PieceRegion> = vec![];
-    let mut edge_at: Vec<[f64; 4]> = vec![];
-    let mut ray_at: Vec<[f64; 4]> = vec![];
-    let mut vtx: Vec<([f64; 2], f64, usize, usize)> = vec![];
+    let mut cvx: Vec<(PieceRegion, Fq)> = vec![];
+    let mut edge_at: Vec<([f64; 4], Fq)> = vec![];
+    let mut ray_at: Vec<([f64; 4], Fq)> = vec![];
+    let mut vtx: Vec<Vtx> = vec![];
     let vf: Vec<[f64; 2]> = (1..=f.vn.len()).map(|i| {
         let v = f.vx(i);
         [q_to_f64(&v[0]), q_to_f64(&v[1])]
@@ -731,22 +776,23 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
             }
             (PieceRegion::Poly(poly), eidx, ed)
         };
+        let fq: Fq = (n.clone(), d.clone());
         for e in &ed {
-            add_vertex(&mut vtx, e.u, q(e.u), k, e.iu);
+            add_vertex(&mut vtx, e.u, q(e.u), k, e.iu, &fq, f);
             if !e.ray {
                 let w = [e.u[0] + e.dv[0], e.u[1] + e.dv[1]];
-                add_vertex(&mut vtx, w, q(w), k, e.iw);
+                add_vertex(&mut vtx, w, q(w), k, e.iw, &fq, f);
             }
         }
         if is_cvx {
-            cvx.push(poly.clone());
-            atoms.push(Atom { kind: AKind::Piece, q: single_piece(f, k, &eidx)?, region: Some(poly.clone()), u: [0.0; 2], w: [0.0; 2], dr: [0.0; 2] });
+            cvx.push((poly.clone(), fq.clone()));
+            atoms.push(Atom { kind: AKind::Piece, q: single_piece(f, k, &eidx)?, region: Some(poly.clone()), u: [0.0; 2], w: [0.0; 2], dr: [0.0; 2], fq: fq.clone(), sup: vec![] });
             if (&n[4] * &n[6] - &n[5] * &n[5]) > Z::zero() {
                 let hi = inv2(h);
                 let hil = [hi[0][0] * l[0] + hi[0][1] * l[1], hi[1][0] * l[0] + hi[1][1] * l[1]];
                 let lhl = l[0] * (hi[0][0] * l[0] + hi[0][1] * l[1]) + l[1] * (hi[1][0] * l[0] + hi[1][1] * l[1]);
                 let (gn, gd) = form_q(FKind::Piece, f, k, 0, 0)?;
-                forms.push(Form { kind: FKind::Piece, a: hi, b: [-hil[0], -hil[1]], c: 0.5 * lhl - k0, u: [0.0; 2], d: [0.0; 2], al: 0.0, be: 0.0, h, l, poly: Some(poly.clone()), tmax: 1.0, gn, gd, dom: OnceLock::new() });
+                forms.push(Form { kind: FKind::Piece, a: hi, b: [-hil[0], -hil[1]], c: 0.5 * lhl - k0, u: [0.0; 2], d: [0.0; 2], al: 0.0, be: 0.0, h, l, poly: Some(poly.clone()), tmax: 1.0, gn, gd, dom: OnceLock::new(), fq: fq.clone(), sup: vec![] });
             }
         }
         for e in &ed {
@@ -758,6 +804,7 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
             let be = (u[0] * h[0][0] + u[1] * h[1][0] + l[0]) * dv[0] + (u[0] * h[0][1] + u[1] * h[1][1] + l[1]) * dv[1];
             let ga = q(u);
             let (gn, gd) = form_q(FKind::Edge, f, k, e.iu, e.iw)?;
+            let sup = edge_support(f, e.iu, e.iw, e.ray);
             let a2 = 2.0 * al;
             let fm = Form {
                 kind: FKind::Edge,
@@ -775,6 +822,8 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
                 gn,
                 gd,
                 dom: OnceLock::new(),
+                fq: fq.clone(),
+                sup: sup.clone(),
             };
             forms.push(fm);
             if is_cvx {
@@ -783,55 +832,77 @@ fn collect_atoms(f: &QuaPol) -> R<(Vec<Atom>, Vec<Form>)> {
             if e.ray {
                 let nd = norm(dv);
                 let key = [u[0], u[1], dv[0] / nd, dv[1] / nd];
-                if ray_at.iter().any(|r| r.iter().zip(key.iter()).all(|(a, b)| (a - b).abs() < 1e-12)) {
+                // the same ray of another face is the same atom only where the two faces AGREE on
+                // it (lsc input: across a jump both values are kept, and the min is theirs)
+                if ray_at.iter().any(|(r, rq)| r.iter().zip(key.iter()).all(|(a, b)| (a - b).abs() < 1e-12) && agree(rq, &fq, &sup)) {
                     continue;
                 }
-                ray_at.push(key);
+                ray_at.push((key, fq.clone()));
                 let qp = QuaPol::new_q(vec![f.vx(e.iu), f.vx(e.iw)], vec![[1, 2, 0]], vec![f.fx(k)], vec![[0, 0]])?;
-                atoms.push(Atom { kind: AKind::Ray, q: qp, region: None, u, w: [0.0; 2], dr: dv });
+                atoms.push(Atom { kind: AKind::Ray, q: qp, region: None, u, w: [0.0; 2], dr: dv, fq: fq.clone(), sup });
                 continue;
             }
             let w = [u[0] + dv[0], u[1] + dv[1]];
             let mut pr = [u, w];
             pr.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));   // NaN-safe (review #6)
             let key = [pr[0][0], pr[0][1], pr[1][0], pr[1][1]];
-            if edge_at.iter().any(|r| r.iter().zip(key.iter()).all(|(a, b)| (a - b).abs() < 1e-12)) {
+            if edge_at.iter().any(|(r, rq)| r.iter().zip(key.iter()).all(|(a, b)| (a - b).abs() < 1e-12) && agree(rq, &fq, &sup)) {
                 continue;
             }
-            edge_at.push(key);
+            edge_at.push((key, fq.clone()));
             let qp = QuaPol::new_q(vec![f.vx(e.iu), f.vx(e.iw)], vec![[1, 2, 1]], vec![f.fx(k)], vec![[0, 0]])?;
-            atoms.push(Atom { kind: AKind::Edge, q: qp, region: None, u, w, dr: [0.0; 2] });
+            atoms.push(Atom { kind: AKind::Edge, q: qp, region: None, u, w, dr: [0.0; 2], fq: fq.clone(), sup });
         }
     }
-    for (p, val, face, iv) in &vtx {
+    for Vtx { p, val, face, iv, fq, vex } in &vtx {
+        // the vertex's value is the MIN over the faces at it (lsc input; = the common value when f
+        // is continuous there), so an atom covers it only where its own face takes that value
         let (gn, gd) = form_q(FKind::Vertex, f, *face, *iv, 0)?;
-        forms.push(Form { kind: FKind::Vertex, a: [[0.0; 2]; 2], b: *p, c: -val, u: *p, d: [0.0; 2], al: 0.0, be: 0.0, h: [[0.0; 2]; 2], l: [0.0; 2], poly: None, tmax: 1.0, gn, gd, dom: OnceLock::new() });
-        let mut covered = cvx.iter().any(|pp| in_piece(*p, pp));
-        for r in &edge_at {
-            covered = covered || norm([p[0] - r[0], p[1] - r[1]]) < 1e-12 || norm([p[0] - r[2], p[1] - r[3]]) < 1e-12;
+        let sup = vec![f.vx(*iv)];
+        let mut covered = cvx.iter().any(|(pp, pq)| in_piece(*p, pp) && agree(pq, fq, &sup));
+        for (r, rq) in &edge_at {
+            covered = covered || ((norm([p[0] - r[0], p[1] - r[1]]) < 1e-12 || norm([p[0] - r[2], p[1] - r[3]]) < 1e-12) && agree(rq, fq, &sup));
         }
-        for r in &ray_at {
-            covered = covered || norm([p[0] - r[0], p[1] - r[1]]) < 1e-12;
+        for (r, rq) in &ray_at {
+            covered = covered || (norm([p[0] - r[0], p[1] - r[1]]) < 1e-12 && agree(rq, fq, &sup));
         }
         if !covered {
-            let (nq, dq) = f.face_q(*face);
             let vx = f.vx(*iv);
-            let vex = eval_face_exact(&nq, &dq, &vx[0], &vx[1]);
             let mut row = vec![qi(0); 9];
-            row.push(vex);
+            row.push(vex.clone());
             let qp = QuaPol::new_q(vec![vx], vec![], vec![row], vec![])?;
-            atoms.push(Atom { kind: AKind::Vertex, q: qp, region: None, u: *p, w: [0.0; 2], dr: [0.0; 2] });
+            atoms.push(Atom { kind: AKind::Vertex, q: qp, region: None, u: *p, w: [0.0; 2], dr: [0.0; 2], fq: fq.clone(), sup: vec![] });
         }
+        forms.push(Form { kind: FKind::Vertex, a: [[0.0; 2]; 2], b: *p, c: -val, u: *p, d: [0.0; 2], al: 0.0, be: 0.0, h: [[0.0; 2]; 2], l: [0.0; 2], poly: None, tmax: 1.0, gn, gd, dom: OnceLock::new(), fq: fq.clone(), sup });
     }
-    let atoms: Vec<Atom> = atoms.into_iter().filter(|at| !(at.kind == AKind::Edge && cvx.iter().any(|pp| in_piece(at.u, pp) && in_piece(at.w, pp)))).collect();
+    let atoms: Vec<Atom> = atoms.into_iter().filter(|at| !(at.kind == AKind::Edge && cvx.iter().any(|(pp, pq)| in_piece(at.u, pp) && in_piece(at.w, pp) && agree(pq, &at.fq, &at.sup)))).collect();
     Ok((atoms, forms))
 }
 
-fn add_vertex(vtx: &mut Vec<([f64; 2], f64, usize, usize)>, p: [f64; 2], v: f64, k: usize, iv: usize) {
-    if vtx.iter().any(|r| (r.0[0] - p[0]).abs() < 1e-12 && (r.0[1] - p[1]).abs() < 1e-12) {
+/// One vertex position with the SMALLEST value of the faces at it, the face it was read from, and
+/// that value exactly.
+struct Vtx {
+    p: [f64; 2],
+    val: f64,
+    face: usize,
+    iv: usize,
+    fq: Fq,
+    vex: Q,
+}
+
+/// One entry per vertex POSITION, carrying the smallest value of the faces at it (lsc input: f at a
+/// shared vertex is the min over the closed pieces holding it; ties keep the first face, so a
+/// continuous f is unchanged).
+fn add_vertex(vtx: &mut Vec<Vtx>, p: [f64; 2], v: f64, k: usize, iv: usize, fq: &Fq, f: &QuaPol) {
+    let x = f.vx(iv);
+    let vex = eval_face_exact(&fq.0, &fq.1, &x[0], &x[1]);
+    if let Some(r) = vtx.iter_mut().find(|r| (r.p[0] - p[0]).abs() < 1e-12 && (r.p[1] - p[1]).abs() < 1e-12) {
+        if vex < r.vex {
+            *r = Vtx { p, val: v, face: k, iv, fq: fq.clone(), vex };
+        }
         return;
     }
-    vtx.push((p, v, k, iv));
+    vtx.push(Vtx { p, val: v, face: k, iv, fq: fq.clone(), vex });
 }
 
 fn form_q(kind: FKind, f: &QuaPol, k: usize, iu: usize, iw: usize) -> R<(Vec<Z>, Z)> {

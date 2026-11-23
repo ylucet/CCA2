@@ -1786,3 +1786,66 @@ engine; Python and Rust have no such limit. Mutation check: with the fallback sw
 vertical strip and the shared-line cell are declared empty
 (`python/tests/test_cell_has_interior_cad.py::test_mutation_fallback_off_is_detected`, and the two
 review tests in all three engines).
+
+## Discontinuous input: the lower semicontinuous reading (#108, review 2026-11-19 #10)
+
+**Semantics (user decision 2026-11-21).** Where pieces meet and disagree, f is LOWER SEMICONTINUOUS:
+f(x) = min over the closed pieces P_k containing x of q_k(x). Then f*(s) = sup_x max_k (<s,x> - q_k(x))
+over the closed pieces -- what `conjQ` always computed, per closed piece -- and f** = cl co f of this lsc
+f. Nothing is refused: `PLQ:notContinuous` (#96's stopgap) is gone, and #96's exact three-point test is
+kept as `QuaPol.isContinuous` (MATLAB) / `isContinuous` (Python) / `is_continuous` (Rust), which
+returns a verdict instead of raising.
+
+**Where the biconj path assumed continuity (the root cause).** Traced on D-160, the review's example
+(14.36 against a certified upper bound -4.89): its vertex (-2,2) is worth 17 in piece 1 and -5 in piece
+2; `biconjAtoms.collectAtoms` kept 17 and lost -5, and every later stage only ever saw atoms. The
+assumption was written into four de-duplications, each correct only if two faces take the same values
+on what they share:
+
+1. `addVertex` keeps ONE entry per vertex position, the first face's value. A vertex form and a vertex
+   atom then carry that value, not the min.
+2. An EDGE (or RAY) atom is de-duplicated by geometry alone: the second face's edge atom on a shared
+   edge is dropped, with its values.
+3. A vertex counts as "covered" (no vertex atom of its own) when it lies in a convex piece or at the end
+   of an edge/ray atom -- whatever value that atom carries there.
+4. An edge atom lying in a convex piece is dropped as "held by the piece", whatever the piece's values
+   on it. `atomHolds` (which atoms hold which dual form, deciding the atom PAIRS) is likewise geometric.
+
+**The fix.** Each atom and form carries its face's exact quadratic; two faces are treated as one only
+where they AGREE, decided exactly by the three-point test (both ends and the midpoint of an edge; base,
+the point it runs through and one more for a ray; the point itself for a vertex) -- `_agree` / `agree` /
+`agreeQ`. A vertex entry keeps the SMALLEST exact value of the faces at it (ties keep the first face). A
+continuous f agrees everywhere, so it takes exactly the old path (same atoms, same forms, same pairs).
+Steps that never needed continuity and were checked: `concaveEnvelope` and the chain envelopes already
+lift each vertex at the min over the faces at it; the two-convex-pieces assembly (`assembledEnvelope`)
+envelopes the two closed pieces' conjugates; the per-piece edge-concavity and -infinity tests are per
+piece; `conjQ` works per closed piece.
+
+**Shortcuts that genuinely need continuity**, and how they decide:
+- `isConvexQ` (the convex shortcut, co f = f): a jump across an interior edge is never convex, and the
+  test already returns false on it (the same three-point test), so the general path decides.
+- `fIsConvex` (the caller's flag, trusted without the edge loop): now honoured only when
+  `isContinuous` says f is continuous; otherwise ignored and the general path decides.
+
+**Still open: the subdivision assumes faces that meet agree there.** The atoms route turns the min over
+atom pairs and contact triangles (an `EnvelopeMin`) into an explicit subdivision (`AlgCrv`:
+`envelopeSubdivisionAlg`, `cutTriangles`) whose evaluator takes the MAX over the faces holding at a point
+-- by design for overlapping irrational pieces, harmless where faces that meet agree. Where the input
+jumps they do not: a bridge face built from one piece's atom carries that piece's values up to a shared
+vertex. Measured: D-132 gives 11 at its vertex (-2,2) (lsc f = -7) and 9.875 at (-13/8, 11/8) on the
+diagonal next to it; D-153 gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it. The review
+grid (offset from the vertices) is unaffected: 0 wrong values in all three engines. Tried and dropped
+(2026-11-21): (1) a contact-triangle face decides where it holds (fixes D-132 only); (2) a face counts
+only if it also holds on a circle around the point (D-153's bad face owns a real sector); (3) return the
+unsubdivided `EnvelopeMin` (clipped to conv(dom f)) for a discontinuous f -- right at both vertices but
+too low on D-209 (a pair envelope evaluates to -2.449 where f** = -1.851; the review #9b class in
+`envelopeEval`, which the subdivision masks). Tracked by the strict xfails of
+`test_discontinuous_shared_points` (D-111, D-132, D-153; D-111 gives 8.5 at (-2,3), lsc f = 3) and the ignored Rust / filtered MATLAB D-132 tests.
+The two-convex-pieces route (`subdividePair`) shows the same class on the discontinuous kink: 1.00000003
+at its jump vertex (1,2) (f** = 1), up to 1.9e-5 off within 1e-4 of it.
+
+**Not a continuity issue, found on the same family (D-202).** `realPoint` (a base point for the rational
+parametrisation of a tie conic, in the doubles screen) took the FIRST real root of the line-conic
+quadratic; along a parabola's axis the leading coefficient is rounding noise and that root was ~1e31, so
+the parametrisation's samples never reached the real tie arc and an atom pair was missed (+inf where f**
+is finite). It now takes the root nearest the base point. Separate commit.

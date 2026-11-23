@@ -761,9 +761,11 @@ classdef QuaPol < RatPol & QuaPar
                      'got degree %d. Cubic is allowed for isConvex only.'], obj.degree);
             end
        end
-       function assertContinuous(obj)
-       % objective: error unless f is CONTINUOUS across every shared edge, decided EXACTLY by
-       %   integer arithmetic.
+       function [tf, why] = isContinuous(obj)
+       % objective: is f CONTINUOUS across every shared edge? Decided EXACTLY by integer
+       %   arithmetic. A discontinuous f is NOT refused (#108): conjQ and biconjQ read it as
+       %   LOWER SEMICONTINUOUS (at a shared point f is the min over the closed pieces holding
+       %   it); this is the exact test the continuity-dependent shortcuts use to choose a path.
        %
        % d = f_L - f_R restricted to the edge LINE is a univariate quadratic, and it vanishes on
        % the whole edge iff it vanishes at three points of it: both endpoints and the midpoint
@@ -778,6 +780,7 @@ classdef QuaPol < RatPol & QuaPar
                                           + 2*n(8)*P(1)*D + 2*n(9)*P(2)*D + 2*n(10)*D^2, ...
                                           abs(n(5:10)) * abs([P(1)^2; 2*P(1)*P(2); P(2)^2; 2*P(1)*D; 2*P(2)*D; 2*D^2]), 'jump value');
             obj.assertExact();
+            tf = true;  why = '';
             if obj.nf < 2, return; end
             for j = 1:size(obj.F, 1)
                 iL = obj.F(j,1);  iR = obj.F(j,2);
@@ -788,10 +791,10 @@ classdef QuaPol < RatPol & QuaPar
                 Pm = [P1(1)*D2 + P2(1)*D1, P1(2)*D2 + P2(2)*D1];
                 Dm = 2*D1*D2;
                 if jumpNum(dn, P1, D1) ~= 0 || jumpNum(dn, P2, D2) ~= 0 || jumpNum(dn, Pm, Dm) ~= 0
-                    error('PLQ:notContinuous', ...
-                        ['f is discontinuous across edge %d: faces %d and %d do not agree on ' ...
-                         'the edge, and the conjugate and biconjugate are implemented only for ' ...
-                         'continuous inputs.'], j, iL, iR);
+                    tf = false;
+                    why = sprintf('f is discontinuous across edge %d: faces %d and %d do not agree on the edge', ...
+                                  j, iL, iR);
+                    return
                 end
             end
        end

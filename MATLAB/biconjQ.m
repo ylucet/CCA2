@@ -97,7 +97,8 @@ function h = biconjQ(obj, opts)
     RatCon.assertNoClosedEdges(obj.E, 'biconjQ');
     obj.assertOperable();
     obj.assertExact();
-    obj.assertContinuous();     % a discontinuous f has no biconjugate to compute -- named refusal
+    % A DISCONTINUOUS f is not refused (#108): it is read as lower semicontinuous, f at a shared
+    % point being the min over the closed pieces holding it (DESIGN.md, "Discontinuous input").
 
     nf = size(obj.fN, 1);
 
@@ -151,7 +152,9 @@ function h = biconjQ(obj, opts)
         Hn = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
         if ~ratQ.isPSD2(Hn), allPSD = false; break, end
     end
-    flagged = isequal(obj.fIsConvex, true);
+    % The flag counts only for a CONTINUOUS f, decided exactly: a jump across an interior edge is
+    % never convex (#108: such an f is read lower semicontinuous), so the general path decides.
+    flagged = isequal(obj.fIsConvex, true) && obj.isContinuous();
     if flagged, assertFlagNotRefuted(obj); end
     if allPSD && (nf == 1 || flagged || isConvexQ(obj))
         if obj.nv == 0

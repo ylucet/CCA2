@@ -114,18 +114,66 @@ fn biconj_infinite_outside_the_square() {
     assert!(v[0].is_infinite(), "got {}", v[0]);
 }
 
-/// Finding 10 (MAJOR): a discontinuous two-piece input (the D family of the review generator,
-/// frozen in python/tests/review/d_family.json) must be refused by NAME -- PLQ:notContinuous --
-/// at the entry of conj and biconj, in every engine. The current engine answers conj (and gets
-/// biconj wrong: 12 of 24 answered calls above a certified upper bound).
+/// Finding 10 (MAJOR) / #108: a discontinuous input is read LOWER SEMICONTINUOUS (at a shared
+/// point, the min over the closed pieces holding it). The 30 D fixtures of the review generator
+/// must give the values of python/tests/review/d_family_ref.json -- the Python engine's, graded 0
+/// wrong by compare_engines.py (conj exact, biconj inside the certified bracket) -- or the same
+/// named refusal. Before #108 biconj was above a certified upper bound on 12 of them (D-160: 14.36
+/// against -4.89), and #96 refused them all as PLQ:notContinuous.
 #[test]
-fn discontinuous_input_refused_by_name() {
+fn discontinuous_input_lsc_values() {
+    check_d_family(|name| !D_SLOW.contains(&name));
+}
+
+/// #108 residual (OPEN, TODO): the atoms route subdivides the min over atom pairs into an AlgCrv
+/// that takes the max over the faces holding at a point; on D-132 a bridge face of piece 1's edge
+/// atom reaches the vertex (-2,2) carrying piece 1's value 11, where lsc f = min(11, -7) = -7, and
+/// 9.875 at a point of the shared diagonal next to it (lsc f = -4.015625).
+#[test]
+#[ignore = "#108 residual: AlgCrv max at a jump vertex (D-132)"]
+fn discontinuous_input_shared_vertex_d132() {
+    let f = pol(&[[-2, 2], [-1, -2], [1, -3], [2, 2]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, -1, -1, 2, -2, 1, -1], [0, 0, 0, 0, -1, 0, -1, 0, -2, 1]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-2.0, 2.0], [-1.625, 1.375]]).unwrap();
+    assert!((v[0] + 7.0).abs() < 1e-9, "f** at the vertex (-2,2): {}", v[0]);
+    assert!(v[1] <= -4.015625 + 1e-9, "f** at (-13/8, 11/8) above lsc f = -4.015625: {}", v[1]);
+}
+
+/// The D fixtures that take minutes (in Python; the slowest in Rust too): `-- --ignored`.
+const D_SLOW: [&str; 5] = ["D-069", "D-111", "D-153", "D-188", "D-209"];
+
+#[test]
+#[ignore = "slow: the minutes-long D fixtures of #108 (run with -- --ignored)"]
+fn discontinuous_input_lsc_values_slow() {
+    check_d_family(|name| D_SLOW.contains(&name));
+}
+
+fn check_d_family(keep: impl Fn(&str) -> bool) {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixes: Vec<serde_json::Value> = serde_json::from_str(
-        &std::fs::read_to_string(root.join("../python/tests/review/d_family.json")).unwrap())
+        &std::fs::read_to_string(root.join("../python/tests/review/d_family_ref.json")).unwrap())
         .unwrap();
     assert_eq!(fixes.len(), 30, "the D family has 30 fixtures");
+    let num = |c: &serde_json::Value| -> f64 {
+        match c.as_str() {
+            Some("inf") => f64::INFINITY,
+            Some("-inf") => f64::NEG_INFINITY,
+            Some(o) => panic!("unexpected value {}", o),
+            None => c.as_f64().unwrap(),
+        }
+    };
+    let pts = |v: &serde_json::Value| -> Vec<[f64; 2]> {
+        v.as_array().unwrap().iter().map(|p| [p[0].as_f64().unwrap(), p[1].as_f64().unwrap()]).collect()
+    };
+    let same = |got: f64, want: f64, tol: f64| -> bool {
+        if want.is_infinite() { got == want } else { (got - want).abs() <= tol * want.abs().max(1.0) }
+    };
     for x in &fixes {
+        let name = x["name"].as_str().unwrap();
+        if !keep(name) {
+            continue;
+        }
         let v: Vec<Vec<Num>> = x["V"].as_array().unwrap().iter().map(|r| {
             r.as_array().unwrap().iter().map(|c| Num::Q(qi(c.as_i64().unwrap()))).collect()
         }).collect();
@@ -139,10 +187,22 @@ fn discontinuous_input_refused_by_name() {
             [r[0].as_u64().unwrap() as usize, r[1].as_u64().unwrap() as usize]
         }).collect();
         let p = QuaPol::new(v, e, f, ff).unwrap();
-        let e1 = cca2::conj_q::conj_q(&p).unwrap_err();
-        assert_eq!(e1.id, "PLQ:notContinuous", "{}: conj refused as {:?}", x["name"], e1.id);
-        let e2 = cca2::biconj_q::biconj_q(&p, &Default::default()).unwrap_err();
-        assert_eq!(e2.id, "PLQ:notContinuous", "{}: biconj refused as {:?}", x["name"], e2.id);
+        assert!(!p.is_continuous().unwrap().0, "{}: the D family jumps across its diagonal", name);
+        let (g, _) = cca2::conj_q::conj_q(&p).unwrap();
+        let (gv, _) = g.eval(&pts(&x["S"])).unwrap();
+        for (k, (a, w)) in gv.iter().zip(x["conj"].as_array().unwrap()).enumerate() {
+            assert!(same(*a, num(w), 1e-9), "{}: conj at S[{}] = {} vs {}", name, k, a, num(w));
+        }
+        let h = cca2::biconj_q::biconj_q(&p, &Default::default());
+        if let Some(err) = x.get("biconj_err") {
+            let id = h.err().map(|e| e.id).unwrap_or_else(|| "answered".to_string());
+            assert_eq!(id, err.as_str().unwrap(), "{}: biconj", name);
+            continue;
+        }
+        let hv = h.unwrap().eval(&pts(&x["X"])).unwrap();
+        for (k, (a, w)) in hv.iter().zip(x["biconj"].as_array().unwrap()).enumerate() {
+            assert!(same(*a, num(w), 1e-7), "{}: biconj at X[{}] = {} vs {}", name, k, a, num(w));
+        }
     }
 }
 
@@ -156,7 +216,10 @@ fn continuous_input_not_refused() {
                 &[[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
                 &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
     cca2::conj_q::conj_q(&f).unwrap();
-    cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap();
+    // review #9c (fixed by #108's realPoint change): f** was +inf at this point of piece 1, where
+    // f = -12.29; the value is inside compare_engines.py's certified bracket, same in Python.
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-2.4921875, 1.51171875]]).unwrap();
+    assert!((v[0] - (-14.681688881664499)).abs() < 1e-9, "got {}", v[0]);
 }
 
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN

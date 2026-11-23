@@ -211,6 +211,54 @@ function H = formHolders(atoms, forms)
 end
 
 function tf = atomHolds(at, fm)
+% Geometry AND values: an atom that holds a form's support geometrically holds the FORM only if it
+% carries the same values there (lsc input: across a jump, two faces on one edge or vertex are
+% different forms; review 2026-11-19 #10, #108).
+    tf = atomHoldsGeom(at, fm);
+    if tf && ~strcmp(fm.kind, 'piece')
+        tf = agreeQ(at.fq, fm.fq, fm.sup);
+    end
+end
+
+function tf = agreeQ(fa, fb, pts)
+% Do the exact face quadratics fa = {n, d} and fb take the same value at every exact point of pts
+% (rows [Px Py D], the point P/D)? The exact continuity test behind every place where one atom
+% stands in for another face's values: true for a continuous f, so those inputs take the old path.
+    tf = true;
+    if isequal(fa, fb), return, end
+    for r = 1:size(pts,1)
+        if faceDiffSign(fa, fb, pts(r,:)) ~= 0, tf = false; return, end
+    end
+end
+
+function s = faceDiffSign(fa, fb, pt)
+% sign of fa - fb at the exact point pt = [Px Py D]: 2*D^2*(fa - fb)(P/D) in integers (the formula
+% of isConvexQ.m evalNum), checked against its scale by ratQ.chkB; the canonical denominator is > 0.
+    [n, ~] = ratQ.sub(fa{1}, fa{2}, fb{1}, fb{2});
+    P = pt(1:2);  D = pt(3);
+    v = ratQ.chkB(n(5)*P(1)^2 + 2*n(6)*P(1)*P(2) + n(7)*P(2)^2 ...
+                  + 2*n(8)*P(1)*D + 2*n(9)*P(2)*D + 2*n(10)*D^2, ...
+                  abs(n(5:10)) * abs([P(1)^2; 2*P(1)*P(2); P(2)^2; 2*P(1)*D; 2*P(2)*D; 2*D^2]), ...
+                  'face difference at a vertex');
+    s = sign(v);
+end
+
+function S = edgeSupport(f, iu, iw, isRay)
+% Three exact points [Px Py D] of an edge (both ends and the midpoint) or of a ray (base, the point
+% it runs through, and one more): a quadratic difference vanishing at them vanishes on the whole
+% edge or ray (it is a univariate quadratic along the line).
+    [P1, D1] = f.vertexQ(iu);  [P2, D2] = f.vertexQ(iw);
+    if isRay
+        P3 = ratQ.chkB(2*P2*D1 - P1*D2, 2*abs(P2)*D1 + abs(P1)*D2, 'ray support point');
+        D3 = ratQ.chk(D1*D2, 'ray support point');
+    else
+        P3 = ratQ.chkB(P1*D2 + P2*D1, abs(P1)*D2 + abs(P2)*D1, 'edge midpoint');
+        D3 = ratQ.chk(2*D1*D2, 'edge midpoint');
+    end
+    S = [P1 D1; P2 D2; P3 D3];
+end
+
+function tf = atomHoldsGeom(at, fm)
     tol = 1e-12;
     switch fm.kind
         case 'vertex'
@@ -465,10 +513,13 @@ function [atoms, forms] = collectAtoms(f)
 % Atoms (QuaPols) and FORMS (closed-form conjugate pieces for the triples), deduplicated.
     atoms = {};
     forms = struct('kind', {}, 'A', {}, 'b', {}, 'c', {}, 'u', {}, 'd', {}, 'al', {}, 'be', {}, ...
-                   'H', {}, 'L', {}, 'poly', {}, 'tmax', {}, 'Gn', {}, 'Gd', {});
+                   'H', {}, 'L', {}, 'poly', {}, 'tmax', {}, 'Gn', {}, 'Gd', {}, 'fq', {}, 'sup', {});
     cvx = {};                                    % the convex-piece atoms' regions (see inPiece)
+    cvxQ = {};                                   % ... and their faces' exact quadratics {n, d}
     edgeAt = zeros(0,4);                         % [u w] of each edge atom, for dedup
+    edgeQ = {};                                  % ... and its face's exact quadratic
     rayAt = zeros(0,4);                          % [u d] of each RAY atom, d primitive
+    rayQ = {};
     vtx = zeros(0,2);  vval = zeros(0,1);        % every vertex that gets a form
     vface = zeros(0,1);                          % ... and the face its value was read from
     for k = 1:f.nf
@@ -493,18 +544,21 @@ function [atoms, forms] = collectAtoms(f)
             m = size(poly,1);
             ed = [poly, poly([2:m 1],:) - poly, zeros(m,1)];
         end
+        fq = {n, d};                             % this face's exact quadratic (lsc checks)
         for i = 1:size(ed,1)
-            [vtx, vval, vface] = addVertex(vtx, vval, vface, ed(i,1:2), q(ed(i,1:2)), k);
+            [vtx, vval, vface] = addVertex(vtx, vval, vface, ed(i,1:2), q(ed(i,1:2)), k, f);
             if ~ed(i,5), [vtx, vval, vface] = addVertex(vtx, vval, vface, ed(i,1:2) + ed(i,3:4), ...
-                                                 q(ed(i,1:2) + ed(i,3:4)), k); end
+                                                 q(ed(i,1:2) + ed(i,3:4)), k, f); end
         end
         if isCvx
             cvx{end+1} = poly; %#ok<AGROW>
-            atoms{end+1} = struct('kind', 'piece', 'q', singlePiece(f, k, eidx), 'region', poly); %#ok<AGROW>
+            cvxQ{end+1} = fq; %#ok<AGROW>
+            atoms{end+1} = struct('kind', 'piece', 'q', singlePiece(f, k, eidx), 'region', poly, ...
+                                  'fq', {fq}, 'sup', []); %#ok<AGROW>
             if n(5)*n(7) - n(6)^2 > 0
                 Hi = inv(H);
                 forms(end+1) = mkForm('piece', Hi, -Hi*L, 0.5*L.'*Hi*L - k0, [], [], [], [], ...
-                                      H, L, poly, formQ('piece', f, k)); %#ok<AGROW>
+                                      H, L, poly, formQ('piece', f, k), fq, []); %#ok<AGROW>
             end
         end
         for i = 1:size(ed,1)
@@ -512,63 +566,94 @@ function [atoms, forms] = collectAtoms(f)
             al = 0.5 * dv*H*dv.';
             if al <= 0, continue, end            % a ray of linear growth only shapes dom f* (D)
             be = (u*H + L.') * dv.';  ga = q(u);
+            iu = vertexIndex(f, u);  iw = vertexIndex(f, u + dv);
+            sup = edgeSupport(f, iu, iw, isRay);
             fm = mkForm('edge', dv.'*dv/(2*al), u.' - be*dv.'/(2*al), ...
                         -ga + be^2/(4*al), u, dv, al, be, [], [], [], ...
-                        formQ('edge', f, k, vertexIndex(f, u), vertexIndex(f, u + dv)));
+                        formQ('edge', f, k, iu, iw), fq, sup);
             if isRay, fm.tmax = inf; end
             forms(end+1) = fm; %#ok<AGROW>
             if isCvx, continue, end              % the convex piece's atom already holds it
             if isRay
                 key = [u, dv / norm(dv)];               % a ray is its base and its direction
-                if any(all(abs(rayAt - key) < 1e-12, 2)), continue, end
+                % the same ray of another face is the same atom only where the two faces AGREE on
+                % it (lsc input: across a jump both values are kept, and the min is theirs)
+                if any(arrayfun(@(j) all(abs(rayAt(j,:) - key) < 1e-12) && agreeQ(rayQ{j}, fq, sup), ...
+                                1:size(rayAt,1))), continue, end
                 rayAt(end+1,:) = key; %#ok<AGROW>
+                rayQ{end+1} = fq; %#ok<AGROW>
                 atoms{end+1} = struct('kind', 'ray', 'u', u, 'w', [], ...
-                    'q', QuaPol([u; u + dv], [1 2 0], f.f(k,:), [0 0])); %#ok<AGROW>
+                    'q', QuaPol([u; u + dv], [1 2 0], f.f(k,:), [0 0]), 'fq', {fq}, 'sup', sup); %#ok<AGROW>
                 continue
             end
             w = u + dv;
             key = sortrows([u; w]);  key = [key(1,:), key(2,:)];
-            if any(all(abs(edgeAt - key) < 1e-12, 2)), continue, end
+            if any(arrayfun(@(j) all(abs(edgeAt(j,:) - key) < 1e-12) && agreeQ(edgeQ{j}, fq, sup), ...
+                            1:size(edgeAt,1))), continue, end
             edgeAt(end+1,:) = key; %#ok<AGROW>
+            edgeQ{end+1} = fq; %#ok<AGROW>
             atoms{end+1} = struct('kind', 'edge', 'u', u, 'w', w, ...
-                'q', QuaPol([u; w], [1 2 1], f.f(k,:), [0 0])); %#ok<AGROW>
+                'q', QuaPol([u; w], [1 2 1], f.f(k,:), [0 0]), 'fq', {fq}, 'sup', sup); %#ok<AGROW>
         end
     end
     for i = 1:size(vtx,1)
+        % the vertex's value is the MIN over the faces at it (lsc input; = the common value when f
+        % is continuous there), so an atom covers it only where its own face takes that value
+        iv = vertexIndex(f, vtx(i,:));
+        [nv, dv0] = f.faceQ(vface(i));  fqv = {nv, dv0};
+        [Pv, Dv] = f.vertexQ(iv);  sup = [Pv Dv];
         forms(end+1) = mkForm('vertex', zeros(2), vtx(i,:).', -vval(i), vtx(i,:), [], [], [], ...
-                              [], [], [], formQ('vertex', f, vface(i), vertexIndex(f, vtx(i,:)))); %#ok<AGROW>
+                              [], [], [], formQ('vertex', f, vface(i), iv), fqv, sup); %#ok<AGROW>
         p = vtx(i,:);
-        covered = any(cellfun(@(P) inPiece(p, P), cvx));
+        covered = any(cellfun(@(P, Q) inPiece(p, P) && agreeQ(Q, fqv, sup), cvx, cvxQ));
         for j = 1:size(edgeAt,1)
-            covered = covered || norm(p - edgeAt(j,1:2)) < 1e-12 || norm(p - edgeAt(j,3:4)) < 1e-12;
+            covered = covered || ((norm(p - edgeAt(j,1:2)) < 1e-12 || norm(p - edgeAt(j,3:4)) < 1e-12) ...
+                                  && agreeQ(edgeQ{j}, fqv, sup));
         end
         for j = 1:size(rayAt,1)
-            covered = covered || norm(p - rayAt(j,1:2)) < 1e-12;   % a ray atom holds its base
+            covered = covered || (norm(p - rayAt(j,1:2)) < 1e-12 && agreeQ(rayQ{j}, fqv, sup));   % a ray atom holds its base
         end
         if ~covered
             atoms{end+1} = struct('kind', 'vertex', 'u', p, 'q', ...
-                QuaPol(p, zeros(0,3), [0 0 0 0 0 0 0 0 0 vval(i)], zeros(0,2))); %#ok<AGROW>
+                QuaPol(p, zeros(0,3), [0 0 0 0 0 0 0 0 0 vval(i)], zeros(0,2)), 'fq', {fqv}, 'sup', []); %#ok<AGROW>
         end
     end
-    % an EDGE atom lying in a convex piece is held by that piece already
+    % an EDGE atom lying in a convex piece is held by that piece already -- where that piece takes
+    % the edge atom's values (lsc input)
     keep = true(1, numel(atoms));
     for i = 1:numel(atoms)
         if strcmp(atoms{i}.kind, 'edge')
-            keep(i) = ~any(cellfun(@(P) inPiece(atoms{i}.u, P) && inPiece(atoms{i}.w, P), cvx));
+            keep(i) = ~any(cellfun(@(P, Q) inPiece(atoms{i}.u, P) && inPiece(atoms{i}.w, P) ...
+                                   && agreeQ(Q, atoms{i}.fq, atoms{i}.sup), cvx, cvxQ));
         end
     end
     atoms = atoms(keep);
 end
 
-function fm = mkForm(kind, A, b, c, u, d, al, be, H, L, poly, G)
-% G = {Gn, Gd}: the form EXACTLY, as the conic Gn/Gd -- see formQ.
+function fm = mkForm(kind, A, b, c, u, d, al, be, H, L, poly, G, fq, sup)
+% G = {Gn, Gd}: the form EXACTLY, as the conic Gn/Gd -- see formQ. fq = {n, d}: the exact quadratic
+% of the face the form comes from; sup: the exact points [Px Py D] of its support (agreeQ).
     fm = struct('kind', kind, 'A', A, 'b', b, 'c', c, 'u', u, 'd', d, 'al', al, 'be', be, ...
-                'H', H, 'L', L, 'poly', poly, 'tmax', 1, 'Gn', G{1}, 'Gd', G{2});
+                'H', H, 'L', L, 'poly', poly, 'tmax', 1, 'Gn', G{1}, 'Gd', G{2}, 'fq', {fq}, 'sup', sup);
 end
 
-function [vtx, vval, vface] = addVertex(vtx, vval, vface, p, v, k)
-    if ~isempty(vtx) && any(all(abs(vtx - p) < 1e-12, 2)), return, end
-    vtx(end+1,:) = p;  vval(end+1,1) = v;  vface(end+1,1) = k;
+function [vtx, vval, vface] = addVertex(vtx, vval, vface, p, v, k, f)
+% One entry per vertex POSITION, carrying the SMALLEST value of the faces at it (lsc input: f at a
+% shared vertex is the min over the closed pieces holding it; ties keep the first face, so a
+% continuous f is unchanged).
+    i = [];
+    if ~isempty(vtx), i = find(all(abs(vtx - p) < 1e-12, 2), 1); end
+    if isempty(i)
+        vtx(end+1,:) = p;  vval(end+1,1) = v;  vface(end+1,1) = k;
+        return
+    end
+    if vface(i) ~= k
+        [na, da] = f.faceQ(k);  [nb, db] = f.faceQ(vface(i));
+        [P, D] = f.vertexQ(vertexIndex(f, p));
+        if faceDiffSign({na, da}, {nb, db}, [P D]) < 0
+            vval(i) = v;  vface(i) = k;
+        end
+    end
 end
 
 function i = vertexIndex(f, p)

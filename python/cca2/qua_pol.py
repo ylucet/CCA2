@@ -170,8 +170,8 @@ class QuaPol:
                   'Convex-analysis operators require a quadratic numerator (degree<=2); got '
                   'degree %d. Cubic is allowed for isConvex only.' % self.degree())
 
-    def assertContinuous(self):
-        """f is CONTINUOUS across every shared edge -- exact, three points per edge.
+    def isContinuous(self):
+        """(tf, why): is f CONTINUOUS across every shared edge? Exact, three points per edge.
 
         d = f_L - f_R restricted to the edge LINE is a univariate quadratic, and it vanishes on
         the whole edge iff it vanishes at three points of it: both endpoints and the midpoint
@@ -179,10 +179,15 @@ class QuaPol:
         reference). A degenerate edge (both endpoints at one vertex) leaves one point, and the
         midpoint formula below evaluates to that point, so the single test that remains decides
         d on it.
+
+        A discontinuous f is NOT refused (#108): conj and biconj read it as LOWER SEMICONTINUOUS
+        -- at a shared point f is the min over the closed pieces holding it. This is the exact
+        test the continuity-dependent shortcuts use to decide their path (isConvexQ's convex
+        shortcut runs the same three-point test; biconjAtoms applies it per edge / vertex).
         """
         self.assertExact()
         if self.nf < 2:
-            return
+            return True, ''
         fN, fD = self.fN, self.fD
         for j, row in enumerate(self.F):
             iL, iR = row
@@ -200,10 +205,9 @@ class QuaPol:
                         + 2 * dn[7] * P[0] * D + 2 * dn[8] * P[1] * D + 2 * dn[9] * D * D)
             if (val(P1, D1) != 0 or val(P2, D2) != 0
                     or val((P1[0] * D2 + P2[0] * D1, P1[1] * D2 + P2[1] * D1), 2 * D1 * D2) != 0):
-                error('PLQ:notContinuous',
-                      'f is discontinuous across edge %d: faces %d and %d do not agree on the '
-                      'edge, and the conjugate and biconjugate are implemented only for '
-                      'continuous inputs.' % (j + 1, iL, iR))
+                return False, ('f is discontinuous across edge %d: faces %d and %d do not agree '
+                               'on the edge' % (j + 1, iL, iR))
+        return True, ''
 
     # ---- the operators ---------------------------------------------------------------------------
     def conj(self, engine='exact'):
