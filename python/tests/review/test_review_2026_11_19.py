@@ -258,6 +258,19 @@ def _d_pieces(name):
     return _D_PIECES[name]
 
 
+def _d_shared_points(rec):
+    """Exact points where the lsc reading matters: every vertex, and 9 points of each edge (both
+    ends, so the shared diagonal's ends, and the interior of the jump)."""
+    V = [tuple(Fr(c) for c in v) for v in rec['V']]
+    pts = set(V)
+    for e in rec['E']:
+        a, b = V[e[0] - 1], V[e[1] - 1]
+        for k in range(9):
+            t = Fr(k, 8)
+            pts.add((a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+    return sorted(pts)
+
+
 def _rel(a, b):
     return abs(a - b) / max(1.0, abs(b))
 
@@ -333,6 +346,41 @@ def test_discontinuous_input_lsc(name):
             cc = max(cc, c0)
         assert v >= cc - 1e-9 * max(1.0, abs(v)), (name, x, v, cc)        # Fenchel-Young
         assert v - cc <= 1e-6 * max(1.0, abs(v)), (name, x, v, cc)       # f** = conj(conj)
+
+
+# Open (#108 residual, TODO): the atoms route SUBDIVIDES the min over atom pairs into an AlgCrv
+# whose evaluator takes the max over the faces holding at a point. Where the input jumps, a face of
+# one piece's atom reaches a shared vertex with that piece's larger value: D-132 gives 11 at its
+# vertex (-2,2) and 9.875 at (-13/8, 11/8) on the diagonal next to it (lsc f = -7, -4.02); D-153
+# gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it; D-111 8.5 at (-2,3) (lsc f = 3).
+# The unsubdivided EnvelopeMin is
+# right there but too low elsewhere (D-209, the review #9b class), so neither form is used yet.
+_D_SHARED_OPEN = {'D-111', 'D-132', 'D-153'}
+
+
+def _shared_param(i):
+    n = 'D-%03d' % i
+    marks = []
+    if n in _D_SLOW:
+        marks.append(pytest.mark.slow)
+    if n in _D_SHARED_OPEN:
+        marks.append(pytest.mark.xfail(strict=True, reason='#108 residual: AlgCrv max at a jump vertex'))
+    return pytest.param(n, marks=marks)
+
+
+@pytest.mark.parametrize('name', [_shared_param(i) for i in range(6, 210, 7)])
+def test_discontinuous_shared_points(name):
+    """f** <= lsc f at every vertex and at 9 points of every edge (both sides of the jump)."""
+    rec = _d_ref()[name]
+    if 'biconj_err' in rec:
+        return
+    fx = _d_pieces(name)
+    h = QuaPol(rec['V'], rec['E'], rec['f'], rec['F']).biconj()
+    P = _d_shared_points(rec)
+    for p, v in zip(P, _ev(h, [[float(a), float(b)] for a, b in P])):
+        fp = float(O.f_at(fx, p))
+        # values read in doubles near algebraic branch points: 1e-7 relative
+        assert v <= fp + 1e-7 * max(1.0, abs(fp)), (name, p, v, fp)
 
 
 def test_continuous_input_not_refused():

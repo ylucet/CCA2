@@ -1827,6 +1827,23 @@ piece; `conjQ` works per closed piece.
 - `fIsConvex` (the caller's flag, trusted without the edge loop): now honoured only when
   `isContinuous` says f is continuous; otherwise ignored and the general path decides.
 
+**Still open: the subdivision assumes faces that meet agree there.** The atoms route turns the min over
+atom pairs and contact triangles (an `EnvelopeMin`) into an explicit subdivision (`AlgCrv`:
+`envelopeSubdivisionAlg`, `cutTriangles`) whose evaluator takes the MAX over the faces holding at a point
+-- by design for overlapping irrational pieces, harmless where faces that meet agree. Where the input
+jumps they do not: a bridge face built from one piece's atom carries that piece's values up to a shared
+vertex. Measured: D-132 gives 11 at its vertex (-2,2) (lsc f = -7) and 9.875 at (-13/8, 11/8) on the
+diagonal next to it; D-153 gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it. The review
+grid (offset from the vertices) is unaffected: 0 wrong values in all three engines. Tried and dropped
+(2026-11-21): (1) a contact-triangle face decides where it holds (fixes D-132 only); (2) a face counts
+only if it also holds on a circle around the point (D-153's bad face owns a real sector); (3) return the
+unsubdivided `EnvelopeMin` (clipped to conv(dom f)) for a discontinuous f -- right at both vertices but
+too low on D-209 (a pair envelope evaluates to -2.449 where f** = -1.851; the review #9b class in
+`envelopeEval`, which the subdivision masks). Tracked by the strict xfails of
+`test_discontinuous_shared_points` (D-111, D-132, D-153; D-111 gives 8.5 at (-2,3), lsc f = 3) and the ignored Rust / filtered MATLAB D-132 tests.
+The two-convex-pieces route (`subdividePair`) shows the same class on the discontinuous kink: 1.00000003
+at its jump vertex (1,2) (f** = 1), up to 1.9e-5 off within 1e-4 of it.
+
 **Not a continuity issue, found on the same family (D-202).** `realPoint` (a base point for the rational
 parametrisation of a tie conic, in the doubles screen) took the FIRST real root of the line-conic
 quadratic; along a parabola's axis the leading coefficient is rounding noise and that root was ~1e31, so

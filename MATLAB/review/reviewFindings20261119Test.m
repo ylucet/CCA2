@@ -96,6 +96,19 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             reviewFindings20261119Test.checkDFamily(tc, false);
         end
 
+        function discontinuousInputSharedVertexD132(tc)
+            % #108 residual (OPEN, TODO): the atoms route subdivides the min over atom pairs into
+            % an AlgCrv that takes the max over the faces holding at a point; on D-132 a bridge
+            % face of piece 1's edge atom reaches the vertex (-2,2) with piece 1's value 11, where
+            % lsc f = min(11, -7) = -7, and 9.875 on the diagonal next to it. Filtered until fixed.
+            tc.assumeFail('#108 residual: AlgCrv max at a jump vertex (D-132)');
+            f = QuaPol([-2 2; -1 -2; 1 -3; 2 2], [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1], ...
+                       [0 0 0 0 -1 -1 2 -2 1 -1; 0 0 0 0 -1 0 -1 0 -2 1], [1 0; 1 0; 1 2; 2 0; 2 0]);
+            v = biconjQ(f).eval([-2 2; -1.625 1.375]);
+            tc.verifyEqual(v(1), -7, 'AbsTol', 1e-9, 'f** at the shared vertex (-2,2)');
+            tc.verifyLessThanOrEqual(v(2), -4.015625 + 1e-9, 'f** at (-13/8, 11/8) <= lsc f');
+        end
+
         function discontinuousInputIsReadLowerSemicontinuousSlow(tc)
             % The rest of the D family (see above). Not in a bucket: run by name.
             reviewFindings20261119Test.checkDFamily(tc, true);
