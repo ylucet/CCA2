@@ -141,3 +141,101 @@ def _uniquetolRows(V, tol):
             continue
         out.append(v)
     return out
+
+
+def cellWitness(C, rows):
+    """A strictly interior point of the cell by a SECTOR search, or (pt, False).
+
+    cellSamplePoint grids the polygon of the straight rows clipped to a box of half-width R, so a
+    cell that is small next to that polygon (a unit-wide cell under rows that leave the polygon
+    open to |x| = 1e3) falls between the grid points, and a live cell was dropped: co f = +inf
+    at points of dom f (review 2026-11-19 #9c). This search does not depend on any box. It is a
+    cylindrical decomposition of the rows' curves (a branch row as its own line): the critical
+    abscissae are the roots of every curve's discriminant in y, of its leading coefficient in y,
+    and of every pairwise resultant in y; an open cell meets the open sector between two
+    consecutive critical abscissae and two consecutive curves above one of them, so the middle
+    of every sector (and past both ends) is tested. Doubles, with the slack rule of
+    cellSamplePoint (a value inside its own rounding is not a margin): a witness search, the
+    point is checked, never trusted."""
+    if not rows:
+        return [0.0, 0.0], True
+    P = []
+    for r in rows:
+        c = C[r[0] - 1][0:6]
+        br = C[r[0] - 1][6]
+        if br != 0:
+            v, _ = rat_q.pairLineEvalM(c, br, [[0, 0], [1, 0], [0, 1]])
+            P.append([0.0, 0.0, 0.0, v[1] - v[0], v[2] - v[0], v[0]])
+        else:
+            P.append([float(t) for t in c])
+    P = [list(p) for p in sorted({tuple(p) for p in P})]       # deterministic order
+    # each curve as a quadratic in y with polynomial coefficients in x (highest power first)
+    Y = [([p[2]], [p[1], p[4]], [p[0], p[3], p[5]]) for p in P]
+    xs = []
+    for A, B, Cc in Y:
+        if A[0] != 0:
+            xs += _realRootsF(np.polysub(np.polymul(B, B), np.polymul([4 * A[0]], Cc)))
+        else:
+            xs += _realRootsF(B)
+    for i in range(len(Y)):
+        for j in range(i + 1, len(Y)):
+            xs += _realRootsF(_resultantY(Y[i], Y[j]))
+    xs = sorted(set(x for x in xs if math.isfinite(x)))
+    if not xs:
+        xs = [0.0]
+    span = max(1.0, xs[-1] - xs[0])
+    samp = [xs[0] - span, xs[-1] + span] + [(xs[i] + xs[i + 1]) / 2 for i in range(len(xs) - 1)]
+    best = -math.inf
+    pt = [0.0, 0.0]
+    for x in samp:
+        ys = []
+        for A, B, Cc in Y:
+            a = A[0]
+            b = float(np.polyval(B, x))
+            c = float(np.polyval(Cc, x))
+            if a != 0:
+                d = b * b - 4 * a * c
+                if d >= 0:
+                    sd = math.sqrt(d)
+                    ys += [(-b - sd) / (2 * a), (-b + sd) / (2 * a)]
+            elif b != 0:
+                ys.append(-c / b)
+        ys = sorted(set(y for y in ys if math.isfinite(y)))
+        if not ys:
+            ys = [0.0]
+        sp = max(1.0, ys[-1] - ys[0])
+        cand = [ys[0] - sp, ys[-1] + sp] + [(ys[i] + ys[i + 1]) / 2 for i in range(len(ys) - 1)]
+        cy = np.array(cand)
+        s = _slackArr(C, rows, np.full(cy.shape, x), cy)
+        k = int(np.argmax(s))
+        if s[k] > best:
+            best = float(s[k])
+            pt = [float(x), float(cy[k])]
+    return pt, best > 0
+
+
+def _realRootsF(p):
+    p = list(np.trim_zeros(np.asarray(p, dtype=float), 'f'))
+    if len(p) < 2:
+        return []
+    return [z.real for z in np.roots(p) if abs(z.imag) <= 1e-9 * max(1.0, abs(z))]
+
+
+def _resultantY(p, q):
+    """The resultant in y of two curves A y^2 + B y + C (A constant, B, C polynomials in x)."""
+    A, B, Cc = p
+    D, E, F = q
+    a, d = A[0], D[0]
+    if a == 0 and d == 0:                       # two lines in y: B y + C = 0, E y + F = 0
+        return np.polysub(np.polymul(B, F), np.polymul(Cc, E))
+    if a == 0:                                  # y = -C/B into the other: D C^2 - E B C + F B^2
+        return np.polyadd(np.polysub(np.polymul([d], np.polymul(Cc, Cc)),
+                                     np.polymul(E, np.polymul(B, Cc))),
+                          np.polymul(F, np.polymul(B, B)))
+    if d == 0:
+        return _resultantY(q, p)
+    # Sylvester, degree 2 x 2: (AF - CD)^2 - (AE - BD)(BF - CE)
+    t1 = np.polysub(np.polymul([a], F), np.polymul(Cc, [d]))
+    t2 = np.polysub(np.polymul([a], E), np.polymul(B, [d]))
+    t3 = np.polysub(np.polymul(B, F), np.polymul(Cc, E))
+    return np.polysub(np.polymul(t1, t1), np.polymul(t2, t3))

@@ -44,13 +44,4 @@ def test_biconj_on_the_cone_family(i):
     except CCA2Error:
         return                                    # a named refusal (co f = -infinity) is the right answer
     bad = checkBiconj(f, h)
-    if bad:
-        # review 2026-11-19 finding 9 (CRITICAL, out of scope for the #1/#5 fixes): the
-        # engine's biconjugate has wrong values on these cone fixtures (+inf at points of
-        # dom f, finite values in the wrong places, Fenchel-Young gaps against its own
-        # conjugate). Tracked by the dedicated xfail tests in
-        # tests/review/test_review_2026_11_19.py: test_biconj_fenchel_young_L_shape,
-        # test_biconj_finite_inside_the_domain_R3_072, test_biconj_infinite_outside_the_square.
-        # The oracle is sound: every defect it reports on this family is a #9 symptom.
-        pytest.xfail('review 2026-11-19 #9: biconjugate values wrong on the cone family')
     assert bad == []

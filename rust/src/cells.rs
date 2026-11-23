@@ -1606,3 +1606,159 @@ fn build_incidence(ecq: &[Vec<Z>], fc: &[Vec<FcRow>], vname: &[[usize; 3]]) -> (
     (e, f)
 }
 
+
+// ---- cell_witness: a box-free sector search (port of cell_sample_point.cellWitness) -----------
+fn pmul_f(a: &[f64], b: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0; a.len() + b.len() - 1];
+    for (i, x) in a.iter().enumerate() {
+        for (j, y) in b.iter().enumerate() {
+            out[i + j] += x * y;
+        }
+    }
+    out
+}
+fn padd_s(a: &[f64], b: &[f64], sg: f64) -> Vec<f64> {
+    let n = a.len().max(b.len());
+    let mut out = vec![0.0; n];
+    for (i, x) in a.iter().enumerate() {
+        out[n - a.len() + i] += x;
+    }
+    for (i, y) in b.iter().enumerate() {
+        out[n - b.len() + i] += sg * y;
+    }
+    out
+}
+fn pval(p: &[f64], x: f64) -> f64 {
+    let mut v = 0.0;
+    for c in p {
+        v = v * x + c;
+    }
+    v
+}
+fn real_roots_f(p: &[f64]) -> Vec<f64> {
+    let first = match p.iter().position(|x| *x != 0.0) {
+        Some(i) => i,
+        None => return vec![],
+    };
+    let q = &p[first..];
+    if q.len() < 2 {
+        return vec![];
+    }
+    crate::numeric::roots(q).into_iter().filter(|z| z.im.abs() <= 1e-9 * 1f64.max(z.re.hypot(z.im))).map(|z| z.re).collect()
+}
+type YQuad = (f64, Vec<f64>, Vec<f64>);
+fn resultant_y(p: &YQuad, q: &YQuad) -> Vec<f64> {
+    let (a, b, c) = (p.0, &p.1, &p.2);
+    let (d, e, f) = (q.0, &q.1, &q.2);
+    if a == 0.0 && d == 0.0 {
+        return padd_s(&pmul_f(b, f), &pmul_f(c, e), -1.0);
+    }
+    if a == 0.0 {
+        return padd_s(&padd_s(&pmul_f(&[d], &pmul_f(c, c)), &pmul_f(e, &pmul_f(b, c)), -1.0), &pmul_f(f, &pmul_f(b, b)), 1.0);
+    }
+    if d == 0.0 {
+        return resultant_y(q, p);
+    }
+    let t1 = padd_s(&pmul_f(&[a], f), &pmul_f(c, &[d]), -1.0);
+    let t2 = padd_s(&pmul_f(&[a], e), &pmul_f(b, &[d]), -1.0);
+    let t3 = padd_s(&pmul_f(b, f), &pmul_f(c, e), -1.0);
+    padd_s(&pmul_f(&t1, &t1), &pmul_f(&t2, &t3), -1.0)
+}
+
+/// A strictly interior point of the cell by a SECTOR search (a cylindrical decomposition of the
+/// rows' curves, a branch row as its own line), or (pt, false). cell_sample_point grids a polygon
+/// clipped to a 1e3 box and misses a unit-wide cell under rows that leave it open, so a live cell
+/// was dropped (review 2026-11-19 #9c); this search depends on no box. See the Python docstring.
+pub fn cell_witness(c: &[Vec<Z>], rows: &[(usize, i64)]) -> R<([f64; 2], bool)> {
+    if rows.is_empty() {
+        return Ok(([0.0, 0.0], true));
+    }
+    let mut pp: Vec<[f64; 6]> = vec![];
+    for &(i, _) in rows {
+        let cc = &c[i - 1][0..6];
+        let br = &c[i - 1][6];
+        let row = if !br.is_zero() {
+            let pe = pair_eval_prep(cc, br_i(br))?;
+            let v0 = pe.eval_m(0.0, 0.0).0;
+            let v1 = pe.eval_m(1.0, 0.0).0;
+            let v2 = pe.eval_m(0.0, 1.0).0;
+            [0.0, 0.0, 0.0, v1 - v0, v2 - v0, v0]
+        } else {
+            let f: Vec<f64> = cc.iter().map(to_f64).collect();
+            [f[0], f[1], f[2], f[3], f[4], f[5]]
+        };
+        pp.push(row);
+    }
+    pp.sort_by(|a, b| a.iter().zip(b.iter()).map(|(x, y)| x.total_cmp(y)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal));
+    pp.dedup();
+    let y: Vec<YQuad> = pp.iter().map(|p| (p[2], vec![p[1], p[4]], vec![p[0], p[3], p[5]])).collect();
+    let mut xs: Vec<f64> = vec![];
+    for (a, b, cc) in &y {
+        if *a != 0.0 {
+            xs.extend(real_roots_f(&padd_s(&pmul_f(b, b), &pmul_f(&[4.0 * a], cc), -1.0)));
+        } else {
+            xs.extend(real_roots_f(b));
+        }
+    }
+    for i in 0..y.len() {
+        for j in i + 1..y.len() {
+            xs.extend(real_roots_f(&resultant_y(&y[i], &y[j])));
+        }
+    }
+    xs.retain(|x| x.is_finite());
+    xs.sort_by(|a, b| a.total_cmp(b));
+    xs.dedup();
+    if xs.is_empty() {
+        xs.push(0.0);
+    }
+    let span = 1f64.max(xs[xs.len() - 1] - xs[0]);
+    let mut samp = vec![xs[0] - span, xs[xs.len() - 1] + span];
+    for i in 0..xs.len() - 1 {
+        samp.push((xs[i] + xs[i + 1]) / 2.0);
+    }
+    let prep = SlackPrep::new(c, rows)?;
+    let mut best = f64::NEG_INFINITY;
+    let mut pt = [0.0, 0.0];
+    for x in samp {
+        let mut ys: Vec<f64> = vec![];
+        for (a, b, cc) in &y {
+            let bv = pval(b, x);
+            let cv = pval(cc, x);
+            if *a != 0.0 {
+                let d = bv * bv - 4.0 * a * cv;
+                if d >= 0.0 {
+                    let sd = d.sqrt();
+                    ys.push((-bv - sd) / (2.0 * a));
+                    ys.push((-bv + sd) / (2.0 * a));
+                }
+            } else if bv != 0.0 {
+                ys.push(-cv / bv);
+            }
+        }
+        ys.retain(|v| v.is_finite());
+        ys.sort_by(|a, b| a.total_cmp(b));
+        ys.dedup();
+        if ys.is_empty() {
+            ys.push(0.0);
+        }
+        let sp = 1f64.max(ys[ys.len() - 1] - ys[0]);
+        let mut cand = vec![ys[0] - sp, ys[ys.len() - 1] + sp];
+        for i in 0..ys.len() - 1 {
+            cand.push((ys[i] + ys[i + 1]) / 2.0);
+        }
+        let mut kb = 0;
+        let mut sb = f64::NEG_INFINITY;
+        for (k, yv) in cand.iter().enumerate() {
+            let s = prep.slack(x, *yv);
+            if s > sb {
+                sb = s;
+                kb = k;
+            }
+        }
+        if sb > best {
+            best = sb;
+            pt = [x, cand[kb]];
+        }
+    }
+    Ok((pt, best > 0.0))
+}

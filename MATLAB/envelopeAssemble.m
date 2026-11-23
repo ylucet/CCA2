@@ -43,7 +43,9 @@ function [env, info] = envelopeAssemble(gA, gB, D)
 %
 % THE FOLD ACROSS PAIRS IS A MAX, and it needs no gluing argument: every candidate is feasible for
 % its own pair, so no pair can overshoot, and the pairs cover the plane -- so the max over the faces
-% IS the envelope. `.claude/assemblyProbe.m` measured both halves.
+% IS the envelope. (A straight tie's two sides are two GROUPS, numel(pairs) + k for the B
+% side: each side's sup is +inf where its own candidates do not cover, and envelopeEval reads
+% +inf for a group that does not cover.) `.claude/assemblyProbe.m` measured both halves.
 %
 % WHY THE FACES ARE RETURNED RATHER THAN A SINGLE SUBDIVISION. Folding the pairs pairwise with `maxQ` is
 % exact and it EXPLODES: each fold overlays two subdivisions, and measured on the convex fixture the
@@ -101,7 +103,11 @@ function [env, info] = envelopeAssemble(gA, gB, D)
             % candidates. The tie becomes one more facet, which is exactly what it is.
             info.nStraight = info.nStraight + 1;
             env = collect(env, cellsFor(nA, dA, [pr.P;  pr.q(4:6)]), k);
-            env = collect(env, cellsFor(nB, dB, [pr.P; -pr.q(4:6)]), k);
+            % The B side is its OWN group: the pair's value is the max of two separate sups, and
+            % each is +inf where none of its own candidates covers x (an unbounded side). Under
+            % one group a finite A-side candidate covered a point where the B side's sup is +inf,
+            % and co f came out finite outside conv(dom f) (review 2026-11-19 #9a).
+            env = collect(env, cellsFor(nB, dB, [pr.P; -pr.q(4:6)]), numel(pairs) + k);
             continue
         end
 

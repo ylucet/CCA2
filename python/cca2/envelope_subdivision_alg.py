@@ -27,7 +27,7 @@ from .alg_face_below import algFaceBelow
 from .alg_row_fails import algRowFails
 from .bridge_member import bridgeMember
 from .cell_interior import cellInterior
-from .cell_sample_point import cellSamplePoint
+from .cell_sample_point import cellSamplePoint, cellWitness
 from .conic_meet import _solve2
 from .envelope_rational_corners import envelopeRationalCorners
 from .errors import error, CCA2Error
@@ -235,6 +235,8 @@ def _liveCell(C, rows):
     hasCurved = any(C[r[0] - 1][6] == 0 and any(x != 0 for x in C[r[0] - 1][0:3]) for r in rows)
     if info['path'] == 'unsureTie' or (hasBranch and hasCurved):
         _, tf, _ = cellSamplePoint(C, rows, _straightRows(C, rows), 1e3)
+        if not tf:                                  # the grid can miss a small cell (#9c)
+            _, tf = cellWitness(C, rows)
     return tf
 
 
@@ -860,6 +862,8 @@ def _interiorPoint(C, rows):
             return cand, True
         if pas == 1:                                # a curved row excludes the centre
             cand, found, _ = cellSamplePoint(C, rows, H, R)
+            if not found:
+                cand, found = cellWitness(C, rows)  # the grid can miss a small cell (#9c)
             if not found:
                 return [0.0, 0.0], False
     return [0.0, 0.0], False

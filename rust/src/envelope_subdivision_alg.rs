@@ -10,7 +10,7 @@ use crate::alg_row_fails::{alg_row_fails, Region, RowCache, RowSpec};
 use crate::bail;
 use crate::biv::M2;
 use crate::bridge::bridge_member;
-use crate::cells::{cell_sample_point, side_i};
+use crate::cells::{cell_sample_point, cell_witness, side_i};
 use crate::conic_meet::solve2f;
 use crate::envelope::{envelope_rational_corners, BFace, Env, FaceKind, PairData, QuadC};
 use crate::envelope_subdivision::{add_key, chebyshev, eval_curve, straight_h};
@@ -280,6 +280,9 @@ pub fn live_cell(c: &[Vec<Z>], rows: &Rows) -> R<bool> {
     let has_curved = rows.iter().any(|r| c[r.0 - 1][6].is_zero() && !all_zero(&c[r.0 - 1][0..3]));
     if unsure || (has_branch && has_curved) {
         let (_, tf2, _) = cell_sample_point(c, rows, &straight_h(c, rows), 1e3, false)?;
+        if !tf2 {
+            return Ok(cell_witness(c, rows)?.1);   // the grid can miss a small cell (#9c)
+        }
         return Ok(tf2);
     }
     Ok(tf)
@@ -976,7 +979,10 @@ fn interior_point(c: &[Vec<Z>], rows: &Rows) -> R<([f64; 2], bool)> {
             return Ok((cand, true));
         }
         if pas == 1 {
-            let (cd, found, _) = cell_sample_point(c, rows, &h, r, false)?;
+            let (mut cd, mut found, _) = cell_sample_point(c, rows, &h, r, false)?;
+            if !found {
+                (cd, found) = cell_witness(c, rows)?;  // the grid can miss a small cell (#9c)
+            }
             if !found {
                 return Ok(([0.0, 0.0], false));
             }

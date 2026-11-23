@@ -59,11 +59,15 @@ def envelopeAssemble(gA, gB, D=None):
             collect(_cellsFor(nA, dA, pr['P']) if sgn > 0 else _cellsFor(nB, dB, pr['P']), k)
             continue
 
-        # a STRAIGHT tie: an ordinary facet of each side polygon
+        # a STRAIGHT tie: an ordinary facet of each side polygon. The pair's value is the MAX of
+        # two separate sups, one per side polygon, and each is +inf where none of its own
+        # candidates covers x (an unbounded side). So the B side is its own group: under one
+        # group index a finite A-side candidate would cover a point where the B side's sup is
+        # +inf, and co f came out finite outside conv(dom f) (review 2026-11-19 #9a).
         if all(x == 0 for x in pr['q'][0:3]):
             info['nStraight'] += 1
             collect(_cellsFor(nA, dA, pr['P'] + [pr['q'][3:6]]), k)
-            collect(_cellsFor(nB, dB, pr['P'] + [[-x for x in pr['q'][3:6]]]), k)
+            collect(_cellsFor(nB, dB, pr['P'] + [[-x for x in pr['q'][3:6]]]), len(pairs) + k)
             continue
 
         try:

@@ -309,6 +309,9 @@ function tf = liveCell(C, rows)
     mixed = any(C(rows(:,1), 7) ~= 0) && any(C(rows(:,1), 7) == 0 & any(C(rows(:,1), 1:3) ~= 0, 2));
     if strcmp(info.path, 'unsureTie') || mixed
         [~, tf] = cellSamplePoint(C, rows, straightRows(C, rows), 1e3);
+        % The grid can miss a cell that is small next to its straight polygon (R6-075: a unit-wide
+        % cell under rows open to |x| = 1e3), so a live cell was dropped (review 2026-11-19 #9c).
+        if ~tf, [~, tf] = cellSamplePoint(C, rows, [], [], 'sector'); end
     end
 end
 
@@ -1273,6 +1276,7 @@ function [pt, ok] = interiorPoint(C, rows)
         if holdsAll(C, rows, cand), pt = cand;  ok = true;  return, end
         if pass == 1                                  % a curved row excludes the centre
             [cand, found] = cellSamplePoint(C, rows, H, R);
+            if ~found, [cand, found] = cellSamplePoint(C, rows, [], [], 'sector'); end   % #9c
             if ~found, return, end
         end
     end

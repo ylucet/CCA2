@@ -107,7 +107,6 @@ fn conj_l_shape_y2() {
 /// Finding 9a (CRITICAL): f = (y^2 - x^2)/2 on the unit square; at (-0.49, 0.01), outside the
 /// square, f** = +inf. Rust (and Python, MATLAB) return 0.24616241455078125.
 #[test]
-#[ignore = "review 2026-11-19 #9a: biconj finite outside conv(dom f)"]
 fn biconj_infinite_outside_the_square() {
     let f = pol(&[[0, 0], [1, 0], [1, 1], [0, 1]], &[[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1]],
                 &[[0, 0, 0, 0, -1, 0, 1, 0, 0, 0]], &[[1, 0]; 4]);
@@ -163,7 +162,6 @@ fn continuous_input_not_refused() {
 /// Finding 9b (CRITICAL): f = -xy + y^2/2 on the L-shape. Fenchel-Young against the engine's OWN
 /// conj: f**(x) >= <s,x> - f*(s) = 1.04606 at the s below; the engine's f**(x) is 0.40871.
 #[test]
-#[ignore = "review 2026-11-19 #9b: biconj below <s,x> - f*(s)"]
 fn biconj_fenchel_young_l_shape() {
     let v = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
     let e: Vec<[usize; 3]> = (0..6).map(|i| [i + 1, (i + 1) % 6 + 1, 1]).collect();
@@ -173,4 +171,32 @@ fn biconj_fenchel_young_l_shape() {
     let g = cca2::conj_q::conj_q(&f).unwrap().0.eval(&[s]).unwrap().0[0];
     let h = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[x]).unwrap()[0];
     assert!(h >= s[0] * x[0] + s[1] * x[1] - g - 1e-9, "f** = {} < <s,x> - f*(s) = {}", h, s[0] * x[0] + s[1] * x[1] - g);
+}
+
+/// Finding 9c/9d (CRITICAL): two continuous pieces on a quadrilateral (R3-072). x is in piece 1,
+/// f(x) = -12.29, so f**(x) is finite; the certified bracket is [-14.68169, -14.67993]. At
+/// (-2.49, 1.85) a convex combination of three domain points gives -18.455, so f** <= that.
+/// The tie-arc screen parametrised the parabola tie through a spurious 1e34 point and dropped
+/// the needed atom pair (+inf, and too high where another pair covered).
+#[test]
+fn biconj_finite_inside_the_domain_r3_072() {
+    let f = pol(&[[-3, 2], [-1, 0], [2, 0], [-2, 3]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 0, 2, -2, 2, 1, 1], [0, 0, 0, 0, 4, 9, 8, -4, -8, 5]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let h = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap();
+    let v = h.eval(&[[-2.4921875, 1.51171875], [-2.49, 1.85]]).unwrap();
+    assert!(v[0] >= -14.681688881664497 - 1e-9 && v[0] <= -14.679931640625, "got {}", v[0]);
+    assert!(v[1] <= -18.455, "got {}", v[1]);
+}
+
+/// Finding 9c (CRITICAL), small-cell mechanism: two continuous pieces on a two-cone fan (R6-075).
+/// x is in piece 2, so f**(x) is finite; certified bracket [1.80731, 1.86682]. The subdivision
+/// dropped the live unit-wide cell holding x: its interior-point grid spans a 1e3 box.
+#[test]
+fn biconj_finite_inside_the_domain_r6_075() {
+    let f = pol(&[[0, 0], [1, 1], [0, 1], [-1, 2]], &[[1, 2, 0], [1, 3, 0], [1, 4, 0]],
+                &[[0, 0, 0, 0, 2, 1, 2, 1, 1, 0], [0, 0, 0, 0, 0, -1, 2, 3, 1, 0]],
+                &[[1, 0], [2, 1], [0, 2]]);
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-0.4088541666666667, 1.1783854166666667]]).unwrap();
+    assert!(v[0] >= 1.8073059721130218 - 1e-9 && v[0] <= 1.8668169186760986, "got {}", v[0]);
 }

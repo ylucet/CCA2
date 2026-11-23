@@ -73,6 +73,32 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             tc.verifyGreaterThanOrEqual(h.eval(x), s*x.' - g.eval(s) - 1e-9);
         end
 
+        function biconjFiniteInsideTheDomainR3072(tc)
+            % Finding 9c/9d (CRITICAL): two continuous pieces on a quadrilateral (R3-072). x is in
+            % piece 1 (f(x) = -12.29), so f** is finite there; certified bracket
+            % [-14.68169, -14.67993]. At (-2.49, 1.85) a convex combination of three domain points
+            % gives -18.455, so f** <= that. The tie-arc screen parametrised the parabola tie
+            % through a spurious 1e34 point and dropped the needed atom pair.
+            f = QuaPol([-3 2; -1 0; 2 0; -2 3], [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1], ...
+                       [0 0 0 0 0 2 -2 2 1 1; 0 0 0 0 4 9 8 -4 -8 5], [1 0; 1 0; 1 2; 2 0; 2 0]);
+            h = biconjQ(f);
+            v = h.eval([-2.4921875 1.51171875; -2.49 1.85]);
+            tc.verifyGreaterThanOrEqual(v(1), -14.681688881664497 - 1e-9);
+            tc.verifyLessThanOrEqual(v(1), -14.679931640625);
+            tc.verifyLessThanOrEqual(v(2), -18.455);
+        end
+
+        function biconjFiniteInsideTheDomainR6075(tc)
+            % Finding 9c (CRITICAL), small-cell mechanism: two continuous pieces on a two-cone fan
+            % (R6-075). x is in piece 2, so f** is finite; certified bracket [1.80731, 1.86682]. The
+            % subdivision dropped the live unit-wide cell holding x (a grid over a 1e3 box).
+            f = QuaPol([0 0; 1 1; 0 1; -1 2], [1 2 0; 1 3 0; 1 4 0], ...
+                       [0 0 0 0 2 1 2 1 1 0; 0 0 0 0 0 -1 2 3 1 0], [1 0; 2 1; 0 2]);
+            v = biconjQ(f).eval([-0.4088541666666667 1.1783854166666667]);
+            tc.verifyGreaterThanOrEqual(v, 1.8073059721130218 - 1e-9);
+            tc.verifyLessThanOrEqual(v, 1.8668169186760986);
+        end
+
         function conjCPLQTinyPositiveEigenvalue(tc)
             % Finding 7 (legacy 'cplq' engine, MAJOR there). f = (x^2 + y^2)/2^31 is strictly convex,
             % f*(s) = 2^29 |s|^2 everywhere. conjCPLQ's absolute eig(Q) > sqrt(eps) test sends it

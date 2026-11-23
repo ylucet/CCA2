@@ -38,10 +38,4 @@ def test_biconjugate_is_the_convex_envelope(i):
     f = io_matlab.quaPolFrom(BICONJ[i]['in'])
     h = biconjQ(f)
     bad = checkBiconj(f, h)
-    if bad and all('outside conv(dom f)' in d for d in bad):
-        # review 2026-11-19 finding 9a (out of scope here): the engine's biconjugate is
-        # finite outside conv(dom f), where it is +infinity. Finding 5's out-of-box sampling
-        # exposes it on this record (f = (x^2 - y^2)/2 on the unit square); its dedicated
-        # xfail test is test_review_2026_11_19.py::test_biconj_infinite_outside_the_square.
-        pytest.xfail('review 2026-11-19 #9a: biconjugate finite outside conv(dom f)')
     assert bad == []

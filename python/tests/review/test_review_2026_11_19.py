@@ -182,7 +182,6 @@ LV = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]
 LE = [[i + 1, (i + 1) % 6 + 1, 1] for i in range(6)]
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9a: f** finite outside conv(dom f)')
 def test_biconj_infinite_outside_the_square():
     # f = (y^2 - x^2)/2 on the unit square (E-square-H-101); x = (-0.49, 0.01) is outside the
     # square, so f**(x) = +inf. Engines: 0.24616241455078125.
@@ -190,7 +189,6 @@ def test_biconj_infinite_outside_the_square():
     assert f.biconj().eval([[-0.4921875, 0.01171875]])[0][0] == INF
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9b: f** below <s,x> - f*(s) (Fenchel-Young vs its own conj)')
 def test_biconj_fenchel_young_L_shape():
     # f = -xy + y^2/2 on the L-shape (E-L-H0-11). For ANY s, f**(x) >= <s,x> - f*(s); with the
     # engine's OWN conj at s below, the bound is 1.04606, the engine's f**(x) is 0.40871.
@@ -204,7 +202,6 @@ def test_biconj_fenchel_young_L_shape():
     assert h[0] >= s[0] * x[0] + s[1] * x[1] - g - 1e-9
 
 
-@pytest.mark.xfail(strict=True, reason='review 2026-11-19 #9c: f** = +inf at a point of dom f')
 def test_biconj_finite_inside_the_domain_R3_072():
     # two continuous pieces on a quadrilateral (R3-072); x is in piece 1, f(x) = -12.29 is finite,
     # so f**(x) <= f(x) < inf. Python returns +inf.
@@ -213,9 +210,25 @@ def test_biconj_finite_inside_the_domain_R3_072():
                [[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]])
     x = [-2.4921875, 1.51171875]
     assert math.isfinite(check.evalQuaPol(f, [x])[0])
-    h = f.biconj().eval([x])
+    h = f.biconj().eval([x, [-2.49, 1.85]])
     h = h[0] if isinstance(h, tuple) else h
     assert math.isfinite(h[0])
+    # 9c: the certified bracket at x; 9d: a convex combination of three domain points gives
+    # -18.455 at (-2.49, 1.85), and the engine said -17.29 there
+    assert -14.681688881664497 - 1e-9 <= h[0] <= -14.679931640625
+    assert h[1] <= -18.455
+
+
+def test_biconj_finite_inside_the_domain_R6_075():
+    # finding 9c, small-cell mechanism: two continuous pieces on a two-cone fan (R6-075). x is in
+    # piece 2, so f**(x) is finite; certified bracket [1.80731, 1.86682]. The subdivision dropped
+    # the live unit-wide cell holding x: its interior-point grid spans a 1e3 box.
+    f = QuaPol([[0, 0], [1, 1], [0, 1], [-1, 2]], [[1, 2, 0], [1, 3, 0], [1, 4, 0]],
+               [[0, 0, 0, 0, 2, 1, 2, 1, 1, 0], [0, 0, 0, 0, 0, -1, 2, 3, 1, 0]],
+               [[1, 0], [2, 1], [0, 2]])
+    h = f.biconj().eval([[-0.4088541666666667, 1.1783854166666667]])
+    h = h[0] if isinstance(h, tuple) else h
+    assert 1.8073059721130218 - 1e-9 <= h[0] <= 1.8668169186760986
 
 
 # ---------------------------------------------------------------------------------------------
