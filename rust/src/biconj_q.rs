@@ -75,7 +75,7 @@ pub fn biconj_q(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
         let hk = hof(k - 1);
         let (vsk, rays, bnd) = piece_geometry_b(obj, k)?;
         if !bnd {
-            let lk = vec![obj.fn_[k - 1][7].clone(), obj.fn_[k - 1][8].clone()];
+            let lk = [obj.fn_[k - 1][7].clone(), obj.fn_[k - 1][8].clone()];
             let mut diverges = false;
             'outer: for d in &rays {
                 let a = quad(d, &hk, d);
@@ -186,7 +186,7 @@ pub fn hull_rows(obj: &QuaPol) -> R<Vec<Vec<Z>>> {
         let (pn, pd) = (&obj.vn[a - 1], &obj.vd[a - 1]);
         let (qn, qd) = (&obj.vn[b - 1], &obj.vd[b - 1]);
         let n = vec![-(&qn[1] * pd - &pn[1] * qd), &qn[0] * pd - &pn[0] * qd];
-        let row = vec![&n[0] * pd, &n[1] * pd, -dot(&n, pn)];
+        let row = [&n[0] * pd, &n[1] * pd, -dot(&n, pn)];
         let g = row[0].gcd(&row[1]).gcd(&row[2]);
         r.push(row.iter().map(|x| x.div_floor(&g)).collect());
     }
@@ -265,7 +265,7 @@ pub fn concave_envelope(obj: &QuaPol) -> R<crate::qua_con::QuaCon> {
                 let v = &vi[v - 1];
                 let g: Vec<Z> = mv(&hn, v).iter().zip(ln.iter()).map(|(x, y)| x + &vd * y).collect();
                 let ri = dot(&g, d);
-                if rho.as_ref().map_or(true, |r| &ri < r) {
+                if rho.as_ref().is_none_or(|r| &ri < r) {
                     rho = Some(ri);
                 }
             }
@@ -415,8 +415,8 @@ pub fn hull_half_planes(vi: &[Vec<Z>], vd: &Z, vs: &[usize], dirs: &[Vec<Z>]) ->
                 }
             }
             if ok {
-                for i in 0..r {
-                    let t = dot(&n, &dirs[i]);
+                for d in dirs.iter().take(r) {
+                    let t = dot(&n, d);
                     if t.is_zero() {
                         continue;
                     }

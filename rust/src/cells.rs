@@ -680,8 +680,8 @@ fn try_one(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool, bool)
     if quadp.is_empty() || quadp.len() == 2 {
         quadp = vec![zi(1), zi(0)];
     }
-    let lam: Vec<Qs>;
-    if a1.len() == 2 {
+    
+    let lam: Vec<Qs> = if a1.len() == 2 {
         let cr = cross2(&a1[0], &a2[0], &a1[1], &a2[1], &quadp)?;
         if qs_sign(&cr, &quadp, &iv)? != 0 {
             return Ok((false, false));
@@ -691,7 +691,7 @@ fn try_one(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool, bool)
             return Ok((false, false));
         }
         let n2 = qs_add(&qs_mul(&a1[1], &a1[1], &quadp)?, &qs_mul(&a2[1], &a2[1], &quadp)?)?;
-        lam = vec![n2, qneg(&dt)];
+        vec![n2, qneg(&dt)]
     } else {
         let mut l = vec![
             cross2(&a1[1], &a2[1], &a1[2], &a2[2], &quadp)?,
@@ -712,8 +712,8 @@ fn try_one(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool, bool)
         if sg.iter().all(|s| *s == 0) {
             return Ok((false, false));
         }
-        lam = l;
-    }
+        l
+    };
     let mut tot = qs(zi(0), zi(0), zi(1));
     for k in 0..cc.len() {
         tot = qs_add(&tot, &qs_mul(&lam[k], &cc[k], &quadp)?)?;
@@ -787,7 +787,7 @@ fn try_two_fields(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool
         let b = &c[rows[t].0 - 1][6];
         let (res, slot) = if b.is_zero() {
             (exact_half_plane(c, rows, t, 0)?, 0)
-        } else if &c[rows[t].0 - 1][0..6] == &u[0][..] {
+        } else if c[rows[t].0 - 1][0..6] == u[0][..] {
             (exact_half_plane(c, rows, t, ref1)?, 1)
         } else {
             (exact_half_plane(c, rows, t, ref2)?, 2)
@@ -801,8 +801,8 @@ fn try_two_fields(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool
         cc.push(embed(&k, slot)?);
     }
     let n = a1.len();
-    let lam: Vec<Qs2>;
-    if n == 2 {
+    
+    let lam: Vec<Qs2> = if n == 2 {
         let cr = cross2two(&a1[0], &a2[0], &a1[1], &a2[1], &qq1, &qq2)?;
         let (sg, ok) = qs2_sign(&cr, &qq1, &iv1, &qq2, &iv2)?;
         if !ok {
@@ -820,7 +820,7 @@ fn try_two_fields(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool
             return Ok((false, false));
         }
         let n2 = qs2_add(&qs2_mul(&a1[1], &a1[1], &qq1, &qq2)?, &qs2_mul(&a2[1], &a2[1], &qq1, &qq2)?)?;
-        lam = vec![n2, qneg2(&dt)];
+        vec![n2, qneg2(&dt)]
     } else {
         let mut l = vec![
             cross2two(&a1[1], &a2[1], &a1[2], &a2[2], &qq1, &qq2)?,
@@ -845,8 +845,8 @@ fn try_two_fields(c: &[Vec<Z>], rows: &[(usize, i64)], idx: &[usize]) -> R<(bool
         if sg.iter().all(|s| *s == 0) {
             return Ok((false, false));
         }
-        lam = l;
-    }
+        l
+    };
     let mut tot: Qs2 = [zi(0), zi(0), zi(0), zi(0), zi(1)];
     for k in 0..cc.len() {
         tot = qs2_add(&tot, &qs2_mul(&lam[k], &cc[k], &qq1, &qq2)?)?;
@@ -1250,7 +1250,7 @@ pub fn merge_adjacent_cells(fn_: Vec<Vec<Z>>, fd: Vec<Z>, fc: Vec<Vec<FcRow>>) -
             groups.entry((fn_[k].clone(), fd[k].clone())).or_default().push(k);
         }
         let mut dead: BTreeSet<usize> = BTreeSet::new();
-        for (_, idx) in groups.iter() {
+        for idx in groups.values() {
             if idx.len() < 2 {
                 continue;
             }

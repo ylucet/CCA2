@@ -328,7 +328,7 @@ fn pseudo_rem(p: &[Z], q: &[Z]) -> Vec<Z> {
     while r.len() >= q.len() && r.iter().any(|x| !x.is_zero()) {
         let shift = r.len() - q.len();
         let mut qq = q.clone();
-        qq.extend(std::iter::repeat(zi(0)).take(shift));
+        qq.extend(std::iter::repeat_n(zi(0), shift));
         let r0 = r[0].clone();
         let nr: Vec<Z> = r.iter().zip(qq.iter()).map(|(a, b)| &lq * a - &r0 * b).collect();
         r = trim_poly(&nr[1..]);

@@ -23,7 +23,7 @@ pub fn unsubdivided(env: Env) -> AlgCon {
 
 pub fn subdivide_pair(env: Env, dom: &[Vec<Z>]) -> R<AlgCon> {
     if has_irrational_face(&env)? {
-        match envelope_subdivision_alg(&[env.clone()], dom, &[], &Default::default()) {
+        match envelope_subdivision_alg(std::slice::from_ref(&env), dom, &[], &Default::default()) {
             Ok(m) => {
                 if m.iter().any(|x| x.kind == SubKind::Bridge) {
                     return Ok(AlgCon::AlgCrv(assemble_alg_crv(&m)?));
@@ -41,7 +41,7 @@ pub fn subdivide_pair(env: Env, dom: &[Vec<Z>]) -> R<AlgCon> {
         Ok(g) => Ok(AlgCon::QuaCon(g)),
         Err(me) => {
             if me.id == "envelopeSubdivision:bridgeCompetes" {
-                return match envelope_subdivision_alg(&[env.clone()], &[], &[], &Default::default()) {
+                return match envelope_subdivision_alg(std::slice::from_ref(&env), &[], &[], &Default::default()) {
                     Ok(m) => Ok(AlgCon::AlgCrv(assemble_alg_crv(&m)?)),
                     Err(me2) => {
                         if me2.id != "envelopeSubdivisionAlg:faceKind" {

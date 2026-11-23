@@ -126,8 +126,8 @@ fn rational_corner(n: &[Z], d: &Z, nn: &[Vec<Z>], m: &[Z], qq: &Z, p: &[Vec<Z>],
     let adj = [[mn[1][1].clone(), -&mn[0][1]], [-&mn[1][0], mn[0][0].clone()]];
     let sdm = zi(sign(&dm) as i64);
     let mut con = vec![];
-    for r in 0..2 {
-        let rr = vec![-&sdm * &pd * &adj[r][0], -&sdm * &pd * &adj[r][1], &sdm * (&adj[r][0] * &pnum[0] + &adj[r][1] * &pnum[1])];
+    for ar in &adj {
+        let rr = vec![-&sdm * &pd * &ar[0], -&sdm * &pd * &ar[1], &sdm * (&ar[0] * &pnum[0] + &ar[1] * &pnum[1])];
         let first = rr.iter().find(|x| !x.is_zero()).unwrap();
         let mut row = conic_lin(&rr)?;
         row.push(zi(sign(first) as i64));
@@ -210,8 +210,8 @@ fn q1(a: Z) -> Qs {
 }
 
 pub fn corner_wedge_rows(f: &BFace, n: &[Z], d: &Z, tie: &[Z], side: i64) -> R<Vec<Vec<Z>>> {
-    let nn = vec![vec![n[4].clone(), n[5].clone()], vec![n[5].clone(), n[6].clone()]];
-    let m = vec![n[7].clone(), n[8].clone()];
+    let nn = [vec![n[4].clone(), n[5].clone()], vec![n[5].clone(), n[6].clone()]];
+    let m = [n[7].clone(), n[8].clone()];
     let sg = f.sigma.as_ref().unwrap();
     let qq: Vec<Z> = sg.quad.to_vec();
     let na = &sg.na;
@@ -233,8 +233,8 @@ pub fn corner_wedge_rows(f: &BFace, n: &[Z], d: &Z, tie: &[Z], side: i64) -> R<V
     let mf = f.mm;
     let xw = [f.p[0] - (mf[0][0] + mf[0][1]), f.p[1] - (mf[1][0] + mf[1][1])];
     let mut rows = vec![];
-    for i in 0..2 {
-        let (aa, bb) = edge_form(&adj[i], &[p1.clone(), p2.clone()], &qq)?;
+    for ai in &adj {
+        let (aa, bb) = edge_form(ai, &[p1.clone(), p2.clone()], &qq)?;
         match row_for(&aa, &bb, &qq, xw, &ivs)? {
             None => return Ok(vec![]),
             Some(r) => rows.push(r),
@@ -384,7 +384,7 @@ fn short_between(a: &Q, b: &Q) -> Q {
         let step = if k >= 0 { Q::from_integer(Z::one() << k as usize) } else { Q::new(Z::one(), Z::one() << (-k) as usize) };
         let mut mm = (a / &step).ceil() * &step;
         if &mm == a {
-            mm = mm + &step;
+            mm += &step;
         }
         if &mm < b {
             return mm;

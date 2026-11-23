@@ -57,7 +57,7 @@ pub fn envelope_subdivision_alg(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], o
 pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(Vec<SubFace>, SubInfo)> {
     if envs.len() > 1 {
         // one subdivision per envelope: independent
-        let res = crate::par::map(envs, |e| esa(&[e.clone()], dom, cuts, opts))?;
+        let res = crate::par::map(envs, |e| esa(std::slice::from_ref(e), dom, cuts, opts))?;
         let mut subs = vec![];
         let mut infos = vec![];
         for (sb, inf) in res {
@@ -317,7 +317,7 @@ fn alg_empty(c: &[Vec<Z>], rows: &Rows, con_rows: &[Vec<Z>], alg_rows: &[AlgRow]
         if qk.is_empty() || n_fail[t] < qk.len() {
             continue;
         }
-        if row_fails(c, rows, con_rows, &[a.clone()])? {
+        if row_fails(c, rows, con_rows, std::slice::from_ref(a))? {
             return Ok(true);
         }
     }
@@ -601,6 +601,8 @@ fn drop_below(irr: Vec<Irr>, c: &[Vec<Z>], rows: &Rows, p: &[[f64; 2]], quad: &[
         v.push(z.into_iter().map(|x| if x.is_finite() { x } else { f64::NEG_INFINITY }).collect());
     }
     let mut top = vec![];
+    // column index into the 2-D array v: load-bearing, so no iterator rewrite
+    #[allow(clippy::needless_range_loop)]
     for t in 0..p.len() {
         let col: Vec<f64> = (0..n).map(|i| v[i][t]).collect();
         let mx = col.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
@@ -808,21 +810,21 @@ fn curve_owners(c: &[Vec<Z>], req: &Req, n_quad: usize, bridges: &[&BFace], c_en
         let s = if owners[src - 1].is_empty() { vec![vec![]] } else { owners[src - 1].clone() };
         owners[j].extend(s);
     }
-    for j in 0..n {
-        if owners[j].is_empty() {
-            owners[j] = vec![vec![]];
+    for ow in owners.iter_mut().take(n) {
+        if ow.is_empty() {
+            *ow = vec![vec![]];
             continue;
         }
         let mut seen: BTreeSet<Vec<(usize, i64)>> = BTreeSet::new();
         let mut uniq = vec![];
-        for r in &owners[j] {
+        for r in ow.iter() {
             let mut k = r.clone();
             k.sort();
             if seen.insert(k) {
                 uniq.push(r.clone());
             }
         }
-        owners[j] = uniq;
+        *ow = uniq;
     }
     owners
 }
@@ -1207,21 +1209,21 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
     let mut cell_rows: Vec<Vec<Rows>> = vec![];
     let mut covered: Vec<Vec<bool>> = vec![];
     let mut faces_of: Vec<Vec<Vec<usize>>> = vec![];
-    for g in 0..np {
-        let cc = &infos[g].cell_con;
+    for info in infos {
+        let cc = &info.cell_con;
         cell_rows.push(cc.iter().map(|c| key_rows(&mut keys, c)).collect());
-        let fo: Vec<Vec<usize>> = (0..cc.len()).map(|k| infos[g].face_cell.iter().enumerate().filter(|(_, fc)| **fc == k + 1).map(|(i, _)| i).collect()).collect();
+        let fo: Vec<Vec<usize>> = (0..cc.len()).map(|k| info.face_cell.iter().enumerate().filter(|(_, fc)| **fc == k + 1).map(|(i, _)| i).collect()).collect();
         covered.push(fo.iter().map(|x| !x.is_empty()).collect());
         faces_of.push(fo);
     }
     let mut tup: Vec<Vec<usize>> = (0..cell_rows[0].len()).map(|k| vec![k]).collect();
     let mut trow: Vec<Rows> = cell_rows[0].clone();
-    for g in 1..np {
-        // every current tuple is merged with every cell of envelope g independently; results in order
+    for grp in cell_rows.iter().skip(1) {
+        // every current tuple is merged with every cell of this envelope independently; results in order
         let merged = crate::par::map_range(trow.len(), |a| -> R<Vec<(Vec<usize>, Rows)>> {
             let mut o = vec![];
-            for k in 0..cell_rows[g].len() {
-                let r = match merge_rows(&trow[a], &cell_rows[g][k]) {
+            for (k, cr) in grp.iter().enumerate() {
+                let r = match merge_rows(&trow[a], cr) {
                     None => continue,
                     Some(r) => r,
                 };
@@ -1299,11 +1301,11 @@ fn min_overlay(subs: &[Vec<SubFace>], infos: &[SubInfo], budget: f64) -> R<Vec<S
                 let mut con = cb.2.clone();
                 let mut alg = cb.3.clone();
                 let mut ii = vec![];
-                for i in 0..gs.len() {
+                for (i, pi) in pick.iter().enumerate().take(gs.len()) {
                     if i == w {
                         continue;
                     }
-                    le_rows(f, pick[i], &mut con, &mut alg, &mut ii)?;
+                    le_rows(f, pi, &mut con, &mut alg, &mut ii)?;
                 }
                 let con = unique_stable(con);
                 if !overlay_live(&keys, rows, &con, &alg, &ii, &mut pp)? {
