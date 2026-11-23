@@ -90,6 +90,16 @@ def biconjQ(obj, opts=None):
     Vi, vd = rat_q.combineDen(obj.VN, obj.VD)
     for k in range(1, nf + 1):
         Hk = Hof(k - 1)
+        if not any(r[0] == k or r[1] == k for r in obj.F):
+            # A face owning no edge is the whole plane, and it reaches this loop only because it
+            # is not convex (a convex single piece took the short-circuit above): f then runs
+            # DOWNWARD at infinity, has no affine minorant, and co f is -infinity everywhere --
+            # the same answer as the cone case below, so the same identifier (review #17).
+            error('PLQ:biconjQ:minusInfinity',
+                  'piece %d owns no edge, so it is the whole plane, and it is not convex (a '
+                  'convex single piece would have taken the short-circuit above): f runs '
+                  'DOWNWARD at infinity, has no affine minorant, and co f is -infinity '
+                  'everywhere. That is the right answer and there is nowhere to put it.' % k)
         vsk, rays, bnd = pieceGeometryB(obj, k)
         if not bnd:
             Lk = [obj.fN[k - 1][7], obj.fN[k - 1][8]]

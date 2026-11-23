@@ -35,7 +35,8 @@ def biconjAtoms(f, mode=None):
         _, D = conjQ(f)
         D = [list(r) for r in sorted(set(tuple(r) for r in D))]
         if any(r[0] == 0 and r[1] == 0 and r[2] < 0 for r in D):
-            error('biconjAtoms:emptyDomain',
+            # one identifier for every f** = -infinity refusal, whatever route saw it first (review #17)
+            error('PLQ:biconjQ:minusInfinity',
                   'dom f* is empty: f has no affine minorant, so co f is -infinity everywhere.')
 
     atoms, forms = collectAtoms(f)

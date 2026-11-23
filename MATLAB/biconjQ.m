@@ -222,6 +222,17 @@ function h = biconjQ(obj, opts)
     % coupling, done in one step.
     for k = 1:nf
         Hk = [obj.fN(k,5) obj.fN(k,6); obj.fN(k,6) obj.fN(k,7)];
+        if ~any(obj.F == k, 'all')
+            % A face owning no edge is the whole plane, and it reaches this loop only because it
+            % is not convex (a convex single piece took the short-circuit above): f then runs
+            % DOWNWARD at infinity, has no affine minorant, and co f is -infinity everywhere --
+            % the same answer as the cone case below, so the same identifier (review #17).
+            error('PLQ:biconjQ:minusInfinity', ...
+                  ['piece %d owns no edge, so it is the whole plane, and it is not convex (a ' ...
+                   'convex single piece would have taken the short-circuit above): f runs ' ...
+                   'DOWNWARD at infinity, has no affine minorant, and co f is -infinity ' ...
+                   'everywhere. That is the right answer and there is nowhere to put it.'], k);
+        end
         [vsk, rays, bnd] = pieceGeometryB(obj, k);
         if ~bnd
             % TWO DIFFERENT SITUATIONS, and saying which is which is the point of this branch.

@@ -73,6 +73,13 @@ pub fn biconj_q(obj: &QuaPol, opts: &Opts) -> R<AlgCon> {
     let (vi, vd) = combine_den(&obj.vn, &obj.vd)?;
     for k in 1..=nf {
         let hk = hof(k - 1);
+        if !obj.f.iter().any(|r| r[0] == k || r[1] == k) {
+            // a face owning no edge is the whole plane, and it reaches this loop only because it is
+            // not convex (a convex single piece took the short-circuit above): f then runs DOWNWARD
+            // at infinity, has no affine minorant, and co f is -infinity everywhere -- the same
+            // answer as the cone case below, so the same identifier (review #17)
+            bail!("PLQ:biconjQ:minusInfinity", "piece {} owns no edge, so it is the whole plane, and it is not convex (a convex single piece would have taken the short-circuit above): f runs DOWNWARD at infinity, has no affine minorant, and co f is -infinity everywhere.", k);
+        }
         let (vsk, rays, bnd) = piece_geometry_b(obj, k)?;
         if !bnd {
             let lk = [obj.fn_[k - 1][7].clone(), obj.fn_[k - 1][8].clone()];

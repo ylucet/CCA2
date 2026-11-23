@@ -200,3 +200,25 @@ fn biconj_finite_inside_the_domain_r6_075() {
     let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-0.4088541666666667, 1.1783854166666667]]).unwrap();
     assert!(v[0] >= 1.8073059721130218 - 1e-9 && v[0] <= 1.8668169186760986, "got {}", v[0]);
 }
+
+/// Finding 17 (MINOR): ONE identifier for every f** = -infinity refusal. f = -x^2/2 - y^2/2 on
+/// the WHOLE PLANE (no vertices, no edges): not convex, so it did not take the convex
+/// short-circuit, and f has no affine minorant. It used to refuse as PLQ:biconjQ:noFace while the
+/// cone case uses PLQ:biconjQ:minusInfinity for the same answer.
+#[test]
+fn biconj_whole_plane_refused_as_minus_infinity() {
+    let f = QuaPol::new(vec![], vec![], vec![n(&[0, 0, 0, 0, -1, 0, -1, 0, 0, 0])], vec![]).unwrap();
+    let e = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap_err();
+    assert_eq!(e.id, "PLQ:biconjQ:minusInfinity", "got {:?}", e.id);
+}
+
+/// Finding 17 (MINOR), fan case: f = -x^2 - y^2 on the cone apex (0,0), rays (1,0), (0,1): dom f*
+/// is empty (golden record trace_biconj 774). It used to refuse as biconjAtoms:emptyDomain, the
+/// third identifier for the same answer.
+#[test]
+fn biconj_atoms_fan_refused_as_minus_infinity() {
+    let f = pol(&[[0, 0], [1, 0], [0, 1]], &[[1, 2, 0], [1, 3, 0]],
+                &[[0, 0, 0, 0, -2, 0, -2, 0, 0, 0]], &[[1, 0], [0, 1]]);
+    let e = cca2::biconj_atoms::biconj_atoms(&f).unwrap_err();
+    assert_eq!(e.id, "PLQ:biconjQ:minusInfinity", "got {:?}", e.id);
+}

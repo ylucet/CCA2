@@ -137,7 +137,8 @@ pub fn biconj_atoms(f: &QuaPol) -> R<(Vec<Env>, Vec<AtomTri>)> {
         let (_, dd) = conj_q(f)?;
         d = dd.into_iter().collect::<BTreeSet<_>>().into_iter().collect();
         if d.iter().any(|r| r[0].is_zero() && r[1].is_zero() && sign(&r[2]) < 0) {
-            bail!("biconjAtoms:emptyDomain", "dom f* is empty: f has no affine minorant, so co f is -infinity everywhere.");
+            // one identifier for every f** = -infinity refusal, whatever route saw it first (review #17)
+            bail!("PLQ:biconjQ:minusInfinity", "dom f* is empty: f has no affine minorant, so co f is -infinity everywhere.");
         }
     }
     let df: Vec<[f64; 3]> = d.iter().map(|r| [to_f64(&r[0]), to_f64(&r[1]), to_f64(&r[2])]).collect();
