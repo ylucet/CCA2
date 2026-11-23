@@ -185,6 +185,24 @@ function tf = cadInterior(EcQ, rows)
 end
 
 function tf = cadExact(EcQ, rows)
+% Memoised: the decision is a pure function of the cell's conics and signs, and conjQ asks about the
+% same cell again and again (compactCells.dropImplied removes one row at a time, assembleQuaConCells
+% revisits cells). Only successes are stored; ratQ:overflow still propagates.
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'logical'); end
+    idx = unique(rows(:,1));
+    sgn = zeros(numel(idx), 1);
+    for k = 1:numel(idx)
+        sd = unique(rows(rows(:,1) == idx(k), 2));
+        if numel(sd) == 1, sgn(k) = sd; else, sgn(k) = 2; end
+    end
+    key = sprintf('%.17g,', [reshape(EcQ(idx, 1:6).', 1, []), sgn.']);
+    if isKey(memo, key), tf = memo(key); return, end
+    tf = cadExactRaw(EcQ, rows);
+    memo(key) = tf;
+end
+
+function tf = cadExactRaw(EcQ, rows)
     tf = false;
     idx = unique(rows(:,1));
     sg = zeros(numel(idx), 1);
@@ -294,6 +312,15 @@ function out = sharedLineCrossing(p, q, u, w)
 % p = L Mp and q = L Mq share the line L (resultant == 0, p and q not proportional):
 % T = alpha' p - alpha q = u(x) y + w(x) = L * N with N vertical, so L = T / gcd(u, w). Returns the
 % polynomial [den, -num] of the abscissa of Mp ^ Mq ({} when they are parallel). Symbolic: rare.
+    persistent memo
+    if isempty(memo), memo = containers.Map('KeyType', 'char', 'ValueType', 'any'); end
+    key = sprintf('%.17g,', [p(:).', q(:).']);
+    if isKey(memo, key), out = memo(key); return, end
+    out = sharedLineCrossingRaw(p, q, u, w);
+    memo(key) = out;
+end
+
+function out = sharedLineCrossingRaw(p, q, u, w)
     out = {};
     if isempty(u), error('cellHasInterior:internal', 'shared line factor with no y term'); end
     if isempty(w), g = ratQ.polyPrimitive(u); else, g = ratQ.polyGcd(u, w); end

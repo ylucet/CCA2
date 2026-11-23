@@ -2031,14 +2031,21 @@ classdef ratQ
         % objective: divide out the integer content, keeping the SIGN of the leading coefficient.
         % The content is positive, so this changes no sign anywhere -- which is what lets the Sturm
         % chain be reduced at every step without disturbing the count.
-            p = ratQ.polyTrim(p);
-            if isempty(p), return, end
-            g = 0;
-            for i = 1:numel(p)
-                if p(i) ~= 0, g = gcd(g, abs(p(i))); end
+            % Hot path (16M calls in one conjQ of the L-shape): trim inline and stop the content loop
+            % as soon as it reaches 1. The checks are those of ratQ.chk, run on the inputs that matter.
+            k = find(p ~= 0, 1);
+            if isempty(k), p = []; return, end
+            p = p(k:end);
+            if ~isreal(p) || ~all(isfinite(p)) || any(p ~= round(p)) || any(abs(p) >= ratQ.LIMIT)
+                ratQ.chk(p, 'primitive polynomial');
+            end
+            a = abs(p);
+            g = a(1);
+            for i = 2:numel(a)
+                if g == 1, break, end
+                g = gcd(g, a(i));
             end
             if g > 1, p = p / g; end
-            ratQ.chk(p, 'primitive polynomial');
         end
 
         function r = polyPremPrimitive(a, b)
@@ -2243,9 +2250,28 @@ classdef ratQ
         % objective: the primitive integer GCD of two integer polynomials.
         % Euclid on pseudo-remainders, taking the primitive part each round so the coefficients
         % stay bounded -- see polyPseudoRem for what happens without that.
+            a = ratQ.polyTrim(a);  b = ratQ.polyTrim(b);
+            if isempty(a), g = ratQ.polyPrimitive(b); return, end
+            if isempty(b), g = ratQ.polyPrimitive(a); return, end
+            % Closed form when one side is a constant or linear (the common case in cellHasInterior's
+            % columns, millions of calls): the gcd is the linear factor itself iff it divides the
+            % other, else 1. Divisibility by a1 x + a0 is exact: Horner of b at -a0/a1, scaled by a1,
+            % every step checked against 2^53.
+            if numel(a) <= 2 || numel(b) <= 2
+                if numel(a) > numel(b), t = a; a = b; b = t; end   % a is the shorter (degree <= 1)
+                if numel(a) <= 1, g = 1; return, end
+                v = b(1);  exact = true;
+                for i = 2:numel(b)
+                    t1 = v * (-a(2));  t2 = b(i) * a(1)^(i-1);
+                    if abs(t1) + abs(t2) >= 2^53, exact = false; break, end   % not provably exact:
+                    v = t1 + t2;                                              % take the general path
+                end
+                if exact
+                    if v == 0, g = ratQ.polyPrimitive(a); else, g = 1; end
+                    return
+                end
+            end
             a = ratQ.polyPrimitive(a);  b = ratQ.polyPrimitive(b);
-            if isempty(a), g = b; return, end
-            if isempty(b), g = a; return, end
             while true
                 % polyPremPrimitive, not polyPseudoRem: the two differ only by a content factor,
                 % and polyGcd's answer is primitive either way -- but the reduced form never builds

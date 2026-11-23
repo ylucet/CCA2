@@ -47,6 +47,22 @@ function [P, info] = conicMeet(A, B, opts)
     if ~isfield(opts, 'tol'),    opts.tol = 1e-9;  end
     if ~isfield(opts, 'polish'), opts.polish = 8;  end
 
+    % MEMO (twin of python/cca2/conic_meet.py): the result is a pure function of (A, B, tol, polish),
+    % and cellHasInterior asks for the same pair hundreds of thousands of times in one conjQ. Only
+    % successful calls are stored, so errors (ratQ:overflow ...) are re-raised every time.
+    persistent memo
+    if isempty(memo) || memo.Count > 50000
+        memo = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    end
+    key = sprintf('%.17g,', [A(:).', B(:).', opts.tol, opts.polish]);
+    if numel(fieldnames(opts)) == 2 && isKey(memo, key)
+        hit = memo(key);  P = hit{1};  info = hit{2};  return
+    end
+    [P, info] = conicMeetRaw(A, B, opts);
+    if numel(fieldnames(opts)) == 2, memo(key) = {P, info}; end
+end
+
+function [P, info] = conicMeetRaw(A, B, opts)
     A = ratQ.conic(A);  B = ratQ.conic(B);
     info = struct('quartic', [], 'shear', 0, 'resid', zeros(0,1), 'sep', inf, 'degenerate', false);
 
