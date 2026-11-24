@@ -85,13 +85,15 @@ verification harness of four oracles that share no code with the engine it
 checks -- golden replay, a pointwise definition oracle, a symbolic kernel oracle,
 and three-engine field-for-field parity -- against which every claim in this
 paper is pinned by a committed test. Third, MATLAB, Python and Rust
-implementations at parity on a 200-fixture corpus, with the Rust engine
+implementations at parity on a 200-fixture golden corpus and with no wrong
+value on a separate 357-input differential corpus, with the Rust engine
 parallelised; on that corpus the best engine is roughly two orders of magnitude
 faster than the symbolic MATLAB reference (indicative timings on a shared
 machine). The paper states, with the same care, what is not yet established:
-a small class of inputs on which the biconjugate is still slightly low, the
-absence of an independent external comparison, and the absence of a citable
-release.
+the biconjugate of a function that jumps across a shared edge is wrong in a
+small neighbourhood of the jump vertices, a few input classes are refused by
+name rather than answered, there is no independent external comparison, and
+there is no citable release.
 \end{abstract}
 
 % ============================================================================
@@ -101,7 +103,8 @@ release.
 A bivariate piecewise linear--quadratic (PLQ) function is a function
 $f:\R^2\to\R\cup\{+\infty\}$ that equals one of finitely many quadratic
 polynomials on each cell of a polyhedral subdivision of $\R^2$; we assume
-continuity on the domain (the case our algorithms are built for) and allow
+continuity on the domain (the case our algorithms are built for), read a
+discontinuous input lower semicontinuously (Section~2.1), and allow
 nonconvex pieces and unbounded cells. Two operators on such functions are the
 subject of this paper. The \emph{Fenchel conjugate}
 \[
@@ -186,7 +189,7 @@ Three, in the order of the paper.
   the engine -- the star-polygon defect of Section~4 -- was found, localised to
   one routine, and fixed in all three languages.
   % CITE: DECISIONS.md entry 2026-11-17
-\item \textbf{Three implementations at parity} -- MATLAB, Python, Rust -- with
+\item \textbf{Three implementations in agreement on the recorded corpora} -- MATLAB, Python, Rust -- with
   the Rust engine parallelised, and a reproducible 200-fixture benchmark
   protocol (Section~7). On that corpus the Rust engine is roughly two orders of
   magnitude faster than the MATLAB reference; we quote the numbers with their
@@ -195,8 +198,8 @@ Three, in the order of the paper.
 
 The paper is a first full draft: the claims are complete, every one is tied to
 a committed test, script or results file, and the open gaps -- one small
-class of inputs on which the biconjugate is still slightly low (Section~8.5),
-no independent external comparison
+class of inputs -- discontinuous functions, whose biconjugate is still wrong
+near the jump vertices (Section~8.4) --, no independent external comparison
 % TODO(G3): comparison against an independent external implementation or
 % against grid/LP-based envelopes is missing from the repository (outline gap
 % G3). The convexdb ground-truth registry that was to serve as the external
@@ -207,7 +210,7 @@ and no citable release
 % README.md ``Status'': alpha, API still changing). MPC wants a code archive
 % with a DOI for the submitted version. Section 9 states this as a declared
 % limitation; add the archive and DOI here at the revision stage.
--- are stated as such in Sections~8.5 and 9.
+-- are stated as such in Sections~8.4 and 9.
 
 % ============================================================================
 \section{The problem and prior work}
@@ -219,7 +222,12 @@ A \emph{quadratic} on $\R^2$ is a function
 $q(x) = \tfrac12 x'Hx + \beta'x + \gamma$ with $H\in\R^{2\times2}$ symmetric,
 $\beta\in\R^2$, $\gamma\in\R$. A bivariate PLQ function $f$ is given by a
 polygon (possibly unbounded) subdivision $\mathcal T = (T_k)$ and a quadratic
-$q_k$ on each cell $T_k$, with $f$ continuous on $\dom f$. The input type of
+$q_k$ on each cell $T_k$, with $f$ continuous on $\dom f$. (A discontinuous
+input is not refused: where cells meet and disagree, $f$ is read lower
+semicontinuously, $f(x)=\min_k\{q_k(x): x\in\overline{T_k}\}$, so that
+$f^*=\sup_k$ of the conjugates of the closed pieces and
+$f^{**}=\cl\co f$ of this function. Section~8.4 states what is and is not
+established in that case.) The input type of
 our algorithms, \texttt{QuaPol}, stores the vertices, edges, and the
 $\{H_k,\beta_k,\gamma_k\}$, all with exact (rational) data.
 
@@ -584,10 +592,47 @@ conjugate discussed in \texttt{ALGORITHM.md}).}
 The one genuinely hard predicate in the conjugate is: \emph{does this cell have
 an interior point} (so that a face is live on it, and so that a row may be
 dropped as implied). The repository's test is a witness search -- pairwise
-conic/line intersections, then a bounded random probe, then a complete
+conic/line intersections, then a bounded random probe, then an exact
 cylindrical-decomposition sample of the critical abscissae and sector
-end-points -- and it has a history worth stating, because it is the one place
-the engine was \emph{measurably wrong} on a whole class of inputs.
+end-points. Only a negative answer of the last stage removes a cell, so its
+completeness is what matters; the argument is given below. The predicate has a
+history worth stating, because it is the one place the engine was
+\emph{measurably wrong} on a whole class of inputs.
+
+\paragraph{Why the last stage is complete.}
+The cell is $S=\{x: \sigma_i q_i(x)>0\ \forall i\}$, every $q_i$ a rational
+conic or line. After a shear $x\mapsto x+ky$ (a linear bijection, so $S$ is
+non-empty iff the sheared cell is) with $k$ the least non-negative integer that
+makes every conic's $y^2$-coefficient non-zero, each row is a full conic, a
+slanted line, a vertical line or a constant. Let $X$ be the finite set of real
+abscissae at which something can change: the roots of the $y$-discriminant of
+every conic; the abscissa of every vertical line; the roots of the
+$y$-resultant of every pair that has a full conic and a non-zero resultant
+(and of two slanted lines); and, for two non-proportional conics whose
+resultant vanishes identically, the abscissa of the crossing of the two
+rational lines that remain after the shared line $L$ is divided out ($L$ is
+rational, since an irrational or complex shared line would bring its conjugate
+and make the conics proportional). On each open interval of $\R\setminus X$
+the number of distinct real roots of every $q_i(x,\cdot)$, and the order of all
+these roots together, is constant, because two root branches can only meet where
+a discriminant, a vertical line or a resultant vanishes. The sign of every row
+on the $m$-th sector of the column $\{x\}\times\R$ is therefore the same for
+all $x$ of the interval. If $S\neq\emptyset$ it is open, so its projection
+contains an open interval and hence a point $x_0\notin X$; $S$ meets
+$\{x_0\}\times\R$ in a non-empty open set, which has a point off every root,
+that is, in some sector; the same sector of any other column of the same
+interval lies in $S$. So one rational column per interval (and beyond both
+ends), and one rational point per sector, decide $S$. Columns and points are
+rationals chosen by Sturm isolation and all sign tests are exact, so a positive
+answer carries a rational point and a negative answer is a proof of emptiness.
+% CITE: DESIGN.md section ``cellHasInterior: the exact CAD fallback (review
+% 2026-11-19 \#2)'', steps 1--4 and ``Exactness''; review finding \#2
+\emph{Limits, stated.} A row with side $0$ (an equality) has no open cell, so
+that stage answers ``no'' and the witness stages alone decide such cells; the
+earlier witness stages accept a boundary point within a $10^{-9}$ band, so a
+zero-area cell touching the boundary is kept, which inflates face counts but not
+values (Section~8.2); and in MATLAB, integers beyond $2^{53}$ raise
+\texttt{ratQ:overflow} and the cell is kept. Python and Rust have no such limit.
 
 \paragraph{The defect, found and fixed.}
 On \emph{star polygons} -- $2n$ vertices alternating radius $100$ and $45$
@@ -618,10 +663,7 @@ another engine: $n=6,\ldots,16$ in the Rust suite (with $n=17,18,19,20$ as
 opt-in long runs of the same test), $n=4,5,6,7$ in the Python suite, the
 MATLAB fast suite green, and fold-versus-tree reduction agreeing.
 % CITE: rust/tests/star.rs; python/tests/test\_star\_polygons.py; DECISIONS.md
-% 2026-11-17 ``Verified''; both test files re-run in this session:
-% \texttt{rust/tests/star.rs} (n=6..10 default) not re-run here (no Rust toolchain
-% in this environment), the Python star test 4/4 and the kernel and definition
-% oracles green, see Section~6.4
+% 2026-11-17 ``Verified''
  A class-based refusal -- refusing to compute
 the conjugate of a strictly convex quadratic on a bounded nonconvex polygon --
 was tried and rejected, because it also refuses correct cases (the golden
@@ -771,23 +813,20 @@ and which are part of the parity contract of Section~6.
 \subsection{Known defects on the envelope side}
 
 Two, stated plainly (the full list with reproduction commands is in the
-repository's support matrix).
-% CITE: SUPPORT\_MATRIX.md section 7, ``Known
-% defects'', and section 7.1
+repository's support matrix and Section~8.4).
+% CITE: SUPPORT\_MATRIX.md section 7; TODO.md ``Open now''
 \begin{itemize}[nosep,leftmargin=*]
-\item \texttt{getInterior} on a \emph{singular} quadratic: on a piece where $f$
-  is constant along an edge the gradient map is not invertible, two edge cells
-  come out on the same region, and the first one checked wins. Measured end to
-  end: the biconjugate of the parallelogram fixture is about $4\%$ low at $2$
-  of $10$ interior probe points ($0.986$ for $1.031$; $1.913$ for $1.950$),
-  reproducible in about a minute with
-  \texttt{functionNDomainTest.parallelogramPiece9}.
-  % CITE: SUPPORT\_MATRIX.md section 7, the LIVE row, and section 7.1
+\item the biconjugate of a \emph{discontinuous} input near a jump vertex: the
+  subdivision takes the maximum over the faces holding at a point, which is
+  wrong where the input jumps (Section~8.4). Continuous inputs are unaffected.
+  % CITE: TODO.md ``OPEN 2026-11-21 (\#108 residual)''; DESIGN.md
+  % ``Discontinuous input''
 \item the legacy \texttt{'cplq'} engine carries its own open items (the
-  $>4$~h poly2 kinks; an \texttt{eig} tolerance that can return $+\infty$ on a
-  strictly convex quadratic) -- disclosed in Section~9.2, not a defect of the
-  exact engine.
-  % CITE: TODO.md ``Open now'', items 4 and 6
+  $>4$~h poly2 kinks) -- disclosed in Section~9.2, not a defect of the
+  exact engine. A $4\%$ error of its parallelogram biconjugate (a singular
+  quadratic in \texttt{getInterior}), recorded in an earlier draft, is recorded
+  in the repository as closed on 2026-08-18.
+  % CITE: TODO.md ``Open now''; TODO.md item ``The parallelogram's piece 9''
 \end{itemize}
 
 % ============================================================================
@@ -847,7 +886,7 @@ engine it checks.
   % CITE: python/tests/test\_kernel\_oracle.py and test\_no\_cas.py; $187$
   %   tests, green in this session (Section~6.4)
 \item \textbf{Cross-engine parity.} MATLAB, Python and Rust agree field for
-  field on the goldens, and the Rust engine's digest of the \emph{complete}
+  field on the goldens (the corpus of Section~6.2, not all inputs), and the Rust engine's digest of the \emph{complete}
   result (every face, row and coefficient, in order) of all $200$ benchmark
   fixtures is identical at $1$, $2$, $8$ and $32$ threads to the digest taken
   from the serial engine before any parallelism was added.
@@ -855,6 +894,32 @@ engine it checks.
   %   \texttt{bench/parallel/digest\_serial.tsv}); rust/README.md verification
   %   table; the re-baselining after the star fix in DECISIONS.md 2026-11-17
 \end{enumerate}
+
+\paragraph{The $357$-input differential corpus.}
+A fifth check is a differential run, independent of the goldens, on $357$ inputs
+produced by a seeded generator written for an independent code review (seed
+$20261119$: $147$ exhaustive small cases, $30$ each of six random families, and
+$30$ discontinuous inputs). Each answer is graded against the reviewer's exact
+oracle: a conjugate value must equal the exact conjugate to $10^{-9}$
+relative, and a biconjugate value must lie inside a certified bracket (a lower
+bound from the exact conjugate, an upper bound from a linear program over dense
+samples of the domain). On the current code, Python and Rust give \textbf{no wrong value
+and no crash} on any of the $357$ inputs: Rust answers the conjugate on
+$357/357$ and the biconjugate on $264$, Python $345$ and $256$ (the other
+conjugates and $12$ biconjugates are timeouts at $600$~s on a machine
+carrying a load of $40$--$90$; the remaining refusals are named and identical in
+both engines, listed in Section~8.4). Wherever both answer, the values agree.
+MATLAB gave no wrong value on the $327$ continuous inputs of an earlier run of
+the same corpus (it answers the conjugate on $327$ and the biconjugate on $235$,
+and refuses eight biconjugates that Python and Rust answer, by its $2^{53}$
+ceiling); it was not re-run after discontinuous input was admitted, so its
+discontinuous results are not claimed. This is a statement about this corpus
+and its grid of test points, not a general parity claim: the grid is offset from
+the vertices of the input, and the residual defect at the jump vertices of a
+discontinuous input (Section~8.4) lives exactly there.
+% CITE: RESULTS.md (the section on the 2026-11-22/23 three-engine run and the
+% addendum of 2026-11-24, which carries the commands and the per-engine table);
+% python/tests/review/\{plq\_gen,run\_engines,compare\_engines\}.py
 
 \paragraph{Why the harness is a contribution.}
 The star-polygon defect of Section~4.2 was \emph{visible} only because oracle
@@ -959,7 +1024,7 @@ The fixes are pinned by tests that fail against the pre-fix code.
 \subsection{Three engines, one corpus}
 
 The engine exists in three languages, each a module-for-module port of the
-previous, all at parity on the recorded corpus:
+previous, all in agreement on the recorded corpora:
 \begin{itemize}[nosep,leftmargin=*]
 \item \textbf{MATLAB} (the reference, \texttt{MATLAB/}): base MATLAB R2024a,
   no toolbox required for the compute path; exact integers are
@@ -984,8 +1049,9 @@ previous, all at parity on the recorded corpus:
 
 Parity is not asserted, it is tested: the golden replay of Section~6.2
 (field-for-field on \texttt{QuaCon}s, by identifier on refusals, $176/176$ and
-$114/114$), the slow-suite replay ($20/20$, including the $317$-face kink
-\texttt{AlgCrv} and the Example-2 \texttt{EnvelopeMin}), with and without
+$114/114$), the slow-suite replay ($20/20$, including the kink \texttt{AlgCrv}, whose
+representation has $319$ faces in Python and Rust (Section~8.2), and the Example-2
+\texttt{EnvelopeMin}), with and without
 FLINT,
 % CITE: rust/README.md verification table
 and the digest parity of the
@@ -1038,7 +1104,8 @@ indicative, not as a ranking (Section~7.4).}
 
 The heaviest fixtures, single thread to $32$ threads:
 % CITE: rust/bench/RESULTS.md slowest-fixture table; rust/PARALLEL.md final sweep
-the kink biconjugate ($317$-face \texttt{AlgCrv}) goes from $7.56$~s to
+the kink biconjugate (an \texttt{AlgCrv} of $317$ faces when measured, now $319$; a representation size,
+see below) goes from $7.56$~s to
 $0.81$~s; erratum Example~2 (\texttt{EnvelopeMin}) from $5.36$~s to $0.73$~s;
 the min-subdivision biconjugate from $1.44$~s to $0.29$~s.
 
@@ -1102,7 +1169,8 @@ digits by an independent eight-million-point grid sup.
  The five-piece
 version is the harder instance -- it is the one that carries the $S_4$ vertex
 of Example~\ref{ex:s4} -- and its conjugate is displayed in full in the
-repository: $17$ faces, $41$ edges of which none is a genuine parabola, with
+repository: $17$ faces (the engine's count of the subdivision it returns, a
+representation size, Section~8.2), $41$ edges of which none is a genuine parabola, with
 the face table and the edge-by-edge classification.
 % CITE: doc/QuaConExample.md section 3; Figure~\ref{fig:facemap}
 
@@ -1115,16 +1183,47 @@ both are in the benchmark corpus.
 % \texttt{slow\_kinkSubdivisionTest}
 
 \paragraph{The kink fixture.}
-A continuous PLQ whose biconjugate is a $317$-face \texttt{AlgCrv}: the
-algebraic bridge faces of Theorem~\ref{thm:biconjface} are live, and the
-subdivision is the local arrangement of Section~5.2. It is the heaviest
+A two-piece PLQ (the poly2 kink at $c=-2$) whose biconjugate is returned as an
+\texttt{AlgCrv}: the algebraic bridge faces of Theorem~\ref{thm:biconjface} are
+live, and the subdivision is the local arrangement of Section~5.2. The two
+pieces do \emph{not} agree on the shared diagonal, so $f$ is
+\emph{discontinuous} and is read lower semicontinuously (Section~2.1); an
+earlier draft called it continuous, which it is not. Its \texttt{AlgCrv} has
+$319$ faces in Python and in Rust on the current code ($317$ when the
+benchmark and the golden record were taken; the value of $f^{**}$ is unchanged,
+the count rose in the course of the review fixes, and we have not traced
+which one; we did not re-count it in MATLAB). The count is the size of the
+\emph{representation} the engine builds, not the number of faces of $f^{**}$
+(next paragraph). Because the input jumps, this is also a fixture on which the
+jump-vertex defect of Section~8.4 applies to the subdivision. It is the heaviest
 conjugate-side fixture in the corpus: $412$--$427$~s in MATLAB, $41$--$45$~s
 in Python with the accelerators, $7.56$~s in Rust single-thread, $0.81$~s at
-$32$ threads.
+$32$ threads; these timings were measured before the review fixes and have not
+been re-measured.
 % CITE: python/bench/RESULTS.md slowest-fixture tables (the last
 % two sections); rust/bench/RESULTS.md; rust/PARALLEL.md final sweep; the face
 % count in rust/README.md verification table and DECISIONS.md 2026-11-03
 % sequence
+
+\paragraph{Face counts are representation sizes.}
+Every face count in this paper -- $319$ (earlier $317$) for the kink and the $3299$ of the full overlay below -- is
+the number of cells of the subdivision the engine returns. It is an upper bound
+on the number of faces of the mathematical answer, not that number: adjacent
+cells carrying the same function are merged only where the exact test says so,
+and a cell that has an interior only on the boundary of the witness stages'
+$10^{-9}$ band (a zero-area cell touching the boundary) is kept
+(Section~4.2). The star polygons of Figure~\ref{fig:star} quantify it: for
+$f=(x^2+y^2)/2$ on the $2n$-vertex star, whose conjugate has $O(n)$ faces, the
+Rust engine returns $105, 180, 325, 718, 836, 927, 1655, 2602, 2555, 2835,
+4241, 11683$ cells for $n=3,\ldots,14$ (not monotone at $n=11$), an overcount of
+about $8\times$ at $n=3$ growing to about $200\times$ at $n=14$. The values are
+unaffected, which is what Sections~6 and~8.3 test; the counts are not a measure of
+the answer's complexity, and they are used in this paper only as a
+regression fingerprint (the same engine, the same count) and to size the
+work.
+% CITE: reviews/codereview-2026-11-19.md finding 19 (counts are the review's
+% Rust measurements for n=3..14); TODO.md ``the cell count is still an upper
+% bound''; DESIGN.md ``cellHasInterior'' Limits
 
 \paragraph{Erratum Example~2.}
 A biconjugate for which several atom pairs are active and the overlay budget
@@ -1157,12 +1256,53 @@ and its gaps sit in one place:
 % CITE: SUPPORT\_MATRIX.md section 7; TODO.md
 % ``Open now''; manuscript/outline.md gaps G1--G8
 \begin{itemize}[nosep,leftmargin=*]
-\item \textbf{One small wrong-value class on the envelope side.}
-  \texttt{getInterior} on a singular quadratic leaves two edge cells on the
-  same region; measured end to end the parallelogram fixture's biconjugate is
-  about $4\%$ low at $2$ of $10$ interior probe points, reproducible in about a
-  minute with \texttt{functionNDomainTest.parallelogramPiece9}.
-  % CITE: SUPPORT\_MATRIX.md section 7, the LIVE row, and section 7.1
+\item \textbf{Discontinuous input: the biconjugate is wrong near the jump
+  vertices.} A $f$ that jumps across a shared edge is answered, read lower
+  semicontinuously (Section~2.1), not refused (an earlier stopgap refusal by the
+  name \texttt{PLQ:notContinuous} was lifted in all three engines). The
+  conjugate is exact on the $30$ discontinuous inputs of the differential corpus
+  (Rust; Python the same except two timeouts), and the biconjugate is inside its
+  certified bracket at every review grid point it answers ($23$ of the $30$;
+  the other seven are named refusals).
+  But the subdivision of the biconjugate takes the \emph{maximum} over the faces
+  holding at a point, which is right where faces that meet agree and wrong where
+  the input jumps: on the review's inputs D-132 and D-153 the returned
+  biconjugate is $11$ where the lower semicontinuous $f$ is $-7$ at the vertex
+  $(-2,2)$ ($9$ against $7.5$ at $(-3,-2)$), and wrong within about $10^{-4}$ of
+  such a vertex; the two-convex-pieces route has the same defect on the
+  discontinuous kink of the test suite ($1.00000003$ at its jump vertex $(1,2)$, where $f^{**}=1$).
+  Three repairs were tried and dropped. Inputs with a jump across an interior
+  edge are therefore the one class on which we do not claim a correct
+  biconjugate at the jump vertices; continuous inputs are unaffected.
+  % CITE: TODO.md ``OPEN 2026-11-21 (\#108 residual)''; DESIGN.md section
+  % ``Discontinuous input'', ``Still open''; tests test\_discontinuous\_shared\_points
+  % (strict xfail D-111, D-132, D-153)
+\item \textbf{Inputs refused by name.} Some inputs are refused rather than
+  answered, always with a stable identifier and never with a value:
+  $f^{**}=-\infty$ (\texttt{PLQ:biconjQ:minusInfinity}), a nonconvex piece the
+  biconjugate route cannot handle (\texttt{PLQ:biconjQ:nonConvexPiece}), two
+  convex pieces coupled across their common edge in a way the two-piece route
+  does not cover (\texttt{PLQ:biconjQ:convexPieceCoupling}), a curved cell in the
+  atom-pair overlay (\texttt{envelopeCellPairs:curvedCell}), a tie with no usable
+  rational witness (\texttt{bridgeFaceAlg:noWitness}, \texttt{bridgeFaceAlg:noZ}),
+  and data with a dyadic denominator above $10^6$ (\texttt{notExact}). The MATLAB
+  engine, whose exact integers are doubles up to $2^{53}$, additionally refuses
+  (\texttt{ratQ:overflow}, \texttt{bridgeFaceAlg:witnessOverflow}) eight
+  biconjugates of the differential corpus that Python and Rust answer.
+  % CITE: RESULTS.md ``Refusals (by name)'' and ``Engine-vs-engine
+  % differences''; SUPPORT\_MATRIX.md; review finding 18
+\item \textbf{Thin conjugates.} For $f=y^2/2+\mathrm{bump}(x)$ with
+  $\mathrm{bump}=1-x^2$ on $(-1,1)$ and $0$ outside, a registry entry
+  (\texttt{separable\_bump\_quadratic\_2d}) stores a conjugate supported on a
+  line, $f^*(0,s_2)=s_2^2/2$; both Python and Rust return $+\infty$ everywhere
+  there. A conjugate whose finite part is a line segment can be lost.
+  % CITE: TODO.md finding \#95-A; python/tests/review/test\_review\_2026\_11\_20.py (xfail)
+\item \textbf{Slow cases.} In the differential corpus Python times out
+  ($600$~s in the latest run, $3600$~s in an earlier one, both under shared
+  load) on a dozen biconjugates that Rust
+  answers in seconds, and MATLAB leaves two unfinished after bounded runs. These
+  are performance observations, not wrong values.
+  % CITE: RESULTS.md ``Python timeouts'', ``MATLAB performance observation''
 \item \textbf{The star class beyond $n=16$.} Not yet run (multi-hour runs);
   the fix is verified up to $n=16$.
   % CITE: TODO.md, the $n=17$ note
@@ -1186,9 +1326,13 @@ and its gaps sit in one place:
   %   sections 2 and 8
 \item \textbf{The legacy engine's open items.} The \texttt{'cplq'} symbolic
   engine, the implementation of \citet{KARMARKAR-25,KARMARKAR-25a}, carries
-  its own open items -- the $>4$~h poly2 kinks and an \texttt{eig} tolerance
-  that can return $+\infty$ on a strictly convex quadratic -- which are its,
-  not the exact engine's, and are disclosed rather than fixed here.
+  its own open items -- the $>4$~h poly2 kinks -- which are its, not the exact
+  engine's, and are disclosed rather than fixed here. (An earlier draft also
+  listed a $4\%$ error of the legacy engine's parallelogram biconjugate; the
+  repository records it as closed on 2026-08-18, and an \texttt{eig} tolerance
+  that returned $+\infty$ on a strictly convex quadratic as fixed on
+  2026-11-20. We could not re-run the parallelogram test in the reviewed
+  environment, so we do not restate it as either open or closed.)
   % CITE: TODO.md ``Open now'', items 4 and 6
 \end{itemize}
 
@@ -1256,7 +1400,7 @@ in the cover letter & met \\
 data available & the exact-rational JSON corpus plus the $200$-fixture bench
 protocol, plain text in the archive & met \\
 independent verification of results & four oracles sharing no code with the
-engine; three engines agreeing at parity; refusal identifiers stable across
+engine; three engines agreeing on the goldens, and no wrong value in two of them on the $357$-input differential corpus; refusal identifiers stable across
 engines & met \\
 reproducible computational results & benchmark protocol and scripts committed
 (\texttt{python/bench/}, \texttt{rust/bench/}); digests recorded as the
@@ -1271,8 +1415,9 @@ citable artifact & -- & \textbf{gap: TODO(G5)}
 
 \subsection{Declared limitations (cross-reference)}
 
-The limitations of Section~8.4 -- the singular-quadratic envelope defect, the
-star class beyond $n=16$, the absence of an independent external comparison,
+The limitations of Section~8.4 -- the biconjugate near the jump vertices of a
+discontinuous input, the inputs refused by name, the thin conjugates, the slow
+cases, the star class beyond $n=16$, the absence of an independent external comparison,
 the absence of a citable release, the legacy engine's open items, and the
 shared-machine caveat on all timings -- are the paper's declared limitations,
 and they are carried into the cover letter as such rather than discovered by a
@@ -1288,13 +1433,14 @@ faces and edges on the conjugate side, algebraic vertices of degree at most~$4$
 with $S_4$ attained, algebraic faces of degree at most~$4$ on the envelope side.
 The paper gives direct exact-arithmetic algorithms for both operators, a
 verification harness of four code-independent oracles against which every claim
-is pinned by a committed test, and three implementations at parity with a
+is pinned by a committed test, and three implementations that agree on the recorded corpora, with a
 reproducible benchmark. The open problems, in the order the repository keeps
 them:
 \begin{enumerate}[label=(\roman*),leftmargin=*]
-\item the \textbf{singular-quadratic envelope defect} of Section~8.4, a small
-  wrong-value class in the same operator as the main claims;
-  % CITE: SUPPORT\_MATRIX.md section 7
+\item the \textbf{biconjugate of a discontinuous input near its jump
+  vertices} of Section~8.4, a small wrong-value class in the same operator as
+  the main claims, together with the thin-conjugate loss;
+  % CITE: TODO.md \#108 residual and \#95-A
 \item the \textbf{star class beyond $n=16$}, the long runs that would close the
   range;
   % CITE: TODO.md, the $n=17$ note

@@ -98,3 +98,45 @@ None. Every answered conjugate matches the exact oracle (1e-9 relative) and
 every answered biconjugate lies inside its certified bracket [lo, hi]. The
 original 12 (py) / 12 (rs) / 10 (ml) wrong discontinuous biconjugates are now
 named refusals. No failing test to open.
+
+---
+
+# Addendum 2026-11-24 (#103) — rerun after #108 lifted the discontinuous-input refusal
+
+The section above was taken before #108: its D-family statements
+("refused by name `PLQ:notContinuous`", "no engine ever answered a discontinuous
+D input") no longer hold. `PLQ:notContinuous` is gone; the D family is answered
+(read lower semicontinuous, DESIGN.md "Discontinuous input"). Python and Rust
+were rerun on the current main, same fixtures (generator seed 20261119, 357
+inputs), same grader; MATLAB was NOT rerun (its rows above stay as measured, and
+are pre-#108 on the D family). Machine shared, load 40-90 during the run, so the
+TIMEOUT counts below are load artefacts, not measurements.
+
+```
+cd python
+python3 tests/review/plq_gen.py FIX.json --seed 20261119 --nrand 210
+python3 tests/review/run_engines.py FIX.json OUT --engines py -j 24 --timeout 600
+python3 tests/review/run_engines.py FIX.json OUT --engines rs -j 16 --timeout 900
+python3 tests/review/compare_engines.py FIX.json OUT --engines py,rs
+```
+
+| | conj ok / wrong / refused | biconj ok / wrong / refused |
+|---|---|---|
+| Python (357) | 345 / **0** / 12 (all TIMEOUT) | 256 / **0** / 101 (89 named + 12 TIMEOUT) |
+| Rust (357) | 357 / **0** / 0 | 264 / **0** / 93 (89 named + 4 TIMEOUT) |
+
+No crash in either engine. Wherever both answer, the two agree (the grader's
+engine-vs-engine check lists only TIMEOUT-vs-answer differences, no value
+difference). Named refusals, identical in both engines (biconj): `PLQ:biconjQ:minusInfinity` 57,
+`PLQ:biconjQ:nonConvexPiece` 11, `envelopeCellPairs:curvedCell` 10,
+`bridgeFaceAlg:noWitness` 7, `PLQ:biconjQ:convexPieceCoupling` 3,
+`bridgeFaceAlg:noZ` 1. The D family (30 inputs): Rust conj 30/30 exact; biconj
+23 inside the certified bracket + 7 named refusals (curvedCell 4, noWitness 3);
+Python the same except 2 TIMEOUTs on D-153 and D-188 (both ops).
+
+Rust TIMEOUTs at 900 s under load: biconj R4-059, R4-150, R2-176, R3-177. Python
+TIMEOUTs at 600 s: R4-003, R2-036, R4-059, R2-120, R2-127, R4-150, D-153, R4-171,
+R2-176, R3-177, D-188, R4-199 (conj and biconj each).
+
+Not covered by this grade: the biconjugate at a jump vertex of a discontinuous
+input (the grid is offset from the vertices) — the open #108 residual (TODO.md).
