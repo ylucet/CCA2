@@ -108,6 +108,82 @@ def _doubleRootNoise(cz, v):
     return abs(v.imag) <= 8.0 * math.sqrt(2.220446049250313e-16 * cabs / abs(p2))
 
 
+_PROBES = ((1, 0), (0, 1), (1, 1), (1, -1))
+
+
+def _nearDoubles(lay, x, y, cz, r, rr, imagTol):
+    """Decide EXACTLY the near-double roots the doubles cannot (#108 residual, D-153).
+
+    A NEAR-DOUBLE is a pair of roots within the double-root noise of each other: two real roots
+    _doubleRootNoise could not tell apart, or a complex pair it accepted as one real double root.
+    The doubles cannot say whether such a pair is a value of the face, and the numbering above
+    every one of them depends on it.
+
+    A face is the b-th real root of its fibre, and f** is closed and convex: its value at a point
+    is the limit from the points around it. So a pair that is real only on a CURVE -- a complex
+    pair touching the real axis there and leaving it on both sides -- is not the value of any
+    branch, and must not be counted. Such a pair appears where a bridge's dual point runs off to
+    infinity, on a boundary line of dom f**. For a continuous f it coincides with the true value
+    there; for a discontinuous one it does not (D-153: the convex piece's own value 10.2578 on its
+    hull edge next to the jump vertex, f** = 9.5177), and the noise rule also accepted it in a
+    ~1e-5 strip inside the domain.
+
+    The test: the fibre is evaluated EXACTLY (doubles are dyadic) at x +- h e for four directions
+    e and a tiny dyadic h, and its distinct real roots near the pair are counted by Sturm. A pair
+    with no real root on EITHER side in at least two directions is dropped. A crossing of two real
+    branches, a fold (real on one side) and a double root that is real along a curve all keep it:
+    at most one of the four directions can run along that curve."""
+    cands = []
+    for v in r:
+        if v.imag > 0 and abs(v.imag) > imagTol * max(1.0, abs(v)) and _doubleRootNoise(cz, v):
+            cands.append(v.real)
+    for a, b in zip(rr[:-1], rr[1:]):
+        if b > a and _doubleRootNoise(cz, complex((a + b) / 2, (b - a) / 2)):
+            cands.append((a + b) / 2)
+    if not cands:
+        return rr
+    out = list(rr)
+    for z0 in cands:
+        d = sorted(abs(complex(v) - z0) for v in r)[2:]       # the pair itself is nearest
+        rad = d[0] / 2 if d and d[0] > 0 else 1.0 + abs(z0)
+        if _isolatedPair(lay, x, y, z0, rad):
+            for _ in range(2):
+                k = min(range(len(out)), key=lambda i: abs(out[i] - z0), default=None)
+                if k is not None and abs(out[k] - z0) <= rad:
+                    out.pop(k)
+    return out
+
+
+def _exactFibreAt(lay, X, Y):
+    """The fibre at the exact rational point (X, Y), as an integer polynomial in z, highest
+    power first (scaled by a positive common denominator: the same roots)."""
+    c = []
+    for terms in lay:
+        v = Fraction(0)
+        for i, j, co in terms:
+            v += co * X ** i * Y ** j
+        c.append(v)
+    den = 1
+    for v in c:
+        den = den * v.denominator // math.gcd(den, v.denominator)
+    return [int(v * den) for v in reversed(c)]
+
+
+def _isolatedPair(lay, x, y, z0, rad):
+    from .rat_q import countRootsIn
+    X = Fraction(x)
+    Y = Fraction(y)
+    h = Fraction(2) ** (math.frexp(max(1.0, abs(x), abs(y)))[1] - 40)   # ~1e-12 relative
+    lo = Fraction(z0 - rad)
+    hi = Fraction(z0 + rad)
+    both = 0
+    for e in _PROBES:
+        if all(countRootsIn(_exactFibreAt(lay, X + sg * h * e[0], Y + sg * h * e[1]), lo, hi) == 0
+               for sg in (1, -1)):
+            both += 1
+    return both >= 2
+
+
 def _sgnz(v):
     """sign(v + (v == 0)): +1 at zero."""
     return 1.0 if v >= 0 else -1.0
@@ -154,6 +230,7 @@ def algBranch(P, X, b, opts=None, wantInfo=False):
             r = roots(cz[::-1])                     # `roots` wants highest power first
             rr = sorted(v.real for v in r
                         if abs(v.imag) <= imagTol * max(1.0, abs(v)) or _doubleRootNoise(cz, v))
+            rr = _nearDoubles(lay, x, y, cz, r, rr, imagTol)
             if len(cz) == 3:
                 ca = _absFibre(lay[:3], x, y)
                 dq = cz[1] ** 2 - 4 * cz[2] * cz[0]

@@ -287,5 +287,26 @@ classdef algBranchTest < matlab.unittest.TestCase
             testCase.verifyEqual(z(2), -1, 'AbsTol', 1e-12, 'and the ordinary point still answers');
         end
 
+        function aDOUBLERootRealOnlyOnALINEIsNotABranch(testCase)
+        % #108 residual (D-153): p = (z - 5)((z - 10)^2 + y^2) has the real double root 10 ONLY on
+        % the line y = 0; off it the pair is complex on both sides. f** is closed, so its value is
+        % the limit from around: the top branch is 5 there, not 10. Before the fix the top branch
+        % was 10 on the line and, through rounding, in a ~1e-6 strip next to it.
+            P = zeros(1, 3, 4);
+            P(1,1,4) = 1;  P(1,1,3) = -25;  P(1,1,2) = 200;  P(1,3,2) = 1;  P(1,1,1) = -500;  P(1,3,1) = -5;
+            for y = [0 1e-9 1e-7 1e-6]
+                testCase.verifyEqual(algBranch(P, [0.3 y], -1), 5, 'AbsTol', 1e-9, sprintf('y = %g', y));
+            end
+        end
+
+        function aDOUBLERootOfTwoCROSSINGBranchesIsKept(testCase)
+        % The control: p = (z - 5)((z - 10)^2 - y^2) has two REAL branches 10 +- y crossing on y = 0,
+        % so the double root 10 is a value there and stays the top branch.
+            P = zeros(1, 3, 4);
+            P(1,1,4) = 1;  P(1,1,3) = -25;  P(1,1,2) = 200;  P(1,3,2) = -1;  P(1,1,1) = -500;  P(1,3,1) = 5;
+            [z, info] = algBranch(P, [0.3 0], -1);
+            testCase.verifyEqual(z, 10, 'AbsTol', 1e-6);
+            testCase.verifyEqual(info.nreal, 3);
+        end
     end
 end

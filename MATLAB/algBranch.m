@@ -180,6 +180,10 @@ function [z, info] = algBranch(P, X, b, opts)
 
         isReal = abs(imag(r)) <= opts.imagTol * max(1, abs(r));
         rr = sort(real(r(isReal)));
+        % A NEAR-DOUBLE REAL PAIR that is real only on a CURVE is not a value (#108 residual,
+        % D-153): see dropIsolatedPairs. Python and Rust also examine the complex pairs their
+        % double-root noise test accepts; MATLAB drops those as before (PORT_NOTES section 4).
+        rr = dropIsolatedPairs(P, Pbig, X(t,:), cz, r, rr, nx, ny, nz);
         % A DOUBLE ROOT OF A QUADRATIC FIBRE -- where the two branches meet -- can come back from
         % `roots` as a complex pair with imaginary part ~ sqrt(eps), past imagTol, leaving the
         % point with no branch at all: the c = -2 AlgCrv evaluated to +Inf on its domain edge x = 0
@@ -351,5 +355,102 @@ function [c, isZero] = exactFibre(B, x, nx, ny, nz)
     end
     c = cellfun(@(a) a.doubleValue(), acc);
     isZero = cellfun(@(a) a.signum() == 0, acc);
+end
+
+function rr = dropIsolatedPairs(P, Pbig, x, cz, r, rr, nx, ny, nz)
+% Drop the NEAR-DOUBLE real roots that are not the value of any branch (#108 residual, D-153).
+%
+% A face is the b-th real root of its fibre, and f** is closed and convex: its value at a point is
+% the limit from the points around it. So a double root that is real only on a CURVE -- a complex
+% pair touching the real axis there and leaving it on both sides -- must not be counted. Such a
+% pair appears where a bridge's dual point runs off to infinity, on a boundary line of dom f**. For
+% a continuous f it coincides with the true value there; for a discontinuous one it does not
+% (D-153: the convex piece's own value 10.2578 on its hull edge next to the jump vertex, f** =
+% 9.5177), and rounding returns it as two close reals in a ~1e-5 strip inside the domain too.
+%
+% Only a pair the doubles cannot separate is examined: two adjacent real roots within the double-
+% root noise of each other, 8 sqrt(eps sum|c_k t^k| / |p''(t)/2|) (alg_branch.py's
+% _doubleRootNoise). The fibre is then evaluated EXACTLY (doubles are dyadic) at x +- h e for four
+% directions e and a tiny dyadic h (~1e-12 relative), and its distinct real roots near the pair are
+% counted by Sturm in BigInteger. A pair with no real root on EITHER side in at least two
+% directions is dropped. A crossing of two real branches, a fold (real on one side) and a double
+% root that is real along a curve all keep it: at most one of the four directions runs along it.
+    cands = [];
+    for i = 1:numel(rr)-1
+        a = rr(i);  b = rr(i+1);
+        if b > a && doubleRootNoise(cz, (a+b)/2, (b-a)/2), cands(end+1) = (a+b)/2; end %#ok<AGROW>
+    end
+    for z0 = cands
+        d = sort(abs(r(:) - z0));  d = d(3:end);       % the pair itself is nearest
+        if ~isempty(d) && d(1) > 0, rad = d(1)/2; else, rad = 1 + abs(z0); end
+        if isolatedPair(P, Pbig, x, z0, rad, nx, ny, nz)
+            for rep = 1:2
+                [m, k] = min(abs(rr - z0));
+                if ~isempty(k) && m <= rad, rr(k) = []; end
+            end
+        end
+    end
+end
+
+function tf = doubleRootNoise(cz, t, im)
+% Is a pair at t +- i*im within the rounding of a DOUBLE root of the fibre cz (z^0 first)?
+    k = 0:numel(cz)-1;
+    cabs = sum(abs(cz) .* abs(t).^k);
+    kk = k(k >= 2);
+    p2 = sum(kk.*(kk-1)/2 .* cz(kk+1) .* t.^(kk-2));
+    tf = p2 ~= 0 && cabs ~= 0 && abs(im) <= 8 * sqrt(eps * cabs / abs(p2));
+end
+
+function tf = isolatedPair(P, Pbig, x, z0, rad, nx, ny, nz)
+% No real root within rad of z0 on either side of x, in at least two of four directions.
+    [~, e] = log2(max([1, abs(x(1)), abs(x(2))]));      % frexp's exponent
+    [xn, xd] = ratQ.dyadicParts(x(1));
+    [yn, yd] = ratQ.dyadicParts(x(2));
+    two = java.math.BigInteger.valueOf(2);
+    if e >= 40, hn = two.pow(e - 40);  hd = java.math.BigInteger.ONE;
+    else,       hn = java.math.BigInteger.ONE;  hd = two.pow(40 - e);
+    end
+    D = xd.max(yd).max(hd);                             % all powers of two: the lcm
+    X0 = xn.multiply(D.divide(xd));  Y0 = yn.multiply(D.divide(yd));  H = hn.multiply(D.divide(hd));
+    probes = [1 0; 0 1; 1 1; 1 -1];
+    both = 0;
+    for q = 1:4
+        none = true;
+        for sg = [1 -1]
+            XN = X0.add(H.multiply(java.math.BigInteger.valueOf(sg*probes(q,1))));
+            YN = Y0.add(H.multiply(java.math.BigInteger.valueOf(sg*probes(q,2))));
+            row = exactFibreRow(P, Pbig, XN, YN, D, nx, ny, nz);
+            if ratQ.countRootsInHalfOpenBig(row, z0 - rad, z0 + rad) ~= 0
+                none = false;  break
+            end
+        end
+        if none, both = both + 1; end
+    end
+    tf = both >= 2;
+end
+
+function row = exactFibreRow(P, Pbig, XN, YN, D, nx, ny, nz)
+% The fibre at (XN/D, YN/D) times D^(nx-1+ny-1), as a BigInteger row, highest power of z first.
+    xp = cell(1, nx);  yp = cell(1, ny);
+    for i = 1:nx, xp{i} = XN.pow(i-1).multiply(D.pow(nx-i)); end
+    for j = 1:ny, yp{j} = YN.pow(j-1).multiply(D.pow(ny-j)); end
+    acc = repmat({java.math.BigInteger.ZERO}, 1, nz);
+    for k = 1:nz
+        for i = 1:nx
+            for j = 1:ny
+                if isempty(Pbig)
+                    v = P(i,j,k);
+                    if v == 0, continue, end
+                    v = java.math.BigInteger(sprintf('%.0f', v));
+                else
+                    v = Pbig.c{sub2ind(Pbig.sz, i, j, k)};
+                    if isempty(v), continue, end
+                    v = java.math.BigInteger(v.toString());
+                end
+                acc{k} = acc{k}.add(v.multiply(xp{i}).multiply(yp{j}));
+            end
+        end
+    end
+    row = fliplr(acc);
 end
 
