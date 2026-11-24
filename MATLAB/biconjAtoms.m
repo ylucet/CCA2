@@ -65,7 +65,8 @@ function env = biconjAtoms(f, mode)
         [~, D] = conjQ(f);
         D = unique(D, 'rows');
         if any(all(D(:,1:2) == 0, 2) & D(:,3) < 0)
-            error('biconjAtoms:emptyDomain', ['dom f* is empty: f has no affine minorant, so ' ...
+            % one identifier for every f** = -infinity refusal, whatever route saw it first (review #17)
+            error('PLQ:biconjQ:minusInfinity', ['dom f* is empty: f has no affine minorant, so ' ...
                   'co f is -infinity everywhere.']);
         end
     end

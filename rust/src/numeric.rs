@@ -50,6 +50,9 @@ fn eig_hessenberg(mut a: Vec<Vec<f64>>) -> Vec<Cx> {
     (0..n).map(|i| Cx { re: wr[i], im: wi[i] }).collect()
 }
 
+// These are the EISPACK routines (QR algorithm, LU): the loop indices address TWO matrix
+// dimensions at once, so they are load-bearing and needless_range_loop does not apply.
+#[allow(clippy::needless_range_loop)]
 fn balance(a: &mut [Vec<f64>]) {
     let n = a.len();
     let radix = 2.0f64;
@@ -94,6 +97,7 @@ fn balance(a: &mut [Vec<f64>]) {
     }
 }
 
+#[allow(clippy::needless_range_loop)]
 fn hqr(a: &mut [Vec<f64>], wr: &mut [f64], wi: &mut [f64]) {
     let n = a.len() as i64;
     let mut anorm = 0.0;
@@ -202,7 +206,7 @@ fn hqr(a: &mut [Vec<f64>], wr: &mut [f64], wi: &mut [f64]) {
                 }
             }
             let mut k = m;
-            while k <= nn - 1 {
+            while k < nn {
                 let ku = k as usize;
                 if k != m {
                     p = a[ku][ku - 1];
@@ -290,6 +294,7 @@ pub fn norm2(v: [f64; 2]) -> f64 {
 }
 
 /// LU with partial pivoting of a 3x3 (LAPACK dgetrf); returns (LU, piv, sign) or None if singular.
+#[allow(clippy::needless_range_loop)]
 fn lu3(m: &[[f64; 3]; 3]) -> ([[f64; 3]; 3], [usize; 3], f64, bool) {
     let mut a = *m;
     let mut piv = [0usize, 1, 2];

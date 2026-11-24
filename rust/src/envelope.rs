@@ -296,16 +296,16 @@ pub fn envelope_cell_regions(n: &[Vec<Z>], m: &[Z], q: &Z, dd: &Z, p: &[Vec<Z>])
             continue;
         }
         let p0 = vec![-c * &a[0], -c * &a[1]];
-        let alpha = vec![&na * dd * &w[0], &na * dd * &w[1]];
+        let alpha = [&na * dd * &w[0], &na * dd * &w[1]];
         let beta = -&na * dot(&w, m) - quad(&w, n, &p0);
         let mut r = vec![];
         let mut dead = false;
-        for j in 0..k {
+        for (j, pj) in p.iter().enumerate().take(k) {
             if j == i {
                 continue;
             }
-            let aj = &p[j][0..2];
-            let cj = &p[j][2];
+            let aj = &pj[0..2];
+            let cj = &pj[2];
             let ajw = dot(aj, &w);
             let bj = dot(aj, &p0) + cj * &na;
             if ajw.is_zero() {

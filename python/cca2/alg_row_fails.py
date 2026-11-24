@@ -1374,14 +1374,3 @@ def _curvePoints(g):
         _memoCurvePts.clear()
     _memoCurvePts[key] = hit
     return hit
-    for x in (0.6180339887, -1.3247179572, 2.7182818285):
-        cy = [sum(g[i][j] * x ** i for i in range(len(g))) for j in range(len(g[0]))]
-        while cy and cy[-1] == 0:
-            cy.pop()
-        if len(cy) < 2:
-            continue
-        for y in roots(cy[::-1]):
-            v, m = _evalTerms(S, [x, y])
-            if abs(v) > 1e-6 * max(m, REALMIN):
-                return False
-    return True

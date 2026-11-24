@@ -22,7 +22,7 @@ fn prem(a: &[Z], b: &[Z]) -> Vec<Z> {
     let lc = &b[0];
     let f = num_traits::pow(lc.abs(), da - db + 1);
     let mut r: Vec<Z> = a.iter().map(|c| c * &f).collect();
-    while !r.is_empty() && r.len() - 1 >= db {
+    while !r.is_empty() && r.len() > db {
         let q = r[0].div_floor(lc);
         for j in 0..b.len() {
             r[j] -= &q * &b[j];

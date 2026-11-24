@@ -13,6 +13,8 @@ struct Tables {
     m2: Vec<Vec<f64>>,
 }
 
+// binomial table: the indices feed comb(i, k), so they are load-bearing
+#[allow(clippy::needless_range_loop)]
 fn binom(n: usize) -> Vec<Vec<f64>> {
     let mut c = vec![vec![0.0; n]; n];
     for i in 0..n {

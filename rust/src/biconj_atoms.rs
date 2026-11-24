@@ -147,7 +147,8 @@ pub fn biconj_atoms(f: &QuaPol) -> R<(Vec<Env>, Vec<AtomTri>)> {
         let (_, dd) = conj_q(f)?;
         d = dd.into_iter().collect::<BTreeSet<_>>().into_iter().collect();
         if d.iter().any(|r| r[0].is_zero() && r[1].is_zero() && sign(&r[2]) < 0) {
-            bail!("biconjAtoms:emptyDomain", "dom f* is empty: f has no affine minorant, so co f is -infinity everywhere.");
+            // one identifier for every f** = -infinity refusal, whatever route saw it first (review #17)
+            bail!("PLQ:biconjQ:minusInfinity", "dom f* is empty: f has no affine minorant, so co f is -infinity everywhere.");
         }
     }
     let df: Vec<[f64; 3]> = d.iter().map(|r| [to_f64(&r[0]), to_f64(&r[1]), to_f64(&r[2])]).collect();
@@ -338,7 +339,7 @@ fn on_segment(p: [f64; 2], u: [f64; 2], w: [f64; 2]) -> bool {
     let d = [w[0] - u[0], w[1] - u[1]];
     let l2 = d[0] * d[0] + d[1] * d[1];
     let t = ((p[0] - u[0]) * d[0] + (p[1] - u[1]) * d[1]) / l2;
-    t >= -1e-12 && t <= 1.0 + 1e-12 && norm([u[0] + t * d[0] - p[0], u[1] + t * d[1] - p[1]]) <= 1e-12 * 1f64.max(norm(p))
+    (-1e-12..=1.0 + 1e-12).contains(&t) && norm([u[0] + t * d[0] - p[0], u[1] + t * d[1] - p[1]]) <= 1e-12 * 1f64.max(norm(p))
 }
 
 fn on_ray(p: [f64; 2], u: [f64; 2], d: [f64; 2]) -> bool {
@@ -416,11 +417,11 @@ fn both_active(s: [f64; 2], i: usize, j: usize, forms: &[Form], d: &[[f64; 3]]) 
         return false;
     }
     let vi = gval(&forms[i], s);
-    for c in 0..forms.len() {
-        if c == i || c == j || !in_dom(s, dom_rows(&forms[c]), 1.0) {
+    for (c, fc) in forms.iter().enumerate() {
+        if c == i || c == j || !in_dom(s, dom_rows(fc), 1.0) {
             continue;
         }
-        if gval(&forms[c], s) > vi + 1e-9 * 1f64.max(vi.abs()) {
+        if gval(fc, s) > vi + 1e-9 * 1f64.max(vi.abs()) {
             return false;
         }
     }
@@ -431,14 +432,14 @@ fn triangle_active(tr: &AtomTri, forms: &[Form], d: &[[f64; 3]]) -> bool {
     let s = tr.s;
     let mut tf = in_dom(s, d, -1.0);
     let v = tr.c;
-    for c in 0..forms.len() {
+    for (c, fc) in forms.iter().enumerate() {
         if tr.forms.contains(&(c + 1)) {
             continue;
         }
         if !tf {
             return tf;
         }
-        if in_dom(s, dom_rows(&forms[c]), 1.0) && gval(&forms[c], s) > v + 1e-9 * 1f64.max(v.abs()) {
+        if in_dom(s, dom_rows(fc), 1.0) && gval(fc, s) > v + 1e-9 * 1f64.max(v.abs()) {
             tf = false;
         }
     }
@@ -587,6 +588,8 @@ fn conic_params(q: &[f64; 6]) -> Vec<Par> {
     p
 }
 
+// Jacobi eigenvalues: the indices address a[p][q]-style PAIRS, so they are load-bearing
+#[allow(clippy::needless_range_loop)]
 fn sym3_norm(m: &[[f64; 3]; 3]) -> f64 {
     // largest |eigenvalue| of a symmetric 3x3 (Jacobi)
     let mut a = *m;

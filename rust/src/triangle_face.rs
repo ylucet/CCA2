@@ -236,6 +236,9 @@ fn narrow(r: &[Z], iv: &(Q, Q)) -> f64 {
     (lo + hi) / 2.0
 }
 
+// the total-degree loop below walks one COLUMN of quv across all its rows, so the index is
+// load-bearing
+#[allow(clippy::needless_range_loop)]
 pub fn dual_point_sign(dp: &DualPoint, q: &M2) -> R<i32> {
     if biv::is_zero(q) {
         return Ok(0);
@@ -436,7 +439,7 @@ fn triangle_lines(tf: &TriFace) -> R<Vec<Vec<Z>>> {
         let a: Vec<Z> = tf.tn[i].iter().map(|x| x * (&d / &tf.td[i])).collect();
         let b: Vec<Z> = tf.tn[j].iter().map(|x| x * (&d / &tf.td[j])).collect();
         let n = [-(&b[1] - &a[1]), &b[0] - &a[0]];
-        let r = vec![&n[0] * &d, &n[1] * &d, -(&n[0] * &a[0] + &n[1] * &a[1])];
+        let r = [&n[0] * &d, &n[1] * &d, -(&n[0] * &a[0] + &n[1] * &a[1])];
         let g = r[0].gcd(&r[1]).gcd(&r[2]);
         let mut r: Vec<Z> = r.iter().map(|x| x.div_floor(&g)).collect();
         if (&r[0] * &tf.tn[o][0] + &r[1] * &tf.tn[o][1] + &r[2] * &tf.td[o]).is_negative() {

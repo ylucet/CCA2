@@ -140,7 +140,7 @@ fn exact_quad(pr: &Prep, x: f64, y: f64) -> ([f64; 3], f64) {
 fn pow_q(x: &Q, i: usize) -> Q {
     let mut r = qi(1);
     for _ in 0..i {
-        r = r * x;
+        r *= x;
     }
     r
 }

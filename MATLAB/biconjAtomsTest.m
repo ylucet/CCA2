@@ -14,7 +14,7 @@ classdef biconjAtomsTest < matlab.unittest.TestCase
             cvxCone = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, 2, 0, 2, 0, 0, 0], [1 0; 0 1]);
             testCase.verifyError(@() biconjAtoms(cvxCone), 'biconjAtoms:oneAtom');
             down = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0, -2, 0, -2, 0, 0, 0], [1 0; 0 1]);
-            testCase.verifyError(@() biconjAtoms(down), 'biconjAtoms:emptyDomain');
+            testCase.verifyError(@() biconjAtoms(down), 'PLQ:biconjQ:minusInfinity');
         end
 
         function aTRIPLEFaceOnTheBoundaryOfDomFStarExtendsAlongItsNormalCone(testCase)

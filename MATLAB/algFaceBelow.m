@@ -127,6 +127,12 @@ function num = separator(X, zl, zh)
 % A quadratic strictly between zl and zh at the points X, in the weighted basis with a power-of-two
 % denominator: [num(1:10), den]. The least-squares quadratic through the midpoints, its coefficients
 % rounded to k bits for the fewest k that keeps it strictly between; [] if none up to 2^40.
+% The fit is a GUESS for a separator, not a decision (header: "a choice, not a decision"): the
+% rounded q is accepted only if it lies strictly between zl and zh, and the box is then decided
+% exactly, by algRowFails. When the sampled points make V nearly singular (RCOND ~1e-21 shows up
+% during biconjQ on random inputs) the fit is no better than any other guess and the box simply
+% splits, so NO decision depends on this solve, and the rank/singularity warnings are expected
+% noise, suppressed here rather than chased.
     num = [];
     x = X(:,1);  y = X(:,2);
     V = [x.^2, x.*y, y.^2, x, y, ones(size(x))];

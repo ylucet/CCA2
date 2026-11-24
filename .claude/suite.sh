@@ -101,7 +101,7 @@ SYMFIX="p = strsplit(path, pathsep); m = p(contains(p, [filesep 'toolbox' filese
 # it. Per-job elapsed times are printed, which is what tells you where to shard next.
 FAST_SUITES=(guardExerciseTest erratumExamplesTest biconjAtomsTest envelopeEvalTest conjQExamplesSweepTest PLQVCTest QuaPolExactTest QuaPolEvalTest bigZTest QuaParCPLQUnitTest QuaParTest RatParTest RatPolTest addQuaParTest addQuaPolTest
              algBranchTest algRowFailsTest algFaceBelowTest dualPointTest triangleFaceTest AlgConTest bridgeFaceAlgTest bridgeFaceRatTest algCurveSideTest AlgCrvTest algCrvVerticesTest algCrvIncidenceTest cellInteriorTest compactCellsTest cornerWedgeRowsTest cornerFaceAlgTest exactSumLintTest envelopeSubdivisionCornersTest envelopeCellPairsTest envelopeCellRegionsTest
-             clipArcByHalfPlaneTest conicMeetTest conjConvexPolygonTest conjEdgeLowerBoundTest
+             clipArcByHalfPlaneTest clipArcByConicTest conicMeetTest conjConvexPolygonTest conjEdgeLowerBoundTest
              biconjCPLQUnitTest biconjQTest conjAffinePLQTest conjPieceCPLQTest conjQTest conjSymFreeTest
              convEnvCPLQTest
              domainIsConvexDTest exactQTest frameAndFanTest infConvTest isConvexQTest

@@ -142,6 +142,8 @@ fn separator(x: &[[f64; 2]], zl: &[f64], zh: &[f64]) -> Option<Vec<Z>> {
 }
 
 /// Minimum-norm least squares by one-sided Jacobi SVD (numpy.linalg.lstsq, rcond = eps*max(m,n)).
+// QR by Givens rotations: the column index addresses rows p and q at once, so it is load-bearing
+#[allow(clippy::needless_range_loop)]
 fn lstsq(a: &[[f64; 6]], b: &[f64]) -> Vec<f64> {
     let m = a.len();
     let n = 6;

@@ -93,7 +93,7 @@ fn domain_is_convex(obj: &QuaPol) -> R<(bool, usize)> {
         }
         let (p1, d1) = vertex_of(obj, obj.e[j][0])?;
         let (p2, d2) = vertex_of(obj, obj.e[j][1])?;
-        let a = vec![-(&p2[1] * &d1 - &p1[1] * &d2), &p2[0] * &d1 - &p1[0] * &d2];
+        let a = [-(&p2[1] * &d1 - &p1[1] * &d2), &p2[0] * &d1 - &p1[0] * &d2];
         let c = &p1[0] * &p2[1] - &p2[0] * &p1[1];
         let sgn = if il == 0 { zi(-1) } else { zi(1) };
         for i in 1..=obj.vn.len() {

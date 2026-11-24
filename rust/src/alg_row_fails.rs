@@ -35,7 +35,7 @@ pub struct Region {
 
 impl Region {
     pub fn new(bx: [f64; 4], row_polys: Vec<M2>, lines: Vec<(Vec<Z>, i64, i64)>, corners: Vec<[f64; 2]>) -> R<Region> {
-        let row_f = row_polys.iter().map(|m| fmat(m)).collect();
+        let row_f = row_polys.iter().map(fmat).collect();
         let mut ls = vec![];
         for (c, side, br) in lines {
             ls.push((pair_eval_prep(&c, br)?, side as f64));
@@ -270,6 +270,12 @@ impl RowCache {
 
     fn insert(&self, at: &RowSpec, r: Option<Row>) {
         self.m.insert(Self::key(at), r);
+    }
+}
+
+impl Default for RowCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -523,7 +529,7 @@ fn row_polys_calc(a: &RowSpec, factors: &[M2]) -> R<Option<Row>> {
     let dn = zi(2) * den;
     let want = -side as i32;
     let nz = nz_of(fp);
-    let (test, top) = if nz - 1 >= 3 {
+    let (test, top) = if nz > 3 {
         if fb != -1 {
             return Ok(None);
         }
@@ -585,7 +591,7 @@ fn sign_polys(s: &[M2], q: &M2, dn: &Z, deg: usize) -> Vec<M2> {
 }
 
 fn top_row_polys(fp: &PolyN, q: &M2, dn: &Z, n: usize, want: i32) -> Vec<M2> {
-    let r: R<Vec<M2>> = (|| {
+    let r: R<Vec<M2>> = {
         let g = slices(fp);
         let nj = if want == 1 { n - 1 } else { 0 };
         let mut p = vec![biv::content_free(&g[n])];
@@ -602,7 +608,7 @@ fn top_row_polys(fp: &PolyN, q: &M2, dn: &Z, n: usize, want: i32) -> Vec<M2> {
             p.push(square_free_sign(&biv::content_free(&biv::trim_n(&rr))));
         }
         Ok(p)
-    })();
+    };
     r.unwrap_or_default()
 }
 
@@ -859,6 +865,8 @@ fn transpose_q(a: &[Vec<Q>]) -> Vec<Vec<Q>> {
     (0..n2).map(|j| (0..n1).map(|i| a[i][j].clone()).collect()).collect()
 }
 
+// bivariate shift: the indices feed comb(i, k) and p[i][j], so they are load-bearing
+#[allow(clippy::needless_range_loop)]
 fn shift_to(p: &[Vec<Q>], x0: &Q) -> Vec<Vec<Q>> {
     let n1 = p.len();
     let mut s = vec![vec![Q::zero(); p[0].len()]; n1];
@@ -866,7 +874,7 @@ fn shift_to(p: &[Vec<Q>], x0: &Q) -> Vec<Vec<Q>> {
         for k in 0..=i {
             let mut f = Q::from_integer(Z::from(comb(i, k)));
             for _ in 0..(i - k) {
-                f = f * x0;
+                f *= x0;
             }
             for (j, v) in p[i].iter().enumerate() {
                 if !v.is_zero() {
@@ -878,6 +886,9 @@ fn shift_to(p: &[Vec<Q>], x0: &Q) -> Vec<Vec<Q>> {
     s
 }
 
+// bivariate scale/shift of the chart: the indices are used in the degree arithmetic (deg - i - j)
+// and address c[i][j] in two dimensions, so they are load-bearing
+#[allow(clippy::needless_range_loop)]
 fn chart_z(zm: &M2, p: [f64; 2], sg: i64, major: u8) -> M2 {
     let mut c = zm.clone();
     let mut sc = 1.0f64;
@@ -926,7 +937,7 @@ fn chart_z(zm: &M2, p: [f64; 2], sg: i64, major: u8) -> M2 {
                 continue;
             }
             if k + l > 0 {
-                v = v * num_traits::pow(scz.clone(), k + l);
+                v *= num_traits::pow(scz.clone(), k + l);
             }
             if sg < 0 && (k + l) % 2 == 1 {
                 v = -v;
@@ -1068,16 +1079,15 @@ fn surd_of_search(p: [f64; 2]) -> Option<[i64; 6]> {
         let qf = q as f64;
         for (k, &d) in SURD_D.iter().enumerate() {
             let mut ab: Vec<(i64, i64)> = vec![];
-            for c in 0..2 {
+            for pc in p {
                 let mut best: Option<(i64, i64)> = None;
                 for b in -64i64..=64 {
-                    let v = qf * p[c] - (b as f64) * sd[k];
+                    let v = qf * pc - (b as f64) * sd[k];
                     let a = round(v);
-                    if (v - a).abs() < 1e-11 * qf * 1f64.max(p[c].abs()) {
-                        if best.map_or(true, |bb| b.abs() < bb.1.abs()) {
+                    if (v - a).abs() < 1e-11 * qf * 1f64.max(pc.abs())
+                        && best.is_none_or(|bb| b.abs() < bb.1.abs()) {
                             best = Some((a as i64, b));
                         }
-                    }
                 }
                 match best {
                     None => break,
@@ -1105,6 +1115,9 @@ fn surd_pow(a: &[Z; 2], n: usize, d: &Z) -> Vec<[Z; 2]> {
     m
 }
 
+// the bound below is sum over (i, j) of pm[i][j] * (..)^i * (..)^j * q^(deg - i - j): the indices
+// are exponents, so they are load-bearing
+#[allow(clippy::needless_range_loop)]
 fn blow_up_surd(pm: &M2, p: [f64; 2], sg: i64, major: u8) -> Option<SP> {
     let r = surd_of(p)?;
     let a = [zi(r[0]), zi(r[1])];
@@ -1353,7 +1366,7 @@ fn square_free_int(c: &Z) -> Z {
             e += 1;
         }
         if e % 2 == 1 {
-            k = k * &p;
+            k *= &p;
         }
         if r.is_one() {
             return k;
@@ -1361,7 +1374,7 @@ fn square_free_int(c: &Z) -> Z {
     }
     let s = r.sqrt();
     if &s * &s != r {
-        k = k * r;
+        k *= r;
     }
     k
 }
@@ -1420,9 +1433,8 @@ fn top_face_row(fk: &Arc<PolyN>, fw: &Arc<PolyN>, nk: usize, hik: bool, factors:
             let mut p = None;
             if let Some(fk2) = surd_face(fk, nk, hik) {
                 let kap = if fk2.lin { Z::one() } else { square_free_int(&fk2.c) };
-                let mu = field_mu(&fk2, &kap);
-                if kap.bits() <= 52 && mu.is_some() {
-                    let mu = mu.unwrap();
+                let mu = (kap.bits() <= 52).then_some(field_mu(&fk2, &kap)).flatten();
+                if let Some(mu) = mu {
                     let k = kap.clone();
                     let g = slices(fw);
                     let n = g.len() - 1;
@@ -1463,7 +1475,7 @@ fn top_face_row(fk: &Arc<PolyN>, fw: &Arc<PolyN>, nk: usize, hik: bool, factors:
 }
 
 fn top_ok(s: &[i32], odd: bool) -> bool {
-    if s[0..3].iter().any(|v| *v == 0) {
+    if s[0..3].contains(&0) {
         return false;
     }
     let t = s[3 + if s[0] * s[1] < 0 { 1 } else { 0 }];
@@ -1472,7 +1484,7 @@ fn top_ok(s: &[i32], odd: bool) -> bool {
 }
 
 fn surd_ok(s: &[i32]) -> bool {
-    if s[0..4].iter().any(|v| *v == 0) {
+    if s[0..4].contains(&0) {
         return false;
     }
     let tk = s[0] * s[2];
@@ -1658,6 +1670,13 @@ fn odd_part(s: &M2, d: usize, lvl: usize) -> R<M2> {
     Ok(o)
 }
 
+// Deliberately generic screen points for the relative-sign screen: they look irrational and
+// avoid the "nice" values a symbolic input is built around, so the screen rarely lands exactly
+// on a root. Several happen to be 10-decimal-place approximations of named constants (sqrt 2,
+// sqrt 3, pi, e, Euler's gamma) -- that accidental closeness is what makes them look generic
+// to an input, so the lint is allowed and the values are KEPT, not replaced by the exact
+// constants.
+#[allow(clippy::approx_constant)]
 const RELPTS: [[f64; 2]; 6] = [[0.6180339887, 0.3247179572], [-0.7182818285, 0.4142135624], [0.2360679775, -0.8660254038], [1.7320508076, 1.4142135624], [-1.2599210499, -0.5772156649], [3.1415926536, -2.7182818285]];
 
 fn rel_sign(s: &M2, o: &M2) -> i32 {
@@ -1791,6 +1810,13 @@ fn may_divide(s: &M2, g: &M2) -> bool {
     true
 }
 
+// The three abscissae below are deliberately generic screen points (a 10-decimal-place
+// golden-ratio conjugate, minus the plastic number, and a 10-decimal-place e): they are
+// unlikely to coincide with a root of the curve for an exact input, which is exactly what the
+// screen wants. The e approximation is what clippy flags; the value is kept, the lint allowed.
+#[allow(clippy::approx_constant)]
+// the evaluation loop sums gg[i][j] * x^i over i: the index is an exponent, so it is load-bearing
+#[allow(clippy::needless_range_loop)]
 fn curve_points(g: &M2) -> Arc<(bool, Option<Vec<(f64, Vec<Cx>)>>)> {
     if let Some(h) = MEMO_CURVE_PTS.get(g) {
         return h;

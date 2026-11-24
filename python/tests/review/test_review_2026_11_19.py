@@ -410,3 +410,34 @@ def test_continuous_input_not_refused():
                 f.conj()
             except CCA2Error as e:
                 raise AssertionError('%s: continuous input refused as %s' % (rec['name'], e.identifier))
+
+
+# ---------------------------------------------------------------------------------------------
+# Finding 17 (MINOR): ONE identifier for every f** = -infinity refusal, whatever route sees it
+# ---------------------------------------------------------------------------------------------
+def test_biconj_whole_plane_refused_as_minus_infinity():
+    # f = -x^2/2 - y^2/2 on the WHOLE PLANE (no vertices, no edges): not convex, so it did not
+    # take the convex short-circuit, and f has no affine minorant. It used to refuse as
+    # PLQ:biconjQ:noFace; the cone case uses PLQ:biconjQ:minusInfinity for the same answer.
+    f = QuaPol([], [], [[0, 0, 0, 0, -1, 0, -1, 0, 0, 0]], [])
+    try:
+        f.biconj()
+    except CCA2Error as e:
+        assert e.identifier == 'PLQ:biconjQ:minusInfinity', 'got %s' % e.identifier
+    else:
+        raise AssertionError('a non-convex whole-plane f was answered by biconjQ')
+
+
+def test_biconj_atoms_fan_refused_as_minus_infinity():
+    # f = -x^2 - y^2 on the cone apex (0,0), rays (1,0), (0,1): dom f* is EMPTY (golden record
+    # trace_biconj 774). It used to refuse as biconjAtoms:emptyDomain, the third identifier for
+    # the same answer.
+    f = QuaPol([[0, 0], [1, 0], [0, 1]], [[1, 2, 0], [1, 3, 0]],
+               [[0, 0, 0, 0, -2, 0, -2, 0, 0, 0]], [[1, 0], [0, 1]])
+    from cca2.biconj_atoms import biconjAtoms
+    try:
+        biconjAtoms(f)
+    except CCA2Error as e:
+        assert e.identifier == 'PLQ:biconjQ:minusInfinity', 'got %s' % e.identifier
+    else:
+        raise AssertionError('a fan with empty dom f* was answered by biconjAtoms')

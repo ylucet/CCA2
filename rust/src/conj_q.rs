@@ -523,7 +523,7 @@ fn recession_conditions(sh: &Shape, hn: &[Vec<Z>], ln: &[Z], fd: &Z, vi: &[Vec<Z
         let mut mu: Option<Z> = None;
         for &v in &sh.vs {
             let t = dot(&vi[v - 1], &hd);
-            if mu.as_ref().map_or(true, |m| &t < m) {
+            if mu.as_ref().is_none_or(|m| &t < m) {
                 mu = Some(t);
             }
         }
@@ -912,9 +912,9 @@ fn conj_unbounded_non_convex(obj: &QuaPol, k: usize) -> R<(QuaCon, Dom)> {
         let ip = [(&p[0] + &w[0]) * &half + &rq[0], (&p[1] + &w[1]) * &half + &rq[1]];
         parts.push(one_part(vec![p, w, pr, wr], vec![[1, 2, 1], [1, 3, 0], [2, 4, 0]], ip, &q)?);
     }
-    for i in 0..2 {
-        let a = obj.vx(rays[i][0]);
-        let b = obj.vx(rays[i][1]);
+    for r2 in rays.iter().take(2) {
+        let a = obj.vx(r2[0]);
+        let b = obj.vx(r2[1]);
         let ar = [&a[0] + &rq[0], &a[1] + &rq[1]];
         let ip = [(&a[0] + &b[0]) * &half + &rq[0], (&a[1] + &b[1]) * &half + &rq[1]];
         parts.push(one_part(vec![a, b, ar], vec![[1, 2, 0], [1, 3, 0]], ip, &q)?);
@@ -952,8 +952,8 @@ fn lineality_conj(_obj: &QuaPol, _k: usize, sh: &Shape, hn: &[Vec<Z>], fnk: &[Z]
     let n: Vec<&[Z]> = sh.hp.iter().map(|h| &h[0..2]).collect();
     let g0 = n[0][0].gcd(&n[0][1]).max(Z::one());
     let p = vec![&n[0][0] / &g0, &n[0][1] / &g0];
-    for i in 1..n.len() {
-        if !(&n[i][0] * &p[1] - &n[i][1] * &p[0]).is_zero() {
+    for h in n.iter().skip(1) {
+        if !(&h[0] * &p[1] - &h[1] * &p[0]).is_zero() {
             return Ok(None);
         }
     }

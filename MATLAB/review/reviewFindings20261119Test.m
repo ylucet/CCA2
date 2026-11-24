@@ -163,6 +163,24 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             v = g.eval([0 1; 1 0]);
             tc.verifyEqual(v(:).', [Inf Inf]);
         end
+
+        function biconjWholePlaneRefusedAsMinusInfinity(tc)
+            % Finding 17 (MINOR): ONE identifier for every f** = -infinity refusal.
+            % f = -x^2/2 - y^2/2 on the WHOLE PLANE (the one-argument constructor: no vertices,
+            % no edges): not convex, so it did not take the convex short-circuit, and f has no
+            % affine minorant. It used to refuse as PLQ:biconjQ:noFace, the cone case's
+            % PLQ:biconjQ:minusInfinity being the identifier for the same answer.
+            f = QuaPol([0 0 0 0 -1 0 -1 0 0 0]);
+            tc.verifyError(@() biconjQ(f), 'PLQ:biconjQ:minusInfinity');
+        end
+
+        function biconjAtomsFanRefusedAsMinusInfinity(tc)
+            % Finding 17 (MINOR), fan case: f = -x^2 - y^2 on the cone apex (0,0), rays (1,0),
+            % (0,1): dom f* is empty (golden record trace_biconj 774). It used to refuse as
+            % biconjAtoms:emptyDomain, the third identifier for the same answer.
+            f = QuaPol([0 0; 1 0; 0 1], [1 2 0; 1 3 0], [0 0 0 0 -2 0 -2 0 0 0], [1 0; 0 1]);
+            tc.verifyError(@() biconjAtoms(f), 'PLQ:biconjQ:minusInfinity');
+        end
     end
     methods (Static)
         function checkDFamily(tc, slow)

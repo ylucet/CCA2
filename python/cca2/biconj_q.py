@@ -92,6 +92,16 @@ def biconjQ(obj, opts=None):
     Vi, vd = rat_q.combineDen(obj.VN, obj.VD)
     for k in range(1, nf + 1):
         Hk = Hof(k - 1)
+        if not any(r[0] == k or r[1] == k for r in obj.F):
+            # A face owning no edge is the whole plane, and it reaches this loop only because it
+            # is not convex (a convex single piece took the short-circuit above): f then runs
+            # DOWNWARD at infinity, has no affine minorant, and co f is -infinity everywhere --
+            # the same answer as the cone case below, so the same identifier (review #17).
+            error('PLQ:biconjQ:minusInfinity',
+                  'piece %d owns no edge, so it is the whole plane, and it is not convex (a '
+                  'convex single piece would have taken the short-circuit above): f runs '
+                  'DOWNWARD at infinity, has no affine minorant, and co f is -infinity '
+                  'everywhere. That is the right answer and there is nowhere to put it.' % k)
         vsk, rays, bnd = pieceGeometryB(obj, k)
         if not bnd:
             Lk = [obj.fN[k - 1][7], obj.fN[k - 1][8]]
@@ -536,9 +546,9 @@ def sgnOfB(row, want):
 
 
 def quaPolAsQuaCon(obj):
-    """f is convex, so co f = f: the same faces, as a QuaCon. A NON-CONVEX piece is refused --
-    an intersection of half-planes cannot express it, and the hull of a union is not the union
-    of hulls."""
+    """f is convex, so co f = f: the same faces, as a QuaCon. A NON-CONVEX piece is refused:
+    its region is not an intersection of half-planes, so it cannot be one face, and this route
+    only returns f unchanged -- it does not compute the envelope of a non-convex piece."""
     Vi, vd = rat_q.combineDen(obj.VN, obj.VD)
     cells = []
     for k in range(1, len(obj.fN) + 1):
@@ -549,10 +559,11 @@ def quaPolAsQuaCon(obj):
                 v = Vi[vi - 1]
                 if r[0] * v[0] + r[1] * v[1] + vd * r[2] < 0:
                     error('PLQ:biconjQ:nonConvexPiece',
-                          'piece %d is NOT CONVEX, and co f = f here, so the answer must carry '
-                          'that same non-convex region -- which an intersection of half-planes '
-                          'cannot express. Unlike the conjugate this cannot be fixed by '
-                          'splitting: the convex hull of a union is not the union of hulls.' % k)
+                          'piece %d is NOT CONVEX, so its region is not an intersection of '
+                          'half-planes and cannot be one face of a QuaCon. This route only '
+                          'returns f unchanged (one face per piece); the convex envelope of a '
+                          'non-convex piece is a different function (on the convex hull of the '
+                          'piece), and this route does not compute it, so it declines.' % k)
             for q in rays:
                 if r[0] * q[0] + r[1] * q[1] < 0:
                     error('PLQ:biconjQ:nonConvexPiece',

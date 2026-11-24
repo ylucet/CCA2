@@ -877,6 +877,8 @@ fn bitlen(x: &Z) -> u64 {
 }
 
 /// sign of c(N / 2^e): the homogeneous Horner sum, in integers.
+// mixed-radix accumulation: the index i is the digit's weight (e * i), so it is load-bearing
+#[allow(clippy::needless_range_loop)]
 fn sign_dy(c: &[Z], n: &Z, e: u64) -> i32 {
     if c.is_empty() {
         return 0;
@@ -915,8 +917,8 @@ fn sign_at_dyadic(q: &[Z], chain_p: &[Vec<Z>], chain_q: &[Vec<Z>], q_const: bool
         }
         let m = &l + &h;
         e += 1;
-        l = l << 1usize;
-        h = h << 1usize;
+        l <<= 1usize;
+        h <<= 1usize;
         let vpmid = var_dy(chain_p, &m, e);
         let vqmid = var_dy(chain_q, &m, e);
         if vplo as i64 - vpmid as i64 == 1 {
@@ -1376,20 +1378,20 @@ pub fn pair_line_data(c: &[Z]) -> R<PairLine> {
     }
     let q = poly_trim(&[cc.clone(), b.clone(), a.clone()]);
     let vertical = cc.is_zero();
-    let iv;
-    if vertical {
+    
+    let iv = if vertical {
         if b.is_zero() {
             bail!("ratQ:notALinePair", "both lines are vertical, so they are parallel and cannot cross.");
         }
         let t = Q::new(-a, b.clone());
-        iv = vec![(&t - qi(1), &t + qi(1)), (qi(0), qi(0))];
+        vec![(&t - qi(1), &t + qi(1)), (qi(0), qi(0))]
     } else {
         let i = isolate_roots(&q)?;
         if i.len() != 2 {
             bail!("ratQ:notALinePair", "the slope quadratic has {} real roots, not two.", i.len());
         }
-        iv = i;
-    }
+        i
+    };
     Ok(PairLine {
         parallel: false,
         apex: [xn[0].clone(), xn[1].clone(), xd],

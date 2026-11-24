@@ -90,9 +90,9 @@ impl AlgPairF {
     pub fn new(pr: &AlgPair) -> AlgPairF {
         let f = |m: &Vec<Vec<Z>>| [[to_f64(&m[0][0]), to_f64(&m[0][1])], [to_f64(&m[1][0]), to_f64(&m[1][1])]];
         let ph = bridge_phi(pr, &[zi(0), zi(0)], &zi(1));
-        let e11 = vec![pr.n1[0][0].clone(), &pr.n1[0][0] - &pr.n2[0][0]];
-        let e12 = vec![pr.n1[0][1].clone(), &pr.n1[0][1] - &pr.n2[0][1]];
-        let e22 = vec![pr.n1[1][1].clone(), &pr.n1[1][1] - &pr.n2[1][1]];
+        let e11 = [pr.n1[0][0].clone(), &pr.n1[0][0] - &pr.n2[0][0]];
+        let e12 = [pr.n1[0][1].clone(), &pr.n1[0][1] - &pr.n2[0][1]];
+        let e22 = [pr.n1[1][1].clone(), &pr.n1[1][1] - &pr.n2[1][1]];
         AlgPairF {
             n1: f(&pr.n1),
             m1: [to_f64(&pr.m1[0]), to_f64(&pr.m1[1])],
@@ -561,10 +561,10 @@ pub fn bridge_arc_cut(tie: &[Z], p: &[Vec<Z>], pr: &AlgPair, wit: &[Z; 3]) -> R<
         }
         let b = if aa.is_positive() { [-&bb, aa.clone()] } else { [bb.clone(), -&aa] };
         if aa.is_positive() {
-            if lo.as_ref().map_or(true, |l| &b[0] * &l[1] > &l[0] * &b[1]) {
+            if lo.as_ref().is_none_or(|l| &b[0] * &l[1] > &l[0] * &b[1]) {
                 lo = Some(b);
             }
-        } else if hi.as_ref().map_or(true, |h| &b[0] * &h[1] < &h[0] * &b[1]) {
+        } else if hi.as_ref().is_none_or(|h| &b[0] * &h[1] < &h[0] * &b[1]) {
             hi = Some(b);
         }
     }
@@ -699,7 +699,7 @@ pub fn implicit_poly(d: &Z, n1: &[Vec<Z>], m1: &[Z], q1: &Z, n2: &[Vec<Z>], m2: 
     let cz = pn::slices(&p, 2);
     let nz = *cz.keys().max().unwrap();
     let g = pn::content_free(&cz[&nz]);
-    let is_unit = g.len() == 1 && g.get(&vec![0u32, 0]).map_or(false, |c| c.abs().is_one());
+    let is_unit = g.len() == 1 && g.get(&vec![0u32, 0]).is_some_and(|c| c.abs().is_one());
     if !is_unit {
         let mut q: BTreeMap<u32, PolyN> = BTreeMap::new();
         let mut ok = true;
@@ -728,7 +728,7 @@ pub fn image_conic(tie: &[Z], nk: &[Vec<Z>], mk: &[Z], d: &Z) -> R<Vec<Z>> {
     if det_exact(nk)?.is_zero() {
         return Ok(vec![]);
     }
-    let adj = vec![vec![nk[1][1].clone(), -&nk[0][1]], vec![-&nk[1][0], nk[0][0].clone()]];
+    let adj = [vec![nk[1][1].clone(), -&nk[0][1]], vec![-&nk[1][0], nk[0][0].clone()]];
     let mn: Vec<Vec<Z>> = adj.iter().map(|r| r.iter().map(|x| d * x).collect()).collect();
     let tn = vec![-(&adj[0][0] * &mk[0] + &adj[0][1] * &mk[1]), -(&adj[1][0] * &mk[0] + &adj[1][1] * &mk[1])];
     let md = det_exact(nk)?;
@@ -957,12 +957,12 @@ pub fn bridge_face_rat(n1: &[Z], d1: &Z, n2: &[Z], d2: &Z, p: &[Vec<Z>]) -> R<BF
         bail!("bridgeFaceRat:notRankOne", "n2 must have a RANK-1 Hessian.");
     }
     let d = lcm(d1, d2);
-    let b1 = vec![&n1[7] * (&d / d1), &n1[8] * (&d / d1)];
+    let b1 = [&n1[7] * (&d / d1), &n1[8] * (&d / d1)];
     let k1 = &n1[9] * (&d / d1);
     let mm2: Vec<Vec<Z>> = nn2.iter().map(|r| r.iter().map(|x| x * (&d / d2)).collect()).collect();
-    let b2 = vec![&n2[7] * (&d / d2), &n2[8] * (&d / d2)];
+    let b2 = [&n2[7] * (&d / d2), &n2[8] * (&d / d2)];
     let k2 = &n2[9] * (&d / d2);
-    let dl = vec![&b1[0] - &b2[0], &b1[1] - &b2[1]];
+    let dl = [&b1[0] - &b2[0], &b1[1] - &b2[1]];
     let kp = &k1 - &k2;
     let (u, a) = if !mm2[0][0].is_zero() { (vec![mm2[0][0].clone(), mm2[0][1].clone()], mm2[0][0].clone()) } else { (vec![mm2[0][1].clone(), mm2[1][1].clone()], mm2[1][1].clone()) };
     if a.is_zero() {
@@ -978,8 +978,8 @@ pub fn bridge_face_rat(n1: &[Z], d1: &Z, n2: &[Z], d2: &Z, p: &[Vec<Z>]) -> R<BF
     let rl = -zi(2) * &a * (&dl[0] * &u[0] + &dl[1] * &u[1]);
     let rc = -zi(2) * &a * &kp * &nu;
     let rd = zi(2) * &a * &dw;
-    let uy = vec![&d * &u[0], &d * &u[1], -(&u[0] * &b1[0] + &u[1] * &b1[1])];
-    let wy = vec![&d * &w[0], &d * &w[1], -(&w[0] * &b1[0] + &w[1] * &b1[1])];
+    let uy = [&d * &u[0], &d * &u[1], -(&u[0] * &b1[0] + &u[1] * &b1[1])];
+    let wy = [&d * &w[0], &d * &w[1], -(&w[0] * &b1[0] + &w[1] * &b1[1])];
     let cc: Vec<Z> = wy.iter().map(|x| &rq * x).collect();
     let bb: Vec<Z> = uy.iter().zip(wy.iter()).map(|(x, y)| &rd * x + &rl * y).collect();
     let mut aa: Vec<Z> = wy.iter().map(|x| &rc * x).collect();
