@@ -156,6 +156,31 @@ fn discontinuous_input_shared_vertex_d111() {
     }
 }
 
+/// #108 residual on D-153 (slow): f** <= lsc f at its vertices and next to them -- 10.2578 for
+/// 9.5177 on the hull edge from the jump vertex (-3,-2) (a double root real only on that edge's line
+/// counted as a branch), 7.5000017 for 7.5 at (-3,-2) (a double root ~sqrt(eps) off), +inf at the
+/// corner (0,0) (a row with a 0/0 there read as failed).
+#[test]
+#[ignore = "slow: D-153 (run with -- --ignored)"]
+fn discontinuous_input_shared_vertex_d153() {
+    let f = pol(&[[-3, -2], [0, 0], [2, 3], [-2, 3]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 1, 1, -1, -1, 1, -2], [0, 0, 0, 0, 2, -1, 1, -2, 2, 2]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let x = [[-3.0, -2.0], [-2.875, -1.375], [0.0, 0.0], [2.0, 3.0], [0.0, 3.0], [0.5, 3.0]];
+    // lsc f there, and the value of f** where it is known in closed form
+    let lsc: [f64; 6] = [7.5, 10.2578125, -2.0, 2.5, 12.5, 10.25];
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&x).unwrap();
+    for i in 0..x.len() {
+        assert!(v[i] <= lsc[i] + 1e-7 * lsc[i].abs().max(1.0), "f** at {:?} above lsc f = {}: {}", x[i], lsc[i], v[i]);
+    }
+    assert!((v[0] - 7.5).abs() <= 1e-12 && (v[2] + 2.0).abs() <= 1e-12 && (v[3] - 2.5).abs() <= 1e-12, "{:?}", v);
+    // on the hull edges f** is the 1-D envelope of lsc f along them: the tangent from the jump
+    // vertex to the convex piece's parabola -- 7.5 + (9 + sqrt 51) t on edge (-3,-2)-(-2,3) at t = 1/8,
+    // 12.5 - 5x on y = 3 (tangent at x = 0, a triple root of the face there)
+    assert!((v[1] - (7.5 + (9.0 + 51f64.sqrt()) / 8.0)).abs() <= 1e-9, "{:?}", v);
+    assert!((v[4] - 12.5).abs() <= 1e-12 && (v[5] - 10.0).abs() <= 1e-9, "{:?}", v);
+}
+
 /// #108 residual, the two-convex-pieces route: the poly2 kink at c = -2 jumps across its diagonal;
 /// at the jump vertex (1,2) lsc f = min(5, 1) = 1 = f**, a DOUBLE root of the face there, which
 /// rounding returned as 1.0000000256.

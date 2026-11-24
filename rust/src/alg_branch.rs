@@ -365,6 +365,18 @@ fn libm_frexp_exp(v: f64) -> i64 {
     exp - 1022
 }
 
+/// Is p(x, y, .) identically zero at each point -- a BASE POINT, where every z is a root and a
+/// row comparing this value is undefined? Every coefficient zero by alg_branch's own zero test.
+pub fn fibre_vanishes(p: &PolyN, x: &[[f64; 2]]) -> R<Vec<bool>> {
+    let pr = prep(p)?;
+    Ok(x.iter()
+        .map(|q| {
+            let (_, z) = if pr.big { fibre_exact(&pr, q[0], q[1]) } else { fibre_double(&pr, q[0], q[1], 1e-12) };
+            z.iter().all(|b| *b)
+        })
+        .collect())
+}
+
 fn sgnz(v: f64) -> f64 {
     if v >= 0.0 {
         1.0

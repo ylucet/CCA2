@@ -105,7 +105,7 @@ classdef AlgCrv < AlgCon & Crv
          % residual: D-132, D-111) and would otherwise win the max.
          tri = false(n,1);
          for k = 1:obj.nf
-            M = obj.facePoints(k, X);
+            M = obj.faceClosurePoints(k, X);
             if ~any(M), continue, end
             v = nan(n,1);  v(M) = obj.faceValues(k, X(M,:));
             isTri = obj.FT(k) > 0;
@@ -117,13 +117,31 @@ classdef AlgCrv < AlgCon & Crv
    end
 
    methods (Access = private)
-      function M = facePoints(obj, k, X)
-      % faceOwns for every row of X at once.
-         M = true(size(X,1), 1);
+      function M = faceClosurePoints(obj, k, X)
+      % facePoints, with a row that is UNDEFINED at a point decided by the face's closure. An
+      % algebraic row compares a root of a polynomial in z; where the whole fibre vanishes (a BASE
+      % POINT: every z is a root, e.g. a 0/0 of a bridge between two atoms sharing a vertex) the row
+      % says nothing, and reading it as "fails" left a hole: D-153's domain corner (0,0), where the
+      % face around it is worth -2 = f**, was +inf (#108 residual). There the face holds iff it holds
+      % at x nudged by 1e-7 in one of eight directions (envelopeEval's nudge); the value is still
+      % the face's own at x.
+         [M, U] = obj.facePoints(k, X);
+         r2 = 1/sqrt(2);
+         D = [1 0; -1 0; 0 1; 0 -1; r2 r2; r2 -r2; -r2 r2; -r2 -r2];
+         for i = find(~M & U).'
+            h = 1e-7 * max([1, abs(X(i,1)), abs(X(i,2))]);
+            if any(obj.facePoints(k, X(i,:) + h*D)), M(i) = true; end
+         end
+      end
+
+      function [M, U] = facePoints(obj, k, X)
+      % faceOwns for every row of X at once; U: held but for rows undefined at a base point.
+         M = true(size(X,1), 1);  U = false(size(X,1), 1);
          rows = obj.FC{k};
          for t = 1:size(rows,1)
-            if ~any(M), return, end
-            P = X(M,:);  ok = true(size(P,1), 1);
+            L = M | U;
+            if ~any(L), return, end
+            P = X(L,:);  ok = true(size(P,1), 1);  und = false(size(P,1), 1);
             tbl = 0;
             if size(rows,2) >= 4, tbl = rows(t,4); end
             if tbl == 3
@@ -136,11 +154,16 @@ classdef AlgCrv < AlgCon & Crv
                r = obj.EcI(rows(t,1));
                v1 = algBranch(r.FP1, P, r.FB1);  v2 = algBranch(r.FP2, P, r.FB2);
                ok = isfinite(v1) & isfinite(v2) & ~(rows(t,2) * (v1 - v2) < -1e-9);
+               if any(~isfinite(v1) | ~isfinite(v2))
+                  und = (~isfinite(v1) & algFibreVanishes(r.FP1, P)) | ...
+                        (~isfinite(v2) & algFibreVanishes(r.FP2, P));
+               end
             elseif tbl == 1
                a = obj.EcA(rows(t,1));
                v = algBranch(a.FP, P, a.FB);
                q = ratQ.evalFace(a.num, a.den, P);
                ok = isfinite(v) & ~(rows(t,2) * (q - v) < -1e-9);
+               if any(~isfinite(v)), und = ~isfinite(v) & algFibreVanishes(a.FP, P); end
             else
                c = obj.EcQ(rows(t,1), :);
                br = 0;
@@ -157,7 +180,9 @@ classdef AlgCrv < AlgCon & Crv
                   ok = ~(rows(t,2) * v < -1e-9);
                end
             end
-            M(M) = ok;
+            m = M(L);  u = U(L);
+            U(L) = (m & ~ok & und) | (~m & (ok | und));   % an undecided point stays so, or fails
+            M(L) = m & ok;
          end
       end
 

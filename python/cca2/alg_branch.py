@@ -265,6 +265,18 @@ def _isolatedPair(lay, x, y, z0, rad):
     return both >= 2
 
 
+def fibreVanishes(P, x):
+    """Is p(x, y, .) identically zero at the point -- a BASE POINT, where every z is a root and a
+    row comparing this value is undefined (#108 residual: D-153's corner (0,0))? Every coefficient
+    zero by algBranch's own zero test (exact for a big P, within degTol of its terms otherwise)."""
+    lay, nx, ny, nz = _layers(P)
+    if max(abs(c) for c in P.values()) >= 2 ** 53:
+        _, isZero = _fibreExact(lay, float(x[0]), float(x[1]))
+    else:
+        _, isZero, _ = _fibreDouble(lay, float(x[0]), float(x[1]), 1e-12)
+    return all(isZero)
+
+
 def _sgnz(v):
     """sign(v + (v == 0)): +1 at zero."""
     return 1.0 if v >= 0 else -1.0

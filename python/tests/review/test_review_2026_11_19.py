@@ -362,12 +362,12 @@ def test_discontinuous_input_lsc(name):
         assert v - cc <= 1e-6 * max(1.0, abs(v)), (name, x, v, cc)       # f** = conj(conj)
 
 
-# #108 residual. Fixed 2026-11-24 on D-111 and D-132: the AlgCrv took the max over the faces holding
-# at a point, and cutting a contact triangle out of a pair's face left ZERO-AREA remnants on the
-# jump diagonal carrying the pair's value (D-132: 11 at the vertex (-2,2), lsc f = -7; D-111: 8.5
-# at (-2,3), lsc f = 3); the triangle now decides where it holds. Open on D-153: 9 at (-3,-2)
-# (lsc f = 7.5) -- a different cause, see TODO.
-_D_SHARED_OPEN = {'D-153'}
+# #108 residual, fixed 2026-11-24 (DESIGN.md "Discontinuous input"): f** <= lsc f failed at jump
+# vertices and next to them on D-111, D-132 (a zero-area remnant of a cut contact triangle won the
+# AlgCrv max: 8.5 at (-2,3), lsc f = 3; 11 at (-2,2), lsc f = -7) and D-153 (a double root real only
+# on its hull edges' lines counted as a branch, 10.2578 for 9.5177; double/triple roots ~eps^(1/k)
+# off at the jump vertices, 7.5000017 for 7.5; a row with a 0/0 at the corner (0,0) made it +inf).
+_D_SHARED_OPEN = set()
 
 
 def _shared_param(i):

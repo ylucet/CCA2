@@ -1827,22 +1827,62 @@ piece; `conjQ` works per closed piece.
 - `fIsConvex` (the caller's flag, trusted without the edge loop): now honoured only when
   `isContinuous` says f is continuous; otherwise ignored and the general path decides.
 
-**Still open: the subdivision assumes faces that meet agree there.** The atoms route turns the min over
-atom pairs and contact triangles (an `EnvelopeMin`) into an explicit subdivision (`AlgCrv`:
-`envelopeSubdivisionAlg`, `cutTriangles`) whose evaluator takes the MAX over the faces holding at a point
--- by design for overlapping irrational pieces, harmless where faces that meet agree. Where the input
-jumps they do not: a bridge face built from one piece's atom carries that piece's values up to a shared
-vertex. Measured: D-132 gives 11 at its vertex (-2,2) (lsc f = -7) and 9.875 at (-13/8, 11/8) on the
-diagonal next to it; D-153 gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it. The review
-grid (offset from the vertices) is unaffected: 0 wrong values in all three engines. Tried and dropped
-(2026-11-21): (1) a contact-triangle face decides where it holds (fixes D-132 only); (2) a face counts
-only if it also holds on a circle around the point (D-153's bad face owns a real sector); (3) return the
-unsubdivided `EnvelopeMin` (clipped to conv(dom f)) for a discontinuous f -- right at both vertices but
-too low on D-209 (a pair envelope evaluates to -2.449 where f** = -1.851; the review #9b class in
-`envelopeEval`, which the subdivision masks). Tracked by the strict xfails of
-`test_discontinuous_shared_points` (D-111, D-132, D-153; D-111 gives 8.5 at (-2,3), lsc f = 3) and the ignored Rust / filtered MATLAB D-132 tests.
-The two-convex-pieces route (`subdividePair`) shows the same class on the discontinuous kink: 1.00000003
-at its jump vertex (1,2) (f** = 1), up to 1.9e-5 off within 1e-4 of it.
+**The residual at jump vertices (#108 residual, fixed 2026-11-24): four causes, none in the max rule
+itself.** The AlgCrv evaluator takes the MAX over the faces holding at a point, by design for overlapping
+irrational pieces; on D-132, D-111, D-153 and the discontinuous poly2 kink it returned values above lsc f
+at the jump vertices and along the edges next to them. Traced, each wrong value came from a face that
+was not right AT the point although it is right around it -- harmless while f is continuous, because
+there every candidate meets f** where it ends. Since f** is closed and convex, its value at a point is
+the limit from the points around it, and each fix makes one step honour that:
+
+1. **Contact triangle remnants (D-132, D-111).** `cutTriangles` cuts an algebraic contact triangle out
+   of every face it meets as CLOSED remnants ("outside edge e"), unconditionally; a face ending on the
+   triangle's edge leaves a ZERO-AREA remnant along it with its pair's value (D-132: 11 at (-2,2) where
+   lsc f = -7, and the line 11 -> 2 along the whole jump diagonal; D-111: 8.5 at (-2,3), lsc f = 3). Now
+   a contact triangle DECIDES where it holds: its plane is an affine minorant of f** equal to f** on the
+   closed triangle (`AlgCrv.eval`).
+2. **A double root real only on a curve (D-153).** A face is "the b-th real root" of its fibre. A
+   bridge's fibre can carry a complex pair that touches the real axis only on a line -- where its dual
+   point runs off to infinity, a boundary line of dom f** -- and there it shifted the numbering: on
+   D-153's hull edge next to the jump vertex (-3,-2) the top root was piece 2's own value 10.2578, f** =
+   9.5177 (certified LP bound; 7.25 for 5 on edge y = 3); rounding widened it to a ~1e-5 strip inside.
+   For a continuous f that touching value IS f** there. Now `algBranch` decides every pair the doubles
+   cannot separate exactly: Sturm counts at x +- h e (dyadic h ~ 1e-12 relative, four directions); a
+   pair with no real root on either side in two directions is dropped.
+3. **A genuine multiple root to full precision (D-153's vertices, the kink).** At a jump vertex f**
+   is often a double or triple root of the face's fibre, which rounding returns ~eps^(1/k) off: D-153
+   7.5000017 at (-3,-2) (f** = 7.5, 2.3e-7 relative), 12.500022 at the tangency point (0,3); the kink
+   1.0000000256 at (1,2). Now `algBranch` splits the exact fibre by multiplicity (Yun) and returns its
+   multiple roots exactly (Sturm bisection), k copies each, whatever the LAPACK.
+4. **A row undefined at a base point (D-153's corner (0,0)).** An algebraic row linear in z had a 0/0
+   at the domain corner (a bridge between two atoms sharing that vertex), algBranch returned NaN, and
+   the row read as "fails": the corner was +inf, f** = -2. Now a row whose whole fibre vanishes is
+   undecided and the face's CLOSURE decides (its rows at x nudged by 1e-7, as `envelopeEval` already
+   does); the value is still the face's own at x. Not a continuity issue: any two atoms sharing a vertex
+   give it; the D family is simply where vertices are tested.
+
+Causes 2-4 never needed a jump to exist; a jump is what makes the wrong value differ from the right one
+(2) or what puts the test points where they are (3, 4). The 2026-11-21 attempts, for the record: (a) "a
+contact triangle decides" was dropped as "D-132 only" -- it fixes D-111 too, and is cause 1's fix; (b) a
+face counts only if it holds on a small circle -- D-153's bad face owns a real sector, because its fault
+was cause 2, not its region; (c) return the unsubdivided EnvelopeMin for a discontinuous f -- causes 2-3
+live in `algBranch`, which the EnvelopeMin's pair envelopes evaluate too (D-153's EnvelopeMin was 10.2578
+at (-23/8,-11/8) as well), so it could not have been the answer; the "too low on D-209" reading was not
+reproduced (the EnvelopeMin agrees with the reference at all D-209 grid points; the -2.449 point was
+not recorded). The "1.9e-5 within 1e-4 of the kink's jump vertex" reading was not reproduced either:
+the subdivision agrees with the definition (sup over the two pieces' conjugates) to ~1e-10 at 12
+points within 1e-5..1e-3 of (1,2); only the vertex itself (cause 3) was off.
+Tests: Python `test_discontinuous_shared_points` (no xfail left), `test_alg_branch_near_double.py`,
+`test_discontinuous_kink_jump_vertex` (slow); Rust `discontinuous_input_shared_vertex_d132` / `_d111`,
+`tests/alg_branch_near_double.rs`, `discontinuous_kink_jump_vertex` (ignored: slow); MATLAB
+`discontinuousInputSharedVertexD132` / `D111`, `algBranchTest`, `kinkSubdivisionTest/theJUMPVertexIsExact`.
+
+**Steps that need continuity, for the paper (#103).** After these fixes the list is the two shortcuts
+above -- the convex shortcut co f = f (`isConvexQ`, which tests continuity exactly and returns false on a
+jump) and the caller's `fIsConvex` flag (honoured only for a continuous f). No other step assumes it:
+the atoms carry their faces' exact values (#108), and the subdivision's max rule is sound once each face
+is evaluated as the limit from around the point (above). What replaced "the max rule at a jump vertex"
+is not a new rule but the four evaluation fixes, none specific to discontinuous input.
 
 **Not a continuity issue, found on the same family (D-202).** `realPoint` (a base point for the rational
 parametrisation of a tie conic, in the doubles screen) took the FIRST real root of the line-conic

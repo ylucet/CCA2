@@ -75,6 +75,21 @@ classdef AlgCrvTest < matlab.unittest.TestCase
                           'the topology routines do not read a tie row, and say so');
         end
 
+        function aROWUndefinedAtABASEPointIsDecidedByTheFacesCLOSURE(t)
+        % #108 residual (D-153's corner (0,0) was +inf): the face 0 <= y <= x is x >= 0, y >= 0 and
+        % the algebraic row 1 - z >= 0 with z the root of x z - y = 0, i.e. y/x <= 1. At the corner
+        % the fibre vanishes identically (every z is a root): the row is undefined there, not
+        % failed, and the face holds because it holds arbitrarily close. Outside it, still +inf.
+            FP = zeros(2,2,2);  FP(2,1,2) = 1;  FP(1,2,1) = -1;          % x z - y = 0
+            EcA = struct('FP', FP, 'FB', 1, 'num', [0 0 0 0 0 0 0 0 0 1], 'den', 1);
+            EcQ = [0 0 0 1 0 0; 0 0 0 0 1 0];                             % x >= 0, y >= 0
+            g = AlgCrv(zeros(0,3), zeros(0,3), EcQ, [0 0 0 0 0 0 0 0 0 5], 1, zeros(0,2), ...
+                       {[1 1 0 0; 2 1 0 0; 1 1 0 1]}, {[]}, 0, EcA);
+            v = g.eval([0 0; 0.5 0.25; 0.25 0.5; -1e-3 0]);
+            t.verifyEqual(v(1:2), [5; 5], 'the corner is in the face''s closure');
+            t.verifyTrue(all(isinf(v(3:4))), 'outside the face: still a hole');
+        end
+
         function assembleAlgCrvCarriesATieRow(t)
             [FP, num, den] = cone();
             FP2 = zeros(3,3,3);  FP2(1,1,3) = 1;  FP2(3,1,1) = -4;

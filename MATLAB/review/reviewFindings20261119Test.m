@@ -147,6 +147,20 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
             tc.verifyLessThanOrEqual(v, lsc + 1e-7*max(1, abs(lsc)), 'f** <= lsc f on the diagonal');
         end
 
+        function discontinuousInputSharedVertexD153Slow(tc)
+            % #108 residual on D-153 (slow; run by name): 10.2578 for 9.5177 on the hull edge from the
+            % jump vertex (-3,-2) (a double root real only on that edge's line counted as a branch),
+            % 7.5000017 for 7.5 at (-3,-2) (a double root ~sqrt(eps) off), +inf at the corner (0,0)
+            % (a row with a 0/0 there read as failed). On the hull edges f** is the 1-D envelope of
+            % lsc f: 7.5 + (9 + sqrt 51) t on (-3,-2)-(-2,3), 12.5 - 5x on y = 3 from x = 0 to 2.
+            f = QuaPol([-3 -2; 0 0; 2 3; -2 3], [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1], ...
+                       [0 0 0 0 1 1 -1 -1 1 -2; 0 0 0 0 2 -1 1 -2 2 2], [1 0; 1 0; 1 2; 2 0; 2 0]);
+            X = [-3 -2; -2.875 -1.375; 0 0; 2 3; 0 3; 0.5 3];
+            want = [7.5; 7.5 + (9 + sqrt(51))/8; -2; 2.5; 12.5; 10];
+            v = biconjQ(f).eval(X);
+            tc.verifyEqual(v, want, 'AbsTol', 1e-9);
+        end
+
         function discontinuousInputIsReadLowerSemicontinuousSlow(tc)
             % The rest of the D family (see above). Not in a bucket: run by name.
             reviewFindings20261119Test.checkDFamily(tc, true);
