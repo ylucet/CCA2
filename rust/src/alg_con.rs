@@ -115,6 +115,12 @@ impl AlgCrv {
         let n = x.len();
         let mut val = vec![f64::INFINITY; n];
         let mut idx = vec![0usize; n];
+        // A CONTACT TRIANGLE decides where it holds: its plane <s,x> - f*(s) is an affine
+        // minorant of f** equal to f** on the whole closed triangle. The closed remnants that
+        // cutting it out of a face leaves can meet it on a ZERO-AREA set (a segment of its edge)
+        // carrying their pair's value, which for a discontinuous f is larger there (#108
+        // residual: D-132, D-111) and would otherwise win the max.
+        let mut tri = vec![false; n];
         for k in 0..self.nf {
             let m = self.face_points(k, x)?;
             let pts: Vec<usize> = (0..n).filter(|&i| m[i]).collect();
@@ -123,13 +129,18 @@ impl AlgCrv {
             }
             let xs: Vec<[f64; 2]> = pts.iter().map(|&i| x[i]).collect();
             let v = self.face_values(k, &xs)?;
+            let is_tri = self.ft[k] > 0;
             for (&i, vi) in pts.iter().zip(v.iter()) {
                 if vi.is_nan() {
                     continue;
                 }
-                if val[i].is_infinite() || *vi > val[i] {
+                if tri[i] && !is_tri {
+                    continue; // a triangle already decides this point
+                }
+                if (is_tri && !tri[i]) || val[i].is_infinite() || *vi > val[i] {
                     val[i] = *vi;
                     idx[i] = k + 1;
+                    tri[i] = tri[i] || is_tri;
                 }
             }
         }

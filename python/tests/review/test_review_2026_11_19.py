@@ -362,14 +362,12 @@ def test_discontinuous_input_lsc(name):
         assert v - cc <= 1e-6 * max(1.0, abs(v)), (name, x, v, cc)       # f** = conj(conj)
 
 
-# Open (#108 residual, TODO): the atoms route SUBDIVIDES the min over atom pairs into an AlgCrv
-# whose evaluator takes the max over the faces holding at a point. Where the input jumps, a face of
-# one piece's atom reaches a shared vertex with that piece's larger value: D-132 gives 11 at its
-# vertex (-2,2) and 9.875 at (-13/8, 11/8) on the diagonal next to it (lsc f = -7, -4.02); D-153
-# gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it; D-111 8.5 at (-2,3) (lsc f = 3).
-# The unsubdivided EnvelopeMin is
-# right there but too low elsewhere (D-209, the review #9b class), so neither form is used yet.
-_D_SHARED_OPEN = {'D-111', 'D-132', 'D-153'}
+# #108 residual. Fixed 2026-11-24 on D-111 and D-132: the AlgCrv took the max over the faces holding
+# at a point, and cutting a contact triangle out of a pair's face left ZERO-AREA remnants on the
+# jump diagonal carrying the pair's value (D-132: 11 at the vertex (-2,2), lsc f = -7; D-111: 8.5
+# at (-2,3), lsc f = 3); the triangle now decides where it holds. Open on D-153: 9 at (-3,-2)
+# (lsc f = 7.5) -- a different cause, see TODO.
+_D_SHARED_OPEN = {'D-153'}
 
 
 def _shared_param(i):

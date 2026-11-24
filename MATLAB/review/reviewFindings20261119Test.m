@@ -123,16 +123,28 @@ classdef reviewFindings20261119Test < matlab.unittest.TestCase
         end
 
         function discontinuousInputSharedVertexD132(tc)
-            % #108 residual (OPEN, TODO): the atoms route subdivides the min over atom pairs into
-            % an AlgCrv that takes the max over the faces holding at a point; on D-132 a bridge
-            % face of piece 1's edge atom reaches the vertex (-2,2) with piece 1's value 11, where
-            % lsc f = min(11, -7) = -7, and 9.875 on the diagonal next to it. Filtered until fixed.
-            tc.assumeFail('#108 residual: AlgCrv max at a jump vertex (D-132)');
+            % #108 residual (fixed 2026-11-24): the AlgCrv took the max over the faces holding at
+            % a point, and cutting the contact triangle out of a pair's face left a ZERO-AREA
+            % remnant on the shared diagonal carrying the pair's value: 11 at the vertex (-2,2),
+            % where lsc f = min(11, -7) = -7, and 9.875 on the diagonal next to it. The triangle
+            % now decides where it holds (its plane is f** on the closed triangle).
             f = QuaPol([-2 2; -1 -2; 1 -3; 2 2], [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1], ...
                        [0 0 0 0 -1 -1 2 -2 1 -1; 0 0 0 0 -1 0 -1 0 -2 1], [1 0; 1 0; 1 2; 2 0; 2 0]);
             v = biconjQ(f).eval([-2 2; -1.625 1.375]);
             tc.verifyEqual(v(1), -7, 'AbsTol', 1e-9, 'f** at the shared vertex (-2,2)');
             tc.verifyLessThanOrEqual(v(2), -4.015625 + 1e-9, 'f** at (-13/8, 11/8) <= lsc f');
+        end
+
+        function discontinuousInputSharedVertexD111(tc)
+            % Same cause on D-111: 8.5 at the jump vertex (-2,3) (lsc f = 3) and above lsc f on the
+            % diagonal next to it, through zero-area remnants of the cut contact triangle.
+            f = QuaPol([-2 3; 1 1; 3 2; 0 3], [1 2 1; 2 3 1; 3 1 1; 3 4 1; 4 1 1], ...
+                       [0 0 0 0 0 -2 -1 -2 -1 0; 0 0 0 0 -1 -2 -2 -2 0 -2], [1 0; 1 0; 1 2; 2 0; 2 0]);
+            X = [-2 3; -1.375 2.875; -0.75 2.75; -0.125 2.625];
+            lsc = [3; -0.5546875; -4.21875; -7.9921875];
+            v = biconjQ(f).eval(X);
+            tc.verifyEqual(v(1), 3, 'AbsTol', 1e-9, 'f** at the shared vertex (-2,3)');
+            tc.verifyLessThanOrEqual(v, lsc + 1e-7*max(1, abs(lsc)), 'f** <= lsc f on the diagonal');
         end
 
         function discontinuousInputIsReadLowerSemicontinuousSlow(tc)

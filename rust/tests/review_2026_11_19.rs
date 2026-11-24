@@ -125,12 +125,12 @@ fn discontinuous_input_lsc_values() {
     check_d_family(|name| !D_SLOW.contains(&name));
 }
 
-/// #108 residual (OPEN, TODO): the atoms route subdivides the min over atom pairs into an AlgCrv
-/// that takes the max over the faces holding at a point; on D-132 a bridge face of piece 1's edge
-/// atom reaches the vertex (-2,2) carrying piece 1's value 11, where lsc f = min(11, -7) = -7, and
-/// 9.875 at a point of the shared diagonal next to it (lsc f = -4.015625).
+/// #108 residual (fixed 2026-11-24): the AlgCrv took the max over the faces holding at a point, and
+/// cutting the contact triangle out of a pair's face left a ZERO-AREA remnant on the shared diagonal
+/// carrying the pair's value: 11 at the vertex (-2,2), where lsc f = min(11, -7) = -7, and 9.875 at
+/// (-13/8, 11/8) (lsc f = -4.015625). Now the triangle decides where it holds (its plane is f** on
+/// the closed triangle).
 #[test]
-#[ignore = "#108 residual: AlgCrv max at a jump vertex (D-132)"]
 fn discontinuous_input_shared_vertex_d132() {
     let f = pol(&[[-2, 2], [-1, -2], [1, -3], [2, 2]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
                 &[[0, 0, 0, 0, -1, -1, 2, -2, 1, -1], [0, 0, 0, 0, -1, 0, -1, 0, -2, 1]],
@@ -138,6 +138,22 @@ fn discontinuous_input_shared_vertex_d132() {
     let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-2.0, 2.0], [-1.625, 1.375]]).unwrap();
     assert!((v[0] + 7.0).abs() < 1e-9, "f** at the vertex (-2,2): {}", v[0]);
     assert!(v[1] <= -4.015625 + 1e-9, "f** at (-13/8, 11/8) above lsc f = -4.015625: {}", v[1]);
+}
+
+/// Same cause on D-111: 8.5 at the jump vertex (-2,3) (lsc f = 3) and above lsc f on the diagonal
+/// next to it, through zero-area remnants of the cut contact triangle.
+#[test]
+fn discontinuous_input_shared_vertex_d111() {
+    let f = pol(&[[-2, 3], [1, 1], [3, 2], [0, 3]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 0, -2, -1, -2, -1, 0], [0, 0, 0, 0, -1, -2, -2, -2, 0, -2]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let x = [[-2.0, 3.0], [-1.375, 2.875], [-0.75, 2.75], [-0.125, 2.625]];
+    let lsc: [f64; 4] = [3.0, -0.5546875, -4.21875, -7.9921875];
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&x).unwrap();
+    assert!((v[0] - 3.0).abs() < 1e-9, "f** at the vertex (-2,3): {}", v[0]);
+    for i in 0..x.len() {
+        assert!(v[i] <= lsc[i] + 1e-7 * lsc[i].abs().max(1.0), "f** at {:?} above lsc f = {}: {}", x[i], lsc[i], v[i]);
+    }
 }
 
 /// The D fixtures that take minutes (in Python; the slowest in Rust too): `-- --ignored`.

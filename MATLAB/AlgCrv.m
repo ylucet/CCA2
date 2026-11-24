@@ -98,12 +98,20 @@ classdef AlgCrv < AlgCon & Crv
          % FACE BY FACE over all points at once (2026-11-01): erratum Example 2's subdivision has
          % thousands of faces, and the point-by-face loop called algBranch once per pair. The rows
          % are read with the same tolerances and the max keeps the same (first) face on a tie.
+         % A CONTACT TRIANGLE decides where it holds: its plane <s,x> - f*(s) is an affine
+         % minorant of f** equal to f** on the whole closed triangle. The closed remnants that
+         % cutting it out of a face leaves can meet it on a ZERO-AREA set (a segment of its edge)
+         % carrying their pair's value, which for a discontinuous f is larger there (#108
+         % residual: D-132, D-111) and would otherwise win the max.
+         tri = false(n,1);
          for k = 1:obj.nf
             M = obj.facePoints(k, X);
             if ~any(M), continue, end
             v = nan(n,1);  v(M) = obj.faceValues(k, X(M,:));
-            up = M & ~isnan(v) & (isinf(val) | v > val);
+            isTri = obj.FT(k) > 0;
+            up = M & ~isnan(v) & ~(tri & ~isTri) & ((isTri & ~tri) | isinf(val) | v > val);
             val(up) = v(up);  idx(up) = k;
+            tri = tri | (up & isTri);
          end
       end
    end

@@ -39,23 +39,35 @@ class AlgCrv(AlgCon):
         self.fIsConvex = None
 
     def eval(self, X):
-        """(val, idx): the value at each point and the 1-based face that supplied it."""
+        """(val, idx): the value at each point and the 1-based face that supplied it.
+
+        A CONTACT TRIANGLE decides where it holds: its plane <s,x> - f*(s) is an affine minorant
+        of f** that equals f** on the whole closed triangle, so no other face can be right there
+        with a different value. Cutting the triangle out of a face leaves closed remnants that
+        can meet the triangle on a ZERO-AREA set (a segment of its edge); such a remnant carries
+        its pair's value, which for a discontinuous f (#108 residual, D-132, D-111) is larger
+        than f** on that edge and would win the max."""
         n = len(X)
         Xf = [[float(p[0]), float(p[1])] for p in X]
         val = [math.inf] * n
         idx = [0] * n
+        tri = [False] * n
         for k in range(self.nf):
             M = self._facePoints(k, Xf)
             pts = [i for i in range(n) if M[i]]
             if not pts:
                 continue
             v = self._faceValues(k, [Xf[i] for i in pts])
+            isTri = self.FT[k] > 0
             for i, vi in zip(pts, v):
                 if math.isnan(vi):
                     continue
-                if math.isinf(val[i]) or vi > val[i]:
+                if tri[i] and not isTri:
+                    continue                    # a triangle already decides this point
+                if (isTri and not tri[i]) or math.isinf(val[i]) or vi > val[i]:
                     val[i] = vi
                     idx[i] = k + 1
+                    tri[i] = tri[i] or isTri
         return val, idx
 
     def _facePoints(self, k, X):
