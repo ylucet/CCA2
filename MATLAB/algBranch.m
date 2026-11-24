@@ -380,6 +380,10 @@ function rr = dropIsolatedPairs(P, Pbig, x, cz, r, rr, nx, ny, nz)
         a = rr(i);  b = rr(i+1);
         if b > a && doubleRootNoise(cz, (a+b)/2, (b-a)/2), cands(end+1) = (a+b)/2; end %#ok<AGROW>
     end
+    % a near-real complex pair (dropped above) is not examined, but it may be a multiple root's
+    % rounding: then the multiple roots are decided exactly below, as in Python and Rust
+    snap = ~isempty(cands) || any(arrayfun(@(v) imag(v) > 0 && ...
+        doubleRootNoise(cz, real(v), imag(v)), r(:)));
     for z0 = cands
         d = sort(abs(r(:) - z0));  d = d(3:end);       % the pair itself is nearest
         if ~isempty(d) && d(1) > 0, rad = d(1)/2; else, rad = 1 + abs(z0); end
@@ -390,6 +394,103 @@ function rr = dropIsolatedPairs(P, Pbig, x, cz, r, rr, nx, ny, nz)
             end
         end
     end
+    if snap
+        rr = snapMultipleRoots(P, Pbig, x, cz, rr, nx, ny, nz);
+    end
+end
+
+function rr = snapMultipleRoots(P, Pbig, x, cz, rr, nx, ny, nz)
+% A GENUINE multiple root of the fibre, to full precision (#108 residual: the jump vertices).
+% Rounding returns a k-fold real root as k roots ~eps^(1/k) apart, and at a jump vertex f** is
+% such a root: D-153's vertex (-3,-2), f** = 7.5 a double root, came back as 7.5000017 (2.3e-7
+% relative), the poly2 kink's (1,2) as 1.0000000256. The multiple roots are the roots of
+% gcd(p, p'), where they are SIMPLE: the fibre at the exact dyadic point is split by multiplicity
+% (Yun), each real root of a factor of multiplicity k >= 2 is isolated by Sturm and bisected
+% exactly to adjacent doubles, and whatever rounding left within 8 (eps sum|c_j m^j| /
+% |p^(k)(m)/k!|)^(1/k) of it (close reals, or a lone real whose partners came back complex)
+% becomes exactly k copies of it, whatever the LAPACK in use (alg_branch.py _snapMultipleRoots).
+    if isempty(rr), return, end
+    [xn, xd] = ratQ.dyadicParts(x(1));
+    [yn, yd] = ratQ.dyadicParts(x(2));
+    D = xd.max(yd);
+    row = ratQ.bigPrimitive(exactFibreRow(P, Pbig, xn.multiply(D.divide(xd)), ...
+                                          yn.multiply(D.divide(yd)), D, nx, ny, nz));
+    if numel(row) <= 2, return, end
+    fac = yunBig(row);
+    for f = 1:numel(fac)
+        k = fac{f}{1};  a = fac{f}{2};
+        if k < 2, continue, end
+        I = ratQ.isolateRootsBig(a);
+        for q = 1:size(I,1)
+            m = bisectBig(a, I(q,1), I(q,2));
+            w = multipleRootNoise(cz, m, k);
+            near = abs(rr - m) <= w;
+            if any(near)                    % rounding left something there: k copies of m
+                rr = [rr(~near); repmat(m, k, 1)];
+            end
+        end
+    end
+    rr = sort(rr);
+end
+
+function w = multipleRootNoise(cz, m, k)
+% 8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k): how far rounding moves a k-fold root m (cz z^0 first)
+    j = 0:numel(cz)-1;
+    cabs = sum(abs(cz) .* abs(m).^j);
+    jj = j(j >= k);
+    pk = 0;
+    for t = jj, pk = pk + nchoosek(t, k) * cz(t+1) * m^(t-k); end
+    if pk == 0 || cabs == 0, w = 0; return, end
+    w = 8 * (eps * cabs / abs(pk))^(1/k);
+end
+
+function fac = yunBig(p)
+% Yun's square-free decomposition of a BigInteger row (highest first): {k, a_k} with
+% p = c prod a_k^k, each a_k square-free, primitive, of positive degree.
+    g = ratQ.bigGcdRow(p, ratQ.bigDeriv(p));
+    if numel(g) <= 1, fac = {{1, p}}; return, end
+    fac = {};
+    b = bigDivRow(ratQ.bigPrimitive(p), g);          % every distinct root once
+    k = 1;  rest = g;
+    while numel(b) > 1
+        a = ratQ.bigGcdRow(b, rest);                 % the roots of multiplicity > k
+        if numel(a) > 1, f = bigDivRow(b, a); else, f = b; end
+        if numel(f) > 1, fac{end+1} = {k, ratQ.bigPrimitive(f)}; end %#ok<AGROW>
+        if numel(a) <= 1, break, end
+        rest = bigDivRow(rest, a);
+        b = a;  k = k + 1;
+    end
+end
+
+function Q = bigDivRow(P, G)
+% P / G for BigInteger rows (highest first) when the division is exact over the integers.
+    n = numel(P) - numel(G) + 1;
+    Q = cell(1, max(n, 0));
+    R = P;
+    for i = 1:n
+        qr = R{i}.divideAndRemainder(G{1});
+        if qr(2).signum() ~= 0
+            error('algBranch:internal', 'an exact polynomial division left a remainder.');
+        end
+        Q{i} = qr(1);
+        for j = 1:numel(G), R{i+j-1} = R{i+j-1}.subtract(Q{i}.multiply(G{j})); end
+    end
+    for i = n+1:numel(R)
+        if R{i}.signum() ~= 0
+            error('algBranch:internal', 'an exact polynomial division left a remainder.');
+        end
+    end
+end
+
+function m = bisectBig(a, lo, hi)
+% The simple root of the square-free a in (lo, hi], bisected exactly down to adjacent doubles;
+% the upper end, which holds the root.
+    for it = 1:2000
+        mid = (lo + hi) / 2;
+        if mid <= lo || mid >= hi, break, end
+        if ratQ.countRootsInHalfOpenBig(a, lo, mid) == 1, hi = mid; else, lo = mid; end
+    end
+    m = hi;
 end
 
 function tf = doubleRootNoise(cz, t, im)

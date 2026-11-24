@@ -395,6 +395,22 @@ def test_discontinuous_shared_points(name):
         assert v <= fp + 1e-7 * max(1.0, abs(fp)), (name, p, v, fp)
 
 
+@pytest.mark.slow
+def test_discontinuous_kink_jump_vertex():
+    # #108 residual, the two-convex-pieces route: the poly2 kink at c = -2 (MATLAB
+    # kinkSubdivisionTest) jumps across its diagonal; at the jump vertex (1,2) lsc f = min(5, 1) = 1
+    # = f**, a DOUBLE root of the face there, which rounding returned as 1.0000000256.
+    V = [[-2, 0], [2, 0], [1, 2], [-1, 2]]
+    q0 = [0, 0, 0, 0, 2, 0, 2, 0, 0, 0]
+    q1 = list(q0)
+    q1[8] = -2
+    f = QuaPol(V, [[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1], [1, 3, 1]], [q0, q1],
+               [[1, 0], [1, 0], [2, 0], [2, 0], [2, 1]])
+    v = _ev(f.biconj(), [[1.0, 2.0], [-1.0, 2.0], [-2.0, 0.0], [2.0, 0.0]])
+    assert abs(v[0] - 1) <= 1e-14, v                     # lsc f(1,2) = 1, the jump vertex
+    assert abs(v[1] - 1) <= 1e-12 and abs(v[2] - 4) <= 1e-12 and abs(v[3] - 4) <= 1e-12, v
+
+
 def test_continuous_input_not_refused():
     # R3 (continuous 2-piece split) and R6 (continuous two-cone fan) carry shared edges whose
     # pieces agree along the edge; the check must pass them, so conj still answers.

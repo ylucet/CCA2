@@ -156,6 +156,21 @@ fn discontinuous_input_shared_vertex_d111() {
     }
 }
 
+/// #108 residual, the two-convex-pieces route: the poly2 kink at c = -2 jumps across its diagonal;
+/// at the jump vertex (1,2) lsc f = min(5, 1) = 1 = f**, a DOUBLE root of the face there, which
+/// rounding returned as 1.0000000256.
+#[test]
+#[ignore = "slow: the poly2 kink (run with -- --ignored)"]
+fn discontinuous_kink_jump_vertex() {
+    let f = pol(&[[-2, 0], [2, 0], [1, 2], [-1, 2]], &[[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1], [1, 3, 1]],
+                &[[0, 0, 0, 0, 2, 0, 2, 0, 0, 0], [0, 0, 0, 0, 2, 0, 2, 0, -2, 0]],
+                &[[1, 0], [1, 0], [2, 0], [2, 0], [2, 1]]);
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap()
+        .eval(&[[1.0, 2.0], [-1.0, 2.0], [-2.0, 0.0], [2.0, 0.0]]).unwrap();
+    assert!((v[0] - 1.0).abs() <= 1e-14, "f** at the jump vertex (1,2): {:?}", v);
+    assert!((v[1] - 1.0).abs() <= 1e-12 && (v[2] - 4.0).abs() <= 1e-12 && (v[3] - 4.0).abs() <= 1e-12, "{:?}", v);
+}
+
 /// The D fixtures that take minutes (in Python; the slowest in Rust too): `-- --ignored`.
 const D_SLOW: [&str; 5] = ["D-069", "D-111", "D-153", "D-188", "D-209"];
 

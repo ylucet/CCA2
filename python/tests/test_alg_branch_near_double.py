@@ -28,3 +28,17 @@ def test_a_double_root_of_two_crossing_branches_is_kept():
     z, info = algBranch(CRS, [[0.3, 0.0]], -1, wantInfo=True)
     assert abs(z[0] - 10) < 1e-6, z
     assert info['nreal'][0] == 3, info
+
+
+# the poly2 kink's face at its jump vertex (1,2): 169 z^3 + 1365 z^2 - 3237 z + 1703 =
+# (z - 1)^2 (169 z + 1703); f** = 1 is the double root, which rounding returned as 1.0000000256
+KINK = {(0, 0, 3): 169, (0, 0, 2): 1365, (0, 0, 1): -3237, (0, 0, 0): 1703}
+# (z - 1)^3 (z + 1): a triple root, which rounding returned as 1.0000013
+TRIPLE = {(0, 0, 4): 1, (0, 0, 3): -2, (0, 0, 1): 2, (0, 0, 0): -1}
+
+
+def test_a_genuine_multiple_root_is_returned_to_full_precision():
+    z, info = algBranch(KINK, [[0.3, 0.7]], -1, wantInfo=True)
+    assert abs(z[0] - 1) <= 4e-16 and info['nreal'][0] == 3, (z, info)
+    z, info = algBranch(TRIPLE, [[0.3, 0.7]], -1, wantInfo=True)
+    assert abs(z[0] - 1) <= 4e-16 and info['nreal'][0] == 4, (z, info)

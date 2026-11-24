@@ -151,7 +151,88 @@ def _nearDoubles(lay, x, y, cz, r, rr, imagTol):
                 k = min(range(len(out)), key=lambda i: abs(out[i] - z0), default=None)
                 if k is not None and abs(out[k] - z0) <= rad:
                     out.pop(k)
+    return _snapMultipleRoots(lay, x, y, cz, out)
+
+
+def _snapMultipleRoots(lay, x, y, cz, rr):
+    """A GENUINE multiple root of the fibre, to full precision (#108 residual: the jump vertices).
+
+    Rounding returns a k-fold real root as k roots up to ~eps^(1/k) apart, and at a jump vertex
+    f** is such a root: D-153's vertex (-3,-2), f** = 7.5 a double root, came back as 7.5000017
+    (2.3e-7 relative), its tangency point (0,3), a triple root 12.5, as 12.500022, and the kink's
+    jump vertex (1,2) as 1.0000000256. The multiple roots are the roots of gcd(p, p'), where they
+    are SIMPLE: the fibre at the exact dyadic point is split by multiplicity (Yun), the real roots
+    of each factor of multiplicity k >= 2 are isolated by Sturm and bisected exactly to a double,
+    and the k entries nearest each one, within the rounding of a k-fold root
+    8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k), take its value."""
+    from .rat_q import isolateRoots, polyPrimitive
+    if not rr:
+        return rr
+    p = polyPrimitive(_exactFibreAt(lay, Fraction(x), Fraction(y)))
+    if len(p) <= 2:
+        return rr
+    out = list(rr)
+    for k, a in _yun(p):
+        if k < 2:
+            continue
+        for lo, hi in isolateRoots(a):
+            m = _bisectRoot(a, lo, hi)
+            w = _multipleRootNoise(cz, m, k)
+            keep = [v for v in out if abs(v - m) > w]
+            if len(keep) < len(out):            # rounding left something there: k copies of m
+                out = keep + [m] * k
+    return sorted(out)
+
+
+def _multipleRootNoise(cz, m, k):
+    """How far rounding the fibre's coefficients (z^0 first) by eps moves a k-fold root m:
+    8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k) -- _doubleRootNoise's bound for any k."""
+    cabs = sum(abs(c) * abs(m) ** j for j, c in enumerate(cz))
+    pk = sum(math.comb(j, k) * c * m ** (j - k) for j, c in enumerate(cz) if j >= k)
+    if pk == 0 or cabs == 0:
+        return 0.0
+    return 8.0 * (2.220446049250313e-16 * cabs / abs(pk)) ** (1.0 / k)
+
+
+def _yun(p):
+    """Yun's square-free decomposition of the integer polynomial p (highest first): the list of
+    (k, a_k) with p = c * prod a_k^k, each a_k square-free, primitive and of positive degree."""
+    from .rat_q import polyder, polyGcd, polyDivExact1, polyPrimitive
+    g = polyGcd(p, polyder(p))
+    if len(g) <= 1:
+        return [(1, p)]
+    out = []
+    b = polyDivExact1(polyPrimitive(p), g)         # every distinct root once
+    k = 1
+    rest = g
+    while len(b) > 1:
+        a = polyGcd(b, rest)                        # the roots of multiplicity > k
+        f = polyDivExact1(b, a) if len(a) > 1 else b
+        if len(f) > 1:
+            out.append((k, polyPrimitive(f)))       # multiplicity exactly k
+        if len(a) <= 1:
+            break
+        rest = polyDivExact1(rest, a)
+        b = a
+        k += 1
     return out
+
+
+def _bisectRoot(a, lo, hi):
+    """The simple root of the square-free a in (lo, hi], bisected EXACTLY until the interval is
+    below 2^-60 of its size (or 400 halvings); the double nearest the midpoint."""
+    from .rat_q import countRootsIn
+    lo = Fraction(lo)
+    hi = Fraction(hi)
+    for _ in range(400):
+        if hi - lo <= abs(hi + lo) * Fraction(1, 2 ** 60):
+            break
+        mid = (lo + hi) / 2
+        if countRootsIn(a, lo, mid) == 1:
+            hi = mid
+        else:
+            lo = mid
+    return float((lo + hi) / 2)
 
 
 def _exactFibreAt(lay, X, Y):

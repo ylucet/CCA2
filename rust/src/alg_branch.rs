@@ -201,7 +201,118 @@ fn near_doubles(pr: &Prep, x: f64, y: f64, cz: &[f64], r: &[Cx], rr: Vec<f64>, i
             }
         }
     }
+    snap_multiple_roots(pr, x, y, cz, out)
+}
+
+/// A GENUINE multiple root of the fibre, to full precision (#108 residual: the jump vertices);
+/// see alg_branch.py `_snapMultipleRoots`. Rounding returns a k-fold root as k roots ~eps^(1/k)
+/// apart (D-153's vertex (-3,-2): 7.5000017 for 7.5; the kink's (1,2): 1.0000000256 for 1). The
+/// fibre at the exact dyadic point is split by multiplicity (Yun); each real root of a factor of
+/// multiplicity k >= 2 is isolated by Sturm and bisected exactly, and whatever rounding left
+/// within the noise of a k-fold root becomes exactly k copies of it (nothing there: stays out).
+fn snap_multiple_roots(pr: &Prep, x: f64, y: f64, cz: &[f64], rr: Vec<f64>) -> Vec<f64> {
+    if rr.is_empty() {
+        return rr;
+    }
+    let p = poly_primitive(&exact_fibre_at(pr, &q_from_f64(x), &q_from_f64(y)));
+    if p.len() <= 2 {
+        return rr;
+    }
+    let mut out = rr;
+    let fac = match yun(&p) {
+        Some(f) => f,
+        None => return out,
+    };
+    for (k, a) in fac {
+        if k < 2 {
+            continue;
+        }
+        let ivs = match isolate_roots(&a) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        for (lo, hi) in ivs {
+            let m = bisect_root(&a, lo, hi);
+            let w = multiple_root_noise(cz, m, k);
+            let keep: Vec<f64> = out.iter().cloned().filter(|v| (v - m).abs() > w).collect();
+            if keep.len() < out.len() {
+                // rounding left something there: exactly k copies of m, whatever the LAPACK
+                out = keep;
+                out.extend(std::iter::repeat(m).take(k));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.total_cmp(b));
     out
+}
+
+/// 8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k): how far rounding moves a k-fold root m.
+fn multiple_root_noise(cz: &[f64], m: f64, k: usize) -> f64 {
+    let cabs: f64 = cz.iter().enumerate().map(|(j, c)| c.abs() * fpow(m.abs(), j)).sum();
+    let mut pk = 0.0;
+    for (j, c) in cz.iter().enumerate() {
+        if j >= k {
+            pk += binom(j, k) * c * fpow(m, j - k);
+        }
+    }
+    if pk == 0.0 || cabs == 0.0 {
+        return 0.0;
+    }
+    8.0 * (2.220446049250313e-16 * cabs / pk.abs()).powf(1.0 / k as f64)
+}
+
+fn binom(n: usize, k: usize) -> f64 {
+    let mut r = 1.0;
+    for i in 0..k {
+        r = r * (n - i) as f64 / (i + 1) as f64;
+    }
+    r
+}
+
+/// Yun's square-free decomposition: (k, a_k) with p = c prod a_k^k, a_k square-free, primitive,
+/// of positive degree. None if an exact division unexpectedly fails.
+fn yun(p: &[Z]) -> Option<Vec<(usize, Vec<Z>)>> {
+    let g = poly_gcd(p, &polyder(p)).ok()?;
+    if g.len() <= 1 {
+        return Some(vec![(1, p.to_vec())]);
+    }
+    let mut out = vec![];
+    let mut b = poly_div_exact1(&poly_primitive(p), &g)?;
+    let mut k = 1;
+    let mut rest = g;
+    while b.len() > 1 {
+        let a = poly_gcd(&b, &rest).ok()?;
+        let f = if a.len() > 1 { poly_div_exact1(&b, &a)? } else { b.clone() };
+        if f.len() > 1 {
+            out.push((k, poly_primitive(&f)));
+        }
+        if a.len() <= 1 {
+            break;
+        }
+        rest = poly_div_exact1(&rest, &a)?;
+        b = a;
+        k += 1;
+    }
+    Some(out)
+}
+
+/// The simple root of the square-free a in (lo, hi], bisected exactly until the interval is below
+/// 2^-60 of its size (or 400 halvings); the double nearest the midpoint.
+fn bisect_root(a: &[Z], lo: Q, hi: Q) -> f64 {
+    let (mut lo, mut hi) = (lo, hi);
+    let tiny = Q::new(Z::one(), Z::one() << 60usize);
+    for _ in 0..400 {
+        if &hi - &lo <= (&hi + &lo).abs() * &tiny {
+            break;
+        }
+        let mid = (&lo + &hi) / qi(2);
+        if count_roots_in_q(a, &lo, &mid) == 1 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    q_to_f64(&((&lo + &hi) / qi(2)))
 }
 
 /// The fibre at the exact rational point (xq, yq) as an integer polynomial in z, highest power

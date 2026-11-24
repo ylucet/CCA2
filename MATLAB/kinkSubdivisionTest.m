@@ -42,6 +42,15 @@ classdef kinkSubdivisionTest < matlab.unittest.TestCase
     end
 
     methods (Test)
+        function theJUMPVertexIsExact(testCase)
+        % #108 residual: at the jump vertex (1,2) lsc f = min(5, 1) = 1 = f**, a DOUBLE root of the
+        % face there, which rounding returned as 1.0000000256 (Python/Rust); now decided exactly.
+            h = kinkSubdivisionTest.cached();
+            v = h.eval([1 2; -1 2; -2 0; 2 0]);
+            testCase.verifyLessThanOrEqual(abs(v(1) - 1), 1e-14, 'f** at the jump vertex (1,2)');
+            testCase.verifyEqual(v(2:4), [1; 4; 4], 'AbsTol', 1e-12);
+        end
+
         function anIRRATIONALStraightTieGetsItsCorners(testCase)
         % Found 2026-10-11 on the poly2 kink at c = -2 (biconjQ's own fixture): one cell pair ties
         % on a PARALLEL PAIR of IRRATIONAL lines, (s1 - 2 s2) = -6 +- sqrt(80). A straight tie is

@@ -30,3 +30,15 @@ fn a_double_root_of_two_crossing_branches_is_kept() {
     assert!((z[0] - 10.0).abs() < 1e-6, "{:?}", z);
     assert_eq!(all[0].len(), 3, "{:?}", all);
 }
+
+/// A genuine multiple root to full precision: the poly2 kink's face at its jump vertex (1,2),
+/// (z - 1)^2 (169 z + 1703), was 1.0000000256 (f** = 1); (z - 1)^3 (z + 1) was 1.0000013.
+#[test]
+fn a_genuine_multiple_root_is_returned_to_full_precision() {
+    let kink = poly(&[([0, 0, 3], 169), ([0, 0, 2], 1365), ([0, 0, 1], -3237), ([0, 0, 0], 1703)]);
+    let (z, all) = alg_branch_info(&kink, &[[0.3, 0.7]], -1).unwrap();
+    assert!((z[0] - 1.0).abs() <= 4e-16 && all[0].len() == 3, "{:?} {:?}", z, all);
+    let triple = poly(&[([0, 0, 4], 1), ([0, 0, 3], -2), ([0, 0, 1], 2), ([0, 0, 0], -1)]);
+    let (z, all) = alg_branch_info(&triple, &[[0.3, 0.7]], -1).unwrap();
+    assert!((z[0] - 1.0).abs() <= 4e-16 && all[0].len() == 4, "{:?} {:?}", z, all);
+}

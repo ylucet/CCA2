@@ -308,5 +308,18 @@ classdef algBranchTest < matlab.unittest.TestCase
             testCase.verifyEqual(z, 10, 'AbsTol', 1e-6);
             testCase.verifyEqual(info.nreal, 3);
         end
+
+        function aGENUINEMultipleRootIsReturnedToFullPrecision(testCase)
+        % The poly2 kink's face at its jump vertex (1,2), (z - 1)^2 (169 z + 1703): f** = 1 is the
+        % double root, which rounding returned as 1.0000000256 (Python/Rust); (z - 1)^3 (z + 1).
+            P = zeros(1, 1, 4);  P(1,1,4) = 169;  P(1,1,3) = 1365;  P(1,1,2) = -3237;  P(1,1,1) = 1703;
+            [z, info] = algBranch(P, [0.3 0.7], -1);
+            testCase.verifyLessThanOrEqual(abs(z - 1), 4e-16);
+            testCase.verifyEqual(info.nreal, 3);
+            P = zeros(1, 1, 5);  P(1,1,5) = 1;  P(1,1,4) = -2;  P(1,1,2) = 2;  P(1,1,1) = -1;
+            [z, info] = algBranch(P, [0.3 0.7], -1);
+            testCase.verifyLessThanOrEqual(abs(z - 1), 4e-16);
+            testCase.verifyEqual(info.nreal, 4);
+        end
     end
 end
