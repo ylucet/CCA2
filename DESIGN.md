@@ -1889,3 +1889,75 @@ parametrisation of a tie conic, in the doubles screen) took the FIRST real root 
 quadratic; along a parabola's axis the leading coefficient is rounding noise and that root was ~1e31, so
 the parametrisation's samples never reached the real tie arc and an atom pair was missed (+inf where f**
 is finite). It now takes the root nearest the base point. Separate commit.
+
+## Two bridge faces never share a cell (#170, 2026-11-25)
+
+The last case refused by name, `envelopeSubdivisionAlg:twoBridges`, was retired on 2026-10-17 in
+favour of the max rule (DECISIONS 2026-10-17: irrational faces are cut against the quadratics only,
+and where two both beat every quadratic their pieces overlap). What reached it then were two
+irrational CORNERS (erratum Example 1, 18 cells), whose regions are outer bounds. Two genuine
+BRIDGE faces in one cell was never observed. This is why, and why the max rule is exact even if it
+happened.
+
+**Setting.** One envelope of `envelopeSubdivisionAlg` is one pair of convex pieces (or atoms) A, B
+with conjugates gA, gB, each piecewise quadratic on a polyhedral subdivision; G = max(gA, gB), plus
+the indicator of D when dom f* is restricted (erratum Case E), and h = G* is that pair's envelope (co
+f for two pieces; one term of the min otherwise, each pair is subdivided on its own before the
+overlay). A bridge face beta belongs to one overlay cell P = cell_i(gA) ^ cell_j(gB) whose tie
+q = gA_i - gB_j is curved; its region is the sweep (bridgeMember's defining question)
+
+    R_beta = { x : x in [grad gA_i(s), grad gB_j(s)] for some s in P with q(s) = 0 },
+
+and its value at such x is z_beta(x) = <s, x> - gA_i(s). There is one bridge face per overlay cell
+(bridgeArcCut keeps all arcs of one cell in one face).
+
+**Lemma 1 (a bridge is exact on its region).** If x in R_beta with base s, then s in dh(x) and
+z_beta(x) = h(x). *Proof.* s is in the closure of cell_i(gA), on whose interior gA = gA_i, so
+grad gA_i(s) is a limit of gradients of gA and lies in dgA(s); likewise grad gB_j(s) in dgB(s). At a
+tie gA(s) = gB(s) = G(s), so both are active and conv(dgA(s) U dgB(s)) is contained in dG(s) (the
+indicator of D only enlarges it). Hence x in dG(s), i.e. s in dh(x) for the closed proper convex G
+with G* = h, and h(x) = <s, x> - G(s) = z_beta(x).
+
+**Lemma 2 (two bridge regions meet in a null set).** For distinct bridges beta, gamma of one
+envelope, R_beta ^ R_gamma has Lebesgue measure zero, unless the two tie conics share a line l that
+carries a common edge of P_beta and P_gamma. *Proof.* h is convex, so it is differentiable at almost
+every point of int dom h, and bd dom h is null. At such an x in R_beta ^ R_gamma, Lemma 1 puts both
+base points in dh(x) = {grad h(x)}, so they coincide: s = grad h(x) lies on both ties and in
+P_beta ^ P_gamma. Distinct overlay cells have disjoint interiors, so s is on one of the finitely
+many lines carrying an edge of P_beta; a curved tie (irreducible conic, or a crossing line pair)
+meets a line in at most two points unless the line is one of its components. Outside the exception,
+then, s ranges over a finite set F and x lies in the union over F of the segments
+[grad gA_i(s), grad gB_j(s)] -- finitely many segments, a null set.
+
+**Theorem.** Two bridge faces never own a cell (an open set) of one envelope's subdivision, except
+in Lemma 2's exception; and wherever two bridges do own a point, both values equal h there (Lemma 1),
+so the max rule loses nothing. The exception is not a gap either: on l both ties vanish, so both
+swept segments are normal to l (each runs along the gradient of its tie, m grad l on l) and can
+overlap in two dimensions -- but there, too, each value is h by Lemma 1. No input reaching the
+exception is known.
+
+**Stored regions versus the sweep.** An ALGEBRAIC bridge's membership (`bridgeMember`: a root mu of
+the tie residual in [-1, 0] whose base point lies in P) is exactly R_beta. A RATIONAL bridge
+(`bridgeFaceRat`, affine against rank 1, the tie a parabola) is stored with a weaker predicate: the
+objective is concave along the parabola and its maximiser s* lies in P -- no condition on the
+multiplier, so its stored region is an OUTER bound of R_beta. Its value <s*, x> - G(s*) is still a
+lower bound of h everywhere (s* is feasible: on the tie and in P, where G = gA_i), and equals h on
+R_beta by Lemma 1. So every bridge value is <= h on its stored region with equality on the sweep, and
+the max over the faces owning a point is h whatever the stored regions overlap. Overlaps involving a
+rational bridge are therefore expected and harmless, and they occur: the witness search below finds
+points in two stored bridge regions with one rational, mostly outside dom f** (where the subdivision
+is clipped away anyway) and, inside it, only in two atom-route inputs (generator seed 7, R2-435 and
+R2-687; 8 and 10 arrangement cells). Both grade OK against the certified bracket in Python and Rust
+(`compare_engines.py`, including 164 evaluation points placed at the overlaps), engines agreeing.
+
+**What the code does with it.** The refusal does not come back: the theorem says the max is exact
+even in the exception, so refusing would only lose correct answers. Each engine counts the cells it
+puts in two ALGEBRAIC bridges (`info.bridgeOverlaps`, Rust `SubInfo::bridge_overlaps`) -- the
+invariant the argument is about -- and the tests assert 0:
+`envelopeSubdivisionAlgTest/twoBRIDGEFacesNeverOwnOneCell`, `python/tests/test_two_bridges.py`,
+`rust/tests/two_bridges.rs` (the c = -2 kink: two bridges, 20000 random points, none in both; the
+subdivision's count 0).
+
+**Witness search** (`python/tests/review/hunt_two_bridges.py`; per input, every envelope with >= 2
+bridge faces is sampled with `bridgeMember` at 4000 random points around dom f, and the
+subdivision's own count is read): WITNESS_SEARCH_NUMBERS

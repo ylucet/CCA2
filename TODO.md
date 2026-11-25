@@ -26,7 +26,7 @@ Exact engine (the default for `conj` and `biconj`):
   2026-11-11: one mechanism behind zero-area faces fixed (cellSamplePoint accepted a sample ON a
   boundary line; DECISIONS 2026-11-11 item 2). Whether it removes these two was NOT re-measured.
 - Example 2 is an EnvelopeMin by default (overlay budget 3000; lifting it takes ~hours).
-- Two BRIDGE faces owning one cell -- no longer refused since 2026-10-17: overlapping pieces, value by max (`envelopeSubdivisionAlg`); erratum Example 1 reaches it (18 cells). Was (2026-09-19): refused by name (`envelopeSubdivisionAlg:twoBridges`), never observed. Review 2026-11-19 #13 statement fixed 2026-11-22; outline G7 (manuscript/) still carries the old wording.
+- Two BRIDGE faces owning one cell -- no longer refused since 2026-10-17: overlapping pieces, value by max (`envelopeSubdivisionAlg`); erratum Example 1 reaches it (18 cells). Was (2026-09-19): refused by name (`envelopeSubdivisionAlg:twoBridges`), never observed. Review 2026-11-19 #13 statement fixed 2026-11-22; outline G7 (manuscript/) still carries the old wording. Two genuine BRIDGES never share a cell (#170, 2026-11-25; DESIGN.md).
 
 Python port (`python/`, merged to main 2026-11-11):
 - FIXED 2026-11-11: the big kink AlgCrv was 334 faces in Python against MATLAB's 317. Cause: the
@@ -217,8 +217,13 @@ DOES carry the value and cannot be reduced the same way.
 
 - [x] **DONE 2026-11-17: the c = -2 diagonal-kink zero-area faces are dropped (nf 4 -> 2, value-neutral; DECISIONS 2026-11-17).** The cause found 2026-09-24 stood -- each is a QUADRATIC face the bridge beats on the whole interior and ties only on the domain edge -- and they are now dropped where `algRowFails` decides a face's rows: a PERFECT-SQUARE TANGENCY certificate (`psTangency`, top of `algRowFails`, MATLAB + `python/cca2/alg_row_fails.py`) recognises a quad-vs-bridge row whose bridge branch exceeds the quad by a perfect square, which holds only on a curve, so the face owns no area. It is s-symmetric in the two branches P+ / P- (the square root's real sign is region-dependent), and its false-positive corner -- the one-sign draft's read of (z-(1-x-y))(z+1) against q=0 as a certified tangency -- is pinned by `algRowFailsTest/aRowVanishingOnTheREGIONSEdge`. The two surviving bridge faces are bit-identical to the 2026-11-05 baseline (owned 54203 / 53797 of 108000, ties 46890, max excess 1.0), so no value changes.
 
-- [ ] **Two BRIDGE faces owning one cell** -- `envelopeSubdivisionAlg:twoBridges`, refused by name and never
-      observed. `envelopeSubdivision:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
+- [x] **Two BRIDGE faces owning one cell** -- SETTLED 2026-11-25 (#170): cannot happen on an open set (DESIGN.md
+      "Two bridge faces never share a cell": each bridge's base point is a subgradient of the pair's envelope,
+      unique a.e., and two tie arcs meet in finitely many points), and where it could (one degenerate
+      exception, no input known) both values are the envelope, so the max rule is exact. The refusal
+      (`twoBridges`) had been retired 2026-10-17; each engine now counts `bridgeOverlaps` and the tests
+      assert 0 (three engines); witness search `python/tests/review/hunt_two_bridges.py`, numbers in DESIGN.md.
+      `envelopeSubdivision:bridgeCompetes` is pinned by envelopeAssembleTest (normal).
 
 - [x] **DONE 2026-10-11: Example 2's biconjugate computes (EnvelopeMin, ~26 min, one run on the shared machine); its 3 tests run. Big polynomial kept in BigInteger, overflowing intermediates reduced by content (ratQ.exactFormula / bigZ), algBranch leader-drop fixed.** **Integer width of the STORED answer: erratum Example 2.** Three constructors overflowed on
       INTERMEDIATES and are fixed (2026-10-11): the corner bracket (now built in BigInteger), the

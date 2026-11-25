@@ -118,7 +118,7 @@ def envelopeSubdivisionAlg(env, dom=None, cuts=None, opts=None):
                   'the face list.' % (maxCells, j, len(C)))
 
     subdivision = []
-    nAlg = nUncovered = nOverlap = nNoPoint = nBelow = 0
+    nAlg = nUncovered = nOverlap = nNoPoint = nBelow = nBridge2 = 0
     cellCon = []
     faceCell = []
     for rows, sk in zip(cells, skips):
@@ -137,6 +137,11 @@ def envelopeSubdivisionAlg(env, dom=None, cuts=None, opts=None):
             if sum(bridgeMember(f['pair'], Q)[0]) * 2 > len(Q):
                 here.append(f['pairIndex'])
                 bHere.append(b)
+        # Two bridges owning one cell cannot happen (DESIGN.md "Two bridge faces never share a
+        # cell"); counted, not refused -- each bridge value is <= the envelope on its stored region.
+        # ALGEBRAIC bridges only: a rational bridge's membership is an outer bound of its sweep.
+        if sum(1 for b in bHere if bridges[b]['kind'] == 'algebraic') > 1:
+            nBridge2 += 1
         if not all(p in here for p in allPairs):
             nUncovered += 1
             continue
@@ -161,7 +166,7 @@ def envelopeSubdivisionAlg(env, dom=None, cuts=None, opts=None):
             faceCell.append(len(cellCon))
     info = {'cells': len(cells), 'faces': len(subdivision), 'algRows': nAlg,
             'refused': nUncovered, 'noPoint': nNoPoint, 'overlaps': nOverlap, 'below': nBelow,
-            'skipped': nSkip, 'cellCon': cellCon, 'faceCell': faceCell}
+            'bridgeOverlaps': nBridge2, 'skipped': nSkip, 'cellCon': cellCon, 'faceCell': faceCell}
     return subdivision, info
 
 
@@ -1116,5 +1121,6 @@ def _minOverlay(subs, infos, budget):
             'iiRows': nII, 'bound': bound, 'refused': nHole, 'unsure': nUnsure, 'tieEmpty': nTie,
             'combos': nCombo, 'pairCells': [x['cells'] for x in infos],
             'pairFaces': [x['faces'] for x in infos],
-            'skipped': sum(x['skipped'] for x in infos)}
+            'skipped': sum(x['skipped'] for x in infos),
+            'bridgeOverlaps': sum(x['bridgeOverlaps'] for x in infos)}
     return out, info

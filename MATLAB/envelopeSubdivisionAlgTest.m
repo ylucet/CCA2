@@ -31,6 +31,27 @@ classdef envelopeSubdivisionAlgTest < matlab.unittest.TestCase
                           'and on the VALUE wherever both are finite');
         end
 
+        function twoBRIDGEFacesNeverOwnOneCell(t)
+        % DESIGN.md "Two bridge faces never share a cell": a bridge's base point is a subgradient of
+        % the pair's envelope, unique almost everywhere, and two tie arcs of one envelope meet in
+        % finitely many points -- so two bridge regions meet in a null set. Checked two independent
+        % ways on the c = -2 kink, which has two bridges: the defining predicate on random points,
+        % and the subdivision's own count. Mirrors python/tests/test_two_bridges.py, rust two_bridges.rs.
+            env = fixture(-2);
+            isBridge = cellfun(@(f) ~strcmp(f.kind, 'corner') && isfield(f, 'pair') && isfield(f, 'cells'), env.bridge);
+            bridges = env.bridge(isBridge);
+            t.assertEqual(numel(bridges), 2, 'the fixture must have two bridges, or the test is vacuous');
+            t.assertTrue(all(cellfun(@(f) strcmp(f.kind, 'algebraic'), bridges)), 'membership exactly the sweep');
+            rng(20261125);
+            X = rand(20000, 2) * 5 - 2;
+            M = [bridgeMember(bridges{1}.pair, X), bridgeMember(bridges{2}.pair, X)];
+            t.verifyGreaterThan(sum(M), [300 300], 'each bridge must own a sizeable sample');
+            t.verifyEqual(sum(all(M, 2)), 0, 'no sampled point may lie in both bridge regions');
+            [subdivision, info] = envelopeSubdivisionAlg(env);
+            t.verifyTrue(any(strcmp({subdivision.kind}, 'bridge')));
+            t.verifyEqual(info.bridgeOverlaps, 0, 'and no cell of the subdivision is put in both');
+        end
+
         function theCONVEXFixtureNeedsNoAlgebraicRowAtAll(t)
         % The control. A convex input has no curved tie, so no bridge face, so nothing to cut
         % algebraically -- and the same routine must still reproduce it exactly. Without this, the

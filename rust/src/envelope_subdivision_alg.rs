@@ -40,6 +40,9 @@ impl Default for AlgOpts {
 pub struct SubInfo {
     pub cell_con: Vec<Vec<Vec<Z>>>,
     pub face_cell: Vec<usize>,
+    /// cells owned by two or more BRIDGE faces of one envelope; 0 by DESIGN.md "Two bridge faces
+    /// never share a cell" (an invariant the tests assert, not a refusal)
+    pub bridge_overlaps: usize,
 }
 
 type Rows = Vec<(usize, i64)>;
@@ -64,7 +67,8 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             subs.push(sb);
             infos.push(inf);
         }
-        return Ok((min_overlay(&subs, &infos, opts.overlay_budget)?, SubInfo { cell_con: vec![], face_cell: vec![] }));
+        let bridge_overlaps = infos.iter().map(|i| i.bridge_overlaps).sum();
+        return Ok((min_overlay(&subs, &infos, opts.overlay_budget)?, SubInfo { cell_con: vec![], face_cell: vec![], bridge_overlaps }));
     }
     let env = combine_pairs(envs)?;
     let (corners, bridges) = split_bridge(&env.bridge)?;
@@ -141,7 +145,7 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
     }
     // the final loop: every cell gets its faces independently (this is where `drop_below` spends
     // its time); a cell with no interior point is None, a cell that gets no faces is Some with none
-    let per_cell = crate::par::map_range(cells.len(), |ci| -> R<Option<(Vec<Vec<Z>>, Vec<SubFace>)>> {
+    let per_cell = crate::par::map_range(cells.len(), |ci| -> R<Option<(Vec<Vec<Z>>, Vec<SubFace>, bool)>> {
         let (rows, sk) = (&cells[ci], &skips[ci]);
         let (pt, ok_pt) = interior_point(&c, rows)?;
         if !ok_pt {
@@ -160,8 +164,12 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
                 b_here.push(b);
             }
         }
+        // Two bridges owning one cell cannot happen (DESIGN.md "Two bridge faces never share a
+        // cell"); counted, not refused -- each bridge value is <= the envelope on its stored region.
+        // ALGEBRAIC bridges only: a rational bridge's membership is an outer bound of its sweep.
+        let two = b_here.iter().filter(|&&b| bridges[b].kind == FaceKind::Algebraic).count() > 1;
         if !all_pairs.iter().all(|p| here.contains(p)) {
-            return Ok(Some((con, vec![])));
+            return Ok(Some((con, vec![], two)));
         }
         let quad_app: Vec<usize> = app.iter().cloned().filter(|&i| i <= n_quad).collect();
         let mut irr: Vec<Irr> = b_here.iter().map(|&b| Irr { fp: bridges[b].fp.clone(), fb: bridges[b].fb }).collect();
@@ -171,25 +179,27 @@ pub fn esa(envs: &[Env], dom: &[Vec<Z>], cuts: &[Vec<Z>], opts: &AlgOpts) -> R<(
             }
         }
         if quad_app.is_empty() && irr.is_empty() {
-            return Ok(Some((con, vec![])));
+            return Ok(Some((con, vec![], two)));
         }
         if irr.len() > 1 {
             irr = drop_below(irr, &c, rows, &pw, &env.quad, &quad_app)?;
         }
         let sub = winner_faces(&env.quad, &quad_app, &irr, rows, &c, &pw, &rows_out)?;
-        Ok(Some((con, sub)))
+        Ok(Some((con, sub, two)))
     })?;
     let mut subdivision = vec![];
     let mut cell_con = vec![];
     let mut face_cell = vec![];
+    let mut bridge_overlaps = 0;
     for r in per_cell.into_iter().flatten() {
+        bridge_overlaps += r.2 as usize;
         cell_con.push(r.0);
         for sf in r.1 {
             subdivision.push(sf);
             face_cell.push(cell_con.len());
         }
     }
-    Ok((subdivision, SubInfo { cell_con, face_cell }))
+    Ok((subdivision, SubInfo { cell_con, face_cell, bridge_overlaps }))
 }
 
 fn quad_face(q: &QuadC, con: Vec<Vec<Z>>, alg: Vec<AlgRow>) -> SubFace {

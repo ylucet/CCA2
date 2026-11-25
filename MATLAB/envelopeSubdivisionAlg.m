@@ -48,7 +48,9 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
 % value is still right because every evaluator takes the max over the faces owning a point.
 % `info.overlaps` counts such cells (a fixed-grid read). Until 2026-10-17 this was refused as
 % `envelopeSubdivisionAlg:twoBridges`; erratum Example 1 reaches it with two corners from Q(sqrt 26) and
-% Q(sqrt 6), and 18 of its cells overlap.
+% Q(sqrt 6), and 18 of its cells overlap. Two genuine BRIDGES never do (DESIGN.md "Two bridge faces
+% never share a cell", 2026-11-25): `info.bridgeOverlaps` counts cells in two ALGEBRAIC bridges, and
+% the tests assert 0.
 
     if nargin < 1 || nargin > 4
         error('envelopeSubdivisionAlg:nargin', 'expects (env), (env, dom), (env, dom, cuts) or (env, dom, cuts, opts).');
@@ -148,7 +150,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
 
     % ---- one face per cell, with the winner decided and the ties cut algebraically ----------------
     subdivision = struct('kind', {}, 'num', {}, 'den', {}, 'FP', {}, 'FB', {}, 'con', {}, 'alg', {});
-    nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;  nBelow = 0;
+    nAlg = 0;  nUncovered = 0;  nOverlap = 0;  nNoPoint = 0;  nBelow = 0;  nBridge2 = 0;
     cellCon = {};  faceCell = zeros(1, 0);      % the cells, for an overlay of several pairs
     for k = 1:numel(cells)
         rows = cells{k};
@@ -176,6 +178,17 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
                 bHere(end+1) = b; %#ok<AGROW>
             end
         end
+        % TWO BRIDGES OWNING ONE CELL cannot happen (DESIGN.md "Two bridge faces never share a cell"):
+        % a bridge's base point is a subgradient of the pair's envelope, unique almost everywhere, and
+        % two tie arcs of one envelope meet in finitely many points, so two swept regions meet in a
+        % null set. Counted, not refused: every bridge value is <= the envelope on its stored region
+        % and equal on the sweep, so the max below is exact whatever overlaps. Only ALGEBRAIC bridges
+        % are counted -- their membership IS the sweep; a RATIONAL bridge's (bridgeMember's
+        % parabola branch) is an outer bound of it, so its overlaps are expected and harmless.
+        % `bridgeOverlaps` is the invariant; the tests assert it is 0.
+        nAlgB = 0;
+        for b = bHere, nAlgB = nAlgB + strcmp(bridges{b}.kind, 'algebraic'); end
+        if nAlgB > 1, nBridge2 = nBridge2 + 1; end
         if ~all(ismember(allPairs, here)), nUncovered = nUncovered + 1; continue, end
 
         quadApp = app(app <= nQuad);
@@ -208,7 +221,7 @@ function [subdivision, info] = envelopeSubdivisionAlg(env, dom, cuts, opts)
     end
     info = struct('cells', numel(cells), 'faces', numel(subdivision), 'algRows', nAlg, ...
                   'refused', nUncovered, 'noPoint', nNoPoint, 'overlaps', nOverlap, 'below', nBelow, ...
-                  'skipped', nSkip, ...
+                  'bridgeOverlaps', nBridge2, 'skipped', nSkip, ...
                   'cellCon', {cellCon}, 'faceCell', faceCell);
 end
 
@@ -824,7 +837,8 @@ function [out, info] = minOverlay(subs, infos, budget)
     info = struct('cells', numel(tup), 'faces', numel(out), 'algRows', nAlg, 'iiRows', nII, 'bound', bound, ...
                   'refused', nHole, 'unsure', nUnsure, 'tieEmpty', nTie, 'combos', nCombo, ...
                   'pairCells', cellfun(@(x) x.cells, infos), 'pairFaces', cellfun(@(x) x.faces, infos), ...
-                  'skipped', sum(cellfun(@(x) x.skipped, infos)));
+                  'skipped', sum(cellfun(@(x) x.skipped, infos)), ...
+                  'bridgeOverlaps', sum(cellfun(@(x) x.bridgeOverlaps, infos)));
 end
 
 function [keys, rows] = keyRows(keys, con)
