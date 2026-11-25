@@ -224,6 +224,8 @@ def _bisectRoot(a, lo, hi):
     from .rat_q import countRootsIn
     lo = Fraction(lo)
     hi = Fraction(hi)
+    if a[-1] == 0 and lo < 0 <= hi:
+        return 0.0                                  # z = 0 is the root (no relative size to reach)
     for _ in range(400):
         if hi - lo <= abs(hi + lo) * Fraction(1, 2 ** 60):
             break

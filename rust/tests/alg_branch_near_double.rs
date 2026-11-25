@@ -42,3 +42,12 @@ fn a_genuine_multiple_root_is_returned_to_full_precision() {
     let (z, all) = alg_branch_info(&triple, &[[0.3, 0.7]], -1).unwrap();
     assert!((z[0] - 1.0).abs() <= 4e-16 && all[0].len() == 4, "{:?} {:?}", z, all);
 }
+
+/// z^2 (z + 1): the double root is z = 0 exactly (MATLAB's bisection toward it reached subnormal
+/// endpoints and threw on D-069; Python and Rust returned ~1e-120).
+#[test]
+fn a_multiple_root_at_zero_is_zero() {
+    let p = poly(&[([0, 0, 3], 1), ([0, 0, 2], 1)]);
+    let (z, all) = alg_branch_info(&p, &[[0.3, 0.7]], -1).unwrap();
+    assert!(z[0] == 0.0 && all[0] == vec![-1.0, 0.0, 0.0], "{:?} {:?}", z, all);
+}

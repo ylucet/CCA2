@@ -42,3 +42,10 @@ def test_a_genuine_multiple_root_is_returned_to_full_precision():
     assert abs(z[0] - 1) <= 4e-16 and info['nreal'][0] == 3, (z, info)
     z, info = algBranch(TRIPLE, [[0.3, 0.7]], -1, wantInfo=True)
     assert abs(z[0] - 1) <= 4e-16 and info['nreal'][0] == 4, (z, info)
+
+
+def test_a_multiple_root_at_zero_is_zero():
+    # z^2 (z + 1): the double root is z = 0 exactly (MATLAB's bisection toward it reached subnormal
+    # endpoints and threw on D-069; Python and Rust returned ~1e-120)
+    z, info = algBranch({(0, 0, 3): 1, (0, 0, 2): 1}, [[0.3, 0.7]], -1, wantInfo=True)
+    assert z[0] == 0.0 and info['allReal'][0] == [-1.0, 0.0, 0.0], (z, info)

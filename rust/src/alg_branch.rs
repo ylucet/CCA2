@@ -300,6 +300,9 @@ fn yun(p: &[Z]) -> Option<Vec<(usize, Vec<Z>)>> {
 /// 2^-60 of its size (or 400 halvings); the double nearest the midpoint.
 fn bisect_root(a: &[Z], lo: Q, hi: Q) -> f64 {
     let (mut lo, mut hi) = (lo, hi);
+    if a.last().map_or(false, |c| c.is_zero()) && lo < Q::zero() && hi >= Q::zero() {
+        return 0.0; // z = 0 is the root (no relative size to reach)
+    }
     let tiny = Q::new(Z::one(), Z::one() << 60usize);
     for _ in 0..400 {
         if &hi - &lo <= (&hi + &lo).abs() * &tiny {

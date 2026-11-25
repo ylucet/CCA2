@@ -484,7 +484,9 @@ end
 
 function m = bisectBig(a, lo, hi)
 % The simple root of the square-free a in (lo, hi], bisected exactly down to adjacent doubles;
-% the upper end, which holds the root.
+% the upper end, which holds the root. A root at z = 0 is returned as 0: bisecting toward it ran
+% into subnormal endpoints, which ratQ.dyadicParts cannot write (D-069: a Java exception).
+    if a{end}.signum() == 0 && lo < 0 && hi >= 0, m = 0; return, end
     for it = 1:2000
         mid = (lo + hi) / 2;
         if mid <= lo || mid >= hi, break, end

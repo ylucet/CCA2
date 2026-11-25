@@ -321,5 +321,14 @@ classdef algBranchTest < matlab.unittest.TestCase
             testCase.verifyLessThanOrEqual(abs(z - 1), 4e-16);
             testCase.verifyEqual(info.nreal, 4);
         end
+
+        function aMULTIPLERootAtZEROIsZero(testCase)
+        % z^2 (z + 1): the double root is z = 0 exactly. Bisecting toward it reached subnormal
+        % endpoints, which ratQ.dyadicParts cannot write: a Java exception on D-069.
+            P = zeros(1, 1, 4);  P(1,1,4) = 1;  P(1,1,3) = 1;
+            [z, info] = algBranch(P, [0.3 0.7], -1);
+            testCase.verifyEqual(z, 0);
+            testCase.verifyEqual(info.allReal{1}(:).', [-1 0 0]);
+        end
     end
 end
