@@ -362,14 +362,12 @@ def test_discontinuous_input_lsc(name):
         assert v - cc <= 1e-6 * max(1.0, abs(v)), (name, x, v, cc)       # f** = conj(conj)
 
 
-# Open (#108 residual, TODO): the atoms route SUBDIVIDES the min over atom pairs into an AlgCrv
-# whose evaluator takes the max over the faces holding at a point. Where the input jumps, a face of
-# one piece's atom reaches a shared vertex with that piece's larger value: D-132 gives 11 at its
-# vertex (-2,2) and 9.875 at (-13/8, 11/8) on the diagonal next to it (lsc f = -7, -4.02); D-153
-# gives 9 at (-3,-2) (lsc f = 7.5) and is wrong within ~1e-4 of it; D-111 8.5 at (-2,3) (lsc f = 3).
-# The unsubdivided EnvelopeMin is
-# right there but too low elsewhere (D-209, the review #9b class), so neither form is used yet.
-_D_SHARED_OPEN = {'D-111', 'D-132', 'D-153'}
+# #108 residual, fixed 2026-11-24 (DESIGN.md "Discontinuous input"): f** <= lsc f failed at jump
+# vertices and next to them on D-111, D-132 (a zero-area remnant of a cut contact triangle won the
+# AlgCrv max: 8.5 at (-2,3), lsc f = 3; 11 at (-2,2), lsc f = -7) and D-153 (a double root real only
+# on its hull edges' lines counted as a branch, 10.2578 for 9.5177; double/triple roots ~eps^(1/k)
+# off at the jump vertices, 7.5000017 for 7.5; a row with a 0/0 at the corner (0,0) made it +inf).
+_D_SHARED_OPEN = set()
 
 
 def _shared_param(i):
@@ -395,6 +393,22 @@ def test_discontinuous_shared_points(name):
         fp = float(O.f_at(fx, p))
         # values read in doubles near algebraic branch points: 1e-7 relative
         assert v <= fp + 1e-7 * max(1.0, abs(fp)), (name, p, v, fp)
+
+
+@pytest.mark.slow
+def test_discontinuous_kink_jump_vertex():
+    # #108 residual, the two-convex-pieces route: the poly2 kink at c = -2 (MATLAB
+    # kinkSubdivisionTest) jumps across its diagonal; at the jump vertex (1,2) lsc f = min(5, 1) = 1
+    # = f**, a DOUBLE root of the face there, which rounding returned as 1.0000000256.
+    V = [[-2, 0], [2, 0], [1, 2], [-1, 2]]
+    q0 = [0, 0, 0, 0, 2, 0, 2, 0, 0, 0]
+    q1 = list(q0)
+    q1[8] = -2
+    f = QuaPol(V, [[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1], [1, 3, 1]], [q0, q1],
+               [[1, 0], [1, 0], [2, 0], [2, 0], [2, 1]])
+    v = _ev(f.biconj(), [[1.0, 2.0], [-1.0, 2.0], [-2.0, 0.0], [2.0, 0.0]])
+    assert abs(v[0] - 1) <= 1e-14, v                     # lsc f(1,2) = 1, the jump vertex
+    assert abs(v[1] - 1) <= 1e-12 and abs(v[2] - 4) <= 1e-12 and abs(v[3] - 4) <= 1e-12, v
 
 
 def test_continuous_input_not_refused():

@@ -1,7 +1,7 @@
 //! The result lattice of biconj (ports of alg_crv.py, assemble_alg_crv.py, envelope_min.py):
 //! an AlgCon is a QuaCon, an AlgCrv or an EnvelopeMin.
 
-use crate::alg_branch::{alg_branch, alg_branch_prep, prep};
+use crate::alg_branch::{alg_branch, alg_branch_prep, fibre_vanishes, prep};
 use crate::envelope::{envelope_eval, Env};
 use crate::errors::R;
 use crate::poly_n::PolyN;
@@ -115,36 +115,77 @@ impl AlgCrv {
         let n = x.len();
         let mut val = vec![f64::INFINITY; n];
         let mut idx = vec![0usize; n];
+        // A CONTACT TRIANGLE decides where it holds: its plane <s,x> - f*(s) is an affine
+        // minorant of f** equal to f** on the whole closed triangle. The closed remnants that
+        // cutting it out of a face leaves can meet it on a ZERO-AREA set (a segment of its edge)
+        // carrying their pair's value, which for a discontinuous f is larger there (#108
+        // residual: D-132, D-111) and would otherwise win the max.
+        let mut tri = vec![false; n];
         for k in 0..self.nf {
-            let m = self.face_points(k, x)?;
+            let m = self.face_closure_points(k, x)?;
             let pts: Vec<usize> = (0..n).filter(|&i| m[i]).collect();
             if pts.is_empty() {
                 continue;
             }
             let xs: Vec<[f64; 2]> = pts.iter().map(|&i| x[i]).collect();
             let v = self.face_values(k, &xs)?;
+            let is_tri = self.ft[k] > 0;
             for (&i, vi) in pts.iter().zip(v.iter()) {
                 if vi.is_nan() {
                     continue;
                 }
-                if val[i].is_infinite() || *vi > val[i] {
+                if tri[i] && !is_tri {
+                    continue; // a triangle already decides this point
+                }
+                if (is_tri && !tri[i]) || val[i].is_infinite() || *vi > val[i] {
                     val[i] = *vi;
                     idx[i] = k + 1;
+                    tri[i] = tri[i] || is_tri;
                 }
             }
         }
         Ok((val, idx))
     }
 
+    /// face_points, with a row that is UNDEFINED at a point decided by the face's closure: an
+    /// algebraic row whose whole fibre vanishes there (a BASE POINT, every z a root -- a 0/0 of a
+    /// bridge between two atoms sharing a vertex) says nothing, and reading it as "fails" left a
+    /// hole: D-153's domain corner (0,0), f** = -2, was +inf (#108 residual). There the face holds
+    /// iff it holds at x nudged by 1e-7 in one of eight directions (envelope_eval's nudge); the
+    /// value is still the face's own at x. See alg_crv.py `_faceClosurePoints`.
+    fn face_closure_points(&self, k: usize, x: &[[f64; 2]]) -> R<Vec<bool>> {
+        let (mut m, u) = self.face_points_und(k, x)?;
+        let r2 = std::f64::consts::FRAC_1_SQRT_2;
+        let dirs = [[1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], [0.0, -1.0], [r2, r2], [r2, -r2], [-r2, r2], [-r2, -r2]];
+        for i in 0..x.len() {
+            if m[i] || !u[i] {
+                continue;
+            }
+            let h = 1e-7 * 1f64.max(x[i][0].abs()).max(x[i][1].abs());
+            let y: Vec<[f64; 2]> = dirs.iter().map(|d| [x[i][0] + h * d[0], x[i][1] + h * d[1]]).collect();
+            if self.face_points(k, &y)?.iter().any(|b| *b) {
+                m[i] = true;
+            }
+        }
+        Ok(m)
+    }
+
     fn face_points(&self, k: usize, x: &[[f64; 2]]) -> R<Vec<bool>> {
+        Ok(self.face_points_und(k, x)?.0)
+    }
+
+    /// (held, undecided): undecided = held but for rows undefined at a base point.
+    fn face_points_und(&self, k: usize, x: &[[f64; 2]]) -> R<(Vec<bool>, Vec<bool>)> {
         let mut m = vec![true; x.len()];
+        let mut u = vec![false; x.len()];
         for row in &self.fc[k] {
-            let live: Vec<usize> = (0..x.len()).filter(|&i| m[i]).collect();
+            let live: Vec<usize> = (0..x.len()).filter(|&i| m[i] || u[i]).collect();
             if live.is_empty() {
-                return Ok(m);
+                return Ok((m, u));
             }
             let p: Vec<[f64; 2]> = live.iter().map(|&i| x[i]).collect();
             let tbl = row[3];
+            let mut und = vec![false; p.len()];
             let ok: Vec<bool> = if tbl == 3 {
                 let t = &self.tri[row[0] as usize - 1].t;
                 let i0 = row[1] as usize;
@@ -164,10 +205,23 @@ impl AlgCrv {
                 let r = &self.eci[row[0] as usize - 1];
                 let v1 = alg_branch(&r.fp1, &p, r.fb1)?;
                 let v2 = alg_branch(&r.fp2, &p, r.fb2)?;
+                if v1.iter().chain(v2.iter()).any(|v| !v.is_finite()) {
+                    let z1 = fibre_vanishes(&r.fp1, &p)?;
+                    let z2 = fibre_vanishes(&r.fp2, &p)?;
+                    for i in 0..p.len() {
+                        und[i] = (!v1[i].is_finite() && z1[i]) || (!v2[i].is_finite() && z2[i]);
+                    }
+                }
                 v1.iter().zip(v2.iter()).map(|(a, b)| a.is_finite() && b.is_finite() && !((row[1] as f64) * (a - b) < -1e-9)).collect()
             } else if tbl == 1 {
                 let a = &self.eca[row[0] as usize - 1];
                 let v = alg_branch(&a.fp, &p, a.fb)?;
+                if v.iter().any(|vi| !vi.is_finite()) {
+                    let z = fibre_vanishes(&a.fp, &p)?;
+                    for i in 0..p.len() {
+                        und[i] = !v[i].is_finite() && z[i];
+                    }
+                }
                 p.iter().zip(v.iter()).map(|(q, vi)| {
                     let qi = eval_face(&a.num, &a.den, q[0], q[1]);
                     vi.is_finite() && !((row[1] as f64) * (qi - vi) < -1e-9)
@@ -187,11 +241,16 @@ impl AlgCrv {
                     v.iter().map(|vi| !((row[1] as f64) * vi < -1e-9)).collect()
                 }
             };
-            for (&i, o) in live.iter().zip(ok) {
-                m[i] = o;
+            for ((&i, o), un) in live.iter().zip(ok).zip(und) {
+                if m[i] {
+                    m[i] = o;
+                    u[i] = !o && un;
+                } else {
+                    u[i] = o || un; // an undecided point stays undecided, or fails
+                }
             }
         }
-        Ok(m)
+        Ok((m, u))
     }
 
     fn face_values(&self, k: usize, x: &[[f64; 2]]) -> R<Vec<f64>> {

@@ -180,6 +180,10 @@ function [z, info] = algBranch(P, X, b, opts)
 
         isReal = abs(imag(r)) <= opts.imagTol * max(1, abs(r));
         rr = sort(real(r(isReal)));
+        % A NEAR-DOUBLE REAL PAIR that is real only on a CURVE is not a value (#108 residual,
+        % D-153): see dropIsolatedPairs. Python and Rust also examine the complex pairs their
+        % double-root noise test accepts; MATLAB drops those as before (PORT_NOTES section 4).
+        rr = dropIsolatedPairs(P, Pbig, X(t,:), cz, r, rr, nx, ny, nz);
         % A DOUBLE ROOT OF A QUADRATIC FIBRE -- where the two branches meet -- can come back from
         % `roots` as a complex pair with imaginary part ~ sqrt(eps), past imagTol, leaving the
         % point with no branch at all: the c = -2 AlgCrv evaluated to +Inf on its domain edge x = 0
@@ -351,5 +355,205 @@ function [c, isZero] = exactFibre(B, x, nx, ny, nz)
     end
     c = cellfun(@(a) a.doubleValue(), acc);
     isZero = cellfun(@(a) a.signum() == 0, acc);
+end
+
+function rr = dropIsolatedPairs(P, Pbig, x, cz, r, rr, nx, ny, nz)
+% Drop the NEAR-DOUBLE real roots that are not the value of any branch (#108 residual, D-153).
+%
+% A face is the b-th real root of its fibre, and f** is closed and convex: its value at a point is
+% the limit from the points around it. So a double root that is real only on a CURVE -- a complex
+% pair touching the real axis there and leaving it on both sides -- must not be counted. Such a
+% pair appears where a bridge's dual point runs off to infinity, on a boundary line of dom f**. For
+% a continuous f it coincides with the true value there; for a discontinuous one it does not
+% (D-153: the convex piece's own value 10.2578 on its hull edge next to the jump vertex, f** =
+% 9.5177), and rounding returns it as two close reals in a ~1e-5 strip inside the domain too.
+%
+% Only a pair the doubles cannot separate is examined: two adjacent real roots within the double-
+% root noise of each other, 8 sqrt(eps sum|c_k t^k| / |p''(t)/2|) (alg_branch.py's
+% _doubleRootNoise). The fibre is then evaluated EXACTLY (doubles are dyadic) at x +- h e for four
+% directions e and a tiny dyadic h (~1e-12 relative), and its distinct real roots near the pair are
+% counted by Sturm in BigInteger. A pair with no real root on EITHER side in at least two
+% directions is dropped. A crossing of two real branches, a fold (real on one side) and a double
+% root that is real along a curve all keep it: at most one of the four directions runs along it.
+    cands = [];
+    for i = 1:numel(rr)-1
+        a = rr(i);  b = rr(i+1);
+        if b > a && doubleRootNoise(cz, (a+b)/2, (b-a)/2), cands(end+1) = (a+b)/2; end %#ok<AGROW>
+    end
+    % a near-real complex pair (dropped above) is not examined, but it may be a multiple root's
+    % rounding: then the multiple roots are decided exactly below, as in Python and Rust
+    snap = ~isempty(cands) || any(arrayfun(@(v) imag(v) > 0 && ...
+        doubleRootNoise(cz, real(v), imag(v)), r(:)));
+    for z0 = cands
+        d = sort(abs(r(:) - z0));  d = d(3:end);       % the pair itself is nearest
+        if ~isempty(d) && d(1) > 0, rad = d(1)/2; else, rad = 1 + abs(z0); end
+        if isolatedPair(P, Pbig, x, z0, rad, nx, ny, nz)
+            for rep = 1:2
+                [m, k] = min(abs(rr - z0));
+                if ~isempty(k) && m <= rad, rr(k) = []; end
+            end
+        end
+    end
+    if snap
+        rr = snapMultipleRoots(P, Pbig, x, cz, rr, nx, ny, nz);
+    end
+end
+
+function rr = snapMultipleRoots(P, Pbig, x, cz, rr, nx, ny, nz)
+% A GENUINE multiple root of the fibre, to full precision (#108 residual: the jump vertices).
+% Rounding returns a k-fold real root as k roots ~eps^(1/k) apart, and at a jump vertex f** is
+% such a root: D-153's vertex (-3,-2), f** = 7.5 a double root, came back as 7.5000017 (2.3e-7
+% relative), the poly2 kink's (1,2) as 1.0000000256. The multiple roots are the roots of
+% gcd(p, p'), where they are SIMPLE: the fibre at the exact dyadic point is split by multiplicity
+% (Yun), each real root of a factor of multiplicity k >= 2 is isolated by Sturm and bisected
+% exactly to adjacent doubles, and whatever rounding left within 8 (eps sum|c_j m^j| /
+% |p^(k)(m)/k!|)^(1/k) of it (close reals, or a lone real whose partners came back complex)
+% becomes exactly k copies of it, whatever the LAPACK in use (alg_branch.py _snapMultipleRoots).
+    if isempty(rr), return, end
+    [xn, xd] = ratQ.dyadicParts(x(1));
+    [yn, yd] = ratQ.dyadicParts(x(2));
+    D = xd.max(yd);
+    row = ratQ.bigPrimitive(exactFibreRow(P, Pbig, xn.multiply(D.divide(xd)), ...
+                                          yn.multiply(D.divide(yd)), D, nx, ny, nz));
+    if numel(row) <= 2, return, end
+    fac = yunBig(row);
+    for f = 1:numel(fac)
+        k = fac{f}{1};  a = fac{f}{2};
+        if k < 2, continue, end
+        I = ratQ.isolateRootsBig(a);
+        for q = 1:size(I,1)
+            m = bisectBig(a, I(q,1), I(q,2));
+            w = multipleRootNoise(cz, m, k);
+            near = abs(rr - m) <= w;
+            if any(near)                    % rounding left something there: k copies of m
+                rr = [rr(~near); repmat(m, k, 1)];
+            end
+        end
+    end
+    rr = sort(rr);
+end
+
+function w = multipleRootNoise(cz, m, k)
+% 8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k): how far rounding moves a k-fold root m (cz z^0 first)
+    j = 0:numel(cz)-1;
+    cabs = sum(abs(cz) .* abs(m).^j);
+    jj = j(j >= k);
+    pk = 0;
+    for t = jj, pk = pk + nchoosek(t, k) * cz(t+1) * m^(t-k); end
+    if pk == 0 || cabs == 0, w = 0; return, end
+    w = 8 * (eps * cabs / abs(pk))^(1/k);
+end
+
+function fac = yunBig(p)
+% Yun's square-free decomposition of a BigInteger row (highest first): {k, a_k} with
+% p = c prod a_k^k, each a_k square-free, primitive, of positive degree.
+    g = ratQ.bigGcdRow(p, ratQ.bigDeriv(p));
+    if numel(g) <= 1, fac = {{1, p}}; return, end
+    fac = {};
+    b = bigDivRow(ratQ.bigPrimitive(p), g);          % every distinct root once
+    k = 1;  rest = g;
+    while numel(b) > 1
+        a = ratQ.bigGcdRow(b, rest);                 % the roots of multiplicity > k
+        if numel(a) > 1, f = bigDivRow(b, a); else, f = b; end
+        if numel(f) > 1, fac{end+1} = {k, ratQ.bigPrimitive(f)}; end %#ok<AGROW>
+        if numel(a) <= 1, break, end
+        rest = bigDivRow(rest, a);
+        b = a;  k = k + 1;
+    end
+end
+
+function Q = bigDivRow(P, G)
+% P / G for BigInteger rows (highest first) when the division is exact over the integers.
+    n = numel(P) - numel(G) + 1;
+    Q = cell(1, max(n, 0));
+    R = P;
+    for i = 1:n
+        qr = R{i}.divideAndRemainder(G{1});
+        if qr(2).signum() ~= 0
+            error('algBranch:internal', 'an exact polynomial division left a remainder.');
+        end
+        Q{i} = qr(1);
+        for j = 1:numel(G), R{i+j-1} = R{i+j-1}.subtract(Q{i}.multiply(G{j})); end
+    end
+    for i = n+1:numel(R)
+        if R{i}.signum() ~= 0
+            error('algBranch:internal', 'an exact polynomial division left a remainder.');
+        end
+    end
+end
+
+function m = bisectBig(a, lo, hi)
+% The simple root of the square-free a in (lo, hi], bisected exactly down to adjacent doubles;
+% the upper end, which holds the root. A root at z = 0 is returned as 0: bisecting toward it ran
+% into subnormal endpoints, which ratQ.dyadicParts cannot write (D-069: a Java exception).
+    if a{end}.signum() == 0 && lo < 0 && hi >= 0, m = 0; return, end
+    for it = 1:2000
+        mid = (lo + hi) / 2;
+        if mid <= lo || mid >= hi, break, end
+        if ratQ.countRootsInHalfOpenBig(a, lo, mid) == 1, hi = mid; else, lo = mid; end
+    end
+    m = hi;
+end
+
+function tf = doubleRootNoise(cz, t, im)
+% Is a pair at t +- i*im within the rounding of a DOUBLE root of the fibre cz (z^0 first)?
+    k = 0:numel(cz)-1;
+    cabs = sum(abs(cz) .* abs(t).^k);
+    kk = k(k >= 2);
+    p2 = sum(kk.*(kk-1)/2 .* cz(kk+1) .* t.^(kk-2));
+    tf = p2 ~= 0 && cabs ~= 0 && abs(im) <= 8 * sqrt(eps * cabs / abs(p2));
+end
+
+function tf = isolatedPair(P, Pbig, x, z0, rad, nx, ny, nz)
+% No real root within rad of z0 on either side of x, in at least two of four directions.
+    [~, e] = log2(max([1, abs(x(1)), abs(x(2))]));      % frexp's exponent
+    [xn, xd] = ratQ.dyadicParts(x(1));
+    [yn, yd] = ratQ.dyadicParts(x(2));
+    two = java.math.BigInteger.valueOf(2);
+    if e >= 40, hn = two.pow(e - 40);  hd = java.math.BigInteger.ONE;
+    else,       hn = java.math.BigInteger.ONE;  hd = two.pow(40 - e);
+    end
+    D = xd.max(yd).max(hd);                             % all powers of two: the lcm
+    X0 = xn.multiply(D.divide(xd));  Y0 = yn.multiply(D.divide(yd));  H = hn.multiply(D.divide(hd));
+    probes = [1 0; 0 1; 1 1; 1 -1];
+    both = 0;
+    for q = 1:4
+        none = true;
+        for sg = [1 -1]
+            XN = X0.add(H.multiply(java.math.BigInteger.valueOf(sg*probes(q,1))));
+            YN = Y0.add(H.multiply(java.math.BigInteger.valueOf(sg*probes(q,2))));
+            row = exactFibreRow(P, Pbig, XN, YN, D, nx, ny, nz);
+            if ratQ.countRootsInHalfOpenBig(row, z0 - rad, z0 + rad) ~= 0
+                none = false;  break
+            end
+        end
+        if none, both = both + 1; end
+    end
+    tf = both >= 2;
+end
+
+function row = exactFibreRow(P, Pbig, XN, YN, D, nx, ny, nz)
+% The fibre at (XN/D, YN/D) times D^(nx-1+ny-1), as a BigInteger row, highest power of z first.
+    xp = cell(1, nx);  yp = cell(1, ny);
+    for i = 1:nx, xp{i} = XN.pow(i-1).multiply(D.pow(nx-i)); end
+    for j = 1:ny, yp{j} = YN.pow(j-1).multiply(D.pow(ny-j)); end
+    acc = repmat({java.math.BigInteger.ZERO}, 1, nz);
+    for k = 1:nz
+        for i = 1:nx
+            for j = 1:ny
+                if isempty(Pbig)
+                    v = P(i,j,k);
+                    if v == 0, continue, end
+                    v = java.math.BigInteger(sprintf('%.0f', v));
+                else
+                    v = Pbig.c{sub2ind(Pbig.sz, i, j, k)};
+                    if isempty(v), continue, end
+                    v = java.math.BigInteger(v.toString());
+                end
+                acc{k} = acc{k}.add(v.multiply(xp{i}).multiply(yp{j}));
+            end
+        end
+    end
+    row = fliplr(acc);
 end
 

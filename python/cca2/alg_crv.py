@@ -12,9 +12,13 @@ eval takes, at each point, the LARGEST value among the faces whose rows hold the
 import math
 
 from . import rat_q
-from .alg_branch import algBranch
+from .alg_branch import algBranch, fibreVanishes
 from .errors import error
 from .qua_con import AlgCon
+
+_R2 = math.sqrt(2.0)
+_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1],
+         [1 / _R2, 1 / _R2], [1 / _R2, -1 / _R2], [-1 / _R2, 1 / _R2], [-1 / _R2, -1 / _R2]]
 
 
 class AlgCrv(AlgCon):
@@ -39,31 +43,64 @@ class AlgCrv(AlgCon):
         self.fIsConvex = None
 
     def eval(self, X):
-        """(val, idx): the value at each point and the 1-based face that supplied it."""
+        """(val, idx): the value at each point and the 1-based face that supplied it.
+
+        A CONTACT TRIANGLE decides where it holds: its plane <s,x> - f*(s) is an affine minorant
+        of f** that equals f** on the whole closed triangle, so no other face can be right there
+        with a different value. Cutting the triangle out of a face leaves closed remnants that
+        can meet the triangle on a ZERO-AREA set (a segment of its edge); such a remnant carries
+        its pair's value, which for a discontinuous f (#108 residual, D-132, D-111) is larger
+        than f** on that edge and would win the max."""
         n = len(X)
         Xf = [[float(p[0]), float(p[1])] for p in X]
         val = [math.inf] * n
         idx = [0] * n
+        tri = [False] * n
         for k in range(self.nf):
-            M = self._facePoints(k, Xf)
+            M = self._faceClosurePoints(k, Xf)
             pts = [i for i in range(n) if M[i]]
             if not pts:
                 continue
             v = self._faceValues(k, [Xf[i] for i in pts])
+            isTri = self.FT[k] > 0
             for i, vi in zip(pts, v):
                 if math.isnan(vi):
                     continue
-                if math.isinf(val[i]) or vi > val[i]:
+                if tri[i] and not isTri:
+                    continue                    # a triangle already decides this point
+                if (isTri and not tri[i]) or math.isinf(val[i]) or vi > val[i]:
                     val[i] = vi
                     idx[i] = k + 1
+                    tri[i] = tri[i] or isTri
         return val, idx
 
-    def _facePoints(self, k, X):
+    def _faceClosurePoints(self, k, X):
+        """_facePoints, with a row that is UNDEFINED at a point decided by the face's closure.
+
+        An algebraic row compares a value that is a root of a polynomial in z; where the whole
+        fibre vanishes (a BASE POINT: every z is a root, e.g. a 0/0 of a bridge between two atoms
+        that share a vertex) the row says nothing, and reading it as "fails" left a hole: D-153's
+        domain corner (0,0), where the face around it is worth -2 = f**, was +inf (#108 residual).
+        There the face holds iff it holds at points arbitrarily close: its rows are read at x
+        nudged by 1e-7 in eight directions (envelopeEval's nudge), and the value is still the
+        face's own at x."""
+        M, U = self._facePoints(k, X, undecided=True)
+        for i in range(len(X)):
+            if M[i] or not U[i]:
+                continue
+            h = 1e-7 * max(1.0, abs(X[i][0]), abs(X[i][1]))
+            Y = [[X[i][0] + h * d[0], X[i][1] + h * d[1]] for d in _DIRS]
+            if any(self._facePoints(k, Y)):
+                M[i] = True
+        return M
+
+    def _facePoints(self, k, X, undecided=False):
         M = [True] * len(X)
+        U = [False] * len(X)                    # held but for rows undefined at a base point
         for row in self.FC[k]:
-            live = [i for i in range(len(X)) if M[i]]
+            live = [i for i in range(len(X)) if M[i] or U[i]]
             if not live:
-                return M
+                return (M, U) if undecided else M
             P = [X[i] for i in live]
             tbl = row[3] if len(row) >= 4 else 0
             if tbl == 3:
@@ -85,12 +122,16 @@ class AlgCrv(AlgCon):
                 v2 = algBranch(r['FP2'], P, r['FB2'])
                 ok = [math.isfinite(a) and math.isfinite(b) and not (row[1] * (a - b) < -1e-9)
                       for a, b in zip(v1, v2)]
+                und = [(not math.isfinite(a) and fibreVanishes(r['FP1'], p))
+                       or (not math.isfinite(b) and fibreVanishes(r['FP2'], p))
+                       for a, b, p in zip(v1, v2, P)]
             elif tbl == 1:
                 a = self.EcA[row[0] - 1]
                 v = algBranch(a['FP'], P, a['FB'])
                 q = rat_q.evalFace(a['num'], a['den'], P)
                 ok = [math.isfinite(vi) and not (row[1] * (qi - vi) < -1e-9)
                       for vi, qi in zip(v, q)]
+                und = [not math.isfinite(vi) and fibreVanishes(a['FP'], p) for vi, p in zip(v, P)]
             else:
                 c = self.EcQ[row[0] - 1]
                 br = row[2] if len(row) >= 3 else 0
@@ -102,9 +143,15 @@ class AlgCrv(AlgCon):
                     ok = [not (abs(vi) > 1e-9) for vi in v]          # an EQUALITY row: thin face
                 else:
                     ok = [not (row[1] * vi < -1e-9) for vi in v]
-            for i, o in zip(live, ok):
-                M[i] = o
-        return M
+            if tbl not in (1, 2):
+                und = [False] * len(live)
+            for i, o, u in zip(live, ok, und):
+                if M[i]:
+                    M[i] = o
+                    U[i] = (not o) and u
+                else:
+                    U[i] = o or u               # an undecided point stays undecided, or fails
+        return (M, U) if undecided else M
 
     def _faceValues(self, k, X):
         if self.FT[k] > 0:

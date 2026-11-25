@@ -125,12 +125,12 @@ fn discontinuous_input_lsc_values() {
     check_d_family(|name| !D_SLOW.contains(&name));
 }
 
-/// #108 residual (OPEN, TODO): the atoms route subdivides the min over atom pairs into an AlgCrv
-/// that takes the max over the faces holding at a point; on D-132 a bridge face of piece 1's edge
-/// atom reaches the vertex (-2,2) carrying piece 1's value 11, where lsc f = min(11, -7) = -7, and
-/// 9.875 at a point of the shared diagonal next to it (lsc f = -4.015625).
+/// #108 residual (fixed 2026-11-24): the AlgCrv took the max over the faces holding at a point, and
+/// cutting the contact triangle out of a pair's face left a ZERO-AREA remnant on the shared diagonal
+/// carrying the pair's value: 11 at the vertex (-2,2), where lsc f = min(11, -7) = -7, and 9.875 at
+/// (-13/8, 11/8) (lsc f = -4.015625). Now the triangle decides where it holds (its plane is f** on
+/// the closed triangle).
 #[test]
-#[ignore = "#108 residual: AlgCrv max at a jump vertex (D-132)"]
 fn discontinuous_input_shared_vertex_d132() {
     let f = pol(&[[-2, 2], [-1, -2], [1, -3], [2, 2]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
                 &[[0, 0, 0, 0, -1, -1, 2, -2, 1, -1], [0, 0, 0, 0, -1, 0, -1, 0, -2, 1]],
@@ -138,6 +138,62 @@ fn discontinuous_input_shared_vertex_d132() {
     let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&[[-2.0, 2.0], [-1.625, 1.375]]).unwrap();
     assert!((v[0] + 7.0).abs() < 1e-9, "f** at the vertex (-2,2): {}", v[0]);
     assert!(v[1] <= -4.015625 + 1e-9, "f** at (-13/8, 11/8) above lsc f = -4.015625: {}", v[1]);
+}
+
+/// Same cause on D-111: 8.5 at the jump vertex (-2,3) (lsc f = 3) and above lsc f on the diagonal
+/// next to it, through zero-area remnants of the cut contact triangle.
+#[test]
+fn discontinuous_input_shared_vertex_d111() {
+    let f = pol(&[[-2, 3], [1, 1], [3, 2], [0, 3]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 0, -2, -1, -2, -1, 0], [0, 0, 0, 0, -1, -2, -2, -2, 0, -2]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let x = [[-2.0, 3.0], [-1.375, 2.875], [-0.75, 2.75], [-0.125, 2.625]];
+    let lsc: [f64; 4] = [3.0, -0.5546875, -4.21875, -7.9921875];
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&x).unwrap();
+    assert!((v[0] - 3.0).abs() < 1e-9, "f** at the vertex (-2,3): {}", v[0]);
+    for i in 0..x.len() {
+        assert!(v[i] <= lsc[i] + 1e-7 * lsc[i].abs().max(1.0), "f** at {:?} above lsc f = {}: {}", x[i], lsc[i], v[i]);
+    }
+}
+
+/// #108 residual on D-153 (slow): f** <= lsc f at its vertices and next to them -- 10.2578 for
+/// 9.5177 on the hull edge from the jump vertex (-3,-2) (a double root real only on that edge's line
+/// counted as a branch), 7.5000017 for 7.5 at (-3,-2) (a double root ~sqrt(eps) off), +inf at the
+/// corner (0,0) (a row with a 0/0 there read as failed).
+#[test]
+#[ignore = "slow: D-153 (run with -- --ignored)"]
+fn discontinuous_input_shared_vertex_d153() {
+    let f = pol(&[[-3, -2], [0, 0], [2, 3], [-2, 3]], &[[1, 2, 1], [2, 3, 1], [3, 1, 1], [3, 4, 1], [4, 1, 1]],
+                &[[0, 0, 0, 0, 1, 1, -1, -1, 1, -2], [0, 0, 0, 0, 2, -1, 1, -2, 2, 2]],
+                &[[1, 0], [1, 0], [1, 2], [2, 0], [2, 0]]);
+    let x = [[-3.0, -2.0], [-2.875, -1.375], [0.0, 0.0], [2.0, 3.0], [0.0, 3.0], [0.5, 3.0]];
+    // lsc f there, and the value of f** where it is known in closed form
+    let lsc: [f64; 6] = [7.5, 10.2578125, -2.0, 2.5, 12.5, 10.25];
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap().eval(&x).unwrap();
+    for i in 0..x.len() {
+        assert!(v[i] <= lsc[i] + 1e-7 * lsc[i].abs().max(1.0), "f** at {:?} above lsc f = {}: {}", x[i], lsc[i], v[i]);
+    }
+    assert!((v[0] - 7.5).abs() <= 1e-12 && (v[2] + 2.0).abs() <= 1e-12 && (v[3] - 2.5).abs() <= 1e-12, "{:?}", v);
+    // on the hull edges f** is the 1-D envelope of lsc f along them: the tangent from the jump
+    // vertex to the convex piece's parabola -- 7.5 + (9 + sqrt 51) t on edge (-3,-2)-(-2,3) at t = 1/8,
+    // 12.5 - 5x on y = 3 (tangent at x = 0, a triple root of the face there)
+    assert!((v[1] - (7.5 + (9.0 + 51f64.sqrt()) / 8.0)).abs() <= 1e-9, "{:?}", v);
+    assert!((v[4] - 12.5).abs() <= 1e-12 && (v[5] - 10.0).abs() <= 1e-9, "{:?}", v);
+}
+
+/// #108 residual, the two-convex-pieces route: the poly2 kink at c = -2 jumps across its diagonal;
+/// at the jump vertex (1,2) lsc f = min(5, 1) = 1 = f**, a DOUBLE root of the face there, which
+/// rounding returned as 1.0000000256.
+#[test]
+#[ignore = "slow: the poly2 kink (run with -- --ignored)"]
+fn discontinuous_kink_jump_vertex() {
+    let f = pol(&[[-2, 0], [2, 0], [1, 2], [-1, 2]], &[[1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 1, 1], [1, 3, 1]],
+                &[[0, 0, 0, 0, 2, 0, 2, 0, 0, 0], [0, 0, 0, 0, 2, 0, 2, 0, -2, 0]],
+                &[[1, 0], [1, 0], [2, 0], [2, 0], [2, 1]]);
+    let v = cca2::biconj_q::biconj_q(&f, &Default::default()).unwrap()
+        .eval(&[[1.0, 2.0], [-1.0, 2.0], [-2.0, 0.0], [2.0, 0.0]]).unwrap();
+    assert!((v[0] - 1.0).abs() <= 1e-14, "f** at the jump vertex (1,2): {:?}", v);
+    assert!((v[1] - 1.0).abs() <= 1e-12 && (v[2] - 4.0).abs() <= 1e-12 && (v[3] - 4.0).abs() <= 1e-12, "{:?}", v);
 }
 
 /// The D fixtures that take minutes (in Python; the slowest in Rust too): `-- --ignored`.

@@ -108,6 +108,177 @@ def _doubleRootNoise(cz, v):
     return abs(v.imag) <= 8.0 * math.sqrt(2.220446049250313e-16 * cabs / abs(p2))
 
 
+_PROBES = ((1, 0), (0, 1), (1, 1), (1, -1))
+
+
+def _nearDoubles(lay, x, y, cz, r, rr, imagTol):
+    """Decide EXACTLY the near-double roots the doubles cannot (#108 residual, D-153).
+
+    A NEAR-DOUBLE is a pair of roots within the double-root noise of each other: two real roots
+    _doubleRootNoise could not tell apart, or a complex pair it accepted as one real double root.
+    The doubles cannot say whether such a pair is a value of the face, and the numbering above
+    every one of them depends on it.
+
+    A face is the b-th real root of its fibre, and f** is closed and convex: its value at a point
+    is the limit from the points around it. So a pair that is real only on a CURVE -- a complex
+    pair touching the real axis there and leaving it on both sides -- is not the value of any
+    branch, and must not be counted. Such a pair appears where a bridge's dual point runs off to
+    infinity, on a boundary line of dom f**. For a continuous f it coincides with the true value
+    there; for a discontinuous one it does not (D-153: the convex piece's own value 10.2578 on its
+    hull edge next to the jump vertex, f** = 9.5177), and the noise rule also accepted it in a
+    ~1e-5 strip inside the domain.
+
+    The test: the fibre is evaluated EXACTLY (doubles are dyadic) at x +- h e for four directions
+    e and a tiny dyadic h, and its distinct real roots near the pair are counted by Sturm. A pair
+    with no real root on EITHER side in at least two directions is dropped. A crossing of two real
+    branches, a fold (real on one side) and a double root that is real along a curve all keep it:
+    at most one of the four directions can run along that curve."""
+    cands = []
+    for v in r:
+        if v.imag > 0 and abs(v.imag) > imagTol * max(1.0, abs(v)) and _doubleRootNoise(cz, v):
+            cands.append(v.real)
+    for a, b in zip(rr[:-1], rr[1:]):
+        if b > a and _doubleRootNoise(cz, complex((a + b) / 2, (b - a) / 2)):
+            cands.append((a + b) / 2)
+    if not cands:
+        return rr
+    out = list(rr)
+    for z0 in cands:
+        d = sorted(abs(complex(v) - z0) for v in r)[2:]       # the pair itself is nearest
+        rad = d[0] / 2 if d and d[0] > 0 else 1.0 + abs(z0)
+        if _isolatedPair(lay, x, y, z0, rad):
+            for _ in range(2):
+                k = min(range(len(out)), key=lambda i: abs(out[i] - z0), default=None)
+                if k is not None and abs(out[k] - z0) <= rad:
+                    out.pop(k)
+    return _snapMultipleRoots(lay, x, y, cz, out)
+
+
+def _snapMultipleRoots(lay, x, y, cz, rr):
+    """A GENUINE multiple root of the fibre, to full precision (#108 residual: the jump vertices).
+
+    Rounding returns a k-fold real root as k roots up to ~eps^(1/k) apart, and at a jump vertex
+    f** is such a root: D-153's vertex (-3,-2), f** = 7.5 a double root, came back as 7.5000017
+    (2.3e-7 relative), its tangency point (0,3), a triple root 12.5, as 12.500022, and the kink's
+    jump vertex (1,2) as 1.0000000256. The multiple roots are the roots of gcd(p, p'), where they
+    are SIMPLE: the fibre at the exact dyadic point is split by multiplicity (Yun), the real roots
+    of each factor of multiplicity k >= 2 are isolated by Sturm and bisected exactly to a double,
+    and the k entries nearest each one, within the rounding of a k-fold root
+    8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k), take its value."""
+    from .rat_q import isolateRoots, polyPrimitive
+    if not rr:
+        return rr
+    p = polyPrimitive(_exactFibreAt(lay, Fraction(x), Fraction(y)))
+    if len(p) <= 2:
+        return rr
+    out = list(rr)
+    for k, a in _yun(p):
+        if k < 2:
+            continue
+        for lo, hi in isolateRoots(a):
+            m = _bisectRoot(a, lo, hi)
+            w = _multipleRootNoise(cz, m, k)
+            keep = [v for v in out if abs(v - m) > w]
+            if len(keep) < len(out):            # rounding left something there: k copies of m
+                out = keep + [m] * k
+    return sorted(out)
+
+
+def _multipleRootNoise(cz, m, k):
+    """How far rounding the fibre's coefficients (z^0 first) by eps moves a k-fold root m:
+    8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k) -- _doubleRootNoise's bound for any k."""
+    cabs = sum(abs(c) * abs(m) ** j for j, c in enumerate(cz))
+    pk = sum(math.comb(j, k) * c * m ** (j - k) for j, c in enumerate(cz) if j >= k)
+    if pk == 0 or cabs == 0:
+        return 0.0
+    return 8.0 * (2.220446049250313e-16 * cabs / abs(pk)) ** (1.0 / k)
+
+
+def _yun(p):
+    """Yun's square-free decomposition of the integer polynomial p (highest first): the list of
+    (k, a_k) with p = c * prod a_k^k, each a_k square-free, primitive and of positive degree."""
+    from .rat_q import polyder, polyGcd, polyDivExact1, polyPrimitive
+    g = polyGcd(p, polyder(p))
+    if len(g) <= 1:
+        return [(1, p)]
+    out = []
+    b = polyDivExact1(polyPrimitive(p), g)         # every distinct root once
+    k = 1
+    rest = g
+    while len(b) > 1:
+        a = polyGcd(b, rest)                        # the roots of multiplicity > k
+        f = polyDivExact1(b, a) if len(a) > 1 else b
+        if len(f) > 1:
+            out.append((k, polyPrimitive(f)))       # multiplicity exactly k
+        if len(a) <= 1:
+            break
+        rest = polyDivExact1(rest, a)
+        b = a
+        k += 1
+    return out
+
+
+def _bisectRoot(a, lo, hi):
+    """The simple root of the square-free a in (lo, hi], bisected EXACTLY until the interval is
+    below 2^-60 of its size (or 400 halvings); the double nearest the midpoint."""
+    from .rat_q import countRootsIn
+    lo = Fraction(lo)
+    hi = Fraction(hi)
+    if a[-1] == 0 and lo < 0 <= hi:
+        return 0.0                                  # z = 0 is the root (no relative size to reach)
+    for _ in range(400):
+        if hi - lo <= abs(hi + lo) * Fraction(1, 2 ** 60):
+            break
+        mid = (lo + hi) / 2
+        if countRootsIn(a, lo, mid) == 1:
+            hi = mid
+        else:
+            lo = mid
+    return float((lo + hi) / 2)
+
+
+def _exactFibreAt(lay, X, Y):
+    """The fibre at the exact rational point (X, Y), as an integer polynomial in z, highest
+    power first (scaled by a positive common denominator: the same roots)."""
+    c = []
+    for terms in lay:
+        v = Fraction(0)
+        for i, j, co in terms:
+            v += co * X ** i * Y ** j
+        c.append(v)
+    den = 1
+    for v in c:
+        den = den * v.denominator // math.gcd(den, v.denominator)
+    return [int(v * den) for v in reversed(c)]
+
+
+def _isolatedPair(lay, x, y, z0, rad):
+    from .rat_q import countRootsIn
+    X = Fraction(x)
+    Y = Fraction(y)
+    h = Fraction(2) ** (math.frexp(max(1.0, abs(x), abs(y)))[1] - 40)   # ~1e-12 relative
+    lo = Fraction(z0 - rad)
+    hi = Fraction(z0 + rad)
+    both = 0
+    for e in _PROBES:
+        if all(countRootsIn(_exactFibreAt(lay, X + sg * h * e[0], Y + sg * h * e[1]), lo, hi) == 0
+               for sg in (1, -1)):
+            both += 1
+    return both >= 2
+
+
+def fibreVanishes(P, x):
+    """Is p(x, y, .) identically zero at the point -- a BASE POINT, where every z is a root and a
+    row comparing this value is undefined (#108 residual: D-153's corner (0,0))? Every coefficient
+    zero by algBranch's own zero test (exact for a big P, within degTol of its terms otherwise)."""
+    lay, nx, ny, nz = _layers(P)
+    if max(abs(c) for c in P.values()) >= 2 ** 53:
+        _, isZero = _fibreExact(lay, float(x[0]), float(x[1]))
+    else:
+        _, isZero, _ = _fibreDouble(lay, float(x[0]), float(x[1]), 1e-12)
+    return all(isZero)
+
+
 def _sgnz(v):
     """sign(v + (v == 0)): +1 at zero."""
     return 1.0 if v >= 0 else -1.0
@@ -154,6 +325,7 @@ def algBranch(P, X, b, opts=None, wantInfo=False):
             r = roots(cz[::-1])                     # `roots` wants highest power first
             rr = sorted(v.real for v in r
                         if abs(v.imag) <= imagTol * max(1.0, abs(v)) or _doubleRootNoise(cz, v))
+            rr = _nearDoubles(lay, x, y, cz, r, rr, imagTol)
             if len(cz) == 3:
                 ca = _absFibre(lay[:3], x, y)
                 dq = cz[1] ** 2 - 4 * cz[2] * cz[0]

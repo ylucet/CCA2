@@ -160,6 +160,226 @@ fn double_root_noise(cz: &[f64], v: Cx) -> bool {
     v.im.abs() <= 8.0 * (2.220446049250313e-16 * cabs / p2.abs()).sqrt()
 }
 
+const PROBES: [(i64, i64); 4] = [(1, 0), (0, 1), (1, 1), (1, -1)];
+
+/// Decide EXACTLY the near-double roots the doubles cannot (#108 residual, D-153); see
+/// alg_branch.py `_nearDoubles`. A pair within the double-root noise of each other (two close
+/// reals, or a complex pair `double_root_noise` accepted) is dropped when it is real only on a
+/// CURVE: the fibre is evaluated exactly at x +- h e for four directions e and a tiny dyadic h, and
+/// a pair with no real root near it on EITHER side in at least two directions is not the value of
+/// any branch (f** is closed: its value is the limit from around). Such a pair is where a bridge's
+/// dual point runs off to infinity, on a boundary line of dom f**.
+fn near_doubles(pr: &Prep, x: f64, y: f64, cz: &[f64], r: &[Cx], rr: Vec<f64>, imag_tol: f64) -> Vec<f64> {
+    let mut cands = vec![];
+    for v in r {
+        if v.im > 0.0 && v.im.abs() > imag_tol * 1f64.max(cabs(*v)) && double_root_noise(cz, *v) {
+            cands.push(v.re);
+        }
+    }
+    for w in rr.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if b > a && double_root_noise(cz, Cx { re: (a + b) / 2.0, im: (b - a) / 2.0 }) {
+            cands.push((a + b) / 2.0);
+        }
+    }
+    if cands.is_empty() {
+        return rr;
+    }
+    let mut out = rr;
+    for z0 in cands {
+        let mut d: Vec<f64> = r.iter().map(|v| cabs(Cx { re: v.re - z0, im: v.im })).collect();
+        d.sort_by(|a, b| a.total_cmp(b));
+        let rad = if d.len() > 2 && d[2] > 0.0 { d[2] / 2.0 } else { 1.0 + z0.abs() };
+        if isolated_pair(pr, x, y, z0, rad) {
+            for _ in 0..2 {
+                let k = (0..out.len()).min_by(|&i, &j| (out[i] - z0).abs().total_cmp(&(out[j] - z0).abs()));
+                if let Some(k) = k {
+                    if (out[k] - z0).abs() <= rad {
+                        out.remove(k);
+                    }
+                }
+            }
+        }
+    }
+    snap_multiple_roots(pr, x, y, cz, out)
+}
+
+/// A GENUINE multiple root of the fibre, to full precision (#108 residual: the jump vertices);
+/// see alg_branch.py `_snapMultipleRoots`. Rounding returns a k-fold root as k roots ~eps^(1/k)
+/// apart (D-153's vertex (-3,-2): 7.5000017 for 7.5; the kink's (1,2): 1.0000000256 for 1). The
+/// fibre at the exact dyadic point is split by multiplicity (Yun); each real root of a factor of
+/// multiplicity k >= 2 is isolated by Sturm and bisected exactly, and whatever rounding left
+/// within the noise of a k-fold root becomes exactly k copies of it (nothing there: stays out).
+fn snap_multiple_roots(pr: &Prep, x: f64, y: f64, cz: &[f64], rr: Vec<f64>) -> Vec<f64> {
+    if rr.is_empty() {
+        return rr;
+    }
+    let p = poly_primitive(&exact_fibre_at(pr, &q_from_f64(x), &q_from_f64(y)));
+    if p.len() <= 2 {
+        return rr;
+    }
+    let mut out = rr;
+    let fac = match yun(&p) {
+        Some(f) => f,
+        None => return out,
+    };
+    for (k, a) in fac {
+        if k < 2 {
+            continue;
+        }
+        let ivs = match isolate_roots(&a) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        for (lo, hi) in ivs {
+            let m = bisect_root(&a, lo, hi);
+            let w = multiple_root_noise(cz, m, k);
+            let keep: Vec<f64> = out.iter().cloned().filter(|v| (v - m).abs() > w).collect();
+            if keep.len() < out.len() {
+                // rounding left something there: exactly k copies of m, whatever the LAPACK
+                out = keep;
+                out.extend(std::iter::repeat(m).take(k));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.total_cmp(b));
+    out
+}
+
+/// 8 (eps sum|c_j m^j| / |p^(k)(m)/k!|)^(1/k): how far rounding moves a k-fold root m.
+fn multiple_root_noise(cz: &[f64], m: f64, k: usize) -> f64 {
+    let cabs: f64 = cz.iter().enumerate().map(|(j, c)| c.abs() * fpow(m.abs(), j)).sum();
+    let mut pk = 0.0;
+    for (j, c) in cz.iter().enumerate() {
+        if j >= k {
+            pk += binom(j, k) * c * fpow(m, j - k);
+        }
+    }
+    if pk == 0.0 || cabs == 0.0 {
+        return 0.0;
+    }
+    8.0 * (2.220446049250313e-16 * cabs / pk.abs()).powf(1.0 / k as f64)
+}
+
+fn binom(n: usize, k: usize) -> f64 {
+    let mut r = 1.0;
+    for i in 0..k {
+        r = r * (n - i) as f64 / (i + 1) as f64;
+    }
+    r
+}
+
+/// Yun's square-free decomposition: (k, a_k) with p = c prod a_k^k, a_k square-free, primitive,
+/// of positive degree. None if an exact division unexpectedly fails.
+fn yun(p: &[Z]) -> Option<Vec<(usize, Vec<Z>)>> {
+    let g = poly_gcd(p, &polyder(p)).ok()?;
+    if g.len() <= 1 {
+        return Some(vec![(1, p.to_vec())]);
+    }
+    let mut out = vec![];
+    let mut b = poly_div_exact1(&poly_primitive(p), &g)?;
+    let mut k = 1;
+    let mut rest = g;
+    while b.len() > 1 {
+        let a = poly_gcd(&b, &rest).ok()?;
+        let f = if a.len() > 1 { poly_div_exact1(&b, &a)? } else { b.clone() };
+        if f.len() > 1 {
+            out.push((k, poly_primitive(&f)));
+        }
+        if a.len() <= 1 {
+            break;
+        }
+        rest = poly_div_exact1(&rest, &a)?;
+        b = a;
+        k += 1;
+    }
+    Some(out)
+}
+
+/// The simple root of the square-free a in (lo, hi], bisected exactly until the interval is below
+/// 2^-60 of its size (or 400 halvings); the double nearest the midpoint.
+fn bisect_root(a: &[Z], lo: Q, hi: Q) -> f64 {
+    let (mut lo, mut hi) = (lo, hi);
+    if a.last().map_or(false, |c| c.is_zero()) && lo < Q::zero() && hi >= Q::zero() {
+        return 0.0; // z = 0 is the root (no relative size to reach)
+    }
+    let tiny = Q::new(Z::one(), Z::one() << 60usize);
+    for _ in 0..400 {
+        if &hi - &lo <= (&hi + &lo).abs() * &tiny {
+            break;
+        }
+        let mid = (&lo + &hi) / qi(2);
+        if count_roots_in_q(a, &lo, &mid) == 1 {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    q_to_f64(&((&lo + &hi) / qi(2)))
+}
+
+/// The fibre at the exact rational point (xq, yq) as an integer polynomial in z, highest power
+/// first (scaled by a positive common denominator: the same roots).
+fn exact_fibre_at(pr: &Prep, xq: &Q, yq: &Q) -> Vec<Z> {
+    let mut c: Vec<Q> = vec![];
+    for terms in &pr.lay {
+        let mut v = Q::zero();
+        for (i, j, co) in terms {
+            v += qz(co) * pow_q(xq, *i) * pow_q(yq, *j);
+        }
+        c.push(v);
+    }
+    let mut den = Z::one();
+    for v in &c {
+        den = num_integer::Integer::lcm(&den, v.denom());
+    }
+    c.iter().rev().map(|v| (v * qz(&den)).to_integer()).collect()
+}
+
+fn isolated_pair(pr: &Prep, x: f64, y: f64, z0: f64, rad: f64) -> bool {
+    let xq = q_from_f64(x);
+    let yq = q_from_f64(y);
+    let e = libm_frexp_exp(1f64.max(x.abs()).max(y.abs()));
+    let h = if e >= 40 { qz(&(Z::one() << ((e - 40) as usize))) } else { Q::new(Z::one(), Z::one() << ((40 - e) as usize)) };
+    let lo = q_from_f64(z0 - rad);
+    let hi = q_from_f64(z0 + rad);
+    let mut both = 0;
+    for (ex, ey) in PROBES {
+        let mut none = true;
+        for sg in [1i64, -1] {
+            let px = &xq + &h * qi(sg * ex);
+            let py = &yq + &h * qi(sg * ey);
+            if count_roots_in_q(&exact_fibre_at(pr, &px, &py), &lo, &hi) != 0 {
+                none = false;
+                break;
+            }
+        }
+        if none {
+            both += 1;
+        }
+    }
+    both >= 2
+}
+
+/// The exponent e of math.frexp(v) = (m, e), v = m 2^e with 0.5 <= |m| < 1, for v >= 1 finite.
+fn libm_frexp_exp(v: f64) -> i64 {
+    let bits = v.to_bits();
+    let exp = ((bits >> 52) & 0x7ff) as i64;
+    exp - 1022
+}
+
+/// Is p(x, y, .) identically zero at each point -- a BASE POINT, where every z is a root and a
+/// row comparing this value is undefined? Every coefficient zero by alg_branch's own zero test.
+pub fn fibre_vanishes(p: &PolyN, x: &[[f64; 2]]) -> R<Vec<bool>> {
+    let pr = prep(p)?;
+    Ok(x.iter()
+        .map(|q| {
+            let (_, z) = if pr.big { fibre_exact(&pr, q[0], q[1]) } else { fibre_double(&pr, q[0], q[1], 1e-12) };
+            z.iter().all(|b| *b)
+        })
+        .collect())
+}
+
 fn sgnz(v: f64) -> f64 {
     if v >= 0.0 {
         1.0
@@ -193,6 +413,7 @@ fn general(pr: &Prep, x: &[[f64; 2]], b: i64) -> (Vec<f64>, Vec<Vec<f64>>) {
             let r = roots(&rev);
             rr = r.iter().filter(|v| v.im.abs() <= imag_tol * 1f64.max(cabs(**v)) || double_root_noise(&cz, **v)).map(|v| v.re).collect();
             rr.sort_by(|a, b| a.total_cmp(b)); // NaN-safe (review #6)
+            rr = near_doubles(pr, xx, yy, &cz, &r, rr, imag_tol);
             if cz.len() == 3 {
                 let ca = abs_fibre(pr, 3, xx, yy);
                 let dq = cz[1].powi(2) - 4.0 * cz[2] * cz[0];
