@@ -90,8 +90,7 @@ value on a separate 357-input differential corpus, with the Rust engine
 parallelised; on that corpus the best engine is roughly two orders of magnitude
 faster than the symbolic MATLAB reference (indicative timings on a shared
 machine). The paper states, with the same care, what is not yet established:
-the biconjugate of a function that jumps across a shared edge is wrong in a
-small neighbourhood of the jump vertices, a few input classes are refused by
+a few input classes are refused by
 name rather than answered, there is no independent external comparison, and
 there is no citable release.
 \end{abstract}
@@ -197,9 +196,8 @@ Three, in the order of the paper.
 \end{enumerate}
 
 The paper is a first full draft: the claims are complete, every one is tied to
-a committed test, script or results file, and the open gaps -- one small
-class of inputs -- discontinuous functions, whose biconjugate is still wrong
-near the jump vertices (Section~8.4) --, no independent external comparison
+a committed test, script or results file, and the open gaps -- a few
+input classes refused by name, no independent external comparison
 % TODO(G3): comparison against an independent external implementation or
 % against grid/LP-based envelopes is missing from the repository (outline gap
 % G3). The convexdb ground-truth registry that was to serve as the external
@@ -226,8 +224,10 @@ $q_k$ on each cell $T_k$, with $f$ continuous on $\dom f$. (A discontinuous
 input is not refused: where cells meet and disagree, $f$ is read lower
 semicontinuously, $f(x)=\min_k\{q_k(x): x\in\overline{T_k}\}$, so that
 $f^*=\sup_k$ of the conjugates of the closed pieces and
-$f^{**}=\cl\co f$ of this function. Section~8.4 states what is and is not
-established in that case.) The input type of
+$f^{**}=\cl\co f$ of this function. Continuity is needed only by two named
+shortcuts: the convex shortcut $\co f=f$, which tests continuity exactly and
+is not taken on a jump, and the caller's \texttt{fIsConvex} flag, honoured only
+for a continuous $f$. No other step assumes it.) The input type of
 our algorithms, \texttt{QuaPol}, stores the vertices, edges, and the
 $\{H_k,\beta_k,\gamma_k\}$, all with exact (rational) data.
 
@@ -812,15 +812,12 @@ and which are part of the parity contract of Section~6.
 
 \subsection{Known defects on the envelope side}
 
-Two, stated plainly (the full list with reproduction commands is in the
-repository's support matrix and Section~8.4).
+One, stated plainly (the full list with reproduction commands is in the
+repository's support matrix and Section~8.4). The earlier defect of the
+biconjugate of a discontinuous input at its jump vertices is fixed
+(Section~8.4).
 % CITE: SUPPORT\_MATRIX.md section 7; TODO.md ``Open now''
 \begin{itemize}[nosep,leftmargin=*]
-\item the biconjugate of a \emph{discontinuous} input near a jump vertex: the
-  subdivision takes the maximum over the faces holding at a point, which is
-  wrong where the input jumps (Section~8.4). Continuous inputs are unaffected.
-  % CITE: TODO.md ``OPEN 2026-11-21 (\#108 residual)''; DESIGN.md
-  % ``Discontinuous input''
 \item the legacy \texttt{'cplq'} engine carries its own open items (the
   $>4$~h poly2 kinks) -- disclosed in Section~9.2, not a defect of the
   exact engine. A $4\%$ error of its parallelogram biconjugate (a singular
@@ -915,8 +912,9 @@ and refuses eight biconjugates that Python and Rust answer, by its $2^{53}$
 ceiling); it was not re-run after discontinuous input was admitted, so its
 discontinuous results are not claimed. This is a statement about this corpus
 and its grid of test points, not a general parity claim: the grid is offset from
-the vertices of the input, and the residual defect at the jump vertices of a
-discontinuous input (Section~8.4) lives exactly there.
+the vertices of the input, and the jump vertices of a
+discontinuous input (Section~8.4) lie exactly there, so the grid does not probe them;
+they are checked separately by the vertex tests of Section~8.4.
 % CITE: RESULTS.md (the section on the 2026-11-22/23 three-engine run and the
 % addendum of 2026-11-24, which carries the commands and the per-engine table);
 % python/tests/review/\{plq\_gen,run\_engines,compare\_engines\}.py
@@ -1194,8 +1192,7 @@ benchmark and the golden record were taken; the value of $f^{**}$ is unchanged,
 the count rose in the course of the review fixes, and we have not traced
 which one; we did not re-count it in MATLAB). The count is the size of the
 \emph{representation} the engine builds, not the number of faces of $f^{**}$
-(next paragraph). Because the input jumps, this is also a fixture on which the
-jump-vertex defect of Section~8.4 applies to the subdivision. It is the heaviest
+(next paragraph). It is the heaviest
 conjugate-side fixture in the corpus: $412$--$427$~s in MATLAB, $41$--$45$~s
 in Python with the accelerators, $7.56$~s in Rust single-thread, $0.81$~s at
 $32$ threads; these timings were measured before the review fixes and have not
@@ -1256,27 +1253,28 @@ and its gaps sit in one place:
 % CITE: SUPPORT\_MATRIX.md section 7; TODO.md
 % ``Open now''; manuscript/outline.md gaps G1--G8
 \begin{itemize}[nosep,leftmargin=*]
-\item \textbf{Discontinuous input: the biconjugate is wrong near the jump
-  vertices.} A $f$ that jumps across a shared edge is answered, read lower
+\item \textbf{Discontinuous input: no residual defect at the jump vertices.}
+  A $f$ that jumps across a shared edge is answered, read lower
   semicontinuously (Section~2.1), not refused (an earlier stopgap refusal by the
   name \texttt{PLQ:notContinuous} was lifted in all three engines). The
   conjugate is exact on the $30$ discontinuous inputs of the differential corpus
   (Rust; Python the same except two timeouts), and the biconjugate is inside its
   certified bracket at every review grid point it answers ($23$ of the $30$;
-  the other seven are named refusals).
-  But the subdivision of the biconjugate takes the \emph{maximum} over the faces
-  holding at a point, which is right where faces that meet agree and wrong where
-  the input jumps: on the review's inputs D-132 and D-153 the returned
-  biconjugate is $11$ where the lower semicontinuous $f$ is $-7$ at the vertex
-  $(-2,2)$ ($9$ against $7.5$ at $(-3,-2)$), and wrong within about $10^{-4}$ of
-  such a vertex; the two-convex-pieces route has the same defect on the
-  discontinuous kink of the test suite ($1.00000003$ at its jump vertex $(1,2)$, where $f^{**}=1$).
-  Three repairs were tried and dropped. Inputs with a jump across an interior
-  edge are therefore the one class on which we do not claim a correct
-  biconjugate at the jump vertices; continuous inputs are unaffected.
-  % CITE: TODO.md ``OPEN 2026-11-21 (\#108 residual)''; DESIGN.md section
-  % ``Discontinuous input'', ``Still open''; tests test\_discontinuous\_shared\_points
-  % (strict xfail D-111, D-132, D-153)
+  the other seven are named refusals). An earlier version of this paper declared
+  a limitation here: the returned biconjugate was wrong in a small neighbourhood
+  of the jump vertices (on the review's inputs D-132 and D-153, $11$ where the
+  lower semicontinuous $f$ is $-7$ at the vertex $(-2,2)$). It was traced to four
+  evaluation defects, none specific to discontinuous input, and fixed in all
+  three engines; the subdivision still takes the maximum over the faces holding
+  at a point, which is sound once each face is evaluated as the limit from
+  around the point. The pinned test of the shared points of the review's
+  discontinuous inputs (\texttt{test\_discontinuous\_shared\_points}) now has
+  no expected failure: $25$ passed, $0$ xfailed (Python, rerun for this
+  revision). Continuity is needed only by the two shortcuts of
+  Section~2.1. MATLAB was not rerun on the discontinuous family after the fix, so
+  its results there are not claimed.
+  % CITE: DESIGN.md ``Discontinuous input'', ``Steps that need continuity, for
+  % the paper''; python/tests/review/test_review_2026_11_19.py; RESULTS.md addendum
 \item \textbf{Inputs refused by name.} Some inputs are refused rather than
   answered, always with a stable identifier and never with a value:
   $f^{**}=-\infty$ (\texttt{PLQ:biconjQ:minusInfinity}), a nonconvex piece the
@@ -1415,8 +1413,7 @@ citable artifact & -- & \textbf{gap: TODO(G5)}
 
 \subsection{Declared limitations (cross-reference)}
 
-The limitations of Section~8.4 -- the biconjugate near the jump vertices of a
-discontinuous input, the inputs refused by name, the thin conjugates, the slow
+The limitations of Section~8.4 -- the inputs refused by name, the thin conjugates, the slow
 cases, the star class beyond $n=16$, the absence of an independent external comparison,
 the absence of a citable release, the legacy engine's open items, and the
 shared-machine caveat on all timings -- are the paper's declared limitations,
@@ -1437,10 +1434,10 @@ is pinned by a committed test, and three implementations that agree on the recor
 reproducible benchmark. The open problems, in the order the repository keeps
 them:
 \begin{enumerate}[label=(\roman*),leftmargin=*]
-\item the \textbf{biconjugate of a discontinuous input near its jump
-  vertices} of Section~8.4, a small wrong-value class in the same operator as
-  the main claims, together with the thin-conjugate loss;
-  % CITE: TODO.md \#108 residual and \#95-A
+\item the \textbf{thin-conjugate loss} of Section~8.4, a conjugate whose finite
+  part is a line segment (the jump-vertex defect of discontinuous input is
+  fixed);
+  % CITE: TODO.md \#95-A
 \item the \textbf{star class beyond $n=16$}, the long runs that would close the
   range;
   % CITE: TODO.md, the $n=17$ note

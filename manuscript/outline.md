@@ -310,7 +310,8 @@ Ordered by how much they block a submission.
   (min-of-repetitions, load recorded) before its table appears in §7.
 - **G7 — Residual engine items that must at least be disclosed.** `Example 2` returns an
   `EnvelopeMin` by default (overlay budget 3000; lifting it takes ~hours — `TODO.md`
-  "Open now"); two `BRIDGE` faces owning one cell are refused by name, never observed;
+  "Open now"); two `BRIDGE` faces owning one cell are no longer refused (since 2026-10-17: overlapping
+  pieces, value by max; two genuine bridges never share a cell, #170);
   the legacy `'cplq'` engine carries its own open items (the > 4 h poly2 kinks, the `eig`
   tolerance that can return `+Inf` on a strictly convex quadratic, G1/G4/G10/G11 and
   companions — `TODO.md` "Open now"). None blocks the exact-engine claims, but the

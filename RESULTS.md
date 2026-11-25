@@ -7,6 +7,12 @@ R1–R6 + 30 discontinuous D), graded against the reviewer's exact oracle
 Dates: 2026-11-22/23. Machine shared (other sessions active); no timing is used
 for any conclusion.
 
+> **SUPERSEDED for the D family (discontinuous input) by the addendum 2026-11-24 (#103) at the
+> end of this file, and by #138 (2026-11-25): `PLQ:notContinuous` is gone and the D family is
+> answered. Everything below is kept as measured; the D-family statements no longer hold.
+> Current check (Python, 2026-11-25): `pytest tests -k discontinuous_shared_points` -> 25
+> passed, 0 xfailed (the open-case set is empty). MATLAB was not rerun.**
+
 ## Verdict
 
 **0 wrong values and 0 crashes** on all 357 inputs in Python, Rust and
@@ -140,3 +146,10 @@ R2-176, R3-177, D-188, R4-199 (conj and biconj each).
 
 Not covered by this grade: the biconjugate at a jump vertex of a discontinuous
 input (the grid is offset from the vertices) — the open #108 residual (TODO.md).
+
+## Update 2026-11-25 (#138)
+
+#138 fixed the jump-vertex residual (D-111/D-132/D-153; four evaluation defects). Rerun for this
+update, Python: `cd python && python3 -m pytest tests -k discontinuous_shared_points -q` -> 25 passed,
+0 xfailed in 60 s (before #138, the three cases were strict xfail). The 357-input differential
+run above was not repeated; its D-family counts stand as measured in the addendum.
