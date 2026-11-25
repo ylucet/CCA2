@@ -1960,4 +1960,12 @@ subdivision's count 0).
 
 **Witness search** (`python/tests/review/hunt_two_bridges.py`; per input, every envelope with >= 2
 bridge faces is sampled with `bridgeMember` at 4000 random points around dom f, and the
-subdivision's own count is read): WITNESS_SEARCH_NUMBERS
+subdivision's own count is read), 2026-11-25, on 1277 inputs: the review
+set (`plq_gen.py`, seed 20261119, 357), two fresh generator draws of the nonconvex and multi-piece
+families R2/R3/R4/R6 (seed 7, 400; seed 11, 320) and the 200 bench fixtures (`python/bench/fixtures.json`).
+1185 finished (92 hit the 600 s timeout on the shared machine), 864 of them with an f**; 846 envelopes
+were subdivided, 746 of them in 457 inputs with two or more bridge faces (up to 7, 689 algebraic).
+Of 2,984,000 random points, 1,003,938 lie in some bridge region and **none in two algebraic
+ones**; the subdivisions put **0 cells** in two algebraic bridges. 1225 points lie in two stored regions
+of which one is rational -- the outer bound above, all accounted for (outside dom f**, or the two
+atom-route inputs graded OK). No input reaching Lemma 2's exception was found.
