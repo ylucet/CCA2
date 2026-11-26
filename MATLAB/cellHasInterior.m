@@ -228,14 +228,35 @@ function tf = cadExactRaw(EcQ, rows)
             [yn, yd] = dyadic(y0);
             ok = true;
             for r = 1:size(cs,1)
-                c = cs(r,:);
-                v = c(1)*xn^2*yd^2 + c(2)*xn*yn*xd*yd + c(3)*yn^2*xd^2 + c(4)*xn*xd*yd^2 + c(5)*yn*yd*xd^2 + c(6)*xd^2*yd^2;
-                ratQ.chk([c(1)*xn^2*yd^2, c(2)*xn*yn*xd*yd, c(3)*yn^2*xd^2, c(4)*xn*xd*yd^2, c(5)*yn*yd*xd^2, c(6)*xd^2*yd^2, v], 'exact cell value');
-                if sg(r) * v <= 0, ok = false; break, end
+                if sg(r) * cellValueSign(cs(r,:), xn, xd, yn, yd) <= 0, ok = false; break, end
             end
             if ok, tf = true; return, end
         end
     end
+end
+
+function s = cellValueSign(c, xn, xd, yn, yd)
+% The exact sign of q(xn/xd, yn/yd) * xd^2 * yd^2. In doubles when every term is small enough that
+% the terms and their partial sums are exact integers; otherwise in java.math.BigInteger. A dyadic
+% sample's denominator grows with the bisection that separated its roots, so the doubles reach 2^53
+% on ordinary small-coefficient cells. Raising ratQ:overflow there made cadInterior KEEP an empty
+% cell, where Python and Rust (exact integers) drop it: the poly2 kink's AlgCrv had 340 faces in
+% MATLAB against 319 (2026-11-25).
+    t = [c(1)*xn^2*yd^2, c(2)*xn*yn*xd*yd, c(3)*yn^2*xd^2, c(4)*xn*xd*yd^2, c(5)*yn*yd*xd^2, c(6)*xd^2*yd^2];
+    if all(isfinite(t)) && max(abs(t)) < 2^49            % six terms: every partial sum < 2^52
+        s = sign(sum(t));
+        return
+    end
+    B = @(z) java.math.BigInteger(sprintf('%.0f', z));  % xn, xd, yn, yd are exact integer doubles
+    X = B(xn);  XD = B(xd);  Y = B(yn);  YD = B(yd);
+    mono = {X.multiply(X).multiply(YD).multiply(YD), X.multiply(Y).multiply(XD).multiply(YD), ...
+            Y.multiply(Y).multiply(XD).multiply(XD), X.multiply(XD).multiply(YD).multiply(YD), ...
+            Y.multiply(YD).multiply(XD).multiply(XD), XD.multiply(XD).multiply(YD).multiply(YD)};
+    v = java.math.BigInteger.ZERO;
+    for i = 1:6
+        if c(i) ~= 0, v = v.add(mono{i}.multiply(B(c(i)))); end
+    end
+    s = double(v.signum());
 end
 
 function [n, d] = dyadic(x)
