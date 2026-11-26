@@ -30,6 +30,10 @@ path behind most kernels. The port has ONE path on unbounded ints:
   may differ in exactly those places (Python's is the decided one).
 - Isolating intervals and bisection midpoints are `Fraction`s (dyadic), so the Sturm bisection is
   exact at any depth instead of stalling at double precision.
+- Seen on a golden record (2026-11-25, #198): the poly2 kink's AlgCrv was 340 faces in MATLAB
+  against 319 here, because MATLAB's CAD in `cellHasInterior` overflowed and kept cells this port
+  decides empty. MATLAB now computes those steps in BigInteger and gives 319; it still overflows on
+  518 calls of that fixture, which only leaves a redundant row off 32 faces (TODO.md #198).
 
 ## 3. MATLAB defects found while porting -- all three FIXED in MATLAB on 2026-11-11
 
