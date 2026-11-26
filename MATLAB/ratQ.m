@@ -2068,6 +2068,57 @@ classdef ratQ
             if isempty(b)
                 error('ratQ:divideByZero', 'pseudo-remainder by the zero polynomial.');
             end
+            % DOUBLES FIRST, THE SAME LOOP IN BigInteger WHERE THEY RUN OUT (2026-11-25), as
+            % polyPseudoRem does. The step r * lc(b) passes 2^53 on cellHasInterior's CAD columns
+            % (the poly2 kink: 3.2e16) while the reduced remainder fits; raising ratQ:overflow there
+            % made the CAD keep thousands of empty cells that Python and Rust (unbounded integers,
+            % this same loop) drop. The big loop is step for step this one -- signed lc(b), the
+            % primitive part after every step -- so its answer, sign included, is Python's.
+            try
+                r = ratQ.polyPremPrimitiveDouble(a, b);
+            catch e
+                if ~strcmp(e.identifier, 'ratQ:overflow'), rethrow(e), end
+                r = ratQ.polyPremPrimitiveBig(a, b);
+            end
+        end
+
+        function r = polyPremPrimitiveBig(a, b)
+        % objective: polyPremPrimitiveDouble's loop in java.math.BigInteger; the result as exact
+        %            doubles, or ratQ:overflow if the REDUCED remainder itself needs more than 53 bits.
+            toBig = @(v) arrayfun(@(z) java.math.BigInteger(sprintf('%.0f', z)), v, 'UniformOutput', false);
+            R = toBig(a);  B = toBig(b);  nb = numel(B);
+            guard = 0;
+            while true
+                while ~isempty(R) && R{1}.signum() == 0, R(1) = []; end
+                if isempty(R) || numel(R) < nb, break, end
+                guard = guard + 1;
+                if guard > 10000
+                    error('ratQ:premNoConverge', 'the reduced pseudo-remainder did not terminate.');
+                end
+                lcb = B{1};  lcr = R{1};
+                for i = 1:numel(R), R{i} = R{i}.multiply(lcb); end
+                for i = 1:nb, R{i} = R{i}.subtract(lcr.multiply(B{i})); end
+                R{1} = java.math.BigInteger.ZERO;   % cancels exactly, by construction
+                while ~isempty(R) && R{1}.signum() == 0, R(1) = []; end
+                g = java.math.BigInteger.ZERO;
+                for i = 1:numel(R), g = g.gcd(R{i}); end
+                if g.compareTo(java.math.BigInteger.ONE) > 0
+                    for i = 1:numel(R), R{i} = R{i}.divide(g); end
+                end
+            end
+            if isempty(R), r = []; return, end
+            r = zeros(1, numel(R));
+            for i = 1:numel(R)
+                if R{i}.abs().bitLength() > 52
+                    error('ratQ:overflow', ['reduced pseudo-remainder: in BigInteger an entry still ' ...
+                        'needs %d bits, past the 53 a double holds exactly.'], R{i}.abs().bitLength());
+                end
+                r(i) = R{i}.doubleValue();
+            end
+        end
+
+        function r = polyPremPrimitiveDouble(a, b)
+        % objective: polyPremPrimitive's loop in doubles (a, b primitive); ratQ:overflow at 2^53.
             db = numel(b) - 1;
             r  = a;
             guard = 0;

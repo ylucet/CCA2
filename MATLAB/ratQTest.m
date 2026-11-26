@@ -871,6 +871,16 @@ classdef ratQTest < matlab.unittest.TestCase
             end
         end
 
+        function polyPremPrimitivePast2to53GivesPythonsAnswer(testCase)
+        % The reduced pseudo-remainder's middle passes 2^53 (1.4e20 and 9.3e26 here) while its
+        % answer is small; it used to raise ratQ:overflow, which made cellHasInterior's CAD keep
+        % empty cells (the poly2 kink, 2026-11-25). The BigInteger loop must give Python's answer,
+        % sign included -- the second case has a NEGATIVE lc(b).
+            testCase.verifyEqual(ratQ.polyPremPrimitive([6 42 96 96 72], [6176268 18528801 -9]), [1 3]);
+            testCase.verifyEqual(ratQ.polyPremPrimitive([3 -16 -30 -31 -27 -7], [-2423915 16967407 -14]), [1 -7]);
+            testCase.verifyEqual(ratQ.polyGcd([3 -16 -30 -31 -27 -7], [-2423915 16967407 -14]), [1 -7]);
+        end
+
         function polyGcdBivFindsASHAREDFactor(testCase)
         % Two products built on a common factor: the gcd must be that factor, primitive.
             F  = zeros(3,2);  F(3,1) = 1;  F(1,2) =  1;     % x^2 + y

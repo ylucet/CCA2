@@ -479,14 +479,31 @@ function s = cadSamples(sp, plain)
         end
     end
     if isempty(roots), s = 0; return, end
-    s = roots{1}.lo;
+    % THE SIMPLEST DYADIC of each open gap, not its midpoint (2026-11-25). Any point of the gap is
+    % an equally valid sample, but the midpoint of two tightly isolated roots carries the bisection's
+    % denominator 2^k, and every later integer (the column polynomial, its gcds and Sturm chain, the
+    % cell value) scales with it: on the poly2 kink they passed 2^53, ratQ:overflow made cadInterior
+    % KEEP empty cells, and MATLAB's AlgCrv split differently from Python's and Rust's (which hold
+    % exact integers and decide those cells). Below and above all roots: integers.
+    s = floor(roots{1}.lo) - 1;                     % < lo, and lo < the least root
     for i = 1:numel(roots)-1
         r = roots{i};  t = roots{i+1};
         while r.hi >= t.lo
             if r.hi - r.lo >= t.hi - t.lo, r = cadRefine(r); else, t = cadRefine(t); end
         end
         roots{i} = r;  roots{i+1} = t;
-        s(end+1) = (r.hi + t.lo) / 2; %#ok<AGROW>
+        s(end+1) = simplestDyadic(r.hi, t.lo); %#ok<AGROW>   % r <= hi < s < lo <= t
     end
-    s(end+1) = roots{end}.hi + 1;
+    s(end+1) = ceil(roots{end}.hi) + 1;             % > hi >= every root
+end
+
+function x = simplestDyadic(a, b)
+% The dyadic n / 2^k in the open interval (a, b), a < b both dyadic, with the least k (an integer
+% when the interval holds one). a * 2^k is exact, so the comparison is exact.
+    d = 1;
+    while true
+        n = floor(a * d) + 1;                       % the least integer > a*d
+        if n < b * d, x = n / d; return, end
+        d = 2 * d;
+    end
 end
