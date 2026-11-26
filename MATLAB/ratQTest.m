@@ -848,6 +848,29 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyError(@() ratQ.polyDivExact(C, A, 2), 'ratQ:notDivisible');
         end
 
+        function polyGcdClosedFormKeepsEuclidsSign(testCase)
+        % The constant/linear shortcut must return what the Euclid loop returns, SIGN included
+        % (the Python and Rust ports give these values). Found 2026-11-25: on a tie it returned
+        % polyPrimitive of the FIRST argument, so a linear gcd came back negated and the poly2
+        % kink's AlgCrv had 340 faces in MATLAB against 319 in Python and Rust.
+            cases = { [1 2],   [-1 -2],  [-1 -2]
+                      [-5 -12], [5 12],  [5 12]
+                      [1 0],   [-1 0],   [-1 0]
+                      [-1 1],  [1 -1],   [1 -1]
+                      [1 3 2], [-1 -2],  [-1 -2]
+                      [-1 -2], [1 3 2],  [-1 -2]
+                      [1 3 2], -3,       -1
+                      -3,      [1 3 2],  1
+                      [2 6 4], [1 1],    [1 1]
+                      [1 1],   [1 0 -1], [1 1]
+                      [1 0 1], [1 1],    1
+                      -2,      4,        1 };
+            for k = 1:size(cases, 1)
+                testCase.verifyEqual(ratQ.polyGcd(cases{k,1}, cases{k,2}), cases{k,3}, ...
+                    sprintf('polyGcd(%s, %s)', mat2str(cases{k,1}), mat2str(cases{k,2})));
+            end
+        end
+
         function polyGcdBivFindsASHAREDFactor(testCase)
         % Two products built on a common factor: the gcd must be that factor, primitive.
             F  = zeros(3,2);  F(3,1) = 1;  F(1,2) =  1;     % x^2 + y

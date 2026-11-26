@@ -2257,17 +2257,26 @@ classdef ratQ
             % columns, millions of calls): the gcd is the linear factor itself iff it divides the
             % other, else 1. Divisibility by a1 x + a0 is exact: Horner of b at -a0/a1, scaled by a1,
             % every step checked against 2^53.
+            % THE SAME ANSWER AS THE LOOP BELOW, SIGN INCLUDED (polyPrimitive keeps the sign, so a
+            % gcd is only defined up to it, and Euclid's choice is the one the Python and Rust ports
+            % make): the first step is prem(a, b), which vanishes when b is the shorter or as long
+            % (so the answer is polyPrimitive(b), and a constant b gives +-1), and is a itself when
+            % a is shorter (the next step then returns polyPrimitive(a), or 1 for a constant a).
+            % Returning polyPrimitive(a) on a tie flipped the sign of a linear gcd; that changed
+            % which side of a curve a row named and split the poly2 kink's AlgCrv into 340 faces
+            % instead of 319 (2026-11-25).
             if numel(a) <= 2 || numel(b) <= 2
-                if numel(a) > numel(b), t = a; a = b; b = t; end   % a is the shorter (degree <= 1)
+                if numel(b) <= 1, g = ratQ.polyPrimitive(b); return, end
                 if numel(a) <= 1, g = 1; return, end
-                v = b(1);  exact = true;
-                for i = 2:numel(b)
-                    t1 = v * (-a(2));  t2 = b(i) * a(1)^(i-1);
+                if numel(a) >= numel(b), lin = b;  oth = a; else, lin = a;  oth = b; end
+                v = oth(1);  exact = true;
+                for i = 2:numel(oth)
+                    t1 = v * (-lin(2));  t2 = oth(i) * lin(1)^(i-1);
                     if abs(t1) + abs(t2) >= 2^53, exact = false; break, end   % not provably exact:
                     v = t1 + t2;                                              % take the general path
                 end
                 if exact
-                    if v == 0, g = ratQ.polyPrimitive(a); else, g = 1; end
+                    if v == 0, g = ratQ.polyPrimitive(lin); else, g = 1; end
                     return
                 end
             end
