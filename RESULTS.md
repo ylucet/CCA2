@@ -11,7 +11,8 @@ for any conclusion.
 > end of this file, and by #138 (2026-11-25): `PLQ:notContinuous` is gone and the D family is
 > answered. Everything below is kept as measured; the D-family statements no longer hold.
 > Current check (Python, 2026-11-25): `pytest tests -k discontinuous_shared_points` -> 25
-> passed, 0 xfailed (the open-case set is empty). MATLAB was not rerun.**
+> passed, 0 xfailed (the open-case set is empty). MATLAB was not rerun -- until the
+> addendum 2026-11-26/27 (#204) at the end of this file, which is that rerun.**
 
 ## Verdict
 
@@ -153,3 +154,97 @@ input (the grid is offset from the vertices) — the open #108 residual (TODO.md
 update, Python: `cd python && python3 -m pytest tests -k discontinuous_shared_points -q` -> 25 passed,
 0 xfailed in 60 s (before #138, the three cases were strict xfail). The 357-input differential
 run above was not repeated; its D-family counts stand as measured in the addendum.
+
+---
+
+# Addendum 2026-11-26/27 (#204) — MATLAB rerun on the 357 corpus, after #108/#138/#198
+
+The #103 addendum left MATLAB "not rerun". This is that rerun, on current main (after #198;
+measurement only, no code changes). Same fixtures (generator seed 20261119, 357 inputs), same
+grader (the reviewer's exact oracle, as the first section of this file). Python and Rust were
+rerun on the same commit, so the engine-vs-engine comparison is on current code. Machine shared:
+load ran ~2 to 126 during the run, so no timing is used for any conclusion, and a hit on the
+30-min per-input cap is recorded as "not finished", not wrong.
+
+## Commands
+
+```
+cd python
+python3 tests/review/plq_gen.py OUT/FIX.json --seed 20261119 --nrand 210      # 357 fixtures
+python3 tests/review/run_engines.py OUT/FIX.json OUT --engines py -j 24 --timeout 600
+(cd rust && cargo build --release --bin golden)
+python3 tests/review/run_engines.py OUT/FIX.json OUT --engines rs -j 8 --timeout 900
+# MATLAB: one `matlab -batch` process per input under `timeout 1800` (4 workers),
+#   reviewDiffDriver(OUT/FIX.json, OUT/mltmp/<id>.jsonl, <id>, 357)      # conj+biconj, 30-min cap
+# the 6 inputs that hit the cap were re-run per op, each with a fresh 30-min cap
+# (same driver body with an op filter; measurement harness only)
+python3 tests/review/compare_engines.py OUT/FIX.json OUT -j 16 --engines py,rs,ml > OUT/report.txt
+```
+(OUT = /tmp/opencode/review357; it holds FIX.json, py.jsonl, rs.jsonl, ml_1.jsonl, graded.json,
+report.txt, the per-input MATLAB files and logs.)
+
+## Per-engine grades
+
+(conj / biconj: ok / wrong / named refusal / not finished; ok = conj at 1e-9 of the exact oracle,
+biconj inside its certified bracket [lo, hi] at 1e-7)
+
+| | conj ok / wrong / refusal / not finished | biconj ok / wrong / refusal / not finished |
+|---|---|---|
+| **MATLAB (357)** | **357 / 0 / 0 / 0** | **256 / 0 / 97 / 4** |
+| Python (357) | 341 / 0 / 0 / 16 | 252 / 0 / 89 / 16 |
+| Rust (357) | 357 / 0 / 0 / 0 | 264 / 0 / 89 / 4 |
+
+**0 wrong values and 0 crashes in all three engines, and 0 value disagreements between any pair of
+engines** (the grader's engine-vs-engine check lists refusal-status differences only).
+
+## MATLAB, in detail
+
+- **conj: 357 answered, 357 ok.** The 30 `PLQ:notContinuous` D-family refusals of the first
+  section are gone with #108; the D family is now answered and exact (30/30 ok).
+- **biconj: 256 ok, 97 named refusals, 4 not finished, 0 wrong.**
+  - Named (97): `PLQ:biconjQ:minusInfinity` 57, `PLQ:biconjQ:nonConvexPiece` 11,
+    `envelopeCellPairs:curvedCell` 10 (D-006, D-034, R3-058, R3-107, R4-108, R3-121, R3-128,
+    R6-138, D-146, D-202), `ratQ:overflow` 8 (R4-003, R3-037, R4-059, R4-101, R2-169, R4-171,
+    R4-199, R6-201), `bridgeFaceAlg:noWitness` 6 (R2-029, R4-073, R4-136, D-167, D-174, R4-185),
+    `bridgeFaceAlg:witnessOverflow` 1 (D-090), `bridgeFaceAlg:noZ` 1 (R4-080),
+    `PLQ:biconjQ:convexPieceCoupling` 3 (R6-096, R6-103, R3-135).
+  - Not finished (4, each past a dedicated 30-min cap on biconj): R2-127, R4-150, R2-176, D-188.
+    (R2-141 and R3-177 also hit the combined-run cap but finished inside a dedicated 30-min cap
+    and are in the 256 ok.)
+- **D family (30):** conj 30/30 ok. biconj 22 ok, 7 named (curvedCell D-006/D-034/D-146/D-202;
+  noWitness D-167/D-174; witnessOverflow D-090), 1 not finished (D-188), 0 wrong. Same shape as
+  the pre-#108 row of the first section (22 inside the bracket, 7 named, D-188 unfinished) --
+  and the 22 now answer ok on the #138-fixed code.
+
+## Where MATLAB disagrees with Python or Rust
+
+No value disagreement on any of the 357 inputs, either op (checked per point at 1e-9). The
+differences are all refusal status:
+
+- **MATLAB answers where a port does not finish:** all 16 of Python's not-finished inputs
+  (R4-003, R4-017, R2-036, R4-059, R4-101, R2-120, R2-127, R4-150, D-153, R2-155, R4-171,
+  R2-176, R3-177, D-188, R4-199, R6-201) -- MATLAB's conjugates on all 16 are answered and ok;
+  its biconjugates are answered and ok on R4-017, R2-036, R2-120, D-153, R2-155, R3-177,
+  `ratQ:overflow` on R4-003, R4-059, R4-101, R4-171, R4-199, R6-201, and not finished on
+  R2-127, R4-150, R2-176, D-188. R3-177 was one of the first section's two "no result after
+  bounded runs" and finished here under a dedicated cap on a quiet machine. Rust's 4 not-finished
+  (R4-059, R4-150, R2-176, R3-177): MATLAB `ratQ:overflow`, not finished, not finished, answered.
+- **MATLAB's `ratQ:overflow` (biconj), the 2^53 ceiling, 8 inputs:** R4-003, R3-037, R4-059,
+  R4-101, R2-169, R4-171, R4-199, R6-201. Rust answers 7 of them (R4-059 also times out);
+  Python answers R3-037 and R2-169 and times out on the rest. R3-037 is `ratQ:overflow` here
+  where the first section had `bridgeFaceAlg:witnessOverflow` -- same refusal, a different guard
+  is reached first after #198's CAD change.
+- **D-090 biconj:** MATLAB `witnessOverflow`, Python/Rust `noWitness` (same refusal, different
+  guard, the same pattern as R2-029 in the first section).
+- **MATLAB not finished where Rust answers (biconj):** R2-127, D-188 (Python also not finished
+  on both; on R4-150 and R2-176 every engine is not finished).
+
+The not-finished set is load-dependent (the run spanned load 2-126): R3-177 finished where it
+never had before, and R2-127 / R2-176 (answered in the first section) hit the cap. Recorded as
+performance, per the first section's precedent, not as defects.
+
+## Wrong values vs the oracle
+
+None. Every answered conjugate in all three engines matches the exact oracle at 1e-9, and every
+answered biconjugate lies inside its certified bracket at 1e-7 (the grader additionally flags
+wide brackets as "loose", 436 such points, not as disagreement). No failing test to open.
