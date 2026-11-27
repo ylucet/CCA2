@@ -152,5 +152,21 @@ classdef cellInteriorTest < matlab.unittest.TestCase
             t.verifyTrue(okIn, 'above the upper line the cell has interior');
             t.verifyFalse(okOut, 'between the line and itself there is no interior point');
         end
+
+        function theCADDecidesAnEmptyCellPast2to53(t)
+        % A cell of the poly2 kink's arrangement (2026-11-25). The straight rows give x >= -1 and
+        % 0 <= y <= 0.8, so t = 2x - 3y >= -4.4, while the curve (t^2 + 8t - 36 >= 0, t <= -4)
+        % needs t <= -4 - sqrt(52) = -11.2: EMPTY. The CAD's dyadic samples carry denominators
+        % whose exact cell values pass 2^53; that raised ratQ:overflow and the cell was KEPT,
+        % where Python and Rust (exact integers) drop it, and the kink's AlgCrv had 340 faces in
+        % MATLAB against 319. The sign is now taken in BigInteger.
+            C = [0 0 0 2 -1 4 0; 0 0 0 0 1 0 0; 0 0 0 0 5 -4 0; 0 0 0 0 1 -2 0; 0 0 0 2 -3 4 0;
+                 0 0 0 2 1 -4 0; 0 0 0 5 0 8 0; 0 0 0 1 0 1 0; 0 0 0 2 4 -1 0;
+                 4 -12 9 16 -24 -36 0];
+            rows = [1 1; 2 1; 3 -1; 4 -1; 5 -1; 6 -1; 7 1; 8 1; 9 -1; 10 1];
+            t.verifyFalse(cellInterior(C, rows), 'the kink cell has no interior');
+            rows(end, 2) = -1;                      % the other side of the curve: live
+            t.verifyTrue(cellInterior(C, rows), 'its complement in the polygon has interior');
+        end
     end
 end

@@ -2068,6 +2068,57 @@ classdef ratQ
             if isempty(b)
                 error('ratQ:divideByZero', 'pseudo-remainder by the zero polynomial.');
             end
+            % DOUBLES FIRST, THE SAME LOOP IN BigInteger WHERE THEY RUN OUT (2026-11-25), as
+            % polyPseudoRem does. The step r * lc(b) passes 2^53 on cellHasInterior's CAD columns
+            % (the poly2 kink: 3.2e16) while the reduced remainder fits; raising ratQ:overflow there
+            % made the CAD keep thousands of empty cells that Python and Rust (unbounded integers,
+            % this same loop) drop. The big loop is step for step this one -- signed lc(b), the
+            % primitive part after every step -- so its answer, sign included, is Python's.
+            try
+                r = ratQ.polyPremPrimitiveDouble(a, b);
+            catch e
+                if ~strcmp(e.identifier, 'ratQ:overflow'), rethrow(e), end
+                r = ratQ.polyPremPrimitiveBig(a, b);
+            end
+        end
+
+        function r = polyPremPrimitiveBig(a, b)
+        % objective: polyPremPrimitiveDouble's loop in java.math.BigInteger; the result as exact
+        %            doubles, or ratQ:overflow if the REDUCED remainder itself needs more than 53 bits.
+            toBig = @(v) arrayfun(@(z) java.math.BigInteger(sprintf('%.0f', z)), v, 'UniformOutput', false);
+            R = toBig(a);  B = toBig(b);  nb = numel(B);
+            guard = 0;
+            while true
+                while ~isempty(R) && R{1}.signum() == 0, R(1) = []; end
+                if isempty(R) || numel(R) < nb, break, end
+                guard = guard + 1;
+                if guard > 10000
+                    error('ratQ:premNoConverge', 'the reduced pseudo-remainder did not terminate.');
+                end
+                lcb = B{1};  lcr = R{1};
+                for i = 1:numel(R), R{i} = R{i}.multiply(lcb); end
+                for i = 1:nb, R{i} = R{i}.subtract(lcr.multiply(B{i})); end
+                R{1} = java.math.BigInteger.ZERO;   % cancels exactly, by construction
+                while ~isempty(R) && R{1}.signum() == 0, R(1) = []; end
+                g = java.math.BigInteger.ZERO;
+                for i = 1:numel(R), g = g.gcd(R{i}); end
+                if g.compareTo(java.math.BigInteger.ONE) > 0
+                    for i = 1:numel(R), R{i} = R{i}.divide(g); end
+                end
+            end
+            if isempty(R), r = []; return, end
+            r = zeros(1, numel(R));
+            for i = 1:numel(R)
+                if R{i}.abs().bitLength() > 52
+                    error('ratQ:overflow', ['reduced pseudo-remainder: in BigInteger an entry still ' ...
+                        'needs %d bits, past the 53 a double holds exactly.'], R{i}.abs().bitLength());
+                end
+                r(i) = R{i}.doubleValue();
+            end
+        end
+
+        function r = polyPremPrimitiveDouble(a, b)
+        % objective: polyPremPrimitive's loop in doubles (a, b primitive); ratQ:overflow at 2^53.
             db = numel(b) - 1;
             r  = a;
             guard = 0;
@@ -2257,17 +2308,26 @@ classdef ratQ
             % columns, millions of calls): the gcd is the linear factor itself iff it divides the
             % other, else 1. Divisibility by a1 x + a0 is exact: Horner of b at -a0/a1, scaled by a1,
             % every step checked against 2^53.
+            % THE SAME ANSWER AS THE LOOP BELOW, SIGN INCLUDED (polyPrimitive keeps the sign, so a
+            % gcd is only defined up to it, and Euclid's choice is the one the Python and Rust ports
+            % make): the first step is prem(a, b), which vanishes when b is the shorter or as long
+            % (so the answer is polyPrimitive(b), and a constant b gives +-1), and is a itself when
+            % a is shorter (the next step then returns polyPrimitive(a), or 1 for a constant a).
+            % Returning polyPrimitive(a) on a tie flipped the sign of a linear gcd; that changed
+            % which side of a curve a row named and split the poly2 kink's AlgCrv into 340 faces
+            % instead of 319 (2026-11-25).
             if numel(a) <= 2 || numel(b) <= 2
-                if numel(a) > numel(b), t = a; a = b; b = t; end   % a is the shorter (degree <= 1)
+                if numel(b) <= 1, g = ratQ.polyPrimitive(b); return, end
                 if numel(a) <= 1, g = 1; return, end
-                v = b(1);  exact = true;
-                for i = 2:numel(b)
-                    t1 = v * (-a(2));  t2 = b(i) * a(1)^(i-1);
+                if numel(a) >= numel(b), lin = b;  oth = a; else, lin = a;  oth = b; end
+                v = oth(1);  exact = true;
+                for i = 2:numel(oth)
+                    t1 = v * (-lin(2));  t2 = oth(i) * lin(1)^(i-1);
                     if abs(t1) + abs(t2) >= 2^53, exact = false; break, end   % not provably exact:
                     v = t1 + t2;                                              % take the general path
                 end
                 if exact
-                    if v == 0, g = ratQ.polyPrimitive(a); else, g = 1; end
+                    if v == 0, g = ratQ.polyPrimitive(lin); else, g = 1; end
                     return
                 end
             end

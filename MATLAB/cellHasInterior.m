@@ -228,14 +228,35 @@ function tf = cadExactRaw(EcQ, rows)
             [yn, yd] = dyadic(y0);
             ok = true;
             for r = 1:size(cs,1)
-                c = cs(r,:);
-                v = c(1)*xn^2*yd^2 + c(2)*xn*yn*xd*yd + c(3)*yn^2*xd^2 + c(4)*xn*xd*yd^2 + c(5)*yn*yd*xd^2 + c(6)*xd^2*yd^2;
-                ratQ.chk([c(1)*xn^2*yd^2, c(2)*xn*yn*xd*yd, c(3)*yn^2*xd^2, c(4)*xn*xd*yd^2, c(5)*yn*yd*xd^2, c(6)*xd^2*yd^2, v], 'exact cell value');
-                if sg(r) * v <= 0, ok = false; break, end
+                if sg(r) * cellValueSign(cs(r,:), xn, xd, yn, yd) <= 0, ok = false; break, end
             end
             if ok, tf = true; return, end
         end
     end
+end
+
+function s = cellValueSign(c, xn, xd, yn, yd)
+% The exact sign of q(xn/xd, yn/yd) * xd^2 * yd^2. In doubles when every term is small enough that
+% the terms and their partial sums are exact integers; otherwise in java.math.BigInteger. A dyadic
+% sample's denominator grows with the bisection that separated its roots, so the doubles reach 2^53
+% on ordinary small-coefficient cells. Raising ratQ:overflow there made cadInterior KEEP an empty
+% cell, where Python and Rust (exact integers) drop it: the poly2 kink's AlgCrv had 340 faces in
+% MATLAB against 319 (2026-11-25).
+    t = [c(1)*xn^2*yd^2, c(2)*xn*yn*xd*yd, c(3)*yn^2*xd^2, c(4)*xn*xd*yd^2, c(5)*yn*yd*xd^2, c(6)*xd^2*yd^2];
+    if all(isfinite(t)) && max(abs(t)) < 2^49            % six terms: every partial sum < 2^52
+        s = sign(sum(t));
+        return
+    end
+    B = @(z) java.math.BigInteger(sprintf('%.0f', z));  % xn, xd, yn, yd are exact integer doubles
+    X = B(xn);  XD = B(xd);  Y = B(yn);  YD = B(yd);
+    mono = {X.multiply(X).multiply(YD).multiply(YD), X.multiply(Y).multiply(XD).multiply(YD), ...
+            Y.multiply(Y).multiply(XD).multiply(XD), X.multiply(XD).multiply(YD).multiply(YD), ...
+            Y.multiply(YD).multiply(XD).multiply(XD), XD.multiply(XD).multiply(YD).multiply(YD)};
+    v = java.math.BigInteger.ZERO;
+    for i = 1:6
+        if c(i) ~= 0, v = v.add(mono{i}.multiply(B(c(i)))); end
+    end
+    s = double(v.signum());
 end
 
 function [n, d] = dyadic(x)
@@ -458,14 +479,31 @@ function s = cadSamples(sp, plain)
         end
     end
     if isempty(roots), s = 0; return, end
-    s = roots{1}.lo;
+    % THE SIMPLEST DYADIC of each open gap, not its midpoint (2026-11-25). Any point of the gap is
+    % an equally valid sample, but the midpoint of two tightly isolated roots carries the bisection's
+    % denominator 2^k, and every later integer (the column polynomial, its gcds and Sturm chain, the
+    % cell value) scales with it: on the poly2 kink they passed 2^53, ratQ:overflow made cadInterior
+    % KEEP empty cells, and MATLAB's AlgCrv split differently from Python's and Rust's (which hold
+    % exact integers and decide those cells). Below and above all roots: integers.
+    s = floor(roots{1}.lo) - 1;                     % < lo, and lo < the least root
     for i = 1:numel(roots)-1
         r = roots{i};  t = roots{i+1};
         while r.hi >= t.lo
             if r.hi - r.lo >= t.hi - t.lo, r = cadRefine(r); else, t = cadRefine(t); end
         end
         roots{i} = r;  roots{i+1} = t;
-        s(end+1) = (r.hi + t.lo) / 2; %#ok<AGROW>
+        s(end+1) = simplestDyadic(r.hi, t.lo); %#ok<AGROW>   % r <= hi < s < lo <= t
     end
-    s(end+1) = roots{end}.hi + 1;
+    s(end+1) = ceil(roots{end}.hi) + 1;             % > hi >= every root
+end
+
+function x = simplestDyadic(a, b)
+% The dyadic n / 2^k in the open interval (a, b), a < b both dyadic, with the least k (an integer
+% when the interval holds one). a * 2^k is exact, so the comparison is exact.
+    d = 1;
+    while true
+        n = floor(a * d) + 1;                       % the least integer > a*d
+        if n < b * d, x = n / d; return, end
+        d = 2 * d;
+    end
 end

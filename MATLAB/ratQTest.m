@@ -848,6 +848,39 @@ classdef ratQTest < matlab.unittest.TestCase
             testCase.verifyError(@() ratQ.polyDivExact(C, A, 2), 'ratQ:notDivisible');
         end
 
+        function polyGcdClosedFormKeepsEuclidsSign(testCase)
+        % The constant/linear shortcut must return what the Euclid loop returns, SIGN included
+        % (the Python and Rust ports give these values). Found 2026-11-25: on a tie it returned
+        % polyPrimitive of the FIRST argument, so a linear gcd came back negated and the poly2
+        % kink's AlgCrv had 340 faces in MATLAB against 319 in Python and Rust.
+            cases = { [1 2],   [-1 -2],  [-1 -2]
+                      [-5 -12], [5 12],  [5 12]
+                      [1 0],   [-1 0],   [-1 0]
+                      [-1 1],  [1 -1],   [1 -1]
+                      [1 3 2], [-1 -2],  [-1 -2]
+                      [-1 -2], [1 3 2],  [-1 -2]
+                      [1 3 2], -3,       -1
+                      -3,      [1 3 2],  1
+                      [2 6 4], [1 1],    [1 1]
+                      [1 1],   [1 0 -1], [1 1]
+                      [1 0 1], [1 1],    1
+                      -2,      4,        1 };
+            for k = 1:size(cases, 1)
+                testCase.verifyEqual(ratQ.polyGcd(cases{k,1}, cases{k,2}), cases{k,3}, ...
+                    sprintf('polyGcd(%s, %s)', mat2str(cases{k,1}), mat2str(cases{k,2})));
+            end
+        end
+
+        function polyPremPrimitivePast2to53GivesPythonsAnswer(testCase)
+        % The reduced pseudo-remainder's middle passes 2^53 (1.4e20 and 9.3e26 here) while its
+        % answer is small; it used to raise ratQ:overflow, which made cellHasInterior's CAD keep
+        % empty cells (the poly2 kink, 2026-11-25). The BigInteger loop must give Python's answer,
+        % sign included -- the second case has a NEGATIVE lc(b).
+            testCase.verifyEqual(ratQ.polyPremPrimitive([6 42 96 96 72], [6176268 18528801 -9]), [1 3]);
+            testCase.verifyEqual(ratQ.polyPremPrimitive([3 -16 -30 -31 -27 -7], [-2423915 16967407 -14]), [1 -7]);
+            testCase.verifyEqual(ratQ.polyGcd([3 -16 -30 -31 -27 -7], [-2423915 16967407 -14]), [1 -7]);
+        end
+
         function polyGcdBivFindsASHAREDFactor(testCase)
         % Two products built on a common factor: the gcd must be that factor, primitive.
             F  = zeros(3,2);  F(3,1) = 1;  F(1,2) =  1;     % x^2 + y
